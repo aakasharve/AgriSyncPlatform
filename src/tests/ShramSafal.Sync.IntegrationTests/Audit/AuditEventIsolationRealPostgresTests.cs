@@ -625,9 +625,25 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
             "and the probe is not vacuous: operator hydration still works for the caller's own "
             + "farm, so Bob's absence is the audit fix and not a broken directory");
 
+        // ── CS8602, and why the two reads below are in this order ─────────────
+        //    `response.AuditEvents is null` is a null TEST against a member the
+        //    contract declares NON-nullable (SyncPullResponseDto.AuditEvents is
+        //    IReadOnlyList<AuditEventDto>). C#'s flow analysis learns from a null
+        //    test, so from that expression onward the compiler treats the member
+        //    as maybe-null — which made the `.Count` on the NEXT line CS8602, and
+        //    ci-gate.yml's Release build runs /warnaserror, so it was an error.
+        //    Read Count FIRST, while the state is still not-null, and keep the
+        //    null probe afterwards. Both evidence lines print exactly what they
+        //    printed before and no assertion changed. Not suppressed with `!` —
+        //    the runtime null probe is deliberate (the wire field must SURVIVE,
+        //    asserted above) and `!` would have asserted the opposite of what
+        //    this evidence line exists to measure. DO NOT reorder these two.
+        var auditEventsCount = response.AuditEvents.Count;
+        var auditEventsWereNull = response.AuditEvents is null;
+
         output.WriteLine("[EVIDENCE] === P0.2-4 sync pull ===");
-        output.WriteLine($"[EVIDENCE] response.AuditEvents is null = {response.AuditEvents is null} (expect False — field kept)");
-        output.WriteLine($"[EVIDENCE] response.AuditEvents count   = {response.AuditEvents.Count} (expect 0)");
+        output.WriteLine($"[EVIDENCE] response.AuditEvents is null = {auditEventsWereNull} (expect False — field kept)");
+        output.WriteLine($"[EVIDENCE] response.AuditEvents count   = {auditEventsCount} (expect 0)");
         output.WriteLine($"[EVIDENCE] operators hydrated           = [{string.Join(", ", response.Operators.Select(o => o.DisplayName))}]");
         output.WriteLine($"[EVIDENCE]   contains stranger Bob      = {operatorIds.Contains(Bob)} (expect False)");
         output.WriteLine($"[EVIDENCE]   contains caller Alice      = {operatorIds.Contains(Alice)} (expect True)");
@@ -901,12 +917,110 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
     /// ShramSafal migrations that land AFTER the TRUNCATE revoke and have been
     /// reviewed as safe to revert and re-apply inside this proof (symmetric
     /// <c>Down()</c>, no dependency on <c>ssf.audit_events</c> state).
+    ///
+    /// <para>
+    /// <b>What "safe" means here, and what it does NOT mean.</b> Every entry
+    /// below is a claim about ONE situation: reverting and immediately
+    /// re-applying this migration inside a per-<c>[Fact]</c> scratch database
+    /// that is created in <see cref="InitializeAsync"/> and dropped in
+    /// <see cref="DisposeAsync"/>, seeded only with the handful of rows this
+    /// class plants. It is <b>not</b> a claim that the <c>Down()</c> is safe to
+    /// run anywhere else, and specifically not on production. Two of the
+    /// <c>Down()</c>s below are destructive on a populated database and say so.
+    /// Do not lift a line out of this list and read it as a rollback approval.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Why the list keeps needing extension.</b> EF's migrator is linear, so
+    /// driving back to <see cref="MigrationBeforeRevokeTruncate"/> necessarily
+    /// reverts everything applied after it. There is no way to exempt a
+    /// migration from the sweep, so retargeting the proof cannot remove this
+    /// tax — the review is the mechanism, and the guard exists to force it.
+    /// If a future <c>Down()</c> is genuinely NOT safe to run mid-proof, the
+    /// answer is to change that migration or move the proof, never to widen
+    /// this list.
+    /// </para>
     /// </summary>
     private static readonly string[] ReviewedMigrationsAfterRevokeTruncate =
     [
         // §P0.3 — ENABLE + FORCE RLS and one tenant policy on
         // ssf.farm_boundaries. Down() drops the policy and disables RLS.
         "20260815061537_AddFarmBoundariesRls",
+
+        // ── Reviewed 2026-08-15 (spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN,
+        //    audit-guard-review). Each Down() below was read in full, not
+        //    name-matched. The common ground for all three: this class touches
+        //    ssf.audit_events, ssf.farms, public.users and ssf.daily_logs and
+        //    NOTHING else — grep this file for correction_events, cost_entries,
+        //    ai_jobs, raw_blob_index or raw_blob_subjects and you get zero hits
+        //    — so every table these three migrations write is EMPTY here.
+        //    Each Up() also already ran once against this same database as this
+        //    same role during InitializeAsync, so the roll-forward is a replay of
+        //    statements known to succeed in this exact environment.
+
+        // §P0.4 — Down() UPDATEs ssf.correction_events.original_parse_id to the
+        // all-zero uuid WHERE NULL, restores NOT NULL, drops prompt_content_hash.
+        // SAFE MID-PROOF: the table is empty, so the UPDATE matches no rows, the
+        // SET NOT NULL cannot fail on a leftover NULL, and the dropped column
+        // carries no data. Roll-forward re-creates the stripper function, re-runs
+        // the redaction UPDATE and its refuse-if-any-leftovers EXCEPTION check
+        // against the same empty table — a no-op both times — then drops the
+        // function again. Its FORCE-RLS lift on correction_events is symmetric
+        // (lifted and restored in the same statement). Touches no audit_events.
+        // ⚠️ NOT SAFE ON A POPULATED DATABASE: that Down() stamps a sentinel over
+        // real NULLs, and the Up() that follows re-widens the column without ever
+        // restoring them. The transcripts the migration strips are gone for good
+        // by design — Down() cannot bring them back and does not pretend to.
+        "20260815080242_StripTranscriptFromCorrectionEvents",
+
+        // §P0.5 — the genuinely boring one. Up() adds seven NULLABLE columns to
+        // ssf.cost_entries (client_attachment_ids_json, direction, payment_mode,
+        // quantity, unit, unit_price, vendor_name); Down() drops exactly those
+        // seven. No backfill, no constraint, no default, no policy, no grant, no
+        // function. SAFE MID-PROOF: the table is empty so the drop discards
+        // nothing, and every column being nullable means the roll-forward needs
+        // no default and forces no table rewrite. Touches no audit_events.
+        // On a populated database this Down() would drop real column data — but
+        // it is symmetric in SCHEMA, which is all this proof replays.
+        "20260815081057_AddCostEntryDirectionAndLineDetail",
+
+        // §P0.9 — THE ONE THAT DROPS A TABLE. Down() is
+        //   DROP POLICY IF EXISTS p_user_raw_blob_subjects ON ssf.raw_blob_subjects;
+        //   DROP TABLE ssf.raw_blob_subjects;
+        // so it gets the longest note, not the shortest.
+        //
+        // WHY THE DESTRUCTIVE Down() IS IRRELEVANT HERE — stated, not assumed.
+        // The production hazard is real and was flagged when this migration was
+        // reviewed: ssf.raw_blob_subjects is the (sha256 -> user_id) linkage, and
+        // for any blob whose ssf.ai_jobs row has already been deleted, its
+        // linkage row is the LAST REMAINING POINTER to whose voice recording
+        // those bytes are. Dropping the table destroys that pointer, and Up()'s
+        // backfill provably cannot rebuild it — the backfill reads ai_jobs, and
+        // the ai_jobs row is precisely what is already gone. On production that
+        // Down() is one-way.
+        // None of that can happen in this database. The table is EMPTY: this
+        // class never writes it, and the Up() backfill that would have populated
+        // it read zero rows because ssf.ai_jobs and ssf.raw_blob_index are empty
+        // here too. Zero linkage rows, zero blobs, zero data subjects — the DROP
+        // destroys nothing and there is no person whose ownership record is lost.
+        // The scratch database is dropped wholesale minutes later regardless.
+        // DEPENDENCIES: nothing depends on this table. Its only FK
+        // (fk_raw_blob_subjects_sha256) points OUTWARD — raw_blob_subjects is the
+        // referencing child of ssf.raw_blob_index — so DropTable needs no CASCADE
+        // and leaves raw_blob_index untouched. It is also the newest ShramSafal
+        // migration, so nothing later references it.
+        // ROLL-FORWARD: Up() re-creates the table + index, re-runs its
+        // role-guarded GRANT block, re-runs the backfill (0 in, 0 out; its RAISE
+        // NOTICE reports 0 of 0 and it raises no EXCEPTION), and re-establishes
+        // ENABLE + FORCE RLS and the policy Down() dropped.
+        // ONE ENVIRONMENT NOTE: that backfill lifts FORCE RLS on ssf.ai_jobs and
+        // ssf.raw_blob_index only when the migration runner cannot bypass RLS,
+        // taking an ACCESS EXCLUSIVE lock while it does. Locally the resolved
+        // connection is agrisync_app (not superuser) so that branch runs; in CI
+        // REQUIRES_POSTGRES_ROOT_CONN is the postgres superuser so it is skipped.
+        // Both are harmless on a single-session scratch database, and the lift is
+        // symmetric — FORCE is restored inside the same DO block.
+        "20260815102440_AddRawBlobSubjects",
     ];
 
     /// <summary>
