@@ -63,6 +63,10 @@ export class BackgroundSyncWorker {
         // than only after the next server round trip. Fire-and-forget: it is a
         // Dexie read and must never delay or fail the sync loop.
         void this.rehydrateRejectedMutations();
+        // §P0.7 box 2e — WORKER START ONLY, never inside the cycle. Same rule
+        // as `abandonedStateRecovery`: a scan placed among the items of a live
+        // cycle would run against rows that cycle is holding.
+        void this.reconcileStrandedLogs();
         this.safeRunCycle();
 
         this.timerId = window.setInterval(() => {
@@ -185,6 +189,41 @@ export class BackgroundSyncWorker {
             }
         } catch (error) {
             console.warn('[BackgroundSyncWorker] Could not rehydrate rejected mutations', error);
+        }
+    }
+
+    /**
+     * §P0.7 box 2e — recover logs that reached NO sync queue at all.
+     *
+     * A death between the log write and the enqueue strands the record on the
+     * handset permanently and invisibly, and nothing else in the app re-scans
+     * for it. Runs once per worker start; see `strandedLogReconciler` for the
+     * predicate, the server-origin guard and why this cannot double-write.
+     *
+     * DYNAMICALLY IMPORTED, and not as a style choice:
+     * `logSyncMutationService` imports `backgroundSyncWorker` (`:6`), so a
+     * static import here would close a module cycle through this file's own
+     * singleton. Deferring the load to worker start breaks it outright rather
+     * than relying on ESM live bindings to paper over it.
+     *
+     * Public so a test can await it — `start()` cannot.
+     */
+    async reconcileStrandedLogs(): Promise<void> {
+        try {
+            const { reconcileStrandedLogs } = await import('../../features/sync/recovery/strandedLogReconciler');
+            await reconcileStrandedLogs();
+        } catch (error) {
+            // The reconciler already logs its own per-record failures and never
+            // throws for them; reaching here means the module itself could not
+            // load. Say so — a recovery that quietly does not exist is the
+            // failure mode this whole task is about.
+            console.error(JSON.stringify({
+                level: 'error',
+                component: 'BackgroundSyncWorker',
+                message: 'Stranded-log reconciler could not run; records that reached no queue stay invisible',
+                error: error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
+                timestamp: new Date().toISOString(),
+            }));
         }
     }
 
