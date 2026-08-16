@@ -20,7 +20,7 @@ const base = (o: Partial<DailyQuestionInputs> = {}): DailyQuestionInputs => ({
 describe('selectDailyQuestion (Phase 5)', () => {
     it('returns null when a question was already recorded today (ONE per day)', () => {
         const r = selectDailyQuestion(base({
-            recentEvents: [{ questionKey: 'gap.dose', createdAtLocalDate: '2026-07-11', ageDays: 0, skipped: false }],
+            recentEvents: [{ questionKey: 'gap.dose', createdAtLocalDate: '2026-07-11', ageDays: 0, skipped: false, dailyLogId: null }],
         }));
         expect(r).toBeNull();
     });
@@ -71,7 +71,7 @@ describe('selectDailyQuestion (Phase 5)', () => {
         };
         const r = selectDailyQuestion(base({
             score,
-            recentEvents: [{ questionKey: 'gap.dose', createdAtLocalDate: '2026-07-09', ageDays: 2, skipped: false }], // < 3d cooldown
+            recentEvents: [{ questionKey: 'gap.dose', createdAtLocalDate: '2026-07-09', ageDays: 2, skipped: false, dailyLogId: null }], // < 3d cooldown
         }));
         expect(r!.question.questionKey).toBe('gap.cost');
     });
@@ -293,7 +293,7 @@ describe('selectDailyQuestion — skip-aware cooldown (Task 2B)', () => {
         // the skip-cooldown does, and 1 < 3 keeps it suppressed. With only one
         // gap dimension in the score there is no other gap to fall back to.
         const r = selectDailyQuestion(base({
-            recentEvents: [{ questionKey: 'gap.dose', createdAtLocalDate: '2026-07-10', ageDays: 1, skipped: true }],
+            recentEvents: [{ questionKey: 'gap.dose', createdAtLocalDate: '2026-07-10', ageDays: 1, skipped: true, dailyLogId: null }],
         }));
         expect(r).toBeNull();
     });
@@ -309,12 +309,12 @@ describe('selectDailyQuestion — skip-aware cooldown (Task 2B)', () => {
 
         // 'stage.confirm_current' cooldownDays is 7 — longer than SKIP_COOLDOWN_DAYS (3).
         const skippedThreeDaysAgo = selectDailyQuestion(stageInputs([
-            { questionKey: 'stage.confirm_current', createdAtLocalDate: '2026-07-08', ageDays: SKIP_COOLDOWN_DAYS, skipped: true },
+            { questionKey: 'stage.confirm_current', createdAtLocalDate: '2026-07-08', ageDays: SKIP_COOLDOWN_DAYS, skipped: true, dailyLogId: null },
         ]));
         expect(skippedThreeDaysAgo!.question.questionKey).toBe('stage.confirm_current');
 
         const answeredThreeDaysAgo = selectDailyQuestion(stageInputs([
-            { questionKey: 'stage.confirm_current', createdAtLocalDate: '2026-07-08', ageDays: SKIP_COOLDOWN_DAYS, skipped: false },
+            { questionKey: 'stage.confirm_current', createdAtLocalDate: '2026-07-08', ageDays: SKIP_COOLDOWN_DAYS, skipped: false, dailyLogId: null },
         ]));
         expect(answeredThreeDaysAgo).toBeNull(); // normal cooldownDays (7) still in effect, no other trigger fires
     });
@@ -342,14 +342,14 @@ describe('selectDailyQuestion — skip-aware cooldown (Task 2B)', () => {
         const { selectDailyQuestion: selectMocked } = await import('../dfesQuestionEngine');
         const r = selectMocked(base({
             weather: { windKph: 30 },
-            recentEvents: [{ questionKey: 'safety.spray_wind_high', createdAtLocalDate: '2026-07-10', ageDays: 1, skipped: true }],
+            recentEvents: [{ questionKey: 'safety.spray_wind_high', createdAtLocalDate: '2026-07-10', ageDays: 1, skipped: true, dailyLogId: null }],
         }));
         expect(r!.question.questionKey).toBe('safety.spray_wind_high');
     });
 
     it('one-question-per-day gate is unchanged: a SKIPPED event today still stops today\'s question (no same-day re-ask)', () => {
         const r = selectDailyQuestion(base({
-            recentEvents: [{ questionKey: 'gap.dose', createdAtLocalDate: '2026-07-11', ageDays: 0, skipped: true }],
+            recentEvents: [{ questionKey: 'gap.dose', createdAtLocalDate: '2026-07-11', ageDays: 0, skipped: true, dailyLogId: null }],
         }));
         expect(r).toBeNull();
     });

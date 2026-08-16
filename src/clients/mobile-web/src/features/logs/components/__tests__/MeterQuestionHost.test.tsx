@@ -192,7 +192,7 @@ describe('MeterQuestionHost (Phase 5, Task 5.9)', () => {
 
         fireEvent.click(card);
         expect(recordOutcome).toHaveBeenCalledTimes(1);
-        expect(recordOutcome).toHaveBeenCalledWith({ skipped: false });
+        expect(recordOutcome).toHaveBeenCalledWith({ skipped: false, dailyLogId: null });
     });
 
     it('returns null (renders nothing) when understandingMeter is OFF, regardless of stageQuestions', async () => {
@@ -211,30 +211,32 @@ describe('MeterQuestionHost (Phase 5, Task 5.9)', () => {
     // -------------------------------------------------------------------------
     // Tap-to-answer (Task 2A, spec: dfes-companion-2026-07-11)
     // -------------------------------------------------------------------------
-    describe('tap-to-answer', () => {
-        function selectedWithOptions() {
-            return {
-                question: {
-                    questionKey: 'stage.confirm_current', crop: 'grapes', lens: 'Execution', depthLevel: 1, priority: 3,
-                    cooldownDays: 7, questionType: 'stage_confirm', answerModes: 'choice,voice', safetyClass: 'informational',
-                    agronomistApproved: true, marathiApproved: true, promptMr: 'तुमची grapes आता कोणत्या टप्प्यात आहे?',
-                    answerOptions: [
-                        { value: 'flowering', labelMr: 'फुलोरा', stageConfirmedValue: true },
-                        { value: 'not_yet', labelMr: 'अजून नाही', stageConfirmedValue: false },
-                    ],
-                },
-                resolvedPromptMr: 'तुमची grapes आता कोणत्या टप्प्यात आहे?',
-                triggerReason: 'stage window open',
-                weatherContext: null,
-                expectedStage: 'flowering',
-                actualStageApplicability: 'current_stage',
+    // Hoisted out of the `tap-to-answer` describe (wave-3.1) so the log-id block below
+    // can reuse the SAME fixture rather than keeping a second copy that could drift.
+    function selectedWithOptions() {
+        return {
+            question: {
+                questionKey: 'stage.confirm_current', crop: 'grapes', lens: 'Execution', depthLevel: 1, priority: 3,
+                cooldownDays: 7, questionType: 'stage_confirm', answerModes: 'choice,voice', safetyClass: 'informational',
+                agronomistApproved: true, marathiApproved: true, promptMr: 'तुमची grapes आता कोणत्या टप्प्यात आहे?',
                 answerOptions: [
                     { value: 'flowering', labelMr: 'फुलोरा', stageConfirmedValue: true },
                     { value: 'not_yet', labelMr: 'अजून नाही', stageConfirmedValue: false },
                 ],
-            };
-        }
+            },
+            resolvedPromptMr: 'तुमची grapes आता कोणत्या टप्प्यात आहे?',
+            triggerReason: 'stage window open',
+            weatherContext: null,
+            expectedStage: 'flowering',
+            actualStageApplicability: 'current_stage',
+            answerOptions: [
+                { value: 'flowering', labelMr: 'फुलोरा', stageConfirmedValue: true },
+                { value: 'not_yet', labelMr: 'अजून नाही', stageConfirmedValue: false },
+            ],
+        };
+    }
 
+    describe('tap-to-answer', () => {
         it('tapping a tap-choice option records ONE event carrying {skipped:false, response, stageConfirmed} — not a bare {skipped:false}', async () => {
             const recordOutcome = vi.fn();
             useDfesQuestionMock.mockReturnValue({ selected: selectedWithOptions(), loading: false, recordOutcome });
@@ -254,7 +256,7 @@ describe('MeterQuestionHost (Phase 5, Task 5.9)', () => {
             fireEvent.click(options[0]); // "फुलोरा" -> stageConfirmedValue: true
 
             expect(recordOutcome).toHaveBeenCalledTimes(1);
-            expect(recordOutcome).toHaveBeenCalledWith({ skipped: false, response: 'flowering', stageConfirmed: true });
+            expect(recordOutcome).toHaveBeenCalledWith({ skipped: false, response: 'flowering', stageConfirmed: true, dailyLogId: null });
         });
 
         it('tapping the non-confirming option maps stageConfirmedValue:false through to stageConfirmed', async () => {
@@ -272,7 +274,7 @@ describe('MeterQuestionHost (Phase 5, Task 5.9)', () => {
             );
 
             fireEvent.click(getAllByTestId('shramsathi-answer-option')[1]); // "अजून नाही"
-            expect(recordOutcome).toHaveBeenCalledWith({ skipped: false, response: 'not_yet', stageConfirmed: false });
+            expect(recordOutcome).toHaveBeenCalledWith({ skipped: false, response: 'not_yet', stageConfirmed: false, dailyLogId: null });
         });
 
         it('dismissing ("नंतर") a tap-choice question records {skipped:true} — never the answer shape', async () => {
@@ -291,7 +293,7 @@ describe('MeterQuestionHost (Phase 5, Task 5.9)', () => {
 
             fireEvent.click(getByTestId('shramsathi-answer-dismiss'));
             expect(recordOutcome).toHaveBeenCalledTimes(1);
-            expect(recordOutcome).toHaveBeenCalledWith({ skipped: true });
+            expect(recordOutcome).toHaveBeenCalledWith({ skipped: true, dailyLogId: null });
         });
 
         it('the host still calls recordOutcome exactly once per tap-choice click — the recordedRef one-shot guard itself is exercised at the useDfesQuestion hook level (useDfesQuestion.test.tsx)', async () => {
@@ -310,6 +312,76 @@ describe('MeterQuestionHost (Phase 5, Task 5.9)', () => {
 
             fireEvent.click(getAllByTestId('shramsathi-answer-option')[0]);
             expect(recordOutcome).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    /**
+     * wave-3.1 (spec: dfes-companion-2026-07-11) — every outcome records WHICH log the
+     * question was about.
+     *
+     * The `dailyLogId: null` assertions above are only meaningful if this host can carry a
+     * REAL log id at all; otherwise they would pass against a host that hardcoded null.
+     * These are the positive controls, and they cover all three outcome paths — a SKIP is
+     * still "this log was asked", so wave-3.2 must never re-ask it.
+     */
+    describe('wave-3.1 — the log id rides on every outcome', () => {
+        const withLog = {
+            crop: 'grapes', todayLocalDate: '2026-07-11', score,
+            engagement: { totalRichDays: 0, unlockStatus: 'locked' as const },
+            sourceLogId: 'log-mon',
+        };
+
+        it('carries sourceLogId on an ANSWERED tap-choice outcome', async () => {
+            const recordOutcome = vi.fn();
+            useDfesQuestionMock.mockReturnValue({ selected: selectedWithOptions(), loading: false, recordOutcome });
+            const { MeterQuestionHost } = await loadComponent(true, true);
+            const { getAllByTestId } = render(
+                <MeterQuestionHost farmId="farm-1" plotId="plot-1" score={score} allLogs={arrivedLogs}
+                    questionInputs={withLog} />,
+            );
+
+            fireEvent.click(getAllByTestId('shramsathi-answer-option')[0]);
+            expect(recordOutcome).toHaveBeenCalledWith(
+                expect.objectContaining({ dailyLogId: 'log-mon', skipped: false }));
+        });
+
+        it('carries sourceLogId on a DISMISSED outcome — a skip still burns the question for that log', async () => {
+            const recordOutcome = vi.fn();
+            useDfesQuestionMock.mockReturnValue({ selected: selectedWithOptions(), loading: false, recordOutcome });
+            const { MeterQuestionHost } = await loadComponent(true, true);
+            const { getByTestId } = render(
+                <MeterQuestionHost farmId="farm-1" plotId="plot-1" score={score} allLogs={arrivedLogs}
+                    questionInputs={withLog} />,
+            );
+
+            fireEvent.click(getByTestId('shramsathi-answer-dismiss'));
+            expect(recordOutcome).toHaveBeenCalledWith({ skipped: true, dailyLogId: 'log-mon' });
+        });
+
+        it('carries sourceLogId on the no-options ACK outcome', async () => {
+            const recordOutcome = vi.fn();
+            useDfesQuestionMock.mockReturnValue({
+                selected: {
+                    question: {
+                        questionKey: 'gap.dose', crop: 'grapes', lens: 'INPUTS', depthLevel: 1, priority: 4,
+                        cooldownDays: 7, questionType: 'TEXT', answerModes: 'text', safetyClass: 'NONE',
+                        agronomistApproved: true, marathiApproved: true, promptMr: 'किती डोस दिला?',
+                    },
+                    resolvedPromptMr: 'किती डोस दिला?',
+                    triggerReason: 'gap DOSE leverage 20',
+                    weatherContext: null, expectedStage: null, actualStageApplicability: null,
+                },
+                loading: false,
+                recordOutcome,
+            });
+            const { MeterQuestionHost } = await loadComponent(true, true);
+            const { getByTestId } = render(
+                <MeterQuestionHost farmId="farm-1" plotId="plot-1" score={score} allLogs={arrivedLogs}
+                    questionInputs={withLog} />,
+            );
+
+            fireEvent.click(getByTestId('shramsathi-gap-question'));
+            expect(recordOutcome).toHaveBeenCalledWith({ skipped: false, dailyLogId: 'log-mon' });
         });
     });
 });

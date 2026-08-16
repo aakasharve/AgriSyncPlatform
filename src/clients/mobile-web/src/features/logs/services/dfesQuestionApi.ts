@@ -34,6 +34,12 @@ export interface RecentQuestionEventDto {
     createdAtUtc: string;
     stageConfirmed: boolean | null;
     skipped: boolean | null;
+    /**
+     * wave-3.1 — `ssf.question_events.daily_log_id`. NULL on every row written before
+     * wave-3.1, and that null is meaningful: wave-3.2 reads it as "legacy row, fall back
+     * to the day cooldown" rather than "asked about no log".
+     */
+    dailyLogId: string | null;
 }
 
 /** Response outcome captured after the farmer interacts with (or skips) the question. */
@@ -84,5 +90,8 @@ export async function fetchRecentQuestionEvents(farmId: string, sinceDays = 14):
         createdAtLocalDate: d.createdAtUtc.slice(0, 10),
         ageDays: Math.floor((now - Date.parse(d.createdAtUtc)) / 86_400_000),
         skipped: d.skipped ?? false,
+        // wave-3.1 — `?? null`, never `?? undefined`: a legacy row must arrive as an
+        // explicit null so wave-3.2's `e.dailyLogId === null` legacy branch can see it.
+        dailyLogId: d.dailyLogId ?? null,
     }));
 }

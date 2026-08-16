@@ -39,6 +39,16 @@ export interface RecentQuestionEvent {
     ageDays: number;
     /** True when the farmer explicitly skipped (vs. answered/acked) this question. */
     skipped: boolean;
+    /**
+     * wave-3.1 — `ssf.question_events.daily_log_id`: the log this question was about.
+     * `null` on every row written before wave-3.1.
+     *
+     * REQUIRED-but-nullable on purpose. Declaring it optional would let a construction
+     * site silently default to undefined, and wave-3.2's per-log dedupe reads this field
+     * to decide whether a question may be asked again. The compiler surfacing every
+     * construction site IS the point.
+     */
+    dailyLogId: string | null;
 }
 
 /**
@@ -80,6 +90,12 @@ export interface DailyQuestionInputs {
      * rather than filling it with a guess.
      */
     previousLog?: { activityMr: string; daysAgo: number };
+    /**
+     * wave-3.1 — the DailyLog this question is about, and wave-3.2's per-log dedupe key
+     * (spec Ruling 1). Absent when the panel has no saved log yet: the engine then falls
+     * back to day-scoped cooldowns exactly as before, which is the safe direction.
+     */
+    sourceLogId?: string;
 }
 
 export interface SelectedQuestion {

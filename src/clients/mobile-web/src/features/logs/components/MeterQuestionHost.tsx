@@ -58,8 +58,17 @@ export function MeterQuestionHost({
     // append-only, so there is no separate "shown" write to patch later.
     // `option.value` -> Response; `option.stageConfirmedValue` -> StageConfirmed
     // (only meaningful for stage_confirm questions; null otherwise).
+    // wave-3.1 (spec: dfes-companion-2026-07-11) — every outcome, answered or skipped,
+    // records WHICH log the question was about. ssf.question_events.daily_log_id has
+    // existed since the DFES data spine but nothing ever populated it, so every historical
+    // row is NULL and wave-3.2's per-log dedupe had nothing to key on. All three outcome
+    // paths carry it, not just the answered one: a SKIP is still "this log was asked".
+    const sourceLogId = questionInputs.sourceLogId ?? null;
     const handleAnswer = (option: DfesAnswerOption) => {
-        void recordOutcome({ skipped: false, response: option.value, stageConfirmed: option.stageConfirmedValue ?? null });
+        void recordOutcome({
+            skipped: false, response: option.value,
+            stageConfirmed: option.stageConfirmedValue ?? null, dailyLogId: sourceLogId,
+        });
     };
     return (
         <MeterDisplay
@@ -68,10 +77,10 @@ export function MeterQuestionHost({
             engagement={engagement}
             dfesQuestion={selected}
             // No-options ack path — UNCHANGED from pre-Task-2A behaviour ({skipped:false}).
-            onQuestionInteract={() => { void recordOutcome({ skipped: false }); }}
+            onQuestionInteract={() => { void recordOutcome({ skipped: false, dailyLogId: sourceLogId }); }}
             // With-options tap-choice path (Task 2A, both new).
             onAnswer={handleAnswer}
-            onDismiss={() => { void recordOutcome({ skipped: true }); }}
+            onDismiss={() => { void recordOutcome({ skipped: true, dailyLogId: sourceLogId }); }}
         />
     );
 }

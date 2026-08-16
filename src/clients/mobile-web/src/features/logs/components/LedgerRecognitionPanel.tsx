@@ -195,6 +195,11 @@ export function LedgerRecognitionPanel({
                 weather: weatherContext,
                 weatherReconcileContext,
                 previousLog,
+                // wave-3.1 (spec: dfes-companion-2026-07-11) — WHICH log this question is
+                // about. It is what lets wave-3.2 ask Monday's and Wednesday's spray logs
+                // for a dose each, while never asking the same log twice. Undefined before
+                // a log is saved; the engine then keeps day-scoped cooldowns.
+                sourceLogId: savedLog?.id,
                 engagement: {
                     totalRichDays: engagement?.totalRichDays ?? 0,
                     unlockStatus: engagement?.unlockStatus ?? 'locked',
