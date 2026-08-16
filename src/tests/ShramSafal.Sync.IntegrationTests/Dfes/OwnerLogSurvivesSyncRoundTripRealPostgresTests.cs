@@ -48,10 +48,16 @@ namespace ShramSafal.Sync.IntegrationTests.Dfes;
 /// <c>VERIFIED</c>/<c>APPROVED</c> (<c>dayState.ts:77-80</c>). Landing on <c>Confirmed</c>
 /// would have reproduced the same 70%-forever bug from the server side while every backend
 /// assertion stayed green. So the last two hops — <c>mapVerificationStatus.ts</c> and
-/// <c>dayState.ts</c>'s counted set — are mirrored here as executable code (see
-/// <see cref="MapVerificationStatusLikeTheClient"/> and <see cref="TheRingCountsIt"/>) and
-/// driven with the ACTUAL string the wire carried. A change to either client file that breaks
-/// this contract fails here.</para>
+/// <c>dayState.ts</c>'s counted set — are MIRRORED in <see cref="ClientRingContractMirror"/>
+/// and driven here with the ACTUAL string the wire carried.</para>
+///
+/// <para><b>The mirror is a mirror, not the client.</b> This suite proves the server puts a
+/// string on the wire that the client's current mapping counts. It cannot, by itself, prove
+/// the client still maps that way — a C# copy does not fail when TypeScript changes. That
+/// gap is covered by <see cref="ClientRingContractDriftTests"/>, which reads the two real
+/// <c>.ts</c> files and fails when the mirror drifts. Together they carry the claim; neither
+/// does alone. A TypeScript test of <c>logsReconciler</c> → <c>computeDayState</c> belongs in
+/// mobile-web's own suite (outside the backend allowlist) and is still worth having.</para>
 ///
 /// <para><b>Native :5433, opt-in, self-skipping.</b> Creates its OWN scratch database, applies
 /// the full migration chain, drops it on dispose. If Postgres :5433 is genuinely unreachable
@@ -328,51 +334,25 @@ public sealed class OwnerLogSurvivesSyncRoundTripRealPostgresTests(Xunit.Abstrac
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // The last two client hops, mirrored so the round trip is EXECUTED, not
-    // asserted in prose. Both are deliberately verbatim transcriptions.
+    // The last two client hops. spec: dfes-companion-2026-07-11 (wave-1.3) — I5.
+    //
+    // These were private transcriptions of two TypeScript functions, described as
+    // proving "the ring reads 100%". They did not. A C# copy cannot detect drift:
+    // editing mapVerificationStatus.ts or dayState.ts would not have failed one
+    // assertion here, so the claim was proven against the mirror, not the client.
+    //
+    // Both now live in ClientRingContractMirror — labelled a MIRROR — and
+    // ClientRingContractDriftTests reads the real .ts files off disk and fails if
+    // either has moved away from it. What the assertions below prove is therefore:
+    // the server put a string on the wire that the client's CURRENT mapping counts,
+    // with a separate suite standing guard over the word "current".
     // ─────────────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Verbatim transcription of
-    /// <c>src/clients/mobile-web/src/features/sync/pull/helpers/mapVerificationStatus.ts</c>
-    /// (the switch at :22-39) — the function <c>logsReconciler.toDailyLog</c> feeds
-    /// <c>DailyLogDto.lastVerificationStatus</c> into before writing
-    /// <c>DailyLog.verification.status</c> to Dexie.
-    /// </summary>
     private static string MapVerificationStatusLikeTheClient(string? status)
-    {
-        if (string.IsNullOrEmpty(status))
-        {
-            return "DRAFT";
-        }
+        => ClientRingContractMirror.MapVerificationStatus(status);
 
-        var normalized = System.Text.RegularExpressions.Regex
-            .Replace(status.Trim(), "([a-z])([A-Z])", "$1_$2");
-        normalized = System.Text.RegularExpressions.Regex
-            .Replace(normalized, "[\\s-]+", "_")
-            .ToLowerInvariant();
-
-        return normalized switch
-        {
-            "draft" or "pending" => "DRAFT",
-            "confirmed" or "auto_approved" => "CONFIRMED",
-            "approved" or "verified" => "VERIFIED",
-            "rejected" or "disputed" => "DISPUTED",
-            "correction_pending" => "CORRECTION_PENDING",
-            _ => "DRAFT",
-        };
-    }
-
-    /// <summary>
-    /// Verbatim transcription of <c>VERIFIED_STATUSES</c> in
-    /// <c>src/clients/mobile-web/src/shared/utils/dayState.ts:77-80</c> — the set
-    /// <c>computeDayState</c> consults when deciding whether a log closes the day.
-    /// CONFIRMED is deliberately NOT in it: <c>ReviewInboxSheet.tsx:40-45</c> still shows a
-    /// CONFIRMED log as waiting for review, so counting it as done would have the ring and
-    /// the inbox contradicting each other about the same log.
-    /// </summary>
     private static bool TheRingCountsIt(string localStatus)
-        => localStatus is "VERIFIED" or "APPROVED";
+        => ClientRingContractMirror.TheRingCountsIt(localStatus);
 
     // ─────────────────────────────────────────────────────────────────────────
     // Provisioning evidence — a suite that reports Passed! in ~1s having created

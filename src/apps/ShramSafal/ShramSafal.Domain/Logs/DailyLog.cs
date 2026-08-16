@@ -207,6 +207,27 @@ public sealed class DailyLog : Entity<Guid>
     }
 
     /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.3) — the marker stamped on
+    /// <see cref="VerificationEvent.Reason"/> for BOTH events
+    /// <see cref="TrySelfVerifyAsCreator"/> emits.
+    ///
+    /// <para><b>Why a constant and not <c>null</c>.</b> A self-attestation is a weaker
+    /// claim than a second person's approval: the same human recorded the day and
+    /// vouched for it. Today the pilot accepts that trade — an owner's word about his
+    /// own farm is the best evidence that exists. If it is ever tightened (an
+    /// attestation from the creator no longer authorises a payout, say), the question
+    /// asked of the data will be "which Verified logs were only ever self-attested?"
+    /// With <c>null</c> in this column that question is UNANSWERABLE after the fact —
+    /// every attestation, self and second-party, looks identical. With this marker it
+    /// is a one-line predicate over a column that already exists (the Disputed path
+    /// requires <c>reason</c>, so this is ZERO schema change).</para>
+    ///
+    /// <para>The value is deliberately machine-readable and stable. Do not localise it,
+    /// do not reword it — anything that reads it is looking for this exact string.</para>
+    /// </summary>
+    public const string SelfAttestationReason = "self-attested-at-creation";
+
+    /// <summary>
     /// spec: dfes-companion-2026-07-11 (wave-1.3) — an owner's own log must come back
     /// from the server as a day that counts.
     ///
@@ -237,6 +258,9 @@ public sealed class DailyLog : Entity<Guid>
     /// <para>The caller MUST derive <paramref name="creatorRole"/> from the operator's
     /// membership on the server. A client-supplied role would make the device the authority
     /// on its own approval, which is exactly what the FSM exists to prevent.</para>
+    ///
+    /// <para><b>Both events carry <see cref="SelfAttestationReason"/>.</b> See that field —
+    /// it is the marker that keeps this decision reversible.</para>
     /// </summary>
     /// <returns><c>true</c> when both attestation events were emitted.</returns>
     public bool TrySelfVerifyAsCreator(
@@ -263,8 +287,8 @@ public sealed class DailyLog : Entity<Guid>
             return false;
         }
 
-        Verify(confirmEventId, VerificationStatus.Confirmed, null, creatorRole, OperatorUserId, occurredAtUtc);
-        Verify(verifyEventId, VerificationStatus.Verified, null, creatorRole, OperatorUserId, occurredAtUtc.AddMilliseconds(1));
+        Verify(confirmEventId, VerificationStatus.Confirmed, SelfAttestationReason, creatorRole, OperatorUserId, occurredAtUtc);
+        Verify(verifyEventId, VerificationStatus.Verified, SelfAttestationReason, creatorRole, OperatorUserId, occurredAtUtc.AddMilliseconds(1));
         return true;
     }
 

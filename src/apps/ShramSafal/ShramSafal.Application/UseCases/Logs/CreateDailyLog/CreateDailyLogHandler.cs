@@ -5,6 +5,7 @@ using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
+using AgriSync.SharedKernel.Contracts.Roles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Contracts.Dtos;
@@ -252,9 +253,11 @@ public sealed class CreateDailyLogHandler(
         // needs an owner. No FSM edge was added or widened.
         var creatorRole = await repository.GetUserRoleForFarmAsync(
             command.FarmId, command.OperatorUserId, ct);
+        AppRole? selfAttestedAs = null;
         if (creatorRole is { } role
             && log.TrySelfVerifyAsCreator(idGenerator.New(), idGenerator.New(), role, clock.UtcNow))
         {
+            selfAttestedAs = role;
             logger.LogInformation(
                 "DailyLog {LogId} self-verified on create: operator {OperatorUserId} holds {Role} on farm {FarmId}, " +
                 "which carries both Draft->Confirmed and Confirmed->Verified.",
@@ -292,6 +295,52 @@ public sealed class CreateDailyLogHandler(
                 ipHash: command.AuditIpHash,
                 sourceAiJobId: validatedSourceAiJobId),
             ct);
+
+        // ── spec: dfes-companion-2026-07-11 (wave-1.3) — I1 ──────────────────────
+        // THE ATTESTATION MUST LEAVE A TRACE. Above, an owner's own log acquires TWO
+        // verification events — "I recorded this" and "I vouch for it" — without any
+        // human pressing an approve button. The explicit approve path
+        // (VerifyLogHandler) writes a VerificationChanged audit row for exactly one
+        // such act; this path was writing only "Created" for two.
+        //
+        // Verification events are themselves persisted, so the state is not lost —
+        // but the AUDIT LEDGER is what answers "who claimed authority over this day,
+        // from which device, on which app version, under which role", and an audit row
+        // that was never written at the moment of the act can never be reconstructed
+        // afterwards. A pilot's worth of self-attestations with no audit row is an
+        // unrepairable gap, which is why this is written here and not deferred.
+        //
+        // Provenance arguments are IDENTICAL to the Created row above (same request,
+        // same device, same app version, same AI-job back-reference), because it is
+        // the same act. The payload carries the SERVER-DERIVED role — the actual
+        // authority the attestation rested on — separately from actorRole, which (like
+        // every other row here) records what the caller CLAIMED to be.
+        if (selfAttestedAs is { } attestedRole)
+        {
+            await repository.AddAuditEventAsync(
+                AuditEventFactory.Create(
+                    entityType: "DailyLog",
+                    entityId: log.Id,
+                    action: "VerificationChanged",
+                    actorUserId: command.OperatorUserId,
+                    actorRole: command.ActorRole ?? "unknown",
+                    payload: new
+                    {
+                        logId = log.Id,
+                        from = Domain.Logs.VerificationStatus.Draft.ToString(),
+                        to = Domain.Logs.VerificationStatus.Verified.ToString(),
+                        selfAttested = true,
+                        role = attestedRole.ToString(),
+                        reason = Domain.Logs.DailyLog.SelfAttestationReason
+                    },
+                    farmId: command.FarmId,
+                    clientCommandId: command.ClientRequestId,
+                    appVersion: stampedAppVersion,
+                    deviceId: command.AuditDeviceId,
+                    ipHash: command.AuditIpHash,
+                    sourceAiJobId: validatedSourceAiJobId),
+                ct);
+        }
 
         // ── Fix F1: TWO-PHASE persistence ────────────────────────────────────
         // PHASE 1 — commit the farmer's DailyLog + its audit row on their OWN

@@ -559,15 +559,27 @@ public sealed class SyncEndpointsTests
             .GetProperty("costEntries")
             .EnumerateArray()
             .Single(x => x.GetProperty("id").GetGuid() == costEntryId);
-        var latestVerification = dailyLog
-            .GetProperty("verificationEvents")
-            .EnumerateArray()
-            .OrderByDescending(x => x.GetProperty("occurredAtUtc").GetDateTime())
-            .First();
+        // spec: dfes-companion-2026-07-11 (wave-1.3) — I4. This used to take the LATEST
+        // verification event and assert its verifiedByUserId. That was specific when the
+        // verify_log mutation was the only thing that ever produced one. It is not any
+        // more: the create path now contributes two attestation events of its own, and
+        // both ALREADY carry TestUserId — so "the latest event names the JWT user" would
+        // hold even if the verify_log mutation had trusted the spoofed payload id, or
+        // had silently stopped emitting an event at all. The assertion would have gone
+        // green while the thing it exists to catch regressed.
+        //
+        // Pick the event THIS mutation produced, by the two things only it has: the
+        // Disputed status and the reason string sent above. Then assert the identity.
+        var verificationEvents = dailyLog.GetProperty("verificationEvents").EnumerateArray().ToList();
+        var disputedByThisMutation = Assert.Single(
+            verificationEvents,
+            x => x.GetProperty("status").GetString() == "disputed"
+                && x.GetProperty("reason").GetString() == "spoof-check: the actor must come from the JWT");
 
         Assert.Equal(TestUserId, dailyLog.GetProperty("operatorUserId").GetGuid());
         Assert.Equal(TestUserId, costEntry.GetProperty("createdByUserId").GetGuid());
-        Assert.Equal(TestUserId, latestVerification.GetProperty("verifiedByUserId").GetGuid());
+        Assert.Equal(TestUserId, disputedByThisMutation.GetProperty("verifiedByUserId").GetGuid());
+        Assert.NotEqual(spoofedUserId, disputedByThisMutation.GetProperty("verifiedByUserId").GetGuid());
     }
 
     [Fact]

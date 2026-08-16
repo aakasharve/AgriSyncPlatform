@@ -47,8 +47,9 @@ namespace ShramSafal.Sync.IntegrationTests.Audit;
 /// DATA_PRINCIPLE_SPINE_2026-05-05 sub-phase 04.6 — proves the audit ledger is
 /// reconstructable end-to-end. Given a single <c>daily_log</c> id, the audit
 /// chain reads back as a complete <c>(actor, when, app_version, device_id,
-/// ip_hash, source_ai_job_id)</c> lineage across the log's three-event
-/// lifecycle: <c>Created</c> → <c>TaskAdded</c> → <c>VerificationChanged</c>.
+/// ip_hash, source_ai_job_id)</c> lineage across the log's lifecycle:
+/// <c>Created</c> → <c>VerificationChanged</c> (the create-time self-attestation,
+/// added by dfes-companion wave-1.3) → <c>TaskAdded</c> → <c>VerificationChanged</c>.
 ///
 /// <para>
 /// The spec's prose lists <c>Created → Verified → Flagged</c> as the lifecycle,
@@ -186,12 +187,35 @@ public sealed class AuditReconstructionTests
                 .OrderBy(a => a.OccurredAtUtc)
                 .ToListAsync();
 
-            chain.Should().HaveCount(3,
-                "the lifecycle emits exactly three audit rows: Created, TaskAdded, VerificationChanged");
+            // spec: dfes-companion-2026-07-11 (wave-1.3) — I1. The chain gained a fourth
+            // row. An owner's own log is now ATTESTED at creation (Draft -> Confirmed ->
+            // Verified, by the person who recorded it), and an attestation that leaves no
+            // audit row can never be reconstructed afterwards — which is the one thing
+            // this suite exists to guarantee. The row is asserted by identity below rather
+            // than by position, so a later lifecycle change reads as a count change here
+            // instead of a silent re-index.
+            chain.Should().HaveCount(4,
+                "the lifecycle emits four audit rows: Created, VerificationChanged (the " +
+                "create-time self-attestation), TaskAdded, VerificationChanged (the dispute)");
 
-            chain[0].Action.Should().Be("Created");
-            chain[1].Action.Should().Be("TaskAdded");
-            chain[2].Action.Should().Be("VerificationChanged");
+            chain.Select(a => a.Action).Should().BeEquivalentTo(
+                new[] { "Created", "VerificationChanged", "TaskAdded", "VerificationChanged" });
+
+            chain[0].Action.Should().Be("Created", "the log's own row opens the chain");
+
+            var createdRow = chain.Single(a => a.Action == "Created");
+            var taskAddedRow = chain.Single(a => a.Action == "TaskAdded");
+            var selfAttestationRow = chain.Single(a =>
+                a.Action == "VerificationChanged" && a.Payload.Contains("\"selfAttested\":true"));
+            var disputeRow = chain.Single(a =>
+                a.Action == "VerificationChanged" && a.Payload.Contains("\"status\":\"Disputed\""));
+
+            selfAttestationRow.Payload.Should().Contain("\"from\":\"Draft\"").And.Contain("\"to\":\"Verified\"",
+                "the row must say which way the status moved, or it cannot be replayed");
+            selfAttestationRow.Payload.Should().Contain("\"role\":\"PrimaryOwner\"",
+                "the SERVER-DERIVED role is the authority the attestation rested on");
+            selfAttestationRow.ClientCommandId.Should().Be(createdRow.ClientCommandId,
+                "it is the same act as the Created row and must correlate to the same client command");
 
             // P6 — forensic trio must be present on every row.
             chain.Should().AllSatisfy(row =>
@@ -212,15 +236,18 @@ public sealed class AuditReconstructionTests
             });
 
             // P8 — voice-created rows back-link to the AI job that produced the
-            // parsed draft. Only the Created row was emitted on the voice path;
-            // TaskAdded and VerificationChanged hand `sourceAiJobId: null` to
+            // parsed draft. The Created row and the create-time self-attestation are
+            // the SAME act on the voice path and carry the same back-reference;
+            // TaskAdded and the later explicit dispute hand `sourceAiJobId: null` to
             // the factory per their handler code.
-            chain[0].SourceAiJobId.Should().Be(AiJobGuid,
+            createdRow.SourceAiJobId.Should().Be(AiJobGuid,
                 "voice-confirmed Create rows must back-link to the originating AiJob (P8)");
-            chain[1].SourceAiJobId.Should().BeNull(
+            selfAttestationRow.SourceAiJobId.Should().Be(AiJobGuid,
+                "the attestation is part of the same voice-created act and carries its provenance");
+            taskAddedRow.SourceAiJobId.Should().BeNull(
                 "TaskAdded does not originate from an AI parse — its handler passes null");
-            chain[2].SourceAiJobId.Should().BeNull(
-                "VerificationChanged does not originate from an AI parse — its handler passes null");
+            disputeRow.SourceAiJobId.Should().BeNull(
+                "an explicit VerificationChanged does not originate from an AI parse — its handler passes null");
         }
     }
 
