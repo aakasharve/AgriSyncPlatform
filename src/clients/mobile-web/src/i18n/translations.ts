@@ -50,6 +50,13 @@ export interface Translations {
         orTypeHere: string;
         checkInput: string;
         micError: string;
+        /**
+         * spec: dfes-companion-2026-07-11 (wave-4.3) — shown when the OS DENIES the
+         * microphone, in place of the generic error. Refusing a device permission is not
+         * a withdrawal of consent and must never read as the end of the road: the typing
+         * route is right below and stays enabled, so the message points at it.
+         */
+        micDeniedTypeInstead: string;
         selectCropFirst: string;
         tapToSelect: string;
         autoStopping: string;
@@ -484,6 +491,7 @@ export const translations: Record<Language, Translations> = {
             orTypeHere: 'Or type here...',
             checkInput: 'Check Input',
             micError: 'Could not access microphone. Please ensure permissions are granted.',
+            micDeniedTypeInstead: 'The microphone is off. That is fine — type below and everything still works.',
             selectCropFirst: 'First Choose the crop or plot where you worked today',
             tapToSelect: 'Tap to Select',
             autoStopping: 'Auto-stopping in {seconds}s...',
@@ -815,6 +823,7 @@ export const translations: Record<Language, Translations> = {
             orTypeHere: 'किंवा इथे टाइप करा...',
             checkInput: 'इनपुट तपासा',
             micError: 'माइक वापरता आला नाही. कृपया परवानगी द्या.',
+            micDeniedTypeInstead: 'माइक बंद आहे. हरकत नाही — खाली लिहून सगळं तसंच करता येतं.',
             selectCropFirst: 'प्रथम आज काम केलेले पीक किंवा प्लॉट निवडा',
             tapToSelect: 'निवडण्यासाठी दाबा',
             autoStopping: '{seconds} सेकंदात आपोआप थांबेल...',

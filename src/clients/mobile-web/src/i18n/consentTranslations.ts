@@ -45,6 +45,13 @@ export interface ConsentBundle {
     revoke: {
         button: string;
         confirm: string;
+        /**
+         * spec: dfes-companion-2026-07-11 (wave-4.3) — DPDP requires withdrawal to be as
+         * easy as granting AND requires the CONSEQUENCE to be explained. "Are you sure?"
+         * explains nothing; this line names what actually stops (and, just as
+         * importantly, what does not — his farm records stay).
+         */
+        whatStops: string;
     };
     save: {
         button: string;
@@ -78,6 +85,7 @@ const mr: ConsentBundle = {
     revoke: {
         button: tagLegalString('सर्व रद्द करा'),
         confirm: tagLegalString('तुम्ही खात्रीने सर्व परवानग्या रद्द करू इच्छिता?'),
+        whatStops: tagLegalString('रद्द केल्यावर: जुने आवाज पुन्हा ऐकता येणार नाहीत. बाकी सगळं तसंच चालू राहील — तुमचं शेत, तुमची कामं आणि तुमचा हिशोब जिथल्या तिथेच राहतो. हवं तेव्हा पुन्हा परवानगी देता येते.'),
     },
     save: {
         button: tagLegalString('जतन करा'),
@@ -111,6 +119,7 @@ const hi: ConsentBundle = {
     revoke: {
         button: tagLegalString('सब रद्द करें'),
         confirm: tagLegalString('क्या आप वाकई सभी अनुमतियाँ रद्द करना चाहते हैं?'),
+        whatStops: tagLegalString('रद्द करने पर: पुरानी आवाज़ें दोबारा नहीं सुनी जा सकेंगी। बाकी सब वैसा ही चलता रहेगा — आपका खेत, आपके काम और आपका हिसाब वहीं रहते हैं। जब चाहें दोबारा अनुमति दे सकते हैं।'),
     },
     save: {
         button: tagLegalString('सहेजें'),
@@ -144,6 +153,7 @@ const en: ConsentBundle = {
     revoke: {
         button: tagLegalString('Revoke all'),
         confirm: tagLegalString('Are you sure you want to revoke every permission?'),
+        whatStops: tagLegalString('If you revoke: you will no longer be able to play back your older recordings. Everything else keeps working — your farm, your work and your accounts stay exactly where they are. You can grant permission again whenever you like.'),
     },
     save: {
         button: tagLegalString('Save'),

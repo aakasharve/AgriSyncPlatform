@@ -46,7 +46,7 @@ export const NOTICE_LEGAL_REVIEW_PENDING = 'LEGAL_REVIEW_PENDING' as const;
  * separate on purpose — the notice can be reworded without the Terms changing, and a
  * record has to be able to say which of the three moved.
  */
-export const NOTICE_VERSION = 'notice-2026-08-16.1';
+export const NOTICE_VERSION = 'notice-2026-08-16.2';
 export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-16.1';
 export const TERMS_VERSION = 'terms-2026-08-16.1';
 
@@ -162,6 +162,7 @@ const mr: NoticeCopy = {
             'तुमच्या वेगळ्या परवानगीशिवाय बँक, विमा कंपनी, व्यापारी किंवा कोणत्याही भागीदाराला देणार नाही.',
             'तुम्ही परवानगी दिल्याशिवाय तुमचा आवाज साठवून ठेवणार नाही.',
             'तुमचं काम जाहिरातीसाठी वापरणार नाही.',
+            'तुमचं बोलणं किंवा तुमचं काम वापरून आमची किंवा भागीदाराची यंत्रणा शिकवणार नाही — त्यासाठी वेगळी परवानगी लागते आणि ती सुरुवातीला बंदच असते.',
             'मायक्रोफोनला तुम्ही नाही म्हटलं म्हणून अ‍ॅप बंद करणार नाही — हाताने लिहून सगळं करता येतं.',
             'वर लिहिलेल्या कामांशिवाय दुसऱ्या कशासाठीही ही माहिती वापरणार नाही. नवीन कारण आलं तर आम्ही पुन्हा विचारू.',
         ],
@@ -270,6 +271,7 @@ const en: NoticeCopy = {
             'We will not give it to a bank, an insurer, a trader or any partner without your separate permission.',
             'We will not keep your voice recordings unless you turn that on.',
             'We will not use your work in advertising.',
+            'We will not train our systems, or a partner’s, on your voice or your work — that needs a separate permission, and it is off to begin with.',
             'We will not shut you out for refusing the microphone — everything can be entered by hand.',
             'We will not use this information for anything beyond the purposes listed above. If a new reason comes up, we will ask you again.',
         ],

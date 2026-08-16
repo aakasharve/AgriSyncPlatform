@@ -20,6 +20,8 @@ vi.mock('../../../infrastructure/ai/TranscribeStreamConsumer', () => ({
 import { useVoiceRecorder } from '../useVoiceRecorder';
 import { getDatabase, resetDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { PendingInterpretationStore } from '../continuity/PendingInterpretationStore';
+import { ACCEPTED_NOTICE_PREF_KEY } from '../../consent/separation/coreConsentGate';
+import { NOTICE_VERSION } from '../../consent/gate/consentNotice';
 import type { VoiceParserPort, VoiceParseResult } from '../../../application/ports';
 import type { AudioData, CropProfile, FarmerProfile, FarmContext, InputMode } from '../../../types';
 import type { LogScope } from '../../../domain/types/log.types';
@@ -61,6 +63,11 @@ describe('useVoiceRecorder voice-continuity (flag ON)', () => {
     beforeEach(async () => {
         Object.defineProperty(globalThis.navigator, 'onLine', { value: true, configurable: true });
         const db = getDatabase(); try { await db.delete(); } catch { /* ignore */ } await resetDatabase();
+        // spec: dfes-companion-2026-07-11 (wave-4.3) — a farmer at the recorder has passed
+        // the first-open gate; the gate stands in front of login and the recorder is behind
+        // it. Recording that here is what makes this the ordinary case rather than an
+        // impossible one. The refusal case is its own test below.
+        await getDatabase().uiPrefs.put({ key: ACCEPTED_NOTICE_PREF_KEY, value: NOTICE_VERSION });
     });
 
     it('persists an audio-only pending capture when batch parse fails and device ASR is unavailable (streak preserved: no dead-end error)', async () => {
@@ -77,5 +84,22 @@ describe('useVoiceRecorder voice-continuity (flag ON)', () => {
         expect(pending[0].ladderLevel).toBe('audio-only');
         expect(pending[0].audioBase64).toBeTruthy();
         expect(pending[0].farmId).toBe('farm-1');
+    });
+
+    // spec: dfes-companion-2026-07-11 (wave-4.3) — NEVER STORE A VOICE CLIP BEFORE CORE
+    // CONSENT, and never turn that refusal into a crash.
+    it('discards the audio-only capture when core consent is not recorded, without a dead end', async () => {
+        await getDatabase().uiPrefs.delete(ACCEPTED_NOTICE_PREF_KEY);
+
+        const { result } = renderHook(() => useVoiceRecorder(props(failingParser(), preprocessorOk())));
+        await act(async () => { await result.current.handleAudioReady(FAKE_AUDIO); });
+
+        // WE lose the clip — he does not lose the app. Without a lawful basis we may not
+        // hold his voice, and the honest outcome is a discard, not an exception thrown out
+        // of the save path.
+        const pending = await PendingInterpretationStore.getInstance().listPending();
+        expect(pending).toHaveLength(0);
+        expect(result.current.savedPendingCaptureId).toBeNull();
+        expect(result.current.status).toBe('idle');
     });
 });

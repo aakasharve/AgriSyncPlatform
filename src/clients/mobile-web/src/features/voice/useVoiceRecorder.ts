@@ -13,6 +13,7 @@ import { TranscribeStreamConsumer } from '../../infrastructure/ai/TranscribeStre
 import { FEATURE_FLAGS } from '../../app/featureFlags';
 import { buildCanonicalVoiceInput } from './continuity/canonicalVoiceInput';
 import { buildPendingFromCanonical, type ContinuityLevel } from './continuity/voiceContinuityLadder';
+import { CoreConsentMissingError } from '../consent/separation/coreConsentGate';
 import type { PendingLadderLevel } from './continuity/pendingInterpretation';
 import { PendingInterpretationStore } from './continuity/PendingInterpretationStore';
 import { DeviceSpeechRecognizer } from '../../infrastructure/voice/DeviceSpeechRecognizer';
@@ -390,7 +391,22 @@ export const useVoiceRecorder = ({
         // salvaged any words: transcript-only (L3) vs audio-only (L4).
         const level: PendingLadderLevel = transcript ? 'transcript-only' : 'audio-only';
         const record = buildPendingFromCanonical(canonical, level, Date.now());
-        await PendingInterpretationStore.getInstance().persist(record);
+        try {
+            await PendingInterpretationStore.getInstance().persist(record);
+        } catch (err) {
+            // spec: dfes-companion-2026-07-11 (wave-4.3) — the store refuses to keep raw
+            // audio without core consent. In production this cannot be reached: the gate
+            // stands in front of login and the recorder is behind it. If it ever is, the
+            // right outcome is that WE LOSE THE CLIP, not that the farmer loses the app —
+            // so this reports and returns instead of throwing out of the save path.
+            // The clip is gone, and honestly so: without a basis we may not hold his voice.
+            if (err instanceof CoreConsentMissingError) {
+                console.warn('[useVoiceRecorder] degraded capture discarded:', err.message);
+                setStatus('idle');
+                return;
+            }
+            throw err;
+        }
         setContinuityLevel(level);
         setSavedPendingCaptureId(record.captureId);
         setStatus('idle');

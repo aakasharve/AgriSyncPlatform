@@ -116,7 +116,17 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
       // (NotSupportedError). Remove the suffix once the root cause is confirmed.
       const name = (err as { name?: string })?.name || 'Error';
       console.error("Error accessing microphone:", err);
-      setInternalError(`${t('voice.micError')} [${name}]`);
+
+      // spec: dfes-companion-2026-07-11 (wave-4.3) — REFUSING THE MICROPHONE MUST NOT
+      // BLOCK MANUAL ENTRY. The typing form below has always stayed mounted and enabled
+      // through a mic failure, but the message did not say so, and a farmer reading only
+      // "microphone error" reasonably concludes the app is now useless to him. A route
+      // that exists but is not visible is not a route. Also: a denial is an OS decision,
+      // never a withdrawal of consent — nothing here touches the consent record.
+      setInternalError(
+        name === 'NotAllowedError'
+          ? t('voice.micDeniedTypeInstead')
+          : `${t('voice.micError')} [${name}]`);
     }
   }, [onAudioCaptured, t]);
 

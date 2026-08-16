@@ -156,6 +156,31 @@
 //   - ssf.consent_audit / ssf.audit_events — append-only by
 //     privilege; flagged "redacted" at the column level, never
 //     deleted.
+//   - ssf.terms_acceptance_events / ssf.consent_grant_events — spec: dfes-companion-2026-07-11
+//     (wave-4.2/4.3). The two legal records behind the first-open gate. Both carry a NULLABLE
+//     user_id (NULL for a pre-registration row, whose only key is pre_registration_session_id),
+//     the notice/policy/terms versions, the displayed language, the accepted purpose codes and a
+//     SHA-256 of the exact notice displayed. KEEP — conscious gate-4 disposition, and the one
+//     case where keeping is the pro-privacy answer rather than the convenient one.
+//
+//     Why. These rows are the EVIDENCE OF THE LAWFUL BASIS on which everything else was held.
+//     Erasing them would destroy the only proof that the data we are erasing was ever lawfully
+//     collected, and would make a later "we never had your permission" impossible to answer
+//     truthfully in either direction. DPDP §12 requires erasure of personal data, and permits
+//     retaining what the law requires — a consent record is precisely that. §W4.3 step 5 states
+//     the same rule from the farmer's side: "retain only what law requires."
+//
+//     They also CANNOT be scrubbed by this worker even if we wanted to: the migration issues
+//     REVOKE UPDATE, DELETE ... FROM agrisync_app (20260816170524_AddConsentGateLedgers), so the
+//     app role has no UPDATE privilege to redact with. The disposition and the privilege agree,
+//     which is how it should be — a KEEP that depended on nobody writing the wrong line of code
+//     would be a wish, not a control.
+//
+//     The identifier exposure is bounded by design: a user_id and a session id, no name, no phone
+//     number, no farm content, no free-text. Withdrawal is expressed the same append-only way —
+//     a NEW row with status='Withdrawn' — so an erased farmer's ledger still reads truthfully as
+//     "granted, then withdrawn", which is the sequence a regulator would ask about. No scrub
+//     action.
 //
 // All DB writes use IAdminDbContextFactory<ShramSafalDbContext> per
 // Phase 04 precedent (the cross-tenant span here is by definition
