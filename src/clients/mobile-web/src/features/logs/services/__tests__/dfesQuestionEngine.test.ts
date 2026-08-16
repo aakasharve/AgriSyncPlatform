@@ -514,3 +514,111 @@ describe('selectDailyQuestion — WeatherReconcile tier (Task 4B)', () => {
         expect(result).toBeNull();
     });
 });
+
+// spec: dfes-companion-2026-07-11 (wave-3.2) — Ruling 1: an execution-gap question
+// belongs to the SPECIFIC SOURCE LOG, not to a day. Monday's and Wednesday's spray logs
+// both missing a dose may BOTH be asked; the same log must never receive the same
+// question twice, ever. That has no time component, so the exclusion is PERMANENT and is
+// deliberately not expressed as a longer cooldown.
+describe('per-log dedupe for execution gaps (wave-3.2, Ruling 1)', () => {
+    const gapDose = (o: Partial<DailyQuestionInputs['recentEvents'][number]> = {}): DailyQuestionInputs['recentEvents'][number] => ({
+        questionKey: 'gap.dose', createdAtLocalDate: '2026-07-09', ageDays: 5,
+        skipped: false, dailyLogId: null, ...o,
+    });
+
+    it('asks the dose question again for a DIFFERENT spray log', () => {
+        // ageDays 2 is INSIDE gap.dose's 3-day cooldown, so this only passes if the
+        // per-log rule genuinely replaces the day rule for execution gaps.
+        const r = selectDailyQuestion(base({
+            sourceLogId: 'log-wed',
+            recentEvents: [gapDose({ dailyLogId: 'log-mon', ageDays: 2 })],
+        }));
+        expect(r?.question.questionKey).toBe('gap.dose');
+    });
+
+    it('never asks the dose question twice for the SAME log, however old', () => {
+        // 400 days is far outside every cooldown in the bank. Only a PERMANENT
+        // per-log exclusion can suppress this; a longer cooldown could not.
+        const r = selectDailyQuestion(base({
+            sourceLogId: 'log-mon',
+            recentEvents: [gapDose({ dailyLogId: 'log-mon', ageDays: 400 })],
+        }));
+        expect(r?.question.questionKey).not.toBe('gap.dose');
+    });
+
+    it('falls back to the day cooldown when the old row has no log id', () => {
+        // Every question_events row written before wave-3.1 has daily_log_id NULL.
+        // Treating those as "asked about no log" would unblock every gap question at
+        // once, the day the API deploys.
+        const r = selectDailyQuestion(base({
+            sourceLogId: 'log-wed',
+            recentEvents: [gapDose({ dailyLogId: null, ageDays: 1 })],
+        }));
+        expect(r?.question.questionKey).not.toBe('gap.dose');
+    });
+
+    it('keeps day cooldowns for CONTEXT questions even across logs', () => {
+        // stage.confirm_current is not a Gap/Execution question: it builds the
+        // relationship rather than repairing one record, so it stays day-scoped.
+        const r = selectDailyQuestion(base({
+            score: { score: 90, outcome: 'SCORED', dimensions: [] },
+            stageContext: { crop: 'grapes', expectedStage: 'flowering' },
+            lastStageConfirm: null,
+            sourceLogId: 'log-wed',
+            recentEvents: [{
+                questionKey: 'stage.confirm_current', createdAtLocalDate: '2026-07-10',
+                ageDays: 1, skipped: false, dailyLogId: 'log-mon',
+            }],
+        }));
+        expect(r?.question.questionKey).not.toBe('stage.confirm_current');
+    });
+
+    it('a SKIPPED per-log ask still burns the question for that log, permanently', () => {
+        // A skip is still "this log was asked". Ruling 1 has no answered/skipped
+        // distinction — SKIP_COOLDOWN_DAYS is a DAY-scoped mechanism and must not
+        // resurrect a question for a log that already received it.
+        const r = selectDailyQuestion(base({
+            sourceLogId: 'log-mon',
+            recentEvents: [gapDose({ dailyLogId: 'log-mon', ageDays: 30, skipped: true })],
+        }));
+        expect(r?.question.questionKey).not.toBe('gap.dose');
+    });
+
+    it('does NOT relax the one-question-per-day gate — a new log on the same day still waits', () => {
+        // MAX_QUESTIONS_PER_DAY is structural, not tunable. Per-log scoping must not
+        // turn "one question a day" into "one question per log per day".
+        const r = selectDailyQuestion(base({
+            sourceLogId: 'log-wed',
+            recentEvents: [gapDose({ dailyLogId: 'log-mon', createdAtLocalDate: '2026-07-11', ageDays: 0 })],
+        }));
+        expect(r).toBeNull();
+    });
+
+    /**
+     * DOCUMENTED EDGE, asserted rather than left to be discovered.
+     *
+     * With no `sourceLogId`, a per-log question consults only the LEGACY (null-log) rows
+     * for its cooldown, so a row belonging to some OTHER log does not suppress it. That
+     * is the direct consequence of Ruling 1 — a different log may be asked the same
+     * question — and it is deliberate, not an oversight in the null branch.
+     *
+     * It is also unreachable from the real app: LedgerRecognitionPanel derives BOTH
+     * `sourceLogId` and `score` from the same `savedLog` (:193, :202), so a render with
+     * no log id also has no score, and the Gap tier never runs. The one-question-per-day
+     * gate caps it regardless. Pinned so that if a future caller ever supplies a score
+     * WITHOUT a log id, this test states what will happen instead of it being a surprise.
+     */
+    it('with no sourceLogId, a per-log question is judged only against legacy (null-log) rows', () => {
+        const r = selectDailyQuestion(base({
+            recentEvents: [gapDose({ dailyLogId: 'log-mon', ageDays: 1 })],
+        }));
+        expect(r?.question.questionKey).toBe('gap.dose');
+
+        // The same call with the row marked legacy IS suppressed — which is what proves
+        // the assertion above is about the log id, not about the cooldown being dead.
+        const legacy = selectDailyQuestion(base({
+            recentEvents: [gapDose({ dailyLogId: null, ageDays: 1 })],
+        }));
+        expect(legacy).toBeNull();
+    });
+});

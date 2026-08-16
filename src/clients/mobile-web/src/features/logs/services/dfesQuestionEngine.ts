@@ -124,8 +124,56 @@ function onCooldown(q: DfesQuestion, recent: RecentQuestionEvent[]): boolean {
     return recent.some(e => e.questionKey === q.questionKey && e.ageDays < effectiveCooldownDays(q, e));
 }
 
-function eligible(q: DfesQuestion | undefined, recent: RecentQuestionEvent[]): q is DfesQuestion {
-    return approved(q) && !onCooldown(q, recent);
+/**
+ * wave-3.2, Ruling 1 (2026-08-15). Execution-gap questions dedupe per SOURCE LOG,
+ * permanently — Monday's and Wednesday's spray logs may BOTH be asked for a dose.
+ * Context questions (crop stage, previous observation, learning) keep day-based
+ * cooldowns, because they build the relationship rather than repair one record.
+ *
+ * The split is read from bank metadata already present: GAP_LENS assigns
+ * WHAT/DOSE/CARRIER/COST to 'Execution'. No new vocabulary, no second list to drift.
+ */
+function isPerLogScoped(q: DfesQuestion): boolean {
+    return q.triggerType === 'Gap' && q.lens === 'Execution';
+}
+
+/**
+ * Already asked for THIS log — PERMANENT, with no time window.
+ *
+ * Ruling 1 says "the same log must never receive the same question twice". That has no
+ * time component, so this is deliberately NOT an age comparison and deliberately not a
+ * longer cooldown: a cooldown, however long, eventually expires and re-asks a log about
+ * a day the farmer has long since moved past.
+ *
+ * `skipped` is not consulted either. A skip is still "this log was asked";
+ * SKIP_COOLDOWN_DAYS is a DAY-scoped mechanism and must not resurrect a question for a
+ * log that already received it.
+ *
+ * Returns false when either side lacks a log id. Every question_events row written
+ * before wave-3.1 has daily_log_id NULL, and treating those as "asked for no log" would
+ * unblock every gap question at once the day the API deploys.
+ */
+function askedForLog(q: DfesQuestion, recent: RecentQuestionEvent[], sourceLogId?: string): boolean {
+    if (!sourceLogId) return false;
+    return recent.some(e => e.questionKey === q.questionKey && e.dailyLogId === sourceLogId);
+}
+
+function eligible(
+    q: DfesQuestion | undefined,
+    recent: RecentQuestionEvent[],
+    sourceLogId?: string,
+): q is DfesQuestion {
+    if (!approved(q)) return false;
+    if (isPerLogScoped(q)) {
+        // Per-log questions: permanent exclusion for THIS log, and the day cooldown
+        // still applies to rows that predate per-log tracking (dailyLogId === null).
+        // Without that second half, deploying wave-3.1 would make every legacy row
+        // invisible and every gap question immediately re-askable.
+        if (askedForLog(q, recent, sourceLogId)) return false;
+        const legacyOnly = recent.filter(e => e.dailyLogId === null);
+        return !onCooldown(q, legacyOnly);
+    }
+    return !onCooldown(q, recent);
 }
 
 /**
@@ -244,31 +292,34 @@ export function selectDailyQuestion(inputs: DailyQuestionInputs): SelectedQuesti
         return null;
     }
     const recent = inputs.recentEvents;
+    // wave-3.2, Ruling 1 — threaded into every eligibility check, not just the Gap tier,
+    // so a future question added to any tier cannot bypass per-log scoping by omission.
+    const sourceLogId = inputs.sourceLogId;
     const w = inputs.weather;
 
     // P1 Safety — high wind makes spraying unsafe.
     if (w && (w.windKph ?? 0) >= TRIGGER_CONFIG.windKphThreshold) {
         const q = findQuestion('safety.spray_wind_high');
-        if (eligible(q, recent)) return pack(q, inputs, `wind ${w.windKph}kph >= ${TRIGGER_CONFIG.windKphThreshold}`);
+        if (eligible(q, recent, sourceLogId)) return pack(q, inputs, `wind ${w.windKph}kph >= ${TRIGGER_CONFIG.windKphThreshold}`);
     }
 
     // P2 Weather — rain likely before a planned spray.
     if (w && (w.rainProbNext6h ?? 0) >= TRIGGER_CONFIG.rainProbThresholdPct) {
         const q = findQuestion('weather.rain_before_spray');
-        if (eligible(q, recent)) return pack(q, inputs, `rainProbNext6h ${w.rainProbNext6h}% >= ${TRIGGER_CONFIG.rainProbThresholdPct}`);
+        if (eligible(q, recent, sourceLogId)) return pack(q, inputs, `rainProbNext6h ${w.rainProbNext6h}% >= ${TRIGGER_CONFIG.rainProbThresholdPct}`);
     }
 
     // P3 StageWindow — planned-vs-actual confirmation window open.
     if (isStageConfirmationWindowOpen(inputs.stageContext, inputs.lastStageConfirm ?? null)) {
         const q = findQuestion('stage.confirm_current');
-        if (eligible(q, recent)) return pack(q, inputs, `stage window open (expected=${inputs.stageContext?.expectedStage})`);
+        if (eligible(q, recent, sourceLogId)) return pack(q, inputs, `stage window open (expected=${inputs.stageContext?.expectedStage})`);
     }
 
     // P4 Schedule — category-scoped "was today's planned {category} work done?"
     // (Task 3A). Category-level only — never a fabricated precise task claim.
     if (inputs.scheduleContext) {
         const q = findQuestion('schedule.category_planned_not_done');
-        if (eligible(q, recent)) return pack(q, inputs, `schedule gap: ${inputs.scheduleContext.category} planned, 0 done today`);
+        if (eligible(q, recent, sourceLogId)) return pack(q, inputs, `schedule gap: ${inputs.scheduleContext.category} planned, 0 done today`);
     }
 
     // P5 WeatherReconcile — severe weather recorded, no logged impact (Task
@@ -276,28 +327,28 @@ export function selectDailyQuestion(inputs: DailyQuestionInputs): SelectedQuesti
     // relevant than a generic gap, so it sits ahead of Gap.
     if (inputs.weatherReconcileContext) {
         const q = findQuestion('weather.severe_care_check');
-        if (eligible(q, recent)) return pack(q, inputs, `weather reconcile: ${inputs.weatherReconcileContext.reason}`);
+        if (eligible(q, recent, sourceLogId)) return pack(q, inputs, `weather reconcile: ${inputs.weatherReconcileContext.reason}`);
     }
 
     // P6 Gap — biggest comprehension gap from the (stage-aware) ranker.
     if (inputs.score) {
         for (const gap of rankMeterGaps(inputs.score, inputs.stageContext, 8)) {
             const q = findGapQuestion(gap.dimension);
-            if (eligible(q, recent)) return pack(q, inputs, `gap ${gap.dimension} leverage ${gap.leverage}`);
+            if (eligible(q, recent, sourceLogId)) return pack(q, inputs, `gap ${gap.dimension} leverage ${gap.leverage}`);
         }
     }
 
     // P7 Followup — an open observation awaiting an outcome.
     if (inputs.openObservation) {
         const q = findQuestion('followup.observation_outcome');
-        if (eligible(q, recent)) return pack(q, inputs, 'open observation outcome');
+        if (eligible(q, recent, sourceLogId)) return pack(q, inputs, 'open observation outcome');
     }
 
     // P8 Learning — deepen once the farmer has EARNED it (>= richDayThreshold rich days).
     if (inputs.engagement.totalRichDays >= DFES_TUNING.richDayThreshold) {
         for (const key of ['learning.deepen_hypothesis', 'learning.next_experiment']) {
             const q = findQuestion(key);
-            if (eligible(q, recent)) return pack(q, inputs, `learning tier (richDays ${inputs.engagement.totalRichDays})`);
+            if (eligible(q, recent, sourceLogId)) return pack(q, inputs, `learning tier (richDays ${inputs.engagement.totalRichDays})`);
         }
     }
 
