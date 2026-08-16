@@ -5,6 +5,7 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Dfes;
+using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Dfes.RecordQuestionEvent;
 
@@ -76,8 +77,39 @@ public sealed class RecordQuestionEventHandler(
         }
 
         var now = clock.UtcNow;
+
+        // wave-3.11 wiring (2026-08-16) — THE ANSWER ROUTE.
+        //
+        // Until this block existed, NOTHING wrote ObservationEvent.SourceQuestionId, so
+        // ObservationAnchor — the whole of wave-3.11 — was unreachable code: every
+        // observation the extractor ever saw took the `SourceQuestionId is null` branch
+        // and was judged by the 8-character floor. The rule was installed ahead of its
+        // route on purpose (that is what made it incapable of lowering an existing day);
+        // this closes the gap so the rule now governs something real.
+        //
+        // wave-3.7 lands the farmer's spoken answer on question_events.response, keyed to
+        // the log the question was ABOUT (the stashed sourceLogId), not the log he happened
+        // to speak while answering. That response is a noticing he made about that day, in
+        // his own words. It is turned into exactly ONE ObservationEvent on that log,
+        // stamped with this question event's id — which is why the id is generated up
+        // front rather than inline below: the link is closed in BOTH directions in the
+        // same insert, and it has to be, because ssf.question_events is append-only by
+        // privilege (REVOKE UPDATE, DELETE) so answer_observation_id can never be filled
+        // in afterwards.
+        //
+        // Nothing is invented (doctrine P4): TextRaw is his transcript verbatim. Whether
+        // it EARNS anything is not decided here — DfesLensExtractor asks ObservationAnchor,
+        // and a filler answer earns zero extra and never anything less (decision 15).
+        var eventId = Guid.NewGuid();
+        var answerLink = await BuildAnswerObservationAsync(cmd, eventId, now, ct);
+        var answerObservation = answerLink?.Observation;
+        if (answerObservation is not null)
+        {
+            await repository.AddObservationEventAsync(answerObservation, ct);
+        }
+
         var entity = QuestionEvent.Create(
-            id: Guid.NewGuid(), dailyLogId: cmd.DailyLogId, farmId: cmd.FarmId, plotId: cmd.PlotId,
+            id: eventId, dailyLogId: cmd.DailyLogId, farmId: cmd.FarmId, plotId: cmd.PlotId,
             questionKey: cmd.QuestionKey, crop: cmd.Crop, expectedStage: cmd.ExpectedStage,
             actualStageApplicability: cmd.ActualStageApplicability, anchorDateType: cmd.AnchorDateType,
             triggerType: cmd.TriggerType, questionType: cmd.QuestionType, lens: cmd.Lens,
@@ -85,7 +117,7 @@ public sealed class RecordQuestionEventHandler(
             answerModes: cmd.AnswerModes, safetyClass: cmd.SafetyClass,
             agronomistApproved: cmd.AgronomistApproved, marathiApproved: cmd.MarathiApproved,
             bankVersion: cmd.BankVersion, questionEngineVersion: cmd.QuestionEngineVersion,
-            answerObservationId: cmd.AnswerObservationId, shownAtUtc: cmd.ShownAtUtc,
+            answerObservationId: cmd.AnswerObservationId ?? answerObservation?.Id, shownAtUtc: cmd.ShownAtUtc,
             triggerReason: cmd.TriggerReason, weatherContext: cmd.WeatherContext,
             response: cmd.Response, stageConfirmed: cmd.StageConfirmed,
             photoSubmitted: cmd.PhotoSubmitted, skipped: cmd.Skipped, createdAtUtc: now);
@@ -126,12 +158,111 @@ public sealed class RecordQuestionEventHandler(
         //
         // TryFrom is the same gate the recompute's own repository read applies, so this
         // can only ever skip work that would have changed nothing — never a real answer.
+        var recomputed = false;
         if (AnsweredGap.TryFrom(cmd.QuestionKey, cmd.Response, localDate, out _))
         {
             await dailyRichnessDerivation.RecomputeAsync(cmd.FarmId, localDate, ct);
+            recomputed = true;
+        }
+
+        // wave-3.11 wiring — the answer route needs its OWN recompute, and on a DIFFERENT
+        // day than the gap route.
+        //
+        // The gap credit is keyed on the day the question was SHOWN, because that is the
+        // window GetAnsweredGapsAsync reads. The observation is keyed on the day of the log
+        // the question was ABOUT — wave-3.7's whole point is that Monday's gap can be
+        // answered on Tuesday. Recomputing only the shown day would write the observation
+        // and leave Monday's number untouched until something else happened to rebuild it,
+        // which is the same "answered and nothing moved" failure founder ruling A exists to
+        // prevent. Also required for non-gap keys (safety.*, followup.*) — AnsweredGap
+        // returns false for those, so without this they would recompute nothing at all
+        // despite having just produced a real observation.
+        if (answerLink is { } link && !(recomputed && link.LogLocalDate == localDate))
+        {
+            await dailyRichnessDerivation.RecomputeAsync(cmd.FarmId, link.LogLocalDate, ct);
+            recomputed = true;
+        }
+
+        if (recomputed)
+        {
             await repository.SaveChangesAsync(ct);
         }
 
         return Result.Success(entity.Id);
     }
+
+    /// <summary>
+    /// The farmer's answer, as an <see cref="ObservationEvent"/> anchored to the question
+    /// that prompted it. Returns <c>null</c> — writing nothing — whenever the answer cannot
+    /// honestly become one.
+    /// </summary>
+    private async Task<AnswerLink?> BuildAnswerObservationAsync(
+        RecordQuestionEventCommand cmd, Guid questionEventId, DateTime now, CancellationToken ct)
+    {
+        // A skip or a bare acknowledgement is SILENCE, and silence never becomes an
+        // observation (doctrine P4) — the same rule AnsweredGap.TryFrom already applies to
+        // the gap route, applied here to the observation route.
+        if (cmd.Skipped == true || string.IsNullOrWhiteSpace(cmd.Response)) return null;
+
+        // ObservationEvent is an EXISTS-join child of daily_logs — it cannot exist without
+        // one. A question with no DailyLogId (the day-scoped context questions, and every
+        // row written before wave-3.1) has no log to hang a noticing on, so it stays exactly
+        // what it is today: preserved text on question_events.response, credited nothing.
+        if (cmd.DailyLogId is not { } answeredLogId) return null;
+
+        var log = await repository.GetDailyLogByIdAsync(answeredLogId, ct);
+        if (log is null)
+        {
+            logger.LogWarning(
+                "question_event {QuestionKey} names daily_log {DailyLogId}, which does not exist; "
+                + "the answer is preserved on the event but produces no observation.",
+                cmd.QuestionKey, answeredLogId);
+            return null;
+        }
+
+        // Cross-farm guard, mirroring DailyRichnessDerivationService's job guard. The log id
+        // arrives from the client; membership was checked against cmd.FarmId, not against
+        // this log. Writing a noticing into another tenant's log would be a data leak that
+        // RLS would (correctly) reject at the DB — fail here instead, loudly and early.
+        if (log.FarmId.Value != cmd.FarmId)
+        {
+            logger.LogWarning(
+                "question_event {QuestionKey} names daily_log {DailyLogId} belonging to farm {LogFarmId}, "
+                + "not the caller's farm {FarmId}; no observation written.",
+                cmd.QuestionKey, answeredLogId, log.FarmId.Value, cmd.FarmId);
+            return null;
+        }
+
+        var observation = ObservationEvent.Create(
+            id: Guid.NewGuid(),
+            dailyLogId: log.Id,
+            // The question's own plot when it named one; otherwise the log's. Never invented.
+            plotId: cmd.PlotId ?? log.PlotId,
+            // A noticing, not a tip: ObservationNoteType.Observation is what the extractor's
+            // NoticingNoteTypes set recognises, and it is what an answer to Sathi actually is.
+            noteType: ObservationNoteType.Observation,
+            severity: ObservationSeverity.Normal,
+            // wave-3.7 is the only route that produces a Response, and it is the spoken one
+            // (the tap-choice branch writes no response at all). If a typed answer route is
+            // ever added, the command must carry the mode rather than this defaulting.
+            source: ObservationSource.Voice,
+            textRaw: cmd.Response!,   // his own words, verbatim — never a summary
+            textCleaned: null,
+            tagsJson: null,
+            linkedActivityId: null,
+            createdAtUtc: now);
+
+        // THE LINK. Everything else on the facet row is null because nothing has derived it;
+        // stamping a facet we did not compute would be fabrication.
+        observation.ApplyInsightEntry(
+            observation: null, change: null, comparison: null, challenge: null, uncertainty: null,
+            hypothesis: null, evidence: null, learning: null, nextAction: null, cropStage: null,
+            farmerConfirmedSummary: null, sourceQuestionId: questionEventId);
+
+        return new AnswerLink(observation, log.LogDate);
+    }
+
+    /// <summary>The answer observation plus the local day it belongs to (the log's, not the
+    /// day the question was shown — wave-3.7 lets those differ).</summary>
+    private sealed record AnswerLink(ObservationEvent Observation, DateOnly LogLocalDate);
 }

@@ -38,11 +38,13 @@ namespace ShramSafal.Domain.Dfes;
 /// <c>DfesLensExtractor</c>'s call sites, which additionally run this under wave-3.5's
 /// <c>appliesNewRules</c> version guard.</para>
 ///
-/// <para><b>What happens to an unanchored answer.</b> It is PRESERVED, honestly, as the
+/// <para><b>What happens to an unanchored answer.</b> It is PRESERVED, honestly — as the
 /// raw response on <c>ssf.question_events</c> (append-only, KEEP on erasure — see
-/// <c>QuestionEvent</c>). The farmer is not told it was insufficient, no second question
-/// is asked that day, and no <c>ObservationEvent</c> is fabricated from it. It simply
-/// earns no OBSERVATION credit. No new table, no new column.</para>
+/// <c>QuestionEvent</c>) and, since the wave-3.11 wiring, as an <c>ObservationEvent</c> on
+/// the log the question was about, carrying his words verbatim and stamped with the
+/// question's id. Nothing about it is fabricated and nothing is discarded; it simply earns
+/// no OBSERVATION credit. The farmer is not told it was insufficient and no second question
+/// is asked that day. No new table, no new column.</para>
 /// </summary>
 public static class ObservationAnchor
 {

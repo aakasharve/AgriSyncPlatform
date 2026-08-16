@@ -505,10 +505,13 @@ internal static class DfesLensExtractor
     /// scored under dfes-1/2/3 is judged by the rule it was scored under, whatever its
     /// route. Two independent reasons the number cannot move backwards, deliberately.</para>
     ///
-    /// <para>Nothing writes <c>SourceQuestionId</c> in production today — wave-3.7 lands
-    /// the farmer's spoken answer on <c>question_events.response</c>, not yet as an
-    /// observation row. This rule is therefore installed AHEAD of the route it governs,
-    /// which is what makes it arithmetically incapable of lowering an existing day.</para>
+    /// <para><c>SourceQuestionId</c> is written by exactly one path:
+    /// <c>RecordQuestionEventHandler</c> turns wave-3.7's spoken answer into an
+    /// <c>ObservationEvent</c> on the log the question was about and stamps it with that
+    /// question event's id. Every OTHER observation — everything the farmer volunteered,
+    /// and every row that existed before that wiring landed — has it null and is judged by
+    /// the 8-character floor exactly as before. That is what makes this rule arithmetically
+    /// incapable of lowering an existing day.</para>
     /// </summary>
     private static bool ClearsTheContentFloor(ObservationEvent o, bool appliesNewRules)
         => o.SourceQuestionId is null || !appliesNewRules

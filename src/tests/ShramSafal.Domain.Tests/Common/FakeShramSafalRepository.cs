@@ -98,6 +98,11 @@ public class FakeShramSafalRepository : IShramSafalRepository
     public virtual Task AddTranscriptAsync(Transcript transcript, CancellationToken ct = default) => throw NotStubbed();
 
     // ── DFES additive members (re-declared virtual so subclasses can override) ──
+    // wave-3.11 wiring: AddObservationEventAsync is a DEFAULT INTERFACE METHOD on the port
+    // (`=> Task.CompletedTask`). Left unmapped it would silently swallow the answer-route
+    // write and a test asserting "the observation was written" could never fail. Declared
+    // here so the mapping lands on this class and subclasses can genuinely observe it.
+    public virtual Task AddObservationEventAsync(ObservationEvent o, CancellationToken ct = default) => Task.CompletedTask;
     public virtual Task<IReadOnlyList<DailyLog>> GetDailyLogsForFarmDateAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default) => throw NotStubbed();
     public virtual Task<IReadOnlyList<ObservationEvent>> GetObservationEventsForDailyLogsAsync(IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default) => throw NotStubbed();
     public virtual Task<DailyRichnessAggregate?> GetDailyRichnessAggregateAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default) => throw NotStubbed();

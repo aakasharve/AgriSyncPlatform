@@ -31,11 +31,13 @@ namespace ShramSafal.Domain.Tests.Dfes;
 /// control: the SAME wiring, the same answer route, an anchored text — and the bucket
 /// fills. Without it every assertion below would be satisfied by a dead route.</para>
 ///
-/// <para><b>Honest scope note.</b> No production path writes
-/// <c>ObservationEvent.SourceQuestionId</c> today — wave-3.7 lands the farmer's spoken
-/// answer on <c>question_events.response</c>, not yet as an observation row. This rule is
-/// therefore installed AHEAD of the route it governs, which is precisely why it is
-/// arithmetically incapable of lowering any existing day's number.</para>
+/// <para><b>Scope note.</b> The observations here are hand-stamped fixtures, which means
+/// this file alone cannot tell you whether any production path sets
+/// <c>SourceQuestionId</c> — for a while none did, and every assertion below still passed.
+/// The route is proved separately, against the handler that writes it, in
+/// <c>RecordQuestionEventHandlerTests.Sathis_gate_actually_evaluates_the_observation_this_handler_wrote</c>.
+/// Only a VOLUNTEERED observation keeps the old 8-character floor, which is why this rule
+/// is arithmetically incapable of lowering any existing day's number.</para>
 /// </summary>
 public sealed class ObservationAnchorTests
 {
