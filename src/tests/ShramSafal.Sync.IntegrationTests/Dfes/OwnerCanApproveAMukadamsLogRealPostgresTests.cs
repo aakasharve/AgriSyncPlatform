@@ -173,29 +173,31 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
         }
     }
 
-    private bool SkippedForMissingPostgres()
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.4) — <c>Assert.True(true, _skipReason)</c> here
+    /// used to report these six trust proofs as PASSING on any runner without Postgres on :5433,
+    /// having exercised nothing. <c>Skip.If</c> (Xunit.SkippableFact) reports the run as Skipped —
+    /// visually and in exit-code terms distinct from both Passed and Failed — so a database-less
+    /// run can never be read as proof the approval FSM behaves.
+    /// </summary>
+    private void SkipIfPostgresUnavailable()
     {
-        if (!_skip)
+        if (_skip)
         {
-            return false;
+            output.WriteLine($"[SKIPPED] {_skipReason} — NO DATABASE WAS EXERCISED; this run proves nothing.");
         }
 
-        output.WriteLine($"[SKIPPED] {_skipReason} — NO DATABASE WAS EXERCISED; this run proves nothing.");
-        Assert.True(true, _skipReason);
-        return true;
+        Skip.If(_skip, _skipReason);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // PROOF 1 — THE BLOCKER. The owner taps approve on the foreman's day and it
     // survives the round trip as a day that counts.
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task An_owner_approving_a_mukadams_log_is_applied_and_comes_back_verified()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         await WriteProvisioningEvidenceAsync();
 
@@ -255,13 +257,10 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
     // ─────────────────────────────────────────────────────────────────────────
     // PROOF 2 — THE CHECK THAT MATTERS MOST. A mukadam cannot approve his OWN log.
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task A_mukadam_cannot_approve_his_own_log()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         var dailyLogId = Guid.Parse("1ddd2222-2222-2222-2222-222222222222");
 
@@ -299,13 +298,10 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
     // ─────────────────────────────────────────────────────────────────────────
     // PROOF 3 — nor another mukadam's. Peers do not approve each other.
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task A_mukadam_cannot_approve_another_mukadams_log()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         var dailyLogId = Guid.Parse("1ddd3333-3333-3333-3333-333333333333");
 
@@ -335,13 +331,10 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
     // ─────────────────────────────────────────────────────────────────────────
     // PROOF 4 — the ledger records who actually acted, not who the payload named.
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task The_approval_is_credited_to_the_authenticated_user_not_the_one_named_in_the_payload()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         var dailyLogId = Guid.Parse("1ddd4444-4444-4444-4444-444444444444");
 
@@ -375,13 +368,10 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
     // The server must never see that as an input it could act on: the whole
     // mutation is rejected, loudly, rather than silently ignoring the field.
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task A_payload_that_declares_its_own_authority_is_refused()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         var dailyLogId = Guid.Parse("1ddd5555-5555-5555-5555-555555555555");
 
@@ -409,13 +399,10 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
     // PROOF 6 — the same two-hop walk carries a REJECTION, and a rejection
     // without a reason is refused.
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task An_owner_can_send_a_mukadams_log_back_but_only_with_a_reason()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         var dailyLogId = Guid.Parse("1ddd6666-6666-6666-6666-666666666666");
 
