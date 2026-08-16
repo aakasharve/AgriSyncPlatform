@@ -10,7 +10,7 @@
  * 'schedule.category_planned_not_done' Task 3A, 'weather.severe_care_check'
  * Task 4B, and — founder ruling 2026-08-13 — the two spray-advice entries
  * 'safety.spray_wind_high' and 'weather.rain_before_spray', which had only
- * ever inherited approval from the `APPROVED` developer constant and were
+ * ever inherited approval from the blanket developer constant and were
  * never seen by an agronomist). The `approved()` gate in dfesQuestionEngine.ts means a
  * content-gated entry can physically exist in this array yet can NEVER be
  * selected in production until its flags flip — asserted by
@@ -108,25 +108,71 @@ export interface DfesAnswerOption {
 // renumber the Task 3A review validated).
 const P_SAFETY = 1, P_WEATHER = 2, P_STAGE = 3, P_SCHEDULE = 4, P_WEATHER_RECONCILE = 5, P_GAP = 6, P_FOLLOWUP = 7, P_LEARNING = 8;
 
-const APPROVED = { agronomistApproved: true, marathiApproved: true } as const;
+/**
+ * wave-3.9, founder decision 10 (2026-08-16) — HONEST NAME.
+ *
+ * This constant used to be called `APPROVED`, and every entry spreading it therefore
+ * READ as agronomist-signed-off. None of them were. It means, plainly: REVIEWED BY
+ * SHRAM SAFAL — read by the founder and by code review, and nothing more. No agronomist
+ * has seen any of this copy.
+ *
+ * The four genuinely agronomic entries — `safety.spray_wind_high`,
+ * `weather.rain_before_spray`, `schedule.category_planned_not_done`,
+ * `weather.severe_care_check` — do NOT spread this. They write
+ * `agronomistApproved: false` explicitly and are therefore inert: the `approved()` gate
+ * in dfesQuestionEngine.ts keeps them out of selection entirely.
+ *
+ * 🛑 THE WIRE FIELD NAMES ARE DELIBERATELY UNCHANGED. Renaming `agronomistApproved` to
+ * `shramSafalReviewed` on DfesQuestion changes what dfesQuestionApi.ts puts on the wire,
+ * and RecordQuestionEventHandler.cs:28 HARD-REJECTS any event whose `agronomistApproved`
+ * is not true. Every question event would become a 400. A truthful COLUMN name needs a
+ * question_events migration, which this wave does not carry. The farmer-facing label is
+ * `dfes.shramSafalReviewed` in translations.ts. Label the screen; name the constant;
+ * leave the wire alone.
+ */
+const SHRAM_SAFAL_REVIEWED = { agronomistApproved: true, marathiApproved: true } as const;
 
-/** Gap lens re-bucket (LOCKED): Execution{WHAT,DOSE,SCOPE,CARRIER,COST} Insight{WEATHER,PURPOSE} Learning{CONTINUITY}. */
+/**
+ * Gap lens (wave-3.9, founder decision 15, 2026-08-16): only dimensions
+ * `DfesLensExtractor` can actually reward remain, and all four are Execution.
+ *
+ * The lens is load-bearing beyond bucketing: `dfesQuestionEngine.isPerLogScoped` reads
+ * `triggerType === 'Gap' && lens === 'Execution'` to decide per-log dedupe (wave-3.2).
+ */
 const GAP_LENS: Readonly<Record<string, QuestionLens>> = {
-    WHAT: 'Execution', DOSE: 'Execution', SCOPE: 'Execution', CARRIER: 'Execution', COST: 'Execution',
-    WEATHER: 'Insight', PURPOSE: 'Insight',
-    CONTINUITY: 'Learning',
+    WHAT: 'Execution', DOSE: 'Execution', CARRIER: 'Execution', COST: 'Execution',
 } as const;
 
-/** Approved FINAL Marathi copy for each gap dimension (replaces meterGaps placeholders). */
+/**
+ * Approved FINAL Marathi copy for each gap dimension, verbatim from
+ * G:\VALIDATION\shram-sathi-FINAL-strings.md rows L100/L101/L103/L104.
+ *
+ * RETIRED 2026-08-16 — founder decision 15, "never ask a question that is already
+ * captured or that cannot reward". A farmer who answers and sees nothing happen learns
+ * that answering is pointless, which costs more than the missing field is worth.
+ *
+ *   SCOPE      — the farmer TAPS the plot before he speaks, so this asks for something
+ *                he just supplied; asking it again turns a conversation into a form.
+ *                The server never scored it either (DfesLensExtractor.cs:15-17 — no
+ *                SCOPE weight alongside W_WHAT/W_DOSE/W_CARRIER/W_COST/W_WEATHER).
+ *   WEATHER    — the app already holds plot weather (ssf.weather_stamps, written on the
+ *                same unit of work as the log), so this asks for what we already have.
+ *   PURPOSE    — never had a weight, so answering it moved nothing.
+ *   CONTINUITY — same.
+ *
+ * Do not restore any of them without BOTH a scoring weight in DfesLensExtractor AND a
+ * founder ruling. Retired, not merely unapproved: an unapproved entry still ships the
+ * copy and sits one flag flip away from firing.
+ *
+ * The forward-looking weather entries (weather.rain_before_spray,
+ * weather.severe_care_check) are NOT affected — they ask what to do NEXT rather than
+ * what is missing from a record, and both are already content-gated inert.
+ */
 const GAP_PROMPT: Readonly<Record<string, string>> = {
     WHAT: 'आज नेमकं कोणतं काम केलं ते सांगाल का?',
     DOSE: 'किती मात्रा (डोस) वापरली?',
-    SCOPE: 'हे काम कोणत्या प्लॉटवर केलं?',
     CARRIER: 'फवारणीसाठी किती पाणी वापरलं?',
     COST: 'खर्च उलगडून सांगू शकाल का?',
-    PURPOSE: 'हे काम आज कशासाठी केलं?',
-    WEATHER: 'आज हवामान कसं होतं?',
-    CONTINUITY: 'हे काम पूर्ण झालं का, की अजून बाकी आहे?',
 } as const;
 
 /**
@@ -174,7 +220,7 @@ function gapEntry(dim: string): DfesQuestion {
         // Undefined for any dimension with no confident variant — that question then
         // always uses the neutral copy, which is the safe direction.
         promptConfidentMr: GAP_PROMPT_CONFIDENT[dim],
-        ...APPROVED,
+        ...SHRAM_SAFAL_REVIEWED,
     };
 }
 
@@ -188,7 +234,7 @@ const TRIGGER_ENTRIES: DfesQuestion[] = [
         // CONTENT GATE (founder ruling 2026-08-13, `flip-now`): this question
         // tells a farmer whether it is safe to spray — safetyClass is
         // 'safety_critical'. It has never been reviewed by an agronomist; it
-        // only ever carried `...APPROVED`, a developer constant, which is not
+        // only ever carried the blanket developer constant, which is not
         // agronomist sign-off. Written as explicit flags rather than a spread
         // so nothing can silently re-approve it by spread ordering. Inert
         // until a real agronomist signs it off (dfesQuestionEngine.ts's
@@ -211,7 +257,7 @@ const TRIGGER_ENTRIES: DfesQuestion[] = [
         questionKey: 'stage.confirm_current', crop: '*', triggerType: 'StageWindow', questionType: 'stage_confirm',
         lens: 'Execution', depthLevel: 1, priority: P_STAGE, cooldownDays: 7, answerModes: 'choice,voice',
         safetyClass: 'informational', anchorDateType: 'stage_start', expectedStageApplicability: 'current_stage',
-        promptMr: '{crop} आता कोणत्या टप्प्यात आहे?', ...APPROVED,
+        promptMr: '{crop} आता कोणत्या टप्प्यात आहे?', ...SHRAM_SAFAL_REVIEWED,
         // CONTENT GATE: answerModes says 'choice,voice' but there is no real,
         // agronomist-approved + Marathi-labeled crop-stage option list in the
         // repo to wire here (checked: StageCode in scheduler.types.ts /
@@ -262,19 +308,19 @@ const TRIGGER_ENTRIES: DfesQuestion[] = [
         questionKey: 'followup.observation_outcome', crop: '*', triggerType: 'Followup', questionType: 'observation',
         lens: 'Learning', depthLevel: 3, priority: P_FOLLOWUP, cooldownDays: 3, answerModes: 'voice,photo',
         safetyClass: 'informational', anchorDateType: 'log_date',
-        promptMr: 'मागच्या वेळी तुम्ही "{observation}" असं सांगितलं होतं — आता काय दिसतंय?', ...APPROVED,
+        promptMr: 'मागच्या वेळी तुम्ही "{observation}" असं सांगितलं होतं — आता काय दिसतंय?', ...SHRAM_SAFAL_REVIEWED,
     },
     {
         questionKey: 'learning.deepen_hypothesis', crop: '*', triggerType: 'Learning', questionType: 'observation',
         lens: 'Learning', depthLevel: 3, priority: P_LEARNING, cooldownDays: 5, answerModes: 'voice',
         safetyClass: 'informational', anchorDateType: 'log_date',
-        promptMr: 'तुम्हाला काय वाटतं, असं का झालं असावं?', ...APPROVED,
+        promptMr: 'तुम्हाला काय वाटतं, असं का झालं असावं?', ...SHRAM_SAFAL_REVIEWED,
     },
     {
         questionKey: 'learning.next_experiment', crop: '*', triggerType: 'Learning', questionType: 'experiment',
         lens: 'Learning', depthLevel: 4, priority: P_LEARNING, cooldownDays: 7, answerModes: 'voice',
         safetyClass: 'informational', anchorDateType: 'log_date',
-        promptMr: 'पुढच्या वेळी काही वेगळं करून बघणार का?', ...APPROVED,
+        promptMr: 'पुढच्या वेळी काही वेगळं करून बघणार का?', ...SHRAM_SAFAL_REVIEWED,
     },
 ];
 

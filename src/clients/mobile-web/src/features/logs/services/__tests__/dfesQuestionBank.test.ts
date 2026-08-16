@@ -75,8 +75,9 @@ describe('DFES question bank v1 (Phase 5)', () => {
         expect(QUESTION_ENGINE_VERSION).toBe('dfes-qengine-1');
     });
 
-    it('has one approved gap entry keyed gap.<dim> for all 8 scoring dimensions', () => {
-        for (const dim of ['WHAT', 'DOSE', 'SCOPE', 'CARRIER', 'COST', 'PURPOSE', 'WEATHER', 'CONTINUITY']) {
+    it('has one approved gap entry keyed gap.<dim> for every REWARDABLE dimension', () => {
+        // wave-3.9 (decision 15): four dimensions retired. See the block below.
+        for (const dim of ['WHAT', 'DOSE', 'CARRIER', 'COST']) {
             const q = findGapQuestion(dim);
             expect(q, `gap.${dim}`).toBeDefined();
             expect(q!.questionKey).toBe(`gap.${dim.toLowerCase()}`);
@@ -84,10 +85,56 @@ describe('DFES question bank v1 (Phase 5)', () => {
     });
 
     it('re-buckets gap lenses per the locked 3-lens map', () => {
-        expect(findGapQuestion('DOSE')!.lens).toBe('Execution');
-        expect(findGapQuestion('PURPOSE')!.lens).toBe('Insight');
-        expect(findGapQuestion('WEATHER')!.lens).toBe('Insight');
-        expect(findGapQuestion('CONTINUITY')!.lens).toBe('Learning');
+        // Only Execution dimensions survive wave-3.9, and the lens is now load-bearing
+        // beyond bucketing: dfesQuestionEngine.isPerLogScoped reads
+        // `triggerType === 'Gap' && lens === 'Execution'` to decide per-log dedupe.
+        for (const dim of ['WHAT', 'DOSE', 'CARRIER', 'COST']) {
+            expect(findGapQuestion(dim)!.lens, `gap.${dim} lens`).toBe('Execution');
+        }
+    });
+
+    /**
+     * wave-3.9, founder decision 15 (2026-08-16) — NEVER ASK A QUESTION THAT IS ALREADY
+     * CAPTURED OR THAT CANNOT REWARD. A farmer who answers and sees nothing happen
+     * learns that answering is pointless.
+     */
+    describe('decision 15 — retired gap dimensions', () => {
+        it('never offers the plot question — the farmer already tapped the plot', () => {
+            expect(DFES_QUESTION_BANK.find(q => q.questionKey === 'gap.scope')).toBeUndefined();
+            expect(findGapQuestion('SCOPE')).toBeUndefined();
+        });
+
+        it('offers only gap questions the scorer can actually reward', () => {
+            const gapKeys = DFES_QUESTION_BANK.filter(q => q.triggerType === 'Gap').map(q => q.questionKey);
+            expect(gapKeys.sort()).toEqual(['gap.carrier', 'gap.cost', 'gap.dose', 'gap.what']);
+        });
+
+        it.each(['SCOPE', 'PURPOSE', 'WEATHER', 'CONTINUITY'])(
+            'gap.%s is gone entirely, not merely unapproved',
+            (dim) => {
+                // Unapproved would still ship the copy and leave it one flag flip from
+                // firing. Decision 15 retires the dimension itself.
+                expect(findGapQuestion(dim)).toBeUndefined();
+            },
+        );
+
+        it('keeps prospective spray advice out of selection', () => {
+            const q = DFES_QUESTION_BANK.find(x => x.questionKey === 'safety.spray_wind_high')!;
+            expect(q.agronomistApproved).toBe(false);   // regression pin — already true today
+        });
+
+        it('leaves the forward-looking weather TRIGGERS alone', () => {
+            // weather.rain_before_spray and weather.severe_care_check are safety/care
+            // questions about what to do NEXT, not gap questions about what is missing
+            // from a record. Decision 15 is about gap questions. Both remain, and both
+            // remain content-gated inert.
+            for (const key of ['weather.rain_before_spray', 'weather.severe_care_check']) {
+                const q = findQuestion(key);
+                expect(q, key).toBeDefined();
+                expect(q!.triggerType).not.toBe('Gap');
+                expect(q!.agronomistApproved).toBe(false);
+            }
+        });
     });
 
     it('has no duplicate questionKeys', () => {

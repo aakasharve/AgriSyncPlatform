@@ -314,6 +314,24 @@ export interface Translations {
         dayUnderstandingIntro: string;
         dayUnderstandingPending: string;
 
+        /**
+         * wave-3.9, founder decision 10 (2026-08-16) — the HONEST provenance label for
+         * Sathi's question copy. It is "reviewed by Shram Safal", never "approved by an
+         * agronomist": no agronomist has seen any of the twelve reviewed bank entries.
+         *
+         * DISPLAY ONLY. The wire field `agronomistApproved` is deliberately NOT renamed —
+         * RecordQuestionEventHandler.cs:28 hard-rejects any event whose
+         * `agronomistApproved` is not true, so a rename would turn every question event
+         * into a 400. See dfesQuestionBank.SHRAM_SAFAL_REVIEWED.
+         *
+         * NOT rendered anywhere yet: no farmer-facing surface makes an approval claim
+         * today, so there was no dishonest label to correct. This exists so the FIRST
+         * surface that needs one reaches for the truthful string instead of inventing
+         * "Agronomist approved". Do NOT reuse it for LogVerificationStatus.APPROVED —
+         * that is an OWNER approving a worker's log, an unrelated claim.
+         */
+        shramSafalReviewed: string;
+
         // Post-save surface redesign (founder, 2026-08-13). The character SPEAKS
         // instead of the system announcing "Saved to Ledger", and each zone of the
         // surface names itself so the screen reads as one clear reply.
@@ -660,6 +678,10 @@ export const translations: Record<Language, Translations> = {
             dayUnderstandingIntro: 'I understood your day today',
             dayUnderstandingPending: 'Still understanding…',
 
+            // wave-3.9, decision 10 — honest provenance, display only. See the
+            // interface docstring for why the wire field keeps its old name.
+            shramSafalReviewed: 'Shram Safal Reviewed',
+
             // Post-save surface redesign (2026-08-13)
             sathiSaidLine: 'Shram Safal is understanding the work you did today',
             sectionWork: 'WHAT YOU DID TODAY',
@@ -977,6 +999,13 @@ export const translations: Record<Language, Translations> = {
             // understanding of the day, never a grade of the farmer.
             dayUnderstandingIntro: 'मी तुमचा आजचा दिवस समजून घेतला',
             dayUnderstandingPending: 'अजून समजतंय…',
+
+            // AGENT-DRAFTED 2026-08-16 (wave-3.9, decision 10) — NEEDS FOUNDER APPROVAL
+            // before it is rendered anywhere. Built only from words already shipping:
+            // 'श्रम सफल' is the founder's own brand wording from sathiSaidLine below,
+            // and 'तपासलेलं' is the plain Marathi for "checked/reviewed". No new brand
+            // vocabulary was invented, and nothing renders this string yet.
+            shramSafalReviewed: 'श्रम सफल ने तपासलेलं',
 
             // Post-save surface redesign (2026-08-13). sathiSaidLine is the
             // FOUNDER'S OWN wording, used verbatim — do not paraphrase it.

@@ -148,7 +148,21 @@ export interface SelectedQuestion {
     answerOptions?: DfesAnswerOption[];
 }
 
-/** Hard gate: unapproved questions are never selectable, even if present. */
+/**
+ * Hard gate: unapproved questions are never selectable, even if present.
+ *
+ * wave-3.9, decision 10 — READ THE FIELD NAME HONESTLY. `agronomistApproved` is true on
+ * twelve bank entries that NO AGRONOMIST HAS EVER SEEN; they inherit it from
+ * dfesQuestionBank's `SHRAM_SAFAL_REVIEWED` constant, which means reviewed by Shram
+ * Safal — the founder and code review — and nothing more. The four genuinely agronomic
+ * entries (safety.spray_wind_high, weather.rain_before_spray,
+ * schedule.category_planned_not_done, weather.severe_care_check) set it false explicitly
+ * and this gate is what keeps them inert.
+ *
+ * The field name stays as it is on purpose: RecordQuestionEventHandler.cs:28 hard-rejects
+ * any event whose wire `agronomistApproved` is not true, so renaming it here would turn
+ * every question event into a 400. The farmer-facing label is `dfes.shramSafalReviewed`.
+ */
 function approved(q: DfesQuestion | undefined): q is DfesQuestion {
     return !!q && q.agronomistApproved && q.marathiApproved;
 }
