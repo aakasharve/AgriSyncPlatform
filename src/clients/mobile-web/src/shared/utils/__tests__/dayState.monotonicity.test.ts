@@ -16,16 +16,14 @@
  * file's coverage, and for one round it was read as if it were.
  *
  *   ASSERTED as law (`assertNonDecreasing`): a log saved, a log confirmed, an
- *   answer credited — in every combination of owner/mukadam and planned/
- *   unplanned below. These are green and are the live regression tripwire.
+ *   answer credited, a task appearing mid-day, a log re-opened — every
+ *   scenario in this file, in every combination of owner/mukadam and planned/
+ *   unplanned below. All nine are green and are the live regression tripwire.
  *
- *   MEASURED but NOT ruled on: two further in-day transitions, added at the
- *   bottom of this file, that DO lower the number today — a task appearing
- *   mid-day (100 -> 30) and a human re-opening a log (100 -> 70). They pin the
- *   measured trail exactly and assert the drop as a fact. They deliberately do
- *   NOT call `assertNonDecreasing`: whether decision 6 reaches them is a
- *   founder question, and answering it by choosing which assertion to write
- *   would be this file deciding it. See the block above those two tests.
+ * As of the 2026-08-16 rulings there is no longer a "measured but unruled"
+ * tier in this file. The last two transitions that had one — a task appearing
+ * mid-day and a human re-opening a log — were ruled DEFECTS and fixed; see
+ * the RULINGS 21 & 22 block below.
  *
  * SCOPE NOTE — this is the FRONTEND half of the guarantee only.
  * `ShramSafal.Domain.Dfes.DayUnderstandingScore` (backend, `src/apps/**`) is
@@ -91,6 +89,42 @@
  * three formerly-red trails are re-pinned to their fixed values with the same
  * exact `toEqual` — see the block comment above them for why the old literals
  * and `assertNonDecreasing` could never both hold.
+ *
+ * ============================================================================
+ * FOUNDER RULINGS 21 & 22 (2026-08-16) — decision 6 is now ABSOLUTE
+ * ============================================================================
+ * The two transitions this file MEASURED and declined to decide (a task
+ * appearing mid-day, a log re-opened) have been ruled on. Both are defects.
+ *
+ *   RULING 21 — AI has NO role in scoring. Founder's words: "AI has no role in
+ *   it. AI is only being used for parsing and sorting." Sathi turning what the
+ *   farmer SAID into a task must not create an obligation he is then measured
+ *   against, so an AI-authored task no longer enters the denominator the score
+ *   is computed from. It is still counted in `plannedCount`/`pendingCount` and
+ *   still appears in his task list — this is about the score, not the UI.
+ *
+ *   RULING 22 — the number preserves or improves, never takes back. Founder's
+ *   words: "it must preserve or improve, nothing to take back, only append if
+ *   the context is same, treat each log separate, only the re-talk on same log
+ *   treat that append." Re-opening a log withdraws its CURRENT confirmation,
+ *   not the fact that a confirmation was earned. The 30 stays.
+ *
+ * HISTORICAL RECORD — the trails those two scenarios measured before the
+ * rulings, preserved verbatim the way the EMPIRICAL FINDING block above was
+ * (they no longer describe this file's behaviour):
+ *
+ *   0 logs, 0 tasks                                  -> closurePercent   0
+ *   + owner's own log (auto-APPROVED)                 -> closurePercent 100
+ *   + an AI-extracted task appears, due today          -> closurePercent  30  ◄ DROP
+ *
+ *   0 logs, 0 tasks                                  -> closurePercent   0
+ *   + owner's own log (auto-APPROVED)                 -> closurePercent 100
+ *   that same log re-opened by a human                 -> closurePercent  70  ◄ DROP
+ *
+ * Both are now [0, 100, 100] and both call `assertNonDecreasing`, like the
+ * other seven. Nothing was loosened to get there: each trail is still pinned
+ * as an exact sequence with the same `toEqual`, and the law assertion was
+ * ADDED to them, not removed from anything.
  */
 import { describe, it, expect } from 'vitest';
 import { computeDayState } from '../dayState';
@@ -116,6 +150,12 @@ function makeCrops(): CropProfile[] {
     ];
 }
 
+/** The instant a confirmation is stamped onto a log. `LogFactory` writes
+ * `verifiedAtISO: isOwner ? nowISO : undefined` (LogFactory.ts:341/479/712/846)
+ * — a confirmation leaves a timestamp, an unreviewed log has none. Ruling 22
+ * turns on exactly that distinction, so the fixtures carry it. */
+const CONFIRMED_AT = `${TODAY}T09:00:00.000Z`;
+
 function makeLog(id: string, status: LogVerificationStatus): DailyLog {
     return {
         id,
@@ -132,12 +172,28 @@ function makeLog(id: string, status: LogVerificationStatus): DailyLog {
         financialSummary: { totalLabourCost: 0, totalInputCost: 0, totalMachineryCost: 0, grandTotal: 0 },
         // Owner logs are auto-stamped APPROVED by LogFactory (Task 1.1) the
         // instant they're created — they are never PENDING. A mukadam
-        // (non-owner) log starts PENDING until the owner reviews it.
-        verification: { status, required: status !== LogVerificationStatus.APPROVED },
+        // (non-owner) log starts PENDING until the owner reviews it. Only the
+        // auto-confirmed one carries `verifiedAtISO`, exactly as LogFactory
+        // writes it.
+        verification: {
+            status,
+            required: status !== LogVerificationStatus.APPROVED,
+            ...(status === LogVerificationStatus.APPROVED ? { verifiedAtISO: CONFIRMED_AT } : {}),
+        },
     };
 }
 
-function makeTask(id: string, status: PlannedTask['status']): PlannedTask {
+/** `sourceType` defaults to `'manual'` — a task the FARMER put on his own day,
+ * which is what every scenario titled "planned task" below means. The one
+ * scenario about an AI-authored task passes `'ai_extracted'` explicitly (see
+ * `taskAppeared`), so ruling 21's exclusion is exercised where it belongs and
+ * nowhere else. Before the rulings every fixture task here was `ai_extracted`,
+ * which was incidental — nothing read `sourceType`. It is read now. */
+function makeTask(
+    id: string,
+    status: PlannedTask['status'],
+    sourceType: PlannedTask['sourceType'] = 'manual',
+): PlannedTask {
     return {
         id,
         title: `task-${id}`,
@@ -145,7 +201,7 @@ function makeTask(id: string, status: PlannedTask['status']): PlannedTask {
         cropId: 'crop-grapes',
         priority: 'normal',
         status,
-        sourceType: 'ai_extracted',
+        sourceType,
         createdAt: `${TODAY}T06:00:00.000Z`,
         dueDate: TODAY,
     };
@@ -170,7 +226,9 @@ const logSaved = (id: string, owner: boolean): DayStep => ({
 const logConfirmed = (id: string): DayStep => ({
     label: `log confirmed [${id}]`,
     apply: (logs, tasks) => ({
-        logs: logs.map(log => (log.id === id ? { ...log, verification: { status: LogVerificationStatus.VERIFIED, required: false } } : log)),
+        logs: logs.map(log => (log.id === id
+            ? { ...log, verification: { status: LogVerificationStatus.VERIFIED, required: false, verifiedAtISO: CONFIRMED_AT } }
+            : log)),
         tasks,
     }),
 });
@@ -204,14 +262,29 @@ const answerCredited = (id: string): DayStep => ({
 
 const taskAppeared = (id: string): DayStep => ({
     label: `AI-extracted task appeared mid-day [${id}]`,
-    apply: (logs, tasks) => ({ logs, tasks: [...tasks, makeTask(id, 'pending')] }),
+    apply: (logs, tasks) => ({ logs, tasks: [...tasks, makeTask(id, 'pending', 'ai_extracted')] }),
 });
 
+/** A re-open walks the STATUS back to DRAFT. It does not un-happen the
+ * confirmation: `verifiedAtISO` (the stamp the confirmation left) survives,
+ * because the sync path rebuilds `verification` from the log's append-only
+ * `verificationEvents` (logsReconciler.ts:153-157, 261-267) and an earlier
+ * confirmation is still one of them. That surviving stamp is the whole
+ * difference between "re-opened" and "never reviewed" — a log that was never
+ * confirmed has no stamp at all (see `makeLog`), so ruling 22 cannot hand out
+ * credit for a confirmation that never existed. */
 const logReopened = (id: string): DayStep => ({
     label: `log re-opened by a human [${id}]`,
     apply: (logs, tasks) => ({
         logs: logs.map(log => (log.id === id
-            ? { ...log, verification: { status: LogVerificationStatus.DRAFT, required: true } }
+            ? {
+                ...log,
+                verification: {
+                    status: LogVerificationStatus.DRAFT,
+                    required: true,
+                    verifiedAtISO: log.verification?.verifiedAtISO,
+                },
+            }
             : log)),
         tasks,
     }),
@@ -265,6 +338,7 @@ describe('computeDayState — closurePercent never falls within a day (founder d
         const beforeConfirm = trail[trail.length - 1].closurePercent;
         const afterConfirm = walk([], [logSaved('m1', false), logConfirmed('m1')]);
         expect(afterConfirm[afterConfirm.length - 1].closurePercent).toBeGreaterThanOrEqual(beforeConfirm);
+        assertNonDecreasing(afterConfirm);
     });
 
     it('mixed operators, multiple answers credited then owner logs, zero mukadam activity: non-decreasing', () => {
@@ -332,57 +406,50 @@ describe('computeDayState — closurePercent never falls within a day (founder d
         assertNonDecreasing(trail);
     });
 
-    // ---- MEASUREMENT (wave-1.6 review, I3) — the two paths walk() could not
-    // ---- reach until now. Both LOWER the number. Recorded, not decided.
+    // ---- The two paths walk() could not reach until wave-1.6 measured them
+    // ---- (review I3), and the founder ruled on 2026-08-16. Both were defects.
     //
-    // These are NOT regressions from wave 2.4 — both predate it and both survive
-    // it, because 2.4 only ever changed what an EMPTY day scores. They are here
-    // because the file's headline claims something wider than it was testing,
-    // and the honest way to narrow the gap is to run the transitions and write
-    // down what happens, exactly as the EMPIRICAL FINDING block above did.
+    // These were never regressions from wave 2.4 — both predate it and both
+    // survived it, because 2.4 only ever changed what an EMPTY day scores. They
+    // were pinned here with `toEqual` + `toBeLessThan` and deliberately WITHOUT
+    // `assertNonDecreasing`, because that helper IS founder decision 6 and
+    // decision 6 had not been extended to them; picking the assertion would
+    // have been this file deciding a founder question. It has now been decided,
+    // so both call the helper like the other seven and the drop assertions are
+    // gone — there is no drop left to assert.
     //
-    // They assert the measured trail with `toEqual` and do NOT call
-    // `assertNonDecreasing`, because that helper encodes founder decision 6 and
-    // decision 6 has not been applied to either of these transitions. Calling it
-    // here would not be a tripwire, it would be this file deciding a founder
-    // question by picking which assertion to write. Each `toEqual` is exact, so
-    // the day the behaviour changes — in either direction — this fails and the
-    // question gets asked again.
+    // RULING 21 — an AI-authored task is not an obligation. It no longer enters
+    // the denominator the score is built from (`dayState.ts` — `isScoredObligation`).
+    // The farmer did nothing but SPEAK; Sathi sorting his words into a task
+    // cannot cost him 70 points. The task is NOT hidden: `plannedCount`,
+    // `pendingCount`, `isClosed` and the task list all still carry it, so a
+    // genuinely un-started AI task is still visible — just not scored.
     //
-    // 👁️ TWO RULINGS NEEDED (see the report; neither is decided here):
-    //
-    //  1. Is an AI-extracted task appearing mid-day allowed to lower the ring?
-    //     Today it takes 100 -> 30. The farmer did nothing but SPEAK; Sathi
-    //     turned his words into a task and the number fell 70 points. If
-    //     decision 6 covers this, the fix is a floor on `taskScore` (or dating
-    //     mid-day-created tasks to tomorrow) — a real behaviour change, and one
-    //     with its own cost: a genuinely un-started task would then be invisible
-    //     in the score.
-    //  2. Is a human RE-OPENING a day allowed to lower it? Today it takes
-    //     100 -> 70. Unlike (1) this is a deliberate human act — arguably the
-    //     number SHOULD fall, since the confirmation it was earned by has been
-    //     withdrawn. Decision 6 says "never backwards within a day" without
-    //     carving this out.
+    // RULING 22 — a re-open withdraws the current confirmation, not the fact
+    // that one was earned. The 30 stays. A log that was never confirmed still
+    // earns nothing (the mukadam-PENDING scenarios above stay at 70), so this
+    // cannot make the ring claim a day is verified when nothing ever was.
 
-    it('MEASURED, unruled: an AI-extracted task appears mid-day — 100 -> 30 (founder decision 6, ruling 1)', () => {
+    it('an AI-extracted task appears mid-day: 0 -> 100 -> 100, never backwards (ruling 21)', () => {
         const trail = walk([], [logSaved('o1', true), taskAppeared('t-new')]);
-        // The owner records his day: 70 for the record + 30 for his own
-        // auto-approved confirmation = 100. Sathi then extracts a task from
-        // what he said, due today. `plannedCount` goes 0 -> 1 with
-        // `completedCount` still 0, so taskScore collapses 1 -> 0 and the 70
-        // evaporates. Nothing the farmer did got worse; the denominator moved.
-        expect(trail.map(t => t.closurePercent)).toEqual([0, 100, 30]);
-        // Stated as a fact, not left to be read off the numbers: this step
-        // GOES BACKWARDS, which is what founder decision 6 forbids.
-        expect(trail[2].closurePercent).toBeLessThan(trail[1].closurePercent);
+        // Was [0, 100, 30] — the owner recorded his day (70 for the record +
+        // 30 for his own auto-approved confirmation), then Sathi extracted a
+        // task from what he had just said, `plannedCount` went 0 -> 1 with
+        // `completedCount` still 0, taskScore collapsed 1 -> 0 and the 70
+        // evaporated. Nothing the farmer did got worse; the denominator moved.
+        // AI now has no vote in the denominator, so the step is flat.
+        expect(trail.map(t => t.closurePercent)).toEqual([0, 100, 100]);
+        assertNonDecreasing(trail);
     });
 
-    it('MEASURED, unruled: an owner re-opens the day he had confirmed — 100 -> 70 (founder decision 6, ruling 2)', () => {
+    it('an owner re-opens the day he had confirmed: 0 -> 100 -> 100, never backwards (ruling 22)', () => {
         const trail = walk([], [logSaved('o1', true), logReopened('o1')]);
-        // The 30 is EARNED by a confirmation existing. Re-opening removes the
-        // confirmation, so the credit goes with it. The 70 survives: the day
-        // still HAS a record, which is what that half measures.
-        expect(trail.map(t => t.closurePercent)).toEqual([0, 100, 70]);
-        expect(trail[2].closurePercent).toBeLessThan(trail[1].closurePercent);
+        // Was [0, 100, 70] — the 30 was earned by a confirmation being CURRENT,
+        // so walking the status back took the credit with it. The credit is now
+        // earned by a confirmation having HAPPENED, which a re-open cannot
+        // un-happen. The day is still openly unfinished elsewhere: `isClosed`
+        // goes back to false and the re-opened log returns to the review queue.
+        expect(trail.map(t => t.closurePercent)).toEqual([0, 100, 100]);
+        assertNonDecreasing(trail);
     });
 });

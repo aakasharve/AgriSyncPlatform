@@ -91,6 +91,52 @@ const VERIFIED_STATUSES = new Set<LogVerificationStatus>([
     LogVerificationStatus.APPROVED
 ]);
 
+/**
+ * Statuses in which a confirmation is CONTESTED — the owner looked and said
+ * "this does not match", or a correction is mid-flight after he did. These are
+ * the one case where a `verifiedAtISO` stamp must NOT be read as standing
+ * credit (see `hasConfirmationOnRecord`): the sync path stamps the log on any
+ * verification event, dispute included, and crediting a disputed log would let
+ * the ring claim a day was confirmed when the owner explicitly said otherwise.
+ */
+const CONTESTED_STATUSES = new Set<LogVerificationStatus>([
+    LogVerificationStatus.DISPUTED,
+    LogVerificationStatus.REJECTED,
+    LogVerificationStatus.CORRECTION_PENDING
+]);
+
+/**
+ * FOUNDER RULING 21 (2026-08-16) — "AI has no role in it. AI is only being used
+ * for parsing and sorting."
+ *
+ * These are the task provenances the AI authors: `ai_extracted` is Sathi
+ * turning the farmer's speech into a task (LogFactory.ts:619, 758) and
+ * `observation_derived` is the same act one hop later — tasks lifted out of an
+ * AI-parsed observation note, carrying an `aiConfidence` (LogFactory.ts:126,
+ * 272, 414). Neither is something the FARMER undertook; both are the AI
+ * describing what it heard. The two provenances that survive are `manual` (he
+ * created the task himself) and `schedule` (the agronomic plan he adopted).
+ *
+ * NOTE the widening: the ruling names `ai_extracted`. `observation_derived` is
+ * included because it is the same act by the same author and would reopen the
+ * identical hole in a rule the founder has now made absolute. Narrowing this
+ * back to `ai_extracted` alone is a one-line change to this set.
+ */
+const AI_AUTHORED_TASK_SOURCES = new Set<PlannedTask['sourceType']>([
+    'ai_extracted',
+    'observation_derived'
+]);
+
+/**
+ * Is this task an obligation the FARMER is measured against? Only tasks he
+ * took on — himself, or by adopting a schedule — can move the number that
+ * judges his day. An unknown/missing provenance counts as his (the field is
+ * required by the type; treating legacy rows as farmer-owned preserves the
+ * pre-ruling behaviour rather than silently forgiving work).
+ */
+const isScoredObligation = (task: PlannedTask): boolean =>
+    !AI_AUTHORED_TASK_SOURCES.has(task.sourceType);
+
 const FARM_GLOBAL = 'FARM_GLOBAL';
 
 const normalizeDateKey = (value: string | Date): string => {
@@ -369,6 +415,39 @@ export const isLogVerified = (log: DailyLog): boolean => {
 
 export const isLogUnverified = (log: DailyLog): boolean => !isLogVerified(log);
 
+/**
+ * FOUNDER RULING 22 (2026-08-16) — "it must preserve or improve, nothing to
+ * take back... only the re-talk on same log treat that append."
+ *
+ * Has a confirmation been EARNED on this log — as distinct from `isLogVerified`,
+ * which asks whether one is CURRENTLY standing. The difference is a re-open:
+ * a human re-opening a log he had confirmed walks the status back to DRAFT (the
+ * same act `DailyLog.Edit` performs server-side), and until this ruling that
+ * withdrew the 30 the confirmation had already earned. It no longer does. The
+ * re-talk is an append to the same log, not a retraction of it.
+ *
+ * The evidence is `verifiedAtISO`, the stamp a confirmation leaves:
+ *   • `LogFactory` writes it ONLY for the owner's own auto-confirmed log
+ *     (`verifiedAtISO: isOwner ? nowISO : undefined`) — a mukadam's unreviewed
+ *     log has no stamp, so it earns nothing, and a day where nothing was ever
+ *     confirmed still scores 0 for this half. The ring cannot claim a day is
+ *     verified when nothing ever was.
+ *   • the sync path rebuilds it from the log's append-only `verificationEvents`
+ *     (logsReconciler.ts:153-157, 261-267), which a re-open does not erase.
+ * That path stamps on ANY verification event, dispute included, which is why a
+ * contested status is excluded rather than trusted.
+ *
+ * A log still genuinely awaiting review is untouched by this: no stamp, no
+ * credit, and the waiting is reported by `unverifiedCount` / `isClosed` / the
+ * review queue exactly as before.
+ */
+const hasConfirmationOnRecord = (log: DailyLog): boolean => {
+    if (isLogVerified(log)) return true;
+    const status = log.verification?.status;
+    if (status && CONTESTED_STATUSES.has(status)) return false;
+    return Boolean(log.verification?.verifiedAtISO);
+};
+
 export const computeDayState = ({
     logs,
     crops,
@@ -424,10 +503,21 @@ export const computeDayState = ({
         doneFromSchedule += Math.min(plannedCount, executedByKey.get(key) || 0);
     });
 
+    // The PUBLISHED counts keep every task, AI-authored included. Ruling 21 is
+    // about the score, not about hiding work from the farmer: his task list,
+    // `pendingCount`, the carried-task hero and `isClosed` all still see it.
     const taskCompletion = getTaskCompletion(tasks, dateKey, scope);
     const plannedCount = plannedFromSchedule + taskCompletion.planned;
     const completedCount = doneFromSchedule + taskCompletion.completed;
     const pendingCount = Math.max(0, plannedCount - completedCount);
+
+    // The SCORED plan (ruling 21) — only obligations the farmer actually took
+    // on. Excluded from BOTH halves of the ratio, never just the denominator:
+    // credit for finishing something he was never measured on would be as
+    // invented as the penalty was.
+    const scoredTaskCompletion = getTaskCompletion(tasks.filter(isScoredObligation), dateKey, scope);
+    const scoredPlannedCount = plannedFromSchedule + scoredTaskCompletion.planned;
+    const scoredCompletedCount = doneFromSchedule + scoredTaskCompletion.completed;
 
     const verifiedCount = dayLogs.filter(log => isLogVerified(log)).length;
     const unverifiedCount = Math.max(0, dayLogs.length - verifiedCount);
@@ -459,8 +549,13 @@ export const computeDayState = ({
     // or, when nothing was planned, the day having a record at all. Nothing
     // planned AND nothing recorded earns 0, not a free 1 — an empty day has
     // not been completed, it has not started.
-    const taskScore = plannedCount > 0
-        ? completedCount / plannedCount
+    //
+    // Reads the SCORED plan (ruling 21): a day whose only "plan" is what the AI
+    // extracted from the farmer's own words is, for scoring purposes, a day
+    // with nothing planned — so it falls through to "did he record anything",
+    // which is a question about him, not about the parser.
+    const taskScore = scoredPlannedCount > 0
+        ? scoredCompletedCount / scoredPlannedCount
         : (dayHasRecord ? 1 : 0);
 
     // 30 — "today's record is confirmed": credit is EARNED by a confirmation
@@ -472,7 +567,14 @@ export const computeDayState = ({
     // the review queue — the ring is a PROGRESS measure that only fills, and
     // it is not the place to charge the owner for a mukadam having recorded
     // something.
-    const verificationScore = verifiedCount > 0 ? 1 : 0;
+    //
+    // Ruling 22 extends that same "earned, never revoked" shape to a RE-OPEN:
+    // the test is whether a confirmation ever happened on the day, not whether
+    // one is standing right now. `verifiedCount` (which is the standing count)
+    // stays exactly as it was and keeps driving `unverifiedCount`/`isClosed`,
+    // so a re-opened log truthfully returns to the review queue while the
+    // credit it already earned stays earned.
+    const verificationScore = dayLogs.some(hasConfirmationOnRecord) ? 1 : 0;
 
     const closurePercent = clampPercent((taskScore * 70) + (verificationScore * 30));
 
