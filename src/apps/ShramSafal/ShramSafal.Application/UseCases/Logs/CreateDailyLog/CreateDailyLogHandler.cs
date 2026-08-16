@@ -232,6 +232,19 @@ public sealed class CreateDailyLogHandler(
             log.SetEvidenceSourcesJson(evidenceJson);
         }
 
+        // ── spec: dfes-companion-2026-07-11 (wave-3.10), founder decision 8 ──────
+        // The farmer's own statement about the DAY, stamped onto the log itself so
+        // PersistedDayRootBuilder (layer 5) can read it back and the scorer can finally
+        // see a typed "no work today". Copied verbatim; absent stays absent.
+        //
+        // 🛑 It is stamped HERE — before AddDailyLogAsync and the PRIMARY save — and
+        // deliberately not inside PersistSideCarAsync. The side-car is non-blocking by
+        // contract: it runs in its own savepoint and a failure there is logged and
+        // swallowed. A declaration is canonical data the farmer supplied, and canonical
+        // data never lives in a best-effort side-car; on the side-car path a rolled-back
+        // savepoint would silently discard the only record that his day was a rest day.
+        log.SetDayOutcome(command.ManualDraft?.DayOutcome);
+
         // ── spec: dfes-companion-2026-07-11 (wave-1.3) ───────────────────────────
         // THE SERVER HALF of the owner-confirm fix. The device stamps the owner's own
         // log approved on save (wave-1.1), but verification is a SERVER-derived value —

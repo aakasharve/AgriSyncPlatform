@@ -69,6 +69,14 @@ const WeatherStampPayloadSchema = z.object({
 // unknown bucket keys and over-sized drafts at the sync boundary.
 const ZDraftBucket = z.array(z.unknown());
 
+// spec: dfes-companion-2026-07-11 (wave-3.10), founder decision 8 (2026-08-16) — the
+// farmer's own statement about the DAY, and the optional chip explaining it. These are
+// the only two NON-bucket keys the draft carries: scalars, not arrays of rows. The eight
+// bucket names above are untouched.
+//
+// The vocabulary is the SAME one the AI contract already uses (`DayOutcomeSchema`,
+// AgriLogResponseSchema.ts) — one vocabulary for what a day turned out to be, never a
+// second list that can drift out of step with the first.
 const ManualDraftSchema = z.object({
     labour: ZDraftBucket.optional(),
     inputs: ZDraftBucket.optional(),
@@ -78,6 +86,15 @@ const ManualDraftSchema = z.object({
     cropActivities: ZDraftBucket.optional(),
     machinery: ZDraftBucket.optional(),
     activityExpenses: ZDraftBucket.optional(),
+    dayOutcome: z.enum(['WORK_RECORDED', 'DISTURBANCE_RECORDED', 'NO_WORK_PLANNED', 'IRRELEVANT_INPUT']).optional(),
+    // OPTIONAL by doctrine P9: a declaration with no chip must still be accepted. Every
+    // field inside is optional too — a chip whose reason is missing simply writes no
+    // DisturbanceEvent server-side rather than failing the farmer's whole day.
+    disturbance: z.object({
+        scope: z.string().optional(),
+        cause: z.string().optional(),
+        reason: z.string().optional(),
+    }).optional(),
 });
 
 export const CreateDailyLogPayload = z.object({

@@ -156,6 +156,12 @@ export interface AppRouterContext {
     setShowReviewInbox: React.Dispatch<React.SetStateAction<boolean>>;
     showQuickLog: boolean;
     setShowQuickLog: React.Dispatch<React.SetStateAction<boolean>>;
+    /**
+     * wave-3.10, founder decision 8 (2026-08-16) — the optional reason chips shown after
+     * he taps `आज काम नाही`. Skipping them still saves the day (doctrine P9).
+     */
+    showNoWorkReason: boolean;
+    setShowNoWorkReason: React.Dispatch<React.SetStateAction<boolean>>;
     reflectFocusRequest: { logId: string; date: string; plotId?: string } | null;
     setReflectFocusRequest: React.Dispatch<React.SetStateAction<{ logId: string; date: string; plotId?: string } | null>>;
     showCloseDaySummary: boolean;

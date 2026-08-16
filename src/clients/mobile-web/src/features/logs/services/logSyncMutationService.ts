@@ -189,6 +189,29 @@ export function buildManualDraft(log: DailyLog): ManualDraftPayload | undefined 
     if (log.machinery?.length) draft.machinery = log.machinery;
     if (log.activityExpenses?.length) draft.activityExpenses = log.activityExpenses;
 
+    // FOUNDER DECISION 8 (2026-08-16) — the farmer's own statement about the DAY, and the
+    // optional chip explaining it. Both are COPIED, never inferred.
+    //
+    // 'WORK_RECORDED' is deliberately NOT sent: it is the LogFactory's default for any
+    // ordinary day, so putting it on the wire would turn a value the farmer never uttered
+    // into a stored declaration (P4). Only a genuine departure from "he worked" travels.
+    //
+    // These two lines sit BEFORE the length check on purpose. A declared no-work day
+    // carries no buckets at all, so without them `buildManualDraft` would return undefined
+    // and the declaration would never leave the device — the exact defect decision 8
+    // closes.
+    if (log.dayOutcome && log.dayOutcome !== 'WORK_RECORDED') draft.dayOutcome = log.dayOutcome;
+    if (log.disturbance?.reason) {
+        // P9 — the chip is optional. A declaration with no reason writes no `disturbance`
+        // key at all, and the record still commits; `DisturbanceEvent.Create` requires a
+        // non-empty reason, which is precisely why the DECLARATION does not live here.
+        draft.disturbance = {
+            scope: log.disturbance.scope,
+            cause: log.disturbance.cause,
+            reason: log.disturbance.reason,
+        };
+    }
+
     return Object.keys(draft).length > 0 ? draft : undefined;
 }
 

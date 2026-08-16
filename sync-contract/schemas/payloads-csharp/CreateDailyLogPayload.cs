@@ -39,6 +39,12 @@ public sealed record WeatherStampItem(
     IReadOnlyList<string>? Alerts = null
 );
 
+public sealed record DisturbanceItem(
+    string? Scope = null,
+    string? Cause = null,
+    string? Reason = null
+);
+
 public sealed record ManualDraftItem(
     // generator: ZodAny / ZodUnknown
     IReadOnlyList<object>? Labour = null,
@@ -55,7 +61,10 @@ public sealed record ManualDraftItem(
     // generator: ZodAny / ZodUnknown
     IReadOnlyList<object>? Machinery = null,
     // generator: ZodAny / ZodUnknown
-    IReadOnlyList<object>? ActivityExpenses = null
+    IReadOnlyList<object>? ActivityExpenses = null,
+    /// <summary>Allowed values: "WORK_RECORDED", "DISTURBANCE_RECORDED", "NO_WORK_PLANNED", "IRRELEVANT_INPUT".</summary>
+    string? DayOutcome = null,
+    DisturbanceItem? Disturbance = null
 );
 
 public sealed record CreateDailyLogPayload(

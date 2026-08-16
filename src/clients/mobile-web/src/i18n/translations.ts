@@ -278,6 +278,18 @@ export interface Translations {
 
         // No work
         noWorkToday: string;
+        // wave-3.10, founder decision 8 — the optional reason chips offered when he
+        // declares a no-work day. Skipping them saves the day anyway (doctrine P9).
+        noWorkReasonPrompt: string;
+        noWorkSkipReason: string;
+        noWorkReason: {
+            weather: string;
+            electricity: string;
+            water: string;
+            machinery: string;
+            labour: string;
+            other: string;
+        };
 
         // Onboarding
         shramSathi: string;
@@ -643,6 +655,16 @@ export const translations: Record<Language, Translations> = {
 
             // No work
             noWorkToday: 'No work today',
+            noWorkReasonPrompt: 'Why? (optional)',
+            noWorkSkipReason: 'Save the day',
+            noWorkReason: {
+                weather: 'Rain / weather',
+                electricity: 'No electricity',
+                water: 'No water',
+                machinery: 'Machine trouble',
+                labour: 'No labour',
+                other: 'Something else',
+            },
 
             // Onboarding
             shramSathi: 'Shram Sathi',
@@ -964,6 +986,16 @@ export const translations: Record<Language, Translations> = {
 
             // No work
             noWorkToday: 'आज काम नाही',
+            noWorkReasonPrompt: 'का? (ऐच्छिक)',
+            noWorkSkipReason: 'दिवस नोंदवा',
+            noWorkReason: {
+                weather: 'पाऊस / हवामान',
+                electricity: 'वीज नव्हती',
+                water: 'पाणी नव्हतं',
+                machinery: 'यंत्र बिघडलं',
+                labour: 'माणसं नव्हती',
+                other: 'दुसरं काही',
+            },
 
             // Onboarding
             shramSathi: 'श्रम साथी',

@@ -6,7 +6,7 @@ import {
     ActivityExpenseEvent, ObservationNote,
     PlannedTask, AgriLogResponse, DisturbanceEvent
 } from '../../types';
-import type { ObservationNoteDraft, ScoreContext } from '../../domain/types/log.types';
+import type { DayOutcome, ObservationNoteDraft, ScoreContext } from '../../domain/types/log.types';
 import { getPhaseAndDay } from '../../shared/utils/timelineUtils';
 import { getDateKey } from './services/DateKeyService';
 import { resolveDueDate } from './dueDateResolver';
@@ -58,6 +58,17 @@ interface ManualEntryData {
     observations?: ObservationNote[];
     plannedTasks?: PlannedTask[];
     disturbance?: DisturbanceEvent;
+    /**
+     * FOUNDER DECISION 8 (2026-08-16), wave-3.10 — the farmer's OWN statement about the
+     * day, supplied only when he actually made one (the `आज काम नाही` declaration).
+     *
+     * When absent, `dayOutcome` is derived exactly as it always was. This field is
+     * therefore a COPY of something he said, never an inference, and it is the only way a
+     * typed day can carry `NO_WORK_PLANNED` — until now the manual path could produce only
+     * `WORK_RECORDED` or `DISTURBANCE_RECORDED`, so a rain-stopped day the farmer typed
+     * out had no honest representation at all.
+     */
+    dayOutcome?: DayOutcome;
     fullTranscript?: string;
     manualTotalCost?: number;
     /**
@@ -298,7 +309,10 @@ export class LogFactory {
                 id: idGen.generate(),
                 date: data.date,
                 context: specificContext,
-                dayOutcome: data.disturbance && !hasExecution ? 'DISTURBANCE_RECORDED' : 'WORK_RECORDED',
+                // wave-3.10, founder decision 8 — a declaration the farmer MADE outranks anything
+                // derived from the shape of his data. Absent, the original rule stands untouched.
+                dayOutcome: data.dayOutcome
+                    ?? (data.disturbance && !hasExecution ? 'DISTURBANCE_RECORDED' : 'WORK_RECORDED'),
 
                 weatherStamp: undefined,
 
@@ -444,7 +458,10 @@ export class LogFactory {
                     selectedPlotNames: []
                 }]
             },
-            dayOutcome: data.disturbance && !hasExecution ? 'DISTURBANCE_RECORDED' : 'WORK_RECORDED',
+            // wave-3.10, founder decision 8 — a declaration the farmer MADE outranks anything
+                // derived from the shape of his data. Absent, the original rule stands untouched.
+                dayOutcome: data.dayOutcome
+                    ?? (data.disturbance && !hasExecution ? 'DISTURBANCE_RECORDED' : 'WORK_RECORDED'),
             weatherStamp: undefined,
             cropActivities: data.cropActivities || [],
             irrigation,

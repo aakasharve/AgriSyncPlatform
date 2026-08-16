@@ -1,3 +1,4 @@
+import type { DayOutcome } from '../../../domain/types/log.types';
 import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 
@@ -49,6 +50,27 @@ export interface ManualDraftPayload {
      cropActivities?: unknown[];
      machinery?: unknown[];
      activityExpenses?: unknown[];
+     /**
+      * FOUNDER DECISION 8 (2026-08-16) — the farmer's own statement about the DAY.
+      *
+      * NOT a bucket: a scalar the server records verbatim on `ssf.daily_logs.day_outcome`.
+      * Absent on every ordinary work day, and an absent value is never defaulted to
+      * 'WORK_RECORDED' — "he did not say" and "he said it was a rest day" must stay
+      * distinguishable (P4).
+      *
+      * It is deliberately NOT expressed as a `disturbance`: "there was no work today" is a
+      * statement about the day, not a blockage, and routing it through `disturbance_events`
+      * would set `HasDisturbance` for a plain rest day and report `blocked` instead of
+      * `rest` — the wrong fact, not a shortcut.
+      */
+     dayOutcome?: DayOutcome;
+     /**
+      * OPTIONAL reason chip, offered AFTER the declaration is already saved. Doctrine P9 —
+      * its absence never rejects the record. It rides the existing `disturbance` wire shape
+      * (`LedgerDerivationService` already writes a `DisturbanceEvent` from it), so a chip
+      * needs no new table.
+      */
+     disturbance?: { scope?: string; cause?: string; reason?: string };
 }
 
 export interface CreateDailyLogPayload {

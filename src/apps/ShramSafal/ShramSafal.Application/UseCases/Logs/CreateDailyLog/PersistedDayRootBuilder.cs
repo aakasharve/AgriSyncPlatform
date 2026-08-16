@@ -58,6 +58,21 @@ internal static class PersistedDayRootBuilder
             root["cropActivities"] = activities;
         }
 
+        // ── dayOutcome ← the farmer's own declaration. THE BRIDGE (wave-3.10) ───
+        // Founder decision 8. Without this line the manual path never reaches
+        // DfesLensExtractor.DeclaredNoWork: ManualDraftNormalizer's output goes to
+        // LedgerDerivationService — the LEDGER writer — and never to the scorer, whose
+        // roots come from the AI job plus this builder. A perfectly wired contract, a
+        // stored column and a working extractor would still have left a typed "no work
+        // today" invisible. This is the only join between them.
+        //
+        // Copied only when present, like every other value here: a NULL column is
+        // omitted, never emitted as "WORK_RECORDED" (P4).
+        if (!string.IsNullOrWhiteSpace(log.DayOutcome))
+        {
+            root["dayOutcome"] = log.DayOutcome;
+        }
+
         // ── labour ← LabourAssignment rows ──────────────────────────────────────
         // "rate" and "totalCost" are the two money facts COST reads. Both are
         // NULLABLE columns held to the NO-MULTIPLY rule (a total is never derived
@@ -120,6 +135,10 @@ internal static class PersistedDayRootBuilder
             root["disturbance"] = row;
         }
 
+        // wave-3.10 — note what this guard now means for a declared no-work day: it has no
+        // typed children at all, but it DOES carry a dayOutcome, so the root is non-empty
+        // and the day becomes scorable. Before decision 8 such a day projected nothing and
+        // was read as "the farmer said nothing".
         return root.Count == 0 ? null : JsonSerializer.Serialize(root);
     }
 

@@ -4,10 +4,11 @@
 // stays small.
 
 import React from 'react';
-import { LogSegment, LogVerificationStatus } from '../../types';
+import { LogSegment, LogVerificationStatus, type BucketIssueType } from '../../types';
 import { TaskCreationSheet, ReviewInboxSheet, QuickLogSheet } from './lazyComponents';
 import { AppRouterContext } from './routeContext';
 import { ConflictBadge } from '../../features/sync/conflict/ConflictBadge';
+import { NoWorkReasonSheet } from '../../features/logs/components/NoWorkReasonSheet';
 
 export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
     const {
@@ -16,8 +17,37 @@ export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
         showReviewInbox, setShowReviewInbox, history, handleVerifyLog,
         showQuickLog, setShowQuickLog,
         setMode, setStatus, setRecordingSegment,
-        currentRoute, setCurrentRoute, mainView, status, recordingSegment, hasActiveLogContext
+        currentRoute, setCurrentRoute, mainView, status, recordingSegment, hasActiveLogContext,
+        showNoWorkReason, setShowNoWorkReason, handleManualSubmit, todayDateKey
     } = ctx;
+
+    /**
+     * FOUNDER DECISION 8 (2026-08-16), wave-3.10 — the NON-SPEECH fallback.
+     *
+     * A farmer who cannot or will not speak declares his day with one tap. This writes a
+     * real `DailyLog` carrying `dayOutcome: 'NO_WORK_PLANNED'` and NO buckets, with a
+     * genuine `source: 'manual'` provenance claim — the declaration came from a blank
+     * state and nothing was typed or inferred, so the claim is honest and the sync layer
+     * (which ships the draft only on that positive assertion) will carry it.
+     *
+     * `cause` is undefined when he skipped the chips, and doctrine P9 is the whole point:
+     * the day saves regardless. Only when he gave one is a `disturbance` attached, and it
+     * carries HIS chip as the reason — never an invented sentence.
+     */
+    const declareNoWorkDay = (cause?: BucketIssueType) => {
+        setShowNoWorkReason(false);
+        void handleManualSubmit({
+            date: todayDateKey,
+            dayOutcome: 'NO_WORK_PLANNED',
+            // P9 — absent chip, absent disturbance. DisturbanceEvent.Create requires a
+            // non-empty reason, so an empty one would be dropped server-side rather than
+            // rejecting the record; sending nothing is the honest form of the same thing.
+            disturbance: cause
+                ? { scope: 'FULL_DAY' as const, group: 'no_work', reason: cause, cause, blockedSegments: [] }
+                : undefined,
+            provenance: { source: 'manual' as const, timestamp: new Date().toISOString() },
+        });
+    };
 
     return (
         <>
@@ -60,14 +90,25 @@ export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
                 }}
                 onTypeSelect={(type) => {
                     if (type === 'no_work') {
-                        setMode('manual');
-                        setStatus('idle');
+                        // wave-3.10 — this branch used to merely open a blank manual-entry
+                        // screen, and NOTHING recorded a typed no-work day: the declared-
+                        // no-work acknowledgement was live for voice days only. It now
+                        // leads to a real declaration.
+                        setShowQuickLog(false);
+                        setShowNoWorkReason(true);
                     } else {
                         setMode('manual');
                         setStatus('idle');
                         setRecordingSegment(type as LogSegment);
                     }
                 }}
+            />
+
+            {/* wave-3.10, founder decision 8: the optional reason chips. Skipping saves the day. */}
+            <NoWorkReasonSheet
+                isOpen={showNoWorkReason}
+                onDeclare={declareNoWorkDay}
+                onClose={() => setShowNoWorkReason(false)}
             />
 
             {/* DFES: FAB to open QuickLogSheet (visible on main log view when idle) */}

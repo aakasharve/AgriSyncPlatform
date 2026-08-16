@@ -92,6 +92,10 @@ const AppRouter: React.FC = () => {
     // DFES Phase 0: Review Inbox / QuickLog / Reflect-focus / close-day modals.
     const [showReviewInbox, setShowReviewInbox] = React.useState(false);
     const [showQuickLog, setShowQuickLog] = React.useState(false);
+    // wave-3.10, founder decision 8 — the optional reason chips after he declares a
+    // no-work day. Lifted here alongside showQuickLog because the two hand off to
+    // each other and both live in renderGlobalSheets.
+    const [showNoWorkReason, setShowNoWorkReason] = React.useState(false);
     const [reflectFocusRequest, setReflectFocusRequest] = React.useState<{ logId: string; date: string; plotId?: string } | null>(null);
     const [showCloseDaySummary, setShowCloseDaySummary] = React.useState(false);
     const [showCloseYesterdaySummary, setShowCloseYesterdaySummary] = React.useState(false);
@@ -201,6 +205,7 @@ const AppRouter: React.FC = () => {
         getTodayCounts, getContextColorIndicator,
         showReviewInbox, setShowReviewInbox,
         showQuickLog, setShowQuickLog,
+        showNoWorkReason, setShowNoWorkReason,
         reflectFocusRequest, setReflectFocusRequest,
         showCloseDaySummary, setShowCloseDaySummary,
         showCloseYesterdaySummary, setShowCloseYesterdaySummary,

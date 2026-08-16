@@ -119,3 +119,65 @@ describe('buildManualDraft', () => {
         expect(draft).toBeUndefined();
     });
 });
+
+/**
+ * spec: dfes-companion-2026-07-11 (wave-3.10) — FOUNDER DECISION 8 (2026-08-16).
+ *
+ * A declared no-work day carries NO buckets at all. Before this task `buildManualDraft`
+ * returned `undefined` for exactly that shape — every key empty — so the declaration
+ * would never have left the device however well the rest of the six layers were wired.
+ * This is the client end of that chain; the server end is proven on real Postgres by
+ * `DeclaredNoWorkDayTests`.
+ */
+describe('buildManualDraft — a declared no-work day (wave-3.10)', () => {
+    it('ships a bucket-less declaration that would otherwise have been dropped', () => {
+        const draft = buildManualDraft(manualLog({
+            dayOutcome: 'NO_WORK_PLANNED',
+        } as Partial<DailyLog>));
+
+        expect(draft).toEqual({ dayOutcome: 'NO_WORK_PLANNED' });
+    });
+
+    it('carries the optional chip when he gave one', () => {
+        const draft = buildManualDraft(manualLog({
+            dayOutcome: 'NO_WORK_PLANNED',
+            disturbance: { scope: 'FULL_DAY', group: 'no_work', reason: 'WEATHER', cause: 'WEATHER', blockedSegments: [] },
+        } as unknown as Partial<DailyLog>));
+
+        expect(draft?.dayOutcome).toBe('NO_WORK_PLANNED');
+        expect(draft?.disturbance).toEqual({ scope: 'FULL_DAY', cause: 'WEATHER', reason: 'WEATHER' });
+    });
+
+    it('P9 — the same declaration without a chip still ships, and carries no disturbance', () => {
+        const draft = buildManualDraft(manualLog({
+            dayOutcome: 'NO_WORK_PLANNED',
+            disturbance: undefined,
+        } as Partial<DailyLog>));
+
+        expect(draft).toBeDefined();
+        expect(draft?.disturbance).toBeUndefined();
+    });
+
+    it('never puts WORK_RECORDED on the wire — an ordinary day declares nothing', () => {
+        // WORK_RECORDED is LogFactory's DEFAULT for any day, not something the farmer
+        // said. Sending it would turn silence into a stored declaration (P4), and every
+        // ordinary manual day would start writing a day_outcome it never earned.
+        const draft = buildManualDraft(manualLog({
+            dayOutcome: 'WORK_RECORDED',
+            labour: [{ id: 'lb-0', type: 'HIRED', count: 3 }],
+        } as unknown as Partial<DailyLog>));
+
+        expect(draft?.dayOutcome).toBeUndefined();
+        expect(Object.keys(draft ?? {})).toEqual(['labour']);
+    });
+
+    it('a chip with no reason is not sent — an empty reason would be dropped server-side anyway', () => {
+        const draft = buildManualDraft(manualLog({
+            dayOutcome: 'NO_WORK_PLANNED',
+            disturbance: { scope: 'FULL_DAY', group: 'no_work', reason: '', blockedSegments: [] },
+        } as unknown as Partial<DailyLog>));
+
+        expect(draft?.disturbance).toBeUndefined();
+        expect(draft?.dayOutcome).toBe('NO_WORK_PLANNED');
+    });
+});

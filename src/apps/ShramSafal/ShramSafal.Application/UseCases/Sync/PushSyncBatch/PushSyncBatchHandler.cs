@@ -142,6 +142,20 @@ public sealed class PushSyncBatchHandler(
         "plannedTasks", "cropActivities", "machinery", "activityExpenses"
     ];
 
+    /// <summary>
+    /// wave-3.10, founder decision 8 (2026-08-16) — the two NON-bucket keys a manual draft
+    /// may carry: the farmer's own statement about the DAY (<c>dayOutcome</c>) and the
+    /// optional reason chip explaining it (<c>disturbance</c>).
+    ///
+    /// <para>They are held SEPARATE from <see cref="ManualDraftBuckets"/> on purpose. The
+    /// eight-bucket vocabulary is "arrays of rows the farmer typed", and every one of them
+    /// is array-shape-checked below. These two are scalars — a string and an object — so
+    /// folding them into that set would have quietly disabled the array check for them and
+    /// let a malformed client send <c>dayOutcome: [...]</c>. One vocabulary each, both
+    /// closed.</para>
+    /// </summary>
+    private static readonly ImmutableHashSet<string> ManualDraftScalars = ["dayOutcome", "disturbance"];
+
     /// <summary>Upper bound on one manual draft's raw JSON, in UTF-8 bytes.</summary>
     private const int MaxManualDraftBytes = 64 * 1024;
 
@@ -714,6 +728,24 @@ public sealed class PushSyncBatchHandler(
 
         foreach (var bucket in draft.EnumerateObject())
         {
+            // wave-3.10 — the declaration and its optional chip are scalars, not buckets.
+            // They are PERMITTED here rather than rejected as unknown bucket names, and
+            // they are shape-checked on their own terms below: without this branch a
+            // farmer tapping "आज काम नाही" would have his entire day refused with
+            // "unsupported buckets".
+            if (ManualDraftScalars.Contains(bucket.Name))
+            {
+                var expected = bucket.Name == "disturbance" ? JsonValueKind.Object : JsonValueKind.String;
+                if (bucket.Value.ValueKind is not JsonValueKind.Null && bucket.Value.ValueKind != expected)
+                {
+                    return MutationExecutionOutcome.Failure(
+                        "ShramSafal.SyncInvalidPayload",
+                        $"create_daily_log manualDraft '{bucket.Name}' must be a {(expected == JsonValueKind.Object ? "object" : "string")}.");
+                }
+
+                continue;
+            }
+
             if (!ManualDraftBuckets.Contains(bucket.Name))
             {
                 return MutationExecutionOutcome.Failure(

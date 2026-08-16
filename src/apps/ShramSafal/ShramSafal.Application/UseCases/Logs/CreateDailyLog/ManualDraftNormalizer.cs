@@ -113,6 +113,35 @@ internal static class ManualDraftNormalizer
             ["observations"] = MapRows(draft.Observations, ObservationFields),
         };
 
+        // wave-3.10, founder decision 8 (2026-08-16) — the farmer's own statement about
+        // the DAY, and the chip he may or may not have added. Both COPIED, never inferred;
+        // an absent dayOutcome stays absent, which is exactly the pre-decision-8 behaviour
+        // for every ordinary work day (P4).
+        if (!string.IsNullOrWhiteSpace(draft.DayOutcome))
+        {
+            root["dayOutcome"] = draft.DayOutcome;
+        }
+
+        if (draft.Disturbance is { } d && !string.IsNullOrWhiteSpace(d.Reason))
+        {
+            // LedgerDerivationService already writes a DisturbanceEvent from this exact
+            // shape, so a chip needs no new table. The reason is REQUIRED there
+            // (DisturbanceEvent.Create rejects a blank one), which is precisely why the
+            // DECLARATION itself does not live here — doctrine P9: an optional chip may
+            // not reject the record. A chip-less declaration writes no disturbance at all
+            // and the day still commits.
+            //
+            // Scope defaults to FULL_DAY only when the client omitted it: a chip attached
+            // to "there was no work today" is a whole-day statement by construction, and
+            // the wire vocabulary has no "unspecified" member to copy instead.
+            root["disturbance"] = new JsonObject
+            {
+                ["reason"] = d.Reason,
+                ["scope"] = string.IsNullOrWhiteSpace(d.Scope) ? "FULL_DAY" : d.Scope,
+                ["cause"] = d.Cause,
+            };
+        }
+
         return root.ToJsonString();
     }
 

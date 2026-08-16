@@ -132,6 +132,47 @@ describe('CreateDailyLogPayload', () => {
         });
         expect(r.success).toBe(false);
     });
+    // wave-3.10, founder decision 8 — a declared no-work day. P9: the chip is optional,
+    // so a declaration carrying NOTHING else must validate.
+    it('accepts a declared no-work day with no buckets and no chip', () => {
+        const r = payloads.CreateDailyLogPayload.safeParse({
+            dailyLogId: VALID_GUID_A,
+            farmId: VALID_GUID_B,
+            plotId: VALID_GUID_C,
+            cropCycleId: VALID_GUID_D,
+            logDate: VALID_LOG_DATE,
+            manualDraft: { dayOutcome: 'NO_WORK_PLANNED' },
+        });
+        expect(r.success).toBe(true);
+    });
+    it('accepts a declared no-work day carrying one reason chip', () => {
+        const r = payloads.CreateDailyLogPayload.safeParse({
+            dailyLogId: VALID_GUID_A,
+            farmId: VALID_GUID_B,
+            plotId: VALID_GUID_C,
+            cropCycleId: VALID_GUID_D,
+            logDate: VALID_LOG_DATE,
+            manualDraft: {
+                dayOutcome: 'NO_WORK_PLANNED',
+                disturbance: { scope: 'FULL_DAY', cause: 'weather', reason: 'पाऊस होता' },
+            },
+        });
+        expect(r.success).toBe(true);
+    });
+    it('rejects a dayOutcome outside the shared vocabulary', () => {
+        // One vocabulary for what a day turned out to be. A server that accepted
+        // 'RAINED_OFF' here would store a value DfesLensExtractor.DeclaredNoWork cannot
+        // read, and the farmer's declaration would vanish silently.
+        const r = payloads.CreateDailyLogPayload.safeParse({
+            dailyLogId: VALID_GUID_A,
+            farmId: VALID_GUID_B,
+            plotId: VALID_GUID_C,
+            cropCycleId: VALID_GUID_D,
+            logDate: VALID_LOG_DATE,
+            manualDraft: { dayOutcome: 'RAINED_OFF' },
+        });
+        expect(r.success).toBe(false);
+    });
 });
 
 describe('AddLogTaskPayload', () => {

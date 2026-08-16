@@ -506,4 +506,37 @@ public sealed class DailyLog : Entity<Guid>
             : evidenceSourcesJson.Trim();
         ModifiedAtUtc = DateTime.UtcNow;
     }
+
+    // ── wave-3.10, founder decision 8 (2026-08-16) ───────────────────────
+    /// <summary>
+    /// The farmer's OWN statement about the day ("NO_WORK_PLANNED"), copied verbatim from
+    /// his declaration. NULL on every ordinary work day and on every log written before
+    /// this change; <see cref="ShramSafal.Domain.Logs.DailyLog"/> never infers it and
+    /// nothing defaults it to "WORK_RECORDED" — "he did not say" and "he said it was a
+    /// rest day" are different facts (doctrine P4).
+    ///
+    /// <para>It lives HERE, on the log, rather than as a <c>DisturbanceEvent</c>, for two
+    /// reasons. First, "there was no work today" is a statement about the DAY, not about a
+    /// blockage: as a disturbance it would set <c>HasDisturbance</c> for a plain rest day
+    /// and be reported as <c>blocked</c> instead of <c>rest</c>. Second,
+    /// <c>DisturbanceEvent.Create</c> requires a non-empty reason, so a farmer who
+    /// declared his day and skipped the optional chips would have had his record silently
+    /// dropped — doctrine P9 forbids an optional field rejecting a record.</para>
+    ///
+    /// <para>Canonical, not best-effort: it is stamped BEFORE the primary save, so it is
+    /// as durable as the log itself and never depends on the non-blocking side-car.</para>
+    /// </summary>
+    public string? DayOutcome { get; private set; }
+
+    /// <summary>
+    /// Records the farmer's declaration. Blank / whitespace clears it to NULL rather than
+    /// storing an empty string, so "absent" has exactly one representation. Normalised to
+    /// upper case because <c>DfesLensExtractor.DeclaredNoWork</c> compares case-insensitively
+    /// against the wire vocabulary and the stored value should read the same as the wire.
+    /// </summary>
+    public void SetDayOutcome(string? dayOutcome)
+    {
+        DayOutcome = string.IsNullOrWhiteSpace(dayOutcome) ? null : dayOutcome.Trim().ToUpperInvariant();
+        ModifiedAtUtc = DateTime.UtcNow;
+    }
 }
