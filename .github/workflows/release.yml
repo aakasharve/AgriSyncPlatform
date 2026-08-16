@@ -41,14 +41,36 @@ jobs:
             --output ./artifacts/dotnet
 
       - name: Build frontend
-        # spec: dfes-companion-2026-07-11 (wave-0.3) — vite.config.ts fails a
-        # production `vite build` if VITE_AGRISYNC_API_URL is unset (nine
+        # spec: dfes-companion-2026-07-11 (wave-0.3, wave-0.4) — vite.config.ts
+        # fails a production `vite build` if VITE_AGRISYNC_API_URL is unset (nine
         # client call sites would otherwise silently fall back to
         # http://localhost:5048). Public prod URL, not a secret — matches
         # android-release.yml's value.
+        #
+        # DFES companion flags (wave-0.4): this is the web production build —
+        # it MUST carry the same companion flag set as android-release.yml's
+        # "Build web assets" step. Vite bakes import.meta.env at BUILD time, so
+        # leaving these unset here (as before) ships a web bundle where the
+        # companion is silently OFF while the same commit's APK has it ON —
+        # one farmer, two truths. Keep both files in sync; see featureFlags.ts.
         working-directory: src/clients/mobile-web
         env:
           VITE_AGRISYNC_API_URL: "https://api.shramsafal.in"
+          VITE_UNDERSTANDING_METER: "1"
+          VITE_STAGE_QUESTIONS: "1"
+          VITE_DISCIPLINE_SYSTEM: "1"
+          # Phase 4 voice-first continuity. Founder ruling 2026-08-16 turns it
+          # ON for the pilot (previously held back pending his decision).
+          VITE_VOICE_CONTINUITY: "1"
+          VITE_DAILY_LOOP: "1"
+          VITE_TASK_CLOSE_CONFIRM: "1"
+          # Founder decision 2026-07-19 pauses the rich-day unlock counter.
+          # Defaults OFF when unset — omitting it here would silently bring
+          # the counter back in the shipped web build. Matches android-release.yml.
+          VITE_UNLOCK_COUNTER_PAUSED: "1"
+          # Dev/test-only switches — must ship OFF in the release build.
+          VITE_SIMULATE_UNLOCK: "0"
+          VITE_INTELLIGENCE_INSIGHTS: "0"
         run: |
           npm ci
           npm run build

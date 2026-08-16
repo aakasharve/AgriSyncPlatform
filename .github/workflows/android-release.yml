@@ -67,6 +67,10 @@ jobs:
           VITE_UNDERSTANDING_METER: "1"
           VITE_STAGE_QUESTIONS: "1"
           VITE_DISCIPLINE_SYSTEM: "1"
+          # Phase 4 voice-first continuity. Held back pending founder decision
+          # (see wave-0.4 handoff); founder ruling 2026-08-16 turns it ON for
+          # the pilot. Must match release.yml so browser and APK agree.
+          VITE_VOICE_CONTINUITY: "1"
           VITE_DAILY_LOOP: "1"
           VITE_TASK_CLOSE_CONFIRM: "1"
           # Founder decision 2026-07-19 (see featureFlags.ts) pauses the rich-day
