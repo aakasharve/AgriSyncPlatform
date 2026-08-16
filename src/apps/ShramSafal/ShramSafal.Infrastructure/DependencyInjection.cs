@@ -383,6 +383,13 @@ public static class DependencyInjection
         services.AddScoped<IRecordCorrectionEventHandler, RecordCorrectionEventHandler>();
 
         services.AddScoped<IShramSafalRepository, ShramSafalRepository>();
+        // spec: dfes-companion-2026-07-11 (wave-1.5) — the one-time repair over days
+        // recorded before the server learned to self-attest an owner's own log. Registered
+        // here rather than beside the other log handlers because it must NOT be composed
+        // from the tenant-scoped repository above: under an admin cross-tenant posture that
+        // context returns zero rows and the repair would silently do nothing. See the
+        // runner's class doc.
+        services.AddScoped<OwnerAttestationBackfillRunner>();
         services.AddScoped<IUserDirectory, UserDirectoryService>();
         services.AddScoped<IMisReportRepository, MisReportRepository>();
         services.AddScoped<IAdminOpsRepository, AdminOpsRepository>();

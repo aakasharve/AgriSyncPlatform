@@ -155,6 +155,34 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .FirstOrDefaultAsync(l => l.IdempotencyKey == idempotencyKey, ct);
     }
 
+    // spec: dfes-companion-2026-07-11 (wave-1.5) — see IShramSafalRepository for why the
+    // predicate is "no verification events at all" and not "reads Draft".
+    //
+    // TRACKED on purpose (no AsNoTracking, unlike the read-only pull queries): the caller
+    // mutates these aggregates and commits them in its own unit of work, exactly as
+    // GetDailyLogByIdAsync feeds VerifyLogHandler. VerificationEvents is Included because
+    // TrySelfVerifyAsCreator folds it to decide whether the log is still in Draft — an
+    // un-Included collection would fold to empty and read Draft for every log, including
+    // ones a human had already disputed.
+    public async Task<IReadOnlyList<DailyLog>> GetDailyLogsWithNoVerificationHistoryAsync(
+        int limit, CancellationToken ct = default)
+    {
+        if (limit <= 0)
+        {
+            return Array.Empty<DailyLog>();
+        }
+
+        return await db.DailyLogs
+            .Include(l => l.VerificationEvents)
+            .Where(l => !l.VerificationEvents.Any())
+            // Oldest day first: if an operator ever has to read the backfill's audit
+            // rows in order, they should tell the farm's story forwards.
+            .OrderBy(l => l.CreatedAtUtc)
+            .ThenBy(l => l.Id)
+            .Take(limit)
+            .ToListAsync(ct);
+    }
+
     public async Task AddCostEntryAsync(CostEntry costEntry, CancellationToken ct = default)
     {
         await db.CostEntries.AddAsync(costEntry, ct);

@@ -243,6 +243,33 @@ public sealed class DailyLog : Entity<Guid>
     public const string SelfAttestationReason = "self-attested-at-creation";
 
     /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.5) — the marker stamped on both events
+    /// <see cref="TrySelfVerifyAsCreator"/> emits when it is called by the ONE-TIME
+    /// BACKFILL over days recorded before wave-1.3 shipped.
+    ///
+    /// <para><b>Why it is not <see cref="SelfAttestationReason"/>.</b> Those two markers
+    /// describe genuinely different acts and must never be conflated. A row carrying
+    /// <see cref="SelfAttestationReason"/> means: at the moment this farmer saved this
+    /// day, the server derived his authority and he attested to it. A row carrying THIS
+    /// marker means: nobody attested to anything at the time — the server reconstructed,
+    /// weeks later, an attestation the farmer would have made had wave-1.3 existed. That
+    /// is a defensible repair (the same person, the same authority, the same farm, and
+    /// he has been looking at the day as his own ever since) but it is a WEAKER claim
+    /// than a live one, and the ledger has to be able to say which it is holding.</para>
+    ///
+    /// <para><b>What it buys.</b> The backfill is a bulk write over a pilot's history.
+    /// If it is ever found to have over-reached, "undo exactly the rows this backfill
+    /// created, and nothing a human actually did" is a one-line predicate on this
+    /// column. With <see cref="SelfAttestationReason"/> on both, the reconstructed rows
+    /// would be permanently indistinguishable from the real ones and the backfill would
+    /// be IRREVERSIBLE — the Cofounder Oath's "reversible by default" spent for the sake
+    /// of reusing a string.</para>
+    ///
+    /// <para>Machine-readable and stable. Do not localise it, do not reword it.</para>
+    /// </summary>
+    public const string BackfilledAttestationReason = "self-attested-backfilled";
+
+    /// <summary>
     /// spec: dfes-companion-2026-07-11 (wave-1.4) — REACH <paramref name="target"/> BY WALKING
     /// ONLY EDGES <paramref name="callerRole"/> ALREADY HOLDS.
     ///
@@ -378,12 +405,23 @@ public sealed class DailyLog : Entity<Guid>
     /// a fresh attestation covering the new content. That caller owns the identity check
     /// (actor == operator); this method owns the state and role checks.</para>
     /// </summary>
+    /// <param name="reason">
+    /// spec: dfes-companion-2026-07-11 (wave-1.5) — the marker both emitted events carry.
+    /// Defaults to <see cref="SelfAttestationReason"/> (the live create-time path). The
+    /// one-time backfill over pre-wave-1.3 history passes
+    /// <see cref="BackfilledAttestationReason"/> instead, so a reconstructed attestation
+    /// is never mistaken for one made at the moment the farmer saved the day. The ROLE
+    /// AND STATE RULES BELOW ARE THE SAME LINES either way — that is the point of adding
+    /// a parameter rather than a second method: the backfill cannot drift into attesting
+    /// something the live path would have refused.
+    /// </param>
     /// <returns><c>true</c> when both attestation events were emitted.</returns>
     public bool TrySelfVerifyAsCreator(
         Guid confirmEventId,
         Guid verifyEventId,
         AppRole creatorRole,
-        DateTime occurredAtUtc)
+        DateTime occurredAtUtc,
+        string reason = SelfAttestationReason)
     {
         // The log must be sitting in Draft — nothing else is re-stamped, ever.
         //
@@ -417,8 +455,8 @@ public sealed class DailyLog : Entity<Guid>
             return false;
         }
 
-        Verify(confirmEventId, VerificationStatus.Confirmed, SelfAttestationReason, creatorRole, OperatorUserId, occurredAtUtc);
-        Verify(verifyEventId, VerificationStatus.Verified, SelfAttestationReason, creatorRole, OperatorUserId, occurredAtUtc.AddMilliseconds(1));
+        Verify(confirmEventId, VerificationStatus.Confirmed, reason, creatorRole, OperatorUserId, occurredAtUtc);
+        Verify(verifyEventId, VerificationStatus.Verified, reason, creatorRole, OperatorUserId, occurredAtUtc.AddMilliseconds(1));
         return true;
     }
 

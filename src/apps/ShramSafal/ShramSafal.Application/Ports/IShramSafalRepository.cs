@@ -71,6 +71,29 @@ public interface IShramSafalRepository
     Task<DailyLog?> GetDailyLogByIdAsync(Guid dailyLogId, CancellationToken ct = default);
     Task<DailyLog?> GetDailyLogByIdempotencyKeyAsync(string idempotencyKey, CancellationToken ct = default);
 
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.5) — every log that has NEVER been touched
+    /// by the verification FSM, oldest first, TRACKED so the caller can attest to them.
+    ///
+    /// <para><b>Why "no events at all" is the right predicate, and the whole guard.</b>
+    /// <c>DailyLog.CurrentVerificationStatus</c> folds the events and defaults to
+    /// <c>Draft</c>, so "reads Draft" is ambiguous: it covers a log nobody has ever
+    /// assessed AND a log a human deliberately re-opened (<c>Edit</c> writes a real Draft
+    /// event; <c>AddLogTaskHandler</c> walks an attested day back to Draft to re-cover new
+    /// content). Backfilling on "reads Draft" would therefore stamp approval over a
+    /// re-opening somebody performed on purpose. An EMPTY event list cannot mean that:
+    /// nothing has ever been asserted about this day by anyone, which is precisely and
+    /// only the population wave-1.3 left behind. It also makes the backfill self-limiting
+    /// — a log it has attested to has two events and can never be a candidate again, so
+    /// re-running is a no-op with no marker table to keep in sync.</para>
+    ///
+    /// <para>Default no-op so the ~28 in-tree test doubles keep compiling, per the
+    /// additive-port convention above.</para>
+    /// </summary>
+    Task<IReadOnlyList<DailyLog>> GetDailyLogsWithNoVerificationHistoryAsync(
+        int limit, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<DailyLog>>(Array.Empty<DailyLog>());
+
     Task AddCostEntryAsync(CostEntry costEntry, CancellationToken ct = default);
     Task<CostEntry?> GetCostEntryByIdAsync(Guid costEntryId, CancellationToken ct = default);
     Task<List<CostEntry>> GetCostEntriesByIdsAsync(IEnumerable<Guid> costEntryIds, CancellationToken ct = default);

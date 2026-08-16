@@ -137,6 +137,12 @@ public static class DependencyInjection
         services.AddScoped<AddLogTaskHandler>();
         services.AddScoped<VerifyLogHandler>();
 
+        // spec: dfes-companion-2026-07-11 (wave-1.5) — BackfillOwnerAttestationsHandler is
+        // deliberately NOT registered here. It scans every farm, so it must be composed
+        // over the admin cross-tenant context that OwnerAttestationBackfillRunner builds
+        // (Infrastructure DI). Resolved from this scope it would receive the tenant-scoped
+        // repository, and RLS would hand it zero rows while it reported success.
+
         services.AddScoped<SetPriceConfigVersionHandler>();
         services.AddScoped<AddCostEntryHandler>();
         services.AddScoped<AllocateGlobalExpenseHandler>();

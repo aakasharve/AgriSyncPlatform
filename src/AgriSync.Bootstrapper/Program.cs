@@ -412,6 +412,12 @@ try
     builder.Services.AddHostedService<AgriSync.BuildingBlocks.Persistence.Outbox.OutboxConnectionInvariantChecker>();
 
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Migrations.BackfillFarmOwnerAccounts>();
+    // spec: dfes-companion-2026-07-11 (wave-1.5) — closes the days a pilot farmer recorded
+    // before the server learned to self-attest an owner's own log. Those logs have no
+    // verification history at all, so every pull reports them Draft and no screen in the
+    // product can clear them (the review inbox lists only logs created by someone else).
+    // Idempotent by data, never fatal — see the class doc.
+    builder.Services.AddHostedService<AgriSync.Bootstrapper.Migrations.BackfillOwnerAttestations>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.MisRefreshJob>();
     // Analytics partition time-bomb fix (CTO debt #1): the initial migration
     // created only current+next month partitions and deferred ongoing
