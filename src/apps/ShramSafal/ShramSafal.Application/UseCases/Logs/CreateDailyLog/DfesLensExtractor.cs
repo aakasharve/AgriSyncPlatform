@@ -31,11 +31,28 @@ internal static class DfesLensExtractor
     /// the crediting block in <see cref="Build"/>): never into the classifier lenses, so
     /// the reward economy does not move. Optional so every pre-existing construction site
     /// keeps compiling; callers that do not pass it credit nothing, same as before.</param>
+    /// <param name="SystemWeather">wave-3.5, Ruling 3 — the day's
+    /// <see cref="WeatherStamp"/> rows, i.e. weather the APP already holds. Optional;
+    /// a caller that passes none simply keeps WEATHER owed, which is the pre-3.5
+    /// behaviour.</param>
+    /// <param name="PlotId">The single plot the day's logs belong to, or null when the
+    /// day spans more than one. A weather stamp for a DIFFERENT plot must not retire the
+    /// question, so a multi-plot day deliberately falls back to plot-agnostic matching.</param>
+    /// <param name="LocalDate">The farmer-local date being scored, so a stamp from
+    /// another day can never satisfy this one.</param>
+    /// <param name="ScoredUnderVersion">The <c>score_engine_version</c> already stamped on
+    /// this day's aggregate, read BEFORE this recompute overwrites it. Null means a day
+    /// this engine has never scored. This is the version guard's only input — see
+    /// <c>appliesNewRules</c> in <see cref="Build"/>.</param>
     public sealed record DayData(
         IReadOnlyList<JsonElement> Roots,
         IReadOnlyList<ObservationEvent> Observations,
         IReadOnlyList<JsonElement>? PersistedRoots = null,
-        IReadOnlyList<AnsweredGap>? AnsweredGaps = null);
+        IReadOnlyList<AnsweredGap>? AnsweredGaps = null,
+        IReadOnlyList<WeatherStamp>? SystemWeather = null,
+        Guid? PlotId = null,
+        DateOnly? LocalDate = null,
+        string? ScoredUnderVersion = null);
 
     public static (LensInput Input, ClassifierSignals Signals) Build(DayData data, LensScoresProbe probeSink, bool clientDatePlausible)
     {
@@ -43,6 +60,36 @@ internal static class DfesLensExtractor
         var persisted = data.PersistedRoots ?? [];
         var hasStructuredObs = HasStructuredObservation(data.Observations);
         var hasLearning = HasLearningFacet(data.Observations);
+
+        // ── THE SCORE-ENGINE VERSION GUARD (wave-3.5) ───────────────────────
+        //
+        // Every scoring change in Wave 3 is dfes-4 behaviour and applies ONLY to a day
+        // this engine is allowed to (re)score:
+        //   • null       → no aggregate yet. A brand-new day. New rules.
+        //   • "dfes-4"   → already on this engine. New rules (idempotent).
+        //   • anything   → scored under dfes-1/2/3 and FINAL. OLD rules — and
+        //     else         DailyRichnessDerivationService re-stamps the row with its
+        //                  ORIGINAL version, never dfes-4, so the row never claims an
+        //                  engine it was not scored under.
+        //
+        // Ruling 3: "do not silently change historical numbers." RecomputeAsync genuinely
+        // reaches old days — a late-synced log recomputes ITS date (CreateDailyLogHandler),
+        // and answering a question recomputes that day (RecordQuestionEventHandler) — so
+        // without this a farmer's June number could move because we deployed in August.
+        //
+        // 🛑 THIS IS THE SWITCH FOR THE WHOLE WAVE, NOT JUST WEATHER. 3.5's weather rule
+        // reads it below. When 3.4 lands, its product-based water rule must read it too:
+        //     if (appliesNewRules && !OwesWater(roots)) return Cover.NotApplicable;
+        // and when 3.11 lands, its observation-anchoring test is likewise
+        // `appliesNewRules && …`. A Wave-3 scoring change that does NOT consult this
+        // boolean silently rescores history and defeats the guard for every other change
+        // as well.
+        //
+        // Deliberately compared against DfesTuning.ScoreEngineVersion rather than a
+        // literal "dfes-4": the next engine bump then re-freezes dfes-4 days automatically
+        // instead of needing this line remembered.
+        var appliesNewRules = data.ScoredUnderVersion is null
+                           || data.ScoredUnderVersion == DfesTuning.ScoreEngineVersion;
 
         // ── the day's dimensions, scored once ───────────────────────────────
         // ALWAYS possible (any day can carry these — nothing about the work performed
@@ -69,6 +116,29 @@ internal static class DfesLensExtractor
         var carrier = Dim("CARRIER", W_CARRIER, Best(CoverCarrier(roots), CoverCarrier(persisted))); // input- or irrigation-op
         var doseOwed = Dim("DOSE", W_DOSE, Best(OwedDose(roots), OwedDose(persisted)));
         var carrierOwed = Dim("CARRIER", W_CARRIER, Best(OwedCarrier(roots), OwedCarrier(persisted)));
+
+        // wave-3.5, Ruling 3 — do not ask the farmer to repeat weather the app already
+        // knows. `weather` above (the LENS reading) is UNTOUCHED: it feeds ThreeLensScorer
+        // → DayClassifier → the reward economy, whose calibration is founder-gated. This
+        // is the ROSTER reading, i.e. the farmer-facing /10's denominator, and it is the
+        // only place the retirement happens.
+        //
+        // 🛑 It lives HERE and never in DayUnderstandingScore.NotYetEarnable. The /10 is
+        // derived on READ from components_json (GetDayUnderstandingHandler), so a read-time
+        // exclusion would rescore every historical row the instant the API deploys, before
+        // any recompute — precisely what Ruling 3 forbids. Written into the roster, it
+        // reaches a day only when that day is legitimately rescored, and only when
+        // appliesNewRules says so.
+        //
+        // 3.9 retired the weather QUESTION from the bank. Until this lands, a farmer can
+        // lose WEATHER coverage with no question offered to fill it — a number that can sit
+        // lower with no route to raise it. That is what this closes.
+        var weatherOwed = Dim("WEATHER", W_WEATHER,
+            appliesNewRules
+            && HasUsableWeather(data.SystemWeather ?? [], data.PlotId, data.LocalDate ?? default)
+                ? Cover.NotApplicable
+                : new Cover(true, Math.Max(
+                    CoverWeather(roots, data.Observations), CoverWeather(persisted, data.Observations))));
 
         // ── the 3 lenses (classifier + persisted lens scores) ───────────────
         // Shape is UNCHANGED: a facet dimension appears in its lens only when the
@@ -116,7 +186,11 @@ internal static class DfesLensExtractor
             Credit(cost, "COST", gaps),
             Credit(doseOwed, "DOSE", gaps),
             Credit(carrierOwed, "CARRIER", gaps),
-            Credit(weather, "WEATHER", gaps),
+            // weatherOwed, not `weather`: when the app already holds the day's weather the
+            // bucket is NotApplicable, and Credit is a documented no-op on a
+            // non-applicable dimension — so a legacy gap.weather answer can never
+            // resurrect a retired bucket.
+            Credit(weatherOwed, "WEATHER", gaps),
             obsFacet,
             learnFacet,
         };
@@ -278,6 +352,42 @@ internal static class DfesLensExtractor
         if (hasReason || weatherObs) return 1.0;
         return roots.Any(r => Obj(r, "disturbance").ValueKind == JsonValueKind.Object) ? 0.5 : 0.0;
     }
+
+    /// <summary>
+    /// wave-3.5, Ruling 3 (2026-08-15). Weather stops being something the FARMER owes only
+    /// when the APP genuinely has it for this plot on this day.
+    ///
+    /// <para><b>"Usable" is defined narrowly, and honestly.</b> <see cref="WeatherStamp"/>
+    /// carries no confidence and no staleness field — its columns are DailyLogId, PlotId,
+    /// TimestampLocal, TimestampProvider, Provider, TempC, Humidity, WindKph, PrecipMm,
+    /// CloudCoverPct, ConditionText, IconCode, RainProbNext6h, WindGustKph,
+    /// SoilMoisture0To10, UvIndex, AlertsJson, CreatedAtUtc. The only honest signals are
+    /// therefore the PROVIDER and the OBSERVATION TIME; anything richer would be invented
+    /// (doctrine P4).</para>
+    ///
+    /// <list type="bullet">
+    ///   <item><b>Never Mock.</b> <c>CreateDailyLogHandler.MapWeatherProvider</c> sends
+    ///   every unrecognised provider string to <c>Mock</c>, so Mock means "unknown
+    ///   provider" as well as "fake data" — both are reasons not to trust it.</item>
+    ///   <item><b>The scored plot.</b> A stamp for a different plot says nothing about this
+    ///   one. When the day spans several plots the caller passes null and matching becomes
+    ///   plot-agnostic, because the day has no single plot to be wrong about.</item>
+    ///   <item><b>The scored day.</b> <c>TimestampProvider</c> is the provider's own
+    ///   observation instant, stored UTC (<c>CreateDailyLogHandler.ParseTimestamp</c> parses
+    ///   with <c>AdjustToUniversal</c>), and is mapped through <see cref="FarmLocalDay"/> —
+    ///   the same one rule the derivation service, the question handler and the repository
+    ///   already share, so this cannot drift into an off-by-one against them.</item>
+    /// </list>
+    ///
+    /// <para>Missing, mock or wrong-day weather leaves the bucket OWED. Retiring it on
+    /// anything weaker would tell the farmer his day is complete on the strength of data
+    /// we do not actually have.</para>
+    /// </summary>
+    private static bool HasUsableWeather(
+        IReadOnlyList<WeatherStamp> stamps, Guid? plotId, DateOnly localDate)
+        => stamps.Any(s => s.Provider != WeatherProvider.Mock
+            && (plotId is null || s.PlotId == plotId)
+            && FarmLocalDay.From(s.TimestampProvider) == localDate);
 
     // ── facet / signal predicates ───────────────────────────────────────────
 

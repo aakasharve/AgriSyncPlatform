@@ -21,7 +21,7 @@ export const DFES_TUNING = {
   unlockThreshold: 25,
   /** Stamped onto every aggregate row (ScoreEngineVersion). Backend source of
    *  truth: ShramSafal.Domain.Dfes.DfesTuning.ScoreEngineVersion. */
-  scoreEngineVersion: 'dfes-3',
+  scoreEngineVersion: 'dfes-4',
   /** Max Shram points a single local date can earn after bonuses. */
   dailyPointCap: 15,
   /** Reward point values. */

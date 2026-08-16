@@ -36,8 +36,37 @@ public static class DfesTuning
     /// the numerator and can no longer push the number down. Rows stamped
     /// <c>dfes-2</c> keep the old roster in <c>components_json</c>; the /10 is derived
     /// on read, so change (1) reaches them immediately and change (2) reaches them on
-    /// the next recompute.</para></summary>
-    public const string ScoreEngineVersion = "dfes-3";
+    /// the next recompute.</para>
+    /// <para><c>dfes-4</c> (2026-08-16, Wave 3 — bumped ONCE, in wave-3.5, for the whole
+    /// wave). Three scoring changes ship under this one version:
+    /// <list type="number">
+    ///   <item><b>WEATHER retires when the app already has it</b> (3.5, Ruling 3). A
+    ///   non-Mock <c>ssf.weather_stamps</c> row for the scored plot on the scored day makes
+    ///   WEATHER <c>NotApplicable</c> in the completeness roster, so the farmer is not asked
+    ///   to repeat what the app measured. This matters now because 3.9 retired the weather
+    ///   QUESTION from the bank: without 3.5 a farmer could lose WEATHER coverage with no
+    ///   question offered to fill it.</item>
+    ///   <item><b>Water is decided by the PRODUCT, not a method flag</b> (3.4, founder
+    ///   decision 14) — dry granular owes no carrier, water-soluble still does, unknown
+    ///   keeps asking.</item>
+    ///   <item><b>Observation anchoring</b> (3.11).</item>
+    /// </list>
+    /// <b>Unlike every earlier bump, dfes-4 does NOT reach old rows.</b>
+    /// <c>DfesLensExtractor.Build</c> computes <c>appliesNewRules</c> from the version
+    /// already stamped on the day's aggregate: a row stamped <c>dfes-1/2/3</c> is scored on
+    /// the OLD rules and re-stamped with its ORIGINAL version, so a June day cannot move
+    /// because we deployed in August (Ruling 3). Rows with no aggregate yet, and rows
+    /// already stamped <c>dfes-4</c>, get the new rules.
+    /// <para><b>Known gap, deliberate:</b> the <c>CoverWhat</c> changes in commits
+    /// <c>355192b3</c> / <c>c2a11e1b</c> (wave-2.2, "stop crediting a silent day for the
+    /// server's own summary") landed BEFORE this guard existed and are still stamped
+    /// <c>dfes-3</c>. A <c>dfes-3</c> day recomputed today therefore carries those two
+    /// fixes and none of the three above. That is the intended treatment: 2.2 removed a
+    /// FABRICATED credit (doctrine P4 outranks number stability), whereas dfes-4 changes
+    /// what the day is ASKED — only the latter is frozen.</para>
+    /// <para>Nothing in the product READS this string as a feature; it is a forensic
+    /// label. <c>appliesNewRules</c> is what actually prevents drift.</para></summary>
+    public const string ScoreEngineVersion = "dfes-4";
 
     /// <summary>Maximum Shram points a single LocalDate can earn after all bonuses.</summary>
     public const int DailyPointCap = 15;

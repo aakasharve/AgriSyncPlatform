@@ -299,17 +299,30 @@ public sealed class DailyRichnessAggregateTrackedWriteTests(Xunit.Abstractions.I
 
         var row = await ReadAggregateAsync(RecomputeDate);
 
-        row.ScoreEngineVersion.Should().Be(DfesTuning.ScoreEngineVersion,
-            "RecomputeAsync must overwrite the pre-existing aggregate — this is the path that was a silent no-op and froze the farmer's day");
+        // has_work and day_classification are the witnesses that the UPDATE genuinely
+        // landed. Both were seeded FALSE / 'UnaccountedDay' and can only have moved by a
+        // real write reaching the database — which is precisely what the detached-entity
+        // bug did not do.
         row.HasWork.Should().BeTrue(
             "a Completed LogTask is real recorded work; the recompute must persist has_work=true over the stale false");
         row.DayClassification.Should().NotBe(nameof(DayClassification.UnaccountedDay),
             "the farmer worked — the day must no longer be classified as 'nothing happened'");
 
+        // wave-3.5 — score_engine_version is NO LONGER a witness for "the write landed",
+        // and asserting DfesTuning.ScoreEngineVersion here would now assert a BUG.
+        // 'stale-v0' is not the current engine, so Ruling 3 makes this a FROZEN day: it is
+        // scored on the rules it was scored under and re-stamped with its ORIGINAL version.
+        // Re-stamping it dfes-4 would make the guard read 'dfes-4' on the next recompute
+        // and rescore the day after all — the freeze would leak away one recompute at a
+        // time. So the assertion flips, and in flipping it proves the freeze survives a
+        // real EF round trip rather than only holding in a unit fake.
+        row.ScoreEngineVersion.Should().Be(StaleEngineVersion,
+            "a day stamped with an older engine keeps its own stamp — the row must never claim an engine it was not scored under (wave-3.5, Ruling 3)");
+
         output.WriteLine("[EVIDENCE] === RecomputeAsync over an existing aggregate (real Npgsql :5433) ===");
-        output.WriteLine($"[EVIDENCE] score_engine_version = '{row.ScoreEngineVersion}' (expect '{DfesTuning.ScoreEngineVersion}', was '{StaleEngineVersion}')");
-        output.WriteLine($"[EVIDENCE] has_work             = {row.HasWork} (expect True, was False)");
+        output.WriteLine($"[EVIDENCE] has_work             = {row.HasWork} (expect True, was False — the UPDATE landed)");
         output.WriteLine($"[EVIDENCE] day_classification   = '{row.DayClassification}' (must NOT be 'UnaccountedDay')");
+        output.WriteLine($"[EVIDENCE] score_engine_version = '{row.ScoreEngineVersion}' (expect '{StaleEngineVersion}' — FROZEN, wave-3.5; current engine is '{DfesTuning.ScoreEngineVersion}')");
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -107,6 +107,16 @@ public class FakeShramSafalRepository : IShramSafalRepository
     public virtual Task<DailyRichnessAggregate?> GetDailyRichnessAggregateForUpdateAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default) => throw NotStubbed();
     public virtual Task AddDailyRichnessAggregateAsync(DailyRichnessAggregate aggregate, CancellationToken ct = default) => throw NotStubbed();
 
+    // wave-3.5 — the day's system weather. Deliberately EMPTY rather than NotStubbed(),
+    // breaking this file's strict-fake rule for one member and for one reason:
+    // RecomputeAsync now calls it on EVERY path, so a throwing default would fail every
+    // pre-existing derivation test for a read they do not care about. Empty is also the
+    // interface's own default and is behaviour-identical to the pre-3.5 world (no system
+    // weather => WEATHER stays owed), so a double that ignores this member scores exactly
+    // as it did before. Override it to exercise the weather rule.
+    public virtual Task<IReadOnlyList<WeatherStamp>> GetWeatherStampsForDailyLogsAsync(IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<WeatherStamp>>([]);
+
     // ── DFES Phase 5 — question-engine telemetry ──
     public virtual Task AddQuestionEventAsync(QuestionEvent e, CancellationToken ct = default) => throw NotStubbed();
     public virtual Task<IReadOnlyList<QuestionEvent>> GetRecentQuestionEventsForFarmAsync(Guid farmId, DateTime sinceUtc, CancellationToken ct = default) => throw NotStubbed();

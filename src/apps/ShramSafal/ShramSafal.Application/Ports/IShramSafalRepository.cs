@@ -638,6 +638,27 @@ public interface IShramSafalRepository
         => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Farms.ObservationEvent>>(
             Array.Empty<ShramSafal.Domain.Farms.ObservationEvent>());
 
+    /// <summary>
+    /// wave-3.5, Ruling 3 (2026-08-15) — the day's system-captured
+    /// <see cref="ShramSafal.Domain.Farms.WeatherStamp"/> rows, so the scorer can stop
+    /// asking the farmer to repeat weather the app already holds.
+    ///
+    /// <para><c>ssf.weather_stamps</c> has been written on the same unit of work as the
+    /// log since 20260630040851_AddWeatherStampsTable and carries its own SELECT RLS
+    /// policy — but until this port existed <b>nothing had ever read it back</b>. That
+    /// was the whole gap: the data was there and the farmer was still being asked.</para>
+    ///
+    /// <para>Same shape as <see cref="GetObservationEventsForDailyLogsAsync"/> above: an
+    /// EXISTS-join child keyed by plain <c>DailyLogId</c>, read no-tracking because the
+    /// scorer only inspects it. Default empty so the in-tree test doubles keep compiling;
+    /// a double that does not override it simply sees no system weather, which is the
+    /// pre-3.5 behaviour exactly.</para>
+    /// </summary>
+    Task<IReadOnlyList<ShramSafal.Domain.Farms.WeatherStamp>> GetWeatherStampsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Farms.WeatherStamp>>(
+            Array.Empty<ShramSafal.Domain.Farms.WeatherStamp>());
+
     // ── the rest of the day's PERSISTED spine (task-7, 2026-08-13) ─────────────
     // The richness scorer used to read the AI job's NormalizedResultJson and
     // nothing else, so every fact the farmer supplied that lives ONLY as a typed

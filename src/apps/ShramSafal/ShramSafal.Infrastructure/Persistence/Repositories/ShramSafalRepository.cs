@@ -339,6 +339,18 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    // wave-3.5, Ruling 3 — the day's system weather, mirroring the ObservationEvent
+    // read above exactly: EXISTS-join child keyed by plain DailyLogId, no-tracking
+    // because the scorer only inspects it, empty id set short-circuited so we never
+    // emit `IN ()`. ssf.weather_stamps has been written since 20260630040851 and read
+    // by nothing until now.
+    public async Task<IReadOnlyList<Domain.Farms.WeatherStamp>> GetWeatherStampsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => dailyLogIds.Count == 0
+            ? Array.Empty<Domain.Farms.WeatherStamp>()
+            : await db.WeatherStamps.AsNoTracking()
+                .Where(w => dailyLogIds.Contains(w.DailyLogId)).ToListAsync(ct);
+
     // ── the rest of the day's PERSISTED spine (task-7, 2026-08-13) ─────────────
     // Same shape as the ObservationEvent read above: EXISTS-join children keyed
     // by plain DailyLogId, read NO-TRACKING because the scorer only inspects

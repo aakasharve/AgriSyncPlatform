@@ -24,9 +24,14 @@ public sealed class DfesTuningTests
         // dfes-3 (2026-08-13, founder-decided): LEARN_FACET left the /10 while nothing
         // can earn it, and DOSE/CARRIER became owed from the OPERATION rather than from
         // a named product. No weight moved. The frontend mirror
+        // dfes-4 (2026-08-16, wave-3.5 — bumped ONCE for all of Wave 3): weather retires
+        // when the app already holds it, water is decided by the product rather than a
+        // method flag, and observations are anchored. Unlike every earlier bump these do
+        // NOT reach old rows — DfesLensExtractor.Build freezes a day on the engine it was
+        // scored under (see ScoreEngineVersionGuardTests). The frontend mirror
         // (mobile-web/src/features/logs/services/dfesTuning.ts) is value-locked to this
         // string by dfesTuning.test.ts — bump both or that test fails.
-        DfesTuning.ScoreEngineVersion.Should().Be("dfes-3");
+        DfesTuning.ScoreEngineVersion.Should().Be("dfes-4");
     }
 
     [Fact]

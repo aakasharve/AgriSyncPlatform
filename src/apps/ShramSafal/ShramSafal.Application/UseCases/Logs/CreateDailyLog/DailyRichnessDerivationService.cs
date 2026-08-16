@@ -120,7 +120,40 @@ public sealed class DailyRichnessDerivationService(
             var serverTodayLocal = FarmLocalDay.From(clock.UtcNow);
             var plausible = ClientDateSanity.IsPlausible(localDate, serverTodayLocal);
 
-            var data = new DfesLensExtractor.DayData(roots, observations, persistedRoots, answeredGaps);
+            // wave-3.5, Ruling 3 — THE VERSION GUARD's input. This read used to sit below,
+            // immediately before ApplyDerivation. It has to happen HERE, above the scoring,
+            // because the version the row already carries decides WHICH RULES RUN, and
+            // ApplyDerivation then overwrites that version. Reading it afterwards is what
+            // made the earlier draft's `scoredUnder` a dead local — it could not reach
+            // Build at all.
+            //
+            // Still the TRACKED accessor, and it must stay so: the .AsNoTracking() sibling
+            // returns a DETACHED entity, so ApplyDerivation + SaveChangesAsync emits NO
+            // UPDATE — silently, with no exception. See the note at the ApplyDerivation
+            // call below; that bug froze farmers' day scores once already.
+            var existing = await repository.GetDailyRichnessAggregateForUpdateAsync(farmId, localDate, ct);
+
+            // Captured BEFORE ApplyDerivation writes over it. Null = a day this engine has
+            // never scored; anything older than the current engine freezes the day on the
+            // rules it was actually scored under.
+            var scoredUnder = existing?.ScoreEngineVersion;
+
+            // wave-3.5, Ruling 3 — the weather the APP already holds for this day. Written
+            // to ssf.weather_stamps on the same unit of work as the log since
+            // 20260630040851 and, until now, read by nothing.
+            var weatherStamps = await repository.GetWeatherStampsForDailyLogsAsync(logIds, ct);
+
+            // The day's plot, when it HAS one. A day whose logs span several plots passes
+            // null, and the weather match becomes plot-agnostic — because a day with no
+            // single plot has no single plot to be wrong about, and demanding a stamp for
+            // "the" plot would silently keep the bucket owed forever on multi-plot farms.
+            var plotId = logs.Select(l => (Guid?)l.PlotId).Distinct().Count() == 1
+                ? (Guid?)logs[0].PlotId
+                : null;
+
+            var data = new DfesLensExtractor.DayData(
+                roots, observations, persistedRoots, answeredGaps,
+                weatherStamps, plotId, localDate, scoredUnder);
             var probe = new DfesLensExtractor.LensScoresProbe();
             var (input, signals) = DfesLensExtractor.Build(data, probe, plausible);
             var scores = probe.Scores;
@@ -133,15 +166,15 @@ public sealed class DailyRichnessDerivationService(
                 signals.HasWork, signals.HasMeaningfulObservation, signals.HasLearning,
                 signals.HasExperimentOutcome, signals.HasDisturbance, signals.HasDeclaredNoWorkReason);
 
-            // FIX (dfes-companion-2026-07-11) — MUST be the TRACKED accessor. This is a
-            // read-modify-write: the ApplyDerivation call below mutates `existing` and the
-            // caller's SaveChangesAsync is expected to flush it. The sibling
+            // FIX (dfes-companion-2026-07-11) — `existing` MUST come from the TRACKED
+            // accessor. This is a read-modify-write: the ApplyDerivation call below mutates
+            // it and the caller's SaveChangesAsync is expected to flush it. The sibling
             // GetDailyRichnessAggregateAsync is .AsNoTracking(), so it returned a DETACHED
             // entity and EF emitted NO UPDATE — silently, with no exception. Effect: only
             // the FIRST log of a day (the Create path below) ever wrote the aggregate, and
             // every recompute after it was discarded, freezing the farmer's day at
             // has_work=false / score 0 / "UnaccountedDay" on a day of real work.
-            var existing = await repository.GetDailyRichnessAggregateForUpdateAsync(farmId, localDate, ct);
+            // (The read itself now happens ABOVE, before scoring — see the version guard.)
             if (existing is not null)
             {
                 existing.ApplyDerivation(
@@ -149,7 +182,12 @@ public sealed class DailyRichnessDerivationService(
                     classification, flags,
                     stamp.AdvancesStreak, stamp.AdvancesBar, stamp.ShramPointsEarned,
                     stamp.RewardReasonsJson, signals.NoWorkReasonCode,
-                    DfesTuning.ScoreEngineVersion, componentsJson);
+                    // wave-3.5 — a FROZEN day keeps its OWN stamp. Writing
+                    // DfesTuning.ScoreEngineVersion here unconditionally would make the row
+                    // claim an engine it was never scored under, and the guard would then
+                    // read "dfes-4" on the NEXT recompute and rescore it after all — the
+                    // freeze would leak away one recompute at a time.
+                    scoredUnder ?? DfesTuning.ScoreEngineVersion, componentsJson);
                 // ApplyDerivation takes no timestamp by contract — the write path owns it.
                 // Without this the row's scores changed while UpdatedAtUtc still reported
                 // the original creation time, which is exactly what made this recompute
@@ -165,7 +203,12 @@ public sealed class DailyRichnessDerivationService(
                     classification, flags,
                     stamp.AdvancesStreak, stamp.AdvancesBar, stamp.ShramPointsEarned,
                     stamp.RewardReasonsJson, signals.NoWorkReasonCode,
-                    DfesTuning.ScoreEngineVersion, componentsJson);
+                    // Reached only when `existing` is null, so `scoredUnder` is null too
+                    // and this is provably the current engine. Written as the SAME
+                    // expression as the update branch on purpose: one rule for what a row's
+                    // version means, so a later refactor cannot make the two branches
+                    // disagree about it.
+                    scoredUnder ?? DfesTuning.ScoreEngineVersion, componentsJson);
                 await repository.AddDailyRichnessAggregateAsync(agg, ct);
             }
         }
