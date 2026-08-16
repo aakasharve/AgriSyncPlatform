@@ -25,6 +25,9 @@ import { formatCurrencyINR, getCarriedTasks } from '../../shared/utils/dayState'
 import { getCropTheme } from '../../shared/utils/colorTheme';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
 import { LedgerRecognitionPanel } from '../../features/logs/components/LedgerRecognitionPanel';
+import {
+    stashPendingQuestionAnswer, abandonPendingQuestionAnswer, readPendingQuestionAnswer,
+} from '../../features/logs/services/pendingQuestionAnswer';
 import VoiceSavedReassurance from '../../features/logs/components/shramsathi/VoiceSavedReassurance';
 import DailyLoopHero from '../../features/logs/components/shramsathi/DailyLoopHero';
 import DailyLoopClarity from '../../features/logs/components/shramsathi/DailyLoopClarity';
@@ -455,7 +458,17 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                         <div className="mb-6 px-4 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-100">
                             <InputMethodToggle
                                 mode={mode}
-                                onChange={(newMode) => setMode(newMode)}
+                                onChange={(newMode) => {
+                                    // wave-3.7 — he was taken to the mic to answer Sathi
+                                    // and is switching away without speaking. Record the
+                                    // SKIP honestly; never invent an answer he did not
+                                    // give (P4). Fire-and-forget: a telemetry write must
+                                    // never delay the mode switch he asked for.
+                                    if (mode === 'voice' && newMode !== 'voice') {
+                                        void abandonPendingQuestionAnswer();
+                                    }
+                                    setMode(newMode);
+                                }}
                                 disabled={false}
                                 suggestInteraction={hasActiveLogContext}
                             />
@@ -477,6 +490,32 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             </div>
                         </div>
                     )}
+
+                    {/* wave-3.7, founder decision 3 — the question stays VISIBLE while he
+                        answers it. Read straight from the stash, so it survives a reload
+                        and needs no second copy of the selection state. */}
+                    {mode === 'voice' && (() => {
+                        const pendingQuestion = readPendingQuestionAnswer();
+                        if (!pendingQuestion) return null;
+                        return (
+                            <div
+                                data-testid="shramsathi-pinned-question"
+                                className="mb-4 rounded-xl border px-4 py-3 text-sm font-medium"
+                                // The 'ask' tone from SurfaceSection — marigold means "what
+                                // Sathi still wants" everywhere else on this surface, so the
+                                // pinned question must read as the SAME thing he just tapped.
+                                // Literal hex, not a Tailwind token: no marigold scale exists
+                                // in this project's config, and a non-existent utility class
+                                // would silently render as no colour at all.
+                                style={{
+                                    fontFamily: "'Noto Sans Devanagari', sans-serif",
+                                    backgroundColor: '#FEF8EF', borderColor: '#F6E3C4', color: '#B4650F',
+                                }}
+                            >
+                                {pendingQuestion.selected.resolvedPromptMr}
+                            </div>
+                        );
+                    })()}
 
                     <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {getContextColorIndicator()}
@@ -902,6 +941,19 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                     savedLog={savedLog}
                                     allLogs={history}
                                     weather={weatherData}
+                                    // wave-3.7, founder decision 3 — "no taps before he
+                                    // speaks". The tap writes NOTHING (question_events is
+                                    // append-only, so a row written now could never
+                                    // acquire his answer); it stashes the pending answer
+                                    // and hands him the SAME microphone entry point
+                                    // globalSheets' QuickLogSheet uses. Do not build a
+                                    // second recording surface.
+                                    onAnswerBySpeaking={(pending) => {
+                                        stashPendingQuestionAnswer(pending);
+                                        setStatus('idle');
+                                        setMode('voice');
+                                        setMainView('log');
+                                    }}
                                 />
                             );
                         })()}

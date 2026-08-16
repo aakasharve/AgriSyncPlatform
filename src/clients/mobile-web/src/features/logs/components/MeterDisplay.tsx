@@ -52,6 +52,17 @@ export interface MeterDisplayProps {
     onAnswer?: (option: DfesAnswerOption) => void;
     /** Task 2A: fired by the "नंतर" dismiss affordance on a tap-choice question (`{skipped:true}`). */
     onDismiss?: () => void;
+    /**
+     * wave-3.7, founder decision 3 — "no taps before he speaks". When wired, tapping the
+     * ack-only question card takes the farmer to the MICROPHONE with the question pinned,
+     * and writes NOTHING: `ssf.question_events` is append-only by privilege, so a row
+     * written here could never afterwards acquire his answer text.
+     *
+     * Optional and falling back to `onQuestionInteract`: a surface with no route to the
+     * recorder (a test harness, or any future caller) keeps its bare-acknowledgement
+     * behaviour unchanged. This adds a path; it removes none.
+     */
+    onAnswerBySpeaking?: () => void;
 }
 
 export function MeterDisplay({
@@ -62,6 +73,7 @@ export function MeterDisplay({
     onQuestionInteract,
     onAnswer,
     onDismiss,
+    onAnswerBySpeaking,
 }: MeterDisplayProps): React.ReactElement | null {
     const { t } = useLanguage();
 
@@ -150,7 +162,9 @@ export function MeterDisplay({
                 <button
                     type="button"
                     data-testid="shramsathi-gap-question"
-                    onClick={() => onQuestionInteract?.()}
+                    // wave-3.7 (decision 3): the tap is a route to the microphone, not a
+                    // write. Falls back to the bare ack when no respeak route is wired.
+                    onClick={() => (onAnswerBySpeaking ? onAnswerBySpeaking() : onQuestionInteract?.())}
                     className="mt-2 w-full rounded-xl bg-stone-100 px-3 py-2 text-left text-xs font-medium text-stone-800"
                 >
                     {combinedQuestion.resolvedPromptMr}

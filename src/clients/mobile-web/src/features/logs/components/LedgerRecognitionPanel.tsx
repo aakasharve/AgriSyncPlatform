@@ -70,6 +70,9 @@ import { computeScheduleGap } from '../services/dfesScheduleWindow';
 import { reconcileWeather } from '../services/dfesWeatherReconcile';
 import { computePreviousLog } from '../services/dfesPreviousLog';
 import { computeTodayWork } from '../services/dfesTodayWork';
+import {
+    settlePendingQuestionAnswer, type PendingQuestionAnswer,
+} from '../services/pendingQuestionAnswer';
 import type { WeatherTriggerContext } from '../services/dfesQuestionEngine';
 import { speakUnlockReward } from '../../../infrastructure/voice/speakUnlockReward';
 import { wasUnlockSpoken, markUnlockSpoken } from '../../../infrastructure/storage/unlockSpeechStore';
@@ -123,6 +126,13 @@ export interface LedgerRecognitionPanelProps {
      * mounted without weather in scope (same pattern as `crops` in 3B).
      */
     weather?: DetailedWeather | null;
+    /**
+     * wave-3.7, founder decision 3 — the route to the microphone. Handed straight through
+     * to MeterQuestionHost; the router (mainView) stashes the pending answer and switches
+     * to voice mode. Optional, so every surface that mounts this panel without a router in
+     * scope keeps the bare-acknowledgement behaviour unchanged.
+     */
+    onAnswerBySpeaking?: (pending: PendingQuestionAnswer) => void;
 }
 
 export function LedgerRecognitionPanel({
@@ -134,6 +144,7 @@ export function LedgerRecognitionPanel({
     savedLog,
     allLogs = [],
     weather = null,
+    onAnswerBySpeaking,
 }: LedgerRecognitionPanelProps): React.ReactElement {
     const { engagement } = useFarmerEngagement(farmId);
     const resolvedDate = todayLocalDate ?? new Date().toISOString().slice(0, 10);
@@ -174,6 +185,30 @@ export function LedgerRecognitionPanel({
     // `mr` translation directly (translateForced(..., 'mr')), never the
     // UI-language-bound `t()` — Sathi's SPOKEN persona is always Marathi,
     // regardless of what language the farmer reads the app in.
+    // wave-3.7, founder decision 3 — HE SPOKE, SO KEEP HIS WORDS.
+    //
+    // This panel remounts on every save with the new `savedLog`, which makes it the one
+    // place that sees "a parse came back" with the transcript attached. If an answer was
+    // pending, the farmer's own words land on `question_events.response` here — verbatim,
+    // never synthesised (P4), and attributed to the log the QUESTION was about rather than
+    // the one he just spoke.
+    //
+    // THE FOLLOW-UP NEVER BLOCKS THE SAVE (spec reliability rules): by the time this runs
+    // the log is already stored, the promise is deliberately not awaited, and
+    // settlePendingQuestionAnswer swallows its own failures. A telemetry write that fails
+    // must never surface to the farmer as a failed save.
+    //
+    // Keyed on the saved log's id: one settle per saved log, and a re-render with the same
+    // log cannot fire a second write (the stash is emptied synchronously inside settle
+    // anyway, so this is belt AND braces).
+    const savedLogId = savedLog?.id;
+    const spokenText = savedLog?.transcriptSnapshot?.raw;
+    useEffect(() => {
+        if (!savedLogId || !spokenText) return;
+        void settlePendingQuestionAnswer({ transcript: spokenText });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [savedLogId]);
+
     useEffect(() => {
         if (!FEATURE_FLAGS.spokenUnlockReward) return;
         if (!farmId) return;
@@ -195,6 +230,7 @@ export function LedgerRecognitionPanel({
             score={savedLog?.understanding}
             allLogs={allLogs}
             engagement={engagement}
+            onAnswerBySpeaking={onAnswerBySpeaking}
             questionInputs={{
                 crop,
                 todayLocalDate: resolvedDate,

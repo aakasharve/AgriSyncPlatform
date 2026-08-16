@@ -17,11 +17,21 @@ import {
 import {
     fetchRecentQuestionEvents, recordQuestionEvent, type QuestionOutcome,
 } from '../services/dfesQuestionApi';
+import {
+    readPendingQuestionAnswer, withPendingMerged, abandonStalePendingQuestionAnswer,
+} from '../services/pendingQuestionAnswer';
 
 export interface UseDfesQuestionResult {
     selected: SelectedQuestion | null;
     loading: boolean;
     recordOutcome: (outcome: QuestionOutcome) => Promise<void>;
+    /**
+     * wave-3.7 — the moment the current question was put in front of the farmer.
+     * Exposed because the respeak path defers the write until AFTER a trip to the
+     * microphone, and `shownAtUtc` must survive that trip rather than being re-stamped
+     * to the moment he finished speaking.
+     */
+    shownAtUtc: string;
 }
 
 export function useDfesQuestion(
@@ -40,6 +50,10 @@ export function useDfesQuestion(
     const [loading, setLoading] = useState(enabled);
     const shownAtRef = useRef<string>('');
     const recordedRef = useRef(false);
+    // Mirrored into state (the ref stays the write path's source of truth) so a consumer
+    // that RENDERS with it — the respeak route, which must carry the shown-at moment
+    // across a trip to the microphone — re-renders when a new question is selected.
+    const [shownAtUtc, setShownAtUtc] = useState('');
 
     useEffect(() => {
         // Flag gate: no farm or feature OFF → do not touch the network.
@@ -50,12 +64,31 @@ export function useDfesQuestion(
         }
         let cancelled = false;
         setLoading(true);
+
+        // wave-3.7 — a stash that outlived its day is abandoned honestly (a SKIP row: he
+        // was shown the question and never answered it), never deleted silently, and never
+        // left to hold today's one-question-per-day guard shut forever. Fire-and-forget:
+        // the follow-up must never block or delay the question surface.
+        void abandonStalePendingQuestionAnswer(inputs.todayLocalDate);
+
+        // Captured SYNCHRONOUSLY, before the fetch. The settle path may clear the slot
+        // while this request is in flight, and a guard that opened in that window would put
+        // a second question in front of him on the same day.
+        const pendingAtStart = readPendingQuestionAnswer();
+
         fetchRecentQuestionEvents(farmId)
             .then((recentEvents) => {
                 if (cancelled) return;
-                const pick = selectDailyQuestion({ ...inputs, recentEvents });
+                const pick = selectDailyQuestion({
+                    ...inputs,
+                    // wave-3.7 — while an answer is pending NO server row exists yet, so
+                    // the stash stands in as a synthetic one. Client-side only; it never
+                    // reaches the server.
+                    recentEvents: withPendingMerged(recentEvents, inputs.todayLocalDate, pendingAtStart),
+                });
                 setSelected(pick);
                 shownAtRef.current = new Date().toISOString();
+                setShownAtUtc(shownAtRef.current);
                 recordedRef.current = false;
             })
             .catch(() => { if (!cancelled) setSelected(null); })
@@ -103,5 +136,5 @@ export function useDfesQuestion(
         }
     }, [farmId, plotId, selected, onAnswered]);
 
-    return { selected, loading, recordOutcome };
+    return { selected, loading, recordOutcome, shownAtUtc };
 }

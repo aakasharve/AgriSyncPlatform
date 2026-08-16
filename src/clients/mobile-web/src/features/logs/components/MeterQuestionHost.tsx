@@ -21,6 +21,7 @@ import { MeterDisplay } from './MeterDisplay';
 import { useDfesQuestion } from '../hooks/useDfesQuestion';
 import { notifyDfesAnswered } from '../services/dfesAnswerSignal';
 import type { DailyQuestionInputs } from '../services/dfesQuestionEngine';
+import type { PendingQuestionAnswer } from '../services/pendingQuestionAnswer';
 import type { DfesAnswerOption } from '../services/dfesQuestionBank';
 import type { VlogScore } from '../../../domain/types/log.types';
 import type { FarmerEngagementDto } from '../../../infrastructure/api/resources/DfesResource';
@@ -40,10 +41,22 @@ export interface MeterQuestionHostProps {
      */
     engagement?: FarmerEngagementDto | null;
     questionInputs: Omit<DailyQuestionInputs, 'recentEvents'>;
+    /**
+     * wave-3.7, founder decision 3 — the farmer answers by SPEAKING AGAIN. When wired,
+     * tapping the ack-only question card hands the whole pending answer up to the router,
+     * which stashes it and routes to the microphone with the question pinned. NOTHING is
+     * written here: `ssf.question_events` is append-only by privilege, so a row written on
+     * the tap could never afterwards acquire his answer text — which is precisely why
+     * `question_events.response` is NULL on every row ever written.
+     *
+     * Optional: a caller with no route to the recorder keeps the bare-acknowledgement
+     * behaviour unchanged.
+     */
+    onAnswerBySpeaking?: (pending: PendingQuestionAnswer) => void;
 }
 
 export function MeterQuestionHost({
-    farmId, plotId, score, allLogs, engagement, questionInputs,
+    farmId, plotId, score, allLogs, engagement, questionInputs, onAnswerBySpeaking,
 }: MeterQuestionHostProps): React.ReactElement | null {
     const enabled = FEATURE_FLAGS.stageQuestions && !!farmId;
     // Task 4 (spec: dfes-farmer-facing-deploy-readiness-2026-08-14) — notify the
@@ -52,7 +65,7 @@ export function MeterQuestionHost({
     // same-feature pub/sub rather than a prop: this host and
     // DayUnderstandingCard are siblings under mainView's hook-free route
     // render function.
-    const { selected, recordOutcome } = useDfesQuestion(farmId ?? '', plotId, questionInputs, enabled, notifyDfesAnswered);
+    const { selected, recordOutcome, shownAtUtc } = useDfesQuestion(farmId ?? '', plotId, questionInputs, enabled, notifyDfesAnswered);
     // Task 2A: a tapped answer option carries the REAL response into the SAME
     // single INSERT (recordOutcome/recordQuestionEvent) — question_events is
     // append-only, so there is no separate "shown" write to patch later.
@@ -70,6 +83,23 @@ export function MeterQuestionHost({
             stageConfirmed: option.stageConfirmedValue ?? null, dailyLogId: sourceLogId,
         });
     };
+    // wave-3.7 (founder decision 3) — the tap is a ROUTE, not a write. Everything the
+    // deferred POST will need travels with him: the resolved question (so the prompt can be
+    // pinned above the recorder and the POST body rebuilt verbatim), the moment he was
+    // shown it, and the log the question was ABOUT — never the log he is about to speak,
+    // or Monday's gap would be credited to Wednesday and stay open forever.
+    const answerBySpeaking = onAnswerBySpeaking && selected && farmId
+        ? () => onAnswerBySpeaking({
+            questionKey: selected.question.questionKey,
+            farmId,
+            plotId,
+            selected,
+            shownAtUtc,
+            sourceLogId,
+            stashedLocalDate: questionInputs.todayLocalDate,
+        })
+        : undefined;
+
     return (
         <MeterDisplay
             score={score}
@@ -77,7 +107,9 @@ export function MeterQuestionHost({
             engagement={engagement}
             dfesQuestion={selected}
             // No-options ack path — UNCHANGED from pre-Task-2A behaviour ({skipped:false}).
+            // Still the fallback whenever no respeak route is wired.
             onQuestionInteract={() => { void recordOutcome({ skipped: false, dailyLogId: sourceLogId }); }}
+            onAnswerBySpeaking={answerBySpeaking}
             // With-options tap-choice path (Task 2A, both new).
             onAnswer={handleAnswer}
             onDismiss={() => { void recordOutcome({ skipped: true, dailyLogId: sourceLogId }); }}
