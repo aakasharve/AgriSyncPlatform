@@ -102,9 +102,35 @@ internal sealed class ShramSafalAuthorizationEnforcer(
             return Result.Failure(ShramSafalErrors.Forbidden);
         }
 
-        var (_, ownerAccountId) = await repository
-            .GetFarmMembershipForTenantAsync(log.FarmId.Value, userId.Value);
-        tenantContext.SetTenant(log.FarmId.Value, ownerAccountId, userId.Value);
+        // ── spec: dfes-companion-2026-07-11 (wave-1.4) ───────────────────────────────
+        // THE AUTHORIZATION DECISION ABOVE IS UNCONDITIONAL. Only the tenant-claim
+        // PUBLICATION below is skipped when the request is already admin cross-tenant.
+        //
+        // Why it has to be. Verification became reachable from /sync/push (verify_log_v2),
+        // and that path is admin-elevated by TenantTransactionMiddleware's skip-list.
+        // TenantContext.SetTenant THROWS on a downgrade from admin — deliberately, and
+        // TenantContextTests pins that as the intended invariant — so publishing here would
+        // turn every successful sync approval into an unhandled InvalidOperationException
+        // and 500 the whole batch. The exception was latent until now only because RLS hid
+        // the log from the admin-scoped read and the enforcer returned DailyLogNotFound
+        // before ever reaching this line.
+        //
+        // Why it costs no isolation. The claim exists to key the RLS GUCs. In admin mode
+        // the interceptor sets no GUC at all, so this call could never have keyed anything;
+        // the sync path establishes its OWN membership-validated farm scope via raw
+        // set_config (PushSyncBatchHandler.EstablishFarmScopeForLogAsync) before invoking
+        // the handler. Nothing is skipped that was doing work.
+        //
+        // Deliberately NOT applied to EnsureIsFarmMember / EnsureIsOwner: no admin-elevated
+        // path reaches those today, and pre-emptively loosening two more auth primitives for
+        // a caller that does not exist would be widening on speculation.
+        if (!tenantContext.IsAdminCrossTenant)
+        {
+            var (_, ownerAccountId) = await repository
+                .GetFarmMembershipForTenantAsync(log.FarmId.Value, userId.Value);
+            tenantContext.SetTenant(log.FarmId.Value, ownerAccountId, userId.Value);
+        }
+
         return Result.Success();
     }
 

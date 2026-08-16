@@ -81,42 +81,63 @@ public sealed class VerifyLogHandler(
         VerificationEvent verification;
         try
         {
-            verification = log.Verify(
-                command.VerificationEventId ?? idGenerator.New(),
+            // ── spec: dfes-companion-2026-07-11 (wave-1.4) ───────────────────────
+            // WALK the state machine instead of taking exactly one edge. The approval
+            // the pilot actually needs — an owner approving a foreman's day — starts on
+            // a Draft log, and the FSM has no Draft->Verified edge for ANY role. A
+            // single Verify() call therefore refused every real approval with
+            // VerificationTransitionNotAllowedForRole; the reachable path is
+            // Draft->Confirmed then Confirmed->Verified, and only owner-tier roles hold
+            // the second edge. VerifyReachingTarget walks exactly those edges and
+            // refuses when the role does not hold them, so nothing was widened: adding
+            // a Draft->Verified edge instead would have let every role self-approve,
+            // because Draft-> edges are open to all roles.
+            //
+            // One button press can therefore produce TWO verification events. Each one
+            // gets its own audit row below — a status that moved must be reconstructable
+            // hop by hop, or the ledger cannot answer "how did this log reach Verified".
+            var emitted = log.VerifyReachingTarget(
                 command.TargetStatus,
                 command.Reason,
                 resolvedCallerRole,
                 command.VerifiedByUserId,
-                clock.UtcNow);
+                clock.UtcNow,
+                targetEventId: command.VerificationEventId ?? idGenerator.New(),
+                enRouteEventId: idGenerator.New());
+
+            verification = emitted[^1];
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from
             // AuditEvent.Create (sentinel provenance) to AuditEventFactory.Create
             // with X-Device-Id / IP hash / X-App-Version sourced from the
             // endpoint's AuditContextAccessor.
-            await repository.AddAuditEventAsync(
-                AuditEventFactory.Create(
-                    entityType: "DailyLog",
-                    entityId: log.Id,
-                    action: "VerificationChanged",
-                    actorUserId: command.VerifiedByUserId,
-                    actorRole: resolvedCallerRole.ToString(),
-                    payload: new
-                    {
-                        logId = log.Id,
-                        verificationId = verification.Id,
-                        status = verification.Status.ToString(),
-                        verification.Reason,
-                        verification.OccurredAtUtc
-                    },
-                    farmId: log.FarmId,
-                    clientCommandId: command.ClientCommandId,
-                    appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
-                        ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
-                        : command.ClientAppVersion,
-                    deviceId: command.AuditDeviceId,
-                    ipHash: command.AuditIpHash,
-                    sourceAiJobId: null),
-                ct);
+            foreach (var emittedEvent in emitted)
+            {
+                await repository.AddAuditEventAsync(
+                    AuditEventFactory.Create(
+                        entityType: "DailyLog",
+                        entityId: log.Id,
+                        action: "VerificationChanged",
+                        actorUserId: command.VerifiedByUserId,
+                        actorRole: resolvedCallerRole.ToString(),
+                        payload: new
+                        {
+                            logId = log.Id,
+                            verificationId = emittedEvent.Id,
+                            status = emittedEvent.Status.ToString(),
+                            emittedEvent.Reason,
+                            emittedEvent.OccurredAtUtc
+                        },
+                        farmId: log.FarmId,
+                        clientCommandId: command.ClientCommandId,
+                        appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                            ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                            : command.ClientAppVersion,
+                        deviceId: command.AuditDeviceId,
+                        ipHash: command.AuditIpHash,
+                        sourceAiJobId: null),
+                    ct);
+            }
         }
         catch (ArgumentException)
         {

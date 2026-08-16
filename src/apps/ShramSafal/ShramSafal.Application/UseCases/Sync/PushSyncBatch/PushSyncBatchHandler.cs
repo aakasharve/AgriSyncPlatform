@@ -404,11 +404,7 @@ public sealed class PushSyncBatchHandler(
             case "verify_log":
                 return await HandleVerifyLogAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "verify_log_v2":
-                // Sub-plan 03 wires the v2 verify handler. Until then, return a
-                // typed UNIMPLEMENTED so the surface area is honest.
-                return MutationExecutionOutcome.Failure(
-                    MutationTypeUnimplementedCode,
-                    "verify_log_v2 handler is not yet wired. Falls back to verify_log on the client. Tracked in Sub-plan 03.");
+                return await HandleVerifyLogV2Async(clientRequestId, payload, actorUserId, actorRole, ct);
             case "add_cost_entry":
                 return await HandleAddCostEntryAsync(clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "allocate_global_expense":
@@ -799,6 +795,60 @@ public sealed class PushSyncBatchHandler(
         return (true, ownerAccountId);
     }
 
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.4) — the same membership-validated
+    /// single-farm scope <see cref="EstablishFarmScopeForDerivationAsync"/> builds, for a
+    /// mutation that names a LOG rather than a farm.
+    ///
+    /// <para><b>Why it is needed at all.</b> <c>/sync/push</c> is admin-elevated
+    /// (<c>TenantTransactionMiddleware</c> skip-list), so <c>TenantConnectionInterceptor</c>
+    /// no-ops and NO <c>agrisync.*</c> GUC is set. Under prod FORCE-RLS (the app connects as
+    /// <c>agrisync_app</c>, no <c>BYPASSRLS</c>) every farm-scoped read then matches
+    /// <c>farm_id = NULL</c> and returns ZERO rows — so a verify mutation that simply looked
+    /// the log up would answer <c>DailyLogNotFound</c> for a log that plainly exists, and
+    /// would do it silently. That is not a hypothetical: it is measured behaviour, and it is
+    /// why "just fall back to the v1 <c>verify_log</c> handler" is not a working route
+    /// either — v1 has the same gap on this path.</para>
+    ///
+    /// <para><b>The chicken-and-egg, and how the isolation survives it.</b> The scope needs a
+    /// farm id; the payload carries only a log id. So the log is read FIRST under the
+    /// caller's OWN user-scoped policies (<c>agrisync.user_id</c> from the JWT, farm GUC
+    /// neutralised to the all-zeros sentinel) — <c>p_user_select_daily_logs</c> surfaces only
+    /// logs belonging to farms the caller owns or actively belongs to. A forged log id from
+    /// another farm therefore resolves to NOTHING, and the real farm GUC is never set, so
+    /// there is no window in which a caller reads a farm he has no claim on.</para>
+    /// </summary>
+    private async Task<(Domain.Logs.DailyLog? Log, bool IsMember)> EstablishFarmScopeForLogAsync(
+        Guid logId, Guid actorUserId, CancellationToken ct)
+    {
+        // Non-relational (the EF InMemory sync-endpoint harness): no RLS to satisfy and no
+        // raw SQL available. Same fallback shape as EstablishFarmScopeForDerivationAsync.
+        if (!dbContext.Database.IsRelational())
+        {
+            var inMemoryLog = await repository.GetDailyLogByIdAsync(logId, ct);
+            if (inMemoryLog is null)
+            {
+                return (null, false);
+            }
+
+            return (inMemoryLog, await repository.IsUserMemberOfFarmAsync(inMemoryLog.FarmId, actorUserId, ct));
+        }
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.user_id', {actorUserId.ToString()}, true)", ct);
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.farm_id', {Guid.Empty.ToString()}, true)", ct);
+
+        var log = await repository.GetDailyLogByIdAsync(logId, ct);
+        if (log is null)
+        {
+            return (null, false);
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(log.FarmId, actorUserId, ct);
+        return (log, isMember);
+    }
+
     private async Task<MutationExecutionOutcome> HandleAddLogTaskAsync(
         string clientRequestId,
         JsonElement payload,
@@ -892,6 +942,85 @@ public sealed class PushSyncBatchHandler(
                 request.Reason,
                 actorUserId,
                 request.VerificationEventId,
+                actorRole,
+                clientRequestId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.4) — THE APPROVE BUTTON'S ONLY PATH.
+    ///
+    /// <para>Until this landed, <c>verify_log_v2</c> answered
+    /// <c>MUTATION_TYPE_UNIMPLEMENTED</c>, which <c>RejectionPolicy.ts</c> classifies
+    /// PERMANENT, which parks the queue row in <c>REJECTED_USER_REVIEW</c> — a state
+    /// <c>pendingMutations.ts</c> does not shield — so the next pull reverted the farmer's
+    /// approval. An owner could not approve a mukadam's log AT ALL, and the failure was
+    /// silent.</para>
+    ///
+    /// <para><b>The payload is the canonical contract</b>
+    /// (<c>sync-contract/schemas/payloads/verify_log_v2.zod.ts</c> →
+    /// <see cref="VerifyLogV2Payload"/>), and the allow-list below is exactly its fields.
+    /// It deliberately does NOT include <c>callerRole</c>: authority is read from the
+    /// operator's membership by <see cref="VerifyLogHandler"/> (and gated owner-tier by
+    /// <c>IAuthorizationEnforcer.EnsureCanVerify</c> in the pipeline), never from the wire.
+    /// A payload that carries one is refused rather than silently stripped — a client that
+    /// thinks it is sending its own authority and is told "applied" has been lied to.</para>
+    ///
+    /// <para><b><c>verifierUserId</c> is not believed either.</b> It rides the contract for
+    /// the client's own bookkeeping; the command is built with <paramref name="actorUserId"/>,
+    /// which came from the JWT. Whoever the payload names, the ledger records who acted.</para>
+    ///
+    /// <para><b>The decision vocabulary is the FSM's, not a synonym list.</b> <c>confirm</c>
+    /// and <c>verify</c> are separate decisions precisely because they are separate edges;
+    /// collapsing them is what a <c>Draft → Verified</c> shortcut would have done.</para>
+    /// </summary>
+    private async Task<MutationExecutionOutcome> HandleVerifyLogV2Async(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "logId", "verifierUserId", "decision", "reason", "decidedAt"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "verify_log_v2 payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<VerifyLogV2Payload>(payload);
+        if (request is null || request.LogId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for verify_log_v2.");
+        }
+
+        if (!TryMapVerifyDecision(request.Decision, out var status))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.InvalidVerificationStatus",
+                "decision must be one of confirm, verify, dispute, request_correction.");
+        }
+
+        var (dailyLog, isMember) = await EstablishFarmScopeForLogAsync(request.LogId, actorUserId, ct);
+        if (dailyLog is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.DailyLogNotFound", "Daily log was not found.");
+        }
+
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
+
+        var result = await verifyLogHandler.HandleAsync(
+            new VerifyLogCommand(
+                request.LogId,
+                status,
+                request.Reason,
+                actorUserId,
+                VerificationEventId: null,
                 actorRole,
                 clientRequestId),
             ct);
@@ -1351,6 +1480,36 @@ public sealed class PushSyncBatchHandler(
         }
 
         return payload.Deserialize<TPayload>(SerializerOptions);
+    }
+
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.4) — maps the canonical <c>verify_log_v2</c>
+    /// <c>decision</c> vocabulary onto the FSM's statuses. Deliberately NOT routed through
+    /// <see cref="TryMapVerificationStatus"/>: that method also accepts raw enum names and
+    /// the legacy v1 aliases ("approved", "rejected", "pending"), and the v2 contract is a
+    /// closed four-value enum. Accepting more than the contract says here would let a client
+    /// reach a status the schema never promised it could.
+    /// </summary>
+    private static bool TryMapVerifyDecision(string? decision, out VerificationStatus status)
+    {
+        switch (decision?.Trim().ToLowerInvariant())
+        {
+            case "confirm":
+                status = VerificationStatus.Confirmed;
+                return true;
+            case "verify":
+                status = VerificationStatus.Verified;
+                return true;
+            case "dispute":
+                status = VerificationStatus.Disputed;
+                return true;
+            case "request_correction":
+                status = VerificationStatus.CorrectionPending;
+                return true;
+            default:
+                status = VerificationStatus.Draft;
+                return false;
+        }
     }
 
     private static bool TryMapVerificationStatus(string? rawStatus, out VerificationStatus status)

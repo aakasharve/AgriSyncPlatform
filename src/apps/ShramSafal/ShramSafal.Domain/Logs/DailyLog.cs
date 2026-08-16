@@ -207,6 +207,21 @@ public sealed class DailyLog : Entity<Guid>
     }
 
     /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.4) — the marker stamped on the INTERMEDIATE
+    /// <see cref="VerificationStatus.Confirmed"/> event that
+    /// <see cref="VerifyReachingTarget"/> emits when the target is two hops away.
+    ///
+    /// <para>Same purpose as <see cref="SelfAttestationReason"/>: the ledger must be able to
+    /// tell an event a human produced from one the machine produced on the way somewhere. An
+    /// owner who taps "approve" on a foreman's Draft log presses ONE button; the FSM requires
+    /// TWO events. Without this marker the resulting <c>Confirmed</c> row is indistinguishable
+    /// from a separate, deliberate act of confirmation that never happened.</para>
+    ///
+    /// <para>Machine-readable and stable. Do not localise it, do not reword it.</para>
+    /// </summary>
+    public const string EnRouteConfirmReason = "confirmed-en-route";
+
+    /// <summary>
     /// spec: dfes-companion-2026-07-11 (wave-1.3) — the marker stamped on
     /// <see cref="VerificationEvent.Reason"/> for BOTH events
     /// <see cref="TrySelfVerifyAsCreator"/> emits.
@@ -226,6 +241,101 @@ public sealed class DailyLog : Entity<Guid>
     /// do not reword it — anything that reads it is looking for this exact string.</para>
     /// </summary>
     public const string SelfAttestationReason = "self-attested-at-creation";
+
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.4) — REACH <paramref name="target"/> BY WALKING
+    /// ONLY EDGES <paramref name="callerRole"/> ALREADY HOLDS.
+    ///
+    /// <para><b>Why this exists.</b> An owner reviewing a foreman's day presses ONE button, and
+    /// the log he presses it on is sitting in <see cref="VerificationStatus.Draft"/>. There is no
+    /// <c>Draft → Verified</c> edge in <see cref="VerificationStateMachine"/> for ANY role, so
+    /// <see cref="Verify"/> alone refuses the only approval the pilot actually needs. The
+    /// tempting fix — add the edge — is the one change that would break the trust model outright:
+    /// <c>Draft → X</c> edges are open to every role, so a <c>Draft → Verified</c> edge would let
+    /// a mukadam approve his own work. Nothing here loosens the machine; this method only walks
+    /// it.</para>
+    ///
+    /// <para><b>The rule, stated once.</b> Take the direct edge when the role holds it. Otherwise,
+    /// from <see cref="VerificationStatus.Draft"/> only, pass THROUGH
+    /// <see cref="VerificationStatus.Confirmed"/> — and through nothing else, ever. Confirmed is
+    /// the one status that asserts nothing beyond "this day was recorded", which is already true
+    /// of any log that exists. Every other status is a human claim: a dispute needs a reason a
+    /// person gave, a correction request needs a dispute to have happened first. A server that
+    /// manufactured those on the way past would be fabricating content
+    /// (<c>docs/AGRISYNC-DOCTRINE.md</c> P4), so it refuses instead.</para>
+    ///
+    /// <para><b>Both events are credited to <paramref name="verifiedByUserId"/>.</b> The
+    /// intermediate hop is not attributed to the log's operator: he never confirmed anything.
+    /// It is the reviewer who, by approving, acknowledges the day was recorded — so it is the
+    /// reviewer's act, marked <see cref="EnRouteConfirmReason"/> so the ledger can always tell
+    /// it from a button somebody pressed.</para>
+    ///
+    /// <para><b>Why the 1 ms offset.</b> <see cref="CurrentVerificationStatus"/> resolves by
+    /// <c>OrderBy(OccurredAtUtc).Last()</c>. Two events sharing one instant would leave the fold
+    /// at the mercy of row order after an EF reload, and the log could read back
+    /// <c>Confirmed</c> — which the client's ring does not count. Same reasoning as
+    /// <see cref="TrySelfVerifyAsCreator"/>.</para>
+    ///
+    /// <para>The caller MUST derive <paramref name="callerRole"/> from the operator's membership
+    /// on the server. A client-supplied role would make the device the authority on its own
+    /// approval, which is exactly what the FSM exists to prevent.</para>
+    /// </summary>
+    /// <returns>The events emitted, in the order they occurred; never empty.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// No path to <paramref name="target"/> that <paramref name="callerRole"/> may walk.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="target"/> is <see cref="VerificationStatus.Disputed"/> with no reason.
+    /// </exception>
+    public IReadOnlyList<VerificationEvent> VerifyReachingTarget(
+        VerificationStatus target,
+        string? reason,
+        AppRole callerRole,
+        UserId verifiedByUserId,
+        DateTime occurredAtUtc,
+        Guid targetEventId,
+        Guid enRouteEventId)
+    {
+        var current = CurrentVerificationStatus;
+
+        if (VerificationStateMachine.CanTransitionWithRole(current, target, callerRole))
+        {
+            return [Verify(targetEventId, target, reason, callerRole, verifiedByUserId, occurredAtUtc)];
+        }
+
+        // The ONLY status the server may pass through. See the rule above.
+        var canWalkViaConfirmed =
+            current == VerificationStatus.Draft
+            && target != VerificationStatus.Confirmed
+            && VerificationStateMachine.CanTransitionWithRole(
+                VerificationStatus.Draft, VerificationStatus.Confirmed, callerRole)
+            && VerificationStateMachine.CanTransitionWithRole(
+                VerificationStatus.Confirmed, target, callerRole);
+
+        if (!canWalkViaConfirmed)
+        {
+            throw new InvalidOperationException("Transition not allowed for role.");
+        }
+
+        // Validate the FINAL hop before writing the intermediate one, so a rejection with
+        // no reason cannot leave a stranded Confirmed event behind. Verify() would throw on
+        // the second call, but by then the first is already in _verificationEvents and the
+        // aggregate is dirty — the sync path's transaction rolls that back, the direct HTTP
+        // path does not, and "it happens to be inside a transaction today" is not a rule.
+        if (target == VerificationStatus.Disputed && string.IsNullOrWhiteSpace(reason))
+        {
+            throw new ArgumentException("Reason is required when disputing a log.", nameof(reason));
+        }
+
+        var enRoute = Verify(
+            enRouteEventId, VerificationStatus.Confirmed, EnRouteConfirmReason,
+            callerRole, verifiedByUserId, occurredAtUtc);
+        var arrived = Verify(
+            targetEventId, target, reason,
+            callerRole, verifiedByUserId, occurredAtUtc.AddMilliseconds(1));
+
+        return [enRoute, arrived];
+    }
 
     /// <summary>
     /// spec: dfes-companion-2026-07-11 (wave-1.3) — an owner's own log must come back
