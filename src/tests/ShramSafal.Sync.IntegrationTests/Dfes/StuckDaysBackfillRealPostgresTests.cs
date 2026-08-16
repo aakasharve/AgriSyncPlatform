@@ -323,7 +323,18 @@ public sealed class StuckDaysBackfillRealPostgresTests(Xunit.Abstractions.ITestO
         await SeedPreFixLogAsync(
             MukadamUserId, "PrimaryOwner", "req-backfill-mukadam", dailyLogId, new DateOnly(2026, 8, 3));
 
-        await RunBackfillAsync();
+        var result = await RunBackfillAsync();
+
+        // The pass must have REFUSED something, not merely looked at something. The
+        // suite-wide `Scanned > 0` inside RunBackfillAsync is satisfied on its own by the
+        // permanent sentinel candidate, so on its own it does not tie this run to THIS
+        // test's log. `LeftForReview >= 2` does: the sentinel accounts for exactly one
+        // refusal, and this test's own foreman-recorded day is the second. A batch of 500
+        // covers every candidate in this scratch database, so if the refusal count could
+        // not reach 2, the day asserted on below was not among the ones examined.
+        result.LeftForReview.Should().BeGreaterThanOrEqualTo(2,
+            "the sentinel is one refusal and this test's own mukadam day must be another — " +
+            "otherwise the Draft assertion below is being made about a log the pass never saw");
 
         var pulled = await PullDailyLogAsync(MukadamUserId, dailyLogId);
 
@@ -415,8 +426,145 @@ public sealed class StuckDaysBackfillRealPostgresTests(Xunit.Abstractions.ITestO
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // BOUNDARY 3 — a full batch of days that can NEVER be attested must not
+    // hide a repairable one behind it. The old loop stopped on the first full
+    // batch that attested nothing, and un-attestable days hold the oldest page
+    // forever, so an owner's stuck day sorting behind 500 of them was never
+    // repaired — on that boot or any later one.
+    // ─────────────────────────────────────────────────────────────────────────
+    [SkippableFact]
+    public async Task An_owner_day_behind_a_full_batch_of_unattestable_days_is_still_repaired()
+    {
+        SkipIfPostgresUnavailable();
+
+        // A batch of 3 keeps the proof fast; nothing about the defect depends on the
+        // number. What matters is that a WHOLE batch is filled by days the repair must
+        // refuse, and that a repairable day sorts strictly behind them.
+        const int batchSize = 3;
+
+        var mukadamLogIds = new[]
+        {
+            Guid.Parse("15aa6666-6666-6666-6666-666666666601"),
+            Guid.Parse("15aa6666-6666-6666-6666-666666666602"),
+            Guid.Parse("15aa6666-6666-6666-6666-666666666603"),
+        };
+        var ownerLogId = Guid.Parse("15aa6666-6666-6666-6666-6666666666ff");
+
+        for (var i = 0; i < mukadamLogIds.Length; i++)
+        {
+            await SeedPreFixLogAsync(
+                MukadamUserId, "Mukadam", $"req-keyset-mukadam-{i}",
+                mukadamLogIds[i], new DateOnly(2026, 8, 6).AddDays(i));
+        }
+        await SeedPreFixOwnerLogAsync(ownerLogId, "req-keyset-owner", new DateOnly(2026, 8, 9));
+
+        // Candidates come back oldest-first, so "sorts before" means "was created
+        // earlier". These four rows are back-dated to the year 2000 — decades before
+        // anything else this suite writes, which all lands at NOW() — so the ordering
+        // under test holds no matter which other tests in this class ran first.
+        var epoch = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        for (var i = 0; i < mukadamLogIds.Length; i++)
+        {
+            await ForceCreatedAtUtcAsync(mukadamLogIds[i], epoch.AddMinutes(i));
+        }
+        await ForceCreatedAtUtcAsync(ownerLogId, epoch.AddMinutes(mukadamLogIds.Length));
+
+        // THE PRECONDITION, PROVEN RATHER THAN ASSUMED. A single pass from the start of
+        // the candidate set comes back FULL and attests NOTHING. Without this the test
+        // could pass while never reproducing the situation it is named for.
+        var firstPass = await RunSinglePassAsync(batchSize);
+        output.WriteLine(
+            $"[EVIDENCE] first page (batch {batchSize}): scanned={firstPass.Scanned} " +
+            $"attested={firstPass.Attested} leftForReview={firstPass.LeftForReview}");
+
+        firstPass.Scanned.Should().Be(batchSize, "the three back-dated foreman days fill the page exactly");
+        firstPass.Attested.Should().Be(0, "not one of them can ever be self-attested");
+        firstPass.LeftForReview.Should().Be(batchSize);
+
+        // ...and this is precisely where the old loop stopped: "a full batch that
+        // attested NOTHING means every candidate was correctly skipped". It does not —
+        // it means nothing at all about what sorts behind them.
+        var drained = await RunDrainAsync(batchSize, maxPasses: 50);
+        output.WriteLine(
+            $"[EVIDENCE] drain: passes={drained.Passes} scanned={drained.Scanned} " +
+            $"attested={drained.Attested} leftForReview={drained.LeftForReview} " +
+            $"reachedCeiling={drained.ReachedPassCeiling}");
+
+        drained.Passes.Should().BeGreaterThan(1,
+            "one page cannot have covered a candidate set that filled the first page whole");
+        drained.ReachedPassCeiling.Should().BeFalse(
+            "the walk must have run OUT of candidates, not out of passes — otherwise 'attested 0' " +
+            "and 'nothing left to do' would still be indistinguishable");
+
+        var pulled = await PullDailyLogAsync(OwnerUserId, ownerLogId);
+
+        output.WriteLine("[EVIDENCE] === the owner day that sorted behind a full batch of refusals ===");
+        output.WriteLine($"[EVIDENCE] lastVerificationStatus = '{pulled.LastVerificationStatus}' (expect Verified)");
+
+        pulled.LastVerificationStatus.Should().Be("Verified",
+            "this is the whole finding: the repair must WALK PAST days it can never attest, not stop " +
+            "at them. Stopping made this day unrepairable on every restart, because the refusals that " +
+            "hid it keep their place at the front of the ordering forever");
+        pulled.VerificationEvents.Should().OnlyContain(e => e.VerifiedByUserId == OwnerUserId);
+
+        // And the negative still holds through the longer walk: paging past the foreman's
+        // days must not have quietly closed them on the way.
+        foreach (var mukadamLogId in mukadamLogIds)
+        {
+            var mukadamDay = await PullDailyLogAsync(MukadamUserId, mukadamLogId);
+            mukadamDay.LastVerificationStatus.Should().Be("Draft",
+                "walking past a day is not the same as approving it");
+            mukadamDay.VerificationEvents.Should().BeEmpty();
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Rewrites a seeded log's <c>created_at_utc</c> so this suite can state where a row
+    /// sorts in the oldest-first candidate ordering. <c>modified_at_utc</c> is deliberately
+    /// left alone — <c>/sync/pull</c>'s delta is keyed on it, and moving it would change
+    /// what the farmer's device sees rather than only what the backfill's walk encounters.
+    /// </summary>
+    private async Task ForceCreatedAtUtcAsync(Guid dailyLogId, DateTime createdAtUtc)
+    {
+        await using var raw = new NpgsqlConnection(_superuserConn);
+        await raw.OpenAsync();
+        await using var cmd = raw.CreateCommand();
+        cmd.CommandText = "UPDATE ssf.daily_logs SET created_at_utc = @at WHERE \"Id\" = @id";
+        cmd.Parameters.AddWithValue("at", createdAtUtc);
+        cmd.Parameters.AddWithValue("id", dailyLogId);
+        var affected = await cmd.ExecuteNonQueryAsync();
+        affected.Should().Be(1, "the fixture must actually have moved the row it names");
+    }
+
+    /// <summary>
+    /// ONE page, from the start of the candidate set. Unlike <see cref="RunBackfillAsync"/>
+    /// this asserts nothing, because the caller's whole point may be that the page attests
+    /// nothing.
+    /// </summary>
+    private async Task<BackfillOwnerAttestationsResult> RunSinglePassAsync(int batchSize)
+    {
+        await using var scope = _rootProvider!.CreateAsyncScope();
+        return await scope.ServiceProvider
+            .GetRequiredService<OwnerAttestationBackfillRunner>()
+            .RunPassAsync(batchSize, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// The REAL production walk — <c>RunUntilDrainedAsync</c>, exactly as the startup
+    /// hosted service calls it, only with a batch small enough to exercise the page
+    /// boundary in a test instead of needing 500 seeded rows to reach it.
+    /// </summary>
+    private async Task<BackfillOwnerAttestationsDrainResult> RunDrainAsync(int batchSize, int maxPasses)
+    {
+        await using var scope = _rootProvider!.CreateAsyncScope();
+        return await scope.ServiceProvider
+            .GetRequiredService<OwnerAttestationBackfillRunner>()
+            .RunUntilDrainedAsync(batchSize, maxPasses, CancellationToken.None);
+    }
 
     /// <summary>
     /// Builds a log EXACTLY as it existed before wave 1.3: created by the real handler, then
@@ -477,6 +625,12 @@ public sealed class StuckDaysBackfillRealPostgresTests(Xunit.Abstractions.ITestO
     /// first version of this repair elevated <c>TenantContext</c> instead of using the admin
     /// factory, RLS handed it zero rows, and BOTH negative proofs below passed while
     /// examining nothing at all. A boundary proven against an empty scan proves nothing.</para>
+    ///
+    /// <para><b>What this guard does NOT do.</b> The permanent sentinel candidate satisfies
+    /// <c>Scanned &gt; 0</c> by itself, so it proves the pass had a live view of the
+    /// database — not that it examined the caller's OWN log. A test whose conclusion depends
+    /// on its own row having been looked at must say so itself; see the
+    /// <c>LeftForReview &gt;= 2</c> assertion in the mukadam boundary above.</para>
     /// </summary>
     private async Task<BackfillOwnerAttestationsResult> RunBackfillAsync()
     {

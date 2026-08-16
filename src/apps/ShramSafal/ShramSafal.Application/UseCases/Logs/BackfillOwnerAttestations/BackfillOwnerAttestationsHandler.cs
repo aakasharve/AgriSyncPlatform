@@ -78,13 +78,19 @@ public sealed class BackfillOwnerAttestationsHandler(
         BackfillOwnerAttestationsCommand command, CancellationToken ct = default)
     {
         var candidates = await repository.GetDailyLogsWithNoVerificationHistoryAsync(
-            command.BatchSize, ct);
+            command.BatchSize, command.AfterCreatedAtUtc, command.AfterId, ct);
 
         if (candidates.Count == 0)
         {
             logger.LogInformation(
-                "Owner-attestation backfill: no logs without verification history; nothing to repair.");
-            return Result.Success(new BackfillOwnerAttestationsResult(0, 0, 0));
+                "Owner-attestation backfill: no logs without verification history past the " +
+                "current cursor; nothing left to repair.");
+
+            // Echo the incoming cursor rather than null: a caller that stores what comes
+            // back must not have its position silently reset to "start again from the
+            // oldest" by an empty page.
+            return Result.Success(new BackfillOwnerAttestationsResult(
+                0, 0, 0, command.AfterCreatedAtUtc, command.AfterId));
         }
 
         logger.LogInformation(
@@ -176,11 +182,17 @@ public sealed class BackfillOwnerAttestationsHandler(
         await repository.SaveChangesAsync(ct);
 
         logger.LogInformation(
-            "Owner-attestation backfill complete: scanned {Scanned}, attested {Attested}, " +
+            "Owner-attestation backfill pass complete: scanned {Scanned}, attested {Attested}, " +
             "left for a human to approve {LeftForReview}.",
             candidates.Count, attested, leftForReview);
 
-        return Result.Success(
-            new BackfillOwnerAttestationsResult(candidates.Count, attested, leftForReview));
+        // The last row of an oldest-first page IS the high-water mark of everything this
+        // pass looked at, attested or refused. Handing it back is what lets the caller
+        // step OVER the refusals instead of re-reading them: they keep no events, so
+        // without this they would occupy the front of every subsequent page forever.
+        var lastExamined = candidates[^1];
+
+        return Result.Success(new BackfillOwnerAttestationsResult(
+            candidates.Count, attested, leftForReview, lastExamined.CreatedAtUtc, lastExamined.Id));
     }
 }

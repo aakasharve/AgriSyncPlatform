@@ -165,16 +165,31 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     // un-Included collection would fold to empty and read Draft for every log, including
     // ones a human had already disputed.
     public async Task<IReadOnlyList<DailyLog>> GetDailyLogsWithNoVerificationHistoryAsync(
-        int limit, CancellationToken ct = default)
+        int limit, DateTime? afterCreatedAtUtc, Guid? afterId, CancellationToken ct = default)
     {
         if (limit <= 0)
         {
             return Array.Empty<DailyLog>();
         }
 
-        return await db.DailyLogs
+        var query = db.DailyLogs
             .Include(l => l.VerificationEvents)
-            .Where(l => !l.VerificationEvents.Any())
+            .Where(l => !l.VerificationEvents.Any());
+
+        // KEYSET, not OFFSET. The candidate set shrinks underneath the walk (a repaired
+        // log gains events and stops being a candidate), so a sliding OFFSET would step
+        // over rows that moved up behind it. A (CreatedAtUtc, Id) cursor is stable against
+        // that: it names the last row seen rather than a position. Both halves are used
+        // together because CreatedAtUtc is not unique — the composite matches the
+        // OrderBy/ThenBy below exactly, which is what makes the page boundary total.
+        if (afterCreatedAtUtc is { } cursorCreatedAtUtc && afterId is { } cursorId)
+        {
+            query = query.Where(l =>
+                l.CreatedAtUtc > cursorCreatedAtUtc
+                || (l.CreatedAtUtc == cursorCreatedAtUtc && l.Id > cursorId));
+        }
+
+        return await query
             // Oldest day first: if an operator ever has to read the backfill's audit
             // rows in order, they should tell the farm's story forwards.
             .OrderBy(l => l.CreatedAtUtc)

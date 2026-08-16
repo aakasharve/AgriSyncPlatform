@@ -47,10 +47,10 @@ internal sealed class BackfillOwnerAttestations(
     private const int BatchSize = 500;
 
     /// <summary>
-    /// Bounds the loop so a pathological case (a pass that somehow attests nothing yet keeps
-    /// returning a full batch) cannot spin at startup forever. At 500 per pass this covers
-    /// 20 000 logs, far beyond pilot scale; if it is ever hit, the WARNING says so and the
-    /// next restart resumes exactly where this one stopped.
+    /// Bounds the walk so it cannot spin at startup forever. At 500 per pass this covers
+    /// 20 000 candidate logs, far beyond pilot scale. If it is ever hit, the WARNING says
+    /// so — and says the honest thing about what a restart does, which is start the same
+    /// walk again from the oldest candidate, not resume mid-history.
     /// </summary>
     private const int MaxPasses = 40;
 
@@ -58,54 +58,35 @@ internal sealed class BackfillOwnerAttestations(
     {
         try
         {
-            var totalScanned = 0;
-            var totalAttested = 0;
-            var totalLeftForReview = 0;
-            var pass = 0;
+            // ONE scope for the whole walk. The runner opens (and audits) a fresh
+            // privileged cross-tenant context inside EVERY pass and disposes it before
+            // returning, so the long-lived thing here is the runner, not a DbContext —
+            // no pass shares a transaction or a change-tracker with another.
+            //
+            // The walk itself lives on the runner (wave-1.5 review, I1) rather than here:
+            // its cursor logic is the thing that decides whether a repairable day behind
+            // a batch of un-attestable ones is ever reached, and it has to be reachable
+            // by a test that drives it with a small batch. A loop that only exists inside
+            // an internal hosted service can only be tested by re-implementing it.
+            await using var scope = services.CreateAsyncScope();
 
-            while (pass < MaxPasses && !cancellationToken.IsCancellationRequested)
-            {
-                pass++;
+            var runner = scope.ServiceProvider
+                .GetRequiredService<OwnerAttestationBackfillRunner>();
 
-                // A NEW scope per pass; the runner opens (and audits) its own privileged
-                // cross-tenant context inside each one and disposes it before returning.
-                await using var scope = services.CreateAsyncScope();
+            var result = await runner.RunUntilDrainedAsync(BatchSize, MaxPasses, cancellationToken);
 
-                var runner = scope.ServiceProvider
-                    .GetRequiredService<OwnerAttestationBackfillRunner>();
-
-                var value = await runner.RunPassAsync(BatchSize, cancellationToken);
-
-                totalScanned += value.Scanned;
-                totalAttested += value.Attested;
-                totalLeftForReview += value.LeftForReview;
-
-                // Under the ceiling means the candidate set is exhausted.
-                if (value.Scanned < BatchSize)
-                {
-                    break;
-                }
-
-                // A full batch that attested NOTHING means every candidate was correctly
-                // skipped (mukadam-recorded days, departed members). Those stay candidates
-                // forever — they have no verification events and never will until a human
-                // approves them — so continuing would re-read the same 500 rows until
-                // MaxPasses. Stop: the work that could be done, was.
-                if (value.Attested == 0)
-                {
-                    break;
-                }
-            }
-
-            if (pass >= MaxPasses)
+            if (result.ReachedPassCeiling)
             {
                 logger.LogWarning(
-                    "Owner-attestation backfill stopped at the {MaxPasses}-pass ceiling. " +
-                    "It is idempotent — the next restart resumes from where this stopped.",
-                    MaxPasses);
+                    "Owner-attestation backfill stopped at the {MaxPasses}-pass ceiling after " +
+                    "examining {Scanned} log(s); some history was NOT looked at. It is idempotent, " +
+                    "but a restart begins the walk again at the oldest unassessed day rather than " +
+                    "resuming here — repaired days drop out of the candidate set, so each run gets " +
+                    "further only if the previous one closed something.",
+                    MaxPasses, result.Scanned);
             }
 
-            if (totalScanned == 0)
+            if (result.Scanned == 0)
             {
                 logger.LogInformation(
                     "Owner-attestation backfill: no unassessed logs found; history is already clean.");
@@ -116,7 +97,7 @@ internal sealed class BackfillOwnerAttestations(
                 "Owner-attestation backfill finished in {Passes} pass(es): scanned {Scanned}, " +
                 "closed {Attested} day(s) the farmer had recorded himself, left {LeftForReview} " +
                 "waiting for an owner to approve.",
-                pass, totalScanned, totalAttested, totalLeftForReview);
+                result.Passes, result.Scanned, result.Attested, result.LeftForReview);
         }
         catch (Exception ex)
         {

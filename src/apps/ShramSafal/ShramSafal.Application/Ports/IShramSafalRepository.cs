@@ -87,11 +87,35 @@ public interface IShramSafalRepository
     /// — a log it has attested to has two events and can never be a candidate again, so
     /// re-running is a no-op with no marker table to keep in sync.</para>
     ///
+    /// <para><b>Why it takes a cursor and not just a limit (wave-1.5 review, I1).</b> Not
+    /// every candidate can be repaired: a mukadam's day, or one whose creator has left the
+    /// farm, is REFUSED and therefore stays a candidate forever — it has no verification
+    /// events and never will until a human presses approve. Ordered oldest-first, a run of
+    /// such rows holds the front of the result set on every re-read, so a caller that only
+    /// ever asks for "the first N candidates" re-reads the same refusals and can never see
+    /// what sorts behind them. With <paramref name="afterCreatedAtUtc"/> /
+    /// <paramref name="afterId"/> the caller walks FORWARD through the whole candidate set
+    /// instead, and an owner's stuck day behind 500 un-attestable ones is reached. Keyset,
+    /// not OFFSET, because the set shrinks underneath the walk as rows are repaired — an
+    /// offset would skip rows as it slid.</para>
+    ///
     /// <para>Default no-op so the ~28 in-tree test doubles keep compiling, per the
     /// additive-port convention above.</para>
     /// </summary>
+    /// <param name="limit">Maximum candidates to return in this page.</param>
+    /// <param name="afterCreatedAtUtc">
+    /// Exclusive lower bound on <c>CreatedAtUtc</c> from the previous page's last row.
+    /// Null (with <paramref name="afterId"/>) starts from the oldest candidate.
+    /// </param>
+    /// <param name="afterId">
+    /// Tie-break half of the cursor: rows sharing <paramref name="afterCreatedAtUtc"/> are
+    /// included only if their id sorts after this one. Both halves are required —
+    /// <c>CreatedAtUtc</c> alone is not unique, and a bulk import can give many logs the
+    /// same timestamp.
+    /// </param>
+    /// <param name="ct">Cancellation.</param>
     Task<IReadOnlyList<DailyLog>> GetDailyLogsWithNoVerificationHistoryAsync(
-        int limit, CancellationToken ct = default)
+        int limit, DateTime? afterCreatedAtUtc, Guid? afterId, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<DailyLog>>(Array.Empty<DailyLog>());
 
     Task AddCostEntryAsync(CostEntry costEntry, CancellationToken ct = default);
