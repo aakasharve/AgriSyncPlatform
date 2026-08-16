@@ -4,10 +4,16 @@
  *
  * Daily Clarity Loop v1 — the morning TRIGGER (spec: dfes-companion-2026-07-11).
  *
- * One calm line at the very top of the home idle view, answering "काय राहिलं":
- *   आज {N} कामं बाकी   (today N tasks left) — when N > 0
- *   आज काहीच सांगितलं नाही. काम झालं नसेल तर कारण सांगा — किंवा "आज काम नाही" एवढं सांगा.
- *     (nothing told today; give a reason, or just say "no work today") — when N === 0
+ * One calm line at the very top of the home idle view, answering "काय राहिलं".
+ * Wave 2.4 splits the N === 0 case in two, because "nothing LEFT" and "nothing
+ * TOLD" are different days and the old single line claimed the second for both:
+ *   N > 0                          → आज {N} कामं बाकी (today N tasks left)
+ *   N === 0, closurePercent === 0  → आज काहीच सांगितलं नाही… (nothing told yet;
+ *                                    give a reason, or just say "no work today")
+ *   N === 0, closurePercent  > 0   → आज सगळं सांगून झालं — काही बाकी नाही.
+ *                                    (today is told, nothing left)
+ * The ring beside it reads from the SAME fact, so the two can never contradict:
+ * on the "nothing told" day it carries a dash, never a percentage.
  *
  * It REUSES a count the app already computes (todayDayState.pendingCount) —
  * nothing new is calculated here. The carried signal is derived from the SAME
@@ -67,6 +73,27 @@ const DailyLoopHero: React.FC<DailyLoopHeroProps> = ({
     const hasWork = pendingCount > 0;
     const showCarried = hasWork && carriedCount > 0;
 
+    // Wave 2.4 (spec: dfes-companion-2026-07-11) — the ring and the line are
+    // driven by ONE fact so they can never state opposite things.
+    //
+    // Before: the ring showed `closurePercent` unconditionally and the line
+    // showed the empty-day invite whenever `pendingCount === 0`. On an
+    // untouched day that put a 100% ring beside "आज काहीच सांगितलं नाही" ("you
+    // told me nothing today") — both derived from "nothing planned, nothing
+    // logged", saying opposite things.
+    //
+    // `closurePercent` is now honest at the source (dayState.ts): a day with
+    // nothing planned and nothing recorded scores 0, and anything the farmer
+    // has actually done pushes it above 0. So with no work pending:
+    //   closurePercent === 0 -> nothing has happened yet: there is no closure
+    //                           to report, so the ring shows NO NUMBER (a
+    //                           neutral track and a dash — not a "0%" that
+    //                           reads as failure; the farmer has done nothing
+    //                           wrong) and the line invites them to speak.
+    //   closurePercent  > 0  -> the day HAS been recorded/completed, so the
+    //                           line must not claim they told us nothing.
+    const nothingRecordedYet = !hasWork && closurePercent === 0;
+
     return (
         <button
             type="button"
@@ -74,17 +101,24 @@ const DailyLoopHero: React.FC<DailyLoopHeroProps> = ({
             data-testid="daily-loop-hero"
             className="w-full text-left rounded-2xl border border-stone-200 bg-white p-4 shadow-sm flex items-center gap-4 transition-transform active:scale-[0.99]"
         >
-            {/* Amber day-closure ring, kept beside the line. */}
+            {/* Amber day-closure ring, kept beside the line. On a day nothing
+                has been told about there is nothing to fill it with, so it
+                stays a flat amber track carrying a dash instead of a number. */}
             <div
                 className="w-12 h-12 shrink-0 rounded-full p-1"
-                style={{ background: `conic-gradient(#059669 ${closurePercent * 3.6}deg, #fde68a 0deg)` }}
+                style={{
+                    background: nothingRecordedYet
+                        ? '#fde68a'
+                        : `conic-gradient(#059669 ${closurePercent * 3.6}deg, #fde68a 0deg)`
+                }}
                 aria-hidden="true"
             >
                 <div
+                    data-testid="daily-loop-hero-ring"
                     className="w-full h-full rounded-full bg-white flex items-center justify-center text-[10px] font-black text-stone-700"
                     style={{ fontFamily: NUMBER_FONT }}
                 >
-                    {closurePercent}%
+                    {nothingRecordedYet ? '—' : `${closurePercent}%`}
                 </div>
             </div>
 
@@ -96,7 +130,9 @@ const DailyLoopHero: React.FC<DailyLoopHeroProps> = ({
                 >
                     {hasWork
                         ? withCount(t('dfes.dailyLoopTasksLeft'), pendingCount)
-                        : t('dfes.dailyLoopDayFree')}
+                        : nothingRecordedYet
+                            ? t('dfes.dailyLoopDayFree')
+                            : t('dfes.dailyLoopDaySettled')}
                 </p>
                 {showCarried && (
                     <p

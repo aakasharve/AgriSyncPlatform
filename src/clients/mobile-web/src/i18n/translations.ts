@@ -361,7 +361,13 @@ export interface Translations {
         // line. Reuses todayDayState.pendingCount. Reward = clarity/control,
         // never points, never scolding. {count} = a plain task count.
         dailyLoopTasksLeft: string;      // N > 0: today's remaining work
-        dailyLoopDayFree: string;        // N === 0: empty-day, invite to record
+        dailyLoopDayFree: string;        // N === 0 AND nothing recorded: invite to record
+        // Wave 2.4: N === 0 but the day HAS been recorded/completed. Splitting
+        // this out is the whole point — dailyLoopDayFree ("आज काहीच सांगितलं
+        // नाही", you told me nothing today) used to render for BOTH states, so
+        // a farmer who had recorded and confirmed their day was told they had
+        // said nothing, next to a full ring. Nothing left ≠ nothing told.
+        dailyLoopDaySettled: string;
         // Carried-over qualifier of the SAME N (its overdue subset, k ≤ N):
         dailyLoopCarriedOne: string;     // exactly 1 carried → names it ("काल पासून: {title}")
         dailyLoopCarriedMany: string;    // k > 1 carried → soft count ("(यातील {count} काल पासून)")
@@ -683,7 +689,8 @@ export const translations: Record<Language, Translations> = {
 
             // Daily Clarity Loop v1 (dfes-companion-2026-07-11)
             dailyLoopTasksLeft: '{count} tasks left today',
-            dailyLoopDayFree: 'Today is clear — just speak to record',
+            dailyLoopDayFree: 'Nothing told today yet — just speak to record',
+            dailyLoopDaySettled: 'Today is told — nothing left',
             dailyLoopCarriedOne: 'From yesterday: {title}',
             dailyLoopCarriedMany: '({count} of these carried over)',
 
@@ -1012,6 +1019,7 @@ export const translations: Record<Language, Translations> = {
             // is a plain fact ("what's left"), not a grade of the farmer.
             dailyLoopTasksLeft: 'आज {count} कामं बाकी',
             dailyLoopDayFree: 'आज काहीच सांगितलं नाही. काम झालं नसेल तर कारण सांगा — किंवा "आज काम नाही" एवढं सांगा.',
+            dailyLoopDaySettled: 'आज सगळं सांगून झालं — काही बाकी नाही.',
             dailyLoopCarriedOne: 'काल पासून: {title}',
             dailyLoopCarriedMany: '(यातील {count} काल पासून)',
 

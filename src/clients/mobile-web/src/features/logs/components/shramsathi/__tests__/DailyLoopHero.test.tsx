@@ -34,12 +34,41 @@ describe('DailyLoopHero (Daily Clarity Loop v1 morning trigger)', () => {
         expect(screen.getByTestId('daily-loop-hero-line')).toHaveTextContent('आज 5 कामं बाकी');
     });
 
-    it('shows the empty-day invite (no scolding, no count) when N === 0', () => {
+    // Wave 2.4: this used to be rendered with closurePercent={100} — i.e. the
+    // test itself encoded the contradiction (a full ring beside "you told me
+    // nothing today"). A day nothing has been told about now scores 0 at the
+    // source (dayState.ts), which is what is passed here.
+    it('shows the empty-day invite (no scolding, no count) when N === 0 and nothing was recorded', () => {
         render(
-            <DailyLoopHero pendingCount={0} carriedCount={0} closurePercent={100} onFocusRecorder={() => {}} />,
+            <DailyLoopHero pendingCount={0} carriedCount={0} closurePercent={0} onFocusRecorder={() => {}} />,
         );
         expect(screen.getByTestId('daily-loop-hero-line')).toHaveTextContent('आज काहीच सांगितलं नाही. काम झालं नसेल तर कारण सांगा — किंवा "आज काम नाही" एवढं सांगा.');
         expect(screen.queryByTestId('daily-loop-hero-carried')).not.toBeInTheDocument();
+    });
+
+    // ---- Wave 2.4: the ring and the line cannot state opposite things -------
+
+    it('shows NO percentage on a day nothing was told about — a dash, not a 0% that reads as failure', () => {
+        render(
+            <DailyLoopHero pendingCount={0} carriedCount={0} closurePercent={0} onFocusRecorder={() => {}} />,
+        );
+        const ring = screen.getByTestId('daily-loop-hero-ring');
+        expect(ring).toHaveTextContent('—');
+        expect(ring).not.toHaveTextContent('%');
+        // And the line agrees with it: nothing told.
+        expect(screen.getByTestId('daily-loop-hero-line')).toHaveTextContent('आज काहीच सांगितलं नाही');
+    });
+
+    it('never claims "you told me nothing" once the day HAS been recorded (N === 0, closure > 0)', () => {
+        render(
+            <DailyLoopHero pendingCount={0} carriedCount={0} closurePercent={100} onFocusRecorder={() => {}} />,
+        );
+        const line = screen.getByTestId('daily-loop-hero-line');
+        // The exact contradiction Wave 2.4 exists to kill: a full ring beside
+        // "आज काहीच सांगितलं नाही" ("you told me nothing today").
+        expect(line).not.toHaveTextContent('आज काहीच सांगितलं नाही');
+        expect(line).toHaveTextContent('आज सगळं सांगून झालं — काही बाकी नाही.');
+        expect(screen.getByTestId('daily-loop-hero-ring')).toHaveTextContent('100%');
     });
 
     it('names the single carried task (no bare count) when exactly one carried over', () => {
@@ -59,7 +88,7 @@ describe('DailyLoopHero (Daily Clarity Loop v1 morning trigger)', () => {
 
     it('hides the carried line on an empty day even if something carried over', () => {
         render(
-            <DailyLoopHero pendingCount={0} carriedCount={3} closurePercent={100} onFocusRecorder={() => {}} />,
+            <DailyLoopHero pendingCount={0} carriedCount={3} closurePercent={0} onFocusRecorder={() => {}} />,
         );
         expect(screen.queryByTestId('daily-loop-hero-carried')).not.toBeInTheDocument();
     });

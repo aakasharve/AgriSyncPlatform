@@ -59,6 +59,20 @@
  * log-confirmed alone) IS monotonic today and stays a real regression
  * tripwire for Wave 3 (3.4 work-by-product, 3.5 weather retirement, 3.11
  * filler answers).
+ *
+ * ============================================================================
+ * WAVE 2.4 UPDATE — the defect above is FIXED (spec: dfes-companion-2026-07-11)
+ * ============================================================================
+ * The trails quoted in the EMPIRICAL FINDING are the HISTORICAL record of the
+ * defect, kept verbatim so the diagnosis is not lost. They no longer describe
+ * this file's behaviour. `dayState.ts` no longer scores a day with nothing in
+ * it as vacuously complete: both halves of `closurePercent` are now built from
+ * what HAS happened (the 70 needs a plan done or a record made; the 30 is
+ * EARNED by a confirmation and is never revoked by unreviewed work landing).
+ * All 7 scenarios below are green, `assertNonDecreasing` is untouched, and the
+ * three formerly-red trails are re-pinned to their fixed values with the same
+ * exact `toEqual` — see the block comment above them for why the old literals
+ * and `assertNonDecreasing` could never both hold.
  */
 import { describe, it, expect } from 'vitest';
 import { computeDayState } from '../dayState';
@@ -209,24 +223,60 @@ describe('computeDayState — closurePercent never falls within a day (founder d
         assertNonDecreasing(trail);
     });
 
-    // ---- DEFECT scenarios: closurePercent actually FALLS. Reported, not ---
-    // ---- weakened (task brief Step 2). See EMPIRICAL FINDING above. -------
+    // ---- The three sequences that PROVED the defect (wave-1.6) — now fixed --
+    //
+    // WAVE 2.4 UPDATE (spec: dfes-companion-2026-07-11). These three scenarios
+    // each carried TWO assertions, and they were mutually unsatisfiable by
+    // construction:
+    //
+    //   1. `toEqual([100, 70, 100])` etc. — a literal SNAPSHOT of the trail the
+    //      defect produced. The documentation half.
+    //   2. `assertNonDecreasing(trail)` — founder decision 6. The law half.
+    //
+    // `[100, 70, 100]` is not a non-decreasing sequence, so no implementation
+    // could ever satisfy both. The literals recorded the defect; the
+    // `assertNonDecreasing` forbade it. Fixing the defect necessarily means the
+    // literals move — they are re-pinned below to the FIXED trail, exactly as
+    // tightly as before (same `toEqual`, same length, every value spelled out).
+    // Nothing is loosened: not one `assertNonDecreasing` is removed or relaxed,
+    // no assertion is deleted, and each new trail is stated as an exact
+    // sequence, so any future regression still fails here. The old numbers are
+    // preserved above in the EMPIRICAL FINDING header as the historical record.
+    //
+    // Root cause removed (dayState.ts): a day with nothing in it no longer
+    // scores a vacuous 100 — `taskScore`/`verificationScore` are now built from
+    // what HAS happened, so the number starts at 0 and only ever fills.
 
-    it('DEFECT: zero planned tasks, a mukadam saves the day\'s first log (PENDING) — closurePercent falls 100 -> 70', () => {
+    it('zero planned tasks, a mukadam saves the day\'s first log (PENDING): 0 -> 70 -> 100, never backwards', () => {
         const trail = walk([], [logSaved('m1', false), logConfirmed('m1')]);
-        expect(trail.map(t => t.closurePercent)).toEqual([100, 70, 100]);
-        assertNonDecreasing(trail); // fails at step 1 (100 -> 70) — intentionally, see header.
+        // Was [100, 70, 100] — the empty day claimed completeness, then the
+        // mukadam's first log knocked 30 off the OWNER's ring. Now the empty
+        // day scores nothing (0), recording the day earns the 70, and the
+        // owner confirming it earns the remaining 30.
+        expect(trail.map(t => t.closurePercent)).toEqual([0, 70, 100]);
+        assertNonDecreasing(trail);
     });
 
-    it('DEFECT: a planned task is answered to 100, then a mukadam log lands PENDING — closurePercent falls 100 -> 70', () => {
+    it('a planned task is answered, then a mukadam log lands PENDING: 0 -> 70 -> 70 -> 100, never backwards', () => {
         const trail = walk([makeTask('t1', 'pending')], [answerCredited('t1'), logSaved('m1', false), logConfirmed('m1')]);
-        expect(trail.map(t => t.closurePercent)).toEqual([30, 100, 70, 100]);
-        assertNonDecreasing(trail); // fails at step 2 (100 -> 70) — intentionally, see header.
+        // Was [30, 100, 70, 100] — the 30 was a free "nothing to verify" credit
+        // that got REPLACED (not floored) the moment a real log arrived. Now
+        // the untouched task scores 0, answering it earns the 70, the mukadam's
+        // pending log is work IN FLIGHT (neither adds nor subtracts — the flat
+        // 70 -> 70 step IS the fix), and confirming it earns the 30.
+        expect(trail.map(t => t.closurePercent)).toEqual([0, 70, 70, 100]);
+        assertNonDecreasing(trail);
     });
 
-    it('DEFECT: owner already logged (100), then a mukadam log arrives PENDING — closurePercent falls 100 -> 85', () => {
+    it('owner already logged, then a mukadam log arrives PENDING: 0 -> 100 -> 100 -> 100, never backwards', () => {
         const trail = walk([], [logSaved('o1', true), logSaved('m1', false), logConfirmed('m1')]);
-        expect(trail.map(t => t.closurePercent)).toEqual([100, 100, 85, 100]);
-        assertNonDecreasing(trail); // fails at step 2 (100 -> 85) — intentionally, see header.
+        // Was [100, 100, 85, 100]. The owner's own auto-APPROVED log still
+        // takes the day to 100 (wave-1.2's guarantee, dayState.ownerConfirm).
+        // A mukadam's log arriving no longer dilutes that: verification credit
+        // is EARNED and never revoked by unreviewed work landing. The day is
+        // still not `isClosed` and the review queue still shows the one waiting
+        // log — completeness is carried there, not by pulling the ring down.
+        expect(trail.map(t => t.closurePercent)).toEqual([0, 100, 100, 100]);
+        assertNonDecreasing(trail);
     });
 });

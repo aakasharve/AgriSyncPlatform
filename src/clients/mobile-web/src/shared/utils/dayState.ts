@@ -420,10 +420,57 @@ export const computeDayState = ({
     const verifiedCount = dayLogs.filter(log => isLogVerified(log)).length;
     const unverifiedCount = Math.max(0, dayLogs.length - verifiedCount);
 
-    const taskScore = plannedCount === 0 ? 1 : completedCount / plannedCount;
-    const verificationScore = dayLogs.length === 0 ? 1 : verifiedCount / dayLogs.length;
+    // spec: dfes-companion-2026-07-11 (wave-2.4) — an empty day stops claiming
+    // completeness.
+    //
+    // Both halves of this score used to answer "how much of X is done?" with a
+    // FREE 1 when there was no X (`plannedCount === 0 ? 1`, `dayLogs.length ===
+    // 0 ? 1`). Absence was scored as perfection, which told two lies at once:
+    //
+    //   (a) an untouched day scored 1*70 + 1*30 = 100 (and `isClosed` was
+    //       vacuously true), so a farmer who had told the app NOTHING saw a
+    //       full ring beside "आज काहीच सांगितलं नाही" — "you told me nothing
+    //       today". Two opposite claims from the same empty state.
+    //   (b) the free 1 was never a floor, only a placeholder that got REPLACED
+    //       by a real ratio the moment the first item appeared. A mukadam's
+    //       first still-unconfirmed log swapped `1` for `0/1` and the OWNER's
+    //       ring fell 100 -> 70 (and 100 -> 85 mixed). Someone recording work
+    //       made the number go backwards — exactly what founder decision 6
+    //       forbids, proved by dayState.monotonicity.test.ts (wave-1.6).
+    //
+    // The rule that fixes both: BUILD BOTH HALVES OUT OF WHAT HAS HAPPENED,
+    // NEVER OUT OF WHAT IS ABSENT. The 70/30 weighting and clampPercent are
+    // unchanged — the weighting was never the defect, the vacuous baselines were.
+    const dayHasRecord = dayLogs.length > 0;
+
+    // 70 — "the day's work is accounted for": the planned work that is done,
+    // or, when nothing was planned, the day having a record at all. Nothing
+    // planned AND nothing recorded earns 0, not a free 1 — an empty day has
+    // not been completed, it has not started.
+    const taskScore = plannedCount > 0
+        ? completedCount / plannedCount
+        : (dayHasRecord ? 1 : 0);
+
+    // 30 — "today's record is confirmed": credit is EARNED by a confirmation
+    // and is never revoked when new, not-yet-reviewed work arrives. A log
+    // waiting for the owner is work IN FLIGHT, not a failure, so it neither
+    // adds nor subtracts here. (To stay non-decreasing when a pending log
+    // lands, this term mathematically CANNOT depend on the pending count.)
+    // The waiting is reported honestly by `unverifiedCount` / `isClosed` /
+    // the review queue — the ring is a PROGRESS measure that only fills, and
+    // it is not the place to charge the owner for a mukadam having recorded
+    // something.
+    const verificationScore = verifiedCount > 0 ? 1 : 0;
+
     const closurePercent = clampPercent((taskScore * 70) + (verificationScore * 30));
-    const isClosed = pendingCount === 0 && unverifiedCount === 0;
+
+    // A day nobody planned and nobody recorded cannot be "closed" — there is
+    // nothing to have closed. Without this precondition `pendingCount === 0 &&
+    // unverifiedCount === 0` is vacuously true on an empty day, and fixing
+    // closurePercent alone would render a 0% ring beside an emerald "Day
+    // Closed" (mainView.tsx:249) — a fresh contradiction replacing the old one.
+    const dayHasSubstance = plannedCount > 0 || dayHasRecord;
+    const isClosed = dayHasSubstance && pendingCount === 0 && unverifiedCount === 0;
 
     const sprayDaysAgo = getLastActionDaysAgo(scopedLogs, dateKey, scope, 'spray');
     const irrigationDaysAgo = getLastActionDaysAgo(scopedLogs, dateKey, scope, 'irrigation');
