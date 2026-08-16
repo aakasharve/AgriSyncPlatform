@@ -4,6 +4,7 @@ import { AuditPort } from '../ports/AuditPort';
 import { mutationQueue } from '../../infrastructure/sync/MutationQueue';
 import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
 import { SyncMutationName } from '../../infrastructure/sync/SyncMutationCatalog';
+import { systemClock } from '../../core/domain/services/Clock';
 
 export interface VerifyLogInput {
     logId: string;
@@ -23,22 +24,13 @@ export interface VerifyResult {
     error?: string;
 }
 
-function mapTargetStatus(action: VerifyLogInput['action']): 'Verified' | 'Disputed' {
-    return action === 'approve' ? 'Verified' : 'Disputed';
-}
-
-function mapCallerRole(profile: FarmerProfile): 'PrimaryOwner' | 'SecondaryOwner' | 'Mukadam' | 'Worker' {
-    const operator = profile.operators.find(item => item.id === profile.activeOperatorId);
-    switch (operator?.role) {
-        case 'PRIMARY_OWNER':
-            return 'PrimaryOwner';
-        case 'SECONDARY_OWNER':
-            return 'SecondaryOwner';
-        case 'MUKADAM':
-            return 'Mukadam';
-        default:
-            return 'Worker';
-    }
+// The canonical verify_log_v2 contract (sync-contract/schemas/payloads/verify_log_v2.zod.ts)
+// is {logId, verifierUserId, decision, reason?, decidedAt}. Authority is
+// NEVER read from the wire on the server: it derives the caller's role
+// itself from the DB, and refuses any payload that tries to declare its
+// own authority (e.g. a callerRole field). Do not add one back.
+function mapDecision(action: VerifyLogInput['action']): 'verify' | 'dispute' {
+    return action === 'approve' ? 'verify' : 'dispute';
 }
 
 async function triggerSyncBestEffort(): Promise<void> {
@@ -53,22 +45,23 @@ export async function verifyLog(
     input: VerifyLogInput,
     _repository: LogsRepository,
     auditPort: AuditPort,
-    profile: FarmerProfile
+    _profile: FarmerProfile
 ): Promise<VerifyResult> {
     try {
+        const decision = mapDecision(input.action);
         await mutationQueue.enqueue(SyncMutationName.VerifyLogV2, {
-            dailyLogId: input.logId,
-            targetStatus: mapTargetStatus(input.action),
+            logId: input.logId,
+            verifierUserId: input.verifierId,
+            decision,
             reason: input.note,
-            verifiedByUserId: input.verifierId,
-            callerRole: mapCallerRole(profile),
+            decidedAt: systemClock.nowISO(),
         });
 
         await auditPort.append({
             actorId: input.verifierId,
             action: 'VERIFY_LOG',
             resourceId: input.logId,
-            details: `Queued verify_log_v2 mutation as ${mapTargetStatus(input.action)}.`,
+            details: `Queued verify_log_v2 mutation as ${decision}.`,
         });
 
         await triggerSyncBestEffort();
@@ -85,15 +78,15 @@ export async function batchVerifyLogs(
     input: BatchVerifyInput,
     _repository: LogsRepository,
     auditPort: AuditPort,
-    profile: FarmerProfile
+    _profile: FarmerProfile
 ): Promise<VerifyResult> {
     try {
         for (const logId of input.logIds) {
             await mutationQueue.enqueue(SyncMutationName.VerifyLogV2, {
-                dailyLogId: logId,
-                targetStatus: 'Verified',
-                verifiedByUserId: input.verifierId,
-                callerRole: mapCallerRole(profile),
+                logId,
+                verifierUserId: input.verifierId,
+                decision: 'verify',
+                decidedAt: systemClock.nowISO(),
             });
 
             await auditPort.append({
