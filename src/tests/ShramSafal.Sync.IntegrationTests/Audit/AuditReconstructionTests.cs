@@ -49,7 +49,9 @@ namespace ShramSafal.Sync.IntegrationTests.Audit;
 /// chain reads back as a complete <c>(actor, when, app_version, device_id,
 /// ip_hash, source_ai_job_id)</c> lineage across the log's lifecycle:
 /// <c>Created</c> → <c>VerificationChanged</c> (the create-time self-attestation,
-/// added by dfes-companion wave-1.3) → <c>TaskAdded</c> → <c>VerificationChanged</c>.
+/// added by dfes-companion wave-1.3) → <c>TaskAdded</c> → <c>VerificationChanged</c>
+/// (that task re-attested by the log's own operator, wave-1.3 I3) →
+/// <c>VerificationChanged</c> (the explicit dispute).
 ///
 /// <para>
 /// The spec's prose lists <c>Created → Verified → Flagged</c> as the lifecycle,
@@ -194,12 +196,18 @@ public sealed class AuditReconstructionTests
             // this suite exists to guarantee. The row is asserted by identity below rather
             // than by position, so a later lifecycle change reads as a count change here
             // instead of a silent re-index.
-            chain.Should().HaveCount(4,
-                "the lifecycle emits four audit rows: Created, VerificationChanged (the " +
-                "create-time self-attestation), TaskAdded, VerificationChanged (the dispute)");
+            //
+            // ...and a fifth (wave-1.3 I3): the task addition re-opens the attested log
+            // and the owner — its own operator — immediately re-attests, so the
+            // attestation covers the task he just added rather than the empty log it was
+            // stamped on. That movement gets its own row for the same reason.
+            chain.Should().HaveCount(5,
+                "the lifecycle emits five audit rows: Created, VerificationChanged (the " +
+                "create-time self-attestation), TaskAdded, VerificationChanged (the " +
+                "re-attestation covering that task), VerificationChanged (the dispute)");
 
             chain.Select(a => a.Action).Should().BeEquivalentTo(
-                new[] { "Created", "VerificationChanged", "TaskAdded", "VerificationChanged" });
+                new[] { "Created", "VerificationChanged", "TaskAdded", "VerificationChanged", "VerificationChanged" });
 
             chain[0].Action.Should().Be("Created", "the log's own row opens the chain");
 
@@ -207,8 +215,15 @@ public sealed class AuditReconstructionTests
             var taskAddedRow = chain.Single(a => a.Action == "TaskAdded");
             var selfAttestationRow = chain.Single(a =>
                 a.Action == "VerificationChanged" && a.Payload.Contains("\"selfAttested\":true"));
+            var reAttestationRow = chain.Single(a =>
+                a.Action == "VerificationChanged" && a.Payload.Contains("\"trigger\":\"TaskAdded\""));
             var disputeRow = chain.Single(a =>
                 a.Action == "VerificationChanged" && a.Payload.Contains("\"status\":\"Disputed\""));
+
+            reAttestationRow.Payload.Should().Contain("\"from\":\"Verified\"").And.Contain("\"to\":\"Verified\"",
+                "the owner's own addition re-opens and re-attests in one act — the day never " +
+                "silently loses its approval, and the approval never silently outruns the content");
+            reAttestationRow.Payload.Should().Contain("\"reAttestedByCreator\":true");
 
             selfAttestationRow.Payload.Should().Contain("\"from\":\"Draft\"").And.Contain("\"to\":\"Verified\"",
                 "the row must say which way the status moved, or it cannot be replayed");
@@ -246,6 +261,8 @@ public sealed class AuditReconstructionTests
                 "the attestation is part of the same voice-created act and carries its provenance");
             taskAddedRow.SourceAiJobId.Should().BeNull(
                 "TaskAdded does not originate from an AI parse — its handler passes null");
+            reAttestationRow.SourceAiJobId.Should().BeNull(
+                "the re-attestation is triggered by a manually added task, not by an AI parse");
             disputeRow.SourceAiJobId.Should().BeNull(
                 "an explicit VerificationChanged does not originate from an AI parse — its handler passes null");
         }

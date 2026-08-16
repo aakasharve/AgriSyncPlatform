@@ -261,6 +261,12 @@ public sealed class DailyLog : Entity<Guid>
     ///
     /// <para><b>Both events carry <see cref="SelfAttestationReason"/>.</b> See that field —
     /// it is the marker that keeps this decision reversible.</para>
+    ///
+    /// <para><b>Not creation-only.</b> The only state guard is "the log is in Draft". A
+    /// caller that has just walked a log back to Draft — <c>AddLogTaskHandler</c>, when the
+    /// log's own operator adds a second task to a day he already attested to — may ask for
+    /// a fresh attestation covering the new content. That caller owns the identity check
+    /// (actor == operator); this method owns the state and role checks.</para>
     /// </summary>
     /// <returns><c>true</c> when both attestation events were emitted.</returns>
     public bool TrySelfVerifyAsCreator(
@@ -269,9 +275,23 @@ public sealed class DailyLog : Entity<Guid>
         AppRole creatorRole,
         DateTime occurredAtUtc)
     {
-        // Creation-time only. A log that already carries verification history has a
-        // story of its own and must never be silently re-stamped.
-        if (_verificationEvents.Count > 0 || CurrentVerificationStatus != VerificationStatus.Draft)
+        // The log must be sitting in Draft — nothing else is re-stamped, ever.
+        //
+        // spec: dfes-companion-2026-07-11 (wave-1.3) — I3. This used to ALSO refuse any
+        // log carrying verification history at all (`_verificationEvents.Count > 0`),
+        // which made the method literally creation-time-only. That extra clause is now
+        // gone, because AddLogTaskHandler has to re-attest a day it just re-opened: it
+        // Edits a Verified log back to Draft so the attestation covers the new task, then
+        // asks this method to re-stamp it. With the old clause the owner's SECOND task of
+        // the day left his log stranded in Draft forever — the exact bug wave-1.3 fixed,
+        // reintroduced through a different door.
+        //
+        // Dropping it is safe because the Draft check does the real work: a log that has
+        // been Confirmed, Verified, Disputed or is CorrectionPending is refused here just
+        // as before. What can now be re-attested is a log that some caller has already
+        // deliberately walked back to Draft — and the CALLER still has to prove the actor
+        // is the log's own operator before it asks (AddLogTaskHandler does exactly that).
+        if (CurrentVerificationStatus != VerificationStatus.Draft)
         {
             return false;
         }
