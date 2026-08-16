@@ -107,7 +107,11 @@ public sealed class AiResponseNormalizerDuplicateKeyTests
 
         var root = JsonNode.Parse(resultJson)!.AsObject();
 
-        Assert.Equal("Log processed.", root["summary"]!.GetValue<string>());
+        // wave-2.2 (spec: dfes-companion-2026-07-11) — this used to pin the literal
+        // "Log processed.". The malformed-JSON path still normalizes to safe defaults;
+        // it just no longer writes the farmer a summary he did not give. See
+        // AiResponseNormalizerSummaryTests for why blank and not absent.
+        Assert.Equal(string.Empty, root["summary"]!.GetValue<string>());
         Assert.Empty(root["cropActivities"]!.AsArray());
         Assert.Empty(root["labour"]!.AsArray());
     }

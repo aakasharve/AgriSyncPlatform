@@ -61,7 +61,22 @@ internal sealed class AiResponseNormalizer
         var root = ParseJsonObject(rawJson);
         PromoteLegacyDailyLogShape(root);
 
-        EnsureString(root, "summary", "Log processed.");
+        // WAVE 2.2 (spec: dfes-companion-2026-07-11) — BLANK, NOT "Log processed.".
+        //
+        // That sentence was the server writing about itself, and it was not decorative:
+        // DfesLensExtractor.CoverWhat credits `hasSummary ? 0.5 : 0.0` on WHAT (weight
+        // 20). On a silent day the completeness denominator is 55, so the injected
+        // sentence was worth 10 * 10 / 55 = 1.82 — the farmer saw 2/10 for a day he said
+        // nothing about. It fired ONLY when `hasActivity || hasDisturbance` was false:
+        // precisely the day the number should read low. Doctrine P4: never fabricate.
+        //
+        // The key is BLANKED and NOT deleted. `summary` is required by
+        // AgriLogResponseSchema.ts (the `.strict()` there governs unknown keys, not
+        // missing ones). Deleting it would not throw — BackendAiClient uses safeParse
+        // with a silent fallback — it would quietly route every voice parse onto the
+        // legacy normalisation path. An empty string satisfies the bare `z.string()`,
+        // and EnsureString assigns unconditionally once past its length guard.
+        EnsureString(root, "summary", string.Empty);
         EnsureString(root, "fullTranscript", string.Empty);
         EnsureArray(root, "cropActivities");
         EnsureArray(root, "irrigation");
