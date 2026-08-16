@@ -177,3 +177,40 @@ describe('the one-question-per-day guard while an answer is pending', () => {
         expect(withPendingMerged([], TODAY)).toHaveLength(0);
     });
 });
+
+/**
+ * spec: dfes-companion-2026-07-11 (wave-3.11) — founder decision 15.
+ *
+ * A filler answer earns zero extra and is NEVER punished. On the server that means
+ * ObservationAnchor refuses it the OBSERVATION bucket while `question_events.response`
+ * keeps his words verbatim (append-only, KEEP on erasure). On the client it means the row
+ * is written EXACTLY as any other answer is — because the one-question-per-day guard
+ * (dfesQuestionEngine `selectDailyQuestion`) is outcome-blind and holds only while every
+ * outcome writes a row.
+ *
+ * This is the pin against the tempting future change: "it wasn't a real answer, don't
+ * write it." That would silently open the guard and put a second question in front of the
+ * farmer the same day — the one thing spec Ruling 6 forbids after filler.
+ */
+describe('a filler answer is written like any other (wave-3.11)', () => {
+    const FILLER = ['ठीक आहे', 'काही नाही', 'सगळं बरोबर'];
+
+    it.each(FILLER)('writes one row, unskipped, with his own words: %s', async (transcript) => {
+        stash();
+
+        await settlePendingQuestionAnswer({ transcript });
+
+        expect(recordQuestionEvent).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(recordQuestionEvent).mock.calls[0][3]).toMatchObject({
+            skipped: false, response: transcript, dailyLogId: 'log-1',
+        });
+    });
+
+    it('is not downgraded to a skip', async () => {
+        // A skip starts SKIP_COOLDOWN_DAYS running and says he declined. He did not
+        // decline — he answered, briefly. Recording the wrong fact is a P3 violation.
+        stash();
+        await settlePendingQuestionAnswer({ transcript: 'सगळं बरोबर' });
+        expect(vi.mocked(recordQuestionEvent).mock.calls[0][3].skipped).toBe(false);
+    });
+});

@@ -58,8 +58,6 @@ internal static class DfesLensExtractor
     {
         var roots = data.Roots;
         var persisted = data.PersistedRoots ?? [];
-        var hasStructuredObs = HasStructuredObservation(data.Observations);
-        var hasLearning = HasLearningFacet(data.Observations);
 
         // ── THE SCORE-ENGINE VERSION GUARD (wave-3.5) ───────────────────────
         //
@@ -78,18 +76,23 @@ internal static class DfesLensExtractor
         // without this a farmer's June number could move because we deployed in August.
         //
         // 🛑 THIS IS THE SWITCH FOR THE WHOLE WAVE, NOT JUST WEATHER. 3.5's weather rule
-        // reads it below. When 3.4 lands, its product-based water rule must read it too:
-        //     if (appliesNewRules && !OwesWater(roots)) return Cover.NotApplicable;
-        // and when 3.11 lands, its observation-anchoring test is likewise
-        // `appliesNewRules && …`. A Wave-3 scoring change that does NOT consult this
-        // boolean silently rescores history and defeats the guard for every other change
-        // as well.
+        // reads it below, 3.4's product-based water rule reads it in OwedCarrier, and
+        // 3.11's observation anchoring reads it in HasStructuredObservation /
+        // hasMeaningfulObs. A Wave-3 scoring change that does NOT consult this boolean
+        // silently rescores history and defeats the guard for every other change as well.
+        //
+        // 🛑 IT IS COMPUTED FIRST, ABOVE EVERY DIMENSION, and must stay there. wave-3.11
+        // moved it above `hasStructuredObs` for exactly that reason: a rule that needs the
+        // guard cannot be evaluated before the guard exists.
         //
         // Deliberately compared against DfesTuning.ScoreEngineVersion rather than a
         // literal "dfes-4": the next engine bump then re-freezes dfes-4 days automatically
         // instead of needing this line remembered.
         var appliesNewRules = data.ScoredUnderVersion is null
                            || data.ScoredUnderVersion == DfesTuning.ScoreEngineVersion;
+
+        var hasStructuredObs = HasStructuredObservation(data.Observations, appliesNewRules);
+        var hasLearning = HasLearningFacet(data.Observations);
 
         // ── the day's dimensions, scored once ───────────────────────────────
         // ALWAYS possible (any day can carry these — nothing about the work performed
@@ -207,7 +210,12 @@ internal static class DfesLensExtractor
         // ── Signals (unioned across all logs AND both root sources) ─────────
         var hasWork = roots.Any(HasWork) || persisted.Any(HasWork);
         var hasDisturbance = roots.Any(HasDisturbanceReason) || persisted.Any(HasDisturbanceReason);
-        var hasMeaningfulObs = hasStructuredObs || data.Observations.Any(o => o.TextRaw.Trim().Length >= 8);
+        // wave-3.11 — the SECOND reader of the content floor, and it must carry the same
+        // answer-route-only anchoring as HasStructuredObservation. Without it a filler
+        // answer still reaches DayClassification.ObservationDay (DayClassifier.cs) and the
+        // day would be labelled an observation day on the strength of "सगळं बरोबर".
+        var hasMeaningfulObs = hasStructuredObs
+            || data.Observations.Any(o => ClearsTheContentFloor(o, appliesNewRules));
         var hasExperiment = data.Observations.Any(o => !string.IsNullOrWhiteSpace(o.Hypothesis)
                                                        && !string.IsNullOrWhiteSpace(o.Evidence));
         var hasFollowup = data.Observations.Any(o => o.SourceQuestionId is not null
@@ -476,13 +484,36 @@ internal static class DfesLensExtractor
         ObservationNoteType.Observation, ObservationNoteType.Issue
     ];
 
-    private static bool HasStructuredObservation(IReadOnlyList<ObservationEvent> obs)
+    private static bool HasStructuredObservation(IReadOnlyList<ObservationEvent> obs, bool appliesNewRules)
         => obs.Any(o => !string.IsNullOrWhiteSpace(o.Observation) || !string.IsNullOrWhiteSpace(o.Change)
             || !string.IsNullOrWhiteSpace(o.Comparison) || !string.IsNullOrWhiteSpace(o.Challenge)
             || !string.IsNullOrWhiteSpace(o.Uncertainty)
-            // Same content floor as before — an 8-character minimum, so an empty or
-            // one-word note is never credited just because a row exists.
-            || (NoticingNoteTypes.Contains(o.NoteType) && o.TextRaw.Trim().Length >= 8));
+            || (NoticingNoteTypes.Contains(o.NoteType) && ClearsTheContentFloor(o, appliesNewRules)));
+
+    /// <summary>
+    /// wave-3.11, founder decision 15 (2026-08-16) — <b>a filler answer earns zero extra,
+    /// NEVER negative.</b>
+    ///
+    /// <para>The anchoring test (<see cref="ObservationAnchor"/>) gates the ANSWER route
+    /// ONLY — an observation whose <c>SourceQuestionId</c> is set. A noticing the farmer
+    /// VOLUNTEERED keeps the 8-character floor it has always had, so no day he has already
+    /// been scored on can lose a point. Doctrine P7 and founder decision 6 (monotonic
+    /// non-decreasing, no exceptions) make that non-negotiable, and the older plan's form
+    /// of this rule — one bar for every observation — would have broken both.</para>
+    ///
+    /// <para>It also runs under wave-3.5's <c>appliesNewRules</c> guard, so a day already
+    /// scored under dfes-1/2/3 is judged by the rule it was scored under, whatever its
+    /// route. Two independent reasons the number cannot move backwards, deliberately.</para>
+    ///
+    /// <para>Nothing writes <c>SourceQuestionId</c> in production today — wave-3.7 lands
+    /// the farmer's spoken answer on <c>question_events.response</c>, not yet as an
+    /// observation row. This rule is therefore installed AHEAD of the route it governs,
+    /// which is what makes it arithmetically incapable of lowering an existing day.</para>
+    /// </summary>
+    private static bool ClearsTheContentFloor(ObservationEvent o, bool appliesNewRules)
+        => o.SourceQuestionId is null || !appliesNewRules
+            ? o.TextRaw.Trim().Length >= ObservationAnchor.MinimumTextLength
+            : ObservationAnchor.IsAnchored(o.TextRaw);
 
     private static bool HasLearningFacet(IReadOnlyList<ObservationEvent> obs)
         => obs.Any(o => !string.IsNullOrWhiteSpace(o.Learning) || o.NoteType == ObservationNoteType.Tip);

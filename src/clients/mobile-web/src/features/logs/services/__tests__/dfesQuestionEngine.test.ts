@@ -622,3 +622,53 @@ describe('per-log dedupe for execution gaps (wave-3.2, Ruling 1)', () => {
         expect(legacy).toBeNull();
     });
 });
+
+// spec: dfes-companion-2026-07-11 (wave-3.11) — founder decision 15: a filler answer
+// earns zero extra, NEVER negative. Spec Ruling 6 spells out what must happen after one:
+// do not tell him it was insufficient, do not ask another question that day, close
+// naturally. The server-side half of that (filler fills no OBSERVATION bucket) is proven
+// in ObservationAnchorTests; this is the client half — the day closes anyway.
+describe('a filler answer closes the day like any other (wave-3.11)', () => {
+    const answeredToday = (o: Partial<DailyQuestionInputs['recentEvents'][number]> = {}) => base({
+        sourceLogId: 'log-mon',
+        recentEvents: [{
+            questionKey: 'gap.dose', createdAtLocalDate: '2026-07-11', ageDays: 0,
+            skipped: false, dailyLogId: 'log-mon', ...o,
+        }],
+    });
+
+    /**
+     * THE GUARD IS OUTCOME-BLIND, AND THAT IS THE DESIGN.
+     *
+     * `RecentQuestionEvent` carries no response text at all, so the engine cannot know
+     * whether "सगळं बरोबर" or "कालचे डाग आज वाढले नाहीत" came back — it knows only that a
+     * row exists for today. Sathi therefore cannot come back for a better answer, which is
+     * exactly what decision 15 ("don't create a strict gate") requires of the client.
+     *
+     * It holds ONLY because every outcome writes a row. See the companion pin in
+     * pendingQuestionAnswer.test.ts — a future change that skipped the write "because it
+     * wasn't a real answer" would silently open this guard and put a second question in
+     * front of the farmer the same day.
+     */
+    it('does not re-ask after an answer, whatever the answer was', () => {
+        expect(selectDailyQuestion(answeredToday())).toBeNull();
+    });
+
+    it('does not re-ask after a skip either — the same one row closes the day', () => {
+        expect(selectDailyQuestion(answeredToday({ skipped: true }))).toBeNull();
+    });
+
+    // The control. Move that same row to YESTERDAY and a question IS offered again —
+    // which is what proves the two assertions above are about today's row existing, and
+    // not about the fixture being unable to produce a question at all.
+    it('CONTROL: the same row dated yesterday does not close today', () => {
+        const r = selectDailyQuestion(base({
+            sourceLogId: 'log-tue',
+            recentEvents: [{
+                questionKey: 'gap.dose', createdAtLocalDate: '2026-07-10', ageDays: 1,
+                skipped: false, dailyLogId: 'log-mon',
+            }],
+        }));
+        expect(r?.question.questionKey).toBe('gap.dose');
+    });
+});
