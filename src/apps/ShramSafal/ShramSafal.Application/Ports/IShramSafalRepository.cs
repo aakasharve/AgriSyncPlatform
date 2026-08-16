@@ -730,6 +730,24 @@ public interface IShramSafalRepository
     Task AddQuestionEventAsync(ShramSafal.Domain.Dfes.QuestionEvent e, CancellationToken ct = default)
         => Task.CompletedTask;
 
+    // ── wave-4.2 — the two append-only consent ledgers behind the gate's one tap ──
+    /// <summary>
+    /// Stage an append-only <see cref="ShramSafal.Domain.Consent.TermsAcceptanceEvent"/>.
+    /// No SaveChanges — the handler owns the commit, and it commits BOTH ledgers together
+    /// or neither. Default no-op keeps in-tree test doubles compiling.
+    /// </summary>
+    Task AddTermsAcceptanceEventAsync(
+        ShramSafal.Domain.Consent.TermsAcceptanceEvent e, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Stage an append-only <see cref="ShramSafal.Domain.Consent.ConsentGrantEvent"/>.
+    /// Same contract as the terms ledger above.
+    /// </summary>
+    Task AddConsentGrantEventAsync(
+        ShramSafal.Domain.Consent.ConsentGrantEvent e, CancellationToken ct = default)
+        => Task.CompletedTask;
+
     /// <summary>
     /// Read recent question_events for a farm (anti-repeat / cooldown feed). RLS
     /// already scopes rows to the tenant; the app layer additionally membership-checks.

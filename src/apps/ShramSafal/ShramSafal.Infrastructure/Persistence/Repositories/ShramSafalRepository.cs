@@ -410,6 +410,16 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     public async Task AddQuestionEventAsync(ShramSafal.Domain.Dfes.QuestionEvent e, CancellationToken ct = default)
         => await db.QuestionEvents.AddAsync(e, ct);
 
+    // wave-4.2 — the two append-only consent ledgers. Staged, never committed here: the
+    // handler flushes both in one SaveChanges so a tap can never leave one record behind.
+    public async Task AddTermsAcceptanceEventAsync(
+        ShramSafal.Domain.Consent.TermsAcceptanceEvent e, CancellationToken ct = default)
+        => await db.TermsAcceptanceEvents.AddAsync(e, ct);
+
+    public async Task AddConsentGrantEventAsync(
+        ShramSafal.Domain.Consent.ConsentGrantEvent e, CancellationToken ct = default)
+        => await db.ConsentGrantEvents.AddAsync(e, ct);
+
     public async Task<IReadOnlyList<ShramSafal.Domain.Dfes.QuestionEvent>> GetRecentQuestionEventsForFarmAsync(
         Guid farmId, DateTime sinceUtc, CancellationToken ct = default)
         => await db.QuestionEvents

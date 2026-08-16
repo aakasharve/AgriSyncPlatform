@@ -103,6 +103,12 @@ public class FakeShramSafalRepository : IShramSafalRepository
     // write and a test asserting "the observation was written" could never fail. Declared
     // here so the mapping lands on this class and subclasses can genuinely observe it.
     public virtual Task AddObservationEventAsync(ObservationEvent o, CancellationToken ct = default) => Task.CompletedTask;
+    // wave-4.2 — same default-interface-method trap as AddObservationEventAsync above:
+    // unmapped, the two consent ledgers would swallow their writes silently.
+    public virtual Task AddTermsAcceptanceEventAsync(
+        ShramSafal.Domain.Consent.TermsAcceptanceEvent e, CancellationToken ct = default) => Task.CompletedTask;
+    public virtual Task AddConsentGrantEventAsync(
+        ShramSafal.Domain.Consent.ConsentGrantEvent e, CancellationToken ct = default) => Task.CompletedTask;
     public virtual Task<IReadOnlyList<DailyLog>> GetDailyLogsForFarmDateAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default) => throw NotStubbed();
     public virtual Task<IReadOnlyList<ObservationEvent>> GetObservationEventsForDailyLogsAsync(IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default) => throw NotStubbed();
     public virtual Task<DailyRichnessAggregate?> GetDailyRichnessAggregateAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default) => throw NotStubbed();

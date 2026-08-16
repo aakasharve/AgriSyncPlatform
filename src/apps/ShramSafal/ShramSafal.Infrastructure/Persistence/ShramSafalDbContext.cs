@@ -217,6 +217,27 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<ConsentAuditEntry> ConsentAuditEntries => Set<ConsentAuditEntry>();
 
     /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-4.2) — the CONTRACTUAL half of the
+    /// first-open gate's single tap. Mapped to <c>ssf.terms_acceptance_events</c>;
+    /// the migration REVOKEs UPDATE + DELETE from <c>agrisync_app</c>, so it is
+    /// append-only by privilege exactly as <c>ssf.question_events</c> is. RLS is
+    /// ENABLEd + FORCEd with a self-only read policy; a pre-registration row
+    /// (user_id NULL) is insertable without a session and readable by nobody
+    /// through it.
+    /// </summary>
+    public DbSet<ShramSafal.Domain.Consent.TermsAcceptanceEvent> TermsAcceptanceEvents =>
+        Set<ShramSafal.Domain.Consent.TermsAcceptanceEvent>();
+
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-4.2) — the DATA-PROTECTION half of the
+    /// same tap, and a separate legal record on purpose: withdrawing consent does
+    /// not un-accept the Terms. Mapped to <c>ssf.consent_grant_events</c>, same
+    /// append-only + RLS posture. A withdrawal is a NEW row, never an edit.
+    /// </summary>
+    public DbSet<ShramSafal.Domain.Consent.ConsentGrantEvent> ConsentGrantEvents =>
+        Set<ShramSafal.Domain.Consent.ConsentGrantEvent>();
+
+    /// <summary>
     /// Voice Diary ship (voice-diary-e2e-2026-05-17) — retained-tier
     /// voice clip metadata. One row per clip that the user has chosen
     /// to keep beyond the 30-day local journal (gated by

@@ -152,6 +152,9 @@ public static class DependencyInjection
         services.AddScoped<GetDayUnderstandingHandler>();
         services.AddScoped<RecordQuestionEventHandler>();
         services.AddScoped<GetRecentQuestionEventsHandler>();
+        // spec: dfes-companion-2026-07-11 (wave-4.2) — first-open Terms + DPDP gate.
+        services.AddScoped<ShramSafal.Application.UseCases.Consent.RecordConsentGateAcceptance
+            .RecordConsentGateAcceptanceHandler>();
         services.AddScoped<CreateAttachmentHandler>();
         services.AddScoped<UploadAttachmentHandler>();
         services.AddScoped<GetAttachmentMetadataHandler>();

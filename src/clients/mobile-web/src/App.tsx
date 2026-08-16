@@ -24,6 +24,7 @@ import JoinFarmLandingPage from './pages/JoinFarmLandingPage';
 import { useMorningNotificationWiring } from './app/hooks/useMorningNotificationWiring';
 import ConsentGateScreen from './features/consent/gate/ConsentGateScreen';
 import { useConsentGate } from './features/consent/gate/useConsentGate';
+import { recordConsentGateAcceptance } from './features/consent/gate/consentGateApi';
 
 const hasJoinDeepLink = (): boolean => {
     if (typeof window === 'undefined') return false;
@@ -91,7 +92,18 @@ const AppFrame: React.FC<{
     if (!isAuthenticated && consentGate.status === 'required') {
         return (
             <AppShell>
-                <ConsentGateScreen onAccept={() => consentGate.markPassed()} />
+                <ConsentGateScreen
+                    onAccept={async (acceptance) => {
+                        // wave-4.2 — the two legal records are written FIRST. markPassed
+                        // runs only after both ids come back; a throw leaves the gate up
+                        // and shows the failure. Letting him through on a failed write
+                        // would mean the app holds data with no record of the basis for
+                        // holding it, which is the one outcome consent exists to prevent.
+                        await recordConsentGateAcceptance(
+                            acceptance, consentGate.preRegistrationSessionId);
+                        consentGate.markPassed();
+                    }}
+                />
             </AppShell>
         );
     }

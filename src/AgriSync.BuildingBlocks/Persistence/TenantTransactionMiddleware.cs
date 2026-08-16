@@ -99,6 +99,13 @@ public sealed class TenantTransactionMiddleware
         // handler legitimately spans the caller's tenancies and has
         // user-scoped filtering of its own).
         "/shramsafal/farms/mine",
+        // spec: dfes-companion-2026-07-11 (wave-4.2) — POST /shramsafal/consent-gate/accept.
+        // The first-open Terms + DPDP gate runs BEFORE login, so there is no farm claim and
+        // no user claim to open a tenant transaction against; the interceptor would
+        // fail-closed on the first DbCommand. The endpoint elevates and owns its own commit.
+        // Narrow by design: it accepts no farm id, takes its user id only from the JWT
+        // subject (null when anonymous), and can write nothing but its own two ledger rows.
+        "/shramsafal/consent-gate",
         // POST /sync/push — user-scoped multi-farm WRITE surface.
         // PushSyncBatchHandler takes only actorUserId and dispatches per-
         // mutation handlers that each run their own IsUserMemberOfFarmAsync
