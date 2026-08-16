@@ -350,7 +350,14 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                         <p className="font-black">Rs {formatCurrencyINR(costSnapshot.cropSoFar)}</p>
                                     </div>
                                 </div>
-                                {costSnapshot.unverifiedToday > 0 && (
+                                {/* Task 1.7 (spec: dfes-companion-2026-07-11) — costSnapshot.unverifiedToday
+                                    (financeSelectors trustStatus) is 'Unverified' for ANY uncorrected cost
+                                    entry, including the owner's own — it does NOT track whether anything is
+                                    genuinely awaiting review. Gate the visit-a-dead-end button on
+                                    todayDayState.unverifiedCount too, the same signal the Close-Day summary
+                                    above already uses, so this only offers the route when a mukadam's log
+                                    really is waiting. */}
+                                {costSnapshot.unverifiedToday > 0 && todayDayState.unverifiedCount > 0 && (
                                     <button
                                         onClick={() => setShowReviewInbox(true)}
                                         className="w-full text-left rounded-lg border border-amber-300/50 bg-amber-200/20 px-2.5 py-2 text-xs text-amber-100 font-semibold"

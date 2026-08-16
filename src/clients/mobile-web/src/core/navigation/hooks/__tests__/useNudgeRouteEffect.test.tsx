@@ -69,4 +69,30 @@ describe('useNudgeRouteEffect', () => {
         expect(props.setMainView).toHaveBeenCalledWith('log');
         expect(props.setShowCloseDaySummary).toHaveBeenCalledWith(true);
     });
+
+    // Task 1.7 (spec: dfes-companion-2026-07-11) — the 4th "hide the dead
+    // end" entry point: this is the ONE that fires with NO user tap at all,
+    // so it needs its own explicit before/after coverage, not just an
+    // assumption that the close-day case above implies it.
+    describe('the auto-open review inbox (Task 1.7, no-tap entry point)', () => {
+        it('empty review queue (todayUnverifiedCount 0): does NOT auto-open the review inbox', () => {
+            window.history.pushState({}, '', '/?nudge=close-day');
+            const props = baseProps(); // todayUnverifiedCount: 0
+
+            renderHook(() => useNudgeRouteEffect(props));
+
+            expect(props.setShowCloseDaySummary).toHaveBeenCalledWith(true);
+            expect(props.setShowReviewInbox).not.toHaveBeenCalled();
+        });
+
+        it('a mukadam log genuinely pending (todayUnverifiedCount > 0): DOES auto-open the review inbox', () => {
+            window.history.pushState({}, '', '/?nudge=close-day');
+            const props = { ...baseProps(), todayUnverifiedCount: 2 };
+
+            renderHook(() => useNudgeRouteEffect(props));
+
+            expect(props.setShowCloseDaySummary).toHaveBeenCalledWith(true);
+            expect(props.setShowReviewInbox).toHaveBeenCalledWith(true);
+        });
+    });
 });
