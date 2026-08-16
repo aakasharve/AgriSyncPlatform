@@ -89,11 +89,11 @@ function makeCtx(overrides: Partial<AppRouterContext> = {}): AppRouterContext {
         setCurrentRoute: () => {},
         ownerDisplayName: 'Owner',
         todayDayState: {
-            closurePercent: 100, isClosed: true,
+            closurePercent: 100, isClosed: true, hasStarted: true,
             completedCount: 0, plannedCount: 0, pendingCount: 0, unverifiedCount: 0,
         },
         yesterdayDayState: {
-            closurePercent: 100, isClosed: true,
+            closurePercent: 100, isClosed: true, hasStarted: true,
             completedCount: 0, plannedCount: 0, pendingCount: 0, unverifiedCount: 0,
         },
         showCloseDaySummary: false,
@@ -152,12 +152,15 @@ describe('renderLogView — review-inbox dead ends stay hidden while nothing is 
         const ctx = makeCtx({
             showCloseDaySummary: true,
             showCloseYesterdaySummary: true,
+            // hasStarted true: the farmer DID record his day (that is why closure
+            // reads 100) — the point under test is that nothing is awaiting
+            // review, not that the day is empty.
             todayDayState: {
-                closurePercent: 100, isClosed: true,
+                closurePercent: 100, isClosed: true, hasStarted: true,
                 completedCount: 0, plannedCount: 0, pendingCount: 0, unverifiedCount: 0,
             },
             yesterdayDayState: {
-                closurePercent: 100, isClosed: true,
+                closurePercent: 100, isClosed: true, hasStarted: true,
                 completedCount: 0, plannedCount: 0, pendingCount: 0, unverifiedCount: 0,
             },
             // The real-world reproduction: an ordinary day with recorded
@@ -169,9 +172,11 @@ describe('renderLogView — review-inbox dead ends stay hidden while nothing is 
 
         expect(screen.queryByText(/Pending approvals/)).toBeNull();
         expect(screen.queryAllByText('Verify now')).toHaveLength(0);
-        // DEFECT surfaced by this task: today this text DOES render because
-        // the Running Cost card gates on costSnapshot.unverifiedToday, not on
-        // there being anything genuinely waiting for review.
+        // The defect this task fixed: the Running Cost card used to gate on
+        // costSnapshot.unverifiedToday ALONE — a finance trust-status that is
+        // 'Unverified' for any uncorrected entry — so this text rendered on an
+        // ordinary solo-farmer day with nothing whatsoever awaiting review.
+        // mainView.tsx now also requires todayDayState.unverifiedCount > 0.
         expect(screen.queryByText(/Cost may be inaccurate/)).toBeNull();
     });
 
@@ -183,11 +188,11 @@ describe('renderLogView — review-inbox dead ends stay hidden while nothing is 
             showCloseYesterdaySummary: true,
             setShowReviewInbox,
             todayDayState: {
-                closurePercent: 70, isClosed: false,
+                closurePercent: 70, isClosed: false, hasStarted: true,
                 completedCount: 0, plannedCount: 0, pendingCount: 0, unverifiedCount: 1,
             },
             yesterdayDayState: {
-                closurePercent: 70, isClosed: false,
+                closurePercent: 70, isClosed: false, hasStarted: true,
                 completedCount: 0, plannedCount: 0, pendingCount: 0, unverifiedCount: 1,
             },
             costSnapshot: { today: 500, cropSoFar: 5000, unverifiedToday: 1 },

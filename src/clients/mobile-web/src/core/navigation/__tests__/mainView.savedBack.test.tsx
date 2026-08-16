@@ -72,6 +72,9 @@ function makeCtx(overrides: Partial<AppRouterContext> = {}): AppRouterContext {
     const today = {
         closurePercent: 40,
         isClosed: false,
+        // wave-2.4 follow-up: this day HAS begun (5 planned, 3 done) — the
+        // not-started state is exercised in mainView.dailyLoop.test.tsx.
+        hasStarted: true,
         completedCount: 3,
         plannedCount: 5,
         pendingCount: 2,

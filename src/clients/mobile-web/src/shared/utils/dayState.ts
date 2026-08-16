@@ -32,6 +32,18 @@ export interface DayState {
     unverifiedCount: number;
     closurePercent: number;
     isClosed: boolean;
+    /**
+     * spec: dfes-companion-2026-07-11 (wave-2.4 follow-up) — has this day STARTED
+     * at all? False only when nothing is planned for it AND nothing has been
+     * recorded on it. Published as its own fact (rather than left for each
+     * surface to infer from `closurePercent === 0`) because EVERY surface that
+     * shows a closure number or a closure label has to answer the same question
+     * first: a day with nothing in it is not 0%-and-failing and not
+     * 100%-and-complete — it has not begun, and the honest render is no number
+     * at all. Inferring it from the score would tie each caller to the 70/30
+     * formula; this ties them to the fact.
+     */
+    hasStarted: boolean;
     riskStatus: DayRiskStatus;
     riskSignals: string[];
     lastActions: {
@@ -469,6 +481,12 @@ export const computeDayState = ({
     // unverifiedCount === 0` is vacuously true on an empty day, and fixing
     // closurePercent alone would render a 0% ring beside an emerald "Day
     // Closed" (mainView.tsx:249) — a fresh contradiction replacing the old one.
+    //
+    // The same fact is published as `hasStarted`, because "not started" is a
+    // THIRD state that both the score and the closed/not-closed label have to
+    // account for. Callers that only ask `isClosed` would render "Day Not
+    // Closed" on a day that has not begun — a reproach for doing nothing wrong,
+    // and day 1 of the pilot for a farmer with no schedule template.
     const dayHasSubstance = plannedCount > 0 || dayHasRecord;
     const isClosed = dayHasSubstance && pendingCount === 0 && unverifiedCount === 0;
 
@@ -500,6 +518,7 @@ export const computeDayState = ({
         unverifiedCount,
         closurePercent,
         isClosed,
+        hasStarted: dayHasSubstance,
         riskStatus: riskSignals.length > 0 ? 'risk_rising' : 'stable',
         riskSignals,
         lastActions: {

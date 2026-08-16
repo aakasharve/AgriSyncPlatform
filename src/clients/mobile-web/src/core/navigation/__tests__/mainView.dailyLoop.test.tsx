@@ -22,6 +22,7 @@ import '@testing-library/jest-dom/vitest';
 import type { AppRouterContext } from '../routeContext';
 import type { PlannedTask } from '../../../types';
 import { getDateKey } from '../../domain/services/DateKeyService';
+import { computeDayState } from '../../../shared/utils/dayState';
 
 const stub = (label: string) => ({
     default: () => React.createElement('div', { 'data-stub': label }),
@@ -89,6 +90,9 @@ function makeCtx(overrides: Partial<AppRouterContext> = {}): AppRouterContext {
     const today = {
         closurePercent: 40,
         isClosed: false,
+        // 6 planned, 1 done — this day has plainly begun. The brand-new-farmer
+        // (hasStarted: false) case has its own describe block at the bottom.
+        hasStarted: true,
         completedCount: 1,
         plannedCount: 6,
         pendingCount: 5,
@@ -214,12 +218,12 @@ describe('renderLogView — Daily Clarity Loop v1 gate', () => {
         const ctx = makeCtx({
             plannedTasks,
             todayDayState: {
-                closurePercent: 40, isClosed: false,
+                closurePercent: 40, isClosed: false, hasStarted: true,
                 completedCount: 2, plannedCount: 3, pendingCount: 3, unverifiedCount: 0,
             },
             // "Yesterday had 5 pending" — proves the hero does NOT surface this number.
             yesterdayDayState: {
-                closurePercent: 0, isClosed: false,
+                closurePercent: 0, isClosed: false, hasStarted: true,
                 completedCount: 0, plannedCount: 5, pendingCount: 5, unverifiedCount: 0,
             },
         } as unknown as Partial<AppRouterContext>);
@@ -241,7 +245,7 @@ describe('renderLogView — Daily Clarity Loop v1 gate', () => {
         const ctx = makeCtx({
             plannedTasks,
             todayDayState: {
-                closurePercent: 20, isClosed: false,
+                closurePercent: 20, isClosed: false, hasStarted: true,
                 completedCount: 0, plannedCount: 1, pendingCount: 1, unverifiedCount: 0,
             },
         } as unknown as Partial<AppRouterContext>);
@@ -278,5 +282,87 @@ describe('renderLogView — Daily Clarity Loop v1 processing screen gate', () =>
         render(<>{renderLogView(makeCtx({ status: 'processing' }))}</>);
         expect(screen.getByText(BRAND)).toBeInTheDocument();
         expect(screen.queryByText(SPINNER_HEADING)).toBeNull();
+    });
+});
+
+// ---- wave-2.4 follow-up: day 1 of the pilot, BOTH flag states ----------------
+//
+// spec: dfes-companion-2026-07-11 (wave-2.4)
+//
+// The farmer this covers has no schedule template, no planned tasks and has not
+// yet spoken to the app — the literal first morning of the pilot. Wave 2.4 gave
+// that day the honest treatment inside DailyLoopHero only, and `dailyLoop`
+// defaults OFF (featureFlags.ts:73), so the path PRODUCTION renders was left
+// printing "0%" and "Day Not Closed" at him, and firing "Yesterday not fully
+// closed" about a yesterday on which nothing was ever planned or recorded.
+//
+// The day-state here is not hand-written: it is what the real `computeDayState`
+// returns for that farmer, so these tests fail if either the fact or its
+// rendering regresses.
+describe('renderLogView — a brand-new farmer with no schedule (both flag states)', () => {
+    /** No crops, no schedule, no tasks, no logs — literally nothing has happened. */
+    const emptyDay = computeDayState({ logs: [], crops: [], tasks: [], date: TODAY_KEY });
+
+    it('computeDayState reports the day as NOT STARTED (not 0%-and-failing, not closed)', () => {
+        expect(emptyDay.hasStarted).toBe(false);
+        expect(emptyDay.closurePercent).toBe(0);
+        expect(emptyDay.isClosed).toBe(false);
+    });
+
+    it('OFF (production today): the ring shows a dash, the label says Day Not Started, no yesterday banner', async () => {
+        const renderLogView = await loadRenderLogView(false);
+        const ctx = makeCtx({
+            showCloseDaySummary: true,
+            todayDayState: emptyDay,
+            yesterdayDayState: emptyDay,
+        } as unknown as Partial<AppRouterContext>);
+        render(<>{renderLogView(ctx)}</>);
+
+        // The ring: no number at all. "0%" beside a farmer who has done nothing
+        // wrong reads as a failing grade on a day that has not begun.
+        expect(screen.getByTestId('daily-closure-ring')).toHaveTextContent('—');
+        expect(screen.queryByText('0%')).toBeNull();
+
+        // The label: the third state, in neutral stone rather than warning amber.
+        expect(screen.getByTestId('daily-closure-label')).toHaveTextContent('Day Not Started');
+        expect(screen.queryByText('Day Not Closed')).toBeNull();
+
+        // The Close-Day summary must not contradict the label three lines above it.
+        expect(screen.getByText('Nothing recorded yet today.')).toBeInTheDocument();
+        expect(screen.queryByText(/Day closure pending/)).toBeNull();
+
+        // Yesterday never started either — there is no leftover to chase.
+        expect(screen.queryByText('Yesterday not fully closed')).toBeNull();
+    });
+
+    it('OFF: a yesterday that GENUINELY has open work still raises the banner', async () => {
+        const renderLogView = await loadRenderLogView(false);
+        const ctx = makeCtx({
+            todayDayState: emptyDay,
+            yesterdayDayState: {
+                closurePercent: 40, isClosed: false, hasStarted: true,
+                completedCount: 1, plannedCount: 3, pendingCount: 2, unverifiedCount: 0,
+            },
+        } as unknown as Partial<AppRouterContext>);
+        render(<>{renderLogView(ctx)}</>);
+
+        expect(screen.getByText('Yesterday not fully closed')).toBeInTheDocument();
+    });
+
+    it('ON: the hero ring shows a dash and invites him to speak; no yesterday banner', async () => {
+        const renderLogView = await loadRenderLogView(true);
+        const ctx = makeCtx({
+            todayDayState: emptyDay,
+            yesterdayDayState: emptyDay,
+        } as unknown as Partial<AppRouterContext>);
+        render(<>{renderLogView(ctx)}</>);
+
+        expect(screen.getByTestId('daily-loop-hero-ring')).toHaveTextContent('—');
+        expect(screen.queryByText('0%')).toBeNull();
+        expect(screen.getByTestId('daily-loop-hero-line')).toHaveTextContent('dfes.dailyLoopDayFree');
+
+        // The legacy label under the hero must agree with the hero, not fight it.
+        expect(screen.getByTestId('daily-closure-label')).toHaveTextContent('Day Not Started');
+        expect(screen.queryByText('Yesterday not fully closed')).toBeNull();
     });
 });

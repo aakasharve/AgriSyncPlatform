@@ -186,6 +186,30 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         })
         : [];
 
+    // spec: dfes-companion-2026-07-11 (wave-2.4 follow-up) — the legacy Daily
+    // Closure card, which is what PRODUCTION renders today (VITE_DAILY_LOOP
+    // defaults OFF), gets the same honest treatment DailyLoopHero already has.
+    //
+    // Wave 2.4 stopped an empty day scoring a vacuous 100 / `isClosed`. Read
+    // through a two-state label, that turned a day that has not begun into
+    // "0%" + "Day Not Closed" — a farmer with no schedule template, i.e. day 1
+    // of the pilot, opening the app to a failing grade and a reproach for
+    // having done nothing wrong. A day is one of THREE things, not two:
+    //
+    //   not started  — nothing planned, nothing recorded: there is no
+    //                  denominator, so no number is shown (a flat track and a
+    //                  dash) and the label says so plainly, in neutral stone
+    //                  rather than warning amber.
+    //   not closed   — something is planned or recorded and not everything is
+    //                  settled: the filled ring, amber label. Unchanged.
+    //   closed       — everything done and confirmed: 100%, emerald. Unchanged.
+    const dayClosureLabel = !todayDayState.hasStarted
+        ? 'Day Not Started'
+        : todayDayState.isClosed ? 'Day Closed' : 'Day Not Closed';
+    const dayClosureTone = !todayDayState.hasStarted
+        ? 'text-stone-500'
+        : todayDayState.isClosed ? 'text-emerald-700' : 'text-amber-700';
+
     return (
         <>
             {/* IDLE / RECORDING STATE */}
@@ -236,18 +260,26 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                             <div
                                                 className="w-14 h-14 rounded-full p-1"
                                                 style={{
-                                                    background: `conic-gradient(#059669 ${todayDayState.closurePercent * 3.6}deg, #e7e5e4 0deg)`
+                                                    background: todayDayState.hasStarted
+                                                        ? `conic-gradient(#059669 ${todayDayState.closurePercent * 3.6}deg, #e7e5e4 0deg)`
+                                                        : '#e7e5e4'
                                                 }}
                                             >
-                                                <div className="w-full h-full rounded-full bg-white flex items-center justify-center text-[11px] font-black text-stone-700">
-                                                    {todayDayState.closurePercent}%
+                                                <div
+                                                    data-testid="daily-closure-ring"
+                                                    className="w-full h-full rounded-full bg-white flex items-center justify-center text-[11px] font-black text-stone-700"
+                                                >
+                                                    {todayDayState.hasStarted ? `${todayDayState.closurePercent}%` : '—'}
                                                 </div>
                                             </div>
                                         )}
                                         <div>
                                             <p className="text-xs uppercase tracking-wide font-bold text-stone-400">Daily Closure</p>
-                                            <p className={`text-sm font-bold ${todayDayState.isClosed ? 'text-emerald-700' : 'text-amber-700'}`}>
-                                                {todayDayState.isClosed ? 'Day Closed' : 'Day Not Closed'}
+                                            <p
+                                                data-testid="daily-closure-label"
+                                                className={`text-sm font-bold ${dayClosureTone}`}
+                                            >
+                                                {dayClosureLabel}
                                             </p>
                                         </div>
                                     </div>
@@ -275,10 +307,16 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
 
                                 {showCloseDaySummary && (
                                     <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2">
+                                        {/* Same three states as the label above — otherwise one
+                                            fact renders as "Day Not Started" up here and
+                                            "Day closure pending: 0 tasks and 0 unverified
+                                            entries" three lines below it. */}
                                         <p className="text-xs font-semibold text-stone-700">
-                                            {todayDayState.isClosed
-                                                ? 'Today is fully closed.'
-                                                : `Day closure pending: ${todayDayState.pendingCount} tasks and ${todayDayState.unverifiedCount} unverified entries.`}
+                                            {!todayDayState.hasStarted
+                                                ? 'Nothing recorded yet today.'
+                                                : todayDayState.isClosed
+                                                    ? 'Today is fully closed.'
+                                                    : `Day closure pending: ${todayDayState.pendingCount} tasks and ${todayDayState.unverifiedCount} unverified entries.`}
                                         </p>
                                         {todayDayState.unverifiedCount > 0 && (
                                             <button
@@ -293,8 +331,17 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
 
                                 {/* Daily Clarity Loop v1: when the loop is ON, yesterday's leftover
                                     is carried into the hero above ("काल राहिलं"), so this separate
-                                    banner is suppressed. When OFF it renders exactly as before. */}
-                                {!FEATURE_FLAGS.dailyLoop && (!yesterdayDayState.isClosed || showCloseYesterdaySummary) && (
+                                    banner is suppressed.
+
+                                    wave-2.4 follow-up: `!isClosed` alone now fires on a yesterday
+                                    that never STARTED — the second morning of the pilot, for a
+                                    farmer with no schedule, would open to "Yesterday not fully
+                                    closed" about a day on which nothing was ever planned or
+                                    recorded. There is no leftover to chase, so there is nothing to
+                                    say. It still fires for a yesterday that genuinely has open
+                                    work, and the summary stays reachable once opened. */}
+                                {!FEATURE_FLAGS.dailyLoop
+                                    && ((yesterdayDayState.hasStarted && !yesterdayDayState.isClosed) || showCloseYesterdaySummary) && (
                                     <div className="pt-1">
                                         <button
                                             onClick={() => setShowCloseYesterdaySummary(prev => !prev)}

@@ -35,6 +35,14 @@ type ViewHelpers = ReturnType<typeof useAppViewHelpers>;
 export interface DayStateSnapshot {
     closurePercent: number;
     isClosed: boolean;
+    /**
+     * spec: dfes-companion-2026-07-11 (wave-2.4 follow-up) — false only when the
+     * day has nothing planned AND nothing recorded. Carried through to the view
+     * (rather than re-derived from `closurePercent === 0` at each render site)
+     * so the ring, the closure label and the yesterday banner all answer
+     * "has this day begun?" from the ONE fact computeDayState decided it with.
+     */
+    hasStarted: boolean;
     completedCount: number;
     plannedCount: number;
     pendingCount: number;
