@@ -174,18 +174,26 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                             continue; // ApplicationInputItem requires a non-blank product name.
                         }
 
+                        // wave-3.12 — how sure he was of THIS dose. The mix item's own
+                        // "numbers" wins; otherwise the parent input's map covers its mix.
+                        var doseFact = ReadNumericFactWithParent(item, input, "dose");
+
                         var child = ApplicationInputItem.Create(
                             id: ids.New(),
                             operationId: opId,
                             productName: productName!,
                             productType: productType,
                             npkGrade: ReadString(item, "npkGrade"),
+                            // P4 — "आठवत नाही" carries no number, so none is read and none is
+                            // invented. The certainty column is where the unknown lives.
                             doseAmount: ReadDecimal(item, "dose"),
                             doseUnit: ReadString(item, "unit"),
                             doseBasisQty: ReadDecimal(item, "basisQty"),
                             doseBasisUnit: ReadString(item, "basisUnit"),
                             ordinal: mixOrdinal,
-                            createdAtUtc: now);
+                            createdAtUtc: now,
+                            doseCertainty: ReadCertainty(doseFact),
+                            doseSpokenText: ReadSpokenText(doseFact));
                         await repository.AddApplicationInputItemAsync(child, ct);
                         children++;
                         mixOrdinal++;
@@ -216,7 +224,11 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                             doseBasisQty: ReadDecimal(input, "basisQty"),
                             doseBasisUnit: ReadString(input, "basisUnit"),
                             ordinal: 0,
-                            createdAtUtc: now);
+                            createdAtUtc: now,
+                            // wave-3.12 — the legacy shape states its dose on the input row,
+                            // so its certainty is read from that same row.
+                            doseCertainty: ReadCertainty(ReadNumericFact(input, "dose")),
+                            doseSpokenText: ReadSpokenText(ReadNumericFact(input, "dose")));
                         await repository.AddApplicationInputItemAsync(legacyChild, ct);
                         children++;
                     }
@@ -248,7 +260,10 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                     durationHours: duration,
                     waterVolumeLitres: ReadDecimal(item, "waterVolumeLitres"),
                     linkedActivityId: ReadGuid(item, "linkedActivityId"),
-                    createdAtUtc: now);
+                    createdAtUtc: now,
+                    // wave-3.12 — how sure he was of the WATER.
+                    waterCertainty: ReadCertainty(ReadNumericFact(item, "waterVolumeLitres")),
+                    waterSpokenText: ReadSpokenText(ReadNumericFact(item, "waterVolumeLitres")));
                 await repository.AddIrrigationEntryAsync(entry, ct);
                 children++;
 
@@ -279,7 +294,11 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                     // NO-MULTIPLY (D3): only an EXPLICIT stated total — never rate × count.
                     totalCost: ReadDecimal(item, "totalCost"),
                     linkedActivityId: ReadGuid(item, "linkedActivityId"),
-                    createdAtUtc: now);
+                    createdAtUtc: now,
+                    // wave-3.12 — how sure he was of the COST. CostEntry.Create throws on
+                    // amount <= 0, so an unknown cost has nowhere else honest to live.
+                    costCertainty: ReadCertainty(ReadNumericFact(item, "totalCost")),
+                    costSpokenText: ReadSpokenText(ReadNumericFact(item, "totalCost")));
                 await repository.AddLabourAssignmentAsync(assignment, ct);
                 children++;
             }
@@ -416,6 +435,64 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
     }
 
     // ── tolerant scalar readers ────────────────────────────────────────────────
+    // ── wave-3.12, spec Ruling 5 — the per-number certainty map ──────────────
+    //
+    // Wire shape, beside the number it qualifies:
+    //   "numbers": { "dose": { "certainty": "approximate", "spokenText": "अंदाजे ५०० मिली" } }
+    //
+    // The KEY names the sibling numeric field ("dose", "totalCost",
+    // "waterVolumeLitres"), so certainty belongs to each NUMBER and not to the log: a
+    // farmer can be exact about the wage and vague about the dose in one sentence.
+    //
+    // Doctrine P8 — certainty is a DIFFERENT AXIS from provenance and is never folded
+    // into it. Doctrine P4 — an unreadable or absent map yields NULL, never Reported: a
+    // number nobody asked about must not come back claiming he was sure of it.
+
+    /// <summary>The <c>numbers.&lt;key&gt;</c> object, or <c>default</c> when absent.</summary>
+    private static JsonElement ReadNumericFact(JsonElement el, string key)
+        => el.ValueKind == JsonValueKind.Object
+           && el.TryGetProperty("numbers", out var numbers)
+           && numbers.ValueKind == JsonValueKind.Object
+           && numbers.TryGetProperty(key, out var fact)
+           && fact.ValueKind == JsonValueKind.Object
+            ? fact
+            : default;
+
+    private static NumericCertainty? ReadCertainty(JsonElement fact)
+        => fact.ValueKind != JsonValueKind.Object ? null : Norm(ReadString(fact, "certainty")) switch
+        {
+            "reported" => NumericCertainty.Reported,
+            "approximate" => NumericCertainty.Approximate,
+            "unknown" => NumericCertainty.Unknown,
+            // An unrecognised word is NOT quietly read as Reported — that would invent
+            // confidence the farmer never expressed.
+            _ => null,
+        };
+
+    /// <summary>His own words for the number. Trimmed, never synthesised.</summary>
+    private static string? ReadSpokenText(JsonElement fact)
+    {
+        if (fact.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var text = ReadString(fact, "spokenText");
+        return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+    }
+
+    /// <summary>
+    /// The fact for <paramref name="key"/> on <paramref name="row"/>, falling back to
+    /// <paramref name="parent"/>. The mix item's own certainty wins; a map stated once on
+    /// the parent input covers its mix, which is the shape the manual-entry screen builds
+    /// (the dose lives on the mix item, the qualifier on the row the farmer edited).
+    /// </summary>
+    private static JsonElement ReadNumericFactWithParent(JsonElement row, JsonElement parent, string key)
+    {
+        var own = ReadNumericFact(row, key);
+        return own.ValueKind == JsonValueKind.Object ? own : ReadNumericFact(parent, key);
+    }
+
     private static string? ReadString(JsonElement el, string prop)
         => el.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.String
             ? v.GetString()

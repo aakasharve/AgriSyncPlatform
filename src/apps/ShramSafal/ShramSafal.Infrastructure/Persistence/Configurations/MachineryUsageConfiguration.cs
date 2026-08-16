@@ -34,6 +34,17 @@ internal sealed class MachineryUsageConfiguration : IEntityTypeConfiguration<Mac
         builder.Property(x => x.LinkedActivityId).HasColumnName("linked_activity_id");
         builder.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
 
+        // ── wave-3.12, spec Ruling 5 — certainty is a DIFFERENT AXIS from
+        // provenance (doctrine P8), so it gets its own nullable columns rather than
+        // overloading anything that already exists. Stored as the enum NAME, matching
+        // every other enum on these tables, so the column reads honestly in psql.
+        // NULL on every row written before this migration and on every row nobody was
+        // asked about — never defaulted to Reported (P4).
+        builder.Property(x => x.CostCertainty)
+            .HasColumnName("cost_certainty").HasConversion<string>().HasMaxLength(20);
+        builder.Property(x => x.CostSpokenText)
+            .HasColumnName("cost_spoken_text").HasMaxLength(200);
+
         builder.HasIndex(x => x.DailyLogId).HasDatabaseName("ix_machinery_usages_daily_log_id");
         builder.Ignore(x => x.DomainEvents);
     }

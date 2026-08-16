@@ -38,6 +38,42 @@ import type { TranscriptSnapshot } from './log-timeline.types'; // local use in 
  */
 export type FieldProvenance = 'spoken' | 'confirmed' | 'derived' | 'assumed';
 
+/**
+ * wave-3.12, spec Ruling 5 (2026-08-15) — **every number remembers how sure the farmer
+ * was.**
+ *
+ * A DIFFERENT AXIS from `FieldProvenance` above, and doctrine **P8** forbids conflating
+ * them: provenance says how the SYSTEM came by a value; certainty says how sure the
+ * FARMER was of it. "अंदाजे ५०० मिली" is `spoken` AND `approximate`. Never overload the one
+ * to carry the other, and never add a fifth `FieldProvenance` member for this.
+ *
+ * - `reported`    — he stated it plainly, no hedge. The ordinary case.
+ * - `approximate` — he explicitly marked it an estimate ("अंदाजे", "साधारण", "जवळपास").
+ * - `unknown`     — he does not remember. There is NO numeric value, and none is invented.
+ */
+export type NumericCertainty = 'reported' | 'approximate' | 'unknown';
+
+/** What a stated quantity is measured against, when he said. */
+export type NumericBasis = 'per_pump' | 'per_acre' | 'whole_plot' | 'per_litre' | 'per_person_day';
+
+export interface NumericFact {
+    certainty: NumericCertainty;
+    /** ABSENT when `certainty === 'unknown'`. Never 0 — doctrine P4: an unknown is not a zero. */
+    quantity?: number;
+    unit?: string;
+    basis?: NumericBasis;
+    /** The farmer's own words for this number, kept verbatim. */
+    spokenText?: string;
+}
+
+/**
+ * Key = the SIBLING numeric field this qualifies — `'dose'`, `'totalCost'`,
+ * `'waterVolumeLitres'`. Certainty therefore belongs to each NUMBER and not to the whole
+ * log: a farmer can be exact about the wage he paid and vague about the dose in the same
+ * sentence.
+ */
+export type NumericFacts = Record<string, NumericFact>;
+
 // =============================================================================
 // LOG SCOPE (What context does a log apply to?)
 // =============================================================================
@@ -117,6 +153,11 @@ export interface CropActivityEvent {
 
 export interface IrrigationEvent {
     id: string;
+    /**
+     * wave-3.12, spec Ruling 5 — how sure the farmer was of each number on this row,
+     * keyed by the sibling field it qualifies. A DIFFERENT axis from provenance (P8).
+     */
+    numbers?: NumericFacts;
     linkedActivityId?: string;
     method: string;
     source: string;
@@ -152,6 +193,11 @@ export interface IrrigationEvent {
 
 export interface LabourEvent {
     id: string;
+    /**
+     * wave-3.12, spec Ruling 5 — how sure the farmer was of each number on this row,
+     * keyed by the sibling field it qualifies. A DIFFERENT axis from provenance (P8).
+     */
+    numbers?: NumericFacts;
     linkedActivityId?: string;
     type: 'HIRED' | 'CONTRACT' | 'SELF';
     shiftId?: string;
@@ -200,6 +246,11 @@ export type InputReason = 'Preventive' | 'Disease' | 'Pest' | 'Growth' | 'Defici
 
 export interface InputMixItem {
     id: string;
+    /**
+     * wave-3.12, spec Ruling 5 — how sure the farmer was of each number on this row,
+     * keyed by the sibling field it qualifies. A DIFFERENT axis from provenance (P8).
+     */
+    numbers?: NumericFacts;
     productName: string;
     dose?: number;
     unit: string; // ml/L, g/L, kg/acre, etc.
@@ -220,6 +271,11 @@ export interface InputMixItem {
 
 export interface InputEvent {
     id: string;
+    /**
+     * wave-3.12, spec Ruling 5 — how sure the farmer was of each number on this row,
+     * keyed by the sibling field it qualifies. A DIFFERENT axis from provenance (P8).
+     */
+    numbers?: NumericFacts;
     linkedActivityId?: string;
 
     // Expense linkage (Phase 3 No-Duplicate Rule)
@@ -281,6 +337,11 @@ export interface InputEvent {
 
 export interface MachineryEvent {
     id: string;
+    /**
+     * wave-3.12, spec Ruling 5 — how sure the farmer was of each number on this row,
+     * keyed by the sibling field it qualifies. A DIFFERENT axis from provenance (P8).
+     */
+    numbers?: NumericFacts;
     linkedActivityId?: string;
     type: 'tractor' | 'tiller' | 'harvester' | 'drone' | 'sprayer' | 'unknown';
     ownership: 'owned' | 'rented' | 'unknown';
@@ -328,6 +389,11 @@ export interface ExpenseItem {
 
 export interface ActivityExpenseEvent {
     id: string;
+    /**
+     * wave-3.12, spec Ruling 5 — how sure the farmer was of each number on this row,
+     * keyed by the sibling field it qualifies. A DIFFERENT axis from provenance (P8).
+     */
+    numbers?: NumericFacts;
     reason: string;
     category?: string;
     vendor?: string;

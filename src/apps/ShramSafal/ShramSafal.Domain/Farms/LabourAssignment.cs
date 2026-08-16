@@ -1,5 +1,7 @@
 using AgriSync.BuildingBlocks.Domain;
 
+using ShramSafal.Domain.Common;
+
 namespace ShramSafal.Domain.Farms;
 
 /// <summary>
@@ -20,7 +22,8 @@ public sealed class LabourAssignment : Entity<Guid>
         Guid id, Guid dailyLogId, LabourEngagementType engagementType,
         int? maleCount, int? femaleCount, int? workerCount, decimal? wagePerPerson,
         ContractUnit? contractUnit, decimal? contractQuantity, decimal? totalCost,
-        Guid? linkedActivityId, DateTime createdAtUtc)
+        Guid? linkedActivityId, DateTime createdAtUtc,
+        NumericCertainty? costCertainty, string? costSpokenText)
         : base(id)
     {
         DailyLogId = dailyLogId;
@@ -34,6 +37,8 @@ public sealed class LabourAssignment : Entity<Guid>
         TotalCost = totalCost;          // NO-MULTIPLY: stored as-given, never computed
         LinkedActivityId = linkedActivityId;
         CreatedAtUtc = createdAtUtc;
+        CostCertainty = costCertainty;
+        CostSpokenText = costSpokenText;
     }
 
     public Guid DailyLogId { get; private set; }
@@ -48,11 +53,25 @@ public sealed class LabourAssignment : Entity<Guid>
     public Guid? LinkedActivityId { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
 
+    // ── wave-3.12, spec Ruling 5 — how sure the farmer was of the COST ──
+    /// <summary>NULL when he was never asked. Never defaulted to Reported (P4).
+    /// <c>Unknown</c> is the only honest home for a cost he cannot recall:
+    /// <c>CostEntry.Create</c> throws on <c>amount &lt;= 0</c>, so "आठवत नाही" must never
+    /// become a CostEntry row at all.</summary>
+    public NumericCertainty? CostCertainty { get; private set; }
+
+    /// <summary>His own words for the cost, kept verbatim beside it.</summary>
+    public string? CostSpokenText { get; private set; }
+
     public static LabourAssignment Create(
         Guid id, Guid dailyLogId, LabourEngagementType engagementType,
         int? maleCount, int? femaleCount, int? workerCount, decimal? wagePerPerson,
         ContractUnit? contractUnit, decimal? contractQuantity, decimal? totalCost,
-        Guid? linkedActivityId, DateTime createdAtUtc)
+        Guid? linkedActivityId, DateTime createdAtUtc,
+        // wave-3.12 — trailing and OPTIONAL so every pre-existing call site keeps
+        // compiling and keeps writing NULL, which is exactly "not asked, not stated".
+        NumericCertainty? costCertainty = null, string? costSpokenText = null)
         => new(id, dailyLogId, engagementType, maleCount, femaleCount, workerCount,
-               wagePerPerson, contractUnit, contractQuantity, totalCost, linkedActivityId, createdAtUtc);
+               wagePerPerson, contractUnit, contractQuantity, totalCost, linkedActivityId, createdAtUtc,
+               costCertainty, costSpokenText);
 }

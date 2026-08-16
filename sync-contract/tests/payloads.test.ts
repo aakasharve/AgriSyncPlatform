@@ -159,6 +159,42 @@ describe('CreateDailyLogPayload', () => {
         });
         expect(r.success).toBe(true);
     });
+    // wave-3.12, spec Ruling 5 — the per-number certainty map rides an ordinary draft row.
+    // No schema change was needed here: draft rows are `z.unknown()` by design, so `numbers`
+    // already validates. These two cases PIN that, because the guarantee is easy to lose —
+    // a future tightening of ZDraftBucket would start rejecting the farmer's whole day.
+    it('accepts a draft row carrying a per-number certainty map', () => {
+        const r = payloads.CreateDailyLogPayload.safeParse({
+            dailyLogId: VALID_GUID_A,
+            farmId: VALID_GUID_B,
+            plotId: VALID_GUID_C,
+            cropCycleId: VALID_GUID_D,
+            logDate: VALID_LOG_DATE,
+            manualDraft: {
+                inputs: [{
+                    id: 'in-1',
+                    productName: 'Mancozeb',
+                    mix: [{ id: 'm-1', productName: 'Mancozeb', dose: 500, unit: 'ml' }],
+                    numbers: { dose: { certainty: 'approximate', spokenText: 'अंदाजे ५०० मिली' } },
+                }],
+            },
+        });
+        expect(r.success).toBe(true);
+    });
+    it('still rejects a numbers-carrying draft that is not an ARRAY of rows', () => {
+        // Row-level meaning stays server-side (ManualDraftNormalizer allow-lists the keys
+        // and LedgerDerivationService reads inside the map), so there is no row shape this
+        // schema can reject. The bucket shape it CAN police, and still does.
+        const r = payloads.CreateDailyLogPayload.safeParse({
+            dailyLogId: VALID_GUID_A,
+            farmId: VALID_GUID_B,
+            plotId: VALID_GUID_C,
+            cropCycleId: VALID_GUID_D,
+            logDate: VALID_LOG_DATE,
+            manualDraft: { inputs: { numbers: { dose: { certainty: 'approximate' } } } },
+        });
+        expect(r.success).toBe(false);
+    });
     it('rejects a dayOutcome outside the shared vocabulary', () => {
         // One vocabulary for what a day turned out to be. A server that accepted
         // 'RAINED_OFF' here would store a value DfesLensExtractor.DeclaredNoWork cannot

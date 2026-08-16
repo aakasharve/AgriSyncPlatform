@@ -46,6 +46,19 @@ internal static class ManualDraftNormalizer
     // with no reader there is dead weight; a reader there with no name here is a
     // fact of the farmer's that would be silently dropped.
 
+
+    // wave-3.12, spec Ruling 5 (2026-08-15) — "numbers", the per-number certainty map:
+    // { dose: { certainty, quantity?, unit?, basis?, spokenText? } }.
+    //
+    // 🛑 THIS FILE SILENTLY EATS ANYTHING NOT ALLOW-LISTED (see CopyAllowed). Without the
+    // name on each list below, the wire test passes, the client ships the map, and the
+    // farmer's "अंदाजे ५०० मिली" vanishes between the sync boundary and the ledger with no
+    // error anywhere. Adding it here is mandatory, not decorative.
+    //
+    // It is copied VERBATIM like every other field — the object is handed through
+    // untouched and LedgerDerivationService is the only thing that reads inside it.
+    private const string NumbersField = "numbers";
+
     private static readonly string[] InputFields =
     [
         // NOTE: "sourceText" is deliberately ABSENT. It is a span of something SPOKEN,
@@ -55,17 +68,20 @@ internal static class ManualDraftNormalizer
         // transcript.
         "type", "productName", "npkGrade", "quantity", "dose", "unit",
         "basisQty", "basisUnit",
+        NumbersField,
     ];
 
     private static readonly string[] MixFields =
     [
         "productName", "npkGrade", "dose", "unit", "basisQty", "basisUnit",
+        NumbersField,
     ];
 
     private static readonly string[] IrrigationFields =
     [
         "role", "weatherAdjusted", "method", "source", "durationHours",
         "waterVolumeLitres", "linkedActivityId",
+        NumbersField,
     ];
 
     private static readonly string[] LabourFields =
@@ -76,6 +92,7 @@ internal static class ManualDraftNormalizer
         // no branch anywhere in this file that derives it from rate x count.
         "totalCost",
         "linkedActivityId",
+        NumbersField,
     ];
 
     private static readonly string[] MachineryFields =
@@ -83,6 +100,7 @@ internal static class ManualDraftNormalizer
         "type", "ownership", "hoursUsed", "rentalCost", "fuelCost", "implement",
         "nozzlesActive", "fanState", "fuelType", "fuelQuantity",
         "operationPerformed", "linkedActivityId",
+        NumbersField,
     ];
 
     private static readonly string[] ObservationFields =

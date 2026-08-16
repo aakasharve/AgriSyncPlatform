@@ -26,6 +26,17 @@ internal sealed class ApplicationInputItemConfiguration : IEntityTypeConfigurati
         builder.Property(x => x.Ordinal).HasColumnName("ordinal").IsRequired();
         builder.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
 
+        // ── wave-3.12, spec Ruling 5 — certainty is a DIFFERENT AXIS from
+        // provenance (doctrine P8), so it gets its own nullable columns rather than
+        // overloading anything that already exists. Stored as the enum NAME, matching
+        // every other enum on these tables, so the column reads honestly in psql.
+        // NULL on every row written before this migration and on every row nobody was
+        // asked about — never defaulted to Reported (P4).
+        builder.Property(x => x.DoseCertainty)
+            .HasColumnName("dose_certainty").HasConversion<string>().HasMaxLength(20);
+        builder.Property(x => x.DoseSpokenText)
+            .HasColumnName("dose_spoken_text").HasMaxLength(200);
+
         builder.HasIndex(x => x.OperationId).HasDatabaseName("ix_application_input_items_operation_id");
         builder.Ignore(x => x.DomainEvents);
     }
