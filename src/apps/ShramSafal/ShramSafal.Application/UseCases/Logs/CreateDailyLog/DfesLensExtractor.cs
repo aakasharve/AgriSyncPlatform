@@ -114,8 +114,15 @@ internal static class DfesLensExtractor
         //     denominator only, and is the one the founder's decision changes.
         var dose = Dim("DOSE", W_DOSE, Best(CoverDose(roots), CoverDose(persisted)));           // input-op only
         var carrier = Dim("CARRIER", W_CARRIER, Best(CoverCarrier(roots), CoverCarrier(persisted))); // input- or irrigation-op
+        //
+        // wave-3.4, founder decision 14 — `carrierOwed` additionally consults the PRODUCT
+        // (see OwedCarrier / OwesWater below). It reads `appliesNewRules` for exactly the
+        // reason the guard block above states: it is a scoring change, so a day already
+        // scored under dfes-3 must keep asking. `doseOwed` is untouched — a dry fertiliser
+        // still has a dose.
         var doseOwed = Dim("DOSE", W_DOSE, Best(OwedDose(roots), OwedDose(persisted)));
-        var carrierOwed = Dim("CARRIER", W_CARRIER, Best(OwedCarrier(roots), OwedCarrier(persisted)));
+        var carrierOwed = Dim("CARRIER", W_CARRIER,
+            Best(OwedCarrier(roots, appliesNewRules), OwedCarrier(persisted, appliesNewRules)));
 
         // wave-3.5, Ruling 3 — do not ask the farmer to repeat weather the app already
         // knows. `weather` above (the LENS reading) is UNTOUCHED: it feeds ThreeLensScorer
@@ -254,12 +261,32 @@ internal static class DfesLensExtractor
         return new Cover(true, hasDose ? 1.0 : 0.5);
     }
 
-    // FOUNDER DECISION 2026-08-13 — an input application owes the water/carrier
-    // question even when it was applied to the SOIL (method "Soil", no spray tank).
-    // The founder was asked directly whether a soil-applied fertiliser should be
-    // exempt and answered NO: keep asking. Do NOT add a `method == "Soil"` bypass
-    // here — it looks like an obvious cleanup and it would reverse an explicit
-    // decision. If it is ever revisited, that is a founder call, not a refactor.
+    // FOUNDER DECISION 14 (2026-08-16) — SUPERSEDES the 2026-08-13 decision that lived
+    // here. On 2026-08-13 the founder was asked whether a soil-applied fertiliser should
+    // still owe the water question and answered "keep asking"; this comment then forbade
+    // a `method == "Soil"` bypass.
+    //
+    // Decision 14 does NOT restore that bypass — it removes the method flag from the
+    // decision entirely. Water-owing is resolved from the PRODUCT
+    // (ShramSafal.Domain.Dfes.ProductWaterAffinity, applied in OwedCarrier below):
+    //   • 0:52:34 (MKP) owes water even when the row is flagged method "Soil"
+    //   • DAP does not owe it even when the row is flagged method "Spray"
+    //   • an unrecognised product keeps asking, which is the 2026-08-13 behaviour intact
+    // Under the forbidden bypass the first and third of those would go silent, so the two
+    // rules are distinguishable in behaviour and not merely in wording. That is why this
+    // is not the bypass the 2026-08-13 note forbade.
+    //
+    // The founder's words: "it must understand from the word, or not flagging it anywhere,
+    // but keep that fertilizer name — such as a farmer might say '0 52 34 दिल', that means
+    // an NPK grade that is given. We already made the AI intelligent enough, don't just
+    // confuse it." Follow-up ruling: `fertiliser rule = dry granular`.
+    //
+    // Do NOT reintroduce a method test as the PRIMARY signal without a newer founder
+    // ruling. `inputs[].method` may act as a tie-breaker only — it may never override an
+    // affinity that resolved from the product.
+    //
+    // CoverCarrier itself is unchanged: it still measures what the farmer DESCRIBED. The
+    // product rule changes only what the day OWES, which lives in OwedCarrier.
     private static Cover CoverCarrier(IReadOnlyList<JsonElement> roots)
     {
         var inputs = roots.SelectMany(r => Arr(r, "inputs")).ToList();
@@ -321,9 +348,46 @@ internal static class DfesLensExtractor
             : new Cover(true, 0.0);
     }
 
-    private static Cover OwedCarrier(IReadOnlyList<JsonElement> roots)
+    /// <summary>
+    /// wave-3.4, founder decision 14 (2026-08-16). Every product row on the day, and what
+    /// it owes.
+    ///
+    /// <para><b>The day owes CARRIER when ANY product on it is water-carried, OR when at
+    /// least one product is UNKNOWN.</b> It owes nothing only when EVERY named product is
+    /// dry. The asymmetry is deliberate: one unrecognised product is enough to keep the
+    /// question, because retiring it would remove the farmer's only route to fill that
+    /// bucket on a day we may simply have failed to recognise (doctrine P4).</para>
+    ///
+    /// <para>A day that named no product at all keeps today's behaviour exactly — that is
+    /// the <c>Count == 0</c> line, and it is what stops this change touching "I sprayed."
+    /// (decision B, dfes-3) or a pure-irrigation day.</para>
+    ///
+    /// <para><c>inputs[].method</c> is not read here, by design. See the decision-14
+    /// comment on <see cref="CoverCarrier"/>.</para>
+    /// </summary>
+    private static bool OwesWater(IReadOnlyList<JsonElement> roots)
+    {
+        var affinities = roots
+            .SelectMany(r => Arr(r, "inputs"))
+            .SelectMany(i => Arr(i, "mix").Any()
+                ? Arr(i, "mix").Select(m => ProductWaterAffinity.Resolve(Str(m, "npkGrade"), Str(m, "productName")))
+                : [ProductWaterAffinity.Resolve(Str(i, "npkGrade"), Str(i, "productName"))])
+            .ToList();
+
+        if (affinities.Count == 0) return true;               // no product named → today's rule
+        return !affinities.All(a => a == WaterAffinity.Dry);  // all-dry → owes nothing
+    }
+
+    /// <param name="appliesNewRules">The wave-3.5 score-engine version guard. Decision 14
+    /// is a SCORING change, so a day already scored under dfes-1/2/3 must keep asking —
+    /// otherwise a farmer's June number would move because we deployed in August.</param>
+    private static Cover OwedCarrier(IReadOnlyList<JsonElement> roots, bool appliesNewRules)
     {
         var described = CoverCarrier(roots);
+
+        // Decision 14 — the whole of the change, in one line.
+        if (appliesNewRules && !OwesWater(roots)) return Cover.NotApplicable;
+
         return described.Applicable || !HasApplicationOperation(roots)
             ? described
             : new Cover(true, 0.0);

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using ShramSafal.Domain.Dfes;
 
 namespace ShramSafal.Infrastructure.AI.DomainKnowledge;
 
@@ -23,21 +24,15 @@ internal static partial class NpkGradeDictionary
     // Seeded grade dictionary
     //   Key   : normalized hyphen form (the canonical grade string)
     //   Value : human-readable product identity for grape context
+    //
+    // wave-3.4 (founder decision 14, 2026-08-16): the table itself now lives in
+    // ShramSafal.Domain.Dfes.NpkGradeTable. It moved because DfesLensExtractor —
+    // an APPLICATION-layer type, which may not import Infrastructure — must read
+    // it to decide the water/carrier question from the product. This file keeps
+    // every behaviour it had; it simply stopped owning a private copy. ONE table,
+    // two readers (this STT rescue and ProductWaterAffinity), never two copies.
     // -------------------------------------------------------------------------
-    private static readonly Dictionary<string, string> KnownGrades =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            // 19/10, 26/10
-            ["0-52-34"] = "MKP (mono-potassium phosphate)",
-            ["19-19-19"] = "balanced NPK WSF",
-            // 29/10
-            ["0-60-20"] = "high-P/K WSF",
-            // 30/10
-            ["13-0-45"] = "KNO3 (potassium nitrate)",
-            // SOP / MOP family
-            ["0-0-50"] = "SOP/MOP",
-            ["0-0-60"] = "SOP/MOP",
-        };
+    private static IReadOnlyDictionary<string, string> KnownGrades => NpkGradeTable.KnownGrades;
 
     // Devanagari digit → ASCII digit translation table
     private static readonly (char Devanagari, char Ascii)[] DevanagariDigits =

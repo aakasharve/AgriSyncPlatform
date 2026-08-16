@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using ShramSafal.Domain.Dfes;
 
 namespace ShramSafal.Infrastructure.AI.DomainKnowledge;
 
@@ -24,110 +25,19 @@ internal static class GrapeInputLexicon
 {
     // -------------------------------------------------------------------------
     // Product entries
+    //
+    // wave-3.4 (founder decision 14, 2026-08-16): the catalogue itself now lives in
+    // ShramSafal.Domain.Dfes.GrapeProductRoles. It moved because DfesLensExtractor —
+    // an APPLICATION-layer type, which may not import Infrastructure — must read each
+    // product's agronomic role to decide the water/carrier question from the product.
+    // This file keeps ALL of its matching machinery (Levenshtein <= 2 and the phonetic
+    // consonant skeleton) and every behaviour it had; it simply stopped owning a
+    // private copy of the data. ONE table, two readers, never two copies — two copies
+    // would drift and the same product would classify differently depending on which
+    // code path saw it.
     // -------------------------------------------------------------------------
 
-    private sealed record LexiconEntry(
-        string CanonicalName,
-        string ChemicalClass,
-        string AgronomicRole,
-        string[] SttAliases,
-        string[] DevanagariAliases);
-
-    private static readonly LexiconEntry[] Entries =
-    [
-        new LexiconEntry(
-            "Dormex",
-            "hydrogen cyanamide",
-            "dormancy-break paste",
-            ["dormex", "dormox", "dormax"],
-            ["डॉर्मेक्स", "डॉर्मेक्‍स"]),
-
-        new LexiconEntry(
-            "Ethrel",
-            "ethephon PGR",
-            "defoliation/ripening",
-            ["ethrel", "ethephon", "ithrel", "ethril", "etrel"],
-            ["इथरेल", "एथरेल", "इथ्रेल"]),
-
-        new LexiconEntry(
-            "6-BA",
-            "cytokinin PGR",
-            "berry sizing",
-            ["6ba", "6 ba", "6b a", "6 b a", "sixba", "6-ba"],
-            ["6-बीए", "सहा बीए", "बीए"]),
-
-        new LexiconEntry(
-            "CPPU",
-            "cytokinin PGR",
-            "berry sizing",
-            ["cppu", "seepu", "cpu", "sepu"],
-            ["सीपीपीयू", "सीपीयू"]),
-
-        new LexiconEntry(
-            "GA3",
-            "gibberellin PGR",
-            "berry elongation",
-            ["ga3", "ga 3", "gibberellic acid", "gibrellic", "jibrelic"],
-            ["जीए3", "जीए ३"]),
-
-        new LexiconEntry(
-            "Bavistin",
-            "fungicide",
-            "systemic fungicide",
-            ["bavistin", "bavisteen", "bavistin", "bavistine"],
-            ["बाविस्टीन", "बाविस्टिन"]),
-
-        new LexiconEntry(
-            "Curzate",
-            "fungicide",
-            "downy mildew control",
-            ["curzate", "curzat", "cursate", "curzet", "curset"],
-            ["कर्जट", "कुर्जट", "कर्ज़ट"]),
-
-        new LexiconEntry(
-            "Alphamethrin",
-            "insecticide",
-            "pyrethroid insecticide",
-            ["alphamethrin", "alphametrin", "aplhamitren", "alphamitren",
-             "alphamethrine", "alpha methrin", "alpha mitren", "alfamitren"],
-            ["अल्फामेथ्रिन", "अल्फामिथ्रीन"]),
-
-        new LexiconEntry(
-            "Mancozeb",
-            "fungicide",
-            "contact fungicide",
-            ["mancozeb", "mancozab", "mankozeb", "mancoseb"],
-            ["मँकोजेब", "मँकोझेब"]),
-
-        new LexiconEntry(
-            "Copper sulfate",
-            "fungicide",
-            "Bordeaux mixture input",
-            ["copper sulfate", "copper sulphate", "coppersulfate", "bluestone"],
-            ["मोरचुद", "मोरचूद", "तांबे सल्फेट"]),
-
-        new LexiconEntry(
-            "Lime",
-            "Bordeaux mixture input",
-            "Bordeaux mixture alkalizer",
-            ["lime", "chuna", "calcium hydroxide"],
-            ["चुना", "चूना", "कळीचा चुना"]),
-
-        new LexiconEntry(
-            "Rally Gold",
-            "fungicide",
-            "systemic fungicide (myclobutanil)",
-            ["rally gold", "rallygold", "rali gold", "rally", "raligold",
-             "raligould", "rally gold", "ralligold"],
-            ["रॅली gold", "रॅली गोल्ड", "रॅलीगोल्ड", "रॅली"]),
-
-        new LexiconEntry(
-            "PDH",
-            "PGR adjuvant",
-            "potassium di-hydrogen adjuvant",
-            ["pdh", "p d h", "peedieach"],
-            ["पीडीएच"]),
-    ];
+    private static IReadOnlyList<GrapeProduct> Entries => GrapeProductRoles.Entries;
 
     // -------------------------------------------------------------------------
     // Public entry point
@@ -197,13 +107,13 @@ internal static class GrapeInputLexicon
     // Matching engine: Levenshtein ≤ 2 OR phonetic key match
     // -------------------------------------------------------------------------
 
-    private static LexiconEntry? FindBestMatch(string input)
+    private static GrapeProduct? FindBestMatch(string input)
     {
         var normalizedInput = NormalizeForComparison(input);
         if (string.IsNullOrWhiteSpace(normalizedInput))
             return null;
 
-        LexiconEntry? bestEntry = null;
+        GrapeProduct? bestEntry = null;
         int bestScore = int.MaxValue;
 
         foreach (var entry in Entries)
