@@ -231,17 +231,30 @@ public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // PROOF 1 — same-farm sourceAiJobId derives the typed ledger on /sync/push.
-    // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
-    public async Task SyncPush_create_daily_log_with_same_farm_source_job_populates_farm_operations_and_input_items()
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.4) — <c>Assert.True(true, _skipReason)</c> here
+    /// used to report these proofs as PASSING on any runner without Postgres on :5433, having
+    /// exercised nothing. <c>Skip.If</c> (Xunit.SkippableFact) reports the run as Skipped —
+    /// visually and in exit-code terms distinct from both Passed and Failed — so a database-less
+    /// run can never be read as proof the Fix 1 derivation behaves.
+    /// </summary>
+    private void SkipIfPostgresUnavailable()
     {
         if (_skip)
         {
-            Assert.True(true, _skipReason);
-            return;
+            output.WriteLine($"[SKIPPED] {_skipReason} — NO DATABASE WAS EXERCISED; this run proves nothing.");
         }
+
+        Skip.If(_skip, _skipReason);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PROOF 1 — same-farm sourceAiJobId derives the typed ledger on /sync/push.
+    // ─────────────────────────────────────────────────────────────────────────
+    [SkippableFact]
+    public async Task SyncPush_create_daily_log_with_same_farm_source_job_populates_farm_operations_and_input_items()
+    {
+        SkipIfPostgresUnavailable();
 
         var dailyLogId = Guid.Parse("eeee1111-1111-1111-1111-111111111111");
 
@@ -311,14 +324,10 @@ public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions
     // ─────────────────────────────────────────────────────────────────────────
     // PROOF 2 — cross-farm sourceAiJobId derives nothing (F1 isolation gate).
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task SyncPush_create_daily_log_with_cross_farm_source_job_derives_nothing_and_leaves_other_farm_untouched()
     {
-        if (_skip)
-        {
-            Assert.True(true, _skipReason);
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         var dailyLogId = Guid.Parse("eeee2222-2222-2222-2222-222222222222");
 

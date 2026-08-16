@@ -198,34 +198,29 @@ public sealed class DailyRichnessAggregateTrackedWriteTests(Xunit.Abstractions.I
     }
 
     /// <summary>
-    /// Self-skip gate. Matches the codebase's <c>Assert.True(true, reason)</c> convention
-    /// (no Xunit.SkippableFact dependency), but ALSO writes the reason to the test output —
-    /// a silently-skipped integration test that reports "passed" is exactly the kind of
-    /// false confidence this file exists to eliminate. A ~1 ms duration plus a
-    /// <c>[SKIPPED]</c> line is the tell that no database was actually touched.
+    /// spec: dfes-companion-2026-07-11 (wave-1.4) — <c>Assert.True(true, _skipReason)</c> here
+    /// used to report these proofs as PASSING on any runner without Postgres on :5433, having
+    /// exercised nothing. <c>Skip.If</c> (Xunit.SkippableFact) reports the run as Skipped —
+    /// visually and in exit-code terms distinct from both Passed and Failed — so a database-less
+    /// run can never be read as proof the tracked-write fix behaves.
     /// </summary>
-    private bool SkippedForMissingPostgres()
+    private void SkipIfPostgresUnavailable()
     {
-        if (!_skip)
+        if (_skip)
         {
-            return false;
+            output.WriteLine($"[SKIPPED] {_skipReason} — NO DATABASE WAS EXERCISED; this run proves nothing.");
         }
 
-        output.WriteLine($"[SKIPPED] {_skipReason} — NO DATABASE WAS EXERCISED; this run proves nothing.");
-        Assert.True(true, _skipReason);
-        return true;
+        Skip.If(_skip, _skipReason);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // PROOF 1 — the TRACKED accessor really persists the read-modify-write.
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task Tracked_accessor_read_modify_write_actually_updates_the_row_in_the_database()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         await MutateUnderTenantScopeAsync(TrackedDate, useTrackedAccessor: true);
 
@@ -251,13 +246,10 @@ public sealed class DailyRichnessAggregateTrackedWriteTests(Xunit.Abstractions.I
     // dropping .AsNoTracking() from the shared read-only method (which would
     // regress GetDayUnderstandingHandler's query).
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task No_tracking_accessor_mutation_is_silently_discarded_so_the_write_path_must_never_use_it()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         await MutateUnderTenantScopeAsync(NoTrackingDate, useTrackedAccessor: false);
 
@@ -278,13 +270,10 @@ public sealed class DailyRichnessAggregateTrackedWriteTests(Xunit.Abstractions.I
     // PROOF 3 — END-TO-END. RecomputeAsync over an ALREADY-EXISTING aggregate
     // (the second-log-of-the-day path the bug silently dropped) really writes.
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task RecomputeAsync_over_an_existing_aggregate_persists_the_new_derivation()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         // A real day of work: one DailyLog carrying a Completed LogTask. The log has NO
         // SourceAiJobId, so RecomputeAsync takes the persisted-work fallback → HasWork.

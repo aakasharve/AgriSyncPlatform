@@ -91,10 +91,13 @@ public sealed class CorrectionsEndpointTenancyTests : IClassFixture<CorrectionsE
     //    fails closed in TenantConnectionInterceptor. After the fix
     //    (CorrectionsEndpoints calls ICallerUserTenantScope.EstablishForCallerAsync
     //    before invoking the handler), the write must actually land. ───────────
-    [Fact]
+    [SkippableFact]
     public async Task Authenticated_caller_can_record_a_correction_and_it_lands_under_their_own_user_id()
     {
-        if (_fx.Skip) { Assert.True(true, _fx.SkipReason); return; }
+        // spec: dfes-companion-2026-07-11 (wave-1.4) — Assert.True(true, _fx.SkipReason) here
+        // used to report this proof as PASSING on any runner without Postgres on :5433, having
+        // exercised nothing. Skip.If (Xunit.SkippableFact) reports the run as Skipped instead.
+        Skip.If(_fx.Skip, _fx.SkipReason);
 
         var originalParseId = Guid.NewGuid();
         using var resp = await PostAsync(CorrectionsEndpointTenancyFixture.UserA, CorrectionBody(originalParseId));
@@ -125,10 +128,10 @@ public sealed class CorrectionsEndpointTenancyTests : IClassFixture<CorrectionsE
     //    untouched by this change. Nothing is ever written for a caller whose
     //    identity was never established — the only identity dimension this
     //    user-scoped (farm-less) table has. ──────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task Unauthenticated_caller_is_rejected_and_writes_nothing()
     {
-        if (_fx.Skip) { Assert.True(true, _fx.SkipReason); return; }
+        Skip.If(_fx.Skip, _fx.SkipReason);
 
         var originalParseId = Guid.NewGuid();
         using var req = new HttpRequestMessage(HttpMethod.Post, "/shramsafal/corrections")

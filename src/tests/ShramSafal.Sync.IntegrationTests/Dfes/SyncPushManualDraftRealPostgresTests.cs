@@ -219,28 +219,30 @@ public sealed class SyncPushManualDraftRealPostgresTests(Xunit.Abstractions.ITes
         }
     }
 
-    private bool SkippedForMissingPostgres()
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.4) — <c>Assert.True(true, _skipReason)</c> here
+    /// used to report these proofs as PASSING on any runner without Postgres on :5433, having
+    /// exercised nothing. <c>Skip.If</c> (Xunit.SkippableFact) reports the run as Skipped —
+    /// visually and in exit-code terms distinct from both Passed and Failed — so a database-less
+    /// run can never be read as proof the manual-draft derivation behaves.
+    /// </summary>
+    private void SkipIfPostgresUnavailable()
     {
-        if (!_skip)
+        if (_skip)
         {
-            return false;
+            output.WriteLine($"[SKIPPED] {_skipReason} — NO DATABASE WAS EXERCISED; this run proves nothing.");
         }
 
-        output.WriteLine($"[SKIPPED] {_skipReason} — NO DATABASE WAS EXERCISED; this run proves nothing.");
-        Assert.True(true, _skipReason);
-        return true;
+        Skip.If(_skip, _skipReason);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // PROOF 1 — a manual day WITH a draft persists typed children and scores.
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task Manual_create_daily_log_with_a_draft_persists_typed_children_and_the_day_scores()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         await WriteProvisioningEvidenceAsync();
 
@@ -341,13 +343,10 @@ public sealed class SyncPushManualDraftRealPostgresTests(Xunit.Abstractions.ITes
     // PROOF 2 — CONTROL. No draft ⇒ the pre-task-0b behaviour, verbatim.
     // This is both the defect reproduced and the old-client compatibility guard.
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task Manual_create_daily_log_without_a_draft_still_persists_nothing_and_scores_zero()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         var dailyLogId = Guid.Parse("0bbb2222-2222-2222-2222-222222222222");
 
@@ -384,13 +383,10 @@ public sealed class SyncPushManualDraftRealPostgresTests(Xunit.Abstractions.ITes
     // ─────────────────────────────────────────────────────────────────────────
     // PROOF 3 — the boundary still rejects what it should, loudly.
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task A_genuinely_unknown_payload_field_is_still_rejected()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         var response = await RunSyncPushAsync(
             clientRequestId: "req-unknown-field",
@@ -406,13 +402,10 @@ public sealed class SyncPushManualDraftRealPostgresTests(Xunit.Abstractions.ITes
         output.WriteLine($"[EVIDENCE] unknown top-level field → status='{result.Status}' code='{result.ErrorCode}'");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task An_unknown_bucket_inside_the_draft_is_rejected_rather_than_silently_dropped()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         var draft = FarmersTypedDay();
         draft["somethingNobodyDefined"] = new[] { new Dictionary<string, object?> { ["id"] = "x" } };

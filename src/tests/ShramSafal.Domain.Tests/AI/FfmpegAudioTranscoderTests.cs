@@ -11,29 +11,22 @@ namespace ShramSafal.Domain.Tests.AI;
 /// mono and yields chunks aligned on 2-byte sample boundaries.
 ///
 /// <para>
-/// <b>Skip semantics.</b> The test suite does NOT take a runtime dependency on
-/// the Xunit.SkippableFact NuGet (none is referenced today). Instead, when the
-/// ffmpeg binary cannot be located on PATH, the test calls <c>Assert.True(true,
-/// "ffmpeg not installed — skipping")</c> and returns early. This is the
-/// closest available equivalent to "skip cleanly" without pulling in a new
-/// package for one test, matching the envelope's instruction to fall back on
-/// the <c>Skip.If(...)</c> pattern when the dedicated framework is missing.
+/// spec: dfes-companion-2026-07-11 (wave-1.4) — <c>Assert.True(true, "ffmpeg not
+/// installed — skipping")</c> here used to report this proof as PASSING on any
+/// runner without ffmpeg on PATH, having exercised nothing. <c>Skip.If</c>
+/// (Xunit.SkippableFact, now referenced by this project) reports the run as
+/// Skipped — visually and in exit-code terms distinct from both Passed and
+/// Failed — so a decoder-less run can never be read as proof the transcoder
+/// works.
 /// </para>
 /// </summary>
 public sealed class FfmpegAudioTranscoderTests
 {
-    [Fact]
+    [SkippableFact]
     public async Task ToPcm16kMonoAsync_DecodesWavToPcm_AndAlignsOnSampleBoundary()
     {
-        if (!IsFfmpegAvailable())
-        {
-            // Skip cleanly when ffmpeg isn't on PATH (CI/dev machine without
-            // the binary). The envelope explicitly calls for a [Skippable]
-            // pattern; an assertion with a Skip-message is the closest we
-            // get without adding a new NuGet to the test project.
-            Assert.True(true, "ffmpeg binary not available on PATH — skipping FfmpegAudioTranscoder integration test.");
-            return;
-        }
+        // Skip cleanly when ffmpeg isn't on PATH (CI/dev machine without the binary).
+        Skip.If(!IsFfmpegAvailable(), "ffmpeg binary not available on PATH — skipping FfmpegAudioTranscoder integration test.");
 
         // Build a 0.25-second 16-kHz sine-tone WAV in memory. WAV is the
         // simplest input format ffmpeg accepts without an external fixture

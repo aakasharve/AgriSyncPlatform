@@ -278,22 +278,35 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
         }
     }
 
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.4) — <c>Assert.True(true, _skipReason)</c> used
+    /// to report these proofs as PASSING on any runner without Postgres on :5433, having
+    /// exercised nothing. <c>Skip.If</c> (Xunit.SkippableFact) reports the run as Skipped —
+    /// visually and in exit-code terms distinct from both Passed and Failed — so a database-less
+    /// run can never be read as proof the F2 supersession fix behaves.
+    /// </summary>
+    private void SkipIfPostgresUnavailable()
+    {
+        if (_skip)
+        {
+            output.WriteLine($"[SKIPPED] {_skipReason} — NO DATABASE WAS EXERCISED; this run proves nothing.");
+        }
+
+        Skip.If(_skip, _skipReason);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // THE PROOF — one test drives BOTH confirms and asserts (i)-(iii); a second
     // test proves (iv) the forced-failure isolation on real Postgres.
     // ─────────────────────────────────────────────────────────────────────────
 
-    [Fact]
+    [SkippableFact]
     public async Task Confirming_twice_same_ai_job_supersedes_to_one_current_row_and_persists_both_logs_with_all_child_families()
     {
-        // Skip cleanly when native Postgres :5433 is absent (no NuGet dependency
-        // on Xunit.SkippableFact; matches the codebase's Assert.True(true, ...)
-        // fallback convention — see FfmpegAudioTranscoderTests).
-        if (_skip)
-        {
-            Assert.True(true, _skipReason);
-            return;
-        }
+        // spec: dfes-companion-2026-07-11 (wave-1.4) — Assert.True(true, _skipReason) here used
+        // to report this proof as PASSING on any runner without Postgres on :5433, having
+        // exercised nothing. Skip.If (Xunit.SkippableFact) reports the run as Skipped instead.
+        SkipIfPostgresUnavailable();
 
         var log1 = Guid.Parse("bbbb1111-1111-1111-1111-111111111111");
         var log2 = Guid.Parse("bbbb2222-2222-2222-2222-222222222222");
@@ -396,14 +409,10 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
         output.WriteLine("[EVIDENCE] no 23505 raised across two confirms with same SourceAiJobId, distinct clientRequestId");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Forced_derivation_failure_does_not_roll_back_the_log_on_real_postgres()
     {
-        if (_skip)
-        {
-            Assert.True(true, _skipReason);
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         var logId = Guid.Parse("cccc1111-1111-1111-1111-111111111111");
 

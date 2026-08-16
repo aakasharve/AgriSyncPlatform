@@ -192,33 +192,29 @@ public sealed class AnswerRaisesScoreTests(Xunit.Abstractions.ITestOutputHelper 
     }
 
     /// <summary>
-    /// Self-skip gate. A silently-skipped integration test that reports "passed" is the
-    /// exact false confidence this suite has produced before, so the reason is written to
-    /// the test output: a ~1 ms duration plus a <c>[SKIPPED]</c> line is the tell that no
-    /// database was touched.
+    /// spec: dfes-companion-2026-07-11 (wave-1.4) — <c>Assert.True(true, _skipReason)</c> here
+    /// used to report these proofs as PASSING on any runner without Postgres on :5433, having
+    /// exercised nothing. <c>Skip.If</c> (Xunit.SkippableFact) reports the run as Skipped —
+    /// visually and in exit-code terms distinct from both Passed and Failed — so a database-less
+    /// run can never be read as proof answering a gap question raises the score.
     /// </summary>
-    private bool SkippedForMissingPostgres()
+    private void SkipIfPostgresUnavailable()
     {
-        if (!_skip)
+        if (_skip)
         {
-            return false;
+            output.WriteLine($"[SKIPPED] {_skipReason} — NO DATABASE WAS EXERCISED; this run proves nothing.");
         }
 
-        output.WriteLine($"[SKIPPED] {_skipReason} — NO DATABASE WAS EXERCISED; this run proves nothing.");
-        Assert.True(true, _skipReason);
-        return true;
+        Skip.If(_skip, _skipReason);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // PROOF 1 — answering a gap question raises the STORED day score.
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task Answering_a_gap_question_raises_the_stored_day_score()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         await SeedSprayingDayAsync(AnsweredDate);
         await RecomputeAndCommitAsync(AnsweredDate);
@@ -253,13 +249,10 @@ public sealed class AnswerRaisesScoreTests(Xunit.Abstractions.ITestOutputHelper 
     // turn one INSERT into a full re-derivation plus an aggregate UPDATE on a
     // single small prod instance. The telemetry row must still land.
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task A_dismissal_is_recorded_but_neither_scores_nor_rebuilds_the_day()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         await SeedSprayingDayAsync(SilentDate);
         await RecomputeAndCommitAsync(SilentDate);
@@ -293,13 +286,10 @@ public sealed class AnswerRaisesScoreTests(Xunit.Abstractions.ITestOutputHelper 
     // rows, which is what makes the shipped docstring true — and it holds for
     // EVERY recompute path, not just the question-event one.
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task A_skipped_row_carrying_text_is_excluded_by_the_repository_and_credits_nothing()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         await SeedSprayingDayAsync(SkippedWithTextDate);
         await RecomputeAndCommitAsync(SkippedWithTextDate);

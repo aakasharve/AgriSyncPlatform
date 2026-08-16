@@ -181,28 +181,30 @@ public sealed class OwnerLogSurvivesSyncRoundTripRealPostgresTests(Xunit.Abstrac
         }
     }
 
-    private bool SkippedForMissingPostgres()
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.4) — <c>Assert.True(true, _skipReason)</c> here
+    /// used to report these proofs as PASSING on any runner without Postgres on :5433, having
+    /// exercised nothing. <c>Skip.If</c> (Xunit.SkippableFact) reports the run as Skipped —
+    /// visually and in exit-code terms distinct from both Passed and Failed — so a database-less
+    /// run can never be read as proof the owner's log survives the sync round trip.
+    /// </summary>
+    private void SkipIfPostgresUnavailable()
     {
-        if (!_skip)
+        if (_skip)
         {
-            return false;
+            output.WriteLine($"[SKIPPED] {_skipReason} — NO DATABASE WAS EXERCISED; this run proves nothing.");
         }
 
-        output.WriteLine($"[SKIPPED] {_skipReason} — NO DATABASE WAS EXERCISED; this run proves nothing.");
-        Assert.True(true, _skipReason);
-        return true;
+        Skip.If(_skip, _skipReason);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // PROOF 1 — the owner's own log survives push AND pull as a day that counts.
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task An_owners_own_log_comes_back_from_the_wire_verified_and_the_ring_counts_it()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         await WriteProvisioningEvidenceAsync();
 
@@ -261,13 +263,10 @@ public sealed class OwnerLogSurvivesSyncRoundTripRealPostgresTests(Xunit.Abstrac
     // ─────────────────────────────────────────────────────────────────────────
     // PROOF 2 — THE BOUNDARY. A mukadam's log still comes back needing approval.
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task A_mukadams_log_still_comes_back_needing_approval_and_the_ring_does_not_count_it()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         var dailyLogId = Guid.Parse("1ccc2222-2222-2222-2222-222222222222");
 
@@ -306,13 +305,10 @@ public sealed class OwnerLogSurvivesSyncRoundTripRealPostgresTests(Xunit.Abstrac
     // PROOF 3 — the owner's SECOND push of the same log (offline retry) must not
     // stack another pair of attestations onto a day he only lived once.
     // ─────────────────────────────────────────────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task An_idempotent_resend_does_not_stack_a_second_attestation()
     {
-        if (SkippedForMissingPostgres())
-        {
-            return;
-        }
+        SkipIfPostgresUnavailable();
 
         var dailyLogId = Guid.Parse("1ccc3333-3333-3333-3333-333333333333");
         const string clientRequestId = "req-owner-resend";

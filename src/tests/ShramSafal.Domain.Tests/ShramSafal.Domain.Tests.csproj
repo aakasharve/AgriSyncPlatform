@@ -22,6 +22,9 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="FluentAssertions" Version="8.9.0" />
+    <!-- spec: dfes-companion-2026-07-11 (wave-1.4) — makes an unavailable-ffmpeg
+         run report Skipped, never Passed. See FfmpegAudioTranscoderTests. -->
+    <PackageReference Include="Xunit.SkippableFact" Version="1.5.23" />
   </ItemGroup>
 
   <ItemGroup>

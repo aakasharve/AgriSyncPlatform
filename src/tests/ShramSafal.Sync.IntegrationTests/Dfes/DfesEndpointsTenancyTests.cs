@@ -88,10 +88,13 @@ public sealed class DfesEndpointsTenancyTests : IClassFixture<DfesEndpointsTenan
 
     // ── Criterion 1 — a real farm member gets 200 on all three GETs and sees ONLY
     //    their own farm's data (never Farm B's). ─────────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task Member_gets_200_on_all_three_reads_and_sees_only_own_farm()
     {
-        if (_fx.Skip) { Assert.True(true, _fx.SkipReason); return; }
+        // spec: dfes-companion-2026-07-11 (wave-1.4) — Assert.True(true, _fx.SkipReason) here
+        // used to report this proof as PASSING on any runner without Postgres on :5433, having
+        // exercised nothing. Skip.If (Xunit.SkippableFact) reports the run as Skipped instead.
+        Skip.If(_fx.Skip, _fx.SkipReason);
 
         // GET /day-understanding — the single farmer-facing /10, DERIVED server-side
         // from Farm A's seeded per-dimension breakdown (47 of 55 scored weight → 9).
@@ -154,10 +157,10 @@ public sealed class DfesEndpointsTenancyTests : IClassFixture<DfesEndpointsTenan
     // ── Criterion 2 (S1-M2 proof) — POST /question-events returns 200 AND the row
     //    actually lands in ssf.question_events, proving the WITH CHECK
     //    (farm_id = agrisync.farm_id) INSERT passes under FORCE-RLS. ──────────────
-    [Fact]
+    [SkippableFact]
     public async Task Post_question_event_returns_200_and_row_lands_under_force_rls()
     {
-        if (_fx.Skip) { Assert.True(true, _fx.SkipReason); return; }
+        Skip.If(_fx.Skip, _fx.SkipReason);
 
         var questionKey = "farmA.posted." + Guid.NewGuid().ToString("N");
 
@@ -184,10 +187,10 @@ public sealed class DfesEndpointsTenancyTests : IClassFixture<DfesEndpointsTenan
 
     // ── Criterion 3 — non-member / forged farmId → 403 on all 4 endpoints, with
     //    zero cross-farm rows ever written or read. ──────────────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task Non_member_is_forbidden_on_all_four_and_writes_nothing()
     {
-        if (_fx.Skip) { Assert.True(true, _fx.SkipReason); return; }
+        Skip.If(_fx.Skip, _fx.SkipReason);
 
         var farmA = DfesEndpointsTenancyFixture.FarmA;
 
@@ -210,10 +213,10 @@ public sealed class DfesEndpointsTenancyTests : IClassFixture<DfesEndpointsTenan
     // ── Criterion 3 (cont.) — a caller who IS a member of Farm A but forges Farm B's
     //    id (a real farm they do NOT belong to) is denied on all 4, and no row lands
     //    under Farm B. This is the cross-farm forgery gate. ───────────────────────
-    [Fact]
+    [SkippableFact]
     public async Task Member_forging_a_foreign_farm_is_forbidden_and_writes_nothing()
     {
-        if (_fx.Skip) { Assert.True(true, _fx.SkipReason); return; }
+        Skip.If(_fx.Skip, _fx.SkipReason);
 
         var farmB = DfesEndpointsTenancyFixture.FarmB; // MemberA is NOT a member of Farm B
 
