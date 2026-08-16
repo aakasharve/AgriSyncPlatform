@@ -63,17 +63,21 @@ interface UseAppDataProps {
     onNewPlotDetected?: (newPlotId: string, parentCropId: string) => void;
 }
 
-export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
-    // --- DATA SOURCE INTEGRATION ---
-    const { dataSource, isDemoMode, setDemoMode } = useDataSource();
-    const { isAuthenticated } = useAuth();
-
-    // --- LOCAL STATE (Mirrors DataSource) ---
-    // Start with empty crops - will be populated based on demo mode
-    const [crops, setCrops] = useState<CropProfile[]>([]);
-    // Separate state for user's real crops (persisted)
-    const [realCrops, setRealCrops] = useState<CropProfile[]>([]);
-    const [farmerProfile, setFarmerProfile] = useState<FarmerProfile>({
+/**
+ * The profile a farmer's device actually holds on day one — BEFORE the first
+ * sync pull has ever returned an operator. Its `activeOperatorId` is the
+ * literal string `'owner'`, not a server id; the three operators here are
+ * placeholders so the UI has names to render.
+ *
+ * WAVE-1.4 (spec: dfes-companion-2026-07-11): extracted from the `useState`
+ * initialiser and EXPORTED so tests can drive the real day-one state instead
+ * of a hand-made GUID fixture. A fixture that invents a UUID here cannot see
+ * the bugs this placeholder causes — that is exactly how the approve button
+ * shipped broken. Also now a lazy initialiser, so it is built once per mount
+ * rather than on every render.
+ */
+export function createInitialFarmerProfile(): FarmerProfile {
+    return {
         name: 'Shetkari Raja',
         village: 'Nashik',
         phone: '',
@@ -135,7 +139,22 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
             waterManagement: 'Decentralized',
             filtrationType: 'Screen'
         }
-    });
+    };
+}
+
+export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
+    // --- DATA SOURCE INTEGRATION ---
+    const { dataSource, isDemoMode, setDemoMode } = useDataSource();
+    const { isAuthenticated } = useAuth();
+
+    // --- LOCAL STATE (Mirrors DataSource) ---
+    // Start with empty crops - will be populated based on demo mode
+    const [crops, setCrops] = useState<CropProfile[]>([]);
+    // Separate state for user's real crops (persisted). Written by the hydrate
+    // effect; nothing reads it, so the value binding is elided rather than
+    // named — the setter call stays exactly as it was.
+    const [, setRealCrops] = useState<CropProfile[]>([]);
+    const [farmerProfile, setFarmerProfile] = useState<FarmerProfile>(createInitialFarmerProfile);
     const [history, setHistory] = useState<DailyLog[]>([]);
 
     // --- AUXILIARY STATE ---
@@ -264,7 +283,7 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
         await dataSource.crops.save(newCrops);
     };
 
-    const handleAddPerson = (person: any) => {
+    const handleAddPerson = (person: Person) => {
         setFarmerProfile(prev => ({
             ...prev,
             operators: [...(prev.operators || []), {

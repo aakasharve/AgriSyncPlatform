@@ -125,6 +125,30 @@ describe('VerifyLog — task 1.4 client wire shape (verify_log_v2)', () => {
         }
     });
 
+    /**
+     * WAVE-1.4 fix round (I1). This use case is the LAST line of defence, not
+     * the fix: the pre-sync placeholder is resolved to a real identity by
+     * `core/domain/verifierIdentity.ts` before it ever gets here (proved in
+     * `app/hooks/__tests__/useTrustLayer.freshDevice.test.tsx`). This test
+     * pins the boundary — if a placeholder ever reaches this far again, it is
+     * REFUSED at the offline queue rather than silently queued as garbage the
+     * server would have to reject.
+     *
+     * Honest label: this assertion was already true before the fix. It exists
+     * so a future "just let it through" shortcut fails loudly here.
+     */
+    it('refuses the pre-sync placeholder "owner" instead of queueing an unroutable payload', async () => {
+        const result = await verifyLog(
+            { logId: LOG_ID, verifierId: 'owner', action: 'approve' },
+            noopRepository,
+            auditPort,
+            makeProfile()
+        );
+
+        expect(result.success).toBe(false);
+        expect(await getDatabase().mutationQueue.toArray()).toHaveLength(0);
+    });
+
     it('batchVerifyLogs enqueues one valid verify_log_v2 payload per log', async () => {
         const otherLogId = 'c3c3c3c3-0000-4000-8000-000000000003';
         const result = await batchVerifyLogs(
