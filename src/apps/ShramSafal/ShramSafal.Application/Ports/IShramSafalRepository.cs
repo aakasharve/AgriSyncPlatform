@@ -719,6 +719,26 @@ public interface IShramSafalRepository
         => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Dfes.QuestionEvent>>(Array.Empty<ShramSafal.Domain.Dfes.QuestionEvent>());
 
     /// <summary>
+    /// wave-3.3, Ruling 1 (2026-08-15) — the existing append-only row for
+    /// (<paramref name="dailyLogId"/>, <paramref name="questionKey"/>), if any.
+    ///
+    /// <para><c>ssf.question_events</c> carries <c>REVOKE UPDATE, DELETE</c>
+    /// (20260713052440_AddDfesDataSpine), so an upsert is unavailable to the app role:
+    /// the handler reads, then inserts. The partial unique index
+    /// <c>ux_question_events_log_question</c> (20260816090000_UniqueQuestionPerLog) is the
+    /// backstop for a genuine race; this read is what makes the ordinary offline retry
+    /// silent rather than a 500.</para>
+    ///
+    /// <para>Default body returns null so the in-tree <c>IShramSafalRepository</c> test
+    /// doubles keep compiling — the same convention this file already uses for
+    /// <see cref="AddWeatherStampAsync"/> and <see cref="AddQuestionEventAsync"/>. A double
+    /// that does not override this therefore behaves exactly as it did before wave-3.3.</para>
+    /// </summary>
+    Task<ShramSafal.Domain.Dfes.QuestionEvent?> FindQuestionEventAsync(
+        Guid dailyLogId, string questionKey, CancellationToken ct = default)
+        => Task.FromResult<ShramSafal.Domain.Dfes.QuestionEvent?>(null);
+
+    /// <summary>
     /// task-3 (2026-08-14), founder ruling A — the gap dimensions the farmer actually
     /// ANSWERED on one local day, for the daily-richness recompute to credit.
     ///

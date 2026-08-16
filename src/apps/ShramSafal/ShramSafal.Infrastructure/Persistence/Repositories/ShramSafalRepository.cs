@@ -406,6 +406,19 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .OrderByDescending(q => q.CreatedAtUtc)
             .ToListAsync(ct);
 
+    // wave-3.3, Ruling 1 — the idempotency read behind RecordQuestionEventHandler.
+    // NO-TRACKING: the caller only needs the existing row's Id to hand back, and the
+    // table is append-only by privilege, so nothing here is ever mutated. RLS already
+    // scopes the row set to the tenant; the handler membership-checks in addition, so
+    // this deliberately keys on (daily_log_id, question_key) only — exactly the columns
+    // ux_question_events_log_question constrains, so the read and the index can never
+    // disagree about what "already asked" means.
+    public async Task<ShramSafal.Domain.Dfes.QuestionEvent?> FindQuestionEventAsync(
+        Guid dailyLogId, string questionKey, CancellationToken ct = default)
+        => await db.QuestionEvents
+            .AsNoTracking()
+            .FirstOrDefaultAsync(q => q.DailyLogId == dailyLogId && q.QuestionKey == questionKey, ct);
+
     // task-3 (2026-08-14), founder ruling A. question_events carries no local_date, so the
     // day is a half-open UTC window (FarmLocalDay — the SAME rule the handler and the
     // derivation service use; a second one here would credit the wrong day). ShownAtUtc is

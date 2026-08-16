@@ -39,6 +39,42 @@ public sealed class RecordQuestionEventHandler(
             return Result.Failure<Guid>(ShramSafalErrors.Forbidden);
         }
 
+        // wave-3.3, Ruling 1 (2026-08-15): "offline retries, reopening the app, or syncing
+        // from another device must not create duplicate questions."
+        //
+        // Task 3.2 stopped the ENGINE asking the same question about the same log twice.
+        // It cannot stop a WRITE happening twice: useDfesQuestion.ts resets recordedRef on a
+        // failed POST, so a request that reaches the server and then loses the response is
+        // retried against a row that already landed. This read is what makes that retry
+        // silent — it returns the SAME event id, so the client's success path is identical
+        // to the first call's and nothing downstream can tell them apart.
+        //
+        // Check-then-insert rather than an upsert, because ssf.question_events is
+        // append-only BY PRIVILEGE (REVOKE UPDATE, DELETE — 20260713052440_AddDfesDataSpine):
+        // ON CONFLICT DO UPDATE is not available to agrisync_app at all. The partial unique
+        // index ux_question_events_log_question (20260816090000_UniqueQuestionPerLog) is the
+        // backstop for the genuine concurrent race this read cannot close.
+        //
+        // Scoped to commands that NAME a log. A null DailyLogId has no per-log identity to
+        // dedupe on — and every row written before wave-3.1 has daily_log_id NULL, which is
+        // exactly why the index carries `WHERE daily_log_id IS NOT NULL`. Guarding on null
+        // here would silently collapse the day-scoped context questions (crop stage,
+        // previous observation) that legitimately recur.
+        //
+        // Placed AFTER the approval and membership gates on purpose: an unapproved or
+        // non-member caller must still be rejected, never handed an existing row's id.
+        if (cmd.DailyLogId is { } logId)
+        {
+            var existing = await repository.FindQuestionEventAsync(logId, cmd.QuestionKey, ct);
+            if (existing is not null)
+            {
+                logger.LogInformation(
+                    "Idempotent replay of question_event {QuestionKey} for log {DailyLogId}; returning existing row {EventId}.",
+                    cmd.QuestionKey, logId, existing.Id);
+                return Result.Success(existing.Id);
+            }
+        }
+
         var now = clock.UtcNow;
         var entity = QuestionEvent.Create(
             id: Guid.NewGuid(), dailyLogId: cmd.DailyLogId, farmId: cmd.FarmId, plotId: cmd.PlotId,
