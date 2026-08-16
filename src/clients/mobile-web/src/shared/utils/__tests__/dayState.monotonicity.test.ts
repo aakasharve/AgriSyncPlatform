@@ -9,6 +9,24 @@
  *
  * spec: dfes-companion-2026-07-11 (wave-1.6)
  *
+ * ============================================================================
+ * WHAT THIS FILE DOES AND DOES NOT ASSERT (wave-1.6 review, I3)
+ * ============================================================================
+ * The headline above is the LAW. It is not, on its own, a description of this
+ * file's coverage, and for one round it was read as if it were.
+ *
+ *   ASSERTED as law (`assertNonDecreasing`): a log saved, a log confirmed, an
+ *   answer credited — in every combination of owner/mukadam and planned/
+ *   unplanned below. These are green and are the live regression tripwire.
+ *
+ *   MEASURED but NOT ruled on: two further in-day transitions, added at the
+ *   bottom of this file, that DO lower the number today — a task appearing
+ *   mid-day (100 -> 30) and a human re-opening a log (100 -> 70). They pin the
+ *   measured trail exactly and assert the drop as a fact. They deliberately do
+ *   NOT call `assertNonDecreasing`: whether decision 6 reaches them is a
+ *   founder question, and answering it by choosing which assertion to write
+ *   would be this file deciding it. See the block above those two tests.
+ *
  * SCOPE NOTE — this is the FRONTEND half of the guarantee only.
  * `ShramSafal.Domain.Dfes.DayUnderstandingScore` (backend, `src/apps/**`) is
  * out of this role's editable surface (frontend implementor). Its own
@@ -165,6 +183,40 @@ const answerCredited = (id: string): DayStep => ({
     }),
 });
 
+// ---- The two transitions walk() could not reach (wave-1.6 review, I3) -------
+//
+// Until these existed, `walk()` only ever ADDED logs, confirmed logs and
+// credited answers — every step it could take moved a numerator up. So the
+// headline of this file ("the number never goes backwards within a day") was
+// broader than what it actually tested: two real paths lower `closurePercent`
+// and neither could be expressed. Both are legitimate things that happen on a
+// farmer's day, and both are inside the day, not across days:
+//
+//   • a task APPEARS mid-day. `plannedCount` is not fixed at dawn —
+//     `getTaskCompletion` counts every task due today, and Sathi creates
+//     `ai_extracted` tasks from what the farmer says (dayState.ts:415-417).
+//     A task landing widens `taskScore`'s denominator after the numerator has
+//     already been counted.
+//   • a log is RE-OPENED. `verifiedCount` is not a ratchet: an owner who
+//     re-opens a day he had confirmed (the same act `DailyLog.Edit` performs
+//     server-side, which walks an attested day back to Draft) removes the
+//     confirmation the 30 was earned by.
+
+const taskAppeared = (id: string): DayStep => ({
+    label: `AI-extracted task appeared mid-day [${id}]`,
+    apply: (logs, tasks) => ({ logs, tasks: [...tasks, makeTask(id, 'pending')] }),
+});
+
+const logReopened = (id: string): DayStep => ({
+    label: `log re-opened by a human [${id}]`,
+    apply: (logs, tasks) => ({
+        logs: logs.map(log => (log.id === id
+            ? { ...log, verification: { status: LogVerificationStatus.DRAFT, required: true } }
+            : log)),
+        tasks,
+    }),
+});
+
 /** Walks a sequence of steps for a fixed day and returns the closurePercent
  * trail (index 0 = before any step). Asserts nothing itself — callers decide
  * whether the trail must be monotonic (so the DEFECT scenarios can show
@@ -278,5 +330,59 @@ describe('computeDayState — closurePercent never falls within a day (founder d
         // log — completeness is carried there, not by pulling the ring down.
         expect(trail.map(t => t.closurePercent)).toEqual([0, 100, 100, 100]);
         assertNonDecreasing(trail);
+    });
+
+    // ---- MEASUREMENT (wave-1.6 review, I3) — the two paths walk() could not
+    // ---- reach until now. Both LOWER the number. Recorded, not decided.
+    //
+    // These are NOT regressions from wave 2.4 — both predate it and both survive
+    // it, because 2.4 only ever changed what an EMPTY day scores. They are here
+    // because the file's headline claims something wider than it was testing,
+    // and the honest way to narrow the gap is to run the transitions and write
+    // down what happens, exactly as the EMPIRICAL FINDING block above did.
+    //
+    // They assert the measured trail with `toEqual` and do NOT call
+    // `assertNonDecreasing`, because that helper encodes founder decision 6 and
+    // decision 6 has not been applied to either of these transitions. Calling it
+    // here would not be a tripwire, it would be this file deciding a founder
+    // question by picking which assertion to write. Each `toEqual` is exact, so
+    // the day the behaviour changes — in either direction — this fails and the
+    // question gets asked again.
+    //
+    // 👁️ TWO RULINGS NEEDED (see the report; neither is decided here):
+    //
+    //  1. Is an AI-extracted task appearing mid-day allowed to lower the ring?
+    //     Today it takes 100 -> 30. The farmer did nothing but SPEAK; Sathi
+    //     turned his words into a task and the number fell 70 points. If
+    //     decision 6 covers this, the fix is a floor on `taskScore` (or dating
+    //     mid-day-created tasks to tomorrow) — a real behaviour change, and one
+    //     with its own cost: a genuinely un-started task would then be invisible
+    //     in the score.
+    //  2. Is a human RE-OPENING a day allowed to lower it? Today it takes
+    //     100 -> 70. Unlike (1) this is a deliberate human act — arguably the
+    //     number SHOULD fall, since the confirmation it was earned by has been
+    //     withdrawn. Decision 6 says "never backwards within a day" without
+    //     carving this out.
+
+    it('MEASURED, unruled: an AI-extracted task appears mid-day — 100 -> 30 (founder decision 6, ruling 1)', () => {
+        const trail = walk([], [logSaved('o1', true), taskAppeared('t-new')]);
+        // The owner records his day: 70 for the record + 30 for his own
+        // auto-approved confirmation = 100. Sathi then extracts a task from
+        // what he said, due today. `plannedCount` goes 0 -> 1 with
+        // `completedCount` still 0, so taskScore collapses 1 -> 0 and the 70
+        // evaporates. Nothing the farmer did got worse; the denominator moved.
+        expect(trail.map(t => t.closurePercent)).toEqual([0, 100, 30]);
+        // Stated as a fact, not left to be read off the numbers: this step
+        // GOES BACKWARDS, which is what founder decision 6 forbids.
+        expect(trail[2].closurePercent).toBeLessThan(trail[1].closurePercent);
+    });
+
+    it('MEASURED, unruled: an owner re-opens the day he had confirmed — 100 -> 70 (founder decision 6, ruling 2)', () => {
+        const trail = walk([], [logSaved('o1', true), logReopened('o1')]);
+        // The 30 is EARNED by a confirmation existing. Re-opening removes the
+        // confirmation, so the credit goes with it. The 70 survives: the day
+        // still HAS a record, which is what that half measures.
+        expect(trail.map(t => t.closurePercent)).toEqual([0, 100, 70]);
+        expect(trail[2].closurePercent).toBeLessThan(trail[1].closurePercent);
     });
 });
