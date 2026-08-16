@@ -132,6 +132,71 @@ import type { DailyLog } from '../../../types';
  */
 const REPORT_PREFIX = '[strandedLogReconciler]';
 
+/**
+ * REVIEW B1 — REPORT ONCE PER RECORD, NOT ONCE PER APP LAUNCH.
+ *
+ * `reconcileStrandedLogs` runs at every worker start, and nothing about an
+ * unroutable record changes between launches. With the report inside the
+ * per-log loop and nothing remembering what had already been said, the same
+ * record filed the same report **every time the app opened, for ever** — ten
+ * stranded records meant ten reports per open.
+ *
+ * The comment on that report is right that it is the only way anyone learns a
+ * record is stranded, and that is exactly why flooding it is the harm: the
+ * channel drowns in its own output and the record stays stranded because nobody
+ * can pick it out of the repeats.
+ *
+ * I had already solved this ten commits earlier, in `VoiceClipRetention`:
+ * *"a systemic gap alarmed once per occurrence is noise that buries the
+ * incidents."* Two halves of one batch were feeding one channel under
+ * contradictory rules. Same target here — SILENT, NOT INVISIBLE: every pass
+ * still counts it, still logs it locally, and still returns it in the result;
+ * only the alarm is once.
+ *
+ * WHY `appMeta` AND NOT A FIELD ON THE LOG ROW. A marker on `DexieLogRecord`
+ * would be erased by `toRecord`, which three repository writers rebuild rows
+ * through — the exact defect found at `DexieLogsRepository.updateVerification`
+ * earlier in this batch. `appMeta` is a key-value store nothing else rewrites.
+ *
+ * Keyed by `logId:reason`, so a record whose reason CHANGES is news once more
+ * — "could not read the queue" becoming "cannot be routed" is a different fact
+ * about the same record.
+ */
+const REPORTED_META_KEY = 'stranded_log_reported_signatures';
+
+/**
+ * Cap on remembered signatures. Generous, because the population is
+ * pathological by definition; eviction is oldest-first and costs at most one
+ * repeat report for an evicted record, which is a slow churn rather than the
+ * flood this replaces.
+ */
+const MAX_REMEMBERED_SIGNATURES = 500;
+
+async function loadReportedSignatures(): Promise<string[]> {
+    try {
+        const row = await getDatabase().appMeta.get(REPORTED_META_KEY);
+        return Array.isArray(row?.value) ? (row.value as string[]).filter(v => typeof v === 'string') : [];
+    } catch {
+        // Unreadable bookkeeping must never suppress a report. Returning empty
+        // means "nothing known reported", which errs toward saying it again —
+        // the safe direction for a channel whose job is to be heard.
+        return [];
+    }
+}
+
+async function saveReportedSignatures(signatures: string[]): Promise<void> {
+    try {
+        await getDatabase().appMeta.put({
+            key: REPORTED_META_KEY,
+            value: signatures.slice(-MAX_REMEMBERED_SIGNATURES),
+            updatedAt: new Date().toISOString(),
+        });
+    } catch {
+        // Worst case the next pass repeats itself once. Never let bookkeeping
+        // break a recovery pass.
+    }
+}
+
 function reportToHumans(summary: string, context: Record<string, unknown>): void {
     const message = `${REPORT_PREFIX} ${summary} ${JSON.stringify(context)}`;
 
@@ -205,6 +270,26 @@ export async function reconcileStrandedLogs(): Promise<StrandedLogReconcileResul
     const deviceId = mutationQueue.getDeviceId();
     const candidates: DailyLog[] = [];
 
+    // Review B1 — read once per pass, write once at the end. Not per report:
+    // this must not turn one flood into another, in Dexie writes this time.
+    const reported = await loadReportedSignatures();
+    const seen = new Set(reported);
+    const added: string[] = [];
+
+    /**
+     * Report the FIRST time this exact (record, reason) pair is seen, ever.
+     * Afterwards the pass still counts it and still logs it locally — the
+     * result object and `console` are unchanged. Only the alarm is once.
+     */
+    const reportOnce = (signature: string, summary: string, context: Record<string, unknown>): void => {
+        if (seen.has(signature)) {
+            return;
+        }
+        seen.add(signature);
+        added.push(signature);
+        reportToHumans(summary, context);
+    };
+
     try {
         await getDatabase().logs
             .where('isDeleted')
@@ -219,9 +304,12 @@ export async function reconcileStrandedLogs(): Promise<StrandedLogReconcileResul
                 candidates.push(record.log);
             });
     } catch (error) {
-        reportToHumans('Could not read the log table; stranded records were not scanned for', {
-            error: error instanceof Error ? error.message : String(error),
-        });
+        reportOnce(
+            'scan:log_table_unreadable',
+            'Could not read the log table; stranded records were not scanned for',
+            { error: error instanceof Error ? error.message : String(error) },
+        );
+        await saveReportedSignatures([...reported, ...added]);
         return result;
     }
 
@@ -233,10 +321,11 @@ export async function reconcileStrandedLogs(): Promise<StrandedLogReconcileResul
             // The queue could not be read for this log. Treat it as NOT stranded:
             // "I could not check" must never become "so I re-sent it".
             result.failed += 1;
-            reportToHumans('Could not check the mutation queue for this log; leaving it alone', {
-                logId: log.id,
-                error: error instanceof Error ? error.message : String(error),
-            });
+            reportOnce(
+                `${log.id}:queue_unreadable`,
+                'Could not check the mutation queue for this log; leaving it alone',
+                { logId: log.id, error: error instanceof Error ? error.message : String(error) },
+            );
             continue;
         }
 
@@ -270,17 +359,19 @@ export async function reconcileStrandedLogs(): Promise<StrandedLogReconcileResul
                 // disagree about their farm, or the log's date does not identify
                 // exactly one crop cycle. Nothing else in the app is looking for
                 // this record, so this line is the only way anyone finds out.
-                reportToHumans('A stranded record could not be routed and is still only on this device', {
-                    logId: log.id,
-                    logDate: log.date,
-                });
+                reportOnce(
+                    `${log.id}:unroutable`,
+                    'A stranded record could not be routed and is still only on this device',
+                    { logId: log.id, logDate: log.date },
+                );
             }
         } catch (error) {
             result.failed += 1;
-            reportToHumans('Re-enqueue of a stranded log threw; the record is still only on this device', {
-                logId: log.id,
-                error: error instanceof Error ? error.message : String(error),
-            });
+            reportOnce(
+                `${log.id}:enqueue_threw`,
+                'Re-enqueue of a stranded log threw; the record is still only on this device',
+                { logId: log.id, error: error instanceof Error ? error.message : String(error) },
+            );
         }
     }
 
@@ -293,10 +384,19 @@ export async function reconcileStrandedLogs(): Promise<StrandedLogReconcileResul
                 requeued: result.requeued,
                 error: error instanceof Error ? error.message : String(error),
             });
+            // Deliberately NOT deduped: this is about one sync attempt, not a
+            // standing condition, and it only fires when something was actually
+            // recovered — bounded by real work rather than by app launches.
         });
     }
 
+    if (added.length > 0) {
+        await saveReportedSignatures([...reported, ...added]);
+    }
+
     if (result.stranded > 0 || result.failed > 0) {
+        // Unconditional and LOCAL — the per-record alarm is once, the per-pass
+        // local record is every time. Silent is not invisible.
         console.warn(JSON.stringify({
             level: 'warn',
             component: 'strandedLogReconciler',

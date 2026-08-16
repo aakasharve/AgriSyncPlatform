@@ -427,6 +427,75 @@ describe('strandedLogReconciler — §P0.7 box 2e', () => {
         expect(message).not.toContain('शेतात पाणी दिले');
     });
 
+    it('B1_the_same_unroutable_record_is_reported_ONCE_not_once_per_app_launch', async () => {
+        // `reconcileStrandedLogs` runs at every worker start and nothing about an
+        // unroutable record changes between launches, so the report used to fire
+        // again every single time the app opened, for ever — drowning the only
+        // channel that tells anyone the record is stranded.
+        const logId = await saveWithoutEnqueueing();
+        await getDatabase().plots.clear();
+        await getDatabase().cropCycles.clear();
+        clientErrorMock.mockClear();
+
+        await reconcileStrandedLogs();   // launch 1
+        await reconcileStrandedLogs();   // launch 2
+        await reconcileStrandedLogs();   // launch 3
+
+        expect(clientErrorMock).toHaveBeenCalledTimes(1);
+        expect((clientErrorMock.mock.calls[0][0] as { message: string }).message).toContain(logId);
+    });
+
+    it('B1_silent_is_not_invisible_every_pass_still_counts_the_record', async () => {
+        await saveWithoutEnqueueing();
+        await getDatabase().plots.clear();
+        await getDatabase().cropCycles.clear();
+
+        await reconcileStrandedLogs();
+        const second = await reconcileStrandedLogs();
+
+        // The alarm is once; the accounting is every pass. A caller or a future
+        // sweep still sees the record on the third launch and the tenth.
+        expect(second.stranded).toBe(1);
+        expect(second.unroutable).toBe(1);
+        expect(second.requeued).toBe(0);
+    });
+
+    it('B1_a_DIFFERENT_record_still_gets_its_own_report', async () => {
+        // Dedup must be per record, not a global "already said something".
+        await getDatabase().plots.clear();
+        await getDatabase().cropCycles.clear();
+        const first = await saveWithoutEnqueueing('2026-08-13');
+        clientErrorMock.mockClear();
+        await reconcileStrandedLogs();
+
+        const second = await saveWithoutEnqueueing('2026-08-14');
+        await reconcileStrandedLogs();
+
+        expect(clientErrorMock).toHaveBeenCalledTimes(2);
+        const messages = clientErrorMock.mock.calls.map(c => (c[0] as { message: string }).message);
+        expect(messages.some(m => m.includes(first))).toBe(true);
+        expect(messages.some(m => m.includes(second))).toBe(true);
+    });
+
+    it('B1_a_record_that_becomes_routable_and_strands_again_is_not_re_alarmed', async () => {
+        // The record recovered, so the earlier alarm was answered. If it strands
+        // again for the SAME reason that is not new information.
+        const logId = await saveWithoutEnqueueing();
+        await getDatabase().plots.clear();
+        await getDatabase().cropCycles.clear();
+        clientErrorMock.mockClear();
+        await reconcileStrandedLogs();
+        expect(clientErrorMock).toHaveBeenCalledTimes(1);
+
+        // Reference data comes back; the record routes and is no longer stranded.
+        await seedReferenceData();
+        const recovered = await reconcileStrandedLogs();
+        expect(recovered.requeued).toBe(1);
+        expect(await createMutationFor(logId)).toBeDefined();
+
+        expect(clientErrorMock).toHaveBeenCalledTimes(1);
+    });
+
     it('B005_a_clean_pass_reports_nothing', async () => {
         clientErrorMock.mockClear();
 

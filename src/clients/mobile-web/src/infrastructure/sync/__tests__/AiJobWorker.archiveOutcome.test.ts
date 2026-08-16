@@ -25,9 +25,16 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const { archiveMock, parseVoiceMock } = vi.hoisted(() => ({
+const { archiveMock, parseVoiceMock, parseTextMock } = vi.hoisted(() => ({
     archiveMock: vi.fn(),
     parseVoiceMock: vi.fn(),
+    // REVIEW B2 — `parseTextLog` WAS MISSING FROM THIS FAKE, and its absence was
+    // holding up a test. `D9_a_text_job_never_reaches_the_archive_at_all` passed
+    // because the text job CRASHED on `agriSyncClient.parseTextLog is not a
+    // function` before ever reaching the archive check — so the assertion was
+    // measuring the fake's gaps, not the safeguard. Deleting the safeguard from
+    // production left it green.
+    parseTextMock: vi.fn(),
 }));
 
 vi.mock('../../voice/VoiceClipRetention', () => ({
@@ -36,7 +43,7 @@ vi.mock('../../voice/VoiceClipRetention', () => ({
 
 vi.mock('../../api/AgriSyncClient', async () => {
     const actual = await vi.importActual<typeof import('../../api/AgriSyncClient')>('../../api/AgriSyncClient');
-    return { ...actual, agriSyncClient: { parseVoiceLog: parseVoiceMock } };
+    return { ...actual, agriSyncClient: { parseVoiceLog: parseVoiceMock, parseTextLog: parseTextMock } };
 });
 
 vi.mock('../../storage/AuthTokenStore', () => ({
@@ -83,7 +90,9 @@ describe('AiJobWorker — the archive outcome is no longer discarded (D9)', () =
         await freshDb();
         archiveMock.mockReset();
         parseVoiceMock.mockReset();
+        parseTextMock.mockReset();
         parseVoiceMock.mockResolvedValue({ parsed: true });
+        parseTextMock.mockResolvedValue({ parsed: true });
     });
 
     it('D9_a_failed_archive_is_recorded_on_the_job_so_completed_stops_over_claiming', async () => {
@@ -155,6 +164,11 @@ describe('AiJobWorker — the archive outcome is no longer discarded (D9)', () =
     it('D9_a_text_job_never_reaches_the_archive_at_all', async () => {
         // Only voice clips have bytes to archive; a text parse must not be
         // recorded as an archive skip, which would be noise about nothing.
+        //
+        // REVIEW B2 — this test must fail for the RIGHT reason. It asserts the
+        // job COMPLETED below, which is what proves the text parse actually ran
+        // and the archive was skipped by the safeguard, rather than the job
+        // dying on a missing fake before the check was ever reached.
         await getDatabase().pendingAiJobs.add({
             operationType: 'voice_parse',
             context: {
@@ -169,6 +183,12 @@ describe('AiJobWorker — the archive outcome is no longer discarded (D9)', () =
 
         await AiJobWorker.run();
 
+        // The parse genuinely ran and the job genuinely completed...
+        expect(parseTextMock).toHaveBeenCalledTimes(1);
+        const row = await getDatabase().pendingAiJobs.toArray();
+        expect(row[0].status).toBe('completed');
+        // ...and only THEN does "the archive was not called" mean the safeguard
+        // worked rather than that the job never got there.
         expect(archiveMock).not.toHaveBeenCalled();
     });
 });

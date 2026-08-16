@@ -268,7 +268,20 @@ export interface PendingAiJobRetainedArchive {
     status: 'archived' | 'skipped' | 'failed';
     /** Machine reason from `VoiceClipArchiveOutcome`; absent when archived. */
     reason?: string;
-    /** POST attempts made. `0` when the wire was never reached; never omitted. */
+    /**
+     * POST attempts made — written for `archived` and `failed` only.
+     *
+     * OMITTED FOR EVERY `skipped` OUTCOME, which after review C1 is every clip
+     * in production today: `AiJobWorker` spreads this key conditionally
+     * (`'attempts' in outcome`) and a skip carries no attempt count to spread.
+     *
+     * Third attempt at this sentence, so it now describes WHAT THE WRITER DOES
+     * rather than what the field means. It first claimed "absent when the wire
+     * was never reached" (false — `0` is written for a reached-nothing failure),
+     * then "`0` … never omitted" (false the other way — omitted for skips). A
+     * sweep written from either sentence would return zero rows on exactly the
+     * population it was written to find.
+     */
     attempts?: number;
     /** When the archive step ran. */
     at: string;
