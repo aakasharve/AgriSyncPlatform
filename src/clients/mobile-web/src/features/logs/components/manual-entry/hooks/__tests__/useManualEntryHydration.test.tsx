@@ -321,6 +321,164 @@ function makeSavedLog(partial: Partial<DailyLog>): DailyLog {
     } as unknown as DailyLog;
 }
 
+/**
+ * WAVE 2.1 — THE FORM MAY NOT INVENT THE FARMER'S WORK.
+ * spec: dfes-companion-2026-07-11 (wave-2.1)
+ *
+ * Doctrine P4: never fabricate — no default fills a bucket the farmer did not fill.
+ *
+ * Every assertion below used to fail. The overlay hand-built each bucket item with a
+ * `|| literal` tail, so a parse that extracted a row but no values still handed the
+ * farmer a well, two hours of water, an owned tractor and a 90%-confident observation.
+ * Worse, none of it stayed on the screen: `ManualEntry` POSTs the hydrated draft to
+ * `/shramsafal/corrections` as the FARMER'S OWN correction of the AI.
+ *
+ * A bare row is the normal shape of a thin day, not an exotic one — the parse names
+ * what it heard and nothing else.
+ */
+function makePlotWithoutInfrastructure(): Plot {
+    return {
+        id: 'plot_2',
+        name: 'South Block',
+        baseline: {} as Plot['baseline'],
+        schedule: {} as Plot['schedule'],
+        infrastructure: {} as Plot['infrastructure'],
+    } as Plot;
+}
+
+/** A parse with every bucket emptied, then only the row under test put back. */
+function makeBareParse(over: Partial<Record<keyof AgriLogResponse, unknown>>): AgriLogResponse {
+    return {
+        ...makeInitialData(),
+        cropActivities: [],
+        irrigation: [],
+        labour: [],
+        inputs: [],
+        machinery: [],
+        activityExpenses: [],
+        observations: [],
+        plannedTasks: [],
+        ...over,
+    } as unknown as AgriLogResponse;
+}
+
+describe('useManualEntryHydration — WAVE 2.1 anti-fabrication (spec: dfes-companion-2026-07-11)', () => {
+    it('leaves the water source and duration blank when the parse named neither', () => {
+        const { captured } = runHydration({
+            initialData: makeBareParse({
+                irrigation: [{ id: 'irr_1', sourceText: 'पाणी दिलं' }],
+            }),
+            activePlot: makePlotWithoutInfrastructure(),
+        });
+
+        const irr = captured.irrigationMap['act_global_daily'];
+        // Not vacuous: the row itself IS hydrated — only its unspoken fields stay empty.
+        expect(irr).toBeDefined();
+        expect(irr.sourceText).toBe('पाणी दिलं');
+        expect(irr.source).toBe('');
+        expect(irr.method).toBe('');
+        expect(irr.durationHours).toBeUndefined();
+    });
+
+    it("still uses the plot's own recorded irrigation hardware as the method", () => {
+        // The guard against over-removal. `infrastructure.irrigationMethod` is a fact
+        // the farmer entered about THIS plot, not a default the app made up for him.
+        const { captured } = runHydration({
+            initialData: makeBareParse({
+                irrigation: [{ id: 'irr_1', sourceText: 'पाणी दिलं' }],
+            }),
+            activePlot: makePlot(),
+        });
+
+        expect(captured.irrigationMap['act_global_daily'].method).toBe('Drip');
+    });
+
+    it('leaves labour type and activity blank when the parse named neither', () => {
+        const { captured } = runHydration({
+            initialData: makeBareParse({ labour: [{ count: 2 }] }),
+            activePlot: makePlotWithoutInfrastructure(),
+        });
+
+        const lab = captured.labourMap['act_global_daily'];
+        expect(lab.count).toBe(2);
+        expect(lab.type).toBeUndefined();
+        expect(lab.activity).toBeUndefined();
+    });
+
+    it('leaves input type, method and product name blank when the parse named none', () => {
+        const { captured } = runHydration({
+            initialData: makeBareParse({ inputs: [{ quantity: 5, unit: 'kg' }] }),
+            activePlot: makePlotWithoutInfrastructure(),
+        });
+
+        const inp = captured.inputMap['act_global_daily'][0];
+        expect(inp.quantity).toBe(5);
+        expect(inp.type).toBeUndefined();
+        expect(inp.method).toBeUndefined();
+        expect(inp.mix[0].productName).toBe('');
+    });
+
+    it('does not turn an untyped NPK fertiliser into a sprayed pesticide', () => {
+        // The `|| 'pesticide'` and the `'Soil' : 'Spray'` pair rewrote WHAT WAS APPLIED,
+        // and wave 3.4 classifies the day's work from exactly these two fields.
+        const { captured } = runHydration({
+            initialData: makeBareParse({
+                inputs: [{ productName: '19:19:19', quantity: 5, unit: 'kg' }],
+            }),
+            activePlot: makePlotWithoutInfrastructure(),
+        });
+
+        const inp = captured.inputMap['act_global_daily'][0];
+        expect(inp.mix[0].productName).toBe('19:19:19');
+        expect(inp.type).not.toBe('pesticide');
+        expect(inp.method).not.toBe('Spray');
+    });
+
+    it('conjures NO machinery when the parse returned none', () => {
+        // The old `else if (hasSpray)` branch invented a whole OWNED TRACTOR running two
+        // hours, off nothing but an input row that carried no delivery method.
+        const { captured } = runHydration({
+            initialData: makeBareParse({
+                inputs: [{ type: 'pesticide', productName: 'Confidor', quantity: 250, unit: 'ml' }],
+                machinery: [],
+            }),
+            activePlot: makePlotWithoutInfrastructure(),
+        });
+
+        expect(captured.inputMap['act_global_daily']).toHaveLength(1);
+        expect(captured.machineryMap).toEqual({});
+    });
+
+    it('leaves machinery type, ownership and hours blank when the parse named none', () => {
+        const { captured } = runHydration({
+            initialData: makeBareParse({
+                machinery: [{ id: 'mach_1', sourceText: 'ट्रॅक्टर' }],
+            }),
+            activePlot: makePlotWithoutInfrastructure(),
+        });
+
+        const mach = captured.machineryMap['act_global_daily'];
+        expect(mach.sourceText).toBe('ट्रॅक्टर');
+        expect(mach.type).toBeUndefined();
+        expect(mach.ownership).toBeUndefined();
+        expect(mach.hoursUsed).toBeUndefined();
+    });
+
+    it('never stamps 90% confidence on an observation the AI did not score', () => {
+        // 90 sits above the `< 60` threshold ObservationEventCard uses to render its
+        // low-confidence caveat, so the invented number SUPPRESSED the caveat entirely.
+        const { captured } = runHydration({
+            initialData: makeBareParse({
+                observations: [{ textRaw: 'पानं पिवळी पडली' }],
+            }),
+            activePlot: makePlotWithoutInfrastructure(),
+        });
+
+        expect(captured.observations[0].textRaw).toBe('पानं पिवळी पडली');
+        expect(captured.observations[0].aiConfidence).toBeUndefined();
+    });
+});
+
 describe('useManualEntryHydration — form origin (spec: dfes-farmer-facing-deploy-readiness-2026-08-14)', () => {
     it('marks a handed-in AgriLogResponse as prefilled-draft, never as blank', () => {
         // Covers BOTH producers of initialData — a fresh voice parse and mainView's

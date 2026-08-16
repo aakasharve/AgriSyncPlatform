@@ -635,7 +635,12 @@ export class LogFactory {
                     textCleaned: obs.textCleaned || obs.textRaw,
                     noteType: obs.noteType || 'observation',
                     severity: obs.severity || 'normal',
-                    aiConfidence: obs.aiConfidence || 90,
+                    // WAVE 2.1 (spec: dfes-companion-2026-07-11) — an observation the AI
+                    // never scored stays unscored. Nothing computed 90; it is a number the
+                    // app wrote about itself, and because ObservationEventCard shows its
+                    // low-confidence caveat only below 60, the invention SUPPRESSED the
+                    // one signal that told the farmer the machine was unsure.
+                    aiConfidence: obs.aiConfidence,
                     tags: obs.tags || []
                 })) || []),
                 ...mirroredTasks.map(t => ({
@@ -773,7 +778,9 @@ export class LogFactory {
                 textCleaned: obs.textCleaned || obs.textRaw,
                 noteType: obs.noteType || 'observation',
                 severity: obs.severity || 'normal',
-                aiConfidence: obs.aiConfidence || 90,
+                // WAVE 2.1 (spec: dfes-companion-2026-07-11) — same rule on the
+                // farm-global branch: unscored stays unscored. See the per-plot branch.
+                aiConfidence: obs.aiConfidence,
                 tags: obs.tags || []
             })) || []),
             ...mirroredTasks.map(t => ({

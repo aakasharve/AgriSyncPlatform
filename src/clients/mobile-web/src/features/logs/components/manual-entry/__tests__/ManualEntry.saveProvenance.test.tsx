@@ -93,6 +93,7 @@ vi.mock('../../../../../core/session/FarmContext', () => ({
 
 import ManualEntry from '../ManualEntry';
 import { buildManualDraft } from '../../../services/logSyncMutationService';
+import { postAiCorrectionBlob } from '../../../../../infrastructure/ai/CorrectionEventStore';
 
 // ── stable props (the hydration effect keys on their identity) ────────────────
 const PLOT_ID = 'plot_1';
@@ -272,5 +273,41 @@ describe('ManualEntry save — who may claim the day was hand-typed', () => {
         const submitted = onSubmit.mock.calls[0][0] as SubmittedDraft;
         expect(submitted.provenance?.source).toBe('ai');
         expect(buildManualDraft(asPersistedLog(submitted))).toBeUndefined();
+    });
+});
+
+/**
+ * WAVE 2.1 — WHERE THE INVENTED VALUES ACTUALLY WENT.
+ * spec: dfes-companion-2026-07-11 (wave-2.1)
+ *
+ * The `manualDraft` wire was closed by 977a95e4, so it is easy to assume the hydration
+ * defaults never left the device. They did. On a voice save this screen fires
+ * `postAiCorrectionBlob`, which POSTs `CorrectedParse: JSON.stringify(userDraft)` to
+ * `/shramsafal/corrections` — the invented tractor filed as the FARMER'S OWN correction
+ * of the AI, on a day he never mentioned a tractor.
+ */
+describe('ManualEntry save — the corrections POST carries no invented value', () => {
+    it("does not file an invented tractor as the farmer's own correction of the AI", () => {
+        // AI_PARSED_DRAFT returns NO machinery, and its single input row carries no
+        // delivery method — precisely what the old `hasSpray` branch fed on.
+        const onSubmit = renderScreen({
+            initialData: AI_PARSED_DRAFT,
+            provenance: { source: 'ai', sourceAiJobId: 'job-1', timestamp: '2026-08-15T04:00:00.000Z' },
+        });
+        save();
+
+        expect(onSubmit).toHaveBeenCalledTimes(1);
+        expect(postAiCorrectionBlob).toHaveBeenCalledTimes(1);
+
+        const posted = vi.mocked(postAiCorrectionBlob).mock.calls[0][0];
+        const userDraft = posted.userDraft as unknown as {
+            machinery?: unknown[];
+            inputs?: Array<{ method?: string }>;
+        };
+
+        // Not vacuous: the parse's own input row really is on this POST.
+        expect(userDraft.inputs).toHaveLength(1);
+        expect(userDraft.machinery).toEqual([]);
+        expect(userDraft.inputs?.[0].method).toBeUndefined();
     });
 });
