@@ -55,8 +55,27 @@ export interface DfesQuestion {
     anchorDateType: QuestionAnchorDateType; // -> AnchorDateType
     agronomistApproved: boolean;         // -> AgronomistApproved (MUST be true)
     marathiApproved: boolean;            // -> MarathiApproved (MUST be true)
-    /** Marathi first-person prompt. May contain {crop} / {observation} tokens. */
+    /**
+     * Marathi first-person prompt. May contain {crop} / {observation} tokens.
+     *
+     * This is the NEUTRAL variant — it names no activity, so it is always safe to show.
+     * wave-3.6 makes it the wording an UNSURE recognition falls back to.
+     */
     promptMr: string;
+    /**
+     * wave-3.6, Ruling 4 — the variant that ACKNOWLEDGES the work before asking, used
+     * only when `isWorkRecognitionConfident` is true. Carries `{todayActivity}`.
+     *
+     * A SEPARATE string, not `promptMr` with an optional token: an absent token
+     * substitutes '' and `tidyResolvedPrompt` collapses the gap, so a single-string
+     * design would hand an unsure farmer the confident sentence minus its subject.
+     * Ruling 4 says do not repeat a guessed activity, which needs a different sentence.
+     *
+     * Optional. A question with no confident variant (gap.what — acknowledging the work
+     * and then asking what the work was is incoherent) simply always uses `promptMr`.
+     * Policed by the same bank token guard as `promptMr`.
+     */
+    promptConfidentMr?: string;
     /** Applicability tag echoed into ActualStageApplicability for stage questions. */
     expectedStageApplicability?: string;
     /**
@@ -110,6 +129,34 @@ const GAP_PROMPT: Readonly<Record<string, string>> = {
     CONTINUITY: 'हे काम पूर्ण झालं का, की अजून बाकी आहे?',
 } as const;
 
+/**
+ * wave-3.6, Ruling 4 — the CONFIDENT variant of each gap question: Sathi acknowledges
+ * the work he recognised, then asks. Used only when `isWorkRecognitionConfident` is
+ * true; otherwise `GAP_PROMPT` above (the founder-locked neutral copy) is shown.
+ *
+ * CONSTRUCTION RULE, so this stays reviewable: each entry is the founder-locked
+ * `GAP_PROMPT` string above, VERBATIM, with one acknowledgement clause prefixed. The
+ * question half is byte-identical to the copy in G:\VALIDATION\shram-sathi-FINAL-strings.md
+ * (rows L101/L103/L104), so no 🔒 string is rewritten and an unsure farmer sees exactly
+ * today's shipped wording.
+ *
+ * The acknowledgement is deliberately VERB-FREE. `{todayActivity}` is a
+ * CATEGORY_LABEL_MR value — 'फवारणी' (f.), 'खत' (n.), 'सिंचन' (n.), 'कामे' (n.pl.) — and
+ * a Marathi verb would have to agree with each. "फवारणी केली" is correct but "खत केली"
+ * and "कामे केली" are not, so any inflected form ships broken Marathi for three of the
+ * four categories. "{todayActivity} — समजलं." agrees with all of them. 'समजलं' is
+ * founder-locked vocabulary (FINAL-strings rows 43, 47-50, 24).
+ *
+ * NO CONFIDENT VARIANT FOR:
+ *   WHAT — acknowledging the work and then asking what the work was is incoherent.
+ *   The unrewardable dimensions — wave-3.9 retires them entirely.
+ */
+const GAP_PROMPT_CONFIDENT: Readonly<Record<string, string>> = {
+    DOSE: '{todayActivity} — समजलं. किती मात्रा (डोस) वापरली?',
+    CARRIER: '{todayActivity} — समजलं. फवारणीसाठी किती पाणी वापरलं?',
+    COST: '{todayActivity} — समजलं. खर्च उलगडून सांगू शकाल का?',
+} as const;
+
 function gapEntry(dim: string): DfesQuestion {
     return {
         questionKey: `gap.${dim.toLowerCase()}`,
@@ -124,6 +171,9 @@ function gapEntry(dim: string): DfesQuestion {
         safetyClass: 'informational',
         anchorDateType: 'log_date',
         promptMr: GAP_PROMPT[dim] ?? `${dim} बद्दल सांगा?`,
+        // Undefined for any dimension with no confident variant — that question then
+        // always uses the neutral copy, which is the safe direction.
+        promptConfidentMr: GAP_PROMPT_CONFIDENT[dim],
         ...APPROVED,
     };
 }

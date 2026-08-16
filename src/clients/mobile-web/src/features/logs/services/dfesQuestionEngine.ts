@@ -96,6 +96,45 @@ export interface DailyQuestionInputs {
      * back to day-scoped cooldowns exactly as before, which is the safe direction.
      */
     sourceLogId?: string;
+    /**
+     * wave-3.6 — the work Sathi believes was done today, in APPROVED Marathi
+     * (CATEGORY_LABEL_MR, never a quoted free-text activity title). Absent when nothing
+     * was recognised, and absence is never filled with a guess (P4).
+     */
+    todayWork?: { activityMr: string };
+    /**
+     * wave-3.6 — `meta.provenance.confidenceScore` from the saved log. UNDEFINED on a
+     * manual entry, and that is the most certain case there is, not the least — see
+     * `isWorkRecognitionConfident`.
+     */
+    parseConfidence?: number;
+}
+
+/**
+ * wave-3.6, Ruling 4 (2026-08-15) — ONE confidence rule, consulted by every question.
+ *
+ * 0.80 sits above the 0.75 that `NormalizeConfidence` uses when the model omits the
+ * field (AiResponseNormalizer.cs:444), so a DEFAULT never reads as a MEASUREMENT. It is
+ * also well above the orchestrator's own 0.60 floor — a threshold at or below that would
+ * be unreachable, because a lower-confidence parse never reaches the client at all.
+ */
+export const WORK_ACKNOWLEDGEMENT_THRESHOLD = 0.80;
+
+/**
+ * May Sathi name the work in this question's wording?
+ *
+ * Nothing recognised → no, obviously: there is no subject to name, and a high score
+ * about nothing is not a licence to invent one.
+ *
+ * A MANUAL entry carries no confidence score at all. `undefined` means "no model guessed
+ * anything" — the farmer typed it himself — which is the most certain case there is.
+ * Reading it as low would hand every manual-entry farmer the "I didn't quite catch that"
+ * wording about something he entered by hand.
+ */
+export function isWorkRecognitionConfident(inputs: DailyQuestionInputs): boolean {
+    if (inputs.todayWork === undefined) return false;
+    if (inputs.parseConfidence === undefined) return true;   // manual entry
+    return inputs.parseConfidence >= WORK_ACKNOWLEDGEMENT_THRESHOLD;
 }
 
 export interface SelectedQuestion {
@@ -188,6 +227,11 @@ const TOKEN_VALUES: ReadonlyArray<readonly [string, (inputs: DailyQuestionInputs
     ['weather', i => i.weather?.conditionText],
     ['lastActivity', i => i.previousLog?.activityMr],
     ['daysAgo', i => (i.previousLog === undefined ? undefined : String(i.previousLog.daysAgo))],
+    // wave-3.6 — camelCase only: TOKEN_PATTERN matches [a-zA-Z]+ and a non-matching
+    // token would reach the farmer verbatim (see the resolvePrompt docstring below).
+    // Gated on the confidence rule as well as presence, so even a template that used
+    // this token outside a confident variant could not name a guessed activity.
+    ['todayActivity', i => (isWorkRecognitionConfident(i) ? i.todayWork?.activityMr : undefined)],
 ];
 
 /**
@@ -273,10 +317,25 @@ export function resolvePrompt(promptMr: string, inputs: DailyQuestionInputs): st
     );
 }
 
+/**
+ * wave-3.6, Ruling 4 — the confidence rule lives HERE, in `pack()`, because every one of
+ * the eight priority branches returns through this function. A question added to any
+ * tier later cannot bypass it by forgetting to ask.
+ *
+ * Falls back to the neutral `promptMr` whenever Sathi is unsure OR the entry has no
+ * confident variant. Both fallbacks land on founder-locked copy, so the failure
+ * direction of this rule is "say less", never "say something wrong".
+ */
+function promptFor(q: DfesQuestion, inputs: DailyQuestionInputs): string {
+    return isWorkRecognitionConfident(inputs) && q.promptConfidentMr
+        ? q.promptConfidentMr
+        : q.promptMr;
+}
+
 function pack(q: DfesQuestion, inputs: DailyQuestionInputs, reason: string): SelectedQuestion {
     return {
         question: q,
-        resolvedPromptMr: resolvePrompt(q.promptMr, inputs),
+        resolvedPromptMr: resolvePrompt(promptFor(q, inputs), inputs),
         triggerReason: reason,
         weatherContext: inputs.weather?.conditionText ?? null,
         expectedStage: inputs.stageContext?.expectedStage ?? null,

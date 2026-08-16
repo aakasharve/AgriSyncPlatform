@@ -224,15 +224,32 @@ describe('the SHIPPED bank may carry no token but a known one (farmer-visible gu
     const forbiddenTokensIn = (promptMr: string): string[] =>
         (promptMr.match(BRACED) ?? []).filter(braced => !BANK_ALLOWED_TOKENS.has(braced.slice(1, -1)));
 
-    it.each(DFES_QUESTION_BANK.map(q => [q.questionKey, q.promptMr] as const))(
+    // wave-3.6 — BOTH farmer-facing strings on an entry, not just promptMr. The
+    // confident variant is exactly where a hand-copied token is most likely to land
+    // (it is the only copy that carries {todayActivity}), so leaving it unpoliced
+    // would put the guard's blind spot on the newest copy in the bank.
+    const shippedCopy = DFES_QUESTION_BANK.flatMap(q => [
+        [`${q.questionKey} promptMr`, q.promptMr] as const,
+        ...(q.promptConfidentMr ? [[`${q.questionKey} promptConfidentMr`, q.promptConfidentMr] as const] : []),
+    ]);
+
+    it.each(shippedCopy)(
         '%s carries only tokens the resolver knows and may speak',
-        (_questionKey, promptMr) => {
+        (_label, promptMr) => {
             expect(forbiddenTokensIn(promptMr)).toEqual([]);
         },
     );
 
+    it('actually reaches the confident variants — the guard above is not scanning zero rows', () => {
+        // A negative proof over an empty set proves nothing. This asserts the confident
+        // copy exists and IS in the list the guard walks.
+        const confident = shippedCopy.filter(([label]) => label.endsWith('promptConfidentMr'));
+        expect(confident.length).toBeGreaterThan(0);
+        expect(confident.every(([, copy]) => copy.includes('{todayActivity}'))).toBe(true);
+    });
+
     it('accepts every bank-allowed token', () => {
-        expect(forbiddenTokensIn('{crop} {observation} {category} {lastActivity} {daysAgo}')).toEqual([]);
+        expect(forbiddenTokensIn('{crop} {observation} {category} {lastActivity} {daysAgo} {todayActivity}')).toEqual([]);
     });
 
     // Proof the guard is not a tautology, run over FIXTURES — never the real

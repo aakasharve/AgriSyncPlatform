@@ -69,6 +69,7 @@ import { useFarmerEngagement } from '../hooks/useFarmerEngagement';
 import { computeScheduleGap } from '../services/dfesScheduleWindow';
 import { reconcileWeather } from '../services/dfesWeatherReconcile';
 import { computePreviousLog } from '../services/dfesPreviousLog';
+import { computeTodayWork } from '../services/dfesTodayWork';
 import type { WeatherTriggerContext } from '../services/dfesQuestionEngine';
 import { speakUnlockReward } from '../../../infrastructure/voice/speakUnlockReward';
 import { wasUnlockSpoken, markUnlockSpoken } from '../../../infrastructure/storage/unlockSpeechStore';
@@ -159,6 +160,13 @@ export function LedgerRecognitionPanel({
     const previousLog = questionsEnabled
         ? computePreviousLog(allLogs, plotId, resolvedDate) ?? undefined
         : undefined;
+    // wave-3.6 (Ruling 4): SAME gate — what Sathi believes THIS log recorded, so his
+    // question can acknowledge the work before asking. Category-level approved Marathi
+    // only (CATEGORY_LABEL_MR), never a quoted free-text activity title. `undefined`
+    // when the log recorded no executed work: the engine then asks neutrally (P4).
+    const todayWork = questionsEnabled
+        ? computeTodayWork(savedLog) ?? undefined
+        : undefined;
 
     // Task 8: "Sathi talks back" — fires the spoken unlock reward EXACTLY
     // ONCE ever per farm. Flag OFF returns immediately: no speak, no
@@ -200,6 +208,13 @@ export function LedgerRecognitionPanel({
                 // for a dose each, while never asking the same log twice. Undefined before
                 // a log is saved; the engine then keeps day-scoped cooldowns.
                 sourceLogId: savedLog?.id,
+                todayWork,
+                // wave-3.6 — UNDEFINED on a manual entry, and that is deliberate:
+                // isWorkRecognitionConfident reads undefined as "no model guessed
+                // anything", the most certain case there is. Never coalesce it to a
+                // number here; a `?? 0` would give every manual-entry farmer the
+                // unsure wording about something he typed himself.
+                parseConfidence: savedLog?.meta?.provenance?.confidenceScore,
                 engagement: {
                     totalRichDays: engagement?.totalRichDays ?? 0,
                     unlockStatus: engagement?.unlockStatus ?? 'locked',
