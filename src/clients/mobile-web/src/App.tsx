@@ -22,6 +22,8 @@ import AppShell from './app/components/AppShell';
 import LoginPage from './pages/LoginPage';
 import JoinFarmLandingPage from './pages/JoinFarmLandingPage';
 import { useMorningNotificationWiring } from './app/hooks/useMorningNotificationWiring';
+import ConsentGateScreen from './features/consent/gate/ConsentGateScreen';
+import { useConsentGate } from './features/consent/gate/useConsentGate';
 
 const hasJoinDeepLink = (): boolean => {
     if (typeof window === 'undefined') return false;
@@ -43,6 +45,11 @@ const AppFrame: React.FC<{
     const { isAuthenticated, authStatus } = useAuth();
     const [joinActive, setJoinActive] = useState<boolean>(hasJoinDeepLink);
     const { t } = useLanguage();
+
+    // spec: dfes-companion-2026-07-11 (wave-4.1) — first-open Terms + DPDP consent gate.
+    // Read here, at the top of AppFrame, because the gate is PRE-LOGIN: it stands in
+    // front of LoginPage, not behind it.
+    const consentGate = useConsentGate();
 
     // Task 7 (spec: dfes-companion-2026-07-11) — daily 7am "आजची कामे पाहा"
     // native local notification. Flag-off / non-native no-op is guaranteed
@@ -66,6 +73,25 @@ const AppFrame: React.FC<{
         return (
             <AppShell>
                 <SplashScreen onComplete={() => { /* boot splash; auth check resolves independently */ }} />
+            </AppShell>
+        );
+    }
+
+    // spec: dfes-companion-2026-07-11 (wave-4.1) — the gate stands in front of LoginPage.
+    //
+    // Only when the answer is KNOWN. `undecided` means the Dexie read has not settled, and
+    // "not loaded" is indistinguishable from "never accepted" — acting on it would flash a
+    // full-screen legal notice at every cold start of a farmer who accepted weeks ago.
+    // SplashScreen already owns that window (App renders it until `showSplash` clears).
+    //
+    // Not shown to an authenticated session: a farmer who is already signed in accepted at
+    // some point, and re-gating a live account on a Dexie miss would lock him out of his
+    // own farm over a cleared cache. Re-consent on a NEW notice version is a server-side
+    // decision, not a client cache one.
+    if (!isAuthenticated && consentGate.status === 'required') {
+        return (
+            <AppShell>
+                <ConsentGateScreen onAccept={() => consentGate.markPassed()} />
             </AppShell>
         );
     }
