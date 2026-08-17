@@ -6,6 +6,7 @@
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import { ConflictResolutionService, type RejectedMutationView } from './ConflictResolutionService';
+import { formatDisplayTimestamp } from '../../../shared/utils/displayTime';
 
 interface OfflineConflictPageProps {
     onBack?: () => void;
@@ -102,7 +103,7 @@ const OfflineConflictPage: React.FC<OfflineConflictPageProps> = ({ onBack }) => 
                     <header className="flex items-center justify-between">
                         <span className="font-mono text-xs text-slate-500">{item.mutationType}</span>
                         <span className="text-xs text-slate-400">
-                            {new Date(item.capturedAt).toLocaleString()}
+                            {formatDisplayTimestamp(item.capturedAt)}
                         </span>
                     </header>
                     <p className="mt-2 text-sm">

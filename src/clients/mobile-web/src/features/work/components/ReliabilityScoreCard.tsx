@@ -15,6 +15,7 @@
 
 import React, { useState } from 'react';
 import type { ReliabilityScore } from '../../../domain/work/ReliabilityScore';
+import { formatDisplayTimestamp } from '../../../shared/utils/displayTime';
 
 interface ReliabilityScoreCardProps {
     score: ReliabilityScore;
@@ -190,7 +191,7 @@ const ReliabilityScoreCard: React.FC<ReliabilityScoreCardProps> = ({ score, onVi
                             className="text-[10px] text-stone-400 mt-3"
                             style={{ fontFamily: "'DM Sans', sans-serif" }}
                         >
-                            Computed at: {new Date(score.computedAtUtc).toLocaleString('en-IN')}
+                            Computed at: {formatDisplayTimestamp(score.computedAtUtc)}
                         </p>
                     </div>
                 </div>

@@ -20,6 +20,7 @@ import {
     formatDisplayTime,
     formatDisplayTimeFromHHmm,
     formatDisplayTimeWithSeconds,
+    formatDisplayTimestamp,
     DISPLAY_TIME_ZONE,
 } from '../displayTime';
 
@@ -55,12 +56,16 @@ describe('formatDisplayTime — 12-hour with AM/PM', () => {
         expect(formatDisplayTime(AT_1430_IST)).toMatch(/ PM$/);
     });
 
-    it('no user-facing clock is ever 24-hour', () => {
-        // Every hour of the day, asserted as a property rather than by example.
+    it('every hour of the day maps to the right 12-hour reading AND the right period', () => {
+        // REVIEW M-3 — this used to assert the SHAPE only, so a single-hour
+        // inversion (13 rendering as `1:20 AM`) passed. It now asserts the exact
+        // expected string per hour, which is the claim the report was making.
         for (let hour = 0; hour < 24; hour++) {
             const utc = Date.UTC(2026, 7, 16, hour, 20) - (5 * 60 + 30) * 60 * 1000;
-            const out = formatDisplayTime(new Date(utc));
-            expect(out, `hour ${hour}`).toMatch(/^(1[0-2]|[1-9]):[0-5]\d (AM|PM)$/);
+            const expectedHour = hour % 12 === 0 ? 12 : hour % 12;
+            const expectedPeriod = hour < 12 ? 'AM' : 'PM';
+            expect(formatDisplayTime(new Date(utc)), `hour ${hour}`)
+                .toBe(`${expectedHour}:20 ${expectedPeriod}`);
         }
     });
 });
@@ -90,6 +95,48 @@ describe('formatDisplayTime — absent and malformed input', () => {
         expect(formatDisplayTime('not-a-date')).toBe('');
         expect(formatDisplayTime(undefined, '--:--')).toBe('--:--');
         expect(formatDisplayTime('not-a-date', '--:--')).toBe('--:--');
+    });
+});
+
+describe('M-1 — a zone-less string is a wall clock, not an instant', () => {
+    it('renders a zone-less literal exactly as written, whatever the device zone', () => {
+        // `log-factory-helpers.ts:288` synthesises `${log.date}T12:00:00` as a
+        // deliberate midday placeholder, with no `Z` and no offset. Before this
+        // task it parsed device-local and rendered device-local, so the round
+        // trip cancelled and it always read 12:00 pm. Pinning only the render to
+        // IST made a UTC handset show 5:30 PM.
+        expect(formatDisplayTime('2026-08-16T12:00:00')).toBe('12:00 PM');
+        expect(formatDisplayTime('2026-08-16T00:00:00')).toBe('12:00 AM');
+        expect(formatDisplayTime('2026-08-16T09:15:00')).toBe('9:15 AM');
+        expect(formatDisplayTime('2026-08-16T14:30:00')).toBe('2:30 PM');
+    });
+
+    it('still converts a real instant — anything carrying Z or an offset', () => {
+        // The distinction that matters: a zoned value IS an instant and must be
+        // shown in IST; a zone-less one has no offset to apply.
+        expect(formatDisplayTime('2026-08-16T12:00:00Z')).toBe('5:30 PM');
+        expect(formatDisplayTime('2026-08-16T12:00:00+05:30')).toBe('12:00 PM');
+    });
+
+    it('the date half of a zone-less literal does not roll either', () => {
+        expect(formatDisplayDateTime('2026-08-16T23:30:00')).toBe('16 Aug, 11:30 PM');
+    });
+});
+
+describe('M-2 — formatDisplayTimestamp keeps the year and the seconds', () => {
+    it('renders day, month, YEAR and seconds', () => {
+        // The sites that previously used a bare `toLocaleString()` carried both;
+        // routing them through formatDisplayDateTime dropped them, and a stale
+        // failures row then looks like a current one.
+        expect(formatDisplayTimestamp(AT_1430_IST)).toBe('16 Aug 2026, 2:30:00 PM');
+    });
+
+    it('midnight keeps the IST date and the AM period', () => {
+        expect(formatDisplayTimestamp(AT_0015_IST)).toBe('16 Aug 2026, 12:15:00 AM');
+    });
+
+    it('formatDisplayDateTime deliberately has NO year — it is for sites that had none', () => {
+        expect(formatDisplayDateTime(AT_1430_IST)).toBe('16 Aug, 2:30 PM');
     });
 });
 

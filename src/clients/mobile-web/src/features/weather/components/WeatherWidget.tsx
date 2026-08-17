@@ -10,7 +10,7 @@ import { formatTemperature, formatPrecipitation, formatHumidity, formatWindSpeed
 import { useLanguage } from '../../../i18n/LanguageContext';
 import WeatherFallbackCard from './WeatherFallbackCard';
 import type { WeatherStatus } from '../useWeatherMonitor';
-import { formatDisplayTime } from '../../../shared/utils/displayTime';
+import { DISPLAY_TIME_ZONE, formatDisplayTime } from '../../../shared/utils/displayTime';
 
 // Feature-local strings (like WeatherFallbackCard) — not the translations.ts cap.
 const CAUTION_STRINGS = {
@@ -85,9 +85,21 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, on
 
     // Format Date for Header
     const today = new Date();
-    const dateStr = today.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-    // Was `en-GB`, which is a 24-hour locale — this clock read `14:30`.
-    // The DATE above keeps its existing en-GB long form; only the time moves.
+    // REVIEW I-3 — BOTH HALVES ARE PINNED TO IST, OR NEITHER.
+    //
+    // The time was `en-GB` (a 24-hour locale) and read `14:30`. Fixing only the
+    // time created a worse fault than the one it fixed: `:117` and `:181` render
+    // these two on ONE LINE, so a device in UTC at 20:00 showed
+    // `16 August 2026 | 1:30 AM` — a date and time pair that never existed,
+    // because 1:30 AM IST is already the 17th. Before, both halves were
+    // device-local: wrong format, but internally consistent.
+    //
+    // And it lands on exactly the population the IST pinning exists to serve —
+    // on an IST handset the pinning is a no-op. The date KEEPS its en-GB long
+    // form; only its timezone is pinned, so this is not a date restyle.
+    const dateStr = today.toLocaleDateString('en-GB', {
+        day: 'numeric', month: 'long', year: 'numeric', timeZone: DISPLAY_TIME_ZONE,
+    });
     const timeStr = formatDisplayTime(today);
 
     const getIcon = (condition: string, size: number) => {

@@ -40,6 +40,7 @@ import {
 
 import { AppRouterContext } from './routeContext';
 import { ReflectPage, ComparePage } from './lazyComponents';
+import { DISPLAY_TIME_ZONE } from '../../shared/utils/displayTime';
 import {
     formatLogTime,
     getPrimaryWorkDone,
@@ -513,7 +514,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                 <div className="flex items-center justify-between px-2 mb-4">
                                     <h3 className="text-slate-800 font-bold text-lg tracking-tight">Activity Feed</h3>
                                     <span className="text-[10px] uppercase font-bold text-slate-500 bg-white border border-slate-100 px-2 py-1 rounded-lg shadow-sm">
-                                        {new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' })}
+                                        {new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short', timeZone: DISPLAY_TIME_ZONE })}
                                     </span>
                                 </div>
 

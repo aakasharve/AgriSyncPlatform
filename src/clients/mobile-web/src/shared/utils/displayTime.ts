@@ -60,50 +60,82 @@ export const DISPLAY_TIME_ZONE = 'Asia/Kolkata';
 /** en-IN because the product is India-only; the day period is upper-cased below. */
 const DISPLAY_LOCALE = 'en-IN';
 
-/** `Intl.DateTimeFormat` construction is expensive; these are hot in lists. */
-let timeFormatter: Intl.DateTimeFormat | null = null;
-let timeWithSecondsFormatter: Intl.DateTimeFormat | null = null;
-let dateTimeFormatter: Intl.DateTimeFormat | null = null;
+/**
+ * `Intl.DateTimeFormat` construction is expensive and these are hot in lists,
+ * so each shape is cached twice: once pinned to IST for real instants, and once
+ * to UTC for zone-less wall-clock literals (see `parseZoneless`). The UTC twin
+ * is not a timezone choice — it is how the digits are passed through unchanged.
+ */
+const formatterCache = new Map<string, Intl.DateTimeFormat>();
 
-function getTimeFormatter(): Intl.DateTimeFormat {
-    timeFormatter ??= new Intl.DateTimeFormat(DISPLAY_LOCALE, {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-        timeZone: DISPLAY_TIME_ZONE,
-    });
-    return timeFormatter;
+function formatter(key: string, options: Intl.DateTimeFormatOptions, wallClock: boolean): Intl.DateTimeFormat {
+    const cacheKey = `${key}:${wallClock ? 'wall' : 'ist'}`;
+    let cached = formatterCache.get(cacheKey);
+    if (!cached) {
+        cached = new Intl.DateTimeFormat(DISPLAY_LOCALE, {
+            ...options,
+            timeZone: wallClock ? 'UTC' : DISPLAY_TIME_ZONE,
+        });
+        formatterCache.set(cacheKey, cached);
+    }
+    return cached;
 }
 
-function getTimeWithSecondsFormatter(): Intl.DateTimeFormat {
-    timeWithSecondsFormatter ??= new Intl.DateTimeFormat(DISPLAY_LOCALE, {
-        hour: 'numeric',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true,
-        timeZone: DISPLAY_TIME_ZONE,
-    });
-    return timeWithSecondsFormatter;
+const TIME_OPTS: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit', hour12: true };
+const TIME_SECONDS_OPTS: Intl.DateTimeFormatOptions = { ...TIME_OPTS, second: '2-digit' };
+const DATE_TIME_OPTS: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', ...TIME_OPTS };
+const TIMESTAMP_OPTS: Intl.DateTimeFormatOptions = {
+    day: 'numeric', month: 'short', year: 'numeric', ...TIME_SECONDS_OPTS,
+};
+
+/**
+ * An ISO-ish local timestamp carrying NO zone: `2026-08-16T12:00:00`, no `Z`
+ * and no `+05:30`.
+ */
+const ZONELESS_ISO = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?$/;
+
+/**
+ * REVIEW M-1 — A STRING WITH NO ZONE HAS NO OFFSET TO APPLY.
+ *
+ * `log-factory-helpers.ts:288` synthesises `createdAtISO: \`${log.date}T12:00:00\``
+ * as a deliberate midday placeholder, and `transcriptTimelineService.ts:86`
+ * uses the same fallback. Before this task both halves were device-local — the
+ * string parsed device-local and rendered device-local — so the round trip
+ * cancelled and it always read `12:00 pm`. Pinning only the RENDER to IST broke
+ * that: on a UTC handset the placeholder started reading `5:30 PM`.
+ *
+ * That is the identical hazard I named for `formatDisplayTimeFromHHmm` and then
+ * failed to check for on this input. A zone-less literal is a wall clock, so it
+ * is rendered as one: parsed as UTC and formatted in UTC, which passes the
+ * digits through untouched. Anything carrying `Z` or an offset is a real
+ * instant and is converted to IST as normal.
+ */
+function parseZoneless(value: string): Date | null {
+    const m = ZONELESS_ISO.exec(value.trim());
+    if (!m) return null;
+    const [, y, mo, d, hh, mm, ss] = m;
+    const date = new Date(Date.UTC(
+        Number(y), Number(mo) - 1, Number(d), Number(hh), Number(mm), Number(ss ?? '0'),
+    ));
+    return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function getDateTimeFormatter(): Intl.DateTimeFormat {
-    dateTimeFormatter ??= new Intl.DateTimeFormat(DISPLAY_LOCALE, {
-        day: 'numeric',
-        month: 'short',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-        timeZone: DISPLAY_TIME_ZONE,
-    });
-    return dateTimeFormatter;
+interface Resolved {
+    date: Date;
+    /** True when the input carried no zone, so it must be rendered as written. */
+    wallClock: boolean;
 }
 
-function toDate(input: Date | string | number | null | undefined): Date | null {
+function toDate(input: Date | string | number | null | undefined): Resolved | null {
     if (input === null || input === undefined || input === '') {
         return null;
     }
+    if (typeof input === 'string') {
+        const wall = parseZoneless(input);
+        if (wall) return { date: wall, wallClock: true };
+    }
     const date = input instanceof Date ? input : new Date(input);
-    return Number.isNaN(date.getTime()) ? null : date;
+    return Number.isNaN(date.getTime()) ? null : { date, wallClock: false };
 }
 
 function partsOf(formatter: Intl.DateTimeFormat, date: Date): Record<string, string> {
@@ -115,7 +147,8 @@ function partsOf(formatter: Intl.DateTimeFormat, date: Date): Record<string, str
 }
 
 /**
- * `h:mm AM`. The single clock the farmer sees.
+ * `h:mm AM`. Every time-of-day the farmer sees goes through here — enforced by
+ * `__tests__/displayTime.sweep.test.ts` rather than asserted.
  *
  * @param fallback what to render when the input is absent or unparseable.
  *        Defaults to empty so a missing timestamp renders nothing rather than a
@@ -125,10 +158,10 @@ export function formatDisplayTime(
     input: Date | string | number | null | undefined,
     fallback = '',
 ): string {
-    const date = toDate(input);
-    if (!date) return fallback;
+    const r = toDate(input);
+    if (!r) return fallback;
 
-    const p = partsOf(getTimeFormatter(), date);
+    const p = partsOf(formatter('time', TIME_OPTS, r.wallClock), r.date);
     if (!p.hour || !p.minute) return fallback;
 
     // `dayPeriod` is present whenever `hour12` is on; the guard is for an ICU
@@ -142,10 +175,10 @@ export function formatDisplayTimeWithSeconds(
     input: Date | string | number | null | undefined,
     fallback = '',
 ): string {
-    const date = toDate(input);
-    if (!date) return fallback;
+    const r = toDate(input);
+    if (!r) return fallback;
 
-    const p = partsOf(getTimeWithSecondsFormatter(), date);
+    const p = partsOf(formatter('timeSeconds', TIME_SECONDS_OPTS, r.wallClock), r.date);
     if (!p.hour || !p.minute || !p.second) return fallback;
 
     const period = p.dayPeriod ? ` ${p.dayPeriod.toUpperCase()}` : '';
@@ -157,19 +190,48 @@ export function formatDisplayTimeWithSeconds(
  *
  * The DATE half is deliberately left in the shape those call sites already
  * used (`day: 'numeric', month: 'short'`). This task changes clocks, not dates.
+ *
+ * ONLY for sites that already showed day+month and no year. Sites that rendered
+ * a bare `toLocaleString()` carried a year and seconds; sending them here drops
+ * both, which is why `formatDisplayTimestamp` exists (review M-2).
  */
 export function formatDisplayDateTime(
     input: Date | string | number | null | undefined,
     fallback = '',
 ): string {
-    const date = toDate(input);
-    if (!date) return fallback;
+    const r = toDate(input);
+    if (!r) return fallback;
 
-    const p = partsOf(getDateTimeFormatter(), date);
+    const p = partsOf(formatter('dateTime', DATE_TIME_OPTS, r.wallClock), r.date);
     if (!p.hour || !p.minute || !p.day || !p.month) return fallback;
 
     const period = p.dayPeriod ? ` ${p.dayPeriod.toUpperCase()}` : '';
     return `${p.day} ${p.month}, ${p.hour}:${p.minute}${period}`;
+}
+
+/**
+ * `16 Aug 2026, 2:30:07 PM` — for the surfaces that previously rendered a bare
+ * `toLocaleString()`.
+ *
+ * REVIEW M-2 — THE YEAR AND THE SECONDS ARE HERE ON PURPOSE. Routing those
+ * sites through `formatDisplayDateTime` silently dropped both, and in a
+ * recent-failures table a stale row then looks like a current one. A bare
+ * `toLocaleString()` had no stable style to preserve — it rendered in whatever
+ * the device was set to — so what is preserved is the INFORMATION it carried,
+ * not a shape it never reliably had.
+ */
+export function formatDisplayTimestamp(
+    input: Date | string | number | null | undefined,
+    fallback = '',
+): string {
+    const r = toDate(input);
+    if (!r) return fallback;
+
+    const p = partsOf(formatter('timestamp', TIMESTAMP_OPTS, r.wallClock), r.date);
+    if (!p.hour || !p.minute || !p.second || !p.day || !p.month || !p.year) return fallback;
+
+    const period = p.dayPeriod ? ` ${p.dayPeriod.toUpperCase()}` : '';
+    return `${p.day} ${p.month} ${p.year}, ${p.hour}:${p.minute}:${p.second}${period}`;
 }
 
 /**
