@@ -538,9 +538,45 @@ describe('the notice document', () => {
     it('moved the version when the words moved', () => {
         // A farmer who accepted the previous wording must not be recorded against this
         // one. The gate re-shows on a version change (useConsentGate), so this string
-        // changing IS the re-consent mechanism. `.4` = the DPDP §5(1)(c) Board-complaint
-        // line landed; anyone who accepted `.3` was never told he could go to the Board.
-        expect(NOTICE_VERSION).toBe('notice-2026-08-17.4');
+        // changing IS the re-consent mechanism. `.5` = English aligned up to the Marathi
+        // absolute on AI training, AND the Terms/Privacy versions moved to documents that
+        // exist; anyone who accepted `.4` was shown a weaker English promise and two
+        // version strings that named nothing.
+        expect(NOTICE_VERSION).toBe('notice-2026-08-17.5');
+    });
+
+    // The other half of `.5` — that TERMS_VERSION and PRIVACY_POLICY_VERSION name
+    // documents which actually declare those versions — is pinned in
+    // `features/legal/__tests__/legalDocuments.test.ts`, which imports both constants and
+    // reads the four served files. It lives there rather than here because this file runs
+    // under jsdom to render a component, and reaching into `public/` from a component
+    // test is how a UI suite quietly becomes a filesystem suite.
+
+    it('makes ONE promise about his voice and AI, not one per language', () => {
+        // The divergence this test exists for: Marathi promised never, English promised
+        // "not without separate permission", and `canonicalNoticeText` hashes each
+        // language separately — so the ledger held two materially different, separately
+        // enforceable commitments about the same voice, under one version, with the
+        // farmers who matter reading the strict one.
+        //
+        // Aligning English UP is also the only line that is TRUE of the code: nothing in
+        // the app can grant voice-training consent. `VerbatimTrainingCorpus` exists on
+        // UserConsentState but is reachable by no endpoint and no screen, and both jobs
+        // that could build a training set are off by default and enabled nowhere.
+        expect(CONSENT_NOTICE.en.willNotDo.items[2])
+            .toBe('We will not use your voice to train AI models.');
+        expect(CONSENT_NOTICE.mr.willNotDo.items[2])
+            .toBe('तुमचा आवाज AI मॉडेल शिकवण्यासाठी वापरणार नाही.');
+
+        // No "unless" may creep back into either. A qualifier on one side only is exactly
+        // how the two drifted apart the first time.
+        for (const language of ['mr', 'en'] as const) {
+            const line = CONSENT_NOTICE[language].willNotDo.items[2];
+            expect(line).not.toContain('without separate permission');
+            expect(line).not.toContain('परवानगीशिवाय');
+            // And it is hashed, so the record can prove which promise was on screen.
+            expect(canonicalNoticeText(language)).toContain(line);
+        }
     });
 
     it('a different displayed language is a different notice, and so a different hash', () => {

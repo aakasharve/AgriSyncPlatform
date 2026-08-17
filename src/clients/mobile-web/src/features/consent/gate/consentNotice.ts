@@ -58,12 +58,26 @@
 // greps for the token, so the prod-deploy block still fires while this constant exists.
 //
 // 🛑 WHAT IS STILL UNKNOWN IS OMITTED, NOT PLACEHELD. The data fiduciary's legal name
-// and contact are real and appear on screen verbatim. A grievance phone number, a named
-// DPO, retention periods, the processor list and the under-18 policy are still
-// genuinely unsettled — so this notice says nothing about
-// them rather than showing a farmer an empty bracket. Omission is honest; a visible
-// "[not yet filled in]" is a screen telling him his consent is provisional. Until those
-// land, no wording here or anywhere else may claim DPDP compliance.
+// and contact are real and appear on screen verbatim. Omission is honest; a visible
+// "[not yet filled in]" is a screen telling him his consent is provisional. No wording
+// here or anywhere else may claim DPDP compliance.
+//
+// Three of the five things this note used to call unsettled were settled on 2026-08-17
+// and now live in `public/legal/privacy_{mr,en}.md`: the RETENTION PERIODS (§6, sourced
+// from `domain/privacy/RetentionPolicy.ts`), the PROCESSOR LIST with the leg outside
+// India (§4, §5), and the UNDER-18 RULE (Terms §2). They are deliberately NOT repeated on
+// this screen — the founder's compression pass asked for the shortest notice that still
+// discloses everything, and a farmer who wants the detail has a document to open. Two
+// remain genuinely unsettled and stay omitted: a grievance phone number and a named DPO.
+//
+// ⚠️ STILL OWED, and stated here rather than assumed away: the documents EXIST but the
+// gate's own links do not yet REACH them. `ConsentGateScreen.tsx:341,343` hrefs are
+// `/legal/terms` and `/legal/privacy`; the served files are `/legal/terms_{mr,en}.md` and
+// `/legal/privacy_{mr,en}.md`. Repointing the href is a one-line change and is NOT the
+// fix — a hard `<a href>` to a raw markdown file unloads the gate mid-consent and drops
+// the pre-registration session. What is owed is a language-aware in-app viewer. Until it
+// lands, the version strings below are honest (the documents are written and served) but
+// the farmer cannot open them from this screen.
 //
 // Founder decision 13 scopes the word for "record" (n-o-n-d) to Sathi's own surface. It
 // appears nowhere in the copy below — deliberately spelled out here rather than written,
@@ -106,10 +120,35 @@ export const NOTICE_LEGAL_REVIEW_PENDING = 'LEGAL_REVIEW_PENDING' as const;
  * different, and a farmer who accepted `.3` was never told he could go to the Board.
  * Recording him against `.4` would assert he was shown a disclosure he never saw — the
  * exact failure the hash and the version exist to prevent.
+ *
+ * `notice-2026-08-17.5` — the ONE-PROMISE pass, and the first version whose Terms and
+ * privacy strings name documents that exist. Two things moved together:
+ *
+ *   1. The Marathi and English notices were making DIFFERENT promises about the same
+ *      voice. Marathi `willNotDo.items[2]` said we will never train AI models on it;
+ *      English said we will not "without separate permission". `canonicalNoticeText`
+ *      hashes each language separately, so the ledger was accumulating two materially
+ *      different, separately enforceable commitments under one version — and virtually
+ *      every pilot farmer reads the Marathi one. English is aligned UP to the Marathi
+ *      absolute rather than the Marathi weakened down: the strict promise is the one the
+ *      people who matter were actually shown, and it is also true of the code — there is
+ *      no surface anywhere in the app through which a farmer could grant voice-training
+ *      consent, `UserConsentState.VerbatimTrainingCorpus` is reachable by no endpoint and
+ *      no UI, and both background jobs that could ever build a training set default off
+ *      and are enabled in no environment.
+ *   2. `TERMS_VERSION` and `PRIVACY_POLICY_VERSION` moved to `-2026-08-17.1`, the versions
+ *      the newly-authored `public/legal/{terms,privacy}_{mr,en}.md` declare. They
+ *      previously read `-2026-08-16.1`, which named nothing at all: every acceptance was
+ *      writing, into an append-only ledger, that the farmer accepted two documents that
+ *      had never been written. Those rows cannot be corrected afterwards, which is why
+ *      this could not wait for the pilot to start.
+ *
+ * Both strings are inside `canonicalNoticeText`, so either one moving is a material
+ * change to the hashed notice and the notice version has to move with it.
  */
-export const NOTICE_VERSION = 'notice-2026-08-17.4';
-export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-16.1';
-export const TERMS_VERSION = 'terms-2026-08-16.1';
+export const NOTICE_VERSION = 'notice-2026-08-17.5';
+export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-17.1';
+export const TERMS_VERSION = 'terms-2026-08-17.1';
 
 /**
  * The data fiduciary, as registered. One copy, shared by both languages, because a
@@ -134,12 +173,13 @@ export const DATA_FIDUCIARY = {
 /**
  * Facts that left the gate but still have to appear SOMEWHERE a farmer can reach.
  *
- * The gate links to `/legal/privacy`. That route has no target in this repo today —
- * there is no privacy-policy page or document under `src/clients/mobile-web` (the only
- * files under `public/consent/` are the wave-4.3 OPTIONAL-consent agreements, a
- * different document). So this is a standing debt, named here so it cannot be lost:
- * when the full privacy notice is authored, the CIN and the registered office go into
- * it. Neither is a secret; both are public register facts.
+ * **This debt is PAID as of 2026-08-17.** Both facts are stated in §1 of
+ * `public/legal/privacy_{mr,en}.md`, and
+ * `features/legal/__tests__/legalDocuments.test.ts` fails if either stops appearing
+ * there. The list survives rather than being deleted because it is the link between the
+ * two halves: the gate test asserts these are OFF the screen, the document test asserts
+ * they are IN the notice, and both read this constant. Delete it and each half stops
+ * knowing why the other exists.
  */
 export const OWED_TO_FULL_PRIVACY_NOTICE = ['cin', 'registeredOffice'] as const;
 
@@ -362,7 +402,10 @@ const en: NoticeCopy = {
         items: [
             'We will not sell your personal data.',
             'We will not use it for advertising without separate permission.',
-            'We will not use your voice to train AI models without separate permission.',
+            // ABSOLUTE, and identical to the Marathi line. The qualifier "without separate
+            // permission" was here until notice-2026-08-17.5 and may not come back without
+            // the Marathi moving in the same commit — see the NOTICE_VERSION note.
+            'We will not use your voice to train AI models.',
             'We will not make lending, insurance or market decisions from your data — that needs separate, specific consent.',
         ],
     },
