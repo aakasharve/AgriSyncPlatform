@@ -315,6 +315,12 @@ const ConsentGateScreen: React.FC<Props> = ({ onAccept, forceLanguage }) => {
                         ))}
                     </ul>
                     <p className="mt-1.5 font-sans text-[9px] leading-relaxed text-stone-500">{copy.rights.withdrawal}</p>
+                    {/* DPDP §5(1)(c) — his right to take a complaint to the Board. Sits
+                        under the existing rights heading rather than earning one of its
+                        own, and outside the list above because `where` promises those
+                        are done from Settings. Same type size and tone as `withdrawal`;
+                        no icon, no card, no emphasis. */}
+                    <p className="mt-1.5 font-sans text-[9px] leading-relaxed text-stone-500">{copy.rights.boardComplaint}</p>
                 </section>
 
                 {/* ── section: who runs this, and the two documents ─────────────── */}

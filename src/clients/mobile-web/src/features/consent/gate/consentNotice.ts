@@ -95,8 +95,19 @@ export const NOTICE_LEGAL_REVIEW_PENDING = 'LEGAL_REVIEW_PENDING' as const;
  * consequence of refusing consent, so it is displayed, serialised and versioned like
  * every other statement here. A notice whose only affordance was "yes" was describing a
  * choice it did not offer.
+ *
+ * `notice-2026-08-17.4` — the BOARD-COMPLAINT pass. DPDP Act 2023 §5(1) requires the
+ * notice to inform the Data Principal of three things; this notice carried two. It
+ * described the personal data and the purposes, and it described how to exercise his
+ * rights — but not §5(1)(c), THE MANNER OF MAKING A COMPLAINT TO THE DATA PROTECTION
+ * BOARD OF INDIA. `rights.boardComplaint` adds it.
+ *
+ * The bump is not optional book-keeping. The words a farmer accepts are now materially
+ * different, and a farmer who accepted `.3` was never told he could go to the Board.
+ * Recording him against `.4` would assert he was shown a disclosure he never saw — the
+ * exact failure the hash and the version exist to prevent.
  */
-export const NOTICE_VERSION = 'notice-2026-08-17.3';
+export const NOTICE_VERSION = 'notice-2026-08-17.4';
 export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-16.1';
 export const TERMS_VERSION = 'terms-2026-08-16.1';
 
@@ -159,7 +170,29 @@ export interface NoticeCopy {
     /** Processor CATEGORIES — the founder's own sentence. No processor is named, because
      *  the list is not settled; naming one we have not confirmed would be a fabrication. */
     processors: string;
-    rights: { heading: string; where: string; items: string[]; withdrawal: string };
+    /**
+     * `boardComplaint` is the DPDP §5(1)(c) disclosure — his right to take a complaint
+     * to the Data Protection Board of India. It is a sibling of `withdrawal` rather than
+     * an entry in `items` on purpose: `where` promises that the items above it are done
+     * from `Settings → Data & Privacy`, and a complaint to the Board is not. Filing it
+     * under that promise would be a false statement about where to go.
+     *
+     * It states the RIGHT and nothing more. No Board address, email, portal URL or form
+     * appears here, because none has been verified — and an invented mechanism is worse
+     * than a named right, since a farmer would act on it. The Board's own procedure is
+     * the Board's to publish.
+     *
+     * The name stays in Latin script in both languages, for the same reason the
+     * company's does: it is a statutory body's registered name, and transliterating a
+     * registered name is inventing one.
+     */
+    rights: {
+        heading: string;
+        where: string;
+        items: string[];
+        withdrawal: string;
+        boardComplaint: string;
+    };
     /**
      * Who the farmer is actually dealing with. Facts only, and only the two a public
      * app screen needs: the legal name (rendered from `DATA_FIDUCIARY`) and a contact.
@@ -259,6 +292,7 @@ const mr: NoticeCopy = {
             'तक्रार करा, किंवा तुमच्या वतीने हक्क वापरायला कुणाला नेमा.',
         ],
         withdrawal: 'मुख्य परवानगी मागे घेतल्यास काही किंवा सर्व सुविधा बंद होऊ शकतात. आधी कायदेशीररीत्या झालेली प्रक्रिया रद्द होत नाही; कायद्याने आवश्यक तेवढी माहिती ठरावीक काळ ठेवावी लागू शकते.',
+        boardComplaint: 'आमच्याकडे तक्रार करूनही समाधान न झाल्यास, Data Protection Board of India कडे तक्रार करण्याचा तुम्हाला हक्क आहे.',
     },
     entity: {
         heading: 'ही सेवा कोण चालवतं',
@@ -343,6 +377,7 @@ const en: NoticeCopy = {
             'Raise a grievance, or nominate someone to act for you.',
         ],
         withdrawal: 'Withdrawing essential consent may disable some or all services. It does not undo processing already lawfully done; limited information may be retained where the law requires it.',
+        boardComplaint: 'If we do not resolve your grievance, you have the right to complain to the Data Protection Board of India.',
     },
     entity: {
         heading: 'Who runs this service',
@@ -403,6 +438,9 @@ export function canonicalNoticeText(language: NoticeLanguage): string {
     lines.push(c.willNotDo.heading, ...c.willNotDo.items);
     lines.push(c.processors);
     lines.push(c.rights.heading, c.rights.where, ...c.rights.items, c.rights.withdrawal);
+    // DPDP §5(1)(c). A statutory disclosure that is on the screen and not in here would
+    // leave the stored hash describing a notice the farmer was never shown.
+    lines.push(c.rights.boardComplaint);
     lines.push(
         c.entity.heading,
         DATA_FIDUCIARY.legalName,

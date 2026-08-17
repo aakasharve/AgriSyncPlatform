@@ -278,6 +278,34 @@ describe('ConsentGateScreen — no dark patterns', () => {
         }
         expect(rights).toHaveTextContent(CONSENT_NOTICE.en.rights.withdrawal);
     });
+
+    it('tells him he can complain to the Data Protection Board, in both languages', () => {
+        // DPDP Act 2023 §5(1) requires the notice to inform him of three things. It had
+        // two: the data and purposes, and how to exercise his rights with us. §5(1)(c) —
+        // the manner of complaining to the Board — was missing entirely.
+        for (const language of ['en', 'mr'] as const) {
+            const { unmount } = render(
+                <ConsentGateScreen onAccept={vi.fn()} forceLanguage={language} />);
+
+            const rights = screen.getByTestId('consent-rights');
+            expect(rights).toHaveTextContent(CONSENT_NOTICE[language].rights.boardComplaint);
+            // The Board is named, so the farmer knows who he is entitled to go to.
+            expect(rights).toHaveTextContent('Data Protection Board of India');
+
+            unmount();
+        }
+    });
+
+    it('names no Board address, inbox or portal, because none is verified', () => {
+        // Stating the right is the disclosure. Inventing the mechanism would be worse
+        // than omitting it — he would act on a channel that does not exist.
+        for (const language of ['en', 'mr'] as const) {
+            const line = CONSENT_NOTICE[language].rights.boardComplaint;
+            expect(line).not.toMatch(/https?:\/\//);
+            expect(line).not.toMatch(/@/);
+            expect(line).not.toMatch(/\b\d{6}\b/); // a PIN code would mean a postal address
+        }
+    });
 });
 
 describe('ConsentGateScreen — who he is dealing with', () => {
@@ -475,6 +503,7 @@ describe('the notice document', () => {
         for (const line of [
             c.title, c.intro, c.brandLine, c.purposeCardsHeading, c.willNotDo.heading,
             c.processors, c.rights.heading, c.rights.where, c.rights.withdrawal,
+            c.rights.boardComplaint,
             c.entity.heading, c.acceptanceMeaning, c.ageDeclaration, c.cta,
             c.ctaDisabledHint, c.decline.label, c.decline.consequence,
             c.links.terms, c.links.privacy,
@@ -509,8 +538,9 @@ describe('the notice document', () => {
     it('moved the version when the words moved', () => {
         // A farmer who accepted the previous wording must not be recorded against this
         // one. The gate re-shows on a version change (useConsentGate), so this string
-        // changing IS the re-consent mechanism. `.3` = the decline copy landed.
-        expect(NOTICE_VERSION).toBe('notice-2026-08-17.3');
+        // changing IS the re-consent mechanism. `.4` = the DPDP §5(1)(c) Board-complaint
+        // line landed; anyone who accepted `.3` was never told he could go to the Board.
+        expect(NOTICE_VERSION).toBe('notice-2026-08-17.4');
     });
 
     it('a different displayed language is a different notice, and so a different hash', () => {
