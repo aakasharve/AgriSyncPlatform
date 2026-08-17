@@ -88,8 +88,9 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, on
     // REVIEW I-3 — BOTH HALVES ARE PINNED TO IST, OR NEITHER.
     //
     // The time was `en-GB` (a 24-hour locale) and read `14:30`. Fixing only the
-    // time created a worse fault than the one it fixed: `:117` and `:181` render
-    // these two on ONE LINE, so a device in UTC at 20:00 showed
+    // time created a worse fault than the one it fixed: `dateStr` and `timeStr`
+    // are rendered together on ONE LINE below (search for `{dateStr}`), so a
+    // device in UTC at 20:00 showed
     // `16 August 2026 | 1:30 AM` — a date and time pair that never existed,
     // because 1:30 AM IST is already the 17th. Before, both halves were
     // device-local: wrong format, but internally consistent.

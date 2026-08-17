@@ -113,11 +113,48 @@ const ZONELESS_ISO = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?
 function parseZoneless(value: string): Date | null {
     const m = ZONELESS_ISO.exec(value.trim());
     if (!m) return null;
+
     const [, y, mo, d, hh, mm, ss] = m;
-    const date = new Date(Date.UTC(
-        Number(y), Number(mo) - 1, Number(d), Number(hh), Number(mm), Number(ss ?? '0'),
-    ));
-    return Number.isNaN(date.getTime()) ? null : date;
+    const year = Number(y);
+    const month = Number(mo);
+    const day = Number(d);
+    const hour = Number(hh);
+    const minute = Number(mm);
+    const second = Number(ss ?? '0');
+
+    const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    if (Number.isNaN(date.getTime())) return null;
+
+    // REVIEW B002 — SHAPE IS NOT VALUE, AND `Date.UTC` ROLLS OVER SILENTLY.
+    //
+    // The first version stopped at the regex. `Date.UTC` happily absorbs
+    // impossible components and carries them into the next unit, so the shape
+    // check alone MANUFACTURED clocks that had never been valid:
+    //
+    //   '2026-08-16T25:00'     -> 1:00 AM
+    //   '9999-99-99T99:99'     -> 4:39 AM
+    //   '2026-13-45T99:99:99'  -> 4:40 AM
+    //
+    // All three returned the fallback before that change, so the fix I wrote to
+    // stop a shifted clock introduced an invented one — contradicting this
+    // module's own contract ("renders nothing rather than a made-up time") and
+    // the suite's rule ("Never show a made-up clock for a timestamp we do not
+    // have").
+    //
+    // Parse AND verify: every component must survive the round trip unchanged.
+    // Anything that rolled over is not a time we were given.
+    if (
+        date.getUTCFullYear() !== year
+        || date.getUTCMonth() !== month - 1
+        || date.getUTCDate() !== day
+        || date.getUTCHours() !== hour
+        || date.getUTCMinutes() !== minute
+        || date.getUTCSeconds() !== second
+    ) {
+        return null;
+    }
+
+    return date;
 }
 
 interface Resolved {
@@ -130,9 +167,14 @@ function toDate(input: Date | string | number | null | undefined): Resolved | nu
     if (input === null || input === undefined || input === '') {
         return null;
     }
-    if (typeof input === 'string') {
+    if (typeof input === 'string' && ZONELESS_ISO.test(input.trim())) {
+        // A string of this SHAPE is a zone-less literal and is handled only by
+        // `parseZoneless`. It must NOT fall through to `new Date(...)` when the
+        // components are invalid: V8 parses `2026-02-30T10:00` leniently, rolls
+        // it to 2 March, and would render `10:00 AM` for a date that does not
+        // exist — the same fabrication B002 was raised for, one layer down.
         const wall = parseZoneless(input);
-        if (wall) return { date: wall, wallClock: true };
+        return wall ? { date: wall, wallClock: true } : null;
     }
     const date = input instanceof Date ? input : new Date(input);
     return Number.isNaN(date.getTime()) ? null : { date, wallClock: false };
@@ -147,8 +189,22 @@ function partsOf(formatter: Intl.DateTimeFormat, date: Date): Record<string, str
 }
 
 /**
- * `h:mm AM`. Every time-of-day the farmer sees goes through here — enforced by
- * `__tests__/displayTime.sweep.test.ts` rather than asserted.
+ * `h:mm AM`. The formatter every user-facing time-of-day should use.
+ *
+ * REVIEW B003 — WHAT THIS PARAGRAPH IS ALLOWED TO CLAIM. It first said "the
+ * single clock the farmer sees", which was false while two clocks bypassed it.
+ * The replacement — "every time-of-day the farmer sees goes through here,
+ * enforced by the sweep test" — was BIGGER, still false, and borrowed
+ * credibility from a test that did not cover it.
+ *
+ * So, precisely: `__tests__/displayTime.sweep.test.ts` parses the syntax tree
+ * and asks the type checker what each receiver is. It catches every
+ * `toLocaleTimeString`/`toTimeString`, every `toLocaleString` on a `Date`,
+ * `toLocaleDateString` carrying time options, and `Intl.DateTimeFormat` with
+ * time options or an options type that permits them. It does NOT catch
+ * hand-rolled arithmetic (`getHours()` + `padStart`), or a `Date` reaching a
+ * formatter through `any`. That list is maintained in the test's own header,
+ * along with a fixture proving each covered form is really detected.
  *
  * @param fallback what to render when the input is absent or unparseable.
  *        Defaults to empty so a missing timestamp renders nothing rather than a
