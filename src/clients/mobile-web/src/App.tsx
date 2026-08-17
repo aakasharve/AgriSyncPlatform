@@ -80,16 +80,16 @@ const DEV_PREVIEW = typeof window !== 'undefined'
 const LABOUR_PREVIEW = typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('preview') === 'labour';
 
-// DEV-ONLY: ?preview=oversight — Owner Oversight Loop (spec:
-// owner-oversight-loop). Unlike the two bypasses above, this one is ALSO
-// gated on `IS_OVERSIGHT_PREVIEW_ENABLED` (`app/featureFlags.ts`, wraps
+// DEV-ONLY: ?preview=oversight — Owner Oversight Loop, full-app preview
+// (spec: owner-oversight-loop). Unlike the two bypasses above, this one is
+// ALSO gated on `IS_OVERSIGHT_PREVIEW_ENABLED` (`app/featureFlags.ts`, wraps
 // `import.meta.env.DEV`) and loaded via `React.lazy`, so Vite/Rollup folds
-// the whole branch to dead code and drops `OversightPreview` (and its seed
-// fixtures) from a production bundle entirely — a query-param check alone
-// would still ship the module. `OversightPreviewLazy` is `null` whenever the
-// flag is off, which in a production build is unconditionally.
+// the whole branch to dead code and drops `OversightAppPreview` (and its
+// seed fixtures) from a production bundle entirely — a query-param check
+// alone would still ship the module. `OversightPreviewLazy` is `null`
+// whenever the flag is off, which in a production build is unconditionally.
 const OversightPreviewLazy = IS_OVERSIGHT_PREVIEW_ENABLED
-    ? React.lazy(() => import('./features/oversight/OversightPreview'))
+    ? React.lazy(() => import('./features/oversight/OversightAppPreview'))
     : null;
 const OVERSIGHT_PREVIEW = IS_OVERSIGHT_PREVIEW_ENABLED
     && typeof window !== 'undefined'
