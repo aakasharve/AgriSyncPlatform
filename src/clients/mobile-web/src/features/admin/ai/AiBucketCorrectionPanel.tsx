@@ -3,6 +3,7 @@ import { RefreshCw } from 'lucide-react';
 import { VISIBLE_BUCKET_IDS, visibleBucketLabels, type VisibleBucketId } from '../../../domain/ai/BucketId';
 import type { CorrectionEvent } from '../../../domain/ai/contracts/CorrectionEvent';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
+import { formatDisplayDateTime } from '../../../shared/utils/displayTime';
 
 interface BucketCorrectionSummary {
     bucketId: VisibleBucketId;
@@ -39,7 +40,7 @@ const formatTimestamp = (iso?: string): string => {
     if (!iso) return 'No edits';
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return 'Invalid date';
-    return date.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+    return formatDisplayDateTime(date);
 };
 
 export const AiBucketCorrectionPanel: React.FC = () => {

@@ -2,15 +2,15 @@
 // Pure helpers used by AppRouter and its route render functions. No hooks, no JSX.
 
 import { DailyLog, LogVerificationStatus } from '../../types';
+import { formatDisplayTime } from '../../shared/utils/displayTime';
 
 export type FeedStatusTone = 'pending' | 'rejected' | 'approved';
 
-export const formatLogTime = (iso?: string): string => {
-    if (!iso) return '--:--';
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) return '--:--';
-    return date.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
-};
+/**
+ * 12-hour, AM/PM, IST — see `shared/utils/displayTime`. Kept as a named export
+ * because `mainView` imports it; the formatting itself lives in one place now.
+ */
+export const formatLogTime = (iso?: string): string => formatDisplayTime(iso, '--:--');
 
 export const truncateLine = (value: string, maxLength: number = 72): string => {
     if (!value) return value;

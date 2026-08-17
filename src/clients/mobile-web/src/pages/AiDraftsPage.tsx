@@ -20,6 +20,7 @@ import { getDateKey } from '../core/domain/services/DateKeyService';
 import type { TodayCounts } from '../domain/types/farm.types';
 import ManualEntry from '../features/logs/components/ManualEntry';
 import type { ManualEntryProps } from '../features/logs/components/manual-entry/types';
+import { formatDisplayDateTime } from '../shared/utils/displayTime';
 import {
     listUnreviewedAiResults,
     markAiResultReviewed,
@@ -69,7 +70,7 @@ function previewLabel(job: UnreviewedAiResult): string {
 // one screen.
 function formatRecordedAt(iso: string): string {
     try {
-        return new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        return formatDisplayDateTime(iso, iso);
     } catch {
         return iso;
     }

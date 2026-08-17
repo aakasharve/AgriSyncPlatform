@@ -24,6 +24,7 @@ import {
     type VoiceDiaryLocale,
     tVoiceDiary,
 } from '../../../i18n/voiceDiaryTranslations';
+import { formatDisplayTime } from '../../../shared/utils/displayTime';
 
 /**
  * Unified clip projection consumed by the player. Either a local Dexie
@@ -50,11 +51,7 @@ interface Props {
     clip: UnifiedClip;
 }
 
-const formatTime = (iso: string): string => {
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) return '--:--';
-    return date.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
-};
+const formatTime = (iso: string): string => formatDisplayTime(iso, '--:--');
 
 const formatDuration = (durationMs?: number): string => {
     if (!durationMs || durationMs <= 0) return '0:00';

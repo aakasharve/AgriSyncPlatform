@@ -3,6 +3,7 @@ import { useAttentionBoard } from '../hooks/useAttentionBoard';
 import AttentionCard from '../components/AttentionCard';
 import { useAppNavigationState } from '../../../app/context/AppFeatureContexts';
 import type { AttentionCardCacheRecord } from '../../../infrastructure/storage/DexieDatabase';
+import { formatDisplayTime } from '../../../shared/utils/displayTime';
 
 const AttentionPage: React.FC = () => {
     const { cards, asOf, isLoading } = useAttentionBoard();
@@ -68,7 +69,7 @@ const AttentionPage: React.FC = () => {
     }
 
     const asOfLabel = asOf
-        ? new Date(asOf).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+        ? formatDisplayTime(asOf)
         : '';
 
     return (

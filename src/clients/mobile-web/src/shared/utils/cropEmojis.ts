@@ -51,17 +51,11 @@ export function getCropEmoji(cropName: string): string {
 }
 
 /**
- * Format time for display (12-hour format with AM/PM)
+ * Format time for display (12-hour, AM/PM, IST).
+ *
+ * Re-exported from `shared/utils/displayTime`, which is the single formatter.
+ * This lived here — in the crop-emoji module — and was one of three partial
+ * implementations that did not know about each other. Kept as a re-export so
+ * `transcriptTimelineService` needs no churn; do not reimplement it here.
  */
-export function formatDisplayTime(isoString: string): string {
-    try {
-        const date = new Date(isoString);
-        return date.toLocaleTimeString('en-IN', {
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-        });
-    } catch {
-        return '';
-    }
-}
+export { formatDisplayTime } from './displayTime';

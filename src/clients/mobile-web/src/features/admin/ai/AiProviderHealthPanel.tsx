@@ -3,6 +3,7 @@ import {
     AiDashboardResponse,
     AiHealthResponse,
 } from '../../../infrastructure/api/AgriSyncClient';
+import { formatDisplayDateTime, formatDisplayTime } from '../../../shared/utils/displayTime';
 
 interface AiProviderHealthPanelProps {
     health: AiHealthResponse | null;
@@ -60,10 +61,10 @@ export const AiProviderHealthPanel: React.FC<AiProviderHealthPanelProps> = ({
                 <div className="text-right text-xs text-stone-500">
                     <div>Fallbacks (recent): {fallbackCount}</div>
                     {dashboard?.sinceUtc && (
-                        <div>Stats since: {new Date(dashboard.sinceUtc).toLocaleString()}</div>
+                        <div>Stats since: {formatDisplayDateTime(dashboard.sinceUtc)}</div>
                     )}
                     {refreshedAtUtc && (
-                        <div>Refreshed: {new Date(refreshedAtUtc).toLocaleTimeString()}</div>
+                        <div>Refreshed: {formatDisplayTime(refreshedAtUtc)}</div>
                     )}
                 </div>
             </div>

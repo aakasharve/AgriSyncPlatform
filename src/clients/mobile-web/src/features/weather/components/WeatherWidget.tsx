@@ -10,6 +10,7 @@ import { formatTemperature, formatPrecipitation, formatHumidity, formatWindSpeed
 import { useLanguage } from '../../../i18n/LanguageContext';
 import WeatherFallbackCard from './WeatherFallbackCard';
 import type { WeatherStatus } from '../useWeatherMonitor';
+import { formatDisplayTime } from '../../../shared/utils/displayTime';
 
 // Feature-local strings (like WeatherFallbackCard) — not the translations.ts cap.
 const CAUTION_STRINGS = {
@@ -85,7 +86,9 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, on
     // Format Date for Header
     const today = new Date();
     const dateStr = today.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-    const timeStr = today.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    // Was `en-GB`, which is a 24-hour locale — this clock read `14:30`.
+    // The DATE above keeps its existing en-GB long form; only the time moves.
+    const timeStr = formatDisplayTime(today);
 
     const getIcon = (condition: string, size: number) => {
         const c = condition.toLowerCase();

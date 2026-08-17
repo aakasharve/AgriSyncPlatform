@@ -1,5 +1,6 @@
 import React from 'react';
 import { AiDashboardResponse } from '../../../infrastructure/api/AgriSyncClient';
+import { formatDisplayDateTime } from '../../../shared/utils/displayTime';
 
 interface AiRecentFailuresTableProps {
     recentJobs: AiDashboardResponse['recentJobs'];
@@ -15,7 +16,7 @@ function formatDate(value?: string): string {
         return '-';
     }
 
-    return date.toLocaleString();
+    return formatDisplayDateTime(date);
 }
 
 export const AiRecentFailuresTable: React.FC<AiRecentFailuresTableProps> = ({ recentJobs }) => {

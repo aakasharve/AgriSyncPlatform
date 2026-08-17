@@ -7,6 +7,7 @@ import React from 'react';
 import { DayWorkSummary } from '../../../types';
 import { formatCurrency } from '../../../shared/utils/currency';
 import { Users, Droplets, Tractor, Package, CheckSquare, FileText, User, ShieldCheck, Clock, SprayCan, Leaf } from 'lucide-react';
+import { formatDisplayTime } from '../../../shared/utils/displayTime';
 
 interface DailyWorkSummaryViewProps {
     summary: DayWorkSummary;
@@ -297,7 +298,7 @@ const DailyWorkSummaryView: React.FC<DailyWorkSummaryViewProps> = ({ summary }) 
                         {summary.loggedAt && (
                             <div className="flex items-center gap-1.5">
                                 <Clock size={12} className="text-slate-400" />
-                                <span>{new Date(summary.loggedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                                <span>{formatDisplayTime(summary.loggedAt)}</span>
                             </div>
                         )}
                     </div>
