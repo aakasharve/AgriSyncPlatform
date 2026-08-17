@@ -63,6 +63,21 @@ namespace AgriSync.Bootstrapper.Migrations.Analytics
     /// </para>
     ///
     /// <para>
+    /// <b>...but do NOT reach for <c>dotnet ef migrations script --idempotent</c>
+    /// to do that inspection.</b> It aborts the whole Analytics chain on this
+    /// migration: the generator wraps each migration in a <c>DO $EF$</c> block,
+    /// and a bare <c>SELECT set_config(...)</c> is illegal inside PL/pgSQL,
+    /// which requires <c>PERFORM</c>. Nothing this repo deploys through is
+    /// affected -- the SSM runbook uses <c>dotnet ef database update</c> and
+    /// <c>Program.cs</c> uses <c>MigrateAsync</c>, both of which execute the raw
+    /// SQL directly -- so this is a tooling limitation, not a deployment defect.
+    /// It is called out here precisely because the paragraph above sends an
+    /// operator to inspect the target database, and a generated script is the
+    /// natural thing to reach for. Use the non-idempotent
+    /// <c>migrations script</c>, or read the SQL in this file.
+    /// </para>
+    ///
+    /// <para>
     /// <b>Two failure modes this migration actively defends against, both of
     /// which are silent rather than loud.</b> (1) <c>dwc_score_per_farm_week</c>
     /// is recreated <c>WITH NO DATA</c>, and <c>MisRefreshJob</c> refreshes
@@ -342,12 +357,39 @@ END $$;
 -- object level, see the grant block below for why the object grant alone is
 -- not enough.
 --
--- Scope of that claim, stated precisely because an earlier version of this
--- comment overstated it: the owner restore keeps REFRESH working (refresh is
--- owner-only) and the two grants keep SELECT working independently of who owns
--- the objects. It does NOT make the views ownerless or make every operation
--- grant-driven -- REFRESH still requires ownership, which is exactly why the
--- restore above is load-bearing rather than tidiness.
+-- Scope of that claim, stated precisely because TWO earlier versions of this
+-- comment overstated it in turn:
+--
+--   * Ownership is NECESSARY for REFRESH but NOT SUFFICIENT. REFRESH executes
+--     the view body AS THE OWNER, so the owner also needs privileges on every
+--     underlying object. Executed: a matview owned by the app role, reading an
+--     input owned by another role, invoked BY A SUPERUSER, still fails
+--     with ERROR permission denied for materialized view <input>. Restoring the
+--     owner is therefore necessary to keep REFRESH working and does not on its
+--     own guarantee it.
+--   * The two grants keep SELECT working. They do not make the views ownerless
+--     or make every operation grant-driven.
+--
+-- What this migration guarantees is narrow and worth stating as such: it leaves
+-- ownership and SELECT grants no worse than it found them, and it does not
+-- silently transfer either. It does not audit the owner's rights on the
+-- underlying tables.
+--
+-- Two facts about the grants on PRODUCTION specifically, so nobody reads more
+-- into them than they buy:
+--
+--   1. Where the prior owner IS agrisync_app -- which is the production case --
+--      the object-level GRANTs below collapse into the owner's own ACL entry
+--      and buy nothing. Only the schema-level USAGE grant is load-bearing
+--      there. The object grants matter for the drifted case (runner != owner),
+--      which is what this migration's own dev run produced.
+--   2. The grants cover the FOUR views this migration recreates. The app reads
+--      roughly thirty views in mis -- log_verify_lag, correction_rate,
+--      voice_log_share, silent_churn_watchlist and farmer_suffering_watchlist
+--      among them -- and those are untouched here, so they still depend on
+--      schema ownership. The schema USAGE grant above helps all of them; the
+--      per-object grants do not. Do not read this block as mis-star-is-now-
+--      grant-driven; it is four views plus the schema.
 DO $$
 DECLARE
     v_owner text := NULLIF(current_setting('agrisync.mis_prior_owner', true), '');
@@ -385,6 +427,21 @@ GRANT SELECT ON mis.dwc_score_per_farm_week TO mis_reader;
 -- OWNS the schema, which carries USAGE implicitly. Granting USAGE explicitly is
 -- what actually removes the dependency on ownership; the object grants alone
 -- only move it from the object to the schema.
+-- RUNNER REQUIREMENT, measured. This block needs a runner that is superuser or
+-- owner of schema mis. Two distinct non-superuser outcomes, both executed:
+--
+--   * runner holds NO rights on the schema
+--       -> ERROR: permission denied for schema mis   (hard abort, loud)
+--   * runner holds USAGE but no GRANT OPTION
+--       -> WARNING no-privileges-were-granted-for-mis + statement SUCCEEDS,
+--          and the grant is NOT applied. Silent. Verified the grantee is still
+--          absent from nspacl afterwards, and it warns whether or not the
+--          grantee already held USAGE -- the trigger is the missing GRANT
+--          OPTION, not the grantee's existing state.
+--
+-- Production runs as agrisync_app, which owns the schema, so neither fires
+-- there. Recorded because the second one would leave this migration reporting
+-- success with the fix silently absent.
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'agrisync_app') THEN
