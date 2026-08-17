@@ -1,0 +1,47 @@
+{
+  "_comment": [
+    "S3 Cross-Region Replication configuration — attaches to",
+    "agrisync-raw-ap-south-1 (SOURCE), replicating to",
+    "agrisync-raw-backup-ap-south-2 (DESTINATION, ap-south-2 / Hyderabad).",
+    "spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN (raw-bucket-backup-recovery)",
+    "AUTHORED, NOT APPLIED.",
+    "",
+    "<ACCOUNT_ID> and the role ARN below must be filled in before apply —",
+    "apply-replication.sh does this substitution; do not hand-edit and apply",
+    "this file directly with a placeholder still in it.",
+    "",
+    "DeleteMarkerReplication is explicitly DISABLED. A delete marker on the",
+    "source (soft-delete) is NOT copied to the destination — this is what",
+    "makes the destination a genuine backup rather than a mirror that",
+    "faithfully reproduces every mistake made on the source, including the",
+    "exact class of event this whole system was built in response to.",
+    "",
+    "Filter is empty (whole-bucket) — every prefix replicates, not just",
+    "raw/. The bucket also carries deploy-staging traffic (see the runbook's",
+    "root-cause section) which does not need backing up, but there is no",
+    "reliable way to distinguish 'deploy staging, safe to skip' from 'real",
+    "evidence' by prefix alone without trusting deploy tooling to keep using",
+    "a stable, documented prefix — which it does not do today (undocumented,",
+    "ad-hoc). Replicating everything costs pennies more; replicating too",
+    "little risks missing real evidence because of a naming assumption. The",
+    "runbook's recommended follow-up (retire the raw-bucket-as-deploy-staging",
+    "pattern) removes this cost entirely rather than trying to filter around it.",
+    "",
+    "APPLY (founder only, via apply-replication.sh):",
+    "  aws s3api put-bucket-replication --bucket agrisync-raw-ap-south-1 --replication-configuration file://<rendered> --region ap-south-1"
+  ],
+  "Role": "arn:aws:iam::<ACCOUNT_ID>:role/agrisync-raw-replication-role",
+  "Rules": [
+    {
+      "ID": "raw-bucket-full-replication-to-ap-south-2",
+      "Status": "Enabled",
+      "Priority": 1,
+      "Filter": {},
+      "DeleteMarkerReplication": {"Status": "Disabled"},
+      "Destination": {
+        "Bucket": "arn:aws:s3:::agrisync-raw-backup-ap-south-2",
+        "StorageClass": "STANDARD"
+      }
+    }
+  ]
+}

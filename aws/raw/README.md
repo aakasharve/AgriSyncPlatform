@@ -25,6 +25,16 @@ nothing else. `apply-config.sh` has this checked in code as a hard guardrail
 (§ below) — it refuses to run at all if the desired document ever contains
 anything beyond that one action.
 
+**Founder decision 2026-08-17: "Recover the 178 AND build a proper backup and
+recovery system."** Root cause investigated, backup + recovery mechanism
+designed, none of it applied. Full findings, the coverage/cost comparison,
+and the go/no-go checklist live in
+`_COFOUNDER/runbooks/raw-bucket-backup-recovery.md`. Short version: the 178
+are not farmer evidence — they are deploy-staging build artifacts from two
+already-shipped commits, deleted by an out-of-band admin action, not by any
+application code path. They remain recoverable today. See the runbook before
+running anything with `--apply`.
+
 ## Files
 
 | File | Purpose |
@@ -36,6 +46,14 @@ anything beyond that one action.
 | `cors-policy.json` | Conservative GET-only CORS. Currently a no-op — verified no code path in `src/` does a direct browser-to-S3 request against this bucket. |
 | `apply-config.sh` | Capture → guardrail-check → apply (gated behind `--apply`) → diff, for `lifecycle-policy.json` + `bucket-policy.json` + `cors-policy.json` only. Never touches the CMK file or the encryption-deny file. |
 | `.gitignore` | Ignores the `capture/` folder `apply-config.sh` writes on every run. |
+| `backup-bucket-policy.json` | Bucket policy for the not-yet-created `agrisync-raw-backup-ap-south-2`. TLS-only, SSE-required, permanent-version-deletion denied bucket-wide (no break-glass exception — this bucket's whole purpose is to be untouchable). |
+| `backup-lifecycle-policy.json` | The backup bucket's lifecycle: `AbortIncompleteMultipartUpload` only, same D9 reasoning as this bucket's own `lifecycle-policy.json`. |
+| `create-backup-bucket.sh` | Provisions `agrisync-raw-backup-ap-south-2` in `ap-south-2` **with Object Lock enabled at creation** (the one S3 setting that cannot be added after the fact — verified read-only against this bucket, which is why a NEW bucket is required). Governance mode, 1825-day floor. Gated, gitignored `capture/` folder pattern reused. |
+| `replication-role-trust-policy.json` / `replication-role-permissions-policy.json` | The IAM role S3 replication assumes. Deliberately excludes `s3:ReplicateDelete` — a delete marker on this bucket must never propagate to the backup. |
+| `replication-configuration.json` | The CRR rule itself. `DeleteMarkerReplication: Disabled` (same reasoning). Whole-bucket filter, not just a prefix — see its `_comment` for why prefix-filtering the known deploy-staging traffic was rejected. |
+| `apply-replication.sh` | Capture → render (substitutes account ID + role ARN) → apply (gated) → diff, wiring replication onto this bucket. Requires `create-backup-bucket.sh` to have already run. Does NOT retroactively copy pre-existing objects — replication only covers new writes from the moment it's applied. |
+| `bucket-policy-deny-delete-rail.PHASE2-NEEDS-BREAKGLASS-ROLE.json` | **Not safe to apply yet** — denies `s3:DeleteObjectVersion` / `s3:PutLifecycleConfiguration` on THIS bucket except from a named break-glass role that does not exist yet. See its header for what it does and does not cover. |
+| `recover-178.sh` | The actual recovery: removes the 178 delete markers (S3's documented undelete mechanism), then copies exactly the recovered keys to the backup bucket (replication won't catch them — see script header). Refuses to run unless the backup bucket exists and replication is Enabled. Dry-run by default; tested against a bash-function mock covering both the refuse-to-run and full-success paths, and run for real (read-only dry-run) against live AWS. |
 
 ## The encryption-header deny was not safe either (round-1 finding C1)
 
@@ -173,13 +191,16 @@ the source of truth for "what was live before this changed."
   is created and bound, which is out of this lane's scope.
 - Does NOT create the bucket — it already exists and is receiving production
   writes (most recent object 2026-08-13 per the plan's gap register).
-- Does NOT decide the noncurrent-version retention question for the 178 evidence
-  versions — that is an explicit open founder decision this section defers to,
-  not something this lane resolves.
-- Does NOT run `--apply`. That is the founder's action, not this lane's.
+- Does NOT run `--apply`. That is the founder's action, not this lane's — this
+  includes every file in the backup/recovery set added 2026-08-17.
+- Does NOT retroactively protect the 178 by wiring replication alone —
+  `recover-178.sh`'s copy step exists specifically because replication does
+  not cover them. See `_COFOUNDER/runbooks/raw-bucket-backup-recovery.md`.
 
 ## References
 
+- Backup + recovery runbook (root cause, coverage/cost comparison, rehearsal
+  procedure, go/no-go checklist): `_COFOUNDER/runbooks/raw-bucket-backup-recovery.md`
 - Plan: `docs/superpowers/plans/FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN.md` §11
 - Founder ruling D9 (voice retained forever): `docs/AGRISYNC-DOCTRINE.md` pointer / project memory
 - Sibling pattern: `aws/voice-retained/`, `aws/snapshot/`
