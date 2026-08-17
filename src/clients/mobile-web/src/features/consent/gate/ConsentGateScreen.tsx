@@ -8,9 +8,29 @@
 // withdrawn on its own. A blanket "accept everything forever" is not valid consent under
 // DPDP, and a button that silently bundles is the same thing wearing a nicer label.
 //
+// ── REBUILD, founder direction 2026-08-17 ───────────────────────────────────────────
+// He read the previous version and said: one section, not a separate scrollable box;
+// much smaller text; the acceptance easy to reach at the bottom; far less text that
+// still means all of it; and no visible "still to be filled in" section.
+//
+// So the shape is now literally ONE COLUMN THAT SCROLLS:
+//   • The root element is the only scroller on the screen. There is no inner scroll
+//     region and no docked/sticky bar — the header, the notice and the acceptance are
+//     siblings in one flow, and he reaches the button by scrolling to the end of the
+//     thing he was already reading.
+//   • This is also what keeps the 004c735e-era defect dead. That bug was content laid
+//     out taller than AppShell's fixed, `overflow-hidden` box with no scroller of its
+//     own, so the acceptance bar was simply cut off and the gate could not be passed on
+//     a short phone. With `h-full overflow-y-auto` at the root, every child is reachable
+//     by construction — there is nothing left that can be clipped. A test pins that
+//     invariant structurally, because it is not a thing jsdom can measure.
+//   • The scale is the app's own small scale, taken from OnboardingPermissionsPage:
+//     17 / 12 / 11.5 / 11 / 10.5 / 10 px, CTA at 15px. The founder explicitly retired
+//     this screen's old 16px floor. No size here is invented.
+//
 // Rules this screen is built to, and the shape each one takes here:
 //   • No dark patterns — the ONLY thing that enables the CTA is the 18+ declaration.
-//     Not scrolling to the bottom, not expanding the cards, not a timer.
+//     Not scrolling to the bottom, not opening anything, not a timer.
 //   • No preselected optional toggles — there are no optional toggles on this screen at
 //     all. Everything extra (audio retention, model improvement, promotions, partner
 //     sharing) is default-off and lives in Settings, per wave-4.3.
@@ -21,40 +41,23 @@
 //     precisely so a mixed line resolves per-glyph: Latin and digits land on DM Sans,
 //     Devanagari falls through to Noto Sans Devanagari. Headings switch face by language
 //     because only Marathi headings are serif.
-//   • Minimum 16px (`text-base`); spacing 20 / 16 / 24 (`p-5` / `gap-4` / `mb-6`);
-//     CTA ≥ 48px.
+//   • The notice is not `select-none`: legal text a farmer cannot copy is worse consent.
 //
-// VISUAL ALIGNMENT (wave-4.1 restyle) — this screen was first built to the written spec
-// alone, so it looked like nothing else in the app. It now speaks the onboarding flow's
-// vocabulary, taken from OnboardingPermissionsPage (the screen the founder named) and
-// LoginPage (the screen this gate stands directly in front of):
-//   • the login/dawn mint gradient base, not a warm cream
-//   • a 440px content column at px-6, an emerald icon-tile + serif title lockup header
-//   • white/85 cards, `rounded-3xl`, stone-200/70 hairline, the emerald-tinted lift
-//     shadow `0_6px_18px_-12px_rgba(6,78,59,0.25)`
-//   • the pill CTA: rounded-full emerald gradient, font-black, ring-1 ring-white/25,
-//     `active:scale-[0.98]`, dimmed via the app's `disabled:opacity-50` idiom
-//   • a scrolling body between a fixed header and a docked CTA with the from-[#F5FCF8]
-//     scrim — the same three-part frame as the permissions screen. This also fixes a
-//     real defect: the old `min-h-screen-safe` + `sticky bottom-0` shape put the
-//     acceptance bar below AppShell's `overflow-hidden` cut, unreachable.
-// Body text stays ≥16px even where the permissions screen goes smaller — that rule is an
-// accessibility guarantee of THIS screen and is not traded away for visual parity. The
-// notice is not `select-none` either: legal text a farmer cannot copy is worse consent.
-//
-// 🛑 This screen does not, and may not, claim DPDP compliance. Six disclosures the
-// founder still owes are rendered as visible unfilled placeholders — see
-// `pendingDisclosures` in `consentNotice.ts`.
+// 🛑 This screen does not, and may not, claim DPDP compliance. What is still unknown —
+// a grievance phone number, a named DPO, retention periods, the processor list, the
+// under-18 policy — is OMITTED rather than shown as an empty bracket. See the header of
+// `consentNotice.ts`.
 
 import React, { useMemo, useState } from 'react';
 import {
-    Ban, ChevronRight, Clock, FileText, KeyRound, Lock, MapPin, Mic,
+    Ban, Building2, FileText, KeyRound, Lock, MapPin, Mic,
     ShieldCheck, Smartphone, Sprout, UserCheck,
 } from 'lucide-react';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import DataPurposeCard from './DataPurposeCard';
 import {
     CONSENT_NOTICE,
+    DATA_FIDUCIARY,
     NOTICE_DATA_CATEGORY_CODES,
     NOTICE_PURPOSE_CODES,
     NOTICE_VERSION,
@@ -91,30 +94,24 @@ const toNoticeLanguage = (lang: string): NoticeLanguage => (lang === 'mr' ? 'mr'
 /**
  * Decorative only — one lucide glyph per purpose, in the same emerald tile the
  * permissions screen uses for location / microphone / camera / storage. Purely visual;
- * the card's own words carry every disclosure, and nothing here is hashed.
+ * the row's own words carry the disclosure, and nothing here is hashed.
  */
 const CARD_ICONS: Record<PurposeCard['id'], React.ReactNode> = {
-    account: <UserCheck size={19} />,
-    farmWork: <Sprout size={19} />,
-    voiceUploads: <Mic size={19} />,
-    farmLocation: <MapPin size={19} />,
-    technical: <Smartphone size={19} />,
+    account: <UserCheck size={14} />,
+    farmWork: <Sprout size={14} />,
+    voiceUploads: <Mic size={14} />,
+    farmLocation: <MapPin size={14} />,
+    technical: <Smartphone size={14} />,
 };
 
-/** Section-heading tile — the header lockup idiom, reused at every section. */
-const SectionTile: React.FC<{ children: React.ReactNode; tone?: 'emerald' | 'stone' }> = ({
-    children, tone = 'emerald',
-}) => (
-    <span
-        aria-hidden="true"
-        className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[12px] ring-1 ${
-            tone === 'emerald'
-                ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/15'
-                : 'bg-stone-100 text-stone-500 ring-stone-400/20'
-        }`}
-    >
+/** Section heading — one small glyph, one short line. Repeated at every block. */
+const SectionHeading: React.FC<{
+    id: string; icon: React.ReactNode; headingFont: string; children: React.ReactNode;
+}> = ({ id, icon, headingFont, children }) => (
+    <h2 id={id} className={`${headingFont} mb-2.5 flex items-center gap-1.5 text-[12px] font-bold text-stone-800`}>
+        <span aria-hidden="true" className="text-emerald-600">{icon}</span>
         {children}
-    </span>
+    </h2>
 );
 
 const ConsentGateScreen: React.FC<Props> = ({ onAccept, forceLanguage }) => {
@@ -123,7 +120,6 @@ const ConsentGateScreen: React.FC<Props> = ({ onAccept, forceLanguage }) => {
     const copy = CONSENT_NOTICE[displayed];
 
     const [ageConfirmed, setAgeConfirmed] = useState(false);
-    const [expanded, setExpanded] = useState<Record<string, boolean>>({});
     const [submitting, setSubmitting] = useState(false);
     const [failed, setFailed] = useState(false);
 
@@ -131,9 +127,6 @@ const ConsentGateScreen: React.FC<Props> = ({ onAccept, forceLanguage }) => {
     const headingFont = displayed === 'mr' ? 'font-serif' : 'font-sans';
 
     const canonical = useMemo(() => canonicalNoticeText(displayed), [displayed]);
-
-    const toggleCard = (card: PurposeCard) =>
-        setExpanded((prev) => ({ ...prev, [card.id]: !prev[card.id] }));
 
     const handleAccept = async () => {
         // Belt and braces: the button is disabled without the declaration, and the
@@ -161,25 +154,29 @@ const ConsentGateScreen: React.FC<Props> = ({ onAccept, forceLanguage }) => {
     };
 
     return (
-        // h-full, not min-h-screen: AppShell hands this screen a fixed, overflow-hidden
-        // box, so the scroll has to live INSIDE — same contract LoginPage honours.
-        <div className="relative flex h-full flex-col overflow-hidden bg-gradient-to-b from-emerald-50/60 via-white to-emerald-50/40 font-sans text-stone-800">
+        // THE ONLY SCROLLER. AppShell hands this screen a fixed, overflow-hidden box, so
+        // the scroll has to live here — and living here, rather than around an inner
+        // region, is what makes every child reachable including the button at the end.
+        <div
+            data-testid="consent-scroll-root"
+            className="h-full overflow-y-auto overscroll-contain bg-gradient-to-b from-emerald-50/60 via-white to-emerald-50/40 font-sans text-stone-800"
+        >
             <style>{`
-                @keyframes cg-up { from{transform:translateY(14px);opacity:0} to{transform:translateY(0);opacity:1} }
+                @keyframes cg-up { from{transform:translateY(10px);opacity:0} to{transform:translateY(0);opacity:1} }
                 @media (prefers-reduced-motion:reduce){ [data-cg-anim]{animation-duration:.01ms!important;animation-delay:0ms!important} }
             `}</style>
 
-            {/* ── header: language switcher + icon-tile lockup ─────────────────── */}
             <div
                 data-cg-anim
-                className="relative z-10 mx-auto w-full max-w-[440px] flex-none px-6 pt-5"
-                style={{ animation: 'cg-up .5s cubic-bezier(.16,1,.3,1) .05s both' }}
+                className="mx-auto w-full max-w-[440px] px-5 pt-4 pb-[calc(1.25rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)))]"
+                style={{ animation: 'cg-up .45s cubic-bezier(.16,1,.3,1) .05s both' }}
             >
-                <div className="mb-4 flex justify-end">
+                {/* ── language switcher ─────────────────────────────────────────── */}
+                <div className="mb-3 flex justify-end">
                     <div
                         role="group"
                         aria-label={t('consentGate.languageGroupLabel')}
-                        className="flex items-center gap-1 rounded-full border border-stone-200/70 bg-white/80 p-1 shadow-[0_6px_18px_-12px_rgba(6,78,59,0.25)] backdrop-blur-sm"
+                        className="flex items-center gap-1 rounded-full border border-stone-200/70 bg-white/80 p-0.5 shadow-[0_6px_18px_-12px_rgba(6,78,59,0.25)] backdrop-blur-sm"
                     >
                         {(['mr', 'en'] as const).map((code) => {
                             const active = displayed === code;
@@ -189,7 +186,7 @@ const ConsentGateScreen: React.FC<Props> = ({ onAccept, forceLanguage }) => {
                                     type="button"
                                     onClick={() => setLanguage(code)}
                                     aria-pressed={active}
-                                    className={`min-h-[40px] rounded-full px-4 font-sans text-base transition-colors ${
+                                    className={`min-h-[34px] rounded-full px-3.5 font-sans text-[12px] transition-colors ${
                                         active
                                             ? 'bg-emerald-600 font-bold text-white shadow-sm'
                                             : 'font-semibold text-stone-500 hover:text-stone-700'
@@ -202,187 +199,163 @@ const ConsentGateScreen: React.FC<Props> = ({ onAccept, forceLanguage }) => {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                {/* ── title lockup ──────────────────────────────────────────────── */}
+                <div className="flex items-center gap-2.5">
                     <span
                         aria-hidden="true"
-                        className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-600/15"
+                        className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-600/15"
                     >
-                        <ShieldCheck size={22} strokeWidth={2} />
+                        <ShieldCheck size={19} strokeWidth={2} />
                     </span>
-                    <h1 className={`${headingFont} text-[21px] font-bold leading-tight text-stone-800`}>
-                        {copy.title}
-                    </h1>
+                    <div className="min-w-0">
+                        <h1 className={`${headingFont} text-[17px] font-bold leading-tight text-stone-800`}>
+                            {copy.title}
+                        </h1>
+                        <p className="mt-0.5 font-sans text-[11px] font-medium leading-snug text-stone-500">
+                            {copy.intro}
+                        </p>
+                    </div>
                 </div>
-            </div>
 
-            {/* ── the notice itself — the only scrolling region ─────────────────── */}
-            <div className="relative z-10 min-h-0 flex-1 overflow-y-auto scrollbar-hide">
-                <main className="mx-auto flex w-full max-w-[440px] flex-col gap-6 px-6 py-5 pb-8">
-                    <p className="font-sans text-base leading-relaxed text-stone-600">{copy.intro}</p>
+                {/* ── the three names, in one line: product · platform · company ── */}
+                <p
+                    data-testid="consent-brand-line"
+                    className="mt-3 border-l-2 border-emerald-300 pl-2.5 font-sans text-[11px] font-medium leading-snug text-stone-600"
+                >
+                    {copy.brandLine}
+                </p>
 
-                    {/* ── five data-purpose cards ─────────────────────────────── */}
-                    <section className="flex flex-col gap-4" aria-labelledby="consent-purposes-heading">
-                        <h2
-                            id="consent-purposes-heading"
-                            className={`${headingFont} text-lg font-bold text-stone-800`}
-                        >
+                {/* ── ONE panel. Every disclosure, then the acceptance at its foot. ── */}
+                <div className="mt-3 divide-y divide-stone-200/70 overflow-hidden rounded-3xl border border-stone-200/70 bg-white/85 shadow-[0_6px_18px_-12px_rgba(6,78,59,0.25)] backdrop-blur-sm">
+
+                    {/* what we take, and what for */}
+                    <section className="p-4" aria-labelledby="consent-purposes-heading">
+                        <SectionHeading id="consent-purposes-heading" icon={<Sprout size={13} />} headingFont={headingFont}>
                             {copy.purposeCardsHeading}
-                        </h2>
-                        {copy.cards.map((card) => (
-                            <DataPurposeCard
-                                key={card.id}
-                                card={card}
-                                expanded={Boolean(expanded[card.id])}
-                                onToggle={() => toggleCard(card)}
-                                headingFont={headingFont}
-                                expandLabel={t('consentGate.expand')}
-                                collapseLabel={t('consentGate.collapse')}
-                                icon={CARD_ICONS[card.id]}
-                            />
-                        ))}
+                        </SectionHeading>
+                        <ul className="flex flex-col gap-2.5">
+                            {copy.cards.map((card) => (
+                                <DataPurposeCard
+                                    key={card.id}
+                                    card={card}
+                                    headingFont={headingFont}
+                                    icon={CARD_ICONS[card.id]}
+                                />
+                            ))}
+                        </ul>
                     </section>
 
-                    {/* ── what we will not do ─────────────────────────────────── */}
-                    <section
-                        className="rounded-3xl border border-emerald-200 bg-gradient-to-b from-emerald-50 to-white p-5 shadow-[0_6px_18px_-12px_rgba(6,78,59,0.25)]"
-                        aria-labelledby="consent-willnot-heading"
-                        data-testid="consent-will-not-do"
-                    >
-                        <div className="mb-4 flex items-center gap-3">
-                            <SectionTile><Ban size={18} /></SectionTile>
-                            <h2
-                                id="consent-willnot-heading"
-                                className={`${headingFont} text-lg font-bold text-emerald-900`}
-                            >
-                                {copy.willNotDo.heading}
-                            </h2>
-                        </div>
-                        <ul className="flex list-disc flex-col gap-4 pl-5 marker:text-emerald-500">
+                    {/* what we will not do — plus who may process, and for what */}
+                    <section className="p-4" aria-labelledby="consent-willnot-heading" data-testid="consent-will-not-do">
+                        <SectionHeading id="consent-willnot-heading" icon={<Ban size={13} />} headingFont={headingFont}>
+                            {copy.willNotDo.heading}
+                        </SectionHeading>
+                        <ul className="flex list-disc flex-col gap-1.5 pl-4 marker:text-emerald-500">
                             {copy.willNotDo.items.map((line) => (
-                                <li key={line} className="font-sans text-base leading-relaxed text-emerald-900">{line}</li>
+                                <li key={line} className="font-sans text-[10.5px] leading-snug text-stone-700">{line}</li>
                             ))}
                         </ul>
+                        <p className="mt-2.5 font-sans text-[10px] leading-snug text-stone-500">{copy.processors}</p>
                     </section>
 
-                    {/* ── rights summary ──────────────────────────────────────── */}
-                    <section
-                        className="rounded-3xl border border-stone-200/70 bg-white/85 p-5 shadow-[0_6px_18px_-12px_rgba(6,78,59,0.25)] backdrop-blur-sm"
-                        aria-labelledby="consent-rights-heading"
-                        data-testid="consent-rights"
-                    >
-                        <div className="mb-4 flex items-center gap-3">
-                            <SectionTile><KeyRound size={18} /></SectionTile>
-                            <h2
-                                id="consent-rights-heading"
-                                className={`${headingFont} text-lg font-bold text-stone-800`}
-                            >
-                                {copy.rights.heading}
-                            </h2>
-                        </div>
-                        <ul className="flex list-disc flex-col gap-4 pl-5 marker:text-emerald-500">
+                    {/* rights */}
+                    <section className="p-4" aria-labelledby="consent-rights-heading" data-testid="consent-rights">
+                        <SectionHeading id="consent-rights-heading" icon={<KeyRound size={13} />} headingFont={headingFont}>
+                            {copy.rights.heading}
+                        </SectionHeading>
+                        <p className="mb-1.5 font-sans text-[10.5px] font-semibold leading-snug text-stone-700">{copy.rights.where}</p>
+                        <ul className="flex list-disc flex-col gap-1.5 pl-4 marker:text-emerald-500">
                             {copy.rights.items.map((line) => (
-                                <li key={line} className="font-sans text-base leading-relaxed text-stone-800">{line}</li>
+                                <li key={line} className="font-sans text-[10.5px] leading-snug text-stone-700">{line}</li>
                             ))}
                         </ul>
-                        <p className="mt-4 font-sans text-base leading-relaxed text-stone-600">{copy.rights.where}</p>
+                        <p className="mt-2.5 font-sans text-[10px] leading-snug text-stone-500">{copy.rights.withdrawal}</p>
                     </section>
 
-                    {/* ── the six disclosures the founder still owes ───────────── */}
-                    <section
-                        className="rounded-3xl border-2 border-dashed border-stone-300 bg-stone-50/80 p-5"
-                        aria-labelledby="consent-pending-heading"
-                        data-testid="consent-pending-disclosures"
-                    >
-                        <div className="mb-4 flex items-center gap-3">
-                            <SectionTile tone="stone"><Clock size={18} /></SectionTile>
-                            <h2
-                                id="consent-pending-heading"
-                                className={`${headingFont} text-lg font-bold text-stone-700`}
-                            >
-                                {copy.pendingDisclosures.heading}
-                            </h2>
-                        </div>
-                        <p className="mb-4 font-sans text-base leading-relaxed text-stone-600">{copy.pendingDisclosures.note}</p>
-                        <ul className="flex list-disc flex-col gap-2 pl-5 marker:text-stone-400">
-                            {copy.pendingDisclosures.items.map((line) => (
-                                <li key={line} className="font-sans text-base leading-relaxed text-stone-600">{line}</li>
-                            ))}
-                        </ul>
-                    </section>
-
-                    {/* ── legal links ─────────────────────────────────────────── */}
-                    <nav className="flex flex-col gap-3" aria-label={t('consentGate.legalLinksLabel')}>
-                        {[
-                            { href: '/legal/terms', label: copy.links.terms, icon: <FileText size={17} /> },
-                            { href: '/legal/privacy', label: copy.links.privacy, icon: <Lock size={17} /> },
-                        ].map((link) => (
-                            <a
-                                key={link.href}
-                                href={link.href}
-                                className="flex min-h-[48px] w-full items-center gap-2.5 rounded-2xl border border-emerald-200 bg-white px-4 py-3.5 font-sans text-base font-bold text-emerald-700 transition-colors hover:bg-emerald-50"
-                            >
-                                {link.icon}
-                                <span className="flex-1">{link.label}</span>
-                                <ChevronRight size={18} className="text-emerald-400" aria-hidden="true" />
+                    {/* who the farmer is actually dealing with, and the two documents */}
+                    <section className="p-4" aria-labelledby="consent-entity-heading" data-testid="consent-entity">
+                        <SectionHeading id="consent-entity-heading" icon={<Building2 size={13} />} headingFont={headingFont}>
+                            {copy.entity.heading}
+                        </SectionHeading>
+                        <p className="font-sans text-[10.5px] font-bold leading-snug text-stone-800">
+                            {DATA_FIDUCIARY.legalName}
+                        </p>
+                        <p className="mt-0.5 font-sans text-[10px] leading-snug text-stone-500">
+                            {copy.entity.cinLabel}: {DATA_FIDUCIARY.cin}
+                        </p>
+                        <p className="mt-0.5 font-sans text-[10px] leading-snug text-stone-500">
+                            {copy.entity.officeLabel}: {DATA_FIDUCIARY.registeredOffice}
+                        </p>
+                        <p className="mt-0.5 font-sans text-[10px] leading-snug text-stone-500">
+                            {copy.entity.contactLabel}:{' '}
+                            <a href={`mailto:${DATA_FIDUCIARY.contact}`} className="font-semibold text-emerald-700 underline">
+                                {DATA_FIDUCIARY.contact}
                             </a>
-                        ))}
-                    </nav>
-                </main>
-            </div>
-
-            {/* ── docked acceptance bar ───────────────────────────────────────── */}
-            {/* Docked, not `sticky`: AppShell gives this screen a fixed box, so the bar
-                has to be a flex sibling of the scroller or it falls past the clip. */}
-            <div
-                data-cg-anim
-                className="relative z-20 w-full flex-none border-t border-stone-200/70 bg-white/85 backdrop-blur-sm"
-                style={{ animation: 'cg-up .5s cubic-bezier(.16,1,.3,1) .12s both' }}
-            >
-                {/* the notice fades out under the bar — same soft hand-off the Welcome
-                    and permissions screens use above their CTA docks. */}
-                <div className="pointer-events-none absolute inset-x-0 -top-10 h-10 bg-gradient-to-t from-white/90 to-transparent" />
-                <div className="mx-auto w-full max-w-[440px] px-6 pt-4 pb-[calc(1.5rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)))]">
-                    <p className="mb-4 font-sans text-base leading-relaxed text-stone-600">{copy.acceptanceMeaning}</p>
-
-                    <label className="mb-4 flex min-h-[48px] cursor-pointer items-start gap-3.5 rounded-2xl border border-stone-200/70 bg-white p-3.5">
-                        <input
-                            type="checkbox"
-                            checked={ageConfirmed}
-                            onChange={(e) => setAgeConfirmed(e.target.checked)}
-                            className="mt-0.5 h-6 w-6 shrink-0 rounded border-stone-300 accent-emerald-600"
-                            data-testid="consent-age-checkbox"
-                        />
-                        <span className="font-sans text-base leading-relaxed text-stone-800">{copy.ageDeclaration}</span>
-                    </label>
-
-                    <button
-                        type="button"
-                        onClick={() => void handleAccept()}
-                        disabled={!ageConfirmed || submitting}
-                        data-testid="consent-accept-cta"
-                        className="flex min-h-[48px] w-full items-center justify-center gap-2.5 rounded-full bg-gradient-to-r from-emerald-700 via-emerald-600 to-emerald-500 py-[16px] font-sans text-base font-black text-white shadow-[0_16px_34px_-10px_rgba(4,120,87,0.55)] ring-1 ring-white/25 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none disabled:active:scale-100"
-                    >
-                        <ShieldCheck size={18} aria-hidden="true" /> {copy.cta}
-                    </button>
-
-                    {/* The only red on the screen: consent missing, or acceptance failed. */}
-                    {!ageConfirmed && (
-                        <p
-                            className="mt-4 text-center font-sans text-base font-semibold leading-snug text-rose-700"
-                            data-testid="consent-cta-hint"
-                        >
-                            {copy.ctaDisabledHint}
                         </p>
-                    )}
-                    {failed && (
-                        <p
-                            className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 font-sans text-base font-semibold leading-snug text-rose-700"
-                            role="alert"
-                            data-testid="consent-failed"
+
+                        <nav className="mt-3 grid grid-cols-2 gap-2" aria-label={t('consentGate.legalLinksLabel')}>
+                            {[
+                                { href: '/legal/terms', label: copy.links.terms, icon: <FileText size={13} /> },
+                                { href: '/legal/privacy', label: copy.links.privacy, icon: <Lock size={13} /> },
+                            ].map((link) => (
+                                <a
+                                    key={link.href}
+                                    href={link.href}
+                                    className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-white px-2 text-center font-sans text-[11px] font-bold leading-snug text-emerald-700 transition-colors hover:bg-emerald-50"
+                                >
+                                    {link.icon}
+                                    <span className="min-w-0">{link.label}</span>
+                                </a>
+                            ))}
+                        </nav>
+                    </section>
+
+                    {/* ── the acceptance, at the foot of the same panel ──────────── */}
+                    <section className="bg-emerald-50/50 p-4">
+                        <p className="font-sans text-[10.5px] leading-snug text-stone-600">{copy.acceptanceMeaning}</p>
+
+                        <label className="mt-3 flex min-h-[44px] cursor-pointer items-center gap-3 rounded-2xl border border-stone-200/70 bg-white px-3 py-2">
+                            <input
+                                type="checkbox"
+                                checked={ageConfirmed}
+                                onChange={(e) => setAgeConfirmed(e.target.checked)}
+                                className="h-5 w-5 shrink-0 rounded border-stone-300 accent-emerald-600"
+                                data-testid="consent-age-checkbox"
+                            />
+                            <span className="font-sans text-[11.5px] font-semibold leading-snug text-stone-800">
+                                {copy.ageDeclaration}
+                            </span>
+                        </label>
+
+                        <button
+                            type="button"
+                            onClick={() => void handleAccept()}
+                            disabled={!ageConfirmed || submitting}
+                            data-testid="consent-accept-cta"
+                            className="mt-3 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-700 via-emerald-600 to-emerald-500 px-4 font-sans text-[15px] font-black text-white shadow-[0_16px_34px_-10px_rgba(4,120,87,0.55)] ring-1 ring-white/25 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none disabled:active:scale-100"
                         >
-                            {t('consentGate.saveFailed')}
-                        </p>
-                    )}
+                            <ShieldCheck size={16} aria-hidden="true" /> {copy.cta}
+                        </button>
+
+                        {/* The only red on the screen: consent missing, or acceptance failed. */}
+                        {!ageConfirmed && (
+                            <p
+                                className="mt-2 text-center font-sans text-[10.5px] font-semibold leading-snug text-rose-700"
+                                data-testid="consent-cta-hint"
+                            >
+                                {copy.ctaDisabledHint}
+                            </p>
+                        )}
+                        {failed && (
+                            <p
+                                className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 font-sans text-[10.5px] font-semibold leading-snug text-rose-700"
+                                role="alert"
+                                data-testid="consent-failed"
+                            >
+                                {t('consentGate.saveFailed')}
+                            </p>
+                        )}
+                    </section>
                 </div>
             </div>
         </div>

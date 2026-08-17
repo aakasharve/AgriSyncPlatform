@@ -1,9 +1,17 @@
 // @vitest-environment jsdom
 // spec: dfes-companion-2026-07-11 (wave-4.1)
 //
-// The first-open consent gate. These tests exist to pin the ANTI-DARK-PATTERN rules,
-// because those are the rules a later "let's make onboarding smoother" change quietly
-// breaks: the CTA must be reachable by ticking one box and nothing else.
+// The first-open consent gate. These tests exist to pin the rules a later "let's make
+// onboarding smoother" change quietly breaks:
+//
+//   • ANTI-DARK-PATTERN — the CTA must be reachable by ticking one box and nothing else.
+//   • ONE SCROLLER — the gate shipped once with its acceptance bar laid out below the
+//     clip of AppShell's fixed, overflow-hidden box, which made the gate impossible to
+//     pass on a short phone. jsdom cannot measure that, so the invariant is pinned
+//     structurally instead: exactly one scroll container, no sticky/fixed children, and
+//     the checkbox and button inside that container. A layout that satisfies those
+//     cannot clip its own acceptance.
+//   • NO UNFILLED PLACEHOLDERS — what we do not know is omitted, never bracketed.
 //
 // Per repo convention the global vitest env stays 'node'; this file opts into jsdom
 // above and imports jest-dom matchers per-file.
@@ -28,6 +36,7 @@ vi.mock('../../../../i18n/LanguageContext', () => ({
 import ConsentGateScreen from '../ConsentGateScreen';
 import {
     CONSENT_NOTICE,
+    DATA_FIDUCIARY,
     NOTICE_DATA_CATEGORY_CODES,
     NOTICE_PURPOSE_CODES,
     NOTICE_VERSION,
@@ -49,7 +58,7 @@ describe('ConsentGateScreen — the 18+ gate', () => {
 
         fireEvent.click(screen.getByTestId('consent-age-checkbox'));
 
-        // Nothing else was touched — no scrolling, no card expanded, no timer waited on.
+        // Nothing else was touched — no scrolling, no timer waited on.
         expect(cta).toBeEnabled();
     });
 
@@ -70,6 +79,47 @@ describe('ConsentGateScreen — the 18+ gate', () => {
         expect(screen.getByTestId('consent-accept-cta')).toBeEnabled();
         fireEvent.click(box);
         expect(screen.getByTestId('consent-accept-cta')).toBeDisabled();
+    });
+});
+
+describe('ConsentGateScreen — one section, one scroll, acceptance at the end', () => {
+    const SCROLL_CLASSES = ['overflow-y-auto', 'overflow-auto', 'overflow-y-scroll', 'overflow-scroll'];
+
+    const scrollers = (container: HTMLElement) =>
+        Array.from(container.querySelectorAll('*')).filter((el) =>
+            SCROLL_CLASSES.some((c) => el.classList.contains(c)));
+
+    it('has exactly one scroll container, and it is the root', () => {
+        const { container } = render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
+
+        const found = scrollers(container);
+        expect(found).toHaveLength(1);
+        expect(found[0]).toBe(screen.getByTestId('consent-scroll-root'));
+    });
+
+    it('parks nothing outside the scroll flow — no sticky or fixed dock to clip against', () => {
+        const { container } = render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
+
+        const parked = Array.from(container.querySelectorAll('*')).filter(
+            (el) => el.classList.contains('sticky') || el.classList.contains('fixed'));
+        expect(parked).toHaveLength(0);
+    });
+
+    it('keeps the checkbox and the CTA inside that one scroller, at the end of it', () => {
+        render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
+
+        const root = screen.getByTestId('consent-scroll-root');
+        const box = screen.getByTestId('consent-age-checkbox');
+        const cta = screen.getByTestId('consent-accept-cta');
+
+        // Reachable by scrolling the same column he was already reading.
+        expect(root).toContainElement(box);
+        expect(root).toContainElement(cta);
+
+        // And they come after the disclosures, not before them.
+        const order = Node.DOCUMENT_POSITION_FOLLOWING;
+        expect(screen.getByTestId('consent-rights').compareDocumentPosition(cta) & order).toBeTruthy();
+        expect(box.compareDocumentPosition(cta) & order).toBeTruthy();
     });
 });
 
@@ -94,23 +144,21 @@ describe('ConsentGateScreen — no dark patterns', () => {
         }
     });
 
-    it('the five data-purpose cards are all collapsed on arrival and expand independently', () => {
-        render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
+    it('shows all five purposes in full, with nothing hidden behind an expander', () => {
+        render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="en" />);
 
-        const ids = CONSENT_NOTICE.mr.cards.map((c) => c.id);
-        expect(ids).toHaveLength(5);
+        const cards = CONSENT_NOTICE.en.cards;
+        expect(cards).toHaveLength(5);
 
-        for (const id of ids) {
-            const card = screen.getByTestId(`consent-purpose-card-${id}`);
-            expect(card.querySelector('button')).toHaveAttribute('aria-expanded', 'false');
+        for (const card of cards) {
+            const row = screen.getByTestId(`consent-purpose-card-${card.id}`);
+            // Title, the itemised data AND the purpose — visible on arrival.
+            expect(row).toHaveTextContent(card.title);
+            expect(row).toHaveTextContent(card.data);
+            expect(row).toHaveTextContent(card.purpose);
+            // Nothing to open. A disclosure behind a tap is one he can miss.
+            expect(row.querySelector('[aria-expanded]')).toBeNull();
         }
-
-        const first = screen.getByTestId(`consent-purpose-card-${ids[0]}`);
-        fireEvent.click(first.querySelector('button') as HTMLElement);
-        expect(first.querySelector('button')).toHaveAttribute('aria-expanded', 'true');
-        // Expanding one does not expand the rest, and does not gate anything.
-        const second = screen.getByTestId(`consent-purpose-card-${ids[1]}`);
-        expect(second.querySelector('button')).toHaveAttribute('aria-expanded', 'false');
     });
 
     it('shows the "what we will not do" panel and the rights summary without expansion', () => {
@@ -120,10 +168,44 @@ describe('ConsentGateScreen — no dark patterns', () => {
         for (const line of CONSENT_NOTICE.en.willNotDo.items) {
             expect(willNot).toHaveTextContent(line);
         }
+        // Who may process, and strictly for what — part of the same disclosure.
+        expect(willNot).toHaveTextContent(CONSENT_NOTICE.en.processors);
+
         const rights = screen.getByTestId('consent-rights');
         for (const line of CONSENT_NOTICE.en.rights.items) {
             expect(rights).toHaveTextContent(line);
         }
+        expect(rights).toHaveTextContent(CONSENT_NOTICE.en.rights.withdrawal);
+    });
+});
+
+describe('ConsentGateScreen — who he is dealing with', () => {
+    it('names the product, the platform and the company in one line', () => {
+        render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="en" />);
+
+        const line = screen.getByTestId('consent-brand-line');
+        expect(line).toHaveTextContent('Shram Safal');
+        expect(line).toHaveTextContent('AgriSync');
+        expect(line).toHaveTextContent('Agriryot Value Enterprises Private Limited');
+    });
+
+    it('carries the same three names in the Marathi notice', () => {
+        render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
+
+        const line = screen.getByTestId('consent-brand-line');
+        expect(line).toHaveTextContent('श्रम सफल');
+        expect(line).toHaveTextContent('AgriSync');
+        expect(line).toHaveTextContent('Agriryot Value Enterprises Private Limited');
+    });
+
+    it('shows the registered identity — legal name, CIN, office and contact', () => {
+        render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
+
+        const entity = screen.getByTestId('consent-entity');
+        expect(entity).toHaveTextContent(DATA_FIDUCIARY.legalName);
+        expect(entity).toHaveTextContent(DATA_FIDUCIARY.cin);
+        expect(entity).toHaveTextContent(DATA_FIDUCIARY.registeredOffice);
+        expect(entity).toHaveTextContent(DATA_FIDUCIARY.contact);
     });
 });
 
@@ -187,15 +269,19 @@ describe('ConsentGateScreen — what the tap hands over', () => {
 });
 
 describe('the notice document', () => {
-    it('renders every founder-owed disclosure as a visible unfilled placeholder', () => {
+    it('shows no unfilled placeholder anywhere — what is unknown is omitted', () => {
         render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="en" />);
-        const panel = screen.getByTestId('consent-pending-disclosures');
 
-        // Six, exactly — the founder's own list. If one is filled in, its placeholder
-        // marker goes with it and this count is the thing that notices.
-        expect(CONSENT_NOTICE.en.pendingDisclosures.items).toHaveLength(6);
-        for (const line of CONSENT_NOTICE.en.pendingDisclosures.items) {
-            expect(panel).toHaveTextContent(line);
+        // The old gate rendered a "still to be filled in" panel of empty brackets. It is
+        // gone, and no bracketed marker may creep back in: a farmer reading his own
+        // consent should never be shown a blank where a fact belongs.
+        expect(screen.queryByTestId('consent-pending-disclosures')).toBeNull();
+
+        for (const language of ['mr', 'en'] as const) {
+            const notice = canonicalNoticeText(language);
+            expect(notice).not.toMatch(/\[[^\]]*\]/);
+            expect(notice.toLowerCase()).not.toContain('not yet');
+            expect(notice).not.toContain('अद्याप');
         }
     });
 
@@ -203,27 +289,32 @@ describe('the notice document', () => {
         expect(canonicalNoticeText('mr')).not.toContain('नोंद');
     });
 
-    it('the canonical text covers what is on screen — every heading and every card line', () => {
+    it('the canonical text covers what is on screen — every line of every section', () => {
         const canonical = canonicalNoticeText('mr');
         const c = CONSENT_NOTICE.mr;
 
         // If a section is ever added to the screen and not to canonicalNoticeText, the
         // stored hash silently stops describing the notice. This is that alarm.
         for (const line of [
-            c.title, c.intro, c.purposeCardsHeading, c.willNotDo.heading, c.rights.heading,
-            c.rights.where, c.acceptanceMeaning, c.ageDeclaration, c.cta, c.ctaDisabledHint,
-            c.pendingDisclosures.heading, c.pendingDisclosures.note, c.links.terms, c.links.privacy,
+            c.title, c.intro, c.brandLine, c.purposeCardsHeading, c.willNotDo.heading,
+            c.processors, c.rights.heading, c.rights.where, c.rights.withdrawal,
+            c.entity.heading, c.acceptanceMeaning, c.ageDeclaration, c.cta,
+            c.ctaDisabledHint, c.links.terms, c.links.privacy,
         ]) {
             expect(canonical).toContain(line);
         }
         for (const card of c.cards) {
             expect(canonical).toContain(card.title);
-            expect(canonical).toContain(card.summary);
-            expect(canonical).toContain(card.why);
-            for (const collected of card.collects) expect(canonical).toContain(collected);
+            expect(canonical).toContain(card.data);
+            expect(canonical).toContain(card.purpose);
         }
-        for (const line of [...c.willNotDo.items, ...c.rights.items, ...c.pendingDisclosures.items]) {
+        for (const line of [...c.willNotDo.items, ...c.rights.items]) {
             expect(canonical).toContain(line);
+        }
+        // The data fiduciary is part of the notice: a notice naming a different company
+        // is a different notice, and the record has to be able to tell them apart.
+        for (const fact of Object.values(DATA_FIDUCIARY)) {
+            expect(canonical).toContain(fact);
         }
     });
 

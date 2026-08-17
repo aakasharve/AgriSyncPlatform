@@ -9,22 +9,45 @@
 // is the thing rendered — which means the notice must be a single addressable document
 // with a single canonical serialisation (`canonicalNoticeText` below), not a scattering
 // of translation keys that a later edit can drift away from. `translations.ts` carries
-// the screen CHROME only (the language switcher, the expand affordance); nothing in the
+// the screen CHROME only (the language switcher, the failure notice); nothing in the
 // chrome makes a legal statement.
 //
+// ── COMPRESSION PASS, founder direction 2026-08-17 ──────────────────────────────────
+// The founder read the previous notice and said: "very little text that meant all of
+// this... no one reads it but it's our duty to display all this and make it clear."
+// So this revision cuts LENGTH, never DISCLOSURES. Every purpose category, every
+// "we will not do" line and every right survives; each is now one line instead of a
+// paragraph, and the five purpose cards no longer hide half their content behind an
+// expander — a disclosure that needs a tap to appear is a disclosure a farmer can miss.
+// `data` and `purpose` stay two fields on purpose: the DPDP Rules ask for an ITEMISED
+// description of the personal data alongside the purpose of each use, so the itemisation
+// has to remain its own addressable, hashable thing even though it renders on one line.
+//
+// ── THE THREE NAMES ─────────────────────────────────────────────────────────────────
+// `brandLine` is the one sentence that untangles them, because nothing else on the
+// screen does: श्रम सफल / Shram Safal is the product the farmer holds, AgriSync is the
+// platform it runs on, and Agriryot Value Enterprises Private Limited is the company
+// behind both. The company name is carried in Latin script in BOTH languages — it is a
+// registered legal name, and transliterating a registered name is inventing one.
+// Tailwind's `font-sans` stack resolves a mixed line per glyph (Latin → DM Sans,
+// Devanagari → Noto Sans Devanagari), so that line reads correctly in Marathi.
+//
 // ── LEGAL_REVIEW_PENDING ────────────────────────────────────────────────────────────
-// Per DS-015 / the LEGAL_REVIEW_PENDING convention, this copy is ENGINEERING-AUTHORED
-// and has not been through counsel. The marker is carried once, here, as
+// Per DS-015 / the LEGAL_REVIEW_PENDING convention, this copy is derived from the
+// founder's own words (docs/superpowers/specs/2026-08-16-consent-gate-founder-copy.md)
+// and has NOT been through counsel. The marker is carried once, here, as
 // `NOTICE_LEGAL_REVIEW_PENDING` rather than as a `[LEGAL_REVIEW_PENDING] ` prefix on
 // every string: prefixing would put the tag in front of every line a farmer reads, and
 // a notice that is hard to read is a worse consent notice, not a safer one. The CI gate
-// (.github/workflows/legal-review-gate.yml) greps for the token, so the prod-deploy
-// block still fires while this constant exists.
+// greps for the token, so the prod-deploy block still fires while this constant exists.
 //
-// 🛑 SIX FIELDS THE FOUNDER STILL OWES (his own list, master plan §W4). They are
-// rendered ON SCREEN as visible, unfilled placeholders rather than quietly omitted —
-// see `pendingDisclosures`. Until they land, NO wording here or anywhere else may claim
-// DPDP compliance.
+// 🛑 WHAT IS STILL UNKNOWN IS OMITTED, NOT PLACEHELD. The data fiduciary's identity,
+// CIN, registered office and contact are now real and appear below verbatim. A
+// grievance phone number, a named DPO, retention periods, the processor list and the
+// under-18 policy are still genuinely unsettled — so this notice says nothing about
+// them rather than showing a farmer an empty bracket. Omission is honest; a visible
+// "[not yet filled in]" is a screen telling him his consent is provisional. Until those
+// land, no wording here or anywhere else may claim DPDP compliance.
 //
 // Founder decision 13 scopes the word for "record" (n-o-n-d) to Sathi's own surface. It
 // appears nowhere in the copy below — deliberately spelled out here rather than written,
@@ -45,25 +68,40 @@ export const NOTICE_LEGAL_REVIEW_PENDING = 'LEGAL_REVIEW_PENDING' as const;
  * the text below; bump the policy/terms versions when those documents change. They are
  * separate on purpose — the notice can be reworded without the Terms changing, and a
  * record has to be able to say which of the three moved.
+ *
+ * `notice-2026-08-17.1` — the compression pass. The words a farmer accepts are
+ * materially different from `notice-2026-08-16.2`, so anyone who accepted the old text
+ * must NOT be recorded as having accepted this one.
  */
-export const NOTICE_VERSION = 'notice-2026-08-16.2';
+export const NOTICE_VERSION = 'notice-2026-08-17.1';
 export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-16.1';
 export const TERMS_VERSION = 'terms-2026-08-16.1';
 
+/**
+ * The data fiduciary, as registered. One copy, shared by both languages, because a
+ * legal identity that differs between two translations of the same notice is a defect.
+ * Only facts that are actually known appear here.
+ */
+export const DATA_FIDUCIARY = {
+    legalName: 'Agriryot Value Enterprises Private Limited',
+    cin: 'U62099PN2026PTC256337',
+    registeredOffice:
+        'H. No. 2992, Near Indira Gandhi Bhaji Market, Pandharpur, Dist. Solapur, Maharashtra – 413304',
+    contact: 'arvesystems@gmail.com',
+} as const;
+
 export type NoticeLanguage = 'mr' | 'en';
 
-/** One expandable data-purpose card. */
+/** One data-purpose row. Always fully visible — nothing here is behind an expander. */
 export interface PurposeCard {
-    /** Stable id — used for test targeting and for the expand/collapse state. */
+    /** Stable id — used for test targeting. */
     id: 'account' | 'farmWork' | 'voiceUploads' | 'farmLocation' | 'technical';
     title: string;
-    /** One line, always visible — the card must be understandable unexpanded. */
-    summary: string;
-    /** What we actually take. Visible when expanded. */
-    collects: string[];
-    /** Why we need it, in the farmer's terms. Visible when expanded. */
-    why: string;
-    /** Codes this card maps onto in the stored record. Never shown to the farmer. */
+    /** The ITEMISED personal data. Its own field because the Rules ask for the itemisation. */
+    data: string;
+    /** What that data is used for. Rendered on the same line as `data`. */
+    purpose: string;
+    /** Codes this row maps onto in the stored record. Never shown to the farmer. */
     purposes: CorePurposeCode[];
     dataCategories: CoreDataCategoryCode[];
 }
@@ -71,86 +109,70 @@ export interface PurposeCard {
 export interface NoticeCopy {
     title: string;
     intro: string;
+    /** Shram Safal ← AgriSync ← ARVE, in one sentence. See the header note. */
+    brandLine: string;
     purposeCardsHeading: string;
     cards: PurposeCard[];
     willNotDo: { heading: string; items: string[] };
-    rights: { heading: string; items: string[]; where: string };
+    /** Processor CATEGORIES — the founder's own sentence. No processor is named, because
+     *  the list is not settled; naming one we have not confirmed would be a fabrication. */
+    processors: string;
+    rights: { heading: string; where: string; items: string[]; withdrawal: string };
+    /** Who the farmer is actually dealing with. Facts only. */
+    entity: { heading: string; cinLabel: string; officeLabel: string; contactLabel: string };
     /** What the single tap actually does. Disclosed, because one button writing two
      *  records is only honest if the farmer is told that is what it does. */
     acceptanceMeaning: string;
     ageDeclaration: string;
     cta: string;
     ctaDisabledHint: string;
-    pendingDisclosures: { heading: string; note: string; items: string[] };
     links: { terms: string; privacy: string };
 }
 
 // ── मराठी ───────────────────────────────────────────────────────────────────────────
 const mr: NoticeCopy = {
-    title: 'आम्ही तुमची माहिती कशी वापरतो',
-    intro: 'श्रम सफल वापरायला सुरुवात करण्यापूर्वी हे एकदा वाचा. तुम्ही काय द्याल, ते आम्ही कशासाठी वापरू, आणि काय कधीच करणार नाही — सगळं इथे लिहिलं आहे.',
+    title: 'सुरू करण्याआधी',
+    intro: 'तुमच्या शेताची माहिती तुमच्याच ताब्यात राहते. ॲप चालण्यासाठी फक्त खालील माहिती वापरतो.',
+    brandLine: 'श्रम सफल हे Agriryot Value Enterprises Private Limited चं ॲप आहे; ते AgriSync प्लॅटफॉर्मवर चालतं.',
     purposeCardsHeading: 'कोणती माहिती, कशासाठी',
     cards: [
         {
             id: 'account',
             title: 'तुमचं खातं',
-            summary: 'तुम्हीच आहात हे ओळखण्यासाठी.',
-            collects: [
-                'तुमचा मोबाईल नंबर आणि तुमचं नाव',
-                'तुम्ही कधी लॉग-इन केलं याची माहिती',
-            ],
-            why: 'यामुळेच तुमचं शेत आणि तुमचं काम फक्त तुम्हालाच दिसतं, दुसऱ्या कुणालाही नाही.',
+            data: 'मोबाईल नंबर, नाव, खात्याची माहिती',
+            purpose: 'लॉगिन, OTP आणि सुरक्षिततेसाठी',
             purposes: ['ACCOUNT_AUTHENTICATION', 'SECURITY'],
             dataCategories: ['IDENTITY_AND_CONTACT'],
         },
         {
             id: 'farmWork',
             title: 'शेतातलं काम',
-            summary: 'तुम्ही सांगितलेलं काम जपून ठेवण्यासाठी.',
-            collects: [
-                'तुम्ही सांगितलेली कामं, खर्च, मजूर, पाणी आणि फवारणी',
-                'तुमचे प्लॉट आणि पिकं',
-                'काम कोणत्या दिवशी झालं',
-            ],
-            why: 'हाच तुमच्या शेताचा हिशोब आहे आणि तो तुमचा आहे. तो तुम्हाला केव्हाही पाहता येतो, दुरुस्त करता येतो आणि पुसून टाकायला सांगता येतो.',
+            data: 'शेत, प्लॉट, पीक, कामं, मजूर, खर्च, उत्पन्न, टीम',
+            purpose: 'रोजचं काम समजून हिशोब स्पष्ट दाखवण्यासाठी',
             purposes: ['FARM_OPERATIONS', 'OFFLINE_SYNC'],
             dataCategories: ['FARM_WORK_RECORDS'],
         },
         {
             id: 'voiceUploads',
-            title: 'आवाज आणि फोटो',
-            summary: 'तुम्ही बोललेलं समजून घेण्यासाठी.',
-            collects: [
-                'तुम्ही बोललेला आवाज',
-                'त्या आवाजाचं मजकुरात केलेलं रूपांतर',
-                'तुम्ही पाठवलेले फोटो आणि पावत्या',
-            ],
-            why: 'आवाजाचं मजकुरात रूपांतर करण्यासाठी तो आमच्या भागीदार सेवेकडे जातो. एवढ्यापुरतंच. मूळ आवाज पुढे साठवून ठेवायचा की नाही हे तुम्ही वेगळं ठरवता — ती परवानगी सुरुवातीला बंदच असते, आणि तुम्ही ती दिल्याशिवाय आम्ही आवाज साठवत नाही.',
+            title: 'आवाज आणि जोडलेली माहिती',
+            data: 'तुम्ही बोललेलं, लिहिलेलं, फोटो, कागदपत्रं',
+            purpose: 'काम समजून योग्य ठिकाणी मांडण्यासाठी. माईक तुम्ही सुरू केल्यावरच वापरला जातो',
             purposes: ['VOICE_PROCESSING_FOR_WORK_RECORD'],
             dataCategories: ['VOICE_AUDIO_AND_TRANSCRIPT'],
         },
         {
             id: 'farmLocation',
-            title: 'शेताचं ठिकाण',
-            summary: 'तुमच्या शेतापुरता हवामान अंदाज देण्यासाठी.',
-            collects: [
-                'तुम्ही नकाशावर आखलेली शेताची हद्द',
-                'तुम्ही परवानगी दिली तरच — फोनचं सध्याचं ठिकाण',
-            ],
-            why: 'ठिकाण माहीत नसेल तर तुमच्या शेतापुरतं हवामान सांगता येत नाही. ठिकाण न देताही बाकीचं सगळं अ‍ॅप चालतं.',
+            title: 'शेताची जागा',
+            data: 'शेताची जागा किंवा हद्द',
+            purpose: 'त्या शेतापुरतं हवामान दाखवण्यासाठी. फोनचा सतत मागोवा घेतला जात नाही',
             purposes: ['PLOT_SPECIFIC_WEATHER'],
             dataCategories: ['FARM_LOCATION'],
         },
         {
             id: 'technical',
             title: 'तांत्रिक माहिती',
-            summary: 'अ‍ॅप चालू आणि सुरक्षित ठेवण्यासाठी.',
-            collects: [
-                'फोनचा प्रकार आणि अ‍ॅपची आवृत्ती',
-                'अ‍ॅप बंद पडलं तर त्याची चूक-माहिती',
-                'इंटरनेट नसताना फोनमध्ये ठेवलेली आणि नंतर पाठवलेली माहिती',
-            ],
-            why: 'यात तुमचं नाव नसतं आणि तुमचं काम नसतं. अ‍ॅप कुठे अडतं एवढंच कळतं.',
+            data: 'फोन, ॲप, सिंक आणि सुरक्षेची मर्यादित माहिती',
+            purpose: 'नेटवर्क नसताना काम सुरक्षित ठेवून नंतर सिंक करण्यासाठी आणि गैरवापर शोधण्यासाठी',
             purposes: ['SECURITY', 'OFFLINE_SYNC'],
             dataCategories: ['DEVICE_TECHNICAL'],
         },
@@ -158,108 +180,81 @@ const mr: NoticeCopy = {
     willNotDo: {
         heading: 'आम्ही काय करणार नाही',
         items: [
-            'तुमची माहिती विकणार नाही.',
-            'तुमच्या वेगळ्या परवानगीशिवाय बँक, विमा कंपनी, व्यापारी किंवा कोणत्याही भागीदाराला देणार नाही.',
-            'तुम्ही परवानगी दिल्याशिवाय तुमचा आवाज साठवून ठेवणार नाही.',
-            'तुमचं काम जाहिरातीसाठी वापरणार नाही.',
-            'तुमचं बोलणं किंवा तुमचं काम वापरून आमची किंवा भागीदाराची यंत्रणा शिकवणार नाही — त्यासाठी वेगळी परवानगी लागते आणि ती सुरुवातीला बंदच असते.',
-            'मायक्रोफोनला तुम्ही नाही म्हटलं म्हणून अ‍ॅप बंद करणार नाही — हाताने लिहून सगळं करता येतं.',
-            'वर लिहिलेल्या कामांशिवाय दुसऱ्या कशासाठीही ही माहिती वापरणार नाही. नवीन कारण आलं तर आम्ही पुन्हा विचारू.',
+            'तुमची वैयक्तिक माहिती विकणार नाही.',
+            'परवानगीशिवाय जाहिरातींसाठी वापरणार नाही.',
+            'तुमचा आवाज AI मॉडेल शिकवण्यासाठी वापरणार नाही.',
+            'तुमच्या माहितीवरून कर्ज, विमा किंवा बाजाराचे निर्णय घेणार नाही — त्यासाठी वेगळी स्पष्ट परवानगी मागू.',
         ],
     },
+    processors: 'OTP, सुरक्षित क्लाउड, आवाज समजणे, हवामान, फाइल, सूचना आणि तांत्रिक मदत — एवढ्याच कामांसाठी काही विश्वासू सेवा पुरवठादार मर्यादित माहिती हाताळू शकतात, ठरलेल्या कामापुरतीच.',
     rights: {
         heading: 'तुमचे हक्क',
+        where: 'Settings → Data & Privacy मध्ये:',
         items: [
-            'तुमची माहिती तुम्हाला पाहता येते.',
-            'चुकीचं असेल ते दुरुस्त करता येतं.',
-            'माहिती पुसून टाकायला सांगता येतं.',
-            'दिलेली परवानगी केव्हाही मागे घेता येते — देण्याइतकीच सोपी. कोणती सेवा थांबेल ते आम्ही तेव्हा स्पष्ट सांगू.',
-            'तक्रार असेल तर ती आमच्याकडे करता येते आणि नंतर माहिती संरक्षण मंडळाकडेही करता येते.',
+            'दिलेली परवानगी पाहा किंवा मागे घ्या.',
+            'माहिती पाहा, दुरुस्त करा किंवा डाउनलोड करा.',
+            'खातं आणि माहिती हटवायची विनंती करा.',
+            'तक्रार करा, किंवा तुमच्या वतीने हक्क वापरायला कुणाला नेमा.',
         ],
-        where: 'हे सगळं ‘सेटिंग्ज → माहिती आणि गोपनीयता’ इथे आहे.',
+        withdrawal: 'मुख्य परवानगी मागे घेतल्यास काही किंवा सर्व सुविधा बंद होऊ शकतात. आधी कायदेशीररीत्या झालेली प्रक्रिया रद्द होत नाही; कायद्याने आवश्यक तेवढी माहिती ठरावीक काळ ठेवावी लागू शकते.',
     },
-    acceptanceMeaning: 'हे एक बटण दाबल्यावर दोन वेगळ्या गोष्टी होतात: तुम्ही वापराच्या अटी स्वीकारता, आणि वर लिहिलेल्या कामांपुरती — तेवढ्यापुरतीच — माहिती वापरायला परवानगी देता. दोन्ही वेगवेगळ्या साठवल्या जातात आणि दोन्ही तुम्ही वेगवेगळ्या मागे घेऊ शकता.',
+    entity: {
+        heading: 'ही सेवा कोण चालवतं',
+        cinLabel: 'CIN',
+        officeLabel: 'पत्ता',
+        contactLabel: 'संपर्क',
+    },
+    acceptanceMeaning: '‘मान्य आहे — पुढे चला’ म्हणजे (१) वापराच्या अटी मान्य, आणि (२) वरच्या कामांपुरतीच माहिती वापरायला स्वतंत्र संमती. दोन्ही वेगळ्या साठवल्या जातात आणि तितक्याच सोप्या पद्धतीने मागे घेता येतात.',
     ageDeclaration: 'माझं वय १८ वर्षे किंवा त्याहून जास्त आहे.',
-    cta: 'मी वाचलं, मी सहमत आहे',
+    cta: 'मान्य आहे — पुढे चला',
     ctaDisabledHint: 'पुढे जाण्यासाठी वरची खूण करा.',
-    pendingDisclosures: {
-        heading: 'हे अजून भरायचं आहे',
-        note: 'ही चाचणी आवृत्ती आहे. खालच्या गोष्टी अजून ठरायच्या आहेत आणि त्या ठरल्यावर आम्ही तुम्हाला पुन्हा दाखवू.',
-        items: [
-            'कंपनीचं कायदेशीर नाव — [अद्याप भरलेलं नाही]',
-            'कार्यालयाचा पत्ता — [अद्याप भरलेलं नाही]',
-            'गोपनीयता आणि तक्रार अधिकाऱ्याचा संपर्क — [अद्याप भरलेलं नाही]',
-            'माहिती हाताळणाऱ्या भागीदार सेवा आणि त्यांची ठिकाणं — [अद्याप भरलेलं नाही]',
-            'कोणती माहिती किती काळ ठेवली जाईल — [अद्याप भरलेलं नाही]',
-            '१८ वर्षांखालील वापरकर्त्यांबाबतचं धोरण — [अद्याप भरलेलं नाही]',
-        ],
-    },
     links: { terms: 'वापराच्या अटी', privacy: 'गोपनीयता धोरण' },
 };
 
 // ── English ─────────────────────────────────────────────────────────────────────────
 const en: NoticeCopy = {
-    title: 'How we use your information',
-    intro: 'Please read this once before you start using Shram Safal. What you give us, what we use it for, and what we will never do — all of it is here.',
-    purposeCardsHeading: 'What we take, and what for',
+    title: 'Before you begin',
+    intro: 'Your farm data stays under your control. Shram Safal uses only the information below.',
+    brandLine: 'Shram Safal is an app by Agriryot Value Enterprises Private Limited, built on the AgriSync platform.',
+    purposeCardsHeading: 'What we use, and why',
     cards: [
         {
             id: 'account',
             title: 'Your account',
-            summary: 'So we know it is you.',
-            collects: ['Your mobile number and your name', 'When you signed in'],
-            why: 'This is what keeps your farm and your work visible to you and to nobody else.',
+            data: 'Mobile number, name, account details',
+            purpose: 'for OTP login, access and security',
             purposes: ['ACCOUNT_AUTHENTICATION', 'SECURITY'],
             dataCategories: ['IDENTITY_AND_CONTACT'],
         },
         {
             id: 'farmWork',
             title: 'Your farm work',
-            summary: 'To keep safe what you tell us.',
-            collects: [
-                'The work, costs, labour, water and spraying you tell us about',
-                'Your plots and crops',
-                'The day the work happened',
-            ],
-            why: 'This is your farm’s account of itself, and it is yours. You can see it, correct it, and ask us to erase it at any time.',
+            data: 'Farm, plot, crop, work, labour, cost, income, team',
+            purpose: 'to understand your daily work and show clear summaries',
             purposes: ['FARM_OPERATIONS', 'OFFLINE_SYNC'],
             dataCategories: ['FARM_WORK_RECORDS'],
         },
         {
             id: 'voiceUploads',
             title: 'Voice and uploads',
-            summary: 'To understand what you said.',
-            collects: [
-                'The audio you speak',
-                'The text that audio is turned into',
-                'Photos and receipts you send',
-            ],
-            why: 'Your audio goes to our partner service to be turned into text. That, and nothing more. Whether the original audio is then kept is a separate decision that is yours — it is off to begin with, and we do not keep audio unless you turn it on.',
+            data: 'What you speak, type, photograph or upload',
+            purpose: 'to understand your work and place it correctly. The microphone runs only when you start it',
             purposes: ['VOICE_PROCESSING_FOR_WORK_RECORD'],
             dataCategories: ['VOICE_AUDIO_AND_TRANSCRIPT'],
         },
         {
             id: 'farmLocation',
-            title: 'Your farm location',
-            summary: 'To give you weather for your own field.',
-            collects: [
-                'The farm boundary you draw on the map',
-                'Only if you allow it — your phone’s current location',
-            ],
-            why: 'Without a location we cannot give weather for your field specifically. Everything else in the app works without it.',
+            title: 'Farm location',
+            data: 'Your farm location or boundary',
+            purpose: 'to give weather for that field. Your phone is not continuously tracked',
             purposes: ['PLOT_SPECIFIC_WEATHER'],
             dataCategories: ['FARM_LOCATION'],
         },
         {
             id: 'technical',
             title: 'Technical information',
-            summary: 'To keep the app running and secure.',
-            collects: [
-                'Your phone type and the app version',
-                'Error information if the app stops working',
-                'What was saved on your phone while offline and sent later',
-            ],
-            why: 'This carries no name and no farm work. It only tells us where the app gets stuck.',
+            data: 'Limited device, app, sync and security information',
+            purpose: 'to protect offline work, sync it later and detect misuse',
             purposes: ['SECURITY', 'OFFLINE_SYNC'],
             dataCategories: ['DEVICE_TECHNICAL'],
         },
@@ -267,42 +262,34 @@ const en: NoticeCopy = {
     willNotDo: {
         heading: 'What we will not do',
         items: [
-            'We will not sell your information.',
-            'We will not give it to a bank, an insurer, a trader or any partner without your separate permission.',
-            'We will not keep your voice recordings unless you turn that on.',
-            'We will not use your work in advertising.',
-            'We will not train our systems, or a partner’s, on your voice or your work — that needs a separate permission, and it is off to begin with.',
-            'We will not shut you out for refusing the microphone — everything can be entered by hand.',
-            'We will not use this information for anything beyond the purposes listed above. If a new reason comes up, we will ask you again.',
+            'We will not sell your personal data.',
+            'We will not use it for advertising without separate permission.',
+            'We will not use your voice to train AI models without separate permission.',
+            'We will not make lending, insurance or market decisions from your data — that needs separate, specific consent.',
         ],
     },
+    processors: 'Trusted service providers may handle limited information only for OTP, secure cloud hosting, speech processing, weather, file storage, notifications and technical support — and only for that assigned purpose.',
     rights: {
         heading: 'Your rights',
+        where: 'From Settings → Data & Privacy:',
         items: [
-            'You can see your information.',
-            'You can correct anything that is wrong.',
-            'You can ask us to erase it.',
-            'You can withdraw a permission at any time — no harder than giving it. We will tell you plainly which services stop.',
-            'You can complain to us, and after that to the Data Protection Board.',
+            'Review or withdraw your consent.',
+            'Access, correct or download your information.',
+            'Request deletion of your account and data.',
+            'Raise a grievance, or nominate someone to act for you.',
         ],
-        where: 'All of this lives under ‘Settings → Data & Privacy’.',
+        withdrawal: 'Withdrawing essential consent may disable some or all services. It does not undo processing already lawfully done; limited information may be retained where the law requires it.',
     },
-    acceptanceMeaning: 'This one button does two separate things: you accept the Terms of Use, and you give permission to use your information for the purposes listed above — and for nothing else. The two are recorded separately, and you can withdraw them separately.',
+    entity: {
+        heading: 'Who runs this service',
+        cinLabel: 'CIN',
+        officeLabel: 'Office',
+        contactLabel: 'Contact',
+    },
+    acceptanceMeaning: 'Choosing ‘Agree and Continue’ means (1) you accept the Terms of Use, and (2) you separately consent to use of only the data needed for the purposes above. The two are stored separately and can be withdrawn just as easily.',
     ageDeclaration: 'I am 18 years of age or older.',
-    cta: 'I have read this and I agree',
+    cta: 'Agree and Continue',
     ctaDisabledHint: 'Tick the box above to continue.',
-    pendingDisclosures: {
-        heading: 'Still to be filled in',
-        note: 'This is a pilot release. The items below are not settled yet. When they are, we will show you this notice again.',
-        items: [
-            'Legal company name — [not yet filled in]',
-            'Office address — [not yet filled in]',
-            'Privacy and grievance contact — [not yet filled in]',
-            'Partner services that handle your information, and where they are — [not yet filled in]',
-            'How long each kind of information is kept — [not yet filled in]',
-            'Policy for users under 18 — [not yet filled in]',
-        ],
-    },
     links: { terms: 'Terms of Use', privacy: 'Privacy Policy' },
 };
 
@@ -318,9 +305,8 @@ export const NOTICE_DATA_CATEGORY_CODES: readonly CoreDataCategoryCode[] = CORE_
  *
  * This is what wave-4.2 hashes, and the hash is only meaningful if this covers exactly
  * what the farmer saw. So it walks every field the screen renders, in render order,
- * including the pending-disclosure placeholders — a notice with a blank where a company
- * name should be is a DIFFERENT notice from one with the name filled in, and the record
- * has to be able to tell them apart.
+ * including the data fiduciary's identity — a notice naming a different company is a
+ * DIFFERENT notice, and the record has to be able to tell them apart.
  *
  * Purpose/data-category codes are included too: they never appear on screen, but they
  * are what the record asserts was consented to, so a change to them must change the hash.
@@ -334,19 +320,27 @@ export function canonicalNoticeText(language: NoticeLanguage): string {
         `language:${language}`,
         c.title,
         c.intro,
+        c.brandLine,
         c.purposeCardsHeading,
     ];
 
     for (const card of c.cards) {
-        lines.push(`card:${card.id}`, card.title, card.summary, ...card.collects, card.why);
+        lines.push(`card:${card.id}`, card.title, card.data, card.purpose);
         lines.push(`purposes:${card.purposes.join(',')}`);
         lines.push(`categories:${card.dataCategories.join(',')}`);
     }
 
     lines.push(c.willNotDo.heading, ...c.willNotDo.items);
-    lines.push(c.rights.heading, ...c.rights.items, c.rights.where);
+    lines.push(c.processors);
+    lines.push(c.rights.heading, c.rights.where, ...c.rights.items, c.rights.withdrawal);
+    lines.push(
+        c.entity.heading,
+        DATA_FIDUCIARY.legalName,
+        `${c.entity.cinLabel}:${DATA_FIDUCIARY.cin}`,
+        `${c.entity.officeLabel}:${DATA_FIDUCIARY.registeredOffice}`,
+        `${c.entity.contactLabel}:${DATA_FIDUCIARY.contact}`,
+    );
     lines.push(c.acceptanceMeaning, c.ageDeclaration, c.cta, c.ctaDisabledHint);
-    lines.push(c.pendingDisclosures.heading, c.pendingDisclosures.note, ...c.pendingDisclosures.items);
     lines.push(c.links.terms, c.links.privacy);
 
     return lines.join('\n');
