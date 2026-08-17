@@ -24,9 +24,9 @@
 //     one section from the next is vertical space, which is how a document does it.
 //   • NO LIST MARKERS. The <ul>/<li> semantics stay for screen readers; the discs are
 //     suppressed, because a marker is a glyph and he asked for none.
-//   • THE ONLY THREE INTERACTIVE CONTROLS are the language switch, the 18+ checkbox and
-//     the accept button, and only those three carry enough styling to read as tappable.
-//     A button has to look like a button or it is a trap.
+//   • THE ONLY FOUR INTERACTIVE CONTROLS are the language switch, the 18+ checkbox, the
+//     accept button and the decline action — and only those carry enough styling to read
+//     as tappable. A button has to look like a button or it is a trap.
 //     (The Terms / Privacy references and the contact address render as plain inline
 //     text links — a document names the papers it incorporates, and the CTA text itself
 //     says he is accepting the Terms, so he has to be able to open them. They are
@@ -50,6 +50,56 @@
 // cut off and the gate could not be passed on a short phone. With `h-full
 // overflow-y-auto` at the root, every child is reachable by construction. A test pins
 // that invariant structurally, because it is not a thing jsdom can measure.
+//
+// ── THE APP'S FRAME, NOT ITS OWN ───────────────────────────────────────────────────
+// Founder direction 2026-08-17 (third): "page is not aligned with the visual aspect of
+// mobile screen as it seems like other part of UI". It was reading as a different
+// application, and the reason was measurable rather than aesthetic — it had invented its
+// own frame instead of using the one every other screen sits in:
+//
+//   • COLUMN. `page-content` (styles/global-theme.css) is the app's content column:
+//     480px / 600px ≥768 / 640px ≥1280, centred, 16px gutters. It is what AppHeader and
+//     AppContent's <main> use, so it is what a screen's text column measures on every
+//     surface. This screen used a hand-rolled `max-w-[420px] px-4`, which is close on a
+//     phone and visibly wrong anywhere wider: at ≥768 the shell opens to 640/720 and
+//     every other screen opens with it while the notice stayed a 420px ribbon.
+//   • BACKGROUND. It painted `bg-white` over the whole slot. AppShell's column is
+//     `bg-surface-100` (#FAFAF9) and screens inherit it — <main> declares no background
+//     at all. So the notice was a white rectangle on the app's warm paper. It now
+//     declares none either, and is on the same paper as everything else.
+//   • SAFE AREA. AppShell already pays the top spacer and the left/right insets for its
+//     children. The screen owes only the BOTTOM inset, because the shell does not pay
+//     that one — same as LoginPage. Re-paying left/right here would double-inset the
+//     text on a notched phone.
+//   • SCROLL. Unchanged, and it was already the app's model: `h-full overflow-y-auto` on
+//     the screen root, exactly as LoginPage does and as <main> does with `flex-1`.
+//   • HEADER. None — deliberately. AppHeader belongs to the signed-in app; the two
+//     pre-login screens in this shell (this one and LoginPage) both open straight into
+//     their own content. Adding a bar here would also have to be `sticky`, and a sticky
+//     child is the shape of the defect above, which a test forbids outright.
+//
+// Only the frame moved. Every word, every type size and the plain-document treatment are
+// exactly as they were at a2fde58b.
+//
+// ── THERE IS A WAY TO SAY NO ───────────────────────────────────────────────────────
+// `decline.label` renders at the CTA's own size, at the CTA's own width, directly beneath
+// it. It is plain text rather than a filled button because there is one primary action on
+// the screen — but plain text at equal size and width is equal prominence, and greying it
+// out or hiding it in fine print would not be. A consent screen offering only "agree" is
+// the textbook dark pattern, and this screen spends four lines promising it will not pull
+// one; the promise and the shape of the screen have to agree.
+//
+// Declining SHOWS `decline.consequence` and does nothing else. Specifically it does not:
+// silently exit (a web tab cannot be closed by script, and killing the app would look
+// like a crash), re-render the same screen with no explanation, or write anything
+// anywhere. `onAccept` is not called, `markPassed` is not called, so the accepted-notice
+// preference stays empty and the gate is simply still here on the next open. He is left
+// exactly where he can reconsider — the checkbox and the CTA never move.
+//
+// NOTHING IS RECORDED ON DECLINE, and that is a judgement, not an omission. See the
+// report; the short form is that the gate runs before any account exists, so a refusal
+// record could only be keyed to a device id we minted ourselves, and storing a
+// device-linked event about a man who just refused processing is the act he refused.
 //
 // Rules this screen is built to, and the shape each one takes here:
 //   • No dark patterns — the ONLY thing that enables the CTA is the 18+ declaration.
@@ -128,6 +178,9 @@ const ConsentGateScreen: React.FC<Props> = ({ onAccept, forceLanguage }) => {
     const [ageConfirmed, setAgeConfirmed] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [failed, setFailed] = useState(false);
+    // Local, and local only. A refusal is not sent anywhere and not persisted — see the
+    // header note. It exists to put the consequence on screen and to keep it there.
+    const [declined, setDeclined] = useState(false);
 
     // Marathi headings are serif; English headings are not.
     const headingFont = displayed === 'mr' ? 'font-serif' : 'font-sans';
@@ -160,14 +213,23 @@ const ConsentGateScreen: React.FC<Props> = ({ onAccept, forceLanguage }) => {
     };
 
     return (
-        // THE ONLY SCROLLER. AppShell hands this screen a fixed, overflow-hidden box, so
-        // the scroll has to live here — and living here, rather than around an inner
-        // region, is what makes every child reachable including the button at the end.
+        // THE ONLY SCROLLER, AND THE APP'S OWN COLUMN.
+        //
+        // `page-content` is the shared content column (480 / 600 ≥768 / 640 ≥1280, 16px
+        // gutters) that AppHeader and AppContent's <main> use — carried on the scroller
+        // itself, exactly as <main> carries it, so this screen measures the same as every
+        // other screen at every width. No background of its own: AppShell's column is
+        // bg-surface-100 and screens sit on it.
+        //
+        // The scroll lives HERE because AppShell hands its children a fixed,
+        // overflow-hidden box — and living on the root, rather than around an inner
+        // region, is what makes every child reachable including the buttons at the end.
         <div
             data-testid="consent-scroll-root"
-            className="h-full overflow-y-auto overscroll-contain bg-white font-sans text-stone-800"
+            className="page-content h-full overflow-y-auto overscroll-contain font-sans text-stone-800"
         >
-            <div className="mx-auto w-full max-w-[420px] px-4 pt-3 pb-[calc(1.5rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)))]">
+            {/* AppShell pays the top and side insets; the bottom one is this screen's. */}
+            <div className="pt-4 pb-[calc(1.5rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)))]">
 
                 {/* ── language switch — one of the three controls ──────────────── */}
                 <div
@@ -305,6 +367,32 @@ const ConsentGateScreen: React.FC<Props> = ({ onAccept, forceLanguage }) => {
                             {copy.ctaDisabledHint}
                         </p>
                     )}
+
+                    {/* SAYING NO. Same 14px, same full width, directly under the CTA —
+                        equal prominence. Never disabled: refusing is always available,
+                        including before the 18+ box is ticked. */}
+                    <button
+                        type="button"
+                        onClick={() => setDeclined(true)}
+                        data-testid="consent-decline"
+                        className="mt-2 flex min-h-[44px] w-full items-center justify-center px-4 font-sans text-[14px] font-bold text-stone-700"
+                    >
+                        {copy.decline.label}
+                    </button>
+
+                    {/* What refusing costs him, in his own language, the moment he asks.
+                        Nothing was sent and nothing was stored — the screen simply stays,
+                        with the checkbox and the CTA untouched above it. */}
+                    {declined && (
+                        <p
+                            className="mt-1 font-sans text-[9.5px] leading-relaxed text-stone-600"
+                            role="status"
+                            data-testid="consent-declined-consequence"
+                        >
+                            {copy.decline.consequence}
+                        </p>
+                    )}
+
                     {failed && (
                         <p
                             className="mt-1.5 font-sans text-[9.5px] font-semibold leading-snug text-rose-700"

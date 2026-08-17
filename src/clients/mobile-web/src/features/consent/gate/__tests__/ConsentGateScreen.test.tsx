@@ -124,6 +124,106 @@ describe('ConsentGateScreen — one section, one scroll, acceptance at the end',
     });
 });
 
+describe('ConsentGateScreen — inside the app frame, not its own', () => {
+    // Founder, 2026-08-17: the screen "seems like other part of UI". It had invented its
+    // own column and its own paper. These pin the two facts that made it foreign — a
+    // hand-rolled width and a white background — so the next styling pass cannot
+    // reintroduce either without tripping a test.
+
+    it('uses the app-wide content column, not a width of its own', () => {
+        render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
+        const root = screen.getByTestId('consent-scroll-root');
+
+        // `page-content` (styles/global-theme.css) is what AppHeader and AppContent's
+        // <main> use: 480 / 600 ≥768 / 640 ≥1280 with 16px gutters. Carrying the class
+        // rather than a max-w-[…] is the point — the number lives in ONE place.
+        expect(root).toHaveClass('page-content');
+        expect(Array.from(root.classList).some((c) => c.startsWith('max-w-'))).toBe(false);
+    });
+
+    it('paints no background of its own — it sits on AppShell\'s surface', () => {
+        const { container } = render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
+
+        // AppShell's column is bg-surface-100 (#FAFAF9) and screens inherit it; <main>
+        // declares no background either. A bg-white root was a white rectangle on the
+        // app's warm paper, which is most of why the screen read as a different app.
+        const painted = Array.from(container.querySelectorAll('*')).filter((el) =>
+            el.classList.contains('bg-white'));
+        expect(painted).toHaveLength(0);
+    });
+
+    it('pays the bottom inset only — AppShell already pays top and sides', () => {
+        render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
+        const root = screen.getByTestId('consent-scroll-root');
+
+        // Re-paying pl/pr-safe-area here would double-inset the text on a notched phone,
+        // because AppShell's children slot already carries them.
+        const inner = root.firstElementChild as HTMLElement;
+        expect(root.className).not.toContain('safe-area');
+        expect(inner.className).not.toContain('pl-safe');
+        expect(inner.className).toContain('safe-area-inset-bottom');
+    });
+});
+
+describe('ConsentGateScreen — there is a way to say no', () => {
+    it('offers a decline at the same size and width as the accept', () => {
+        render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
+
+        const accept = screen.getByTestId('consent-accept-cta');
+        const decline = screen.getByTestId('consent-decline');
+
+        // Equal prominence is the requirement, and it is measurable: same type size,
+        // same full width. Plain text vs filled is allowed; smaller or hidden is not.
+        expect(decline).toHaveTextContent(CONSENT_NOTICE.mr.decline.label);
+        expect(decline.className).toContain('text-[14px]');
+        expect(accept.className).toContain('text-[14px]');
+        expect(decline.className).toContain('w-full');
+        // And it is never disabled — refusing is available before the box is ticked.
+        expect(decline).toBeEnabled();
+        expect(accept).toBeDisabled();
+    });
+
+    it('explains what declining costs, and records nothing', () => {
+        const onAccept = vi.fn();
+        render(<ConsentGateScreen onAccept={onAccept} forceLanguage="en" />);
+
+        expect(screen.queryByTestId('consent-declined-consequence')).toBeNull();
+        fireEvent.click(screen.getByTestId('consent-decline'));
+
+        expect(screen.getByTestId('consent-declined-consequence'))
+            .toHaveTextContent(CONSENT_NOTICE.en.decline.consequence);
+        // Nothing is written. Not the acceptance callback, not a denial — the gate runs
+        // before any account exists, so a refusal could only be keyed to a device id we
+        // minted ourselves, and storing that is the processing he just refused.
+        expect(onAccept).not.toHaveBeenCalled();
+    });
+
+    it('leaves him exactly where he can reconsider', () => {
+        render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
+
+        fireEvent.click(screen.getByTestId('consent-decline'));
+
+        // No silent exit, no reload into the same screen with no explanation. The
+        // checkbox and the CTA are still on screen and still work.
+        const box = screen.getByTestId('consent-age-checkbox');
+        expect(box).toBeInTheDocument();
+        fireEvent.click(box);
+        expect(screen.getByTestId('consent-accept-cta')).toBeEnabled();
+    });
+
+    it('carries the decline copy in both languages, and in the hash', () => {
+        for (const language of ['mr', 'en'] as const) {
+            const copy = CONSENT_NOTICE[language].decline;
+            expect(copy.label.length).toBeGreaterThan(0);
+            // The consequence is a disclosure about the consent, so the stored hash has
+            // to cover it — otherwise the record cannot say what he was told refusing
+            // would mean.
+            expect(canonicalNoticeText(language)).toContain(copy.label);
+            expect(canonicalNoticeText(language)).toContain(copy.consequence);
+        }
+    });
+});
+
 describe('ConsentGateScreen — no dark patterns', () => {
     it('starts every checkbox on the screen unticked, and there is exactly one', () => {
         const { container } = render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
@@ -256,11 +356,13 @@ describe('ConsentGateScreen — a printed document, not an app screen', () => {
         for (const list of lists) expect(list).toHaveClass('list-none');
     });
 
-    it('keeps exactly three interactive controls: switch, checkbox, button', () => {
+    it('keeps exactly four interactive controls: switch, checkbox, accept, decline', () => {
         const { container } = render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
 
-        // Two language buttons + the CTA. Nothing else is a <button>.
-        expect(container.querySelectorAll('button')).toHaveLength(3);
+        // Two language buttons + accept + decline. Nothing else is a <button>. The
+        // decline arrived on 2026-08-17 and is the ONLY control added since the
+        // plain-document pass; anything beyond four is chrome creeping back.
+        expect(container.querySelectorAll('button')).toHaveLength(4);
         expect(container.querySelectorAll('input')).toHaveLength(1);
     });
 
@@ -366,7 +468,8 @@ describe('the notice document', () => {
             c.title, c.intro, c.brandLine, c.purposeCardsHeading, c.willNotDo.heading,
             c.processors, c.rights.heading, c.rights.where, c.rights.withdrawal,
             c.entity.heading, c.acceptanceMeaning, c.ageDeclaration, c.cta,
-            c.ctaDisabledHint, c.links.terms, c.links.privacy,
+            c.ctaDisabledHint, c.decline.label, c.decline.consequence,
+            c.links.terms, c.links.privacy,
         ]) {
             expect(canonical).toContain(line);
         }
@@ -398,8 +501,8 @@ describe('the notice document', () => {
     it('moved the version when the words moved', () => {
         // A farmer who accepted the previous wording must not be recorded against this
         // one. The gate re-shows on a version change (useConsentGate), so this string
-        // changing IS the re-consent mechanism.
-        expect(NOTICE_VERSION).toBe('notice-2026-08-17.2');
+        // changing IS the re-consent mechanism. `.3` = the decline copy landed.
+        expect(NOTICE_VERSION).toBe('notice-2026-08-17.3');
     });
 
     it('a different displayed language is a different notice, and so a different hash', () => {

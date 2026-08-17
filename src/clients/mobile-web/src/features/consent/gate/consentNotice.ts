@@ -89,8 +89,14 @@ export const NOTICE_LEGAL_REVIEW_PENDING = 'LEGAL_REVIEW_PENDING' as const;
  * left both the screen and the canonical text, so the words a farmer accepts are
  * materially different from `notice-2026-08-17.1`; anyone who accepted that text must
  * NOT be recorded as having accepted this one.
+ *
+ * `notice-2026-08-17.3` — the DECLINE pass. The screen now states, in the farmer's own
+ * language, what happens if he does not agree. That is a material statement about the
+ * consequence of refusing consent, so it is displayed, serialised and versioned like
+ * every other statement here. A notice whose only affordance was "yes" was describing a
+ * choice it did not offer.
  */
-export const NOTICE_VERSION = 'notice-2026-08-17.2';
+export const NOTICE_VERSION = 'notice-2026-08-17.3';
 export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-16.1';
 export const TERMS_VERSION = 'terms-2026-08-16.1';
 
@@ -167,6 +173,21 @@ export interface NoticeCopy {
     ageDeclaration: string;
     cta: string;
     ctaDisabledHint: string;
+    /**
+     * The REFUSAL, and what refusing costs him.
+     *
+     * `label` is the decline action itself. It renders at the same type size as the CTA
+     * and across the same full width, because accept and decline have to be offered with
+     * equal prominence — a notice that shows only "agree" is a dark pattern wearing a
+     * legal notice's clothes, and this screen's own `willNotDo` promises are worth
+     * nothing if the screen itself pulls one.
+     *
+     * `consequence` is what he is told the moment he taps it: that the app cannot be used
+     * without this consent, that nothing about him was saved, and how to change his mind.
+     * It is copy on the notice — not chrome — because "what happens if you say no" is a
+     * disclosure about the consent itself, so it is hashed with everything else.
+     */
+    decline: { label: string; consequence: string };
     links: { terms: string; privacy: string };
 }
 
@@ -247,6 +268,10 @@ const mr: NoticeCopy = {
     ageDeclaration: 'माझं वय १८ वर्षे किंवा त्याहून जास्त आहे.',
     cta: 'मान्य आहे — पुढे चला',
     ctaDisabledHint: 'पुढे जाण्यासाठी वरची खूण करा.',
+    decline: {
+        label: 'मान्य नाही',
+        consequence: 'या संमतीशिवाय श्रम सफल वापरता येणार नाही. तुमची कोणतीही माहिती साठवली गेलेली नाही. विचार बदलल्यास वरची खूण करून पुढे चला.',
+    },
     links: { terms: 'वापराच्या अटी', privacy: 'गोपनीयता धोरण' },
 };
 
@@ -327,6 +352,10 @@ const en: NoticeCopy = {
     ageDeclaration: 'I am 18 years of age or older.',
     cta: 'Agree and Continue',
     ctaDisabledHint: 'Tick the box above to continue.',
+    decline: {
+        label: 'I do not agree',
+        consequence: 'Shram Safal cannot be used without this consent. Nothing about you has been saved. If you change your mind, tick the box above and continue.',
+    },
     links: { terms: 'Terms of Use', privacy: 'Privacy Policy' },
 };
 
@@ -380,6 +409,9 @@ export function canonicalNoticeText(language: NoticeLanguage): string {
         `${c.entity.contactLabel}:${DATA_FIDUCIARY.contact}`,
     );
     lines.push(c.acceptanceMeaning, c.ageDeclaration, c.cta, c.ctaDisabledHint);
+    // The refusal and its stated consequence are part of the notice: what he was told
+    // would happen if he said no is as much a disclosure as what happens if he says yes.
+    lines.push(c.decline.label, c.decline.consequence);
     lines.push(c.links.terms, c.links.privacy);
 
     return lines.join('\n');
