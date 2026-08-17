@@ -23,6 +23,22 @@
 // description of the personal data alongside the purpose of each use, so the itemisation
 // has to remain its own addressable, hashable thing even though it renders on one line.
 //
+// ── PLAIN-DOCUMENT PASS, founder direction 2026-08-17 (second) ──────────────────────
+// "remove office details and other details such as CIN Number and all — that's not
+// needed for public facing app". So the REGISTERED OFFICE and the CIN come off the
+// gate. They are not deleted — they stay on `DATA_FIDUCIARY` below, unrendered, and
+// they are OWED to the full privacy notice the gate links to.
+//
+// Because they are no longer on screen they are also no longer in
+// `canonicalNoticeText`. That is not an oversight: the hash is only worth something if
+// it covers exactly what the farmer was shown, so a fact that left the screen must
+// leave the serialisation in the same commit, and the version must move with it.
+//
+// What did NOT come off, and may not: the company's LEGAL NAME and a CONTACT. A notice
+// that will not say who is processing the data, or how to reach them, is not a consent
+// notice — it is a splash screen. Every purpose category, every "we will not do" line,
+// every right and the withdrawal consequence also stay in full.
+//
 // ── THE THREE NAMES ─────────────────────────────────────────────────────────────────
 // `brandLine` is the one sentence that untangles them, because nothing else on the
 // screen does: श्रम सफल / Shram Safal is the product the farmer holds, AgriSync is the
@@ -41,10 +57,10 @@
 // a notice that is hard to read is a worse consent notice, not a safer one. The CI gate
 // greps for the token, so the prod-deploy block still fires while this constant exists.
 //
-// 🛑 WHAT IS STILL UNKNOWN IS OMITTED, NOT PLACEHELD. The data fiduciary's identity,
-// CIN, registered office and contact are now real and appear below verbatim. A
-// grievance phone number, a named DPO, retention periods, the processor list and the
-// under-18 policy are still genuinely unsettled — so this notice says nothing about
+// 🛑 WHAT IS STILL UNKNOWN IS OMITTED, NOT PLACEHELD. The data fiduciary's legal name
+// and contact are real and appear on screen verbatim. A grievance phone number, a named
+// DPO, retention periods, the processor list and the under-18 policy are still
+// genuinely unsettled — so this notice says nothing about
 // them rather than showing a farmer an empty bracket. Omission is honest; a visible
 // "[not yet filled in]" is a screen telling him his consent is provisional. Until those
 // land, no wording here or anywhere else may claim DPDP compliance.
@@ -69,11 +85,12 @@ export const NOTICE_LEGAL_REVIEW_PENDING = 'LEGAL_REVIEW_PENDING' as const;
  * separate on purpose — the notice can be reworded without the Terms changing, and a
  * record has to be able to say which of the three moved.
  *
- * `notice-2026-08-17.1` — the compression pass. The words a farmer accepts are
- * materially different from `notice-2026-08-16.2`, so anyone who accepted the old text
- * must NOT be recorded as having accepted this one.
+ * `notice-2026-08-17.2` — the plain-document pass. The CIN and the registered office
+ * left both the screen and the canonical text, so the words a farmer accepts are
+ * materially different from `notice-2026-08-17.1`; anyone who accepted that text must
+ * NOT be recorded as having accepted this one.
  */
-export const NOTICE_VERSION = 'notice-2026-08-17.1';
+export const NOTICE_VERSION = 'notice-2026-08-17.2';
 export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-16.1';
 export const TERMS_VERSION = 'terms-2026-08-16.1';
 
@@ -81,6 +98,13 @@ export const TERMS_VERSION = 'terms-2026-08-16.1';
  * The data fiduciary, as registered. One copy, shared by both languages, because a
  * legal identity that differs between two translations of the same notice is a defect.
  * Only facts that are actually known appear here.
+ *
+ * `legalName` and `contact` are ON the gate — a farmer must be able to see who holds
+ * his data and how to reach them.
+ *
+ * `cin` and `registeredOffice` are NOT on the gate (founder direction 2026-08-17) and
+ * are NOT in `canonicalNoticeText`. They are kept here rather than deleted because they
+ * are owed to the full privacy notice — see `OWED_TO_FULL_PRIVACY_NOTICE`.
  */
 export const DATA_FIDUCIARY = {
     legalName: 'Agriryot Value Enterprises Private Limited',
@@ -89,6 +113,18 @@ export const DATA_FIDUCIARY = {
         'H. No. 2992, Near Indira Gandhi Bhaji Market, Pandharpur, Dist. Solapur, Maharashtra – 413304',
     contact: 'arvesystems@gmail.com',
 } as const;
+
+/**
+ * Facts that left the gate but still have to appear SOMEWHERE a farmer can reach.
+ *
+ * The gate links to `/legal/privacy`. That route has no target in this repo today —
+ * there is no privacy-policy page or document under `src/clients/mobile-web` (the only
+ * files under `public/consent/` are the wave-4.3 OPTIONAL-consent agreements, a
+ * different document). So this is a standing debt, named here so it cannot be lost:
+ * when the full privacy notice is authored, the CIN and the registered office go into
+ * it. Neither is a secret; both are public register facts.
+ */
+export const OWED_TO_FULL_PRIVACY_NOTICE = ['cin', 'registeredOffice'] as const;
 
 export type NoticeLanguage = 'mr' | 'en';
 
@@ -118,8 +154,13 @@ export interface NoticeCopy {
      *  the list is not settled; naming one we have not confirmed would be a fabrication. */
     processors: string;
     rights: { heading: string; where: string; items: string[]; withdrawal: string };
-    /** Who the farmer is actually dealing with. Facts only. */
-    entity: { heading: string; cinLabel: string; officeLabel: string; contactLabel: string };
+    /**
+     * Who the farmer is actually dealing with. Facts only, and only the two a public
+     * app screen needs: the legal name (rendered from `DATA_FIDUCIARY`) and a contact.
+     * There is deliberately no `cinLabel` / `officeLabel` — a label with nothing to
+     * label is how a removed field creeps back.
+     */
+    entity: { heading: string; contactLabel: string };
     /** What the single tap actually does. Disclosed, because one button writing two
      *  records is only honest if the farmer is told that is what it does. */
     acceptanceMeaning: string;
@@ -200,8 +241,6 @@ const mr: NoticeCopy = {
     },
     entity: {
         heading: 'ही सेवा कोण चालवतं',
-        cinLabel: 'CIN',
-        officeLabel: 'पत्ता',
         contactLabel: 'संपर्क',
     },
     acceptanceMeaning: '‘मान्य आहे — पुढे चला’ म्हणजे (१) वापराच्या अटी मान्य, आणि (२) वरच्या कामांपुरतीच माहिती वापरायला स्वतंत्र संमती. दोन्ही वेगळ्या साठवल्या जातात आणि तितक्याच सोप्या पद्धतीने मागे घेता येतात.',
@@ -282,8 +321,6 @@ const en: NoticeCopy = {
     },
     entity: {
         heading: 'Who runs this service',
-        cinLabel: 'CIN',
-        officeLabel: 'Office',
         contactLabel: 'Contact',
     },
     acceptanceMeaning: 'Choosing ‘Agree and Continue’ means (1) you accept the Terms of Use, and (2) you separately consent to use of only the data needed for the purposes above. The two are stored separately and can be withdrawn just as easily.',
@@ -305,8 +342,12 @@ export const NOTICE_DATA_CATEGORY_CODES: readonly CoreDataCategoryCode[] = CORE_
  *
  * This is what wave-4.2 hashes, and the hash is only meaningful if this covers exactly
  * what the farmer saw. So it walks every field the screen renders, in render order,
- * including the data fiduciary's identity — a notice naming a different company is a
+ * including the data fiduciary's legal name — a notice naming a different company is a
  * DIFFERENT notice, and the record has to be able to tell them apart.
+ *
+ * It does NOT carry the CIN or the registered office, because since 2026-08-17 the gate
+ * does not show them. Serialising a fact the farmer never saw would make the hash claim
+ * more than the screen did.
  *
  * Purpose/data-category codes are included too: they never appear on screen, but they
  * are what the record asserts was consented to, so a change to them must change the hash.
@@ -336,8 +377,6 @@ export function canonicalNoticeText(language: NoticeLanguage): string {
     lines.push(
         c.entity.heading,
         DATA_FIDUCIARY.legalName,
-        `${c.entity.cinLabel}:${DATA_FIDUCIARY.cin}`,
-        `${c.entity.officeLabel}:${DATA_FIDUCIARY.registeredOffice}`,
         `${c.entity.contactLabel}:${DATA_FIDUCIARY.contact}`,
     );
     lines.push(c.acceptanceMeaning, c.ageDeclaration, c.cta, c.ctaDisabledHint);

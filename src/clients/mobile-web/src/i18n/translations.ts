@@ -264,7 +264,6 @@ export interface Translations {
     consentGate: {
         /** Accessible name for the मराठी | English switcher. */
         languageGroupLabel: string;
-        legalLinksLabel: string;
         /** Shown when the two legal records could not be written. Never a silent pass. */
         saveFailed: string;
     };
@@ -656,7 +655,6 @@ export const translations: Record<Language, Translations> = {
         // features/consent/gate/consentNotice.ts.
         consentGate: {
             languageGroupLabel: 'Choose language',
-            legalLinksLabel: 'Legal documents',
             saveFailed: 'We could not save this. Please check your connection and try again.',
         },
         // DFES Behavioral Layer
@@ -991,7 +989,6 @@ export const translations: Record<Language, Translations> = {
         // features/consent/gate/consentNotice.ts.
         consentGate: {
             languageGroupLabel: 'भाषा निवडा',
-            legalLinksLabel: 'कायदेशीर कागदपत्रं',
             saveFailed: 'हे साठवता आलं नाही. इंटरनेट तपासून पुन्हा प्रयत्न करा.',
         },
         // DFES Behavioral Layer

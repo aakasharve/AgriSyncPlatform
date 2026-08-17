@@ -40,6 +40,7 @@ import {
     NOTICE_DATA_CATEGORY_CODES,
     NOTICE_PURPOSE_CODES,
     NOTICE_VERSION,
+    OWED_TO_FULL_PRIVACY_NOTICE,
     canonicalNoticeText,
 } from '../consentNotice';
 import { CORE_PURPOSE_CODES, OPTIONAL_PURPOSE_CODES } from '../../../../domain/consent/CoreConsentScope';
@@ -198,14 +199,80 @@ describe('ConsentGateScreen — who he is dealing with', () => {
         expect(line).toHaveTextContent('Agriryot Value Enterprises Private Limited');
     });
 
-    it('shows the registered identity — legal name, CIN, office and contact', () => {
+    it('names the company and a way to reach it — the two facts that may never leave', () => {
         render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
 
         const entity = screen.getByTestId('consent-entity');
+        // A farmer has to be able to see WHO is processing his data and HOW to reach
+        // them. Strip these and the screen stops being a consent notice.
         expect(entity).toHaveTextContent(DATA_FIDUCIARY.legalName);
-        expect(entity).toHaveTextContent(DATA_FIDUCIARY.cin);
-        expect(entity).toHaveTextContent(DATA_FIDUCIARY.registeredOffice);
         expect(entity).toHaveTextContent(DATA_FIDUCIARY.contact);
+    });
+
+    it('keeps the CIN and the registered office OFF the public screen', () => {
+        // Founder direction 2026-08-17: corporate-register detail is not what a farmer
+        // needs at first open. It is not deleted — it is owed to the full privacy
+        // notice, which is why `OWED_TO_FULL_PRIVACY_NOTICE` names both. This test is
+        // what stops a later "let's be thorough" edit putting them back.
+        for (const language of ['mr', 'en'] as const) {
+            const { unmount } = render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage={language} />);
+            const body = document.body.textContent ?? '';
+            expect(body).not.toContain(DATA_FIDUCIARY.cin);
+            expect(body).not.toContain(DATA_FIDUCIARY.registeredOffice);
+            unmount();
+        }
+
+        expect(OWED_TO_FULL_PRIVACY_NOTICE).toEqual(['cin', 'registeredOffice']);
+    });
+});
+
+describe('ConsentGateScreen — a printed document, not an app screen', () => {
+    // The founder asked for "no extra decorative UI element inside it". These pin the
+    // absence, because absence is exactly what a later styling pass restores by reflex.
+
+    it('renders no icon anywhere — not one svg', () => {
+        const { container } = render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
+        expect(container.querySelectorAll('svg')).toHaveLength(0);
+    });
+
+    it('wraps the notice in no card, tile, panel or gradient', () => {
+        const { container } = render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
+
+        const decorated = Array.from(container.querySelectorAll('*')).filter((el) =>
+            Array.from(el.classList).some((c) =>
+                c.startsWith('shadow-')
+                || c.startsWith('ring-')
+                || c.startsWith('bg-gradient')
+                || c.startsWith('backdrop-')
+                || c === 'divide-y'));
+        expect(decorated).toHaveLength(0);
+    });
+
+    it('shows no list markers — the sections are stacked text', () => {
+        const { container } = render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
+
+        const lists = Array.from(container.querySelectorAll('ul'));
+        expect(lists.length).toBeGreaterThan(0);
+        for (const list of lists) expect(list).toHaveClass('list-none');
+    });
+
+    it('keeps exactly three interactive controls: switch, checkbox, button', () => {
+        const { container } = render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
+
+        // Two language buttons + the CTA. Nothing else is a <button>.
+        expect(container.querySelectorAll('button')).toHaveLength(3);
+        expect(container.querySelectorAll('input')).toHaveLength(1);
+    });
+
+    it('never falls back to system-ui or Arial for visible text', () => {
+        const { container } = render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
+
+        const html = container.innerHTML;
+        expect(html).not.toContain('system-ui');
+        expect(html).not.toContain('Arial');
+        // Every text node hangs off a font-sans or font-serif ancestor: the root sets
+        // font-sans (DM Sans → Noto Sans Devanagari), headings override to font-serif.
+        expect(screen.getByTestId('consent-scroll-root')).toHaveClass('font-sans');
     });
 });
 
@@ -313,9 +380,26 @@ describe('the notice document', () => {
         }
         // The data fiduciary is part of the notice: a notice naming a different company
         // is a different notice, and the record has to be able to tell them apart.
-        for (const fact of Object.values(DATA_FIDUCIARY)) {
-            expect(canonical).toContain(fact);
+        expect(canonical).toContain(DATA_FIDUCIARY.legalName);
+        expect(canonical).toContain(DATA_FIDUCIARY.contact);
+    });
+
+    it('does not hash facts the farmer was never shown', () => {
+        // The hash has to describe the SCREEN. The CIN and the office came off the
+        // screen, so they came out of the serialisation in the same commit — otherwise
+        // the stored record would assert he was told something he was not.
+        for (const language of ['mr', 'en'] as const) {
+            const canonical = canonicalNoticeText(language);
+            expect(canonical).not.toContain(DATA_FIDUCIARY.cin);
+            expect(canonical).not.toContain(DATA_FIDUCIARY.registeredOffice);
         }
+    });
+
+    it('moved the version when the words moved', () => {
+        // A farmer who accepted the previous wording must not be recorded against this
+        // one. The gate re-shows on a version change (useConsentGate), so this string
+        // changing IS the re-consent mechanism.
+        expect(NOTICE_VERSION).toBe('notice-2026-08-17.2');
     });
 
     it('a different displayed language is a different notice, and so a different hash', () => {
