@@ -10,57 +10,97 @@ measured status, §17 for deferrals.
 
 ## Read this first, in plain words
 
-The **code** is built and reviewed. The **road it drives to production on is not finished.**
+The **code** is built and reviewed. The **road it drives to production on has three gates across it**,
+and none of them opens by itself.
 
-Three things will stop a deploy of this branch. None of them is a bug in what we built — all three are
-gaps in the machinery that carries code to production, and **two of them existed before this branch.**
-They are listed here because the deploy session must not discover them at the console.
+None of the three is a bug in what we built. All three are in the machinery that carries code to
+production, and **all three are older than this branch.** They are listed here so the deploy session
+meets them on paper rather than at the console.
 
-The good news: **every one fails loudly and early, before touching farmer data.** Nothing here can
-half-apply and leave the database in a strange state. The system refuses to start rather than guess.
+Two pieces of good news, and one caution.
+
+**Good:** every gate fails *loudly and early*, before farmer data is touched. The system refuses to
+start rather than guess.
+
+**Good:** the tool for the biggest job already exists and is written properly — it is simply sitting on
+a branch nobody merged.
+
+**The caution:** the way this system applies database changes is **all-or-nothing across four
+databases at once.** There is no "just this one migration" switch. Blocker 1 explains why that matters
+more than anything else on this page.
 
 ---
 
-## BLOCKER 1 — 16 database changes have no way to reach production
-
-**This is the big one, and it is the oldest.**
+## BLOCKER 1 — the tool that applies these 17 migrations is on a branch nobody has merged
 
 This branch carries **17 pending database migrations**: 16 for ShramSafal (the main farm/labour
 database) and 1 for Analytics.
 
-There is exactly one automated migration lane in this repo:
-`ops/aws/agent-deploy-lane/agrisync-analytics-migration-deploy.ssm-document.json`. It runs
-`dotnet ef database update --context AnalyticsDbContext`. **Analytics only.**
+**A purpose-built runbook for exactly this exists and is committed:**
+`ops/aws/agent-deploy-lane/api-binary-swap.sh`, at `fe4e853a`, tip of branch
+`chore/ssf-migration-runbook`. Verified: that commit is **on no other branch** — not `main`, not this
+one. So it is real, reviewed, and **unreachable from the SHA you would deploy.**
 
-Searched across `ops/`, `aws/` and `.github/` for any deploy artifact naming `ShramSafalDbContext`:
-**zero matches.** There is no lane, no script, no workflow that applies ShramSafal migrations to
-production.
+> *A first draft of this handover said no ShramSafal path existed at all. That was wrong: it grepped
+> the working tree, and the artifact lives on a different ref. The correction is recorded here rather
+> than quietly overwritten, because the same mistake has now been made twice in this repo's history
+> and the second time it told the founder that four weeks of work could not reach a farmer.*
 
-The application cannot apply them itself either. `Program.cs:1163-1174`
-(`ApplyStartupMigrationsIfAllowedAsync`) throws for **any** context with pending migrations when
-running in Production unless `ALLOW_PRODUCTION_STARTUP_MIGRATIONS=true`.
-`PRODUCTION_ENVIRONMENT_VARIABLES.md:51` sets it to `"false"`.
+**How the mechanism actually works** — and it is not what you would guess. There is no
+`dotnet ef database update` for ShramSafal. Instead: stage `ALLOW_PRODUCTION_STARTUP_MIGRATIONS=true`
+→ restart the API → `Program.cs` applies the pending migrations **during boot** → set the flag back to
+`false`. **The restart *is* the apply.** This is proven, not theoretical: deploy `23222cdc`
+(2026-07-04) applied 17 `ShramSafalDbContext` migrations this way, `ssf.__ef_migrations` 61→78, with
+snapshot floor `shramsafal-prod-db-pre-23222cdc-20260704004123`.
 
-> **Consequence:** deploy this branch to production as-is and the API **will not boot.** It throws
-> `Pending migrations detected for <context>. Apply them in a deployment step before starting Production.`
+Any plan that demands "migrations proven applied *before* the API restarts" is describing a mechanism
+that has never existed here. Drop that requirement.
 
-**This fails closed, which is correct** — it is the behaviour that prevents a half-migrated database.
-But it means someone must **build a ShramSafal migration lane** before this branch can ship. That is
-authoring work, not a deploy-time decision.
+### 🔴 The single most missable fact: the gate is not a ShramSafal switch
 
-**Options for the deploy session, in the order a careful team would consider them:**
-1. **Author a ShramSafal SSM document** modelled on the Analytics one (same phases, `--context
-   ShramSafalDbContext`, its own secret key). Most work, most reusable, correct.
-2. **A one-time controlled maintenance window** with `ALLOW_PRODUCTION_STARTUP_MIGRATIONS=true`, then
-   set it back to `false`. Fastest. Weakest — it applies 16 migrations on startup with no
-   pre-state capture, no allow-list, and no snapshot gate, which is precisely what the flag exists to
-   prevent. **If you take this route, take the RDS snapshot manually first.**
-3. **Split the release** — ship the code that needs no migration now, and hold the rest. Requires
-   knowing which features that leaves half-wired; the plan's §0 is where to work that out.
+`Program.cs:939-984` makes **six** `ApplyStartupMigrationsIfAllowedAsync` calls across **four**
+contexts, all behind that one environment variable:
+
+| Context | History table |
+|---|---|
+| `UserDbContext` | `public.__ef_migrations` |
+| `AccountsDbContext` | `accounts.__accounts_migrations_history` |
+| `ShramSafalDbContext` — Phase A, then Phase B | `ssf.__ef_migrations` |
+| `AnalyticsDbContext` — Phase 1, then Phase 2 | `analytics.__analytics_migrations_history` |
+
+**Opening the gate for one `ssf` migration also applies every pending User, Accounts and Analytics
+migration in the same boot.** "We didn't touch the Analytics document" is not containment — see
+Blocker 2, which this makes considerably more interesting.
+
+And `ssf` applies in **two phases with Analytics interleaved between them**, so a boot that dies
+mid-sequence leaves `ssf` **partially** migrated. **A count cannot detect that; a set difference can.**
+The runbook's Step 12 is built for precisely this, which is the strongest argument for using it rather
+than hand-rolling the flag flip.
+
+### What the deploy session must decide
+
+1. **Merge or cherry-pick `fe4e853a`** so the runbook is reachable from the deployed SHA. This is the
+   recommended path — the script already carries the pre-apply drift guard, an EXIT trap that closes
+   the gate on **every** exit path, a live-DLL sha256 check, and per-context post-apply verification.
+2. **Or flip the flag by hand** in a maintenance window. Faster, and it discards every protection in
+   the previous sentence. **If you do this, take the RDS snapshot manually first** and diff the
+   migration sets per context afterwards, not the counts.
+
+⚠️ **`feat/dfes-companion` cherry-picked the FIRST draft (`5a374f5d`)** minutes after it landed. That
+copy guards `ssf` **only** and therefore carries the multi-context defect described above. **If that
+branch merges, re-pick `fe4e853a` over it.**
+
+⚠️ **Unresolved and worth checking before you rely on the plugin for a rollback floor:** the
+`agent-deployer` IAM role denies `rds:CreateDBSnapshot` and `rds:Restore*`, yet the July deploy took a
+snapshot — so either founder credentials were used, or the role has since changed.
 
 ---
 
 ## BLOCKER 2 — the Analytics lane refuses to run at this SHA. **Executed, not read.**
+
+**Read Blocker 1 first.** If the deploy opens the startup-migration gate, the Analytics migration
+applies during boot and **never goes through the document below at all** — bypassing the very
+allow/forbid screening this section is about. That is the containment hole, not a convenience.
 
 `ForbiddenMigrationFiles` defaults to
 `20260504000000_WtlV0Entities.cs 20260505000000_DwcV2Matviews.cs`.
