@@ -65,8 +65,14 @@
 //     every other screen opens with it while the notice stayed a 420px ribbon.
 //   • BACKGROUND. It painted `bg-white` over the whole slot. AppShell's column is
 //     `bg-surface-100` (#FAFAF9) and screens inherit it — <main> declares no background
-//     at all. So the notice was a white rectangle on the app's warm paper. It now
-//     declares none either, and is on the same paper as everything else.
+//     at all. So the notice was a white rectangle on the app's warm paper.
+//     Founder direction 2026-08-17 (fourth): this screen is the ONLY pre-login screen
+//     with no backdrop of its own, so it read as a different app from its neighbours —
+//     LoginPage sits on `bg-gradient-to-b from-emerald-50/60 via-white to-emerald-50/40`
+//     and OnboardingPermissionsPage on `bg-[#F4FCF8]` plus a scene. A backdrop is not
+//     decoration INSIDE the document (the plain-document rules above still hold: no
+//     cards, no shadows, no icons) — it is the world the document sits in. This screen
+//     now carries LoginPage's exact gradient, since it opens immediately before it.
 //   • SAFE AREA. AppShell already pays the top spacer and the left/right insets for its
 //     children. The screen owes only the BOTTOM inset, because the shell does not pay
 //     that one — same as LoginPage. Re-paying left/right here would double-inset the
@@ -218,15 +224,16 @@ const ConsentGateScreen: React.FC<Props> = ({ onAccept, forceLanguage }) => {
         // `page-content` is the shared content column (480 / 600 ≥768 / 640 ≥1280, 16px
         // gutters) that AppHeader and AppContent's <main> use — carried on the scroller
         // itself, exactly as <main> carries it, so this screen measures the same as every
-        // other screen at every width. No background of its own: AppShell's column is
-        // bg-surface-100 and screens sit on it.
+        // other screen at every width. Backdrop is LoginPage's gradient, byte-identical
+        // (`bg-gradient-to-b from-emerald-50/60 via-white to-emerald-50/40`) — see the
+        // fourth founder direction above.
         //
         // The scroll lives HERE because AppShell hands its children a fixed,
         // overflow-hidden box — and living on the root, rather than around an inner
         // region, is what makes every child reachable including the buttons at the end.
         <div
             data-testid="consent-scroll-root"
-            className="page-content h-full overflow-y-auto overscroll-contain font-sans text-stone-800"
+            className="page-content h-full overflow-y-auto overscroll-contain bg-gradient-to-b from-emerald-50/60 via-white to-emerald-50/40 font-sans text-stone-800"
         >
             {/* AppShell pays the top and side insets; the bottom one is this screen's. */}
             <div className="pt-4 pb-[calc(1.5rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)))]">

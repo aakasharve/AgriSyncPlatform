@@ -335,17 +335,25 @@ describe('ConsentGateScreen — a printed document, not an app screen', () => {
         expect(container.querySelectorAll('svg')).toHaveLength(0);
     });
 
-    it('wraps the notice in no card, tile, panel or gradient', () => {
+    it('wraps the notice in no card, tile or panel — and the one gradient is the backdrop, not decoration', () => {
         const { container } = render(<ConsentGateScreen onAccept={vi.fn()} forceLanguage="mr" />);
 
+        // Founder direction 2026-08-17 (fourth): a backdrop is not decoration INSIDE the
+        // document — it is the world the document sits in. `consent-scroll-root` is the
+        // screen's own frame (LoginPage's exact gradient, so the two pre-login screens
+        // read as one app); every element inside that frame still carries none of these.
         const decorated = Array.from(container.querySelectorAll('*')).filter((el) =>
-            Array.from(el.classList).some((c) =>
+            el.getAttribute('data-testid') !== 'consent-scroll-root'
+            && Array.from(el.classList).some((c) =>
                 c.startsWith('shadow-')
                 || c.startsWith('ring-')
                 || c.startsWith('bg-gradient')
                 || c.startsWith('backdrop-')
                 || c === 'divide-y'));
         expect(decorated).toHaveLength(0);
+
+        const root = screen.getByTestId('consent-scroll-root');
+        expect(root).toHaveClass('bg-gradient-to-b', 'from-emerald-50/60', 'via-white', 'to-emerald-50/40');
     });
 
     it('shows no list markers — the sections are stacked text', () => {
