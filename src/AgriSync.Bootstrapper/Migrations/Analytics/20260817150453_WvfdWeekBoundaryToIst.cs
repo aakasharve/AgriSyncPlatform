@@ -50,6 +50,32 @@ namespace AgriSync.Bootstrapper.Migrations.Analytics
     /// </para>
     ///
     /// <para>
+    /// <b>WARNING for whoever runs this against production: that walk proves
+    /// the CODE-DECLARED dependency set, which is all it can prove.</b>
+    /// Production has carried objects outside the migration chain before -
+    /// <c>20260502000000_AnalyticsRewrite</c> drops a "prod-only
+    /// <c>ssf.verifications</c> compat view ... a manual hotfix on 2026-04-23".
+    /// If a hand-made view, Metabase model or reporting object depends on
+    /// <c>mis.wvfd_weekly</c> in that environment, <c>DROP ... CASCADE</c> will
+    /// remove it silently and nothing here will restore it. Run the recursive
+    /// <c>pg_depend</c>/<c>pg_rewrite</c> walk against the TARGET database
+    /// before applying, and compare against the three names above.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Two failure modes this migration actively defends against, both of
+    /// which are silent rather than loud.</b> (1) <c>dwc_score_per_farm_week</c>
+    /// is recreated <c>WITH NO DATA</c>, and <c>MisRefreshJob</c> refreshes
+    /// CONCURRENTLY, which cannot populate an empty matview - so it would stay
+    /// empty for ever while every reader swallowed the error and returned zero.
+    /// (2) Recreating a view transfers ownership to the migration runner, and
+    /// read access to <c>mis.*</c> rests on ownership rather than on any grant -
+    /// so a runner that is not the application role would break SELECT (42501,
+    /// swallowed) and REFRESH (owner-only). Both are handled below; the comments
+    /// there carry the detail.
+    /// </para>
+    ///
+    /// <para>
     /// <b>Only the boundary moves.</b> The 48-hour rule, the status set
     /// (<c>Confirmed</c>/<c>Verified</c>) and the day grouping are untouched.
     /// The 48h comparison is <c>timestamptz + INTERVAL</c> - absolute instant
@@ -131,7 +157,7 @@ wvfd_prev AS (
 SELECT
     1                                                                            AS id,
     'R2_wau_vs_wvfd'                                                             AS detector,
-    'WAU up >10% but WVFD down >10% - growth masking product failure'            AS description,
+    'WAU up >10% but WVFD down >10% — growth masking product failure'            AS description,
     (
         wau_now.wau > wau_prev.wau_prev * 1.10
         AND wvfd_now.avg_wvfd IS NOT NULL
@@ -144,8 +170,11 @@ CREATE UNIQUE INDEX ux_mis_alert_r2 ON mis.alert_r2_wau_vs_wvfd (id);
 
 
 -- == Dependent 3/3: mis.dwc_score_per_farm_week ==============
--- Verbatim from 20260505000000_DwcV2Matviews. WITH NO DATA is part
--- of the original and is preserved: MisRefreshJob populates it.
+-- Verbatim from 20260505000000_DwcV2Matviews, WITH NO DATA included.
+-- MisRefreshJob CANNOT populate it from that state -- it refreshes
+-- CONCURRENTLY, which requires an already-populated matview. The
+-- guarded non-concurrent refresh further down is what makes this
+-- safe; do not delete one without the other.
 CREATE MATERIALIZED VIEW mis.dwc_score_per_farm_week AS
 WITH base_farms AS (
   SELECT DISTINCT farm_id FROM analytics.events WHERE farm_id IS NOT NULL
@@ -231,16 +260,114 @@ CREATE UNIQUE INDEX ux_mis_dwc_farm_week ON mis.dwc_score_per_farm_week (farm_id
 CREATE        INDEX ix_mis_dwc_bucket    ON mis.dwc_score_per_farm_week (bucket, week_start DESC);
 
 
--- == Grants, exactly as the owning migrations issued them ====
+-- == Populate dwc BEFORE the ownership change, while the runner owns it ===
+--
+-- dwc_score_per_farm_week is created WITH NO DATA (faithful to the original).
+-- That is a trap here that it is not in the original: MisRefreshJob:173 issues
+-- REFRESH MATERIALIZED VIEW *CONCURRENTLY*, and a concurrent refresh CANNOT
+-- populate a never-populated matview. On an environment where the one-time
+-- non-concurrent cutover refresh had already been done, recreating the view
+-- puts it back to unpopulated, every nightly refresh then throws, MisRefreshJob
+-- catches and continues, and the founder's DWC dashboard reads zero for ever --
+-- silently, because AdminFarmerHealthRepository and AdminCohortPatternsRepository
+-- swallow the read error and return an empty score.
+--
+-- So populate it here, non-concurrently, exactly as the cutover runbook
+-- prescribes for a first refresh.
+--
+-- GUARDED, and the guard is load-bearing: dwc reads four sibling matviews that
+-- are themselves WITH NO DATA on a fresh database. An unconditional refresh
+-- would abort the whole migration with a has-not-been-populated error -- observed,
+-- not theorised. So refresh only when every input is already populated, which
+-- is exactly the upgrade-in-place case this repairs. On a fresh database it
+-- correctly does nothing and leaves the pre-existing state untouched.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_class c
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'mis'
+           AND c.relname IN ('action_simplicity_p50_per_farm',
+                             'repeat_curve_per_farm',
+                             'gaming_signals_per_farm',
+                             'schedule_compliance_weekly')
+           AND NOT c.relispopulated
+    ) THEN
+        REFRESH MATERIALIZED VIEW mis.dwc_score_per_farm_week;
+        RAISE NOTICE 'mis.dwc_score_per_farm_week populated non-concurrently (CONCURRENTLY cannot populate an empty matview).';
+    ELSE
+        RAISE NOTICE 'mis.dwc_score_per_farm_week left unpopulated: one or more input matviews are themselves unpopulated. It will need a NON-CONCURRENT refresh before MisRefreshJob can maintain it.';
+    END IF;
+END $$;
+
+
+-- == Ownership and grants ====================================================
+--
+-- Read access to mis.* rests on OWNERSHIP, not on a grant: there is no
+-- GRANT ... TO agrisync_app on mis.* anywhere in the tree, and every in-app
+-- reader (AdminMisRepository, AdminFarmerHealthRepository,
+-- AdminCohortPatternsRepository, MisReportRepository) goes through
+-- AnalyticsDbContext, whose connection string falls back to UserDb =
+-- agrisync_app. mis_reader is a Metabase/reporting role and appears in zero
+-- application code.
+--
+-- Recreating a view makes the MIGRATION RUNNER its owner. If the runner is not
+-- the AnalyticsDb role, SELECT starts failing 42501 -- swallowed by those
+-- readers' catch blocks, so the dashboard silently reads zero -- and REFRESH
+-- breaks outright, because refresh is owner-only in PG16, which would take
+-- wvfd_weekly down with it. That is not hypothetical: this migration's own dev
+-- run had runner=postgres against owner=agrisync_app.
+--
+-- So restore the ORIGINAL owner captured before the DROP rather than assuming
+-- who ran this, and additionally grant explicitly so read access no longer
+-- depends on ownership alone.
+DO $$
+DECLARE
+    v_owner text := NULLIF(current_setting('agrisync.mis_prior_owner', true), '');
+    v_view  text;
+BEGIN
+    IF v_owner IS NOT NULL THEN
+        FOREACH v_view IN ARRAY ARRAY['wvfd_weekly', 'engagement_tier',
+                                      'alert_r2_wau_vs_wvfd', 'dwc_score_per_farm_week'] LOOP
+            EXECUTE format('ALTER MATERIALIZED VIEW mis.%I OWNER TO %I', v_view, v_owner);
+        END LOOP;
+        RAISE NOTICE 'Restored mis matview ownership to %.', v_owner;
+    ELSE
+        RAISE NOTICE 'No prior owner captured; leaving ownership as the migration runner.';
+    END IF;
+END $$;
+
 GRANT SELECT ON mis.wvfd_weekly             TO mis_reader;
 GRANT SELECT ON mis.engagement_tier         TO mis_reader;
 GRANT SELECT ON mis.alert_r2_wau_vs_wvfd    TO mis_reader;
-GRANT SELECT ON mis.dwc_score_per_farm_week TO mis_reader;";
+GRANT SELECT ON mis.dwc_score_per_farm_week TO mis_reader;
+
+-- The role the application actually connects as. Role-guarded so a database
+-- without the app role (some test harnesses) skips instead of failing.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'agrisync_app') THEN
+        GRANT SELECT ON mis.wvfd_weekly             TO agrisync_app;
+        GRANT SELECT ON mis.engagement_tier         TO agrisync_app;
+        GRANT SELECT ON mis.alert_r2_wau_vs_wvfd    TO agrisync_app;
+        GRANT SELECT ON mis.dwc_score_per_farm_week TO agrisync_app;
+    END IF;
+END $$;";
 
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.Sql(@"
+-- Capture the CURRENT owner before dropping, so recreation cannot silently
+-- transfer these views to whoever happens to run the migration. Transaction-
+-- local (set_config third arg true); migrations run in a transaction.
+SELECT set_config(
+    'agrisync.mis_prior_owner',
+    COALESCE((SELECT pg_get_userbyid(c.relowner)
+                FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE n.nspname = 'mis' AND c.relname = 'wvfd_weekly'), ''),
+    true);
+
 DROP MATERIALIZED VIEW IF EXISTS mis.wvfd_weekly CASCADE;
 
 CREATE MATERIALIZED VIEW mis.wvfd_weekly AS
@@ -292,6 +419,16 @@ CREATE        INDEX ix_mis_wvfd_week      ON mis.wvfd_weekly (week_start DESC);
             // Restores the UTC boundary. Safe on a populated database: see the
             // class docstring - matviews hold derived data only.
             migrationBuilder.Sql(@"
+-- Capture the CURRENT owner before dropping, so recreation cannot silently
+-- transfer these views to whoever happens to run the migration. Transaction-
+-- local (set_config third arg true); migrations run in a transaction.
+SELECT set_config(
+    'agrisync.mis_prior_owner',
+    COALESCE((SELECT pg_get_userbyid(c.relowner)
+                FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE n.nspname = 'mis' AND c.relname = 'wvfd_weekly'), ''),
+    true);
+
 DROP MATERIALIZED VIEW IF EXISTS mis.wvfd_weekly CASCADE;
 
 CREATE MATERIALIZED VIEW mis.wvfd_weekly AS

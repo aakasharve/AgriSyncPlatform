@@ -268,6 +268,19 @@ public sealed class AnalyticsMigrationTests : IAsyncLifetime
             "alert_r6_flash_churn",
             "alert_r7_correction_rising",
             "alert_r8_referral_quality",
+
+            // DWC v2 (20260505000000_DwcV2Matviews) — the founder's Daily Work
+            // Closure score. Consumed by AdminFarmerHealthRepository and
+            // AdminCohortPatternsRepository, both of which swallow a read
+            // failure and return an empty score, so its ABSENCE is invisible at
+            // runtime — which is exactly why it belongs in this list.
+            //
+            // It was omitted until 2026-08-17. That gap mattered: this fact is
+            // the in-gate guard on matview survival, and
+            // 20260817150453_WvfdWeekBoundaryToIst drops mis.wvfd_weekly
+            // CASCADE, which takes dwc_score_per_farm_week with it. Had the
+            // recreation been forgotten, nothing in the gate would have said so.
+            "dwc_score_per_farm_week",
         };
 
         foreach (var matview in requiredMatviews)
