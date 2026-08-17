@@ -1287,8 +1287,33 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     {
         // For now return zeroed metrics — ReliabilityScore computation from DB queries
         // is deferred to a dedicated read-model in a future phase.
+        //
+        // spec: dfes-companion-2026-07-11 (wave-4.4) — WHEN YOU BUILD THAT READ-MODEL:
+        // scopedFarmId is not advisory. A null scope means "every farm this worker has
+        // ever worked", which is exactly the portable reputation founder ruling A
+        // (2026-08-17) put behind the worker's OWN consent. GetWorkerProfileHandler now
+        // refuses to pass a null scope for anyone but the worker himself unless
+        // HasWorkerRecordPortabilityConsentAsync says yes — see WorkerRecordPortability.
+        // Do not write a query here that ignores the parameter.
         return Task.FromResult(new WorkerMetricsDto(0, 0, 0, 0, 0, 0, 0));
     }
+
+    // --- spec: dfes-companion-2026-07-11 (wave-4.4) — founder ruling A, 2026-08-17 ----
+    // Stated here rather than inherited silently from the port's default, because this
+    // is the file someone edits when they build the cross-farm worker feature and this
+    // is the answer that must stop them.
+    //
+    // There is NO grant surface for WORKER_RECORD_PORTABILITY: no screen asks a worker
+    // for it, no endpoint records it, and ssf.consent_grant_events has never held a row
+    // carrying that purpose code. So the honest answer is false, and returning false
+    // keeps every identifiable cross-farm read refused.
+    //
+    // Do not satisfy this by reading the FARMER's consent row. The farm owner is not the
+    // data principal for his worker's reputation; ruling A is explicit that the consent
+    // required at portability is the worker's own.
+    public Task<bool> HasWorkerRecordPortabilityConsentAsync(
+        UserId workerUserId, CancellationToken ct = default)
+        => Task.FromResult(false);
 
     // --- DATA_PRINCIPLE_SPINE sub-phase 02.3 (warm-tier transcripts) ------
     public Task AddTranscriptAsync(Transcript transcript, CancellationToken ct = default)

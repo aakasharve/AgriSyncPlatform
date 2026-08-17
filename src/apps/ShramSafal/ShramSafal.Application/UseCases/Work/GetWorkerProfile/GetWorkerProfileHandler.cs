@@ -12,6 +12,13 @@ namespace ShramSafal.Application.UseCases.Work.GetWorkerProfile;
 /// CEI Phase 4 §4.8 — Task 3.2.1 + 3.3.1.
 /// Returns a worker's profile including ReliabilityScore computed over the trailing 30 days.
 /// Access: caller is the worker themselves, OR a member of a farm the worker is on.
+///
+/// <para>spec: dfes-companion-2026-07-11 (wave-4.4) — a ReliabilityScore is a worker's
+/// reputation as a number, so this handler is where that reputation could quietly leave
+/// the farm that earned it. Founder ruling A (2026-08-17) says a worker's real name
+/// inside his own farm's records needs no consent from him, but a record that FOLLOWS HIM
+/// to another farm does. <see cref="WorkerRecordPortability"/> holds that line; read its
+/// header before widening anything here.</para>
 /// </summary>
 public sealed class GetWorkerProfileHandler(
     IShramSafalRepository repository,
@@ -22,20 +29,47 @@ public sealed class GetWorkerProfileHandler(
         GetWorkerProfileQuery query,
         CancellationToken ct = default)
     {
-        // 1. Access check.
-        if (query.CallerUserId != query.WorkerUserId)
+        // 1. Access + portability check.
+        //
+        // This replaces a bare "do they share any farm" test that then handed
+        // query.ScopedFarmId straight to the metrics read. Two things were wrong with
+        // that: a null farmId asked for a score aggregated across every farm he has
+        // worked, and a supplied farmId was never checked against the caller's own farms
+        // — so a farm B owner could name farm A and read his record there. Both are the
+        // portable artefact ruling A gates on the worker's own consent.
+        var callerFarmIds = await repository.GetFarmIdsForUserAsync(query.CallerUserId.Value, ct);
+        var workerFarmIds = await repository.GetFarmIdsForUserAsync(query.WorkerUserId.Value, ct);
+
+        // Fails closed: nothing can grant this purpose today, so every cross-farm read
+        // is refused until someone builds the worker-facing consent that ruling A names.
+        var portabilityConsent = await repository
+            .HasWorkerRecordPortabilityConsentAsync(query.WorkerUserId, ct);
+
+        var access = WorkerRecordPortability.DecideProfileScope(
+            callerUserId: query.CallerUserId.Value,
+            workerUserId: query.WorkerUserId.Value,
+            callerFarmIds: callerFarmIds,
+            workerFarmIds: workerFarmIds,
+            requestedFarmId: query.ScopedFarmId,
+            workerConsentedToPortability: portabilityConsent);
+
+        if (!access.IsAllowed)
         {
-            var callerFarmIds = await repository.GetFarmIdsForUserAsync(query.CallerUserId.Value, ct);
-            var workerFarmIds = await repository.GetFarmIdsForUserAsync(query.WorkerUserId.Value, ct);
-            var hasSharedFarm = callerFarmIds.Any(id => workerFarmIds.Contains(id));
-            if (!hasSharedFarm)
-                return Result.Failure<WorkerProfileDto>(ShramSafalErrors.Forbidden);
+            logger.LogInformation(
+                "GetWorkerProfile refused for worker {WorkerUserId} by caller {CallerUserId}: {DenyReason}.",
+                query.WorkerUserId, query.CallerUserId, access.DenyReason);
+
+            return Result.Failure<WorkerProfileDto>(
+                access.DenyReason == WorkerRecordPortability.DenyReasons.NoSharedFarm
+                    ? ShramSafalErrors.Forbidden
+                    : ShramSafalErrors.WorkerRecordPortabilityForbidden);
         }
 
-        // 2. Load worker metrics.
+        // 2. Load worker metrics — over the farm the guard permitted, never over the raw
+        //    farm id the client asked for.
         var since30d = clock.UtcNow.AddDays(-30);
         var metrics = await repository.GetWorkerMetricsAsync(
-            query.WorkerUserId, query.ScopedFarmId, since30d, ct);
+            query.WorkerUserId, access.SingleFarmScope, since30d, ct);
 
         // 3. Compute ReliabilityScore.
         var reliability = ReliabilityScore.Compute(

@@ -354,8 +354,37 @@ public interface IShramSafalRepository
     /// <summary>
     /// Returns worker metrics for ReliabilityScore computation.
     /// </summary>
+    /// <remarks>
+    /// <paramref name="scopedFarmId"/> must not be null for a caller who is not the
+    /// worker himself — a null scope aggregates every farm he has ever worked, which is
+    /// the portable reputation <see cref="WorkerRecordPortability"/> guards. The callers
+    /// obtain it from <c>WorkerRecordAccess.SingleFarmScope</c>; do not pass a raw
+    /// client-supplied farm id.
+    /// </remarks>
     Task<WorkerMetricsDto> GetWorkerMetricsAsync(UserId workerUserId, Guid? scopedFarmId, DateTime since30d, CancellationToken ct = default)
         => Task.FromResult(new WorkerMetricsDto(0, 0, 0, 0, 0, 0, 0));
+
+    // --- spec: dfes-companion-2026-07-11 (wave-4.4) — founder ruling A, 2026-08-17 ----
+    /// <summary>
+    /// True when <paramref name="workerUserId"/> has himself granted
+    /// <see cref="WorkerRecordPortability.PortabilityConsentPurposeCode"/> — consent for
+    /// his identifiable record to leave the farm that recorded it.
+    ///
+    /// <para><b>The default is false, and false is the whole point.</b> Ruling A puts the
+    /// worker-consent question at portability, not at naming: his name inside his own
+    /// farm's records needs no consent, but a reputation that follows him to the next
+    /// employer needs HIS. Nothing in this codebase can grant that purpose yet, so every
+    /// implementation answers false and every cross-farm read is refused.</para>
+    ///
+    /// <para>This default impl is the fail-closed seam. When someone builds a portable
+    /// worker record they must come here and implement it against a real consent row —
+    /// they cannot ship the feature by forgetting this method, because forgetting it
+    /// denies. An owner's consent is NEVER an answer to this question, and
+    /// <c>ConsentPurpose.CrossFarmAggregation</c> is not either: that licenses
+    /// DE-IDENTIFIED data, and this boundary is only about data that still names him.</para>
+    /// </summary>
+    Task<bool> HasWorkerRecordPortabilityConsentAsync(UserId workerUserId, CancellationToken ct = default)
+        => Task.FromResult(false);
 
     // --- DATA_PRINCIPLE_SPINE sub-phase 02.5 (cost-category lookup) -------
     /// <summary>

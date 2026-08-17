@@ -55,6 +55,18 @@ public static class ShramSafalErrors
         "ShramSafal.ConsentRequired",
         "Full History Journal consent is required to retain voice notes beyond 30 days.");
 
+    // spec: dfes-companion-2026-07-11 (wave-4.4) — founder ruling A, 2026-08-17.
+    // Returned when a read would carry an identifiable worker's record past the farm
+    // that produced it without that worker's own recorded consent. Naming a worker
+    // INSIDE his farm is never this error — see WorkerRecordPortability.
+    //
+    // The code ends in "Forbidden" deliberately: both worker endpoints map an error code
+    // with that suffix to HTTP 403, and a portability refusal is an authorisation
+    // answer, not a malformed request.
+    public static readonly Error WorkerRecordPortabilityForbidden = Error.Forbidden(
+        "ShramSafal.WorkerRecordPortabilityForbidden",
+        "This worker's record cannot leave the farm that recorded it without his own consent.");
+
     // --- Validation (bad caller input) -----------------------------------------------------
     public static readonly Error InvalidAmount = Error.Validation("ShramSafal.InvalidAmount", "Amount must be greater than zero.");
     public static readonly Error InvalidVerificationReason = Error.Validation("ShramSafal.InvalidVerificationReason", "Reason is required for disputed verification.");

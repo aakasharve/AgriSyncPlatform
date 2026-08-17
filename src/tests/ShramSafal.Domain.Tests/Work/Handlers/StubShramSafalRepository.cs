@@ -95,6 +95,11 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
     public virtual Task<List<JobCard>> GetJobCardsForWorkerAsync(UserId workerUserId, CancellationToken ct = default) => Task.FromResult(new List<JobCard>());
     public virtual Task<List<JobCard>> GetJobCardsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default) => Task.FromResult(new List<JobCard>());
     public virtual Task<WorkerMetricsDto> GetWorkerMetricsAsync(UserId workerUserId, Guid? scopedFarmId, DateTime since30d, CancellationToken ct = default) => Task.FromResult(new WorkerMetricsDto(0, 0, 0, 0, 0, 0, 0));
+
+    // spec: dfes-companion-2026-07-11 (wave-4.4). False by default so every handler test
+    // inherits the closed state; a test that wants the portable case must say so out
+    // loud by overriding it. See WorkerRecordPortability (founder ruling A, 2026-08-17).
+    public virtual Task<bool> HasWorkerRecordPortabilityConsentAsync(UserId workerUserId, CancellationToken ct = default) => Task.FromResult(false);
     public virtual Task<JobCard?> GetJobCardByLinkedDailyLogIdAsync(Guid dailyLogId, CancellationToken ct = default) => Task.FromResult<JobCard?>(null);
 
     // Sub-plan 03 Task 5 (T-IGH-03-PORT-COMPLETE-MIGRATION):
