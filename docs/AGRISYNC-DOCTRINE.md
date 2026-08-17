@@ -128,6 +128,63 @@ Acknowledged = reconstructable without the originating device.
 
 **Born from:** the 2026-08-14 Data Ownership Matrix. Six independent tracers found ~50 defects with one cause — capture, persistence, read-back and reconstruction built as partially independent paths. The forbidden category, *"important information that exists permanently only on this phone"*, was holding the farmer's harvest book, his purchase book, his drawn plot boundaries and his planned work. Worse, the first sync after a successful save destroyed fourteen fields of a log **on the device that created it** — reproduced at runtime, 23 failing assertions. The system reported success and then silently reduced the record.
 
+### P11. An improvement may never break the app the farmer already has *(founder, 2026-08-17)*
+
+> A farmer who has not updated must keep working exactly as before. Improving ShramSafal is never a
+> reason for a farmer to lose what ShramSafal already held for them.
+
+Compatibility is **bidirectional**, and both halves are load-bearing:
+
+```
+old client request   → new server MUST accept it
+new server response  → old client MUST still parse it
+```
+
+Both ends of this system are strict *by design* — the client validates responses with Zod, and
+`/sync/push` enforces a payload allow-list (`F5`) — so a new enum value, a renamed status or an
+unexpected key **breaks the counterparty rather than being ignored**. The strictness is the
+compatibility risk. Adding a field is a contract change, not a detail.
+
+The APK is sideloaded from `shramsafal.in`, not the Play Store: no forced update, no staged rollout
+to halt, no way to retract an installed build. Old clients therefore persist in the field
+indefinitely. **This is a permanent property of the system, not a migration-period concern.**
+
+**Corollary — "backward compatible" is not a claim an agent may make in prose.** It is proven by
+running the supported client's own source against the new server, in both directions, across the
+critical farmer journeys.
+
+**The support window — 180 days, time-based** *(founder, 2026-08-17)*:
+
+> **The server supports every farmer APK released within the previous 180 days.**
+
+Time-based, never release-count-based. Counting releases would punish a farmer for *our* shipping
+pace: three releases in a month would strand someone five weeks behind through no fault of theirs.
+While the app is sideloaded from `shramsafal.in`, update discovery is a burden we place on the
+farmer, so the window absorbs that cost rather than passing it to him.
+
+**Archive and obligation are different things — never conflate them:**
+
+```
+internal archive      → EVERY build, retained permanently
+support obligation    → the previous 180 days
+```
+
+Keeping an old APK available for testing is not a promise that it still works. Both facts live in
+one **Release Record** (Cofounder-Mode Rulebook §4.2).
+
+**Update awareness is a precondition, not a nicety.** A 180-day window is fiction while nothing tells
+a farmer an update exists. Before real farmers depend on sideloaded builds the app must surface
+*"a newer version is available"* with **Update / Later** — never a forced routine update. A forced
+minimum version is reserved for the exceptional case: a serious security issue, or a build that can
+no longer safely talk to the backend.
+
+**Revisit at Play Store launch.** Store distribution changes the problem — discovery and updating
+become automatic. The 180-day sideloading rule must not silently outlive the condition that
+justified it.
+
+**Relationship to `P10`:** `P10` says acknowledged work must survive without the device. `P11` says
+it must survive without the *upgrade*. Together they are the farmer's two guarantees.
+
 ---
 
 ## §3. ENGINEERING RULES — how we build
@@ -161,6 +218,77 @@ Record **baseline → change → actual result**. A predicted test total is an a
 ### E7. Reuse the pattern, not the wrong table
 
 Prefer an existing convention — but verify it actually *fits*. Two things named "correction" in this repo mean entirely different things: one captures AI parse corrections (keyed on a parse id a manual entry doesn't have), the other records a domain-record correction. Copying the *shape* of the right one beats forcing the wrong one.
+
+### E8. Rollback is a tested path, not an assumption *(founder, 2026-08-17)*
+
+Migrations apply automatically when the API boots. Putting the previous binary back therefore does
+**not** put the previous schema back — the old code comes up against the *migrated* database. Code
+rollback and database rollback are different events, and only one of them happens by itself.
+
+So for every release carrying a migration: **apply the full migration set, then run the currently
+deployed binary against that migrated schema.** Until that has been observed, the deployment has no
+rollback path — regardless of what the runbook claims.
+
+An **irreversible** migration must be named as such *before* it runs, and shipping one is a founder
+decision, not an implementation detail. The standing recovery policy *(founder, 2026-08-17)*:
+
+```
+production DB → encrypted pre-migration snapshot → run migration
+              → retain 30 days → AUTOMATIC deletion
+```
+
+The snapshot is **disaster recovery, not retention**. It is encrypted, access-restricted, carries an
+explicit automatic expiry, and must never become a staging database or a convenience source for
+development. Where the migration exists to *remove* data for privacy reasons, an indefinitely-kept
+snapshot would defeat its own purpose — bounded, documented retention is what makes it defensible.
+
+**Discomfort about rollback is never a reason to delay a privacy correction.**
+
+Note the structural asymmetry: a migration being *structurally additive* (no dropped column, no
+rename) says nothing about whether it is *behaviourally* safe. A new constraint, a tightened RLS
+policy, a changed default or a `FORCE ROW LEVEL SECURITY` can each make previously valid behaviour
+invalid while dropping nothing. Classify by behaviour, never by operation name.
+
+### E9. A failure the farmer cannot report must still reach us *(founder, 2026-08-17)*
+
+A farmer whose sync silently fails does not file a bug — they stop trusting the app. A sync failure
+must therefore be reconstructable without the farmer's help:
+
+```
+which client version · which server build · which operation · which farm
+what failed · was the work retained · did it retry · did it recover
+```
+
+The client stamps `X-App-Version` on every request (`AgriSyncClient.ts`), and every farmer-facing
+write path must record it alongside the server build. That header is **telemetry, never an
+authorisation input** — a client can send anything it likes.
+
+> **Repo-hygiene note.** This file is in the **public** repository. State the *rule* here; record
+> current coverage gaps, skip-lists, incident detail and infrastructure topology in the private
+> cofounder repo. A doctrine that publishes its own unguarded edges is an attacker's checklist
+> *(founder, 2026-08-17)*.
+
+---
+
+### Release-safety index — which existing rule proves which gate
+
+The release gates are **verification of the architecture already built**, not a new architecture.
+Most of what they demand is already locked above. Do not restate these rules in a second document;
+a second document *is* the drift.
+
+| Release gate | Already governed by | Genuinely new |
+|---|---|---|
+| Tenant isolation / farm separation | `E3` (proofs run as the real role) · `E4` (DB is not the whole defence) | — |
+| Farmer work survives sync failure | `P10` (acknowledged ⇒ reconstructable without the device) | — |
+| Judged by farmer journeys, not bug counts | `W3` · `W4` | — |
+| Evidence, not prose | `E1` (repo is truth) · `E6` (measure, never predict) · `W6` (report faithfully) | — |
+| Migrations rehearsed on a throwaway copy | `E5` | — |
+| **Old clients keep working** | — | **`P11`** |
+| **Rollback proven, not assumed** | — | **`E8`** |
+| **Failures visible without the farmer** | — | **`E9`** |
+
+**Execution:** `_COFOUNDER/plugins/agrisync-deploy/skills/verification/release-safety-gates/`.
+**Tier that triggers them:** `Data-prod` (Cofounder-Mode Rulebook §1 / §4).
 
 ---
 
