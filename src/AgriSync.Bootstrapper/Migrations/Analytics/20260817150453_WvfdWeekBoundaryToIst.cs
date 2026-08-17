@@ -72,7 +72,26 @@ namespace AgriSync.Bootstrapper.Migrations.Analytics
     /// read access to <c>mis.*</c> rests on ownership rather than on any grant -
     /// so a runner that is not the application role would break SELECT (42501,
     /// swallowed) and REFRESH (owner-only). Both are handled below; the comments
-    /// there carry the detail.
+    /// there carry the detail. Note the SELECT half needs a grant at BOTH the
+    /// schema and the object level - an object grant alone still fails with
+    /// <c>permission denied for schema mis</c>, executed and reproduced.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>ORDERING FACT FOR WHOEVER RUNS THE DEPLOY: on production the dwc
+    /// repair below is a NO-OP, and will stay one until a separate, older task
+    /// runs first.</b> The repair only fires when all four of dwc's input
+    /// matviews are already populated. Production's are not:
+    /// <c>DEPLOYMENT_TRACKER.md:90</c> records D3
+    /// (<c>T-MATVIEW-INITIAL-REFRESH</c>, "One-time non-concurrent REFRESH of
+    /// unpopulated matviews") as <b>NOT LIVE - P3</b>, and prod's own log from
+    /// 2026-06-05 shows
+    /// <c>0A000: CONCURRENTLY cannot be used when the materialized view is not
+    /// populated ... mis.dwc_score_per_farm_week</c>. So this migration ships in
+    /// a P0 lane while the thing that makes its dwc repair effective is a P3
+    /// that has never run. This migration does not make DWC worse on production
+    /// - it is already empty there - but do not read "dwc repair" as "DWC will
+    /// start working after this deploy". Run D3, then this.
     /// </para>
     ///
     /// <para>
@@ -296,7 +315,7 @@ BEGIN
         REFRESH MATERIALIZED VIEW mis.dwc_score_per_farm_week;
         RAISE NOTICE 'mis.dwc_score_per_farm_week populated non-concurrently (CONCURRENTLY cannot populate an empty matview).';
     ELSE
-        RAISE NOTICE 'mis.dwc_score_per_farm_week left unpopulated: one or more input matviews are themselves unpopulated. It will need a NON-CONCURRENT refresh before MisRefreshJob can maintain it.';
+        RAISE WARNING 'mis.dwc_score_per_farm_week LEFT UNPOPULATED: one or more of its input matviews (action_simplicity_p50_per_farm, repeat_curve_per_farm, gaming_signals_per_farm, schedule_compliance_weekly) is itself unpopulated, so this repair was skipped. MisRefreshJob refreshes CONCURRENTLY and CANNOT populate it from here, so the DWC dashboard will read zero until deployment-tracker task D3 (T-MATVIEW-INITIAL-REFRESH, one-time non-concurrent REFRESH of unpopulated matviews) is run. This is expected on production today: D3 is NOT LIVE.';
     END IF;
 END $$;
 
@@ -319,8 +338,16 @@ END $$;
 -- run had runner=postgres against owner=agrisync_app.
 --
 -- So restore the ORIGINAL owner captured before the DROP rather than assuming
--- who ran this, and additionally grant explicitly so read access no longer
--- depends on ownership alone.
+-- who ran this, and additionally grant explicitly -- at BOTH the schema and
+-- object level, see the grant block below for why the object grant alone is
+-- not enough.
+--
+-- Scope of that claim, stated precisely because an earlier version of this
+-- comment overstated it: the owner restore keeps REFRESH working (refresh is
+-- owner-only) and the two grants keep SELECT working independently of who owns
+-- the objects. It does NOT make the views ownerless or make every operation
+-- grant-driven -- REFRESH still requires ownership, which is exactly why the
+-- restore above is load-bearing rather than tidiness.
 DO $$
 DECLARE
     v_owner text := NULLIF(current_setting('agrisync.mis_prior_owner', true), '');
@@ -344,9 +371,25 @@ GRANT SELECT ON mis.dwc_score_per_farm_week TO mis_reader;
 
 -- The role the application actually connects as. Role-guarded so a database
 -- without the app role (some test harnesses) skips instead of failing.
+--
+-- BOTH grants are required and the schema one is the easy half to miss: a
+-- table-level GRANT is necessary but NOT sufficient. Executed proof, on a
+-- database whose object ACL already listed mis_reader=r AND agrisync_app=r:
+--
+--   SET ROLE agrisync_app; SELECT count(*) FROM mis.wvfd_weekly;
+--   ERROR:  permission denied for schema mis
+--
+-- Nothing in the tree grants USAGE ON SCHEMA mis to agrisync_app --
+-- AnalyticsRewrite:143-144 grants it to mis_reader only, and BootstrapDbRoles:65
+-- covers ssf, not mis. Where this works today it works because agrisync_app
+-- OWNS the schema, which carries USAGE implicitly. Granting USAGE explicitly is
+-- what actually removes the dependency on ownership; the object grants alone
+-- only move it from the object to the schema.
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'agrisync_app') THEN
+        GRANT USAGE ON SCHEMA mis TO agrisync_app;
+
         GRANT SELECT ON mis.wvfd_weekly             TO agrisync_app;
         GRANT SELECT ON mis.engagement_tier         TO agrisync_app;
         GRANT SELECT ON mis.alert_r2_wau_vs_wvfd    TO agrisync_app;
