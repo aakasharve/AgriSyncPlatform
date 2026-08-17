@@ -165,17 +165,39 @@ public sealed class FieldOperatorErasureRealPostgresTests : IAsyncLifetime
 
         var scopeFactory = _provider.GetRequiredService<IServiceScopeFactory>();
         var worker = new ErasureWorker(scopeFactory, NullLogger<ErasureWorker>.Instance);
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
         var workerTask = worker.StartAsync(cts.Token);
-        await Task.Delay(TimeSpan.FromSeconds(3), CancellationToken.None);
-        cts.Cancel();
-        try { await workerTask; } catch (OperationCanceledException) { }
 
         await using var raw = new NpgsqlConnection(_superuserConn);
         await raw.OpenAsync();
 
-        var status = (int)(await ScalarAsync(raw,
-            "SELECT status FROM ssf.erasure_requests WHERE id = @id", ("id", requestId)))!;
+        // Wait for a TERMINAL status instead of sleeping a fixed interval — same
+        // reasoning as ErasureWorkerWorkerNameScrubRealPostgresTests. A 3s sleep
+        // hard-codes an assumption about how long one erasure pass takes, and this
+        // branch widened the manifest past it. This test sat right on the boundary:
+        // it passed in one full-suite run and failed in the next with nothing
+        // changed but load, which is the worst kind of red because it looks random.
+        //
+        // The status a timeout produces is InProgress, not Failed — ProcessOneAsync's
+        // catch excludes OperationCanceledException — so "the clock ran out" was
+        // indistinguishable from "a creator was left half-erased".
+        var status = (int)ErasureStatus.Requested;
+        var deadline = DateTime.UtcNow.AddSeconds(60);
+        while (DateTime.UtcNow < deadline)
+        {
+            status = (int)(await ScalarAsync(raw,
+                "SELECT status FROM ssf.erasure_requests WHERE id = @id", ("id", requestId)))!;
+            if (status == (int)ErasureStatus.Completed || status == (int)ErasureStatus.Failed)
+            {
+                break;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(200), CancellationToken.None);
+        }
+
+        cts.Cancel();
+        try { await workerTask; } catch (OperationCanceledException) { }
+
         status.Should().Be((int)ErasureStatus.Completed,
             "ErasureWorker must complete the creator's request — the assertions below are only "
             + "meaningful if creator erasure actually ran");
