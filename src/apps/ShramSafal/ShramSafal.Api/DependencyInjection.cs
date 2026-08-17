@@ -87,6 +87,7 @@ using ShramSafal.Application.UseCases.Work.CreateJobCard;
 using ShramSafal.Application.UseCases.Work.GetJobCardsForFarm;
 using ShramSafal.Application.UseCases.Work.GetJobCardsForWorker;
 using ShramSafal.Application.UseCases.Work.GetWorkerProfile;
+using ShramSafal.Application.UseCases.Work.GetWorkerReputation;
 using ShramSafal.Application.UseCases.Work.Handlers;
 using ShramSafal.Application.UseCases.Work.SettleJobCardPayout;
 using ShramSafal.Application.UseCases.Work.StartJobCard;
@@ -702,6 +703,9 @@ public static class DependencyInjection
         services.AddScoped<GetJobCardsForFarmHandler>();
         services.AddScoped<GetJobCardsForWorkerHandler>();
         services.AddScoped<GetWorkerProfileHandler>();
+        // spec: dfes-companion-2026-07-11 (wave-4.4) — tiers 2 + 3, the only worker read
+        // designed to leave the farm that recorded the work.
+        services.AddScoped<GetWorkerReputationHandler>();
         services.AddScoped<OnLogVerifiedAutoVerifyJobCard>();
 
         // T-IGH-03-PIPELINE-ROLLOUT (CompleteJobCard): caller-shape

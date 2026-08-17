@@ -355,14 +355,49 @@ public interface IShramSafalRepository
     /// Returns worker metrics for ReliabilityScore computation.
     /// </summary>
     /// <remarks>
-    /// <paramref name="scopedFarmId"/> must not be null for a caller who is not the
-    /// worker himself — a null scope aggregates every farm he has ever worked, which is
-    /// the portable reputation <see cref="WorkerRecordPortability"/> guards. The callers
-    /// obtain it from <c>WorkerRecordAccess.SingleFarmScope</c>; do not pass a raw
-    /// client-supplied farm id.
+    /// <para><paramref name="scopedFarmIds"/> is the tier-1 boundary in parameter form.
+    /// It used to be a single nullable farm id, where null meant "every farm he has ever
+    /// worked" — a portable reputation expressible by forgetting to pass an argument. It is
+    /// now an explicit, non-empty list, so the widest thing a caller can ask for is the
+    /// widest thing he was permitted.</para>
+    /// <para>Callers obtain it from <c>WorkerRecordAccess.PermittedFarmIds</c>; never pass
+    /// a raw client-supplied farm id, and never pass an empty list expecting "no filter" —
+    /// an empty list means no farms and must return nothing. See
+    /// <see cref="WorkerRecordPortability"/>.</para>
     /// </remarks>
-    Task<WorkerMetricsDto> GetWorkerMetricsAsync(UserId workerUserId, Guid? scopedFarmId, DateTime since30d, CancellationToken ct = default)
+    Task<WorkerMetricsDto> GetWorkerMetricsAsync(UserId workerUserId, IReadOnlyCollection<Guid> scopedFarmIds, DateTime since30d, CancellationToken ct = default)
         => Task.FromResult(new WorkerMetricsDto(0, 0, 0, 0, 0, 0, 0));
+
+    /// <summary>
+    /// The farms this user OWNS — not the farms he belongs to.
+    ///
+    /// <para>Founder ruling, 2026-08-17: an owner with two farms of his own may see his own
+    /// worker's record across both, because that is one owner's own record and not
+    /// portability at all. <see cref="WorkerRecordPortability.DecideAggregateScope"/> needs
+    /// ownership separately from membership to tell that case apart from a mukadam folding
+    /// two different owners' records together.</para>
+    ///
+    /// <para>The default is empty, which is fail-closed: an implementation that says
+    /// nothing claims no ownership, and the widening never fires.</para>
+    /// </summary>
+    Task<List<Guid>> GetOwnedFarmIdsForUserAsync(Guid userId, CancellationToken ct = default)
+        => Task.FromResult(new List<Guid>());
+
+    /// <summary>
+    /// TIER 2 — the statements farms have written about this worker
+    /// (<see cref="WorkerStatement"/>): "anything the ARVE farm owner wants to say".
+    ///
+    /// <para><b>Returns empty today, and empty means silence.</b> No table stores these and
+    /// no endpoint writes one, so there is nothing to return and nothing is invented. The
+    /// caller must render an empty result as the farm having said nothing — never as a zero
+    /// score, an unrated badge, or any phrasing implying a review was owed and withheld.
+    /// Writing one is optional, and an owner is allowed to stay silent forever.</para>
+    ///
+    /// <para>Whoever adds the table implements this against it. The read path, the tier
+    /// boundary and the attribution are already built and tested around this seam.</para>
+    /// </summary>
+    Task<IReadOnlyList<WorkerStatement>> GetWorkerStatementsAsync(UserId workerUserId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<WorkerStatement>>([]);
 
     // --- spec: dfes-companion-2026-07-11 (wave-4.4) — founder ruling A, 2026-08-17 ----
     /// <summary>
@@ -382,6 +417,10 @@ public interface IShramSafalRepository
     /// denies. An owner's consent is NEVER an answer to this question, and
     /// <c>ConsentPurpose.CrossFarmAggregation</c> is not either: that licenses
     /// DE-IDENTIFIED data, and this boundary is only about data that still names him.</para>
+    ///
+    /// <para><b>Even a true here opens only tiers 2 and 3</b> — the farm's own operational
+    /// detail is not his to license, so no answer to this question moves it. See
+    /// <see cref="WorkerRecordTier"/>.</para>
     /// </summary>
     Task<bool> HasWorkerRecordPortabilityConsentAsync(UserId workerUserId, CancellationToken ct = default)
         => Task.FromResult(false);

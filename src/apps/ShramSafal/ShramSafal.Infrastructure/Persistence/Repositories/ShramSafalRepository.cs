@@ -1283,20 +1283,48 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     }
 
     public Task<WorkerMetricsDto> GetWorkerMetricsAsync(
-        UserId workerUserId, Guid? scopedFarmId, DateTime since30d, CancellationToken ct = default)
+        UserId workerUserId, IReadOnlyCollection<Guid> scopedFarmIds, DateTime since30d, CancellationToken ct = default)
     {
         // For now return zeroed metrics — ReliabilityScore computation from DB queries
         // is deferred to a dedicated read-model in a future phase.
         //
         // spec: dfes-companion-2026-07-11 (wave-4.4) — WHEN YOU BUILD THAT READ-MODEL:
-        // scopedFarmId is not advisory. A null scope means "every farm this worker has
-        // ever worked", which is exactly the portable reputation founder ruling A
-        // (2026-08-17) put behind the worker's OWN consent. GetWorkerProfileHandler now
-        // refuses to pass a null scope for anyone but the worker himself unless
-        // HasWorkerRecordPortabilityConsentAsync says yes — see WorkerRecordPortability.
-        // Do not write a query here that ignores the parameter.
+        // scopedFarmIds is not advisory, and it is no longer nullable precisely so that
+        // "every farm this worker has ever worked" cannot be expressed by omission. It is
+        // the set of farms the caller was PERMITTED (WorkerRecordAccess.PermittedFarmIds),
+        // and a query here must filter on it. An empty set means no farms, never "all".
+        //
+        // Note also what these zeros mean for tier 3: nothing in this method is derived
+        // from anything, so ReliabilityScore is not a real number today. Do not let it
+        // become a portable reputation until it is.
         return Task.FromResult(new WorkerMetricsDto(0, 0, 0, 0, 0, 0, 0));
     }
+
+    // --- spec: dfes-companion-2026-07-11 (wave-4.4) — founder model, 2026-08-17 -------
+    // The farms this user OWNS, kept apart from the farms he merely belongs to.
+    // GetFarmIdsForUserAsync unions the two; the founder's ruling that "an owner with two
+    // farms of his own may see his own worker's record across both" needs the owned half
+    // on its own, or a mukadam on two farms would inherit the same widening.
+    public async Task<List<Guid>> GetOwnedFarmIdsForUserAsync(
+        Guid userId, CancellationToken ct = default)
+        => await db.Farms
+            .AsNoTracking()
+            .Where(f => (Guid)f.OwnerUserId == userId)
+            .Select(f => (Guid)f.Id)
+            .ToListAsync(ct);
+
+    // TIER 2 — a farm's own word about a worker.
+    //
+    // There is no ssf table for these yet and no endpoint that writes one, so the honest
+    // answer is nothing at all. Empty here means SILENCE: the farm has said nothing. It
+    // must never be rendered as a zero, an empty star row, or "not yet rated" — writing a
+    // statement is optional and an owner may never write one.
+    //
+    // When the table lands, query it here. The tier boundary, the attribution and the
+    // consent gate around this read are already built and tested against this seam.
+    public Task<IReadOnlyList<WorkerStatement>> GetWorkerStatementsAsync(
+        UserId workerUserId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<WorkerStatement>>([]);
 
     // --- spec: dfes-companion-2026-07-11 (wave-4.4) — founder ruling A, 2026-08-17 ----
     // Stated here rather than inherited silently from the port's default, because this

@@ -55,17 +55,23 @@ public static class ShramSafalErrors
         "ShramSafal.ConsentRequired",
         "Full History Journal consent is required to retain voice notes beyond 30 days.");
 
-    // spec: dfes-companion-2026-07-11 (wave-4.4) — founder ruling A, 2026-08-17.
-    // Returned when a read would carry an identifiable worker's record past the farm
-    // that produced it without that worker's own recorded consent. Naming a worker
-    // INSIDE his farm is never this error — see WorkerRecordPortability.
+    // spec: dfes-companion-2026-07-11 (wave-4.4) — founder model, 2026-08-17.
+    // Returned when a read would carry a worker's record past the farm that produced it
+    // and the tier does not permit that: TIER 1 never, at all; TIERS 2 and 3 only with
+    // that worker's own recorded consent. Naming a worker INSIDE his farm is never this
+    // error — see WorkerRecordTier and WorkerRecordPortability.
     //
-    // The code ends in "Forbidden" deliberately: both worker endpoints map an error code
-    // with that suffix to HTTP 403, and a portability refusal is an authorisation
-    // answer, not a malformed request.
+    // One code covers both refusals on purpose: the caller's remedy differs but the
+    // answer does not, and the machine-readable WHICH is on the log line
+    // (WorkerRecordPortability.DenyReasons) rather than leaking the shape of another
+    // farm's data holdings back to whoever asked.
+    //
+    // The code ends in "Forbidden" deliberately: the worker endpoints map an error code
+    // with that suffix to HTTP 403, and this is an authorisation answer, not a malformed
+    // request.
     public static readonly Error WorkerRecordPortabilityForbidden = Error.Forbidden(
         "ShramSafal.WorkerRecordPortabilityForbidden",
-        "This worker's record cannot leave the farm that recorded it without his own consent.");
+        "This worker's record cannot leave the farm that recorded it.");
 
     // --- Validation (bad caller input) -----------------------------------------------------
     public static readonly Error InvalidAmount = Error.Validation("ShramSafal.InvalidAmount", "Amount must be greater than zero.");

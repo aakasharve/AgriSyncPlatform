@@ -13,12 +13,13 @@ namespace ShramSafal.Application.UseCases.Work.GetWorkerProfile;
 /// Returns a worker's profile including ReliabilityScore computed over the trailing 30 days.
 /// Access: caller is the worker themselves, OR a member of a farm the worker is on.
 ///
-/// <para>spec: dfes-companion-2026-07-11 (wave-4.4) — a ReliabilityScore is a worker's
-/// reputation as a number, so this handler is where that reputation could quietly leave
-/// the farm that earned it. Founder ruling A (2026-08-17) says a worker's real name
-/// inside his own farm's records needs no consent from him, but a record that FOLLOWS HIM
-/// to another farm does. <see cref="WorkerRecordPortability"/> holds that line; read its
-/// header before widening anything here.</para>
+/// <para>spec: dfes-companion-2026-07-11 (wave-4.4) — <b>this is a TIER 1 read.</b> What
+/// it returns is the farm's own operational record of its own work: what it paid him, how
+/// its own logs were verified, how many of its own disputes he was in. That is the farm's
+/// business record, not the worker's reputation, so it never crosses a farm boundary and
+/// <b>no consent opens it</b> — the worker cannot license his employer's books, and this
+/// handler deliberately does not ask him to. What a worker CAN license lives in
+/// <c>GetWorkerReputationHandler</c> (tiers 2 and 3). See <see cref="WorkerRecordTier"/>.</para>
 /// </summary>
 public sealed class GetWorkerProfileHandler(
     IShramSafalRepository repository,
@@ -29,26 +30,35 @@ public sealed class GetWorkerProfileHandler(
         GetWorkerProfileQuery query,
         CancellationToken ct = default)
     {
-        // 1. Access + portability check.
+        // 1. Access check, at TIER 1.
         //
         // This replaces a bare "do they share any farm" test that then handed
         // query.ScopedFarmId straight to the metrics read. Two things were wrong with
         // that: a null farmId asked for a score aggregated across every farm he has
         // worked, and a supplied farmId was never checked against the caller's own farms
-        // — so a farm B owner could name farm A and read his record there. Both are the
-        // portable artefact ruling A gates on the worker's own consent.
+        // — so a farm B owner could name farm A and read his record there.
         var callerFarmIds = await repository.GetFarmIdsForUserAsync(query.CallerUserId.Value, ct);
         var workerFarmIds = await repository.GetFarmIdsForUserAsync(query.WorkerUserId.Value, ct);
 
-        // Fails closed: nothing can grant this purpose today, so every cross-farm read
-        // is refused until someone builds the worker-facing consent that ruling A names.
+        // Founder ruling, 2026-08-17: an owner with two farms of HIS OWN is reading his own
+        // record across both, not carrying a reputation between employers. Ownership is
+        // fetched separately from membership because only ownership earns that widening.
+        var callerOwnedFarmIds = await repository
+            .GetOwnedFarmIdsForUserAsync(query.CallerUserId.Value, ct);
+
+        // Read, but at tier 1 it cannot change the answer — no consent of his opens his
+        // employer's operational record. It is passed anyway so the decision is taken in
+        // one place with the full picture, and so removing the tier would fail loudly here
+        // rather than silently widening this read.
         var portabilityConsent = await repository
             .HasWorkerRecordPortabilityConsentAsync(query.WorkerUserId, ct);
 
-        var access = WorkerRecordPortability.DecideProfileScope(
+        var access = WorkerRecordPortability.DecideAggregateScope(
+            tier: WorkerRecordTier.FarmOperationalDetail,
             callerUserId: query.CallerUserId.Value,
             workerUserId: query.WorkerUserId.Value,
             callerFarmIds: callerFarmIds,
+            callerOwnedFarmIds: callerOwnedFarmIds,
             workerFarmIds: workerFarmIds,
             requestedFarmId: query.ScopedFarmId,
             workerConsentedToPortability: portabilityConsent);
@@ -65,11 +75,11 @@ public sealed class GetWorkerProfileHandler(
                     : ShramSafalErrors.WorkerRecordPortabilityForbidden);
         }
 
-        // 2. Load worker metrics — over the farm the guard permitted, never over the raw
-        //    farm id the client asked for.
+        // 2. Load worker metrics — over the farms the guard permitted, never over the raw
+        //    farm id the client asked for, and never over an open-ended scope.
         var since30d = clock.UtcNow.AddDays(-30);
         var metrics = await repository.GetWorkerMetricsAsync(
-            query.WorkerUserId, access.SingleFarmScope, since30d, ct);
+            query.WorkerUserId, access.PermittedFarmIds, since30d, ct);
 
         // 3. Compute ReliabilityScore.
         var reliability = ReliabilityScore.Compute(

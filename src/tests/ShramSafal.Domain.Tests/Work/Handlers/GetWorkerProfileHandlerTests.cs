@@ -88,7 +88,7 @@ public sealed class GetWorkerProfileHandlerTests
         }
 
         public override Task<WorkerMetricsDto> GetWorkerMetricsAsync(
-            UserId workerUserId, Guid? scopedFarmId, DateTime since30d, CancellationToken ct = default)
+            UserId workerUserId, IReadOnlyCollection<Guid> scopedFarmIds, DateTime since30d, CancellationToken ct = default)
             => Task.FromResult(metrics);
 
         public override Task<IReadOnlyList<SyncOperatorDto>> GetOperatorsByIdsAsync(
