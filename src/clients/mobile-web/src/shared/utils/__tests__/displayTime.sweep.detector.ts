@@ -21,6 +21,12 @@ import ts from 'typescript';
  * `timeZone` is deliberately absent. It is a modifier, not a clock: pinning
  * `timeZone` on a DATE formatter is the correct fix for the date/time split in
  * `WeatherWidget` and `mainView`, so flagging it would forbid the right thing.
+ *
+ * B009 — each of the six has an options bag of its OWN in the harness. Before
+ * that, `minute`, `second` and `dayPeriod` could each be deleted from this set
+ * with the whole suite green, because every fixture carrying them also carried
+ * `hour`. Adding a name here without adding it to `TIME_OPTION_FIXTURE_NAMES`
+ * reddens the harness on purpose.
  */
 export const TIME_OPTION_NAMES = new Set([
     'hour', 'minute', 'second', 'timeStyle', 'hour12', 'dayPeriod',
@@ -70,12 +76,18 @@ export function typeCanCarryTimeOptions(arg: ts.Expression, chk: ts.TypeChecker)
     if (type.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null | ts.TypeFlags.Void)) {
         return false;
     }
-    // A string or array in this position is a LOCALE, not an options bag.
-    if (type.flags & ts.TypeFlags.StringLike) return false;
 
+    // B009 — an explicit `StringLike -> false` guard used to sit here, for a
+    // LOCALE written into the options slot. Measured, it could not change a
+    // single answer: the checker reads 50 properties off `string` and off a
+    // string literal type, and 35 off `string[]`, none of them a time option,
+    // so the two lines below already answer NO. A line that cannot change an
+    // outcome cannot be disabled either, which made it the one part of this
+    // function no fixture could ever redden. Deleted rather than excused.
     const props = chk.getPropertiesOfType(type).map(p => p.getName());
     // No resolvable properties means the checker could not read it. Treat that
-    // as unverifiable, which is the unsafe direction.
+    // as unverifiable, which is the unsafe direction. This is the line that
+    // catches an options bag typed `any` or `Record<string, unknown>`.
     if (props.length === 0) return true;
     return props.some(name => TIME_OPTION_NAMES.has(name));
 }
@@ -87,8 +99,12 @@ export function typeCanCarryTimeOptions(arg: ts.Expression, chk: ts.TypeChecker)
  * `PropertyAssignment` and `ShorthandPropertyAssignment`, and because a spread
  * still arrives inside an `ObjectLiteralExpression`, the type-based fallback in
  * the caller was never reached: `new Intl.DateTimeFormat('en-GB', { ...TIME_OPTS })`
- * scanned clean. There was no live instance, but `displayTime.ts` spreads
- * options three times, so it was one refactor from being one.
+ * scanned clean. There was no live instance. Counted, though: `displayTime.ts`
+ * spreads options in FOUR places — `...options` straight into the
+ * `new Intl.DateTimeFormat(…)` argument at line 76, and `...TIME_OPTS` /
+ * `...TIME_SECONDS_OPTS` at lines 85, 86 and 88. That file is EXEMPT, so none
+ * of the four is a miss; the spelling is one copy-paste out of the exempt file
+ * from being one. (Round 3 said "three times" here. It is four.)
  */
 export function hasTimeOption(arg: ts.Expression | undefined, chk: ts.TypeChecker): boolean {
     if (!arg) return false;
