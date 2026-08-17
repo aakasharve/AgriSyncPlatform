@@ -30,10 +30,20 @@ import {
     RETENTION_DAY_NUMBERS,
     RETENTION_POLICY_VERSION,
 } from '../../../domain/privacy/RetentionPolicy';
+import {
+    PRIVACY_POLICY_VERSION,
+    TERMS_VERSION,
+} from '../../consent/gate/consentNotice';
 
-/** The versions the documents declare. Commit 2 pins these against `consentNotice.ts`. */
-const TERMS_DOC_VERSION = 'terms-2026-08-17.1';
-const PRIVACY_DOC_VERSION = 'privacy-2026-08-17.1';
+/**
+ * IMPORTED, not retyped. These are the exact strings the gate writes into the append-only
+ * ledger on every acceptance, so the assertion below is the real one: the version the
+ * RECORD claims must be the version a SERVED DOCUMENT declares. A local copy of the
+ * literal would pass happily while the gate wrote something else entirely — which is
+ * precisely the state this suite was written to end.
+ */
+const TERMS_DOC_VERSION = TERMS_VERSION;
+const PRIVACY_DOC_VERSION = PRIVACY_POLICY_VERSION;
 
 const LEGAL_DIR = resolve(__dirname, '../../../../public/legal');
 
@@ -221,6 +231,32 @@ describe('the promises', () => {
         // it is what makes the 18+ tick mean something.
         expect(DOCS.termsEn).toContain('not for anyone under the age of 18');
         expect(DOCS.termsMr).toContain('१८ वर्षांखालील कुणासाठीही नाही');
+    });
+
+    it('does not claim the 18+ confirmation is stored, because it is not', () => {
+        // Measured 2026-08-17: `AgeDeclaredAdult` travels the whole request path and
+        // `RecordConsentGateAcceptanceHandler:56` REFUSES the acceptance without it — but
+        // `20260816170524_AddConsentGateLedgers.cs` gives NEITHER ledger table an
+        // `age_declared_adult` column, so nothing is ever written down. The first draft of
+        // these documents said "that confirmation is recorded with your consent" in all
+        // four files. That is the exact failure mode this whole wave exists to stop: a
+        // legal document describing a record the software does not keep.
+        //
+        // The column is owed (it needs a migration, deliberately not scaffolded in this
+        // pass). When it lands, this test is what tells the next author to correct the
+        // wording in the same change rather than leaving the notices pessimistic.
+        for (const [name, body] of ALL_DOCS) {
+            expect(body, `${name} must not claim the age tick is stored`)
+                .not.toMatch(/confirmation is recorded with|record that confirmation with/);
+            expect(body, `${name} must not claim the age tick is stored (mr)`)
+                .not.toContain('ती नोंद तुमच्या संमतीसोबत ठेवली जाते');
+        }
+        // And it must say what IS true — the rule is enforced, the proof is not kept.
+        expect(DOCS.privacyEn).toContain('do not yet store that confirmation');
+        expect(DOCS.termsEn).toContain('do not yet *store* that confirmation');
+        for (const body of [DOCS.privacyMr, DOCS.termsMr]) {
+            expect(body).toContain('संमतीच्या नोंदीसोबत साठवली जात नाही');
+        }
     });
 
     it('tells the farmer, in the Terms, that his workers\' names go into the app', () => {

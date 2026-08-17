@@ -41,8 +41,14 @@ you can withdraw the consent without ceasing to be bound by these Terms.
 
 **Shram Safal is not for anyone under the age of 18.**
 
-You confirmed your age before you could continue, and that confirmation is recorded with
-your consent. If you are under 18 you may not use the app, with or without a parent's
+You confirmed your age before you could continue — the app will not let you past that
+screen without it, and the server refuses an acceptance that does not carry it.
+
+**One honest limitation:** we do not yet *store* that confirmation alongside your consent
+record. The rule is enforced; the proof is not yet kept. We are adding that, and we would
+rather tell you than let you assume a record exists that does not.
+
+If you are under 18 you may not use the app, with or without a parent's
 permission — we do not operate a parental-consent route, and there is no age at which a
 younger user becomes acceptable. If we learn that an account belongs to someone under 18,
 we will close it.

@@ -199,9 +199,14 @@ and sending you to an invented channel would be worse than sending you to none.
 ## 9. Children
 
 **Shram Safal is not for anyone under 18.** You confirmed you were 18 or older before you
-could continue, and we record that confirmation with your consent. We do not knowingly
-collect information from anyone under 18. If you believe someone under 18 is using the
-app, write to us at the address in §1 and we will close the account.
+could continue — the app will not let you past that screen without it.
+
+We do not yet store that confirmation alongside your consent record. The app enforces the
+rule but does not yet keep the proof; that is owed and is being added. We would rather say
+so than let you believe a record exists that does not.
+
+We do not knowingly collect information from anyone under 18. If you believe someone under
+18 is using the app, write to us at the address in §1 and we will close the account.
 
 ---
 
