@@ -22,7 +22,6 @@ import { Leaf, Droplets, Users, Package, Tractor, Sprout } from 'lucide-react';
 import { getSegmentVisual } from '../../shared/utils/uiUtils';
 import { getDateKey } from '../domain/services/DateKeyService';
 import { buildTimelineEntries } from '../../services/transcriptTimelineService';
-import CompactWeatherChip from '../../features/oversight/components/CompactWeatherChip';
 import { formatCurrencyINR } from '../../shared/utils/dayState';
 import { getCropTheme } from '../../shared/utils/colorTheme';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
@@ -127,7 +126,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
 
     const {
         status, mode, recordingSegment,
-        weatherData, weatherStatus, boundaryUnset, refetchWeather, setCurrentRoute,
+        setCurrentRoute,
         ownerDisplayName, setMainView,
         crops, logScope, setLogScope, setMode, setStatus,
         hasActiveLogContext, isContextReady, error, errorTranscript,
@@ -145,9 +144,6 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         logIntent
     } = ctx;
 
-    // Single boundary handoff: flag it + route to Profile, where the drawer auto-opens.
-    const openBoundary = () => { window.sessionStorage.setItem('open_farm_boundary', '1'); setCurrentRoute('profile'); };
-
     return (
         <>
             {/* IDLE / RECORDING STATE */}
@@ -160,22 +156,13 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                         scroll ~380px before reaching the only question this
                         screen exists for. The header already shows the
                         owner (canonical strip), the closure/pending-approval
-                        facts now live in the oversight drawer, and the
-                        weather card is reduced to a one-line chip that
-                        expands into the SAME WeatherWidget on tap — nothing
-                        here reimplements it. */}
-                    {!recordingSegment && (
-                        <div className="mb-4 animate-in slide-in-from-top-4 duration-300 delay-100">
-                            <CompactWeatherChip
-                                data={weatherData}
-                                status={weatherStatus}
-                                boundaryUnset={boundaryUnset}
-                                onRetry={refetchWeather}
-                                onAddLocation={openBoundary}
-                                onOpenBoundary={openBoundary}
-                            />
-                        </div>
-                    )}
+                        facts now live in the oversight drawer. The weather
+                        chip that used to sit here (Task 7's one-line
+                        `CompactWeatherChip`) MOVED AGAIN in Task 11 — the
+                        founder's header restructure put it into `AppHeader`
+                        row 1 instead ("in the dead space on the right,
+                        before the gear"), so it is not rendered here any
+                        more (never rendered twice). */}
 
                     {/* spec: 2026-07-13-labour-attendance-approval-design (Task 3.5) —
                         promoted from the Task-3.4 dismissible hint to a full

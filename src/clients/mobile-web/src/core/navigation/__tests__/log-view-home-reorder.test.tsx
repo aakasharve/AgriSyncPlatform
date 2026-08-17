@@ -183,7 +183,12 @@ describe('renderLogView — home-screen reorder (Task 7)', () => {
         expect(allText).toContain('Running Cost');
     });
 
-    it('renders CompactWeatherChip — not a full WeatherWidget — at the top of the idle view, wired with the same weather props', () => {
+    it('no_longer_renders_CompactWeatherChip — Task 11 moved it into AppHeader row 1, never rendered twice', () => {
+        // Founder header restructure (task-11 brief): "The weather chip
+        // moves into row 1 [of AppHeader] ... It must be removed from
+        // mainView.tsx so it is not rendered twice." Even with real weather
+        // props present on ctx (proving this isn't just "no props, so
+        // nothing to show"), `renderLogView` must not mount the chip.
         const ctx = makeLogViewCtx({
             weatherData: { locationName: 'Arve Farm' } as unknown as AppRouterContext['weatherData'],
             weatherStatus: 'ready',
@@ -193,26 +198,11 @@ describe('renderLogView — home-screen reorder (Task 7)', () => {
         const elements = flattenElements(tree);
 
         const chip = elements.find((el) => el.type === CompactWeatherChip);
-        expect(chip).toBeDefined();
-        const props = chip!.props as {
-            data?: unknown;
-            status?: string;
-            boundaryUnset?: boolean;
-            onRetry?: () => void;
-            onAddLocation?: () => void;
-            onOpenBoundary?: () => void;
-        };
-        expect(props.data).toEqual({ locationName: 'Arve Farm' });
-        expect(props.status).toBe('ready');
-        expect(props.boundaryUnset).toBe(true);
-        expect(props.onRetry).toBe(ctx.refetchWeather);
-        expect(props.onAddLocation).toBeTypeOf('function');
-        expect(props.onOpenBoundary).toBeTypeOf('function');
+        expect(chip).toBeUndefined();
 
-        // The chip renders strictly before the plot selector — it is the
-        // only thing left above it (spec §5's locked order).
-        const chipIdx = elements.indexOf(chip!);
+        // The plot selector is still reachable and still real — this test
+        // proves REMOVAL, not breakage of the rest of the idle view.
         const cropSelectorIdx = elements.findIndex((el) => el.type === CropSelector);
-        expect(chipIdx).toBeLessThan(cropSelectorIdx);
+        expect(cropSelectorIdx).toBeGreaterThan(-1);
     });
 });

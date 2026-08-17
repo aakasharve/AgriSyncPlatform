@@ -184,6 +184,16 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
                     // preview (and the shipped app) cannot honestly assert.
                     approvalHolderName: null,
                 }}
+                // spec: owner-oversight-loop (Task 11) — same seeded honest
+                // "no-location" weather stub `usePreviewRouterCtx` already
+                // builds for `renderLogView`'s old spot; forwarded here now
+                // that the chip lives in AppHeader row 1 instead.
+                weather={{
+                    data: ctx.weatherData,
+                    status: ctx.weatherStatus,
+                    boundaryUnset: ctx.boundaryUnset,
+                    onRetry: ctx.refetchWeather,
+                }}
             />
 
             <main

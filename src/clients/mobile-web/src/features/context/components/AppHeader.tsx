@@ -4,8 +4,9 @@
  */
 
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { User2, Settings, Leaf, X } from 'lucide-react';
-import { AppRoute, PageView } from '../../../types';
+import { AppRoute, PageView, DetailedWeather } from '../../../types';
 import PageToggle from '../../../shared/components/ui/PageToggle';
 import { useLanguage } from '../../../i18n/LanguageContext';
 
@@ -14,10 +15,16 @@ import type { DailyLog } from '../../../domain/types/log.types';
 import { FarmSwitcherSheet } from './FarmContextSwitcher';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 import { useSyncQueueStatus, SyncStatusDrawer } from '../../sync';
+import type { WeatherStatus } from '../../weather/useWeatherMonitor';
 
 // Owner Oversight Loop (spec: owner-oversight-loop). Replaces the old
 // `FarmContextSwitcher compact` pill + `SyncIndicator` chip (spec §2, §4.1).
-import CanonicalStrip from '../../oversight/components/CanonicalStrip';
+// Task 11 (founder header restructure) — `CompactFarmChip` (row 1, beside
+// the avatar) and `CompactWeatherChip` (row 1, before the gear) join
+// `CanonicalStrip`, now row 2's waiting button alone. See each file's own
+// header for why it moved.
+import CanonicalStrip, { CompactFarmChip } from '../../oversight/components/CanonicalStrip';
+import CompactWeatherChip from '../../oversight/components/CompactWeatherChip';
 import WaitingDrawer from '../../oversight/components/WaitingDrawer';
 import { buildOversightModel, type OversightDecision } from '../../oversight/oversightSelectors';
 import { useOversightAcknowledgement } from '../../oversight/useOversightAcknowledgement';
@@ -77,6 +84,22 @@ interface AppHeaderProps {
      * something this task can honestly do. */
     approvalHolderName: string | null;
   };
+  /**
+   * Weather chip data for row 1 (Task 11 — founder header restructure: the
+   * weather chip moves out of `mainView.tsx`'s home screen and into this
+   * header, "in the dead space on the right, before the gear"). Omit
+   * entirely to render `CompactWeatherChip`'s compact trigger in its honest
+   * default ("no data yet") state — never a fabricated reading.
+   * `WeatherWidget` itself (mounted on tap, through `CompactWeatherChip`'s
+   * own bottom-sheet portal) owns every loading/error/no-location state;
+   * this prop only forwards what the caller already has.
+   */
+  weather?: {
+    data?: DetailedWeather;
+    status?: WeatherStatus;
+    boundaryUnset?: boolean;
+    onRetry?: () => void;
+  };
 }
 
 /**
@@ -114,6 +137,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   onVoiceTrigger,
   farmContext,
   oversightData,
+  weather,
 }) => {
   const { language, t } = useLanguage();
   const [isSyncDrawerOpen, setIsSyncDrawerOpen] = React.useState(false);
@@ -191,32 +215,56 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     }
   };
 
+  // Weather's own "add location" / "set boundary" affordances (Task 11) —
+  // the same single-handoff pattern `mainView.tsx`'s now-removed local
+  // `openBoundary` used: flag it in sessionStorage, then route to Profile,
+  // where the boundary drawer auto-opens (`ProfilePage.tsx` reads + clears
+  // this same key). AppHeader already owns `onNavigate`, so this needs no
+  // new prop from either caller.
+  const openWeatherBoundary = () => {
+    window.sessionStorage.setItem('open_farm_boundary', '1');
+    onNavigate('profile');
+  };
+
   return (
     <header className="sticky top-0 z-50 border-b border-stone-200 bg-white/95 backdrop-blur" style={{ boxShadow: '0 4px 12px -2px rgba(0,0,0,0.06), 0 1px 0 rgba(0,0,0,0.04)' }}>
-      <div className="page-content pl-safe-area pr-safe-area flex min-h-[56px] items-center justify-between gap-3 py-2">
+      <div className="page-content pl-safe-area pr-safe-area flex min-h-[56px] items-center justify-between gap-1 py-2">
 
-        {/* LEFT: Profile / User Identity */}
-        <button
-          onClick={() => onNavigate('profile')}
-          disabled={disabled}
-          className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center rounded-2xl px-1 py-1"
-          title={activeOperator ? activeOperator.name : t('header.profile')}
-        >
-          <div className={`
-             w-9 h-9 flex items-center justify-center rounded-full border-2 transition-all duration-150
-             ${activeOperator ? userColorClass : 'border-transparent bg-stone-100 text-stone-400'}
-          `}>
-            <User2 size={18} strokeWidth={2.5} />
-          </div>
-          {activeOperator && (
-            <span className="text-[9px] font-bold text-stone-600 max-w-[60px] truncate leading-tight mt-0.5">
-              {activeOperator.name.split(' ')[0]}
-            </span>
+        {/* LEFT: Profile identity + farm chip. Task 11 (founder header
+            restructure): "The farm switcher moves up beside the profile
+            circle" — immediately right of the avatar, row 1. */}
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            onClick={() => onNavigate('profile')}
+            disabled={disabled}
+            className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center rounded-2xl px-1 py-1"
+            title={activeOperator ? activeOperator.name : t('header.profile')}
+          >
+            <div className={`
+               w-9 h-9 flex items-center justify-center rounded-full border-2 transition-all duration-150
+               ${activeOperator ? userColorClass : 'border-transparent bg-stone-100 text-stone-400'}
+            `}>
+              <User2 size={18} strokeWidth={2.5} />
+            </div>
+            {activeOperator && (
+              <span className="text-[9px] font-bold text-stone-600 max-w-[60px] truncate leading-tight mt-0.5">
+                {activeOperator.name.split(' ')[0]}
+              </span>
+            )}
+          </button>
+
+          {farmContext && (
+            <CompactFarmChip
+              language={language}
+              farmName={farmName}
+              plotCount={plotCount}
+              onOpenFarmSwitcher={() => setIsFarmSwitcherOpen(true)}
+            />
           )}
-        </button>
+        </div>
 
         {/* CENTER: Toggle (Visible on all core pages) */}
-        <div className="flex-1 flex items-center justify-center">
+        <div className="min-w-0 flex-1 flex items-center justify-center">
           {['main', 'schedule', 'procurement', 'income', 'profile', 'settings', 'finance-manager', 'finance-ledger', 'finance-price-book', 'finance-review-inbox', 'finance-reports', 'finance-settings'].includes(currentRoute) ? (
             <div className="w-full max-w-[220px]">
               <PageToggle
@@ -244,8 +292,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({
           )}
         </div>
 
-        {/* RIGHT: Voice & Settings */}
-        <div className="flex items-center gap-1">
+        {/* RIGHT: Weather + Voice + Settings. Task 11 (founder header
+            restructure): "The weather chip moves into row 1, in the dead
+            space on the right, before the gear." */}
+        <div className="flex shrink-0 items-center gap-1">
           {/* Phase 4: Global Voice Trigger (Moved to Header) */}
           {onVoiceTrigger && !disabled && (
             <button
@@ -272,6 +322,16 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             </button>
           )}
 
+          <CompactWeatherChip
+            variant="compact"
+            data={weather?.data}
+            status={weather?.status}
+            boundaryUnset={weather?.boundaryUnset}
+            onRetry={weather?.onRetry}
+            onAddLocation={openWeatherBoundary}
+            onOpenBoundary={openWeatherBoundary}
+          />
+
           <button
             onClick={() => onNavigate('settings')}
             disabled={disabled}
@@ -288,17 +348,16 @@ const AppHeader: React.FC<AppHeaderProps> = ({
 
       </div>
 
-      {/* Owner Oversight Loop (spec §2) — the canonical strip. Canonical on
-          every route by construction: AppHeader itself renders on every
-          route, so no per-page wiring is needed (spec §2's own claim). */}
+      {/* Owner Oversight Loop (spec §2) — the canonical strip, now row 2:
+          the waiting button alone, full width (Task 11 founder
+          restructure). Canonical on every route by construction: AppHeader
+          itself renders on every route, so no per-page wiring is needed
+          (spec §2's own claim). */}
       {farmContext && (
         <div className="page-content pl-safe-area pr-safe-area border-t border-stone-100 bg-stone-50/60 py-1.5">
           <CanonicalStrip
             language={language}
-            farmName={farmName}
-            plotCount={plotCount}
             waitingCount={oversightModel.waitingCount}
-            onOpenFarmSwitcher={() => setIsFarmSwitcherOpen(true)}
             onToggleWaiting={() => setIsWaitingDrawerOpen(true)}
           />
         </div>
@@ -331,8 +390,19 @@ const AppHeader: React.FC<AppHeaderProps> = ({
       {/* Waiting drawer (spec §3). `WaitingDrawer` is presentational only —
           no overlay chrome of its own (Task 5) — so this sheet follows the
           same bottom-sheet convention `SyncStatusDrawer` (below) and
-          `FarmSwitcherSheet` already use in this app. */}
-      {isWaitingDrawerOpen && (
+          `FarmSwitcherSheet` already use in this app.
+
+          PORTAL FIX (task-11 brief): this overlay used to render as plain
+          JSX here, INSIDE `<header className="sticky ...">` below. A
+          `position: sticky` ancestor creates a containing block that traps
+          `position: fixed` descendants, so the dark backdrop covered only
+          the ~139px sticky header box instead of the full viewport —
+          diagnosed in the task-10 report, confirmed by computed-style
+          inspection. `createPortal` to `document.body` is the same fix
+          `FarmContextSwitcher.tsx`'s `FarmSwitcherSheet` already applies
+          for exactly this reason; this makes AppHeader consistent with it
+          rather than papering over the trap with z-index or margins. */}
+      {isWaitingDrawerOpen && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed inset-0 z-[150] flex items-end justify-center bg-stone-900/50 backdrop-blur-sm sm:items-center"
           onClick={() => setIsWaitingDrawerOpen(false)}
@@ -367,7 +437,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({
               onOpenDecision={handleOpenDecision}
             />
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       <SyncStatusDrawer

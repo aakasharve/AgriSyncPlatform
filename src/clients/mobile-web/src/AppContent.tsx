@@ -120,6 +120,18 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                     // AppHeader.tsx's own doc comment on this field.
                     approvalHolderName: null,
                 }}
+                // spec: owner-oversight-loop (Task 11) — the weather chip
+                // moved from mainView.tsx's home screen into AppHeader row
+                // 1. `weather` is the SAME `useWeatherMonitor()` state
+                // mainView.tsx used to read via `ctx.weatherData` etc.
+                // (`core/navigation/routeContext.ts`), forwarded here
+                // instead — no second fetch, no re-derivation.
+                weather={{
+                    data: weather.weatherData,
+                    status: weather.weatherStatus,
+                    boundaryUnset: weather.boundaryUnset,
+                    onRetry: weather.refetchWeather,
+                }}
             />
 
             <MeAlertRail />

@@ -99,3 +99,96 @@ describe('CompactWeatherChip', () => {
         expect(onOpenBoundary).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('CompactWeatherChip — variant="compact" (Task 11, founder header restructure)', () => {
+    it('renders icon + temperature only — no location text, unlike the full variant', () => {
+        render(<CompactWeatherChip variant="compact" data={sampleData} status="ready" />);
+
+        const chip = screen.getByTestId('compact-weather-chip');
+        // Real value (28), rounded — never a fabricated number (spec §P-F).
+        expect(chip).toHaveTextContent('28°');
+        expect(chip).not.toHaveTextContent('Arve Farm');
+    });
+
+    it('shows an honest "--°" placeholder when there is no data yet — never a fabricated reading', () => {
+        render(<CompactWeatherChip variant="compact" status="loading" />);
+        expect(screen.getByTestId('compact-weather-chip')).toHaveTextContent('--°');
+    });
+
+    it('surfaces the boundary caution icon in compact form too', () => {
+        render(<CompactWeatherChip variant="compact" data={sampleData} status="ready" boundaryUnset />);
+        expect(screen.getByTestId('compact-weather-chip-caution')).toBeInTheDocument();
+    });
+
+    it('tapping the compact trigger mounts the REAL WeatherWidget through a portal, every prop forwarded', () => {
+        const onRetry = vi.fn();
+        const onAddLocation = vi.fn();
+        const onOpenBoundary = vi.fn();
+        render(
+            <CompactWeatherChip
+                variant="compact"
+                data={sampleData}
+                status="ready"
+                boundaryUnset
+                onRetry={onRetry}
+                onAddLocation={onAddLocation}
+                onOpenBoundary={onOpenBoundary}
+            />
+        );
+
+        expect(screen.queryByLabelText('Weather details')).toBeNull();
+        fireEvent.click(screen.getByTestId('compact-weather-chip'));
+
+        // Proven by WeatherWidget's own aria-label, exactly like the full
+        // variant's test above — not a copy of its markup.
+        expect(screen.getByLabelText('Weather details')).toBeInTheDocument();
+
+        // WeatherWidget renders its own boundary caution when `boundaryUnset`
+        // is forwarded truthfully — proves the prop actually reached it.
+        const caution = screen.getByTestId('weather-boundary-caution');
+        fireEvent.click(caution);
+        expect(onOpenBoundary).toHaveBeenCalledTimes(1);
+    });
+
+    it('the sheet the compact trigger opens is NOT a DOM descendant of its own React parent (portal escapes it)', () => {
+        // The exact structural property this task's other fix (AppHeader's
+        // waiting drawer) relies on: a `createPortal` to `document.body`
+        // renders OUTSIDE whatever DOM subtree contains the trigger,
+        // regardless of the React tree. Proven directly here rather than
+        // only at the AppHeader level, since this is where the portal is
+        // actually implemented.
+        const { container } = render(
+            <div data-testid="not-body-parent">
+                <CompactWeatherChip variant="compact" data={sampleData} status="ready" />
+            </div>
+        );
+
+        fireEvent.click(screen.getByTestId('compact-weather-chip'));
+        const sheet = screen.getByTestId('compact-weather-chip-sheet');
+        const parent = container.querySelector('[data-testid="not-body-parent"]');
+
+        expect(parent).not.toBeNull();
+        expect(parent!.contains(sheet)).toBe(false);
+        expect(document.body.contains(sheet)).toBe(true);
+    });
+
+    it('closing the compact sheet unmounts it and returns to the collapsed trigger', () => {
+        render(<CompactWeatherChip variant="compact" data={sampleData} status="ready" />);
+
+        fireEvent.click(screen.getByTestId('compact-weather-chip'));
+        expect(screen.getByTestId('compact-weather-chip-sheet')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByTestId('compact-weather-chip-sheet-close'));
+        expect(screen.queryByTestId('compact-weather-chip-sheet')).not.toBeInTheDocument();
+    });
+
+    it('the full variant is untouched — default (no variant prop) still expands WeatherWidget inline, not through a portal', () => {
+        // Regression guard: proves 'full' stays the ORIGINAL Task-7 inline
+        // behaviour byte-for-byte — no sheet, no portal, no compact icon.
+        render(<CompactWeatherChip data={sampleData} status="ready" />);
+
+        fireEvent.click(screen.getByTestId('compact-weather-chip'));
+        expect(screen.getByLabelText('Weather details')).toBeInTheDocument();
+        expect(screen.queryByTestId('compact-weather-chip-sheet')).not.toBeInTheDocument();
+    });
+});

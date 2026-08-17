@@ -54,6 +54,7 @@ import { t as translate, type Language } from '../../../../i18n/translations';
 import type { SyncQueueStatus } from '../../../sync/hooks/useSyncQueueStatus';
 import { SYNC_HONESTY_I18N_KEYS } from '../../../sync/status/syncHonestyState';
 import type { DailyLog } from '../../../../domain/types/log.types';
+import type { DetailedWeather } from '../../../../types';
 
 const queueRef: { current: SyncQueueStatus } = {
     current: {
@@ -183,8 +184,10 @@ describe('AppHeader — the canonical strip renders on every route', () => {
         expect(screen.getByTestId('canonical-strip-farm-chip')).toBeInTheDocument();
         expect(screen.getByTestId('canonical-strip-waiting-button')).toBeInTheDocument();
         // The farm chip carries the real farm name from `farmContext` — proves
-        // the strip is reading real data, not a static shell.
-        expect(screen.getByTestId('canonical-strip-farm-chip')).toHaveTextContent('Arve Farm');
+        // the strip is reading real data, not a static shell. Task 11:
+        // the name lives in the accessible label now (measured — see
+        // CanonicalStrip.tsx's own header comment), not visible text.
+        expect(screen.getByTestId('canonical-strip-farm-chip').getAttribute('aria-label')).toContain('Arve Farm');
     });
 });
 
@@ -317,8 +320,10 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
         });
 
         // 1. The farm chip's plot count is the REAL one, not the honest-zero
-        // fallback (proves the prop actually reached CanonicalStrip).
-        expect(screen.getByTestId('canonical-strip-farm-chip')).toHaveTextContent('4');
+        // fallback (proves the prop actually reached `CompactFarmChip`).
+        // Task 11 moved the count out of visible text (no room in a 44px
+        // row-1 chip) into the accessible label — asserted there instead.
+        expect(screen.getByTestId('canonical-strip-farm-chip').getAttribute('aria-label')).toContain('4');
 
         // 2. The waiting count reflects one real PERSON (no decisions were
         // supplied), and opening the drawer proves the briefing itself —
@@ -349,8 +354,108 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
             renderHeader();
         });
 
-        expect(screen.getByTestId('canonical-strip-farm-chip')).not.toHaveTextContent('4');
+        // Task 11: the plot count lives in the farm chip's accessible label
+        // now, not visible text — assert the honest-zero fallback there
+        // instead of the (now trivially-true) visible-text check.
+        expect(screen.getByTestId('canonical-strip-farm-chip').getAttribute('aria-label')).toContain('0');
+        expect(screen.getByTestId('canonical-strip-farm-chip').getAttribute('aria-label')).not.toContain('4');
         expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
         expect(screen.queryByTestId('canonical-strip-waiting-count')).not.toBeInTheDocument();
+    });
+});
+
+describe('AppHeader — the waiting drawer backdrop is not trapped by the sticky header (task-11 portal fix)', () => {
+    it('the_backdrop_renders_outside_the_sticky_header_via_a_portal', async () => {
+        // Diagnosed defect (task-10 report, confirmed by computed-style
+        // inspection in a real browser): `<header className="sticky ...">`
+        // is a `position: sticky` ancestor, which creates a containing
+        // block that traps `position: fixed` descendants — so the waiting
+        // drawer's dark backdrop used to cover only the ~139px sticky
+        // header box instead of the full viewport. The fix is
+        // `createPortal(..., document.body)`, the same pattern
+        // `FarmContextSwitcher.tsx`'s `FarmSwitcherSheet` already uses.
+        //
+        // jsdom does not compute layout, so this proves the STRUCTURAL fix
+        // (the overlay is no longer a DOM descendant of `<header>` at all,
+        // which is the actual cause of the trap) rather than a computed
+        // style — the right level for jsdom. The task-11 report's own
+        // browser measurement is what proves the VISUAL result.
+        await act(async () => {
+            renderHeader();
+        });
+
+        fireEvent.click(screen.getByTestId('canonical-strip-waiting-button'));
+        const sheet = screen.getByTestId('waiting-drawer-sheet');
+        const header = document.querySelector('header');
+
+        expect(header).not.toBeNull();
+        expect(header!.contains(sheet)).toBe(false);
+        expect(document.body.contains(sheet)).toBe(true);
+    });
+});
+
+describe('AppHeader — row 1 (task-11 founder restructure)', () => {
+    const sampleWeather = {
+        locationName: 'Arve Farm',
+        current: {
+            fetchedAt: '', lat: 20, lon: 73, provider: 'tomorrow.io',
+            current: { tempC: 28, humidity: 50, windKph: 5, precipMm: 0, conditionText: 'Partly Cloudy', iconCode: '1000' },
+            forecast: { rainProb: 0 },
+        },
+        forecast: [],
+        history: [],
+        advisory: { title: 'x', content: 'y' },
+    } as unknown as DetailedWeather;
+
+    it('the_weather_chip_renders_in_row_1_and_reads_real_data_from_the_weather_prop', async () => {
+        await act(async () => {
+            renderHeader({
+                weather: {
+                    data: sampleWeather,
+                    status: 'ready',
+                    boundaryUnset: false,
+                    onRetry: vi.fn(),
+                },
+            });
+        });
+
+        // The compact trigger reads the SAME real tempC the full-size chip
+        // would — rounded for the compact display, never a fabricated
+        // number (spec §P-F: derived from the data shown).
+        const chip = screen.getByTestId('compact-weather-chip');
+        expect(chip).toHaveTextContent('28°');
+    });
+
+    it('the_weather_chip_renders_even_when_the_weather_prop_is_omitted_entirely', async () => {
+        // Honest "no data yet" state — never a fabricated reading (spec
+        // §P-F). Row 1 always carries the trigger; it just has nothing to
+        // show yet.
+        await act(async () => {
+            renderHeader();
+        });
+
+        expect(screen.getByTestId('compact-weather-chip')).toBeInTheDocument();
+    });
+
+    it('the_farm_chip_and_the_avatar_share_row_1_ahead_of_the_row_2_waiting_strip', async () => {
+        // Structural proof of the founder's locked layout: the farm chip is
+        // a DOM ancestor-sibling of the profile button (both inside the
+        // header's first content row), and that whole row appears BEFORE
+        // the waiting button's row-2 wrapper in document order.
+        await act(async () => {
+            renderHeader();
+        });
+
+        const header = document.querySelector('header');
+        expect(header).not.toBeNull();
+
+        const farmChip = screen.getByTestId('canonical-strip-farm-chip');
+        const waitingButton = screen.getByTestId('canonical-strip-waiting-button');
+
+        // DOCUMENT_POSITION_FOLLOWING (4) means `waitingButton` comes AFTER
+        // `farmChip` in the tree — i.e. row 1's farm chip precedes row 2's
+        // waiting strip, never the reverse.
+        const position = farmChip.compareDocumentPosition(waitingButton);
+        expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 });
