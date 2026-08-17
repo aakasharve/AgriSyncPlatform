@@ -34,8 +34,7 @@ public sealed class AdminTestFixture : IAsyncLifetime
 {
     private const string TestDbName = "agrisync_admin_test";
 
-    private const string DefaultRootConnectionString =
-        "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=akash123";
+    private const string RootConnEnvVar = "ADMIN_TESTS_ADMIN_ROOT_CONN";
 
     private readonly string _rootConnString;
     private readonly string _testConnString;
@@ -46,8 +45,18 @@ public sealed class AdminTestFixture : IAsyncLifetime
 
     public AdminTestFixture()
     {
-        _rootConnString = Environment.GetEnvironmentVariable("ADMIN_TESTS_ADMIN_ROOT_CONN")
-                         ?? DefaultRootConnectionString;
+        // No fallback, deliberately. This used to fall back to a connection string
+        // with a real password baked into this file: a credential in a tracked file
+        // on a public repo, which then silently rotted into Postgres 28P01 when the
+        // password was rotated (2026-08-10). An authentication error reads like a
+        // broken machine, so the stale literal cost far more to diagnose than a
+        // missing variable would have. Fail loudly and name the cause instead.
+        _rootConnString = Environment.GetEnvironmentVariable(RootConnEnvVar)
+            ?? throw new InvalidOperationException(
+                $"{nameof(AdminTestFixture)}: {RootConnEnvVar} is not set. This suite no longer "
+                + "carries a hardcoded fallback credential. Set it to a Postgres maintenance "
+                + "connection (Database=postgres) with rights to CREATE DATABASE. CI sets it "
+                + "automatically in .github/workflows/ci-gate.yml.");
 
         var builder = new NpgsqlConnectionStringBuilder(_rootConnString) { Database = TestDbName };
         _testConnString = builder.ConnectionString;
