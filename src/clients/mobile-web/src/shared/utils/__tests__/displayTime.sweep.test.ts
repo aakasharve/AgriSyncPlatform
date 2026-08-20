@@ -208,6 +208,20 @@ const program = ts.createProgram(ALL_FILES, COMPILER_OPTIONS);
 const FINDINGS = collectFindings(program, SCANNED, SRC);
 const format = (f: Finding) => `${f.file}:${f.line} [${f.why}] ${f.text}`;
 
+// Every scanText() call builds its own ts.Program, and a Program's dominant
+// cost is parsing the ES2022 lib.*.d.ts declaration files -- tens of thousands
+// of lines that are byte-identical on every call. With scanText() invoked from
+// most assertions in this file, the suite spent nearly all its time re-reading
+// unchanging declarations and left individual tests with no margin under
+// vitest's 5000ms default. That is fine on an idle laptop and not fine on a
+// loaded CI runner, where ci-gate.yml runs `npm test` as a BLOCKING step.
+//
+// So cache them. Only non-fixture files are cached: the fixture's text differs
+// on every call and is deliberately never stored. Lib declaration files are
+// immutable for the life of the process, so sharing the parsed SourceFile
+// across programs is safe -- it is what TypeScript's own watch mode does.
+const LIB_SOURCE_CACHE = new Map<string, ts.SourceFile | undefined>();
+
 /** Scan a source string with the SAME detector the repository scan uses. */
 function scanText(text: string): Finding[] {
     const NAME = join(SRC, '__fixture__.ts');
@@ -219,10 +233,18 @@ function scanText(text: string): Finding[] {
 
     const host = ts.createCompilerHost(COMPILER_OPTIONS);
     const original = host.getSourceFile.bind(host);
-    host.getSourceFile = (fileName, languageVersion, onError, shouldCreate) =>
-        isFixture(fileName)
-            ? ts.createSourceFile(fileName, text, languageVersion, true)
-            : original(fileName, languageVersion, onError, shouldCreate);
+    host.getSourceFile = (fileName, languageVersion, onError, shouldCreate) => {
+        if (isFixture(fileName)) {
+            return ts.createSourceFile(fileName, text, languageVersion, true);
+        }
+        const key = norm(fileName);
+        if (!LIB_SOURCE_CACHE.has(key)) {
+            LIB_SOURCE_CACHE.set(
+                key,
+                original(fileName, languageVersion, onError, shouldCreate));
+        }
+        return LIB_SOURCE_CACHE.get(key);
+    };
     host.fileExists = (f) => isFixture(f) || ts.sys.fileExists(f);
     host.readFile = (f) => (isFixture(f) ? text : ts.sys.readFile(f));
 
