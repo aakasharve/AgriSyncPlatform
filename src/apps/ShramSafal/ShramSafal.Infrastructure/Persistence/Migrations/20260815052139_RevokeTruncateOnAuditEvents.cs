@@ -31,15 +31,56 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
     /// </para>
     ///
     /// <para>
-    /// <b>Which privileged path keeps it, measured not assumed.</b> The
-    /// surviving path is the <b>superuser migration role</b> — the role this very
-    /// migration runs as (<c>ConnectionStrings:ShramSafalDb_Migration</c>, locally
-    /// <c>postgres</c>, <c>rolsuper = t</c>). A superuser bypasses every privilege
-    /// check, so it needs no grant and none is invented here. No new role is
-    /// created. The guard below asserts that path is still open, so a future
-    /// cluster that runs migrations as a NON-superuser fails loudly at deploy time
-    /// instead of silently leaving nobody able to perform a lawful ledger
-    /// maintenance operation.
+    /// <b>Which privileged path keeps it.</b> A superuser bypasses every
+    /// privilege check, so it needs no grant and none is invented here. No new
+    /// role is created.
+    /// </para>
+    ///
+    /// <para>
+    /// 🛑 <b>CORRECTED 2026-08-20 — this migration does NOT run as a superuser on
+    /// the path production uses, and an earlier version of this docstring said it
+    /// did.</b> It claimed the runner is
+    /// <c>ConnectionStrings:ShramSafalDb_Migration</c> (<c>postgres</c>,
+    /// <c>rolsuper = t</c>). That is true only for the <c>dotnet ef</c> CLI, which
+    /// resolves its connection through <c>ShramSafalDbContextFactory</c> — an
+    /// <c>IDesignTimeDbContextFactory</c>. Production applies ShramSafal
+    /// migrations by flipping <c>ALLOW_PRODUCTION_STARTUP_MIGRATIONS</c> and
+    /// restarting the API, which migrates through the DI-registered context
+    /// (<c>Program.cs:941</c>); that context is built at
+    /// <c>DependencyInjection.cs:34</c> from <c>ConnectionStrings:ShramSafalDb</c>
+    /// — <b>the ordinary application role</b>.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Why the original guard could never pass there.</b> It aborted unless
+    /// <c>current_user</c> was a superuser <i>or still held TRUNCATE</i>. On the
+    /// production path <c>current_user</c> IS <c>agrisync_app</c> — the role the
+    /// statement immediately above has just revoked TRUNCATE from. Both limbs are
+    /// false by construction, so the migration aborted deterministically,
+    /// stopping the deploy at 11 of 16 and leaving the database half-migrated; in
+    /// Production <c>Program.cs:1104</c> then rethrows and the API process exits.
+    /// Reproduced as <c>agrisync_app</c> and as an RDS-master-shaped NOSUPERUSER
+    /// role.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>And waiting for a superuser runner would not have fixed it.</b> On
+    /// Amazon RDS the master user holds <c>rds_superuser</c> membership but
+    /// <c>rolsuper = f</c>, so pointing this at <c>ShramSafalDb_Migration</c>
+    /// would still fail the original guard. (Stated from RDS's documented role
+    /// model — <b>not</b> measured against the production instance, which is
+    /// hibernated.) The guard therefore must not depend on the runner being a
+    /// superuser at all.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>What the guard checks now.</b> The safety property — <c>agrisync_app</c>
+    /// can no longer TRUNCATE the ledger — is unchanged and still aborts if the
+    /// revoke fails to take. What was removed is the second abort, whose premise
+    /// was false: <i>the runner is not privileged</i> does not imply <i>nobody can
+    /// perform lawful maintenance</i>. The guard now resolves which maintenance
+    /// path actually survives, names it in the migration output, and aborts only
+    /// if genuinely none does.
     /// </para>
     ///
     /// <para>
@@ -97,6 +138,8 @@ DO $$
 DECLARE
     v_app_truncate  boolean;
     v_runner_super  boolean;
+    v_owner         name;
+    v_super_exists  boolean;
 BEGIN
     SELECT has_table_privilege('agrisync_app', 'ssf.audit_events', 'TRUNCATE')
       INTO v_app_truncate;
@@ -106,16 +149,44 @@ BEGIN
             'REVOKE TRUNCATE on ssf.audit_events did not take — agrisync_app can still erase the ledger';
     END IF;
 
-    -- The other half of the ruling: the capability is MOVED, not deleted. The
-    -- deliberate privileged path is the superuser migration role. If a cluster
-    -- ever runs migrations as a non-superuser, stop here rather than quietly
-    -- leaving no lawful maintenance path at all.
+    -- The other half of the ruling: the capability is MOVED, not deleted.
+    --
+    -- This deliberately does NOT abort when the runner is a non-superuser. That
+    -- was the original guard, and it could never pass on the path production
+    -- actually uses: startup migrations run as agrisync_app, the very role the
+    -- REVOKE above has just stripped, so both limbs were false by construction
+    -- and the deploy died at 11 of 16 with the database half-migrated. The
+    -- premise was the bug -- 'this runner is unprivileged' does not mean 'no
+    -- lawful maintenance path exists'.
+    --
+    -- Resolve which path genuinely survives, and say so out loud. Abort only if
+    -- none does, which is the condition the original guard meant to catch.
     SELECT rolsuper INTO v_runner_super FROM pg_roles WHERE rolname = current_user;
 
-    IF NOT COALESCE(v_runner_super, false)
-       AND NOT has_table_privilege(current_user, 'ssf.audit_events', 'TRUNCATE') THEN
+    SELECT pg_get_userbyid(relowner) INTO v_owner
+      FROM pg_class WHERE oid = 'ssf.audit_events'::regclass;
+
+    SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolsuper) INTO v_super_exists;
+
+    IF COALESCE(v_runner_super, false) THEN
+        RAISE NOTICE
+            'TRUNCATE on ssf.audit_events: maintenance path = migration runner ''%'' is a superuser.',
+            current_user;
+    ELSIF v_owner IS NOT NULL THEN
+        -- The honest name for this path. It is the same ownership property the
+        -- 'Known limit' paragraph records: the owner can re-grant to itself. It
+        -- is a real maintenance route and it is NOT a containment boundary, so
+        -- report it as what it is rather than dress it up as a privileged role.
+        RAISE WARNING
+            'TRUNCATE on ssf.audit_events: runner ''%'' is NOT a superuser. Lawful maintenance remains possible only because table owner ''%'' can re-grant. Containment against the application role holds (that is the revoke above); containment against the OWNER does not, and never did.',
+            current_user, v_owner;
+    ELSIF v_super_exists THEN
+        RAISE WARNING
+            'TRUNCATE on ssf.audit_events: runner ''%'' is NOT a superuser and the table has no resolvable owner; a superuser exists on this cluster and is the only remaining maintenance path.',
+            current_user;
+    ELSE
         RAISE EXCEPTION
-            'no privileged maintenance path retains TRUNCATE on ssf.audit_events (migration runner ''%'' is not a superuser and holds no grant)',
+            'no privileged maintenance path retains TRUNCATE on ssf.audit_events (runner ''%'' is not a superuser, table has no resolvable owner, and no superuser exists on this cluster)',
             current_user;
     END IF;
 END $$;
