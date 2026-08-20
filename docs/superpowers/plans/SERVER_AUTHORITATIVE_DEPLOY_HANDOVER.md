@@ -33,8 +33,18 @@ more than anything else on this page.
 
 ## BLOCKER 1 — the tool that applies these 17 migrations is on a branch nobody has merged
 
-This branch carries **17 pending database migrations**: 16 for ShramSafal (the main farm/labour
-database) and 1 for Analytics.
+This branch carries **17 database migrations that are not on `main`**: 16 for ShramSafal (the main
+farm/labour database) and 1 for Analytics.
+
+> ⚠️ **"17" is a branch-versus-`main` file diff, not a count of what is unapplied on production**, and
+> the two are not the same number. Production may already carry some of these (D7 below records two of
+> them as previously handled), and — because the gate applies **four contexts** — it may also have
+> pending User, Accounts or Analytics migrations that no diff against `main` will show you.
+> **`api-binary-swap.sh` fails the deploy when any context moves beyond its declared `--expect-*`
+> count**, so sizing the snapshot, the maintenance window and the Step-12 expected set from "17" is how
+> that check fires spuriously. Get the real number from the target database's history tables
+> (`ssf.__ef_migrations`, `public.__ef_migrations`, `accounts.__accounts_migrations_history`,
+> `analytics.__analytics_migrations_history`) before you declare anything.
 
 **A purpose-built runbook for exactly this exists and is committed:**
 `ops/aws/agent-deploy-lane/api-binary-swap.sh`, at `fe4e853a`, tip of branch
@@ -76,6 +86,20 @@ And `ssf` applies in **two phases with Analytics interleaved between them**, so 
 mid-sequence leaves `ssf` **partially** migrated. **A count cannot detect that; a set difference can.**
 The runbook's Step 12 is built for precisely this, which is the strongest argument for using it rather
 than hand-rolling the flag flip.
+
+### ⛔ The sequencing trap — the cautious-looking order is the one that breaks production
+
+**Do not swap the binary first and decide about migrations afterwards.** That order looks careful and
+it is the one that takes the API down.
+
+`Program.cs:1163-1174` throws `Pending migrations detected for {contextName}. Apply them in a
+deployment step before starting Production.` for **any** context with pending migrations while
+`ALLOW_PRODUCTION_STARTUP_MIGRATIONS` is `"false"`. `Program.cs:1104` rethrows on init failure, so the
+**process exits**. Not degraded — **dead**. Farmers get 5xx from the moment of restart, and every
+subsequent boot fails identically until the gate is opened or the binary is rolled back.
+
+There is no configuration in which this branch's binary boots against today's production database with
+the gate shut. **The migration decision is not a follow-up step; it is a precondition of the restart.**
 
 ### What the deploy session must decide
 
@@ -133,6 +157,29 @@ allow-list or delete the parameter and rename the phase.
 
 ---
 
+## ~~BLOCKER 3~~ — **REFUTED 2026-08-20 by inserting, not by reading. Downgraded to a MINOR note.**
+
+> **This section was wrong, and the way it was wrong is instructive enough to leave standing.**
+> A verification lens built a production-shaped PostgreSQL 16 cluster, applied the chain, and then did
+> the thing this document told you to skip: it **actually logged in as `agrisync_app` and ran INSERT,
+> UPDATE and DELETE** on all three tables. **All three succeeded.**
+>
+> The tables *are* owned by `agrisync_app`, and an owner's privileges do not appear in `relacl`. So
+> `relacl IS NULL` means *"no explicit grants"* — **not** *"nobody can write."* The verification query
+> below is therefore misleading in both directions: it reports these three as broken when they are
+> not, and it would **stay silent** about a genuinely unwritable table that happened to carry any
+> unrelated explicit grant.
+>
+> **The real residue is small:** `agrisync_readonly` loses `SELECT` on the three tables. `grep` across
+> `src/` finds no application code that connects as that role, so the loss is limited to ad-hoc
+> reporting and DBA queries. Worth a follow-up migration; **not** worth a deploy gate.
+>
+> **Keep this in mind for the rest of the document:** every remaining permission claim here was
+> reasoned from catalog inspection. This one was too, and executing it reversed the verdict.
+
+<details>
+<summary>Original Blocker 3 text, kept for the record</summary>
+
 ## BLOCKER 3 — three Labour tables may land unwritable. **One query settles it.**
 
 `20260811082301_AddFieldOperators`, `20260811090237_AddFieldOperatorWorkRows` and
@@ -176,6 +223,63 @@ WHERE relnamespace = 'ssf'::regnamespace AND relkind = 'r' AND relacl IS NULL;
 Anything returned is a table the application cannot write to. Expect zero rows.
 
 Full analysis: `_COFOUNDER/specs/_inbox/migration-runner-ownership-drift-2026-08-17.md`.
+
+</details>
+
+**Corrected query, if you want the check anyway.** `relacl IS NULL` is the wrong predicate — it misses
+owner privileges entirely. Ask the actual question instead:
+
+```sql
+SELECT c.relname,
+       has_table_privilege('agrisync_app', c.oid, 'INSERT') AS app_can_insert
+FROM pg_class c
+WHERE c.relnamespace = 'ssf'::regnamespace AND c.relkind = 'r'
+ORDER BY app_can_insert, c.relname;
+```
+
+Any row with `app_can_insert = false` is a real problem. `has_table_privilege` accounts for ownership,
+explicit grants and role inheritance together, which is why it answers the question the earlier query
+only appeared to.
+
+---
+
+## The final verification, and the three things it broke open
+
+Five independent verification lenses ran over the whole branch on 2026-08-20 — backend build/test,
+frontend build/test, migration chain, regression hunt, and an adversarial audit of *this document*.
+**All five completed**; three built their own throwaway PostgreSQL 16 clusters rather than skip a
+database check. `postgresql-x64-16` was never touched and AWS was never contacted.
+
+**Honest limit:** 5 of 8 refutation agents died on an account rate limit, so the migration-chain,
+frontend, regression and handover-audit findings are lens-reported but **not independently refuted.**
+The one refuter that survived returned `refuted=False` on the provenance regression — the only finding
+in this programme to survive adversarial challenge.
+
+It found three defects that made "deploy ready" untrue. **All three are now fixed and verified.**
+
+| | What was wrong | Fix |
+|---|---|---|
+| **The deploy-stopper** | `20260815052139_RevokeTruncateOnAuditEvents` revoked TRUNCATE from `agrisync_app`, then demanded `current_user` be a superuser **or still hold TRUNCATE**. On the production path `current_user` **is** `agrisync_app` — the role just stripped. Both limbs false by construction: **the deploy halts at 11 of 16 and the API exits.** | `1f3362dc` |
+| **Backend gate red** | A successful S3 PUT was discarded because the *bookkeeping write after it* failed — they shared one `try`. Turned a green provenance test red. | `73f9a193` |
+| **Frontend gate red** | The new time-guard suite rebuilt the TypeScript lib parse on every assertion, leaving no margin against vitest's 5s cap on a loaded runner. | `d2130199` |
+
+Each was reproduced before being fixed and re-verified after:
+
+- **The TRUNCATE guard**, on a production-shaped cluster (`agrisync_app` owns `ssf.audit_events`,
+  `rolsuper=f`): old guard → `ERROR`, exit 3. New guard → `WARNING` naming the surviving path,
+  `COMMIT`, exit 0. As `postgres` → `NOTICE`, exit 0. **The security property was re-proven, not
+  assumed:** `TRUNCATE` as `agrisync_app` → `permission denied for table`, and guard 1 still aborts
+  when the revoke is sabotaged.
+- **The provenance test**: `Failed: 1, Passed: 0` → `Failed: 0, Passed: 1`. Whole `AiEndpointsTests`
+  class 20 passed / 2 failed, both remaining failures being the ReceiptExtract pair **that also fails
+  on `main`**.
+- **The time sweep**: test time 13.45s → 2.86s, same 35 passing. Full blocking gate **174 files, 1781
+  tests, all passed, exit 0** — the complete denominator, so nothing was silently skipped.
+
+**One thing the deploy session must still weigh:** 55 Sync integration tests need Docker and did not run
+on this host — including **9 `Tenancy.RowLevelSecurityTests`, 3 `UserDbRowLevelSecurityTests` and 3
+`CallerFarmTenantScopeTests`.** Cross-farm isolation is therefore **unproven locally**; only CI with
+Docker can assert it. Four NuGet packages also carry known **HIGH**-severity advisories (NU1903).
 
 ---
 
@@ -247,7 +351,25 @@ All in `_COFOUNDER/specs/_inbox/`:
 - `voice-archive-telemetry-goes-live-with-sealing-2026-08-16.md` — three items that all go live the day
   clip sealing is wired; attach it to that task
 
-**No `DEPLOYMENT_TRACKER.md` rows exist for any of this yet.** Per this project's own Definition of
-Done, that makes the work code-complete and **not done**. Authoring those rows is the deploy session's
-first act, not its last — and for the Analytics migration the row must carry the ordering instruction
-that currently lives only in a C# comment: **run D3, then this.**
+### `DEPLOYMENT_TRACKER.md` — **read row D7 before you author anything**
+
+> **Corrected 2026-08-20.** An earlier version of this document said *"No `DEPLOYMENT_TRACKER.md` rows
+> exist for any of this yet"* and told you to author them. **That was false and it was the more
+> dangerous of the two errors in this file.**
+
+**Row D7 already exists, at `DEPLOYMENT_TRACKER.md:94`.** It covers two of the sixteen ShramSafal
+migrations this branch carries — `20260718132540_AddLabourAssignmentShiftTaskNames` and
+`20260719074300_AddUserScopedJobCardComplianceTestReadPolicies` — and it already classifies that work
+as **destructive**, with `rehearsal_method: clone`.
+
+That classification is a **recorded verdict, not an opinion to re-form.** Per ADR 0024 a tier decision
+is *consumed, not re-argued*. A deploy session told "no rows exist, author them" would open a fresh row,
+pick its own tier, and silently discard a destructive/Heavy-tier finding — losing the clone-rehearsal
+requirement that D7 already imposes.
+
+**So: extend D7's coverage to the remaining fourteen, do not replace it.** The other migrations still
+need rows; the Analytics migration's row must carry the ordering instruction that currently lives only
+in a C# comment — **run D3, then this**. But start by reading what is already recorded.
+
+Per this project's Definition of Done the work remains code-complete and **not done** until those rows
+exist with prod evidence.
