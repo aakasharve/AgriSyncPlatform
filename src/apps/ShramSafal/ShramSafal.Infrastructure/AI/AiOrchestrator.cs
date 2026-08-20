@@ -1477,13 +1477,33 @@ internal sealed class AiOrchestrator(
     // The raw-blob store is compliance/audit only (DPDP raw-voice retention).
     // A storage-infra failure (e.g. the AWSSDK.S3 v4 PutObject
     // SignatureDoesNotMatch regression on prod) MUST NOT fail the farmer's
-    // voice/receipt parse — the model has already done the real work. Any
-    // exception from the PUT (or the ref-count index upsert that depends on
-    // the resulting blobRef) is logged at ERROR (alertable) and swallowed;
-    // the method returns null so the caller stamps rawInputRef=null — a valid
-    // Phase-01 state (AiJob.Create normalizes null/empty rawInputRef). Only
-    // this storage step is made non-fatal; Gemini/parse failures still
-    // propagate through the normal attempt/fallback path below.
+    // voice/receipt parse — the model has already done the real work. Both
+    // steps below are therefore non-fatal to the parse; Gemini/parse failures
+    // still propagate through the normal attempt/fallback path.
+    //
+    // TWO STEPS, TWO try BLOCKS — corrected 2026-08-20. They used to share one
+    // try, so a bookkeeping failure discarded an ALREADY-SUCCESSFUL PUT and
+    // returned null. That is throwing away a true fact because a later step
+    // failed, and it is the swallowed-failure pattern this branch exists to
+    // remove:
+    //
+    //   PUT fails         -> nothing was stored -> null is TRUE. Unchanged.
+    //   PUT ok, index bad -> the bytes ARE in the cold tier at that hash.
+    //                        Return the ref and report the missing bookkeeping.
+    //
+    // Returning the ref here is also the better PRIVACY answer, which is the
+    // non-obvious part. The blob is orphaned in S3 either way — returning null
+    // never deleted anything, it only made the orphan invisible. Stamping the
+    // real hash on the AiJob keeps it DISCOVERABLE, so a DPDP erasure request
+    // can still reach it via ai_jobs.raw_input_ref instead of it sitting in the
+    // bucket with nothing on record pointing at it.
+    //
+    // Nothing is fabricated by doing this: the hash is the digest of bytes that
+    // are genuinely stored. What is lost in that window is the ref-count
+    // lifecycle row and the subject linkage, and the ERROR log names the exact
+    // query that lists the affected jobs rather than promising an observer.
+    // (AiJob.Create normalizes null/empty rawInputRef, so null remains a valid
+    // Phase-01 state for the PUT-failed case.)
     //
     // OperationCanceledException is re-thrown so request cancellation still
     // unwinds normally and is never masquerading as a "store failed" log.
@@ -1495,12 +1515,14 @@ internal sealed class AiOrchestrator(
     // pass null, which records the blob as unowned rather than mislabelling it.
     private async Task<RawBlobRef?> TryPersistRawBlobAsync(byte[] payload, string mimeType, Guid subjectUserId, CancellationToken ct)
     {
+        RawBlobRef blobRef;
+
+        // Step 1 — the PUT. If this fails, nothing was stored and null is the
+        // truthful answer.
         try
         {
             using var blobStream = new MemoryStream(payload, writable: false);
-            var blobRef = await blobStore.PutAsync(blobStream, mimeType, ct);
-            await shramSafalRepository.UpsertRawBlobIndexAsync(blobRef, subjectUserId, ct);
-            return blobRef;
+            blobRef = await blobStore.PutAsync(blobStream, mimeType, ct);
         }
         catch (OperationCanceledException)
         {
@@ -1514,6 +1536,28 @@ internal sealed class AiOrchestrator(
                 ColdTierBucketLabel);
             return null;
         }
+
+        // Step 2 — bookkeeping, in its OWN try. Reaching here means the bytes
+        // are in the cold tier at this hash; that is a fact about the world and
+        // a bookkeeping failure does not un-store them.
+        try
+        {
+            await shramSafalRepository.UpsertRawBlobIndexAsync(blobRef, subjectUserId, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "[raw-blob-store] index/subject bookkeeping FAILED after a successful PUT. The audio IS stored at Sha256={Sha256} and rawInputRef is being stamped with it, but ssf.raw_blob_index and/or ssf.raw_blob_subjects has no row for it — so its ref-count lifecycle and its DPDP subject linkage are both missing. Find these with: SELECT j.raw_input_ref FROM ssf.ai_jobs j LEFT JOIN ssf.raw_blob_index i ON i.sha256 = j.raw_input_ref WHERE j.raw_input_ref IS NOT NULL AND i.sha256 IS NULL. Bucket={Bucket}",
+                blobRef.Sha256,
+                ColdTierBucketLabel);
+        }
+
+        return blobRef;
     }
 
     private static async Task<byte[]> ReadPayloadAsync(Stream stream, CancellationToken ct)
