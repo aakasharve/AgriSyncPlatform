@@ -153,9 +153,9 @@
  * each UI location to exact copy. Every key below is transcribed
  * character-for-character from that table — `navToday`, `navMyFarm`,
  * `navCompare`, `waitingSubtitle`, `guideGreeting`, `guideHeadline`,
- * `guideLine1`, `guideLine2`, `plotSectionHeader`, `plotSectionHint`,
- * `entireFarmLabel`, `entireFarmHint`, `helpTitle`, `helpSubtitle`,
- * `helpButtonLabel`. None are placeholders; none are in
+ * `guideLine1`, `guideLine2`, `guideLine3`, `plotSectionHeader`,
+ * `plotSectionHint`, `entireFarmLabel`, `entireFarmHint`, `helpTitle`,
+ * `helpSubtitle`, `helpButtonLabel`. None are placeholders; none are in
  * `PENDING_FOUNDER_STRINGS`. `en` values are ordinary English translations of
  * the approved Marathi (translating INTO English is not the Hard Rule's
  * concern — the rule guards against inventing farmer-facing MARATHI).
@@ -165,6 +165,25 @@
  * already names, correcting the agent placeholder "तुम्हांसाठी बाकी" (wrong
  * spelling) that shipped in Task 4. Only the `mr` value and its PENDING
  * listing change; the key, its `en` value and every consumer are untouched.
+ *
+ * TASK 17 — a finished visual, three instruction lines, one reworded
+ * ---------------------------------------------------------------------
+ * The founder supplied a second, finished reference image for this same
+ * card and asked to match it exactly. It carries THREE instruction lines,
+ * not two, and its third line is a reworded version of Task 13's original
+ * `guideLine2` — so this task renumbers, it does not just append:
+ *   - `guideLine1` — UNCHANGED verbatim ("एक किंवा अनेक प्लॉट निवडा.").
+ *   - `guideLine2` — NEW slot, new sentence ("एकाच कामासाठी एकापेक्षा जास्त
+ *     प्लॉट निवडू शकता."); Task 13-16 never had a second-slot sentence with
+ *     this wording — there is no prior value this replaces.
+ *   - `guideLine3` — Task 13's ORIGINAL `guideLine2` text, reworded by the
+ *     founder ("प्लॉटशी संबंध नसलेलं काम असेल तर..." -> "काम प्लॉटशी संबंधित
+ *     नसेल, तरच खाली 'संपूर्ण शेत' निवडा.") and moved to the third slot. Note
+ *     the reference's own single curly quotes around संपूर्ण शेत (U+2018/
+ *     U+2019), not straight or double — transcribed exactly.
+ * All three are transcribed character-for-character from the founder's new
+ * reference table, same (d) provenance rule as every other key in this
+ * section.
  */
 import type { Language } from './language';
 
@@ -282,8 +301,17 @@ export interface OversightTranslations {
     guideHeadline: string;
     /** Sathi guide card — first instruction line, below the divider. */
     guideLine1: string;
-    /** Sathi guide card — second instruction line. */
+    /**
+     * Sathi guide card — second instruction line (Task 17, NEW slot): you
+     * may pick more than one plot for the SAME task.
+     */
     guideLine2: string;
+    /**
+     * Sathi guide card — third instruction line, the "Entire Farm" caveat.
+     * Task 17 reworded this from Task 13's original `guideLine2` text and
+     * moved it to this slot (see file header, category (d), "TASK 17").
+     */
+    guideLine3: string;
     /** Plot-selector section header (replaces the old English dev copy,
      * gated behind `CropSelector`'s `hideGlobalCard` opt-in). */
     plotSectionHeader: string;
@@ -343,7 +371,8 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         guideGreeting: 'Hello!',
         guideHeadline: 'Which plot did you work on today?',
         guideLine1: 'Select one or more plots.',
-        guideLine2: 'If the work isn\'t tied to a plot, choose "Entire Farm" below.',
+        guideLine2: 'You can select more than one plot for the same task.',
+        guideLine3: 'Only choose "Entire Farm" below if the work isn\'t related to a plot.',
         plotSectionHeader: 'Select plot',
         plotSectionHint: 'You can select more than one plot',
         entireFarmLabel: 'Entire Farm',
@@ -401,7 +430,8 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         guideGreeting: 'नमस्कार!',
         guideHeadline: 'आज कोणत्या प्लॉटवर काम केलं?',
         guideLine1: 'एक किंवा अनेक प्लॉट निवडा.',
-        guideLine2: 'प्लॉटशी संबंध नसलेलं काम असेल तर खाली "संपूर्ण शेत" निवडा.',
+        guideLine2: 'एकाच कामासाठी एकापेक्षा जास्त प्लॉट निवडू शकता.',
+        guideLine3: 'काम प्लॉटशी संबंधित नसेल, तरच खाली ‘संपूर्ण शेत’ निवडा.',
         plotSectionHeader: 'प्लॉट निवडा',
         plotSectionHint: 'एकापेक्षा जास्त प्लॉट निवडू शकता',
         entireFarmLabel: 'संपूर्ण शेत',
