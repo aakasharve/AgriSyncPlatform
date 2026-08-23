@@ -187,6 +187,7 @@
 // admin-elevated — the worker iterates rows across every farm the
 // user touched).
 
+using System.Globalization;
 using AgriSync.BuildingBlocks.Auditing;
 using AgriSync.BuildingBlocks.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -416,19 +417,184 @@ public sealed class ErasureWorker(
             .ConfigureAwait(false);
         totalAnonymized += perTableCounts["golden_set_candidate"];
 
-        // (e) Retained voice S3 — via port (Phase 07 rebinds the stub).
+        // (e) Retained voice — the farmer's Farm Memory.
+        //
+        // spec: dfes-companion-2026-07-11 (farm-memory) — founder ITEM 4
+        // HARD RULE, doctrine P4, ADR-DS-009 (c).
+        //
+        // Three things were wrong here and they compounded. The catch
+        // was for NotImplementedException, thrown by a stub that was
+        // deleted in the Voice Diary ship — S3RetainedBlobStore cannot
+        // throw it — so `voiceClipsDeferred` was permanently false and
+        // the erasure path had no failure signal at all. The port
+        // returned a bare Task, so even a delete that touched nothing
+        // looked identical to one that purged the bucket. And the
+        // clips themselves left no individual trace, so once the sweep
+        // stopped removing Farm Memory there was no per-recording
+        // lifecycle record anywhere.
+        //
+        // Now: read the clips first, act on the outcome the port
+        // reports, and write per-clip evidence ONLY for clips actually
+        // removed. Since Farm Memory no longer has a calendar expiry,
+        // erasure is the sole way it ends, which makes this the only
+        // place that per-recording accountability can live.
         var retainedStore = sp.GetRequiredService<IRetainedBlobStore>();
+
+        // Read before deleting: afterwards the rows are gone and there
+        // is nothing left to name in the audit trail.
+        var retainedClips = await admin.VoiceClipsRetained
+            .AsNoTracking()
+            .Where(c => c.UserId == targetUserId)
+            .Select(c => new { c.ClipId, c.S3Key, c.RecordedAtUtc })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var consentKid = await admin.UserConsentStates
+            .AsNoTracking()
+            .Where(c => c.UserId == targetUserId)
+            .Select(c => c.CurrentTokenKid)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
+        RetainedVoiceDeletionOutcome retainedOutcome;
+        string? retainedFailureReason = null;
         try
         {
-            await retainedStore.DeleteRetainedVoiceForUserAsync(targetUserId, ct).ConfigureAwait(false);
+            retainedOutcome = await retainedStore
+                .DeleteRetainedVoiceForUserAsync(targetUserId, ct)
+                .ConfigureAwait(false);
         }
-        catch (NotImplementedException ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            voiceClipsDeferred = true;
-            logger.LogWarning(ex,
-                "ErasureWorker: voice_clips_retained purge deferred for user {UserId} (Phase 07 not yet shipped).",
-                targetUserId);
+            retainedOutcome = RetainedVoiceDeletionOutcome.SkippedNoBucket(retainedClips.Count);
+            retainedFailureReason = ex.Message;
+            logger.LogError(ex,
+                "ErasureWorker: retained-voice purge threw for user {UserId}; {ClipCount} clip(s) may still exist.",
+                targetUserId, retainedClips.Count);
         }
+
+        voiceClipsDeferred = !retainedOutcome.CanBeReportedAsDeleted;
+
+        if (voiceClipsDeferred)
+        {
+            // The audio may still be sitting in the bucket. Founder
+            // ITEM 4: never tell a farmer something is deleted while we
+            // knowingly keep the active copy. So we do not write a
+            // single per-clip "Erased" row, we do not mark the request
+            // Completed, and we record the residue positively rather
+            // than by omission — an absent claim is easy to misread as
+            // nothing having happened.
+            var reason = retainedFailureReason
+                ?? $"retained voice not purged ({retainedOutcome.Status}); "
+                   + $"{retainedOutcome.ClipsLeftInPlace} clip(s) remain";
+
+            admin.AuditEvents.Add(AuditEventFactory.Create(
+                entityType: "ErasureRequest",
+                entityId: request.Id,
+                action: "RetainedVoiceNotPurged",
+                actorUserId: sentinel,
+                actorRole: "system_erasure_worker",
+                payload: new
+                {
+                    requestId = request.Id,
+                    targetUserId,
+                    status = retainedOutcome.Status.ToString(),
+                    clipsLeftInPlace = retainedOutcome.ClipsLeftInPlace,
+                    clipIdsLeftInPlace = retainedClips.Select(c => c.ClipId).ToArray(),
+                    reason,
+                },
+                farmId: null,
+                clientCommandId: null,
+                appVersion: AppVersionProvider.Current,
+                deviceId: "system",
+                ipHash: "sha256:system",
+                sourceAiJobId: null));
+
+            // Failed, not Completed. The structured anonymization above
+            // did land and its per-table audit rows say so, but the §12
+            // request as a whole was not satisfied, and a terminal
+            // "Failed" with a stated reason is the only status here that
+            // is true. It is also the status a human can act on: founder
+            // ITEM 4 permits a documented manual deletion at pilot
+            // scale, and that operator needs to be able to find this.
+            request.MarkFailed(reason, nowUtc);
+
+            admin.AuditEvents.Add(AuditEventFactory.Create(
+                entityType: "ErasureRequest",
+                entityId: request.Id,
+                action: "Failed",
+                actorUserId: sentinel,
+                actorRole: "system_erasure_worker",
+                payload: new
+                {
+                    requestId = request.Id,
+                    targetUserId,
+                    rowsAnonymizedCount = totalAnonymized,
+                    perTableCounts,
+                    voiceClipsRetainedDeferred = true,
+                    reason,
+                },
+                farmId: null,
+                clientCommandId: null,
+                appVersion: AppVersionProvider.Current,
+                deviceId: "system",
+                ipHash: "sha256:system",
+                sourceAiJobId: null));
+
+            await admin.SaveChangesAsync(ct).ConfigureAwait(false);
+
+            logger.LogError(
+                "ErasureWorker request {RequestId} for user {UserId} marked Failed: {Reason}.",
+                request.Id, targetUserId, reason);
+            return;
+        }
+
+        // ADR-DS-009 (c) — per-recording lifecycle auditability. One row
+        // per clip actually removed, carrying the consent-token kid that
+        // authorised the retention right up to the erasure.
+        //
+        // The count is cross-checked rather than assumed. The port's
+        // contract is "every clip this user owns", so the two numbers
+        // agree by construction; if they ever disagree we do not know
+        // WHICH clips died, and naming individual clips we cannot
+        // account for would be the same false claim in a subtler form.
+        if (retainedOutcome.MetadataRowsRemoved == retainedClips.Count)
+        {
+            foreach (var c in retainedClips)
+            {
+                admin.AuditEvents.Add(AuditEventFactory.Create(
+                    entityType: "VoiceClipRetained",
+                    entityId: c.ClipId,
+                    action: "Erased",
+                    actorUserId: sentinel,
+                    actorRole: "system_erasure_worker",
+                    payload: new
+                    {
+                        consentTokenKid = consentKid,
+                        clipId = c.ClipId,
+                        userId = targetUserId,
+                        s3Key = c.S3Key,
+                        recordedAtUtc = c.RecordedAtUtc.ToString("O", CultureInfo.InvariantCulture),
+                        erasureRequestId = request.Id,
+                        reason = "dpdp_section_12_erasure",
+                    },
+                    farmId: null,
+                    clientCommandId: null,
+                    appVersion: AppVersionProvider.Current,
+                    deviceId: "system",
+                    ipHash: "sha256:system",
+                    sourceAiJobId: null));
+            }
+        }
+        else if (retainedClips.Count > 0)
+        {
+            logger.LogError(
+                "ErasureWorker: retained-voice delete for user {UserId} reported {Removed} row(s) removed "
+                + "but {Listed} were listed; per-clip audit rows withheld because the set cannot be named.",
+                targetUserId, retainedOutcome.MetadataRowsRemoved, retainedClips.Count);
+        }
+
+        perTableCounts["voice_clips_retained"] = retainedOutcome.MetadataRowsRemoved;
 
         // Per-row audit emission per DS-017 rule (d). We emit one
         // aggregate "ErasureAnonymize/Applied" row per TABLE (carrying

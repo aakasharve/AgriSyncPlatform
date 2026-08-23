@@ -1,43 +1,70 @@
 // spec: data-principle-spine-2026-05-05/08.4 + data-principle-spine-2026-05-05/phase-07-spine-hardening
+// spec: dfes-companion-2026-07-11 (farm-memory) — ADR-DS-017
 //
 // Sub-phase 08.4 (per OQ-4 verdict) — daily 03:00 IST sweep of the
 // in-app retention surfaces. Mirrors the ComplianceEvaluatorSweeper
 // schedule shape; uses IAdminDbContextFactory<ShramSafalDbContext> for
 // the DELETE.
 //
-// Scope (per OQ-4):
-//   - ssf.export_artifacts       : DELETE rows + S3 objects > 7 days old
-//   - ssf.audit_read_telemetry   : DELETE rows > 30 days old
-//   - ssf.voice_clips_retained   : DELETE rows + S3 objects for users
-//                                   who have withdrawn FullHistoryJournal
-//                                   consent OR whose clip is older than
-//                                   the configured retention horizon
-//                                   (default 1825 days / 5 years, per
-//                                   appsettings Privacy:VoiceClipsRetained:MaxAgeDays).
+// Scope:
+//   - ssf.export_artifacts     : DELETE rows + S3 objects > 7 days old
+//   - ssf.audit_read_telemetry : DELETE rows > 30 days old
 //
-// voice_clips_retained sweep added by Phase 07 spine-hardening (ADR-DS-009).
-// Per-row AuditEvent emission diverges from ADR-DS-010 §a (per-table for
-// anonymization) — see ADR-DS-009 §"Per-row sweep audit" for the rationale.
-// Sweep target: VoiceClipRetained rows whose owner has UserConsentState
-// FullHistoryJournal=false AND WithdrawnAtUtc IS NOT NULL OR clip age >
-// Privacy:VoiceClipsRetained:MaxAgeDays (default 1825 = 5y).
+// That is the whole scope, and the boundary is the point.
+//
+// ── Why ssf.voice_clips_retained is NOT in this list ──────────────────
+//
+// It used to be. Phase 07 added a third branch here that deleted a
+// farmer's retained voice on either of two triggers: the clip passed a
+// configurable age horizon (default 1825 days), or its owner's
+// UserConsentState showed FullHistoryJournal=false with a withdrawal
+// stamp. Founder decision 2026-08-23 and ADR-DS-017 remove both.
+//
+// Original voice is Farm Memory — a product asset the farmer owns, not
+// evidence with a shelf life. ADR-DS-017 (b): it is not silently deleted
+// because five years elapsed, or a subscription lapsed, or he stopped
+// recording. ADR-DS-017 (c): turning off FUTURE retention is a different
+// intention from deleting what is already saved, and must never perform
+// the second on being asked for the first. Between them those two rules
+// remove every trigger this branch had, so what remained was a nightly
+// job with no legitimate reason to delete anything — and one very
+// illegitimate one, since it routed a per-clip candidate set through a
+// per-user delete and took the farmer's whole diary with any single
+// qualifying clip.
+//
+// Removing the branch rather than narrowing its predicate is the smaller
+// change AND the more honest one: a sweep that keeps the machinery but
+// can never select a row is dead code that reads like a live safeguard.
+//
+// ── How Farm Memory is told apart from temporary technical data ───────
+//
+// It does not need a flag or a tier column. The discrimination already
+// exists at table granularity and always did. ssf.export_artifacts holds
+// generated ZIPs and ssf.audit_read_telemetry holds read logs — founder
+// ITEM 5 category B, system-generated, no continuing value to the
+// farmer, and they keep their 7-day and 30-day rules untouched below.
+// ssf.voice_clips_retained holds nothing but Farm Memory: a row lands
+// there only when PersistVoiceClipRetainedHandler clears the consent
+// gate AND the ciphertext reaches the bucket, so there is no such thing
+// as a failed or temporary row in that table to sweep.
+//
+// Deletion of Farm Memory did not disappear with this branch; it moved
+// to where the farmer can see it. Explicit erasure, account closure and
+// legal requirement all run through ErasureWorker, which calls
+// IRetainedBlobStore.DeleteRetainedVoiceForUserAsync — the whole-user
+// shape, correct there because those callers genuinely mean all of it.
 //
 // Each pass emits one ssf.retention_sweep_runs row + one AuditEvent
 // (entityType="RetentionSweep", action="Executed") for the cron-firing
-// record, AND one AuditEvent per swept voice_clips_retained row
-// (entityType="VoiceClipRetained", action="RetentionSweep") carrying
-// consentTokenKid in payload so DPDP §11 export can prove which signed
-// token authorized retention up until the sweep.
+// record.
 
 using System.Globalization;
 using AgriSync.BuildingBlocks.Auditing;
 using AgriSync.BuildingBlocks.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using ShramSafal.Application.Privacy.Ports;
 using ShramSafal.Application.Storage;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Privacy;
@@ -51,7 +78,6 @@ public sealed class RetentionSweepWorker(
 {
     private const int ExportArtifactsTtlDays = 7;
     private const int AuditReadTelemetryTtlDays = 30;
-    private const int VoiceClipsRetainedMaxAgeDaysDefault = 1825; // 5y per ADR-DS-009
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -134,18 +160,14 @@ public sealed class RetentionSweepWorker(
                 "DELETE FROM ssf.audit_read_telemetry WHERE read_at_utc < {0}",
                 new object[] { auditTelemetryCutoff }, ct).ConfigureAwait(false);
 
-            // ── Phase 07 ADR-DS-009 — voice_clips_retained sweep ──────────
-            var retainedBlobStore = sp.GetService<IRetainedBlobStore>();
-            var config = sp.GetService<IConfiguration>();
-            var (vcrRows, vcrS3) = await SweepVoiceClipsRetainedAsync(
-                admin, retainedBlobStore, config, nowUtc, ct).ConfigureAwait(false);
+            var totalRows = artifactsDeleted + telemetryDeleted;
+            var totalS3 = s3Removed;
 
-            var totalRows = artifactsDeleted + telemetryDeleted + vcrRows;
-            var totalS3 = s3Removed + vcrS3;
-
-            var tablesSwept = vcrRows > 0
-                ? "export_artifacts,audit_read_telemetry,voice_clips_retained"
-                : "export_artifacts,audit_read_telemetry";
+            // ssf.voice_clips_retained is deliberately absent — see the
+            // file header. Farm Memory has no calendar expiry and no
+            // consent-toggle expiry, so this worker never names that
+            // table and the sweep-run record must not imply it did.
+            const string tablesSwept = "export_artifacts,audit_read_telemetry";
 
             var sweepRow = RetentionSweepRun.Record(
                 tablesSwept: tablesSwept,
@@ -177,165 +199,14 @@ public sealed class RetentionSweepWorker(
             await admin.SaveChangesAsync(ct).ConfigureAwait(false);
 
             logger.LogInformation(
-                "RetentionSweepWorker pass complete: {RowsRemoved} rows + {S3Removed} S3 objects removed ({VcrRows} voice clips).",
-                totalRows, totalS3, vcrRows);
+                "RetentionSweepWorker pass complete: {RowsRemoved} rows + {S3Removed} S3 objects removed from {TablesSwept}.",
+                totalRows, totalS3, tablesSwept);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             logger.LogError(ex, "RetentionSweepWorker pass failed.");
         }
-    }
-
-    /// <summary>
-    /// Phase 07 spine-hardening (ADR-DS-009) — sweep ssf.voice_clips_retained
-    /// for rows whose owner has withdrawn the FullHistoryJournal consent OR
-    /// whose RecordedAtUtc is older than the configured retention horizon.
-    /// Per-row AuditEvent emission per ADR-DS-009 §"Per-row sweep audit"
-    /// (diverges from ADR-DS-010 §a per-table erasure pattern).
-    /// </summary>
-    private async Task<(int rowsRemoved, int s3ObjectsDeleted)> SweepVoiceClipsRetainedAsync(
-        ShramSafalDbContext admin,
-        IRetainedBlobStore? retainedBlobStore,
-        IConfiguration? config,
-        DateTime nowUtc,
-        CancellationToken ct)
-    {
-        if (retainedBlobStore is null)
-        {
-            // No retained blob store registered (e.g. tests that wire
-            // IRetainedBlobStore via a sibling scope). Skip — the next
-            // run picks up the rows when the store is present.
-            return (0, 0);
-        }
-
-        var maxAgeDays = config?.GetValue<int?>("Privacy:VoiceClipsRetained:MaxAgeDays")
-            ?? VoiceClipsRetainedMaxAgeDaysDefault;
-        var ageHorizonUtc = nowUtc.AddDays(-maxAgeDays);
-
-        // Candidate clips: owner has withdrawn FullHistoryJournal consent
-        // (FullHistoryJournal=false AND WithdrawnAtUtc != null) OR the clip
-        // is older than the configured retention horizon. Left-join consent
-        // state via subquery so clips whose owner never created a consent
-        // row (defensive: shouldn't happen per Phase 06 invariant but we
-        // tolerate it by treating "no consent row" as "no grant" and
-        // letting the age-horizon branch govern).
-        var candidates = await admin.VoiceClipsRetained
-            .AsNoTracking()
-            .Select(clip => new
-            {
-                clip.ClipId,
-                clip.UserId,
-                clip.S3Key,
-                clip.RecordedAtUtc,
-                ConsentState = admin.UserConsentStates
-                    .AsNoTracking()
-                    .FirstOrDefault(c => c.UserId == clip.UserId),
-            })
-            .Where(x =>
-                (x.ConsentState != null
-                    && !x.ConsentState.FullHistoryJournal
-                    && x.ConsentState.WithdrawnAtUtc != null)
-                || x.RecordedAtUtc < ageHorizonUtc)
-            .Select(x => new
-            {
-                x.ClipId,
-                x.UserId,
-                x.S3Key,
-                x.RecordedAtUtc,
-                CurrentTokenKid = x.ConsentState != null ? x.ConsentState.CurrentTokenKid : null,
-                FullHistoryJournal = x.ConsentState != null && x.ConsentState.FullHistoryJournal,
-            })
-            .ToListAsync(ct).ConfigureAwait(false);
-
-        if (candidates.Count == 0)
-        {
-            return (0, 0);
-        }
-
-        // Delete S3 objects FIRST (per-user batch — matches the existing
-        // IRetainedBlobStore API). If S3 deletion fails for a user we skip
-        // their DB rows so the next pass retries. Note: the per-user
-        // delete also removes the DB rows inside S3RetainedBlobStore —
-        // we re-query after to compute the actual delta.
-        var deletedClipIdsByUser = candidates
-            .GroupBy(c => c.UserId)
-            .ToDictionary(g => g.Key, g => g.Select(c => c.ClipId).ToList());
-
-        var successfullySweptUsers = new HashSet<Guid>();
-        int s3DeleteCount = 0;
-        foreach (var (userId, clipIds) in deletedClipIdsByUser)
-        {
-            try
-            {
-                await retainedBlobStore.DeleteRetainedVoiceForUserAsync(userId, ct).ConfigureAwait(false);
-                s3DeleteCount += clipIds.Count;
-                successfullySweptUsers.Add(userId);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex,
-                    "RetentionSweepWorker: S3 delete failed for user {UserId} (skipping audit + DB delete to preserve consistency).",
-                    userId);
-            }
-        }
-
-        // Per-row AuditEvent for each successfully swept clip. The
-        // payload carries consentTokenKid so DPDP §11 export can prove
-        // which signed consent token authorized retention until the
-        // sweep moment. Emit BEFORE relying on DB delete — the
-        // S3RetainedBlobStore adapter already removed the rows during
-        // the per-user call above, so the audit row is the durable
-        // record that the clip ever existed.
-        int rowsRemoved = 0;
-        foreach (var c in candidates.Where(c => successfullySweptUsers.Contains(c.UserId)))
-        {
-            var sweepReason = c.RecordedAtUtc < ageHorizonUtc
-                ? "age_horizon"
-                : "consent_withdrawn";
-
-            var auditRow = AuditEventFactory.Create(
-                entityType: "VoiceClipRetained",
-                entityId: c.ClipId,
-                action: "RetentionSweep",
-                actorUserId: SystemActor.Worker,
-                actorRole: "system_retention_sweeper",
-                payload: new
-                {
-                    consentTokenKid = c.CurrentTokenKid, // ADR-DS-009 audit-payload kid stamp
-                    clipId = c.ClipId,
-                    userId = c.UserId,
-                    s3Key = c.S3Key,
-                    recordedAtUtc = c.RecordedAtUtc.ToString("O", CultureInfo.InvariantCulture),
-                    sweepReason,
-                },
-                farmId: null,
-                clientCommandId: null,
-                appVersion: AppVersionProvider.Current,
-                deviceId: "system",
-                ipHash: "sha256:system",
-                sourceAiJobId: null);
-            admin.AuditEvents.Add(auditRow);
-            rowsRemoved++;
-        }
-
-        // Belt-and-braces: ensure any orphan metadata rows from a prior
-        // half-failed sweep are cleared for the users we successfully
-        // swept. The S3RetainedBlobStore.DeleteRetainedVoiceForUserAsync
-        // already calls SaveChanges with the row delete; this re-attach
-        // is a defensive no-op when nothing remains.
-        if (successfullySweptUsers.Count > 0)
-        {
-            var orphans = await admin.VoiceClipsRetained
-                .Where(c => successfullySweptUsers.Contains(c.UserId))
-                .ToListAsync(ct).ConfigureAwait(false);
-            if (orphans.Count > 0)
-            {
-                admin.VoiceClipsRetained.RemoveRange(orphans);
-            }
-        }
-
-        return (rowsRemoved, s3DeleteCount);
     }
 
     private static string ExtractSha256(string s3Key)

@@ -148,8 +148,9 @@ public sealed class PersistVoiceClipRetainedHandlerKidStampTest
 
     private sealed class StubRetainedBlobStore : IRetainedBlobStore
     {
-        public Task DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct)
-            => Task.CompletedTask;
+        public Task<RetainedVoiceDeletionOutcome> DeleteRetainedVoiceForUserAsync(
+            Guid userId, CancellationToken ct)
+            => Task.FromResult(RetainedVoiceDeletionOutcome.Nothing);
 
         public Task<Guid> PersistAsync(VoiceClipRetained metadata, byte[] cipherBytes, CancellationToken ct)
             => Task.FromResult(metadata.ClipId);

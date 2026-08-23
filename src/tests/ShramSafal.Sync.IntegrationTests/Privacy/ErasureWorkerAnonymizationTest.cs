@@ -886,7 +886,8 @@ internal sealed class InMemoryRetainedBlobStore : IRetainedBlobStore
 {
     private readonly Dictionary<Guid, (VoiceClipRetained Meta, byte[] Cipher)> _store = new();
 
-    public Task DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct)
+    public Task<RetainedVoiceDeletionOutcome> DeleteRetainedVoiceForUserAsync(
+        Guid userId, CancellationToken ct)
     {
         var keys = _store
             .Where(kv => kv.Value.Meta.UserId == userId)
@@ -896,7 +897,14 @@ internal sealed class InMemoryRetainedBlobStore : IRetainedBlobStore
         {
             _store.Remove(key);
         }
-        return Task.CompletedTask;
+
+        // spec: dfes-companion-2026-07-11 (farm-memory) — the port now
+        // reports what it did rather than returning a bare Task. This
+        // fake holds a real object map, so it can answer honestly: an
+        // empty user is NothingToDelete, not a silent success.
+        return Task.FromResult(keys.Count == 0
+            ? RetainedVoiceDeletionOutcome.Nothing
+            : RetainedVoiceDeletionOutcome.Removed(keys.Count));
     }
 
     public Task<Guid> PersistAsync(VoiceClipRetained metadata, byte[] cipherBytes, CancellationToken ct)
