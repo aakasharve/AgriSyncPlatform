@@ -19,8 +19,8 @@ import React from 'react';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
-import CanonicalStrip, { CompactFarmChip } from '../CanonicalStrip';
-import type { CanonicalStripProps, CompactFarmChipProps } from '../CanonicalStrip';
+import CanonicalStrip, { FarmIdentityElement } from '../CanonicalStrip';
+import type { CanonicalStripProps, FarmIdentityElementProps } from '../CanonicalStrip';
 import { oversightTranslations } from '../../../../i18n/oversightTranslations';
 
 afterEach(() => {
@@ -36,11 +36,12 @@ function baseStripProps(overrides: Partial<CanonicalStripProps> = {}): Canonical
     };
 }
 
-function baseFarmChipProps(overrides: Partial<CompactFarmChipProps> = {}): CompactFarmChipProps {
+function baseFarmChipProps(overrides: Partial<FarmIdentityElementProps> = {}): FarmIdentityElementProps {
     return {
         language: 'mr',
         farmName: 'Arve Farm',
         plotCount: 4,
+        farmCount: 1,
         onOpenFarmSwitcher: vi.fn(),
         ...overrides,
     };
@@ -165,62 +166,94 @@ describe('CanonicalStrip — row 2, the waiting button alone, full width', () =>
     });
 });
 
-describe('CompactFarmChip — row 1 farm-identity trigger (Task 11)', () => {
-    it('tapping_the_farm_chip_calls_onOpenFarmSwitcher', () => {
-        const onOpenFarmSwitcher = vi.fn();
-        render(<CompactFarmChip {...baseFarmChipProps({ onOpenFarmSwitcher })} />);
+describe('FarmIdentityElement — row 1 farm-identity element (Task 12)', () => {
+    describe('farmCount === 1 — a label, never a control', () => {
+        it('a_single_farm_account_renders_no_farm_switcher_control', () => {
+            render(<FarmIdentityElement {...baseFarmChipProps({ farmCount: 1 })} />);
 
-        fireEvent.click(screen.getByTestId('canonical-strip-farm-chip'));
+            const el = screen.getByTestId('canonical-strip-farm-chip');
+            // Not a button at all — the element itself must be a <span>,
+            // not merely styled to look like one.
+            expect(el.tagName).not.toBe('BUTTON');
+            expect(screen.queryByRole('button', { name: /./ })).not.toBeInTheDocument();
+            expect(screen.queryByTestId('canonical-strip-farm-count-badge')).not.toBeInTheDocument();
+            // No click handler, not focusable.
+            expect(el).not.toHaveAttribute('tabindex');
+            expect(el.onclick).toBeNull();
+        });
 
-        expect(onOpenFarmSwitcher).toHaveBeenCalledTimes(1);
+        it('shows the farm name and plot count as real visible text', () => {
+            render(<FarmIdentityElement {...baseFarmChipProps({ farmCount: 1, farmName: 'Bhosale Vasti', plotCount: 7 })} />);
+
+            const el = screen.getByTestId('canonical-strip-farm-chip');
+            expect(el).toHaveTextContent('Bhosale Vasti');
+            expect(el).toHaveTextContent('7');
+            expect(el.getAttribute('title')).toBe('Bhosale Vasti');
+        });
+
+        it('clicking the label does nothing — onOpenFarmSwitcher is never called', () => {
+            const onOpenFarmSwitcher = vi.fn();
+            render(<FarmIdentityElement {...baseFarmChipProps({ farmCount: 1, onOpenFarmSwitcher })} />);
+
+            fireEvent.click(screen.getByTestId('canonical-strip-farm-chip'));
+
+            expect(onOpenFarmSwitcher).not.toHaveBeenCalled();
+        });
+
+        // spec: farmCount === 0 (an honest empty account, not yet a real
+        // farm) must NOT be treated as "multi" — same label presentation.
+        it('farmCount 0 also renders the label, not the switcher button', () => {
+            render(<FarmIdentityElement {...baseFarmChipProps({ farmCount: 0 })} />);
+
+            expect(screen.getByTestId('canonical-strip-farm-chip').tagName).not.toBe('BUTTON');
+        });
     });
 
-    it('carries the real farm name in its accessible label and title — MEASURED: visible text collided with the toggle at 390px, so the name is not rendered as text (see the component\'s own header comment)', () => {
-        render(<CompactFarmChip {...baseFarmChipProps({ farmName: 'Bhosale Vasti' })} />);
+    describe('farmCount >= 2 — a button, with a count badge', () => {
+        it('a_multi_farm_account_renders_the_switcher_with_a_count', () => {
+            render(<FarmIdentityElement {...baseFarmChipProps({ farmCount: 3 })} />);
 
-        const chip = screen.getByTestId('canonical-strip-farm-chip');
-        expect(chip.getAttribute('aria-label')).toContain('Bhosale Vasti');
-        expect(chip.getAttribute('title')).toBe('Bhosale Vasti');
-        // Not lost, just not VISIBLE text — the full name still shows inside
-        // the `FarmSwitcherSheet` this chip opens (spec §2.1).
-        expect(chip).not.toHaveTextContent('Bhosale Vasti');
-    });
+            const el = screen.getByTestId('canonical-strip-farm-chip');
+            expect(el.tagName).toBe('BUTTON');
+            expect(el).toHaveClass('rounded-full');
+            expect(el.className).toContain('emerald');
 
-    it('carries the real plot count in its accessible label — never a literal, never silently dropped', () => {
-        render(<CompactFarmChip {...baseFarmChipProps({ plotCount: 7 })} />);
+            const badge = screen.getByTestId('canonical-strip-farm-count-badge');
+            expect(badge).toHaveTextContent('3');
+        });
 
-        const chip = screen.getByTestId('canonical-strip-farm-chip');
-        expect(chip.getAttribute('aria-label')).toContain('7');
+        it('tapping_the_farm_button_calls_onOpenFarmSwitcher', () => {
+            const onOpenFarmSwitcher = vi.fn();
+            render(<FarmIdentityElement {...baseFarmChipProps({ farmCount: 2, onOpenFarmSwitcher })} />);
 
-        cleanup();
+            fireEvent.click(screen.getByTestId('canonical-strip-farm-chip'));
 
-        render(<CompactFarmChip {...baseFarmChipProps({ plotCount: 12 })} />);
-        expect(screen.getByTestId('canonical-strip-farm-chip').getAttribute('aria-label')).toContain('12');
-    });
+            expect(onOpenFarmSwitcher).toHaveBeenCalledTimes(1);
+        });
 
-    it('meets the 44px minimum tap target even though it is visually small', () => {
-        render(<CompactFarmChip {...baseFarmChipProps()} />);
+        it('the count badge reflects the real farmCount — never a literal', () => {
+            render(<FarmIdentityElement {...baseFarmChipProps({ farmCount: 5 })} />);
+            expect(screen.getByTestId('canonical-strip-farm-count-badge')).toHaveTextContent('5');
 
-        // `h-11 w-11` is Tailwind's 44px utility on both axes — the exact
-        // minimum this task's brief requires ("do NOT reduce any tap
-        // target below 44px").
-        const chip = screen.getByTestId('canonical-strip-farm-chip');
-        expect(chip).toHaveClass('h-11');
-        expect(chip).toHaveClass('w-11');
-    });
+            cleanup();
 
-    it('renders no plot-count text — the design doc\'s second line does not fit a 44px-tall row-1 chip', () => {
-        render(<CompactFarmChip {...baseFarmChipProps({ plotCount: 4 })} />);
+            render(<FarmIdentityElement {...baseFarmChipProps({ farmCount: 2 })} />);
+            expect(screen.getByTestId('canonical-strip-farm-count-badge')).toHaveTextContent('2');
+            expect(screen.queryByText('5')).not.toBeInTheDocument();
+        });
 
-        // The digit must not appear as VISIBLE text content (only in the
-        // accessible label, asserted above) — proves the chip really did
-        // drop the second line rather than just shrinking its font.
-        expect(screen.getByTestId('canonical-strip-farm-chip')).not.toHaveTextContent('4');
-    });
+        it('carries the real farm name and plot count as visible text too', () => {
+            render(<FarmIdentityElement {...baseFarmChipProps({ farmCount: 2, farmName: 'Bhosale Vasti', plotCount: 7 })} />);
 
-    it('english_language_resolves_yourFarms_from_translations_not_a_literal', () => {
-        render(<CompactFarmChip {...baseFarmChipProps({ language: 'en' })} />);
-        const chip = screen.getByTestId('canonical-strip-farm-chip');
-        expect(chip.getAttribute('aria-label')).toContain(oversightTranslations.en.yourFarms);
+            const el = screen.getByTestId('canonical-strip-farm-chip');
+            expect(el).toHaveTextContent('Bhosale Vasti');
+            expect(el).toHaveTextContent('7');
+        });
+
+        it('english_language_resolves_yourFarms_from_translations_not_a_literal', () => {
+            render(<FarmIdentityElement {...baseFarmChipProps({ farmCount: 2, language: 'en' })} />);
+            const el = screen.getByTestId('canonical-strip-farm-chip');
+            expect(el.getAttribute('aria-label')).toContain(oversightTranslations.en.yourFarms);
+        });
     });
 });

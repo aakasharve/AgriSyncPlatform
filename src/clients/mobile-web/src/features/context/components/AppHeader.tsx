@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { User2, Settings, Leaf, X } from 'lucide-react';
+import { User2, Leaf, X } from 'lucide-react';
 import { AppRoute, PageView, DetailedWeather } from '../../../types';
 import PageToggle from '../../../shared/components/ui/PageToggle';
 import { useLanguage } from '../../../i18n/LanguageContext';
@@ -19,11 +19,15 @@ import type { WeatherStatus } from '../../weather/useWeatherMonitor';
 
 // Owner Oversight Loop (spec: owner-oversight-loop). Replaces the old
 // `FarmContextSwitcher compact` pill + `SyncIndicator` chip (spec §2, §4.1).
-// Task 11 (founder header restructure) — `CompactFarmChip` (row 1, beside
-// the avatar) and `CompactWeatherChip` (row 1, before the gear) join
-// `CanonicalStrip`, now row 2's waiting button alone. See each file's own
-// header for why it moved.
-import CanonicalStrip, { CompactFarmChip } from '../../oversight/components/CanonicalStrip';
+// Task 11 (founder header restructure) moved the farm trigger into row 1,
+// beside the avatar, and `CompactWeatherChip` beside it. Task 12
+// (`G:\VALIDATION\farm-selector-contextual.html`) restyles the header into
+// a floating card, replaces that farm trigger with `FarmIdentityElement`
+// (label-or-button, decided by `farmCount`), restyles row 2's waiting
+// button into an inset tray, and REMOVES the settings gear from row 1
+// entirely (measured — see the row-1 JSX below) — the Setup Hub is the
+// settings surface now, reachable from the profile avatar beside it.
+import CanonicalStrip, { FarmIdentityElement } from '../../oversight/components/CanonicalStrip';
 import CompactWeatherChip from '../../oversight/components/CompactWeatherChip';
 import WaitingDrawer from '../../oversight/components/WaitingDrawer';
 import { buildOversightModel, type OversightDecision } from '../../oversight/oversightSelectors';
@@ -226,8 +230,19 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     onNavigate('profile');
   };
 
+  // Task 12 — `farmContext.farms` is the real list `AppContent.tsx` already
+  // fetches (`getMyFarms()`); this is the ONLY place `farmCount` is
+  // derived, never a literal, so `FarmIdentityElement`'s label-vs-button
+  // split always reflects the real account.
+  const farmCount = farmContext?.farms.length ?? 0;
+
   return (
-    <header className="sticky top-0 z-50 border-b border-stone-200 bg-white/95 backdrop-blur" style={{ boxShadow: '0 4px 12px -2px rgba(0,0,0,0.06), 0 1px 0 rgba(0,0,0,0.04)' }}>
+    // Task 12 (`G:\VALIDATION\farm-selector-contextual.html`'s `.hdr` rule):
+    // "the header becomes a card" — a rounded bottom + a soft downward
+    // shadow so it reads as a surface floating over content, not a stacked
+    // band. Still sticky. The old flat `border-b` is gone — a floating card
+    // doesn't carry a hairline seam, only its own shadow.
+    <header className="sticky top-0 z-50 rounded-b-3xl bg-white/95 backdrop-blur" style={{ boxShadow: '0 8px 22px -12px rgba(28,25,23,0.34)' }}>
       <div className="page-content pl-safe-area pr-safe-area flex min-h-[56px] items-center justify-between gap-1 py-2">
 
         {/* LEFT: Profile identity + farm chip. Task 11 (founder header
@@ -254,10 +269,11 @@ const AppHeader: React.FC<AppHeaderProps> = ({
           </button>
 
           {farmContext && (
-            <CompactFarmChip
+            <FarmIdentityElement
               language={language}
               farmName={farmName}
               plotCount={plotCount}
+              farmCount={farmCount}
               onOpenFarmSwitcher={() => setIsFarmSwitcherOpen(true)}
             />
           )}
@@ -292,9 +308,13 @@ const AppHeader: React.FC<AppHeaderProps> = ({
           )}
         </div>
 
-        {/* RIGHT: Weather + Voice + Settings. Task 11 (founder header
-            restructure): "The weather chip moves into row 1, in the dead
-            space on the right, before the gear." */}
+        {/* RIGHT: Weather + Voice. Task 11 moved the weather chip into row
+            1 here. Task 12 REMOVES the settings gear that used to follow
+            it — MEASURED reason: with five row-1 elements the row totalled
+            410 of 411px (zero slack) and the centre toggle was crushed to
+            110px. The Setup Hub is the settings surface now, and it is
+            already reachable from the profile avatar at the other end of
+            this row. */}
         <div className="flex shrink-0 items-center gap-1">
           {/* Phase 4: Global Voice Trigger (Moved to Header) */}
           {onVoiceTrigger && !disabled && (
@@ -331,30 +351,26 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             onAddLocation={openWeatherBoundary}
             onOpenBoundary={openWeatherBoundary}
           />
-
-          <button
-            onClick={() => onNavigate('settings')}
-            disabled={disabled}
-            className={`
-              w-11 h-11 flex items-center justify-center rounded-full transition-colors duration-150
-              ${currentRoute === 'settings'
-                ? 'bg-emerald-100 text-emerald-700'
-                : 'text-stone-500 active:bg-stone-100'}
-            `}
-          >
-            <Settings size={22} strokeWidth={2} />
-          </button>
         </div>
 
       </div>
 
-      {/* Owner Oversight Loop (spec §2) — the canonical strip, now row 2:
-          the waiting button alone, full width (Task 11 founder
-          restructure). Canonical on every route by construction: AppHeader
-          itself renders on every route, so no per-page wiring is needed
-          (spec §2's own claim). */}
+      {/* Owner Oversight Loop (spec §2) — the canonical strip, row 2: the
+          waiting button alone, full width (Task 11 founder restructure).
+          Canonical on every route by construction: AppHeader itself
+          renders on every route, so no per-page wiring is needed (spec
+          §2's own claim).
+          Task 12 — the wrapper is now an INSET TRAY container, not a
+          full-bleed banded strip: no more `border-t`/`bg-stone-50/60`
+          seam, just ~12px of horizontal inset + bottom padding so the
+          tray (`CanonicalStrip`'s own rounded/shadowed card) floats free
+          of the header's edges. Mirrors `.page-content`'s own
+          breakpoints (480/600/640) so it stays concentric with row 1
+          above it, but with Tailwind's `px-3` (12px) instead of
+          `.page-content`'s hardcoded 16px — deliberate, not a rounding
+          error, per the task-12 brief's "inset ~12px from both edges". */}
       {farmContext && (
-        <div className="page-content pl-safe-area pr-safe-area border-t border-stone-100 bg-stone-50/60 py-1.5">
+        <div className="mx-auto w-full max-w-[480px] px-3 pb-3 md:max-w-[600px] xl:max-w-[640px]">
           <CanonicalStrip
             language={language}
             waitingCount={oversightModel.waitingCount}

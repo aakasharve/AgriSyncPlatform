@@ -184,10 +184,10 @@ describe('AppHeader — the canonical strip renders on every route', () => {
         expect(screen.getByTestId('canonical-strip-farm-chip')).toBeInTheDocument();
         expect(screen.getByTestId('canonical-strip-waiting-button')).toBeInTheDocument();
         // The farm chip carries the real farm name from `farmContext` — proves
-        // the strip is reading real data, not a static shell. Task 11:
-        // the name lives in the accessible label now (measured — see
-        // CanonicalStrip.tsx's own header comment), not visible text.
-        expect(screen.getByTestId('canonical-strip-farm-chip').getAttribute('aria-label')).toContain('Arve Farm');
+        // the strip is reading real data, not a static shell. Task 12: this
+        // fixture is single-farm, so the element is a LABEL and the name is
+        // real visible text again (CanonicalStrip.tsx's own header comment).
+        expect(screen.getByTestId('canonical-strip-farm-chip')).toHaveTextContent('Arve Farm');
     });
 });
 
@@ -320,10 +320,9 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
         });
 
         // 1. The farm chip's plot count is the REAL one, not the honest-zero
-        // fallback (proves the prop actually reached `CompactFarmChip`).
-        // Task 11 moved the count out of visible text (no room in a 44px
-        // row-1 chip) into the accessible label — asserted there instead.
-        expect(screen.getByTestId('canonical-strip-farm-chip').getAttribute('aria-label')).toContain('4');
+        // fallback (proves the prop actually reached `FarmIdentityElement`).
+        // Task 12: real visible text again (single-farm fixture -> label).
+        expect(screen.getByTestId('canonical-strip-farm-chip')).toHaveTextContent('4');
 
         // 2. The waiting count reflects one real PERSON (no decisions were
         // supplied), and opening the drawer proves the briefing itself —
@@ -354,11 +353,10 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
             renderHeader();
         });
 
-        // Task 11: the plot count lives in the farm chip's accessible label
-        // now, not visible text — assert the honest-zero fallback there
-        // instead of the (now trivially-true) visible-text check.
-        expect(screen.getByTestId('canonical-strip-farm-chip').getAttribute('aria-label')).toContain('0');
-        expect(screen.getByTestId('canonical-strip-farm-chip').getAttribute('aria-label')).not.toContain('4');
+        // Task 12: real visible text again — assert the honest-zero
+        // fallback directly.
+        expect(screen.getByTestId('canonical-strip-farm-chip')).toHaveTextContent('0');
+        expect(screen.getByTestId('canonical-strip-farm-chip')).not.toHaveTextContent('4');
         expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
         expect(screen.queryByTestId('canonical-strip-waiting-count')).not.toBeInTheDocument();
     });
@@ -457,5 +455,63 @@ describe('AppHeader — row 1 (task-11 founder restructure)', () => {
         // waiting strip, never the reverse.
         const position = farmChip.compareDocumentPosition(waitingButton);
         expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+});
+
+describe('AppHeader — the farm element is contextual on the real farm list (Task 12)', () => {
+    // spec: owner-oversight-loop (Task 12, `G:\VALIDATION\
+    // farm-selector-contextual.html`) — "the control appears only if there
+    // is a choice." `farmCount` is derived by AppHeader itself from
+    // `farmContext.farms.length`, never a literal — these two fixtures are
+    // real farm lists of different sizes, not a prop forced directly on
+    // `FarmIdentityElement`.
+    const singleFarmContext = {
+        farms: [
+            { farmId: 'farm-1', name: 'Arve Farm', role: 'PrimaryOwner', farmCode: 'ABC123', subscription: null },
+        ],
+        currentFarmId: 'farm-1',
+        onSwitchFarm: vi.fn(),
+        onCreateFarm: vi.fn(),
+        onJoinViaQr: vi.fn(),
+    };
+
+    const multiFarmContext = {
+        farms: [
+            { farmId: 'farm-1', name: 'Arve Farm', role: 'PrimaryOwner', farmCode: 'ABC123', subscription: null },
+            { farmId: 'farm-2', name: 'Bhosale Vasti', role: 'PrimaryOwner', farmCode: 'DEF456', subscription: null },
+            { farmId: 'farm-3', name: 'Kadam Mala', role: 'SecondaryOwner', farmCode: 'GHI789', subscription: null },
+        ],
+        currentFarmId: 'farm-1',
+        onSwitchFarm: vi.fn(),
+        onCreateFarm: vi.fn(),
+        onJoinViaQr: vi.fn(),
+    };
+
+    it('a_single_farm_account_renders_no_farm_switcher_control', async () => {
+        await act(async () => {
+            renderHeader({ farmContext: singleFarmContext });
+        });
+
+        const el = screen.getByTestId('canonical-strip-farm-chip');
+        expect(el.tagName).not.toBe('BUTTON');
+        expect(screen.queryByTestId('canonical-strip-farm-count-badge')).not.toBeInTheDocument();
+        expect(el).not.toHaveAttribute('tabindex');
+        expect(el).toHaveTextContent('Arve Farm');
+    });
+
+    it('a_multi_farm_account_renders_the_switcher_with_a_count', async () => {
+        await act(async () => {
+            renderHeader({ farmContext: multiFarmContext });
+        });
+
+        const el = screen.getByTestId('canonical-strip-farm-chip');
+        expect(el.tagName).toBe('BUTTON');
+
+        const badge = screen.getByTestId('canonical-strip-farm-count-badge');
+        expect(badge).toHaveTextContent('3');
+
+        // Still opens the SAME existing `FarmSwitcherSheet` (spec §2.1).
+        fireEvent.click(el);
+        expect(screen.getByTestId('farm-switcher-sheet')).toBeInTheDocument();
     });
 });

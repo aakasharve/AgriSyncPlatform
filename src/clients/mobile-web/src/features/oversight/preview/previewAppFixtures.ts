@@ -121,6 +121,24 @@ export const PREVIEW_FARMS: MyFarmDto[] = [
     { farmId: 'farm-preview-1', name: 'Arve Farm', role: 'PrimaryOwner', farmCode: 'PRVW01', subscription: null },
 ];
 
+/**
+ * spec: owner-oversight-loop (Task 12) — additive, purely for browser-
+ * verifying `FarmIdentityElement`'s `farmCount >= 2` presentation
+ * (`?preview=oversight&farms=multi`, `OversightAppPreview.tsx`). Does NOT
+ * contradict `PREVIEW_FARMS`'s own reasoning above: `onSwitchFarm` in both
+ * branches is still the same inert no-op (`OversightAppPreview.tsx`), so
+ * tapping a row here still never implies a real data reload — only the
+ * LIST shown in the sheet, and the header trigger's own shape, changes.
+ * The first entry is `PREVIEW_FARMS[0]` itself (same id/name/plots), so the
+ * seeded crops/logs/oversight briefing stay identical between the two
+ * preview modes — only the farm-count-driven chrome differs.
+ */
+export const PREVIEW_FARMS_MULTI: MyFarmDto[] = [
+    PREVIEW_FARMS[0],
+    { farmId: 'farm-preview-2', name: 'Bhosale Vasti', role: 'PrimaryOwner', farmCode: 'PRVW02', subscription: null },
+    { farmId: 'farm-preview-3', name: 'Kadam Mala', role: 'SecondaryOwner', farmCode: 'PRVW03', subscription: null },
+];
+
 /** Same literal defaults `useAppData.ts` ships for a brand-new farmer —
  * reused, not reinvented. */
 export const PREVIEW_LEDGER_DEFAULTS: LedgerDefaults = {

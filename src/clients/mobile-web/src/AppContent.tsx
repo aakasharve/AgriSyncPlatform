@@ -22,7 +22,7 @@ import { CropProfile } from './types';
 import { useAgriLogApp } from './app/compositionRoot';
 import { AppFeatureProviders } from './app/context/AppFeatureContexts';
 import { useTemplateCatalogSync } from './app/hooks/useTemplateCatalogSync';
-import { useFarmContextState } from './app/hooks/useFarmContextState';
+import { useFarmContextState, OPEN_CREATE_FARM_WIZARD_EVENT } from './app/hooks/useFarmContextState';
 import { useCapacitorKeyboard } from './app/hooks/useCapacitorKeyboard';
 import {
     getTodayCounts as deriveTodayCounts,
@@ -69,6 +69,21 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
     useEffect(() => {
         setCrops(data.crops);
     }, [data.crops, setCrops]);
+
+    // spec: owner-oversight-loop (Task 12) — the "तुमच्या शेती · Your farms"
+    // row in `SetupHubMenu.tsx` (deep inside `AppRouter`, no prop path to
+    // this component's local `setShowFirstFarmWizard`) opens the SAME
+    // `FirstFarmWizard` instance below via this event, rather than a second
+    // mount. `AppContent` renders once for the app's whole lifetime, so a
+    // listener attached here reliably outlives any later navigation into
+    // Profile. See `useFarmContextState.ts`'s own comment on
+    // `requestCreateFarmWizard` for why this is a `window` event and not a
+    // threaded prop.
+    useEffect(() => {
+        const openWizard = () => setShowFirstFarmWizard(true);
+        window.addEventListener(OPEN_CREATE_FARM_WIZARD_EVENT, openWizard);
+        return () => window.removeEventListener(OPEN_CREATE_FARM_WIZARD_EVENT, openWizard);
+    }, [setShowFirstFarmWizard]);
 
     const featureHelpers = {
         getTodayCounts: (plotId: string, dateStr: string) =>

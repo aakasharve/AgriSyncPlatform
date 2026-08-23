@@ -100,12 +100,18 @@ const CompactWeatherChip: React.FC<CompactWeatherChipProps> = ({
 
         return (
             <>
+                {/* Task 12 (`G:\VALIDATION\farm-selector-contextual.html`'s
+                    `.wx` rule): "Weather becomes a proper button" — tinted
+                    sky-50/sky-100 instead of a plain white/stone-200 chip,
+                    ~38px tall, icon+temperature+chevron in sky-700. Same
+                    tap-to-expand behaviour as before; `WeatherWidget`
+                    itself (mounted below, unchanged) is not touched. */}
                 <button
                     type="button"
                     data-testid="compact-weather-chip"
                     onClick={() => setExpanded(true)}
                     aria-label={t('weather')}
-                    className="flex h-11 shrink-0 items-center gap-1 rounded-full border border-stone-200 bg-white px-2"
+                    className="flex h-[38px] shrink-0 items-center gap-1 rounded-full border border-sky-100 bg-sky-50 pl-2 pr-1.5"
                 >
                     {/* MEASURED (task-11 report): the caution used to be a
                         full sibling `AlertTriangle` + its own gap, adding
@@ -124,9 +130,10 @@ const CompactWeatherChip: React.FC<CompactWeatherChipProps> = ({
                             />
                         )}
                     </span>
-                    <span className="text-xs font-bold text-stone-700" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                    <span className="text-[13px] font-extrabold text-sky-700" style={{ fontFamily: "'DM Sans', sans-serif" }}>
                         {compactTemp}
                     </span>
+                    <ChevronDown size={12} className="shrink-0 text-sky-700/70" />
                 </button>
 
                 {/* Bottom-sheet PORTAL (Task 11) — row 1 has no width for

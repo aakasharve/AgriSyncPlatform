@@ -15,6 +15,7 @@ import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useFarmContext } from '../../core/session/FarmContext';
+import { requestCreateFarmWizard, promptAndJoinFarmViaQr } from '../../app/hooks/useFarmContextState';
 import { useWorkerProfile } from '../work/hooks/useWorkerProfile';
 import { AddMemberWizard } from '../people/components/AddMemberWizard';
 import FarmInviteQrSheet from '../onboarding/qr/FarmInviteQrSheet';
@@ -152,6 +153,21 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
             farmAdmin.setMyFarm({ farmId: picked.farmId, name: picked.name, role: picked.role, subscription: picked.subscription ?? null });
         }
         setActiveTab('identity');
+    }, [switchFarm, farmAdmin]);
+
+    // spec: owner-oversight-loop (Task 12) — the "तुमच्या शेती · Your farms"
+    // row's own switch handler: switches farm context only, same as
+    // AppHeader's own farm-switcher trigger (no drill-into-Identity, unlike
+    // `handleOpenFarm` above, which is a DIFFERENT affordance — "open this
+    // farm's page" — that already exists in `FarmsSection`). Mirrors
+    // `handleOpenFarm`'s own `farmAdmin.setMyFarm` sync so the profile
+    // summary's farm name stays correct after switching from this row too.
+    const handleSwitchFarmFromMenu = React.useCallback((farmId: string) => {
+        switchFarm(farmId);
+        const picked = farmAdmin.myMemberships.find(m => m.farmId === farmId);
+        if (picked) {
+            farmAdmin.setMyFarm({ farmId: picked.farmId, name: picked.name, role: picked.role, subscription: picked.subscription ?? null });
+        }
     }, [switchFarm, farmAdmin]);
 
     // Guided-setup progress: a section counts as "done" once its core data
@@ -388,6 +404,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             farms={farmAdmin.myMemberships}
                             familyName={profile.name ? `${profile.name.split(' ')[0]} कुटुंब` : undefined}
                             onOpenFarm={handleOpenFarm}
+                            currentFarmId={profileFarmId ?? undefined}
+                            onSwitchFarm={handleSwitchFarmFromMenu}
+                            onCreateFarm={requestCreateFarmWizard}
+                            onJoinViaQr={promptAndJoinFarmViaQr}
                             language={language}
                             setupProgress={setupProgress}
                             items={menuItems}

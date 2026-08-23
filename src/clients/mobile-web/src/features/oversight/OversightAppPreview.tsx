@@ -83,10 +83,18 @@ import {
     PREVIEW_CROPS,
     PREVIEW_FARMER_PROFILE,
     PREVIEW_FARMS,
+    PREVIEW_FARMS_MULTI,
     PREVIEW_LEDGER_DEFAULTS,
     PREVIEW_PLANNED_TASKS,
     buildPreviewLogs,
 } from './preview/previewAppFixtures';
+
+// Task 12 — `?preview=oversight&farms=multi` swaps in `PREVIEW_FARMS_MULTI`
+// so `FarmIdentityElement`'s `farmCount >= 2` presentation can be
+// browser-verified alongside the default single-farm case, without
+// touching `PREVIEW_FARMS`'s own single-farm reasoning (see that file).
+const IS_MULTI_FARM_PREVIEW = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('farms') === 'multi';
 import { usePreviewRouterCtx } from './preview/usePreviewRouterCtx';
 
 const ENGLISH_FONT = { fontFamily: "'DM Sans', sans-serif" } as const;
@@ -167,9 +175,12 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
                 disabled={false}
                 activeOperator={activeOperator}
                 farmContext={{
-                    farms: PREVIEW_FARMS,
+                    farms: IS_MULTI_FARM_PREVIEW ? PREVIEW_FARMS_MULTI : PREVIEW_FARMS,
                     currentFarmId: PREVIEW_FARMS[0].farmId,
-                    onSwitchFarm: () => { /* one seeded farm — nothing to switch to */ },
+                    // Inert in BOTH modes — see `PREVIEW_FARMS_MULTI`'s own
+                    // comment for why switching never implies a data reload
+                    // in this seeded preview.
+                    onSwitchFarm: () => { /* seeded preview — nothing to switch to */ },
                     onCreateFarm: () => { /* out of scope for this preview */ },
                     onJoinViaQr: () => { /* out of scope for this preview */ },
                 }}
