@@ -243,6 +243,43 @@ only appeared to.
 
 ---
 
+## 2026-08-23 — the blockers were resolved against founder principles, not picks
+
+The founder replaced the earlier yes/no questions with **decision principles**, and each item below was
+resolved by inspecting the repo rather than by choosing an option. **Nothing here has been deployed.**
+
+| Principle | What the repo actually said | What was built |
+|---|---|---|
+| No manual production migration | The runbook existed at `fe4e853a`, **unmerged**, and depended on an RDS snapshot **it never checked for** | Cherry-picked onto this branch + new **step 0b** that proves the rollback floor, exit **30** if absent — `639da4ab` |
+| Recoverability is mandatory | `agent-deployer` is **explicitly denied** `rds:CreateDBSnapshot` *and* `rds:RestoreDB*`; Deny beats Allow, and `iam:*` is denied too | `verify-rollback-floor.sh` — **verifies, never creates**; 18/18 tests — `d91f1cf5` |
+| Dashboard may ride only if dormant | Admin-only consumer chain, unpopulated until refresh, already zero on prod, reversible | Removed from the forbid default **with the reason recorded** — guard now states real intent, not overridden at runtime — `bc99d4b6` |
+| No decorative safety controls | The allow-list was **assigned, echoed, and read by nothing** | Deleted. Replaced with a preflight that prints **the exact migrations at this SHA** — `bc99d4b6` |
+| Fix reachable vulnerabilities | SSH.NET + SQLitePCLRaw are **test-only**; XML crypto **ships** | Bumped shipped one 10.0.6 → 10.0.11; documented the other two — `a591dba0` |
+| RLS suite must gate merge | Both workflows filtered `Category!=RequiresDocker`; isolation ran **nowhere** | Added as a **blocking** CI step — `08542c9d` |
+| Farmer time in natural language | — | `formatFarmerTime` built + tested; **not wired to screens** (see below) — `d34a3a38` |
+
+### The migration identities, enumerated — because a count is not proof
+
+Parsing `Up()` and `Down()` separately (a whole-file grep wrongly flags ten, because it counts
+`Down()` reversals): **16 of 17 are additive in `Up()`, and every one has a real `Down()`.** Two are not
+plain additions:
+
+- `RevokeTruncateOnAuditEvents` — a privilege **REVOKE**. Touches no data; tightens security.
+- **`StripTranscriptFromCorrectionEvents` (§P0.4) — the one that irreversibly destroys farmer data**,
+  deliberately. Its own `Down()`: *"The transcripts are gone and stay gone — there is no copy to
+  restore them from, which is the property §P0.4 buys."* Already-ruled, **and the single reason the
+  pre-deploy snapshot is not optional.**
+
+### Marathi time is built but deliberately not switched on
+
+Wiring only the plain-time formatter would leave a farmer reading `सकाळी 9:15` on one screen and
+`12 Aug, 9:15 AM` on the next, since date-time, timestamp and `HH:mm` each have their own formatter.
+Converting all six across ~17 components is a sweeping visual change, and this release is about
+correctness and recoverability. **The capability is ready and tested; enabling it is a mechanical swap
+on one word from the founder.**
+
+---
+
 ## The final verification, and the three things it broke open
 
 Five independent verification lenses ran over the whole branch on 2026-08-20 — backend build/test,
