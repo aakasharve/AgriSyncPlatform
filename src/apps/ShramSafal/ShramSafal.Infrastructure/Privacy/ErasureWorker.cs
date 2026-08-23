@@ -488,6 +488,15 @@ public sealed class ErasureWorker(
                 ?? $"retained voice not purged ({retainedOutcome.Status}); "
                    + $"{retainedOutcome.ClipsLeftInPlace} clip(s) remain";
 
+            // The structured anonymization above already ran — those are
+            // ExecuteSqlRaw/ExecuteDelete calls, not deferred writes — so its
+            // per-table evidence must be emitted even though the request as a
+            // whole is about to fail. Returning without it would leave the
+            // ledger silent about work that really was done to the farmer's
+            // rows, which is the same defect as claiming work that was not.
+            await EmitPerRowAuditEventsAsync(admin, request, perTableCounts, sentinel, ct)
+                .ConfigureAwait(false);
+
             admin.AuditEvents.Add(AuditEventFactory.Create(
                 entityType: "ErasureRequest",
                 entityId: request.Id,
@@ -510,9 +519,9 @@ public sealed class ErasureWorker(
                 ipHash: "sha256:system",
                 sourceAiJobId: null));
 
-            // Failed, not Completed. The structured anonymization above
-            // did land and its per-table audit rows say so, but the §12
-            // request as a whole was not satisfied, and a terminal
+            // Failed, not Completed. The structured anonymization landed
+            // and the rows just emitted say so, but the §12 request as a
+            // whole was not satisfied, and a terminal
             // "Failed" with a stated reason is the only status here that
             // is true. It is also the status a human can act on: founder
             // ITEM 4 permits a documented manual deletion at pilot
