@@ -73,6 +73,28 @@ jobs:
         # stabilised. Everything else (~1130 tests) must pass.
         run: dotnet test src/AgriSync.sln --configuration Release --no-build --filter "Category!=RequiresDocker&FullyQualifiedName!~ReceiptExtract_DoesNotFallbackToSarvam&FullyQualifiedName!~ReceiptExtract_RejectsUnsupportedImageMimeType"
 
+      # ── Cross-farm isolation. BLOCKING, and deliberately its own step. ──
+      #
+      # These three assert that farm A can never read farm B's rows AS THE
+      # APPLICATION ROLE against a freshly-built database. No other suite
+      # covers that: row-level security is bypassed entirely by superusers,
+      # and the RequiresPostgres suite connects to the service container as
+      # postgres. So without this step, "tenants are isolated" is asserted
+      # nowhere that can fail.
+      #
+      # They carry Category=RequiresDocker and were therefore swept up by the
+      # blanket exclusion in the step above, whose stated reason is that the
+      # Testcontainers localstack/S3 suite is chronically red. That reason
+      # does not apply to these three: they reference no S3 and no LocalStack
+      # at all (only 4 of the 22 RequiresDocker classes do), and need nothing
+      # but a Postgres container, which ubuntu-latest runners provide.
+      #
+      # Named individually rather than by namespace on purpose — Tenancy/ also
+      # contains TestFixtureServiceTests, which is unrelated to isolation and
+      # must not be able to redden or greenden this gate.
+      - name: Cross-farm isolation (RLS as the app role, fresh container)
+        run: dotnet test src/AgriSync.sln --configuration Release --no-build --filter "FullyQualifiedName~Tenancy.RowLevelSecurityTests|FullyQualifiedName~Tenancy.UserDbRowLevelSecurityTests|FullyQualifiedName~Tenancy.CallerFarmTenantScopeTests"
+
   frontend:
     runs-on: ubuntu-latest
     steps:
