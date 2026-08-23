@@ -350,14 +350,16 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                     return (
                         <button
                             key={crop.id}
+                            data-testid={`crop-card-${crop.id}`}
+                            aria-pressed={isSelected}
                             onClick={() => handleCropToggle(crop)}
                             disabled={disabled}
                             className={`
                                 relative flex-shrink-0 flex flex-col items-center pt-4 pb-6 px-2 rounded-[2.5rem] transition-all duration-500 group snap-center overflow-visible
                                 ${compact ? 'w-28' : 'w-36'}
                                 ${isSelected
-                                    ? `${theme.slideBgSelected} ring-[3px] ${theme.border} shadow-[0_20px_50px_-12px_rgba(0,0,0,0.3)] ${theme.slideShadow} scale-110 z-20`
-                                    : `bg-white ring-1 ring-slate-100 shadow-sm hover:shadow-md hover:scale-105 hover:z-10 ${isDimmed ? 'opacity-50 grayscale-[0.8] scale-95' : 'opacity-100'}`}
+                                    ? `${theme.strongFill} ring-[4px] ${theme.border} shadow-[0_20px_50px_-12px_rgba(0,0,0,0.35)] ${theme.slideShadow} scale-110 z-20`
+                                    : `bg-white ring-1 ring-slate-100 shadow-sm hover:shadow-md hover:scale-105 hover:z-10 ${isDimmed ? 'opacity-40 grayscale scale-90' : 'opacity-100'}`}
                             `}
                             style={{ minHeight: minHeight }}
                         >
@@ -366,15 +368,22 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                                 <div className={`absolute inset-0 ${theme.bg} blur-xl -z-10 rounded-[2.5rem]`} />
                             )}
 
-                            {/* Image Container */}
+                            {/* Image Container — spec: owner-oversight-loop
+                                (Task 16, Problem 2): the selected ring and
+                                fill now match strength (both at the theme's
+                                full `-500` intensity / `strongFill`), where
+                                before the outer ring was solid-500 but the
+                                inner photo ring was a mismatched pale -100 —
+                                a "not vivid enough" confidence gap the
+                                founder flagged. */}
                             <div className={`
                                 relative z-10 mb-3 rounded-full p-1 transition-all duration-500
                                 ${isSelected ? `bg-white p-1.5 shadow-inner` : 'bg-transparent'}
                                 ${compact ? 'w-16 h-16' : 'w-20 h-20'}
                             `}>
                                 <div className={`
-                                    relative w-full h-full rounded-full flex items-center justify-center overflow-hidden border transition-colors duration-500
-                                    ${isSelected ? `${theme.slideBorder} ${theme.slideBgSelected}` : 'border-slate-100 bg-slate-50'}
+                                    relative w-full h-full rounded-full flex items-center justify-center overflow-hidden transition-colors duration-500
+                                    ${isSelected ? `border-2 ${theme.border} ${theme.strongFill}` : 'border border-slate-100 bg-slate-50'}
                                  `}>
                                     <CropSymbol name={crop.iconName} size={compact ? 'md' : 'xl'} />
                                 </div>
@@ -389,7 +398,7 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                                 {!compact && (
                                     <span className={`
                                         text-[11px] font-black uppercase tracking-widest transition-colors duration-300
-                                        ${isSelected ? `${theme.iconText} bg-white/60 px-2 py-0.5 rounded-full` : 'text-slate-400'}
+                                        ${isSelected ? `${theme.iconText} bg-white/90 px-2.5 py-1 rounded-full shadow-sm` : 'text-slate-400'}
                                     `}>
                                         {mode === 'reflect' && selectedPlotCount === 0
                                             ? (hasMultiplePlots ? `${crop.plots.length} PLOTS` : '1 PLOT')
@@ -398,16 +407,21 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                                 )}
                             </div>
 
-                            {/* Hanging Checkmark Badge - Glass Morphed Dark Green Tick */}
+                            {/* Hanging Checkmark Badge — larger + a solid
+                                white border (was a near-invisible
+                                border-white/20) so the badge reads as a
+                                crisp filled disc, not a soft blob. */}
                             {isSelected && (
-                                <div className={`
-                                    absolute -bottom-5 left-1/2 -translate-x-1/2 z-30
+                                <div
+                                    data-testid={`crop-tick-${crop.id}`}
+                                    className={`
+                                    absolute -bottom-6 left-1/2 -translate-x-1/2 z-30
                                     ${theme.indicator} text-white
-                                    rounded-full p-2 shadow-xl 
-                                    border border-white/20 ring-2 ring-white/50
+                                    rounded-full p-2.5 shadow-2xl
+                                    border-2 border-white ring-2 ring-white/70
                                     animate-in zoom-in spin-in-12 duration-300
                                 `}>
-                                    <CheckCircle2 size={24} className="text-white drop-shadow-md" strokeWidth={4} />
+                                    <CheckCircle2 size={28} className="text-white drop-shadow-md" strokeWidth={4} />
                                 </div>
                             )}
                         </button>

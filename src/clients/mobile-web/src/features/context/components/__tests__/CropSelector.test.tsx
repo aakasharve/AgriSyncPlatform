@@ -54,6 +54,19 @@ const CROPS = [
     },
 ] as unknown as CropProfile[];
 
+const TWO_CROPS = [
+    ...CROPS,
+    {
+        id: 'sugarcane',
+        name: 'ऊस',
+        iconName: 'Sugarcane',
+        color: 'bg-green-600',
+        plots: [{ id: 's1', name: 'Plot C' }],
+        supportedTasks: [],
+        workflow: [],
+    },
+] as unknown as CropProfile[];
+
 describe('CropSelector — hideGlobalCard opt-in (Task 13, change 4)', () => {
     it('default (omitted) still renders the Entire Farm card first in the carousel — Attendance.tsx regression guard', () => {
         render(
@@ -207,5 +220,106 @@ describe('CropSelector — hideGlobalCard opt-in (Task 13, change 4)', () => {
         // A FILLED emerald tick, not the old grey CheckCircle2.
         const tick = screen.getByTestId('crop-selector-entire-farm-row-selected-tick');
         expect(tick.className).toContain('bg-emerald-600');
+    });
+});
+
+describe('CropSelector — crop card vividness (Task 16, Problem 2)', () => {
+    // Founder: "make the plot selection UI more vivid — the user must be
+    // able to know what he selected... but it must be aligned with the
+    // aesthetic and UI of the whole app." Assertions below check things a
+    // user would actually SEE (a checkmark badge appearing/disappearing,
+    // a thicker themed ring, a greyed-and-shrunk sibling) — not a class
+    // name that merely happens to differ.
+    it('a selected crop card shows a real checkmark badge and a thicker, fully-themed ring', () => {
+        render(
+            <CropSelector
+                mode="log"
+                crops={CROPS}
+                selectedCrops={['grapes']}
+                selectedPlots={{}}
+                onSelectionChange={vi.fn()}
+                disabled={false}
+            />,
+        );
+
+        const card = screen.getByTestId('crop-card-grapes');
+        expect(card).toHaveAttribute('aria-pressed', 'true');
+        expect(card.className).toContain('scale-110');
+        expect(card.className).toContain('ring-[4px]');
+        expect(card.className).toContain('bg-purple-100'); // strongFill for the purple theme
+
+        // A real, visible checkmark badge — an actual SVG icon, not a class.
+        const tick = screen.getByTestId('crop-tick-grapes');
+        expect(tick).toBeInTheDocument();
+        expect(tick.querySelector('svg')).toBeTruthy();
+    });
+
+    it('an unselected card recedes further while a sibling is selected: greyed out and shrunk, no badge', () => {
+        render(
+            <CropSelector
+                mode="log"
+                crops={TWO_CROPS}
+                selectedCrops={['grapes']}
+                selectedPlots={{}}
+                onSelectionChange={vi.fn()}
+                disabled={false}
+            />,
+        );
+
+        const selected = screen.getByTestId('crop-card-grapes');
+        const other = screen.getByTestId('crop-card-sugarcane');
+
+        expect(selected).toHaveAttribute('aria-pressed', 'true');
+        expect(other).toHaveAttribute('aria-pressed', 'false');
+
+        // The unselected sibling recedes further than before this task:
+        // fully greyscale (was a partial grayscale-[0.8]), more transparent
+        // (opacity-40, was opacity-50), and visibly smaller (scale-90, was
+        // scale-95) — the contrast a farmer sees at a glance.
+        expect(other.className).toContain('opacity-40');
+        expect(other.className).toContain('grayscale');
+        expect(other.className).not.toContain('grayscale-[0.8]');
+        expect(other.className).toContain('scale-90');
+        expect(screen.queryByTestId('crop-tick-sugarcane')).not.toBeInTheDocument();
+
+        // The selected card is untouched by the dimming path.
+        expect(selected.className).not.toContain('opacity-40');
+        expect(selected.className).not.toContain('grayscale');
+    });
+
+    it('selected vs unselected crop cards are meaningfully different, not merely differently labelled', () => {
+        const { rerender } = render(
+            <CropSelector
+                mode="log"
+                crops={CROPS}
+                selectedCrops={[]}
+                selectedPlots={{}}
+                onSelectionChange={vi.fn()}
+                disabled={false}
+            />,
+        );
+
+        const unselected = screen.getByTestId('crop-card-grapes');
+        expect(screen.queryByTestId('crop-tick-grapes')).not.toBeInTheDocument();
+        expect(unselected.className).not.toContain('scale-110');
+        expect(unselected.className).not.toContain('ring-[4px]');
+
+        rerender(
+            <CropSelector
+                mode="log"
+                crops={CROPS}
+                selectedCrops={['grapes']}
+                selectedPlots={{}}
+                onSelectionChange={vi.fn()}
+                disabled={false}
+            />,
+        );
+
+        // Selected state adds a visible badge AND a stronger fill/ring —
+        // "not only a ring" was the founder's own phrasing.
+        expect(screen.getByTestId('crop-tick-grapes')).toBeInTheDocument();
+        const selected = screen.getByTestId('crop-card-grapes');
+        expect(selected.className).toContain('bg-purple-100'); // strongFill for the purple theme
+        expect(selected.className).toContain('ring-[4px]');
     });
 });

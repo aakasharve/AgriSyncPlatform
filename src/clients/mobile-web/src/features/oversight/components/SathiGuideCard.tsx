@@ -91,6 +91,62 @@
  * y:[10,1437] of 1448 — the figure is already dead-centre in its own
  * frame with near-zero side padding, so a horizontal offset would only
  * fight the asset, not the layout.
+ *
+ * TASK 16 — RECOMPOSED AGAIN: HEADLINE IS THE HERO, CHARACTER IS AN ACCENT
+ * ---------------------------------------------------------------------------
+ * Founder, verbatim in substance: "putting the character in the middle
+ * occupies too much empty dead space... and gives less importance to the
+ * text itself. Text must be bigger and warming. Character is helper, not
+ * hero." Task 15's single centred column (full-width text block, THEN a
+ * full-width 186-206px-tall character beneath it) is exactly what produced
+ * that complaint — the character's own column ran the full card width,
+ * out-weighing the words above it.
+ *
+ * The founder's requested composition, followed literally:
+ *   1. Greeting, small, at the top (unchanged — already small).
+ *   2. The headline, full width, BIGGER than before — the largest text
+ *      anywhere on the page. Bumped 21px/23px -> 27px/30px (+~30%). No
+ *      other surface on this screen sets text above ~20px (`CropSelector`'s
+ *      "प्लॉट निवडा" section header is `text-xl`/20px；`AppHeader`'s row-1
+ *      labels sit at 9-11px), so this remains the largest text on the
+ *      screen at both sizes.
+ *   3. BELOW the headline: the two instruction lines and the character,
+ *      SIDE BY SIDE in one row (`flex items-end`), not stacked. Text is
+ *      `flex-1` (grows to fill the row), the character is a fixed,
+ *      noticeably smaller `w-[92px]` (down from a full-width ~139-154px at
+ *      Task 15) — so the text column is measurably wider than he is, not
+ *      merely visually busier.
+ *
+ * WHICH SIDE — text LEFT, character RIGHT. Two reasons, not one:
+ *   (a) reading order: both Marathi and English read left-to-right, so a
+ *       reader's eye reaches the instruction text (`flex-1`, first in
+ *       source order) before it reaches the character (second, fixed-width,
+ *       trailing) — literally "the eye reaches the words before the
+ *       character", the founder's own framing.
+ *   (b) the asset itself is symmetric — `sathi-points-down-both.png` is
+ *       BOTH hands, front-facing, pointing straight down (not sideways, per
+ *       Task 15's own note on why this asset retired the left/right split
+ *       that Task 14 built for a single-handed sideways-pointing figure).
+ *       A straight-down gesture has no left/right preference to honour, so
+ *       side selection turns purely on (a) — text-first reading order —
+ *       and vertical placement (below) is what keeps his fingers landing on
+ *       the plot area, not which side he sits on.
+ *
+ * LOW IN THE CARD: this text+character row is the LAST child of the card,
+ * with a small `pb-4` (not the Task 15 zero-gap flush — that reasoning was
+ * for a lone full-width image; here the row also carries the instruction
+ * text, so a small bottom margin keeps both from crowding the rounded
+ * corner). `items-end` aligns the character's feet with the second
+ * instruction line's baseline, so both sit at the same "low in the card"
+ * height, immediately above `CropSelector`'s `plotSectionHeader`
+ * ("प्लॉट निवडा") that `mainView.tsx` renders directly beneath this
+ * component — his fingers still point straight down into the plot cards.
+ *
+ * Card height: this recomposition removes the previous full-width
+ * character row entirely and replaces it with a single shared row shorter
+ * than before (character height 108px vs the old 186-206px) — the card
+ * gets SHORTER overall, not taller. Measured before/after in the task-16
+ * report.
  */
 import React from 'react';
 import { Leaf } from 'lucide-react';
@@ -160,19 +216,32 @@ const SathiGuideCard: React.FC = () => {
                     <Leaf size={13} className="text-emerald-600" strokeWidth={2.5} />
                 </p>
 
+                {/* Task 16 — the hero of the card: bumped from 21px/23px to
+                    27px/30px, the largest text anywhere on this screen. */}
                 <h2
-                    className="mt-1.5 text-[21px] font-black leading-[1.2] text-stone-900 sm:text-[23px]"
+                    className="mt-1.5 text-[27px] font-black leading-[1.15] text-stone-900 sm:text-[30px]"
                     style={headlineFontStyleFor(headline)}
                 >
                     {headlineNode}
                 </h2>
 
                 <span aria-hidden="true" className="mt-2.5 block h-[3px] w-10 rounded-full bg-emerald-700/25" />
+            </div>
 
-                <div className="mt-2.5 space-y-1.5">
-                    {/* Change 2 — the action line outranks the caveat: larger,
-                        bolder, darker. Same two keys as Task 13; only the
-                        emphasis moved. */}
+            {/* Task 16 — the instruction lines and the character, SIDE BY
+                SIDE, not stacked (see file header for the full reasoning on
+                side choice and sizing). Text is `flex-1` (measurably wider
+                than the character); the character is a fixed, noticeably
+                smaller `w-[92px]` — down from a full-width ~139-154px at
+                Task 15. `items-end` keeps his fingertips and the last
+                instruction line at the same "low in the card" height, and
+                this row is the card's LAST child, immediately above
+                `CropSelector`'s "प्लॉट निवडा" section. */}
+            <div className="mt-3 flex items-end gap-3 px-5 pb-4">
+                <div className="min-w-0 flex-1 space-y-1.5">
+                    {/* Change 2 (Task 14) — the action line outranks the
+                        caveat: larger, bolder, darker. Same two keys as
+                        Task 13; only the emphasis moved. */}
                     <p
                         className="text-[13.5px] font-extrabold leading-snug text-stone-800"
                         style={fontStyleFor(line1)}
@@ -183,24 +252,19 @@ const SathiGuideCard: React.FC = () => {
                         {line2}
                     </p>
                 </div>
-            </div>
 
-            {/* Task 15 — centred, bottom-anchored, no bottom padding: his
-                fingertips sit at the card's own bottom edge (the source's
-                non-transparent content already ends ~11px short of the
-                frame's own bottom, so "flush" here means no added gap, not
-                an actual crop of the figure). `object-contain` inside
-                `h-*`/`w-auto` keeps the source's true 1086:1448 ratio
-                regardless of the height chosen for "a sensible card
-                height" — the figure can never be squashed. */}
-            <img
-                src="/images/sathi/sathi-points-down-both.png"
-                alt=""
-                loading="lazy"
-                width={1086}
-                height={1448}
-                className="mx-auto mt-1 h-[186px] w-auto shrink-0 object-contain object-bottom sm:h-[206px]"
-            />
+                {/* `h-auto` + a fixed width keeps the source's true
+                    1086:1448 ratio regardless of the width chosen — the
+                    figure can never be squashed. */}
+                <img
+                    src="/images/sathi/sathi-points-down-both.png"
+                    alt=""
+                    loading="lazy"
+                    width={1086}
+                    height={1448}
+                    className="h-auto w-[92px] shrink-0 object-contain object-bottom"
+                />
+            </div>
         </div>
     );
 };

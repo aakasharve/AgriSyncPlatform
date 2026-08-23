@@ -2,12 +2,36 @@
 /**
  * Maps raw color strings (e.g. 'bg-indigo-500') to a full theme object.
  * This prevents Tailwind class purging by using full static strings.
+ *
+ * spec: owner-oversight-loop (Task 16, Problem 2) — `strongFill` added
+ * alongside the existing `slideBgSelected`. Founder: "plot selection is not
+ * vivid enough... a stronger fill or tint on the selected card, not only a
+ * ring." `slideBgSelected` (the `-50` tint) stays untouched — every existing
+ * consumer (`CropSelector.tsx`'s inner plot tray, `SlidingCropSelector.tsx`)
+ * keeps its current look. `strongFill` (the `-100` tint, one step bolder) is
+ * a pure addition, used only where a caller opts into the stronger selected
+ * treatment — nothing already shipping is restyled by adding this field.
  */
-export const getCropTheme = (colorString?: string) => {
+interface CropColorTheme {
+    border: string;
+    bg: string;
+    text: string;
+    shadow: string;
+    iconBg: string;
+    iconText: string;
+    indicator: string;
+    slideBorder: string; // For SlidingCropSelector
+    slideShadow: string;
+    slideText: string;
+    slideBgSelected: string;
+    strongFill: string;
+}
+
+export const getCropTheme = (colorString?: string): CropColorTheme => {
     // Extract base color name from 'bg-{color}-500' string if present
     const baseColor = colorString?.split('-')[1] || 'indigo';
 
-    const themes: Record<string, any> = {
+    const themes: Record<string, CropColorTheme> = {
         indigo: {
             border: 'border-indigo-500',
             bg: 'bg-indigo-50/50',
@@ -20,6 +44,7 @@ export const getCropTheme = (colorString?: string) => {
             slideShadow: 'shadow-indigo-900/10',
             slideText: 'text-indigo-500',
             slideBgSelected: 'bg-indigo-50',
+            strongFill: 'bg-indigo-100',
         },
         rose: {
             border: 'border-rose-500',
@@ -33,6 +58,7 @@ export const getCropTheme = (colorString?: string) => {
             slideShadow: 'shadow-rose-900/10',
             slideText: 'text-rose-500',
             slideBgSelected: 'bg-rose-50',
+            strongFill: 'bg-rose-100',
         },
         green: {
             border: 'border-green-600',
@@ -46,6 +72,7 @@ export const getCropTheme = (colorString?: string) => {
             slideShadow: 'shadow-green-900/10',
             slideText: 'text-green-500',
             slideBgSelected: 'bg-green-50',
+            strongFill: 'bg-green-100',
         },
         emerald: { // Fallback / Existing
             border: 'border-emerald-500',
@@ -59,6 +86,7 @@ export const getCropTheme = (colorString?: string) => {
             slideShadow: 'shadow-emerald-900/10',
             slideText: 'text-emerald-500',
             slideBgSelected: 'bg-emerald-50',
+            strongFill: 'bg-emerald-100',
         },
         purple: {
             border: 'border-purple-500',
@@ -72,6 +100,7 @@ export const getCropTheme = (colorString?: string) => {
             slideShadow: 'shadow-purple-900/10',
             slideText: 'text-purple-500',
             slideBgSelected: 'bg-purple-50',
+            strongFill: 'bg-purple-100',
         },
         red: {
             border: 'border-red-500',
@@ -85,6 +114,7 @@ export const getCropTheme = (colorString?: string) => {
             slideShadow: 'shadow-red-900/10',
             slideText: 'text-red-500',
             slideBgSelected: 'bg-red-50',
+            strongFill: 'bg-red-100',
         }
     };
 
