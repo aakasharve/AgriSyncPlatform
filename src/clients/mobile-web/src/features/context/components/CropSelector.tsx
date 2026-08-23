@@ -415,16 +415,20 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                 })}
             </div>
 
-            {/* spec: owner-oversight-loop (Task 13, change 4) — the demoted
-                "Entire Farm" row. Same handler/selection state as the
-                suppressed card above (`handleGlobalToggle`/
-                `isGlobalSelected`) — this is a restyle of the SAME
-                selection, not a second implementation, so it "select[s]
-                FARM_GLOBAL with exactly the existing behaviour" per the
-                task brief. Deliberately muted: stone palette, a plain house
-                icon (not a photo circle), no emerald — matching the
-                founder's own instruction, not the emphasis the crop cards
-                above still carry. */}
+            {/* spec: owner-oversight-loop (Task 13, change 4; Task 14,
+                change 3) — the demoted "Entire Farm" row. Same
+                handler/selection state as the suppressed card above
+                (`handleGlobalToggle`/`isGlobalSelected`) — this is a
+                restyle of the SAME selection, not a second implementation.
+                Task 14: the founder could not tell whether this row was
+                selected — the only prior signal was a grey tick swapping
+                for a grey chevron, same white card, same stone-200 border
+                throughout. Selected is now unmistakably emerald (spec
+                §P-G: emerald = selected); UNSELECTED stays full-colour and
+                legible — position (demoted below the crop carousel) and
+                plainness (no photo, a plain house icon) carry the
+                secondary status, never a washed-out grey that reads as
+                broken to this audience. */}
             {!compact && hideGlobalCard && (
                 <button
                     type="button"
@@ -432,29 +436,46 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                     disabled={disabled}
                     data-testid="crop-selector-entire-farm-row"
                     aria-pressed={isGlobalSelected}
-                    className="flex w-full items-center gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-left transition-colors hover:bg-stone-50 disabled:opacity-60"
+                    className={`flex w-full items-center gap-3 rounded-2xl border-2 px-4 py-3 text-left transition-colors disabled:opacity-60 ${
+                        isGlobalSelected
+                            ? 'border-emerald-500 bg-emerald-50'
+                            : 'border-stone-200 bg-white hover:bg-stone-50'
+                    }`}
                 >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-stone-100 text-stone-500">
+                    <span
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                            isGlobalSelected ? 'bg-emerald-600 text-white' : 'bg-stone-100 text-stone-600'
+                        }`}
+                    >
                         <Home size={18} strokeWidth={2.25} />
                     </span>
                     <span className="min-w-0 flex-1">
                         <span
-                            className="block truncate text-sm font-bold text-stone-700"
+                            className={`block truncate text-sm font-bold ${
+                                isGlobalSelected ? 'text-emerald-900' : 'text-stone-800'
+                            }`}
                             style={fontStyleFor(resolveOversightString(language, 'entireFarmLabel'))}
                         >
                             {resolveOversightString(language, 'entireFarmLabel')}
                         </span>
                         <span
-                            className="block truncate text-xs text-stone-400"
+                            className={`block truncate text-xs ${
+                                isGlobalSelected ? 'text-emerald-700/80' : 'text-stone-500'
+                            }`}
                             style={fontStyleFor(resolveOversightString(language, 'entireFarmHint'))}
                         >
                             {resolveOversightString(language, 'entireFarmHint')}
                         </span>
                     </span>
                     {isGlobalSelected ? (
-                        <CheckCircle2 size={18} className="shrink-0 text-stone-400" />
+                        <span
+                            data-testid="crop-selector-entire-farm-row-selected-tick"
+                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600"
+                        >
+                            <CheckCircle2 size={16} className="text-white" strokeWidth={3} />
+                        </span>
                     ) : (
-                        <ChevronRight size={16} className="shrink-0 text-stone-300" />
+                        <ChevronRight size={16} className="shrink-0 text-stone-400" />
                     )}
                 </button>
             )}

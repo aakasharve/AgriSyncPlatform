@@ -456,6 +456,30 @@ describe('AppHeader — row 1 (task-11 founder restructure)', () => {
         const position = farmChip.compareDocumentPosition(waitingButton);
         expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
+
+    it('the_avatar_name_label_is_no_longer_squeezed_to_9px_and_60px (Task 14, change 6)', async () => {
+        // Founder: "while enhancing the page selector you compromised the
+        // weather and profile navigation buttons." Measured cause: the
+        // name label under the avatar was `text-[9px]` truncated at
+        // `max-w-[60px]` — sized for when row 1 also fought Task 13's
+        // centre toggle for space. That toggle has since moved to its own
+        // row (`OversightNavCards`, below row 1), freeing the room back.
+        await act(async () => {
+            renderHeader({
+                activeOperator: {
+                    id: 'op-1',
+                    name: 'Rokade',
+                    role: 'PRIMARY_OWNER',
+                    capabilities: [],
+                    isVerifier: false,
+                },
+            });
+        });
+
+        const nameLabel = screen.getByText('Rokade');
+        expect(nameLabel.className).not.toContain('text-[9px]');
+        expect(nameLabel.className).not.toContain('max-w-[60px]');
+    });
 });
 
 describe('AppHeader — the farm element is contextual on the real farm list (Task 12)', () => {

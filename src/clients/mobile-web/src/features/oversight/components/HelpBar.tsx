@@ -2,11 +2,25 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: owner-oversight-loop (Task 13, change 5)
+ * spec: owner-oversight-loop (Task 13, change 5; Task 14, change 7)
  *
  * HelpBar — the small closing strip on the founder's reference image: a
  * circular Sathi avatar, "काही अडचण आहे का?" / "मी मदत करतो.", and an
  * emerald pill button "श्रम साथीशी बोला".
+ *
+ * TASK 14, CHANGE 7 — THE FACE DID NOT FIT
+ * -------------------------------------------
+ * Founder, on the built screen: "for help tab the face is not properly fit
+ * there." Task 13's crop rendered the WHOLE `sathi-guide.png` image at
+ * 142×190 (matching the source's own 1086:1448 ratio almost exactly, so
+ * `object-cover` did no actual cropping/zooming at all) and only then
+ * windowed a 44×44 circle out of its centre — the avatar showed a shrunken
+ * slice of his whole upper body, not a face. This crops TIGHTER: the
+ * rendered box is scaled up so the 44px circle only ever exposes roughly
+ * the top ~39% of the source image (turban through the collar), which is
+ * where the head actually sits, and drops the old vertical offset — the
+ * window now starts flush at the image's own top edge instead of guessing
+ * an 18px shift. Same asset, same `object-cover`, only the numbers change.
  *
  * THE BUTTON IS HONESTLY DISABLED — READ BEFORE RE-WIRING
  * ----------------------------------------------------------
@@ -54,13 +68,13 @@ const HelpBar: React.FC = () => {
             data-testid="help-bar"
             className="mb-4 mt-6 flex items-center gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/60 px-3.5 py-3"
         >
-            {/* A cropped headshot of the same `sathi-guide.png` asset the
-                guide card uses full-body — explicit pixel offsets, not
-                `object-fit: cover`, because `cover`'s forced scale (matching
-                this box's 44px width against the source's 1086px width)
-                would only ever show a ~1000px-tall vertical slice — most of
-                his body, not a face. Sized/positioned to frame the
-                turban+face region instead. */}
+            {/* Head-and-shoulders crop (Task 14, change 7) — the rendered
+                box (84×112) is deliberately far larger than the source's
+                own ratio would need for a 44px circle, so `object-cover`
+                zooms in: only the top ~39% of the 1448px-tall source is
+                ever inside the circle (turban through the collar), flush
+                with the image's own top edge (no vertical offset). Reads
+                as a face in a circle, not a shrunken body. */}
             <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full border-2 border-white shadow-sm">
                 <img
                     src="/images/sathi/sathi-guide.png"
@@ -68,7 +82,7 @@ const HelpBar: React.FC = () => {
                     loading="lazy"
                     width={1086}
                     height={1448}
-                    className="absolute left-1/2 top-0 h-[190px] w-[142px] -translate-x-1/2 -translate-y-[18px] object-cover"
+                    className="absolute left-1/2 top-0 h-[112px] w-[84px] -translate-x-1/2 object-cover"
                 />
             </span>
 

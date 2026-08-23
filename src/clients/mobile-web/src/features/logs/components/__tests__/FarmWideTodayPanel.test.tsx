@@ -26,6 +26,7 @@ import { render, screen, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 
 import { t as translate, type Language } from '../../../../i18n/translations';
+import { oversightTranslations } from '../../../../i18n/oversightTranslations';
 
 const langRef = { current: 'mr' as Language };
 
@@ -78,18 +79,26 @@ describe('the eyebrow', () => {
         // stone-400 measured 2.52:1. This is the class the viewport token was
         // minted against; changing it puts the code outside what was verified.
         render(<FarmWideTodayPanel summary={summary()} />);
-        const eyebrow = screen.getByText('Entire Farm');
+        const eyebrow = screen.getByText(oversightTranslations.mr.entireFarmLabel);
         expect(eyebrow.className).toContain('text-stone-500');
         expect(eyebrow.className).not.toContain('text-stone-400');
     });
 
-    it('uses the app\'s own shipped label for this scope', () => {
-        // `Entire Farm` is what CropSelector, LogFactory.FARM_GLOBAL_NAME and
-        // appContentContextDisplay already show. `संपूर्ण शेत` exists only in
-        // code comments and has never reached a farmer, so inventing it here
-        // would be an agent minting farmer-facing Marathi.
+    it('uses the founder-approved label for this scope (Task 14, change 4)', () => {
+        // The founder has now approved `संपूर्ण शेत`
+        // (`oversightTranslations.entireFarmLabel`, his own reference-image
+        // table) — superseding the earlier "Entire Farm" borrowed-English
+        // copy this test used to pin. Read through `resolveOversightString`,
+        // same as every other founder-approved string in this feature.
         render(<FarmWideTodayPanel summary={summary()} />);
-        expect(screen.getByText('Entire Farm')).toBeInTheDocument();
+        expect(screen.getByText(oversightTranslations.mr.entireFarmLabel)).toBeInTheDocument();
+        expect(screen.queryByText('Entire Farm')).not.toBeInTheDocument();
+    });
+
+    it('follows the farmer preference into English too', () => {
+        langRef.current = 'en';
+        render(<FarmWideTodayPanel summary={summary()} />);
+        expect(screen.getByText(oversightTranslations.en.entireFarmLabel)).toBeInTheDocument();
     });
 });
 

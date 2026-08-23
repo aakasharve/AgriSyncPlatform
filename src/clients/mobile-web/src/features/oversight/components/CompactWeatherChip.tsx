@@ -103,15 +103,20 @@ const CompactWeatherChip: React.FC<CompactWeatherChipProps> = ({
                 {/* Task 12 (`G:\VALIDATION\farm-selector-contextual.html`'s
                     `.wx` rule): "Weather becomes a proper button" — tinted
                     sky-50/sky-100 instead of a plain white/stone-200 chip,
-                    ~38px tall, icon+temperature+chevron in sky-700. Same
-                    tap-to-expand behaviour as before; `WeatherWidget`
-                    itself (mounted below, unchanged) is not touched. */}
+                    icon+temperature+chevron in sky-700. Same tap-to-expand
+                    behaviour as before; `WeatherWidget` itself (mounted
+                    below, unchanged) is not touched.
+                    Task 14, change 6 — sized for when this row also fought
+                    Task 13's centre toggle for space; that toggle has since
+                    moved to its own row below (Task 13), so this chip gets
+                    a little more room back too: 38px -> 42px tall, and a
+                    touch more internal breathing room. */}
                 <button
                     type="button"
                     data-testid="compact-weather-chip"
                     onClick={() => setExpanded(true)}
                     aria-label={t('weather')}
-                    className="flex h-[38px] shrink-0 items-center gap-1 rounded-full border border-sky-100 bg-sky-50 pl-2 pr-1.5"
+                    className="flex h-[42px] shrink-0 items-center gap-1.5 rounded-full border border-sky-100 bg-sky-50 pl-2.5 pr-2"
                 >
                     {/* MEASURED (task-11 report): the caution used to be a
                         full sibling `AlertTriangle` + its own gap, adding
@@ -121,7 +126,7 @@ const CompactWeatherChip: React.FC<CompactWeatherChipProps> = ({
                         same information (boundary not set — still one tap
                         target, still the same button) for ~2px instead. */}
                     <span className="relative shrink-0">
-                        {weatherIcon(data, 15)}
+                        {weatherIcon(data, 16)}
                         {boundaryUnset && (
                             <span
                                 data-testid="compact-weather-chip-caution"
@@ -130,10 +135,10 @@ const CompactWeatherChip: React.FC<CompactWeatherChipProps> = ({
                             />
                         )}
                     </span>
-                    <span className="text-[13px] font-extrabold text-sky-700" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                    <span className="text-[14px] font-extrabold text-sky-700" style={{ fontFamily: "'DM Sans', sans-serif" }}>
                         {compactTemp}
                     </span>
-                    <ChevronDown size={12} className="shrink-0 text-sky-700/70" />
+                    <ChevronDown size={13} className="shrink-0 text-sky-700/70" />
                 </button>
 
                 {/* Bottom-sheet PORTAL (Task 11) — row 1 has no width for

@@ -19,6 +19,7 @@ import { AppRouterContext } from './routeContext';
 import { SIMPLE_ROUTE_RENDERERS } from './simpleRoutes';
 import { renderReflectView, renderCompareView, renderLogView } from './mainView';
 import { renderGlobalSheets } from './globalSheets';
+import MainViewTransition from './MainViewTransition';
 import { useUiPref } from '../../shared/hooks/useUiPref';
 import { useAppRouterDerivations } from './hooks/useAppRouterDerivations';
 import { useNudgeRouteEffect } from './hooks/useNudgeRouteEffect';
@@ -227,9 +228,13 @@ const AppRouter: React.FC = () => {
                     <React.Fragment key={idx}>{render(ctx)}</React.Fragment>
                 ))}
 
-                {renderReflectView(ctx)}
-                {renderCompareView(ctx)}
-                {renderLogView(ctx)}
+                {/* Task 14, change 5 — the slide transition + swipe every
+                    other route already has, extended to Log/Reflect/Compare. */}
+                <MainViewTransition view={mainView} onChangeView={setMainView}>
+                    {renderReflectView(ctx)}
+                    {renderCompareView(ctx)}
+                    {renderLogView(ctx)}
+                </MainViewTransition>
 
                 {renderGlobalSheets(ctx)}
             </div>

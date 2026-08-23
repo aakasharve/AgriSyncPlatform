@@ -4,8 +4,7 @@
  */
 
 import React from 'react';
-import { createPortal } from 'react-dom';
-import { User2, Leaf, X } from 'lucide-react';
+import { User2, Leaf } from 'lucide-react';
 import { AppRoute, PageView, DetailedWeather } from '../../../types';
 import { useLanguage } from '../../../i18n/LanguageContext';
 
@@ -28,7 +27,12 @@ import type { WeatherStatus } from '../../weather/useWeatherMonitor';
 // settings surface now, reachable from the profile avatar beside it.
 import CanonicalStrip, { FarmIdentityElement } from '../../oversight/components/CanonicalStrip';
 import CompactWeatherChip from '../../oversight/components/CompactWeatherChip';
-import WaitingDrawer from '../../oversight/components/WaitingDrawer';
+// Task 14, change 9 — the waiting-drawer sheet's OWN chrome (backdrop,
+// title bar, close button) is now `OversightOverlay`, a distinct component
+// boundary, not inline JSX in this file. `AppHeader` owns only `isOpen` and
+// the data the overlay needs — the same "trigger here, surface elsewhere"
+// shape `FarmSwitcherSheet`/`SyncStatusDrawer` already have below.
+import OversightOverlay from '../../oversight/components/OversightOverlay';
 // Task 13 — replaces the `PageToggle` segmented pill that used to sit here
 // in row 1's centre (see `CanonicalStrip.tsx`'s header comment for the row
 // diagram this moved to). `PageToggle` itself is left in place, unused by
@@ -39,19 +43,7 @@ import OversightNavCards from '../../oversight/components/OversightNavCards';
 import { buildOversightModel, type OversightDecision } from '../../oversight/oversightSelectors';
 import { useOversightAcknowledgement } from '../../oversight/useOversightAcknowledgement';
 import { LocalOversightAcknowledgementStore } from '../../oversight/LocalOversightAcknowledgementStore';
-import { resolveOversightString } from '../../../i18n/oversightTranslations';
 import { systemClock } from '../../../core/domain/services/Clock';
-
-// Same font-selection convention `CanonicalStrip.tsx`/`WaitingDrawer.tsx`
-// already use (root CLAUDE.md Font Rules) — picks which of the two locked
-// fonts a resolved string needs, never what text renders.
-const DEVANAGARI_PATTERN = /[ऀ-ॿ]/;
-const MARATHI_BODY_FONT = { fontFamily: "'Noto Sans Devanagari', sans-serif" } as const;
-const ENGLISH_FONT = { fontFamily: "'DM Sans', sans-serif" } as const;
-
-function fontStyleFor(text: string): React.CSSProperties {
-    return DEVANAGARI_PATTERN.test(text) ? MARATHI_BODY_FONT : ENGLISH_FONT;
-}
 
 interface AppHeaderProps {
   currentRoute: AppRoute;
@@ -265,12 +257,20 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     // band. Still sticky. The old flat `border-b` is gone — a floating card
     // doesn't carry a hairline seam, only its own shadow.
     <header className="sticky top-0 z-50 rounded-b-3xl bg-white/95 backdrop-blur" style={{ boxShadow: '0 8px 22px -12px rgba(28,25,23,0.34)' }}>
-      <div className="page-content pl-safe-area pr-safe-area flex min-h-[56px] items-center justify-between gap-1 py-2">
+      <div className="page-content pl-safe-area pr-safe-area flex min-h-[56px] items-center justify-between gap-2.5 py-2">
 
         {/* LEFT: Profile identity + farm chip. Task 11 (founder header
             restructure): "The farm switcher moves up beside the profile
-            circle" — immediately right of the avatar, row 1. */}
-        <div className="flex shrink-0 items-center gap-1">
+            circle" — immediately right of the avatar, row 1.
+            Task 14, change 6 — founder: "while enhancing the page selector
+            you compromised the weather and profile navigation buttons."
+            Measured cause: `gap-1` (4px) throughout, and the avatar's own
+            name label at `text-[9px]` truncated to `max-w-[60px]` — sized
+            for when this row still fought Task 13's centre toggle for
+            space. `OversightNavCards` has since moved to its own row below
+            (Task 13), so that space is free now; the avatar/farm-chip
+            group and the weather trigger both get it back. */}
+        <div className="flex shrink-0 items-center gap-2">
           <button
             onClick={() => onNavigate('profile')}
             disabled={disabled}
@@ -284,7 +284,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
               <User2 size={18} strokeWidth={2.5} />
             </div>
             {activeOperator && (
-              <span className="text-[9px] font-bold text-stone-600 max-w-[60px] truncate leading-tight mt-0.5">
+              <span className="text-[11px] font-bold text-stone-600 max-w-[92px] truncate leading-tight mt-0.5">
                 {activeOperator.name.split(' ')[0]}
               </span>
             )}
@@ -332,7 +332,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             110px. The Setup Hub is the settings surface now, and it is
             already reachable from the profile avatar at the other end of
             this row. */}
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-2">
           {/* Phase 4: Global Voice Trigger (Moved to Header) */}
           {onVoiceTrigger && !disabled && (
             <button
@@ -441,59 +441,20 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         />
       )}
 
-      {/* Waiting drawer (spec §3). `WaitingDrawer` is presentational only —
-          no overlay chrome of its own (Task 5) — so this sheet follows the
-          same bottom-sheet convention `SyncStatusDrawer` (below) and
-          `FarmSwitcherSheet` already use in this app.
-
-          PORTAL FIX (task-11 brief): this overlay used to render as plain
-          JSX here, INSIDE `<header className="sticky ...">` below. A
-          `position: sticky` ancestor creates a containing block that traps
-          `position: fixed` descendants, so the dark backdrop covered only
-          the ~139px sticky header box instead of the full viewport —
-          diagnosed in the task-10 report, confirmed by computed-style
-          inspection. `createPortal` to `document.body` is the same fix
-          `FarmContextSwitcher.tsx`'s `FarmSwitcherSheet` already applies
-          for exactly this reason; this makes AppHeader consistent with it
-          rather than papering over the trap with z-index or margins. */}
-      {isWaitingDrawerOpen && typeof document !== 'undefined' && createPortal(
-        <div
-          className="fixed inset-0 z-[150] flex items-end justify-center bg-stone-900/50 backdrop-blur-sm sm:items-center"
-          onClick={() => setIsWaitingDrawerOpen(false)}
-        >
-          <div
-            data-testid="waiting-drawer-sheet"
-            className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-stone-50 shadow-2xl sm:rounded-3xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-stone-200 bg-white px-3.5 py-3">
-              <span
-                className="text-[15px] font-extrabold text-stone-800"
-                style={fontStyleFor(resolveOversightString(language, 'waitingLabel'))}
-              >
-                {resolveOversightString(language, 'waitingLabel')}
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsWaitingDrawerOpen(false)}
-                data-testid="waiting-drawer-close"
-                aria-label="Close"
-                className="rounded-full bg-stone-100 p-2 text-stone-600 hover:bg-stone-200"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <WaitingDrawer
-              language={language}
-              model={oversightModel}
-              status={acknowledgementStatus}
-              onAcknowledge={() => { void acknowledge(); }}
-              onOpenDecision={handleOpenDecision}
-            />
-          </div>
-        </div>,
-        document.body,
-      )}
+      {/* Task 14, change 9 — the oversight "page" itself, as a distinct
+          overlay/sheet, NOT a route change (see `OversightOverlay.tsx`'s
+          own header for the founder's own reasoning and every invariant
+          this preserves — one back control, no route change, the log
+          screen underneath never unmounted). */}
+      <OversightOverlay
+        isOpen={isWaitingDrawerOpen}
+        language={language}
+        model={oversightModel}
+        status={acknowledgementStatus}
+        onAcknowledge={() => { void acknowledge(); }}
+        onOpenDecision={handleOpenDecision}
+        onClose={() => setIsWaitingDrawerOpen(false)}
+      />
 
       <SyncStatusDrawer
         isOpen={isSyncDrawerOpen}

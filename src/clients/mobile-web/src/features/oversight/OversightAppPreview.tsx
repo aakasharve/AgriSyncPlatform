@@ -76,6 +76,7 @@ import AppHeader from '../context/components/AppHeader';
 import BottomNavigation from '../context/components/BottomNavigation';
 import { renderCompareView, renderLogView, renderReflectView } from '../../core/navigation/mainView';
 import { RouteLoader } from '../../core/navigation/lazyComponents';
+import MainViewTransition from '../../core/navigation/MainViewTransition';
 import { buildOversightHeaderInputs } from '../../app/helpers/appContentOversightInputs';
 import type { CropProfile, DailyLog, FarmerProfile, LedgerDefaults, PlannedTask } from '../../types';
 
@@ -215,11 +216,15 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
                     <UnhandledRouteNotice route={ctx.currentRoute} onBack={() => ctx.setCurrentRoute('main')} />
                 ) : (
                     <Suspense fallback={<RouteLoader />}>
-                        <div className="relative w-full">
+                        {/* Task 14, change 5 — same slide-transition +
+                            swipe wrapper `AppRouter.tsx` uses, so this
+                            preview proves the real behaviour, not a
+                            simplified stand-in. */}
+                        <MainViewTransition view={ctx.mainView} onChangeView={ctx.setMainView}>
                             {renderReflectView(ctx)}
                             {renderCompareView(ctx)}
                             {renderLogView(ctx)}
-                        </div>
+                        </MainViewTransition>
                     </Suspense>
                 )}
             </main>

@@ -2,13 +2,13 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: owner-oversight-loop (Task 13, change 3)
+ * spec: owner-oversight-loop (Task 13, change 3; Task 14, changes 1-2)
  *
  * SathiGuideCard — the centrepiece of the founder's reference image (`log
  * screen re design reference.png`): a wide card above the plot selector,
  * soft green field gradient, carrying his own greeting/headline/instruction
  * copy (all in `oversightTranslations.ts`, category (d) — see that file's
- * header) and the Sathi character bled to the card's bottom-right edge.
+ * header).
  *
  * A REAL COMPONENT, not inlined into `mainView.tsx` — two independent
  * reasons: (1) `mainView.tsx`'s render functions are plain functions, not
@@ -18,18 +18,47 @@
  * a real component in the tree; (2) `check:file-sizes`' 800-line cap —
  * `mainView.tsx` sat at 636 before this task.
  *
- * `sathi-guide.png` (~1MB, per the task brief) is the default asset — his
- * open-hand/thumbs-up gesture composes naturally beside this card's own
- * text. The second asset, `sathi-point-down.png`, points at a green arrow
- * below him; this card has no such arrow to point at, so it does not apply
- * here (the founder's brief names it optional, "use it only if it composes
- * better").
+ * TASK 14, CHANGE 1 — CHARACTER MOVED LEFT, WHOLE FIGURE
+ * ---------------------------------------------------------
+ * Founder, on the built screen: "the position of character is misplaced,
+ * that must be on left aside as his hands are directed at opposite
+ * direction." Two fixes, not one:
+ *
+ *   1. Position — the character now sits FIRST in a flex row (screen
+ *      LEFT), the text block second (right), reversing Task 13's
+ *      absolute-bled-bottom-right placement.
+ *
+ *   2. Asset — `sathi-guide.png` (Task 13's default) is cropped at the
+ *      waist; there is no plot-height at which it shows the WHOLE figure,
+ *      which the founder now explicitly asks for ("use the WHOLE figure").
+ *      `sathi-point-down.png` is the one asset in `/images/sathi/` that is
+ *      a full standing figure, head to sandals, in the SAME 1086×1448
+ *      frame — and his downward-pointing hand, placed on the LEFT of this
+ *      card, points across and down at the plot-selector cards this card
+ *      sits directly above (`mainView.tsx` renders `CropSelector`
+ *      immediately after this component). That is the founder's own
+ *      stated fix for the direction complaint ("that gesture points INTO
+ *      the content"), and it is why the asset changes here, not just the
+ *      side. `object-contain` inside a box matching the source's own
+ *      1086:1448 ratio (`aspect-[1086/1448]`) means the box's own
+ *      dimensions can never force a squash — the figure's true proportions
+ *      are preserved regardless of the box size chosen for "a sensible
+ *      card height".
+ *
+ * TASK 14, CHANGE 2 — LINE 1 OUTRANKS LINE 2
+ * ---------------------------------------------
+ * Founder ruling: keep BOTH instruction lines (do not cut the "संपूर्ण
+ * शेत" caveat), but "एक किंवा अनेक प्लॉट निवडा" — the action — must read
+ * as visually stronger than the caveat beneath it. `guideLine1` now carries
+ * its own bolder/larger/darker treatment; `guideLine2` stays the quieter
+ * second line. Same two translation keys as Task 13 — no copy changed,
+ * only which one is louder.
  *
  * IMAGE WEIGHT — flagged, not silently shipped: both PNGs are ~1MB
  * (1086×1448 source). `loading="lazy"` plus explicit `width`/`height`
  * (the source's real intrinsic pixels, so the browser can reserve the
  * correct aspect ratio before the file loads — CSS controls the actual
- * rendered size) avoid layout shift, per the task brief. Optimising the
+ * rendered size) avoid layout shift, per the task-13 brief. Optimising the
  * asset itself (WebP/compression) is out of this task's scope and is
  * called out again in the task-13 report for a rural-bandwidth follow-up.
  */
@@ -90,47 +119,55 @@ const SathiGuideCard: React.FC = () => {
     return (
         <div
             data-testid="sathi-guide-card"
-            className="relative mb-6 overflow-hidden rounded-[28px] border border-emerald-100 bg-gradient-to-br from-emerald-50 via-lime-50 to-emerald-100/70 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500"
+            className="relative mb-6 flex items-end overflow-hidden rounded-[28px] border border-emerald-100 bg-gradient-to-br from-emerald-50 via-lime-50 to-emerald-100/70 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500"
         >
-            <div className="relative z-10 min-h-[248px] py-5 pl-5 pr-[150px]">
+            {/* Change 1 — LEFT, whole figure. `aspect-[1086/1448]` locks the
+                box to the source's own ratio, so `h-*` alone decides the
+                size and the figure can never be squashed. Bled flush to the
+                card's left + bottom edges, same "bled" aesthetic Task 13
+                gave the old bottom-right placement. */}
+            <img
+                src="/images/sathi/sathi-point-down.png"
+                alt=""
+                loading="lazy"
+                width={1086}
+                height={1448}
+                className="h-[224px] w-auto shrink-0 aspect-[1086/1448] object-contain object-bottom sm:h-[248px]"
+            />
+
+            <div className="min-w-0 flex-1 py-5 pl-1 pr-5">
                 <p
-                    className="flex items-center gap-1.5 text-[15px] font-extrabold text-stone-800"
+                    className="flex items-center gap-1.5 text-[14px] font-extrabold text-stone-800"
                     style={fontStyleFor(greeting)}
                 >
                     {greeting}
-                    <Leaf size={14} className="text-emerald-600" strokeWidth={2.5} />
+                    <Leaf size={13} className="text-emerald-600" strokeWidth={2.5} />
                 </p>
 
                 <h2
-                    className="mt-2 text-[25px] font-black leading-[1.18] text-stone-900"
+                    className="mt-1.5 text-[21px] font-black leading-[1.2] text-stone-900 sm:text-[23px]"
                     style={headlineFontStyleFor(headline)}
                 >
                     {headlineNode}
                 </h2>
 
-                <span aria-hidden="true" className="mt-3 block h-[3px] w-10 rounded-full bg-emerald-700/25" />
+                <span aria-hidden="true" className="mt-2.5 block h-[3px] w-10 rounded-full bg-emerald-700/25" />
 
-                <div className="mt-3 space-y-1.5">
-                    <p className="text-[12.5px] leading-snug text-stone-700" style={fontStyleFor(line1)}>
+                <div className="mt-2.5 space-y-1.5">
+                    {/* Change 2 — the action line outranks the caveat: larger,
+                        bolder, darker. Same two keys as Task 13; only the
+                        emphasis moved. */}
+                    <p
+                        className="text-[13.5px] font-extrabold leading-snug text-stone-800"
+                        style={fontStyleFor(line1)}
+                    >
                         {line1}
                     </p>
-                    <p className="text-[12.5px] leading-snug text-stone-700" style={fontStyleFor(line2)}>
+                    <p className="text-[11px] font-medium leading-snug text-stone-500" style={fontStyleFor(line2)}>
                         {line2}
                     </p>
                 </div>
             </div>
-
-            {/* Decorative — bled to the card's bottom-right edge per the
-                reference. Adds nothing a screen reader needs beyond the
-                greeting/headline text above, so `alt=""`. */}
-            <img
-                src="/images/sathi/sathi-guide.png"
-                alt=""
-                loading="lazy"
-                width={1086}
-                height={1448}
-                className="pointer-events-none absolute bottom-0 right-1 h-[196px] w-auto object-contain object-bottom sm:h-[220px]"
-            />
         </div>
     );
 };

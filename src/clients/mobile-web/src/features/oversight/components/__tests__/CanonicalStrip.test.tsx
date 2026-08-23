@@ -123,6 +123,22 @@ describe('CanonicalStrip — row 2, the waiting button alone, full width', () =>
         expect(tick.className).toMatch(/emerald/);
     });
 
+    it('matches the nav cards\' flat visual language — no gradient, no bespoke shadow (Task 14, change 8)', () => {
+        // Founder: "that section still feels like overridden or not a part
+        // of the application." The gradient background and the one-off
+        // amber drop shadow were the cause — `OversightNavCards.tsx` (the
+        // row directly above) is flat: `rounded-2xl`, one `border`, a
+        // solid tint, no shadow at all. This proves the waiting state now
+        // matches that, not Task 12's tray.
+        render(<CanonicalStrip {...baseStripProps({ waitingCount: 4 })} />);
+        const waitingButton = screen.getByTestId('canonical-strip-waiting-button');
+
+        expect(waitingButton.className).toContain('rounded-2xl');
+        expect(waitingButton.className).not.toContain('gradient');
+        expect(waitingButton.className).not.toContain('shadow');
+        expect(waitingButton.className).toContain('bg-amber-50');
+    });
+
     it('english_language_renders_the_english_strings_not_the_marathi_placeholders', () => {
         render(<CanonicalStrip {...baseStripProps({ language: 'en', waitingCount: 2 })} />);
 

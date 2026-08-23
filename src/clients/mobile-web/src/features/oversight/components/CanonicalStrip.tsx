@@ -209,15 +209,30 @@ export interface CanonicalStripProps {
 }
 
 /**
- * Row 2 — the waiting button, alone, full width, styled as an INSET TRAY
- * (Task 12, `G:\VALIDATION\farm-selector-contextual.html`'s `.wait` rules).
- * The solid `bg-amber-600` full-width banner Task 4/11 shipped read as an
- * error state; this replaces it with a light amber gradient card, a
- * drag-handle bar (the affordance that says "this opens"), and a plain
- * white/stone-200 rest state at the EXACT same place/height — every Task-4
- * locked behaviour (§2.2) still applies underneath the restyle: same
- * place/height in both states, colour carries the two-axis rule (§P-G),
- * copy from `oversightTranslations.ts` only.
+ * Row 2 — the waiting button, alone, full width. The solid `bg-amber-600`
+ * full-width banner Task 4/11 shipped read as an error state; Task 12
+ * replaced it with a light amber GRADIENT card plus a custom drop shadow, a
+ * drag-handle bar, and a plain white/stone-200 rest state.
+ *
+ * TASK 14, CHANGE 8 — STOP FEELING PASTED ON
+ * -----------------------------------------------
+ * Founder, on the built screen: "that section still feels like overridden
+ * or not a part of the application, change the design aesthetics of it."
+ * Task 12's gradient (`from-[#FFFDF7] to-amber-50`) and its bespoke amber
+ * drop shadow (`shadow-[0_3px_10px_-4px_...]`) are exactly what made it
+ * read as a floating tray dropped ON TOP of the page rather than a card
+ * belonging to it — nothing else in this feature uses a gradient
+ * background or a one-off coloured shadow. `OversightNavCards.tsx` (the
+ * row directly above this one) is the reference: `rounded-2xl`, a single
+ * flat `border`, a solid tint background when active
+ * (`border-emerald-200 bg-emerald-50`), no shadow at all. This restyle
+ * matches that exactly, swapped to amber for the waiting state
+ * (`border-amber-200 bg-amber-50`) — same corner radius, same border
+ * weight, same (lack of) elevation as the cards it now visually belongs
+ * with. The founder's ruling was aesthetic, not structural: still
+ * FULL-WIDTH, same place, same `min-h-[52px]`, same amber-vs-stone colour
+ * rule (§P-G), same count badge, same quiet rest state, every Task-4
+ * behaviour (§2.2) unchanged underneath.
  */
 const CanonicalStrip: React.FC<CanonicalStripProps> = ({
     language,
@@ -254,9 +269,9 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
             onClick={onToggleWaiting}
             data-testid="canonical-strip-waiting-button"
             aria-label={primaryLabelText}
-            className={`relative flex w-full items-center gap-2.5 rounded-2xl border px-3 text-left transition-colors ${
+            className={`relative flex w-full items-center gap-2.5 rounded-2xl border px-3 py-2.5 text-left transition-colors ${
                 isWaiting
-                    ? 'border-amber-200 bg-gradient-to-b from-[#FFFDF7] to-amber-50 py-2.5 shadow-[0_3px_10px_-4px_rgba(217,119,6,0.38)]'
+                    ? 'border-amber-200 bg-amber-50'
                     : 'border-stone-200 bg-white'
             }`}
             style={{ minHeight: STRIP_MIN_HEIGHT }}

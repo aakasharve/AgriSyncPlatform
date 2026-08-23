@@ -162,4 +162,50 @@ describe('CropSelector — hideGlobalCard opt-in (Task 13, change 4)', () => {
 
         expect(screen.getByTestId('crop-selector-entire-farm-row')).toBeDisabled();
     });
+
+    it('the_entire_farm_row_shows_an_unmistakable_selected_state', () => {
+        // Founder, on the built screen: "at the entire farm selection, it's
+        // not highlighted, user is unable to understand whether it's
+        // chosen" / "highlight संपूर्ण शेत in green colour." Task 14, change
+        // 3 — selected must be unmistakably emerald (spec §P-G); unselected
+        // must stay full-colour and legible, never washed-out grey.
+        const { rerender } = render(
+            <CropSelector
+                mode="log"
+                crops={CROPS}
+                selectedCrops={[]}
+                selectedPlots={{}}
+                onSelectionChange={vi.fn()}
+                disabled={false}
+                hideGlobalCard
+            />,
+        );
+
+        const unselectedRow = screen.getByTestId('crop-selector-entire-farm-row');
+        expect(unselectedRow.className).not.toContain('emerald');
+        expect(unselectedRow).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.queryByTestId('crop-selector-entire-farm-row-selected-tick')).not.toBeInTheDocument();
+
+        rerender(
+            <CropSelector
+                mode="log"
+                crops={CROPS}
+                selectedCrops={['FARM_GLOBAL']}
+                selectedPlots={{}}
+                onSelectionChange={vi.fn()}
+                disabled={false}
+                hideGlobalCard
+            />,
+        );
+
+        const selectedRow = screen.getByTestId('crop-selector-entire-farm-row');
+        expect(selectedRow).toHaveAttribute('aria-pressed', 'true');
+        // Border AND background both carry the emerald selected state —
+        // not just a tick swap.
+        expect(selectedRow.className).toContain('border-emerald-500');
+        expect(selectedRow.className).toContain('bg-emerald-50');
+        // A FILLED emerald tick, not the old grey CheckCircle2.
+        const tick = screen.getByTestId('crop-selector-entire-farm-row-selected-tick');
+        expect(tick.className).toContain('bg-emerald-600');
+    });
 });

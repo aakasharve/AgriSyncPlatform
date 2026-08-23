@@ -3,7 +3,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: owner-oversight-loop (Task 13, change 3)
+ * spec: owner-oversight-loop (Task 13, change 3; Task 14, changes 1-2)
  *
  * Pins `SathiGuideCard`'s founder-approved copy and the headline's emerald
  * emphasis split.
@@ -54,15 +54,30 @@ describe('SathiGuideCard — the centrepiece guide card (Task 13, change 3)', ()
         expect(emphasis.className).toContain('emerald');
     });
 
-    it('renders the Sathi image bled to the card, with explicit width/height and lazy loading', () => {
+    it('renders the whole-figure Sathi image, left of the text, with explicit width/height and lazy loading', () => {
+        // Task 14, change 1 — `sathi-guide.png` (Task 13's default) is
+        // cropped at the waist; the founder now explicitly asks for the
+        // WHOLE figure, and for it to sit on the LEFT so his gesture points
+        // into the card's content instead of away from it.
+        // `sathi-point-down.png` is the one asset that is a full standing
+        // figure in the same 1086×1448 frame.
         render(<SathiGuideCard />);
 
-        const img = screen.getByTestId('sathi-guide-card').querySelector('img') as HTMLImageElement;
+        const card = screen.getByTestId('sathi-guide-card');
+        const img = card.querySelector('img') as HTMLImageElement;
         expect(img).toBeTruthy();
-        expect(img.getAttribute('src')).toBe('/images/sathi/sathi-guide.png');
+        expect(img.getAttribute('src')).toBe('/images/sathi/sathi-point-down.png');
         expect(img.getAttribute('loading')).toBe('lazy');
         expect(img.getAttribute('width')).toBe('1086');
         expect(img.getAttribute('height')).toBe('1448');
+
+        // LEFT of the text — the image is the first element child, the text
+        // block the second, in a flex row (reversing Task 13's
+        // bottom-right-bled placement).
+        const children = Array.from(card.children);
+        const imgIndex = children.indexOf(img);
+        expect(imgIndex).toBe(0);
+        expect(imgIndex).toBeLessThan(children.length - 1);
     });
 
     it('english language resolves the english headline and emphasises "plot"', () => {
@@ -74,5 +89,20 @@ describe('SathiGuideCard — the centrepiece guide card (Task 13, change 3)', ()
         );
         const emphasis = screen.getByText('plot');
         expect(emphasis.className).toContain('emerald');
+    });
+
+    it('line 1 (the plot instruction) reads visually stronger than line 2 (the caveat)', () => {
+        // Task 14, change 2 — founder ruling: keep BOTH lines, but the
+        // action line must outrank the caveat beneath it, not merely
+        // repeat its styling.
+        render(<SathiGuideCard />);
+
+        const line1 = screen.getByText(oversightTranslations.mr.guideLine1);
+        const line2 = screen.getByText(oversightTranslations.mr.guideLine2);
+
+        expect(line1.className).toContain('font-extrabold');
+        expect(line1.className).toContain('text-stone-800');
+        expect(line2.className).not.toContain('font-extrabold');
+        expect(line2.className).toContain('text-stone-500');
     });
 });
