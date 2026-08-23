@@ -82,6 +82,11 @@ function formatter(key: string, options: Intl.DateTimeFormatOptions, wallClock: 
 }
 
 const TIME_OPTS: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit', hour12: true };
+// 24-hour, used ONLY by formatFarmerTime to read which part of the day an
+// instant falls in. hour12:false here is not a display choice — nothing renders
+// this directly; it is how the Marathi day-period is selected before the string
+// is rebuilt in 12-hour form.
+const FARMER_HOUR_OPTS: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: false };
 const TIME_SECONDS_OPTS: Intl.DateTimeFormatOptions = { ...TIME_OPTS, second: '2-digit' };
 const DATE_TIME_OPTS: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', ...TIME_OPTS };
 const TIMESTAMP_OPTS: Intl.DateTimeFormatOptions = {
@@ -224,6 +229,72 @@ export function formatDisplayTime(
     // build that omits it rather than for normal operation.
     const period = p.dayPeriod ? ` ${p.dayPeriod.toUpperCase()}` : '';
     return `${p.hour}:${p.minute}${period}`;
+}
+
+/**
+ * `सकाळी 9:15` — the farmer-facing time. **Presentation only.**
+ *
+ * <p>Founder direction, 2026-08-23: <i>"Farmer-facing time should be natural
+ * language for the farmer, not technical clock notation."</i> AM/PM is not a
+ * Marathi convention; a smallholder reading a log at a glance reads the part of
+ * the day, not a Latin abbreviation. Admin and technical surfaces keep
+ * {@link formatDisplayTime}'s `9:15 AM`, because that is where precision and
+ * copy-paste-into-a-ticket matter more than warmth.</p>
+ *
+ * <p><b>This changes rendering and nothing else.</b> It takes the same instant,
+ * resolves it through the same IST-pinned formatter as every other function
+ * here, and reorders the words. No stored value, no timestamp semantics and no
+ * comparison anywhere is affected by it — which is the reason it is a sibling
+ * of the existing formatters rather than a flag on them.</p>
+ *
+ * <p><b>The word precedes the time</b>, as Marathi puts it: सकाळी ९ वाजता, not
+ * ९ सकाळी. Digits stay Latin, matching the founder's own written example
+ * (`सकाळी 9:15`) and every number already rendered elsewhere in the app.</p>
+ *
+ * <p><b>Boundaries.</b> These follow ordinary Marathi usage and are the one
+ * judgment call in this function, so they are written where they can be argued
+ * with rather than buried:</p>
+ * <pre>
+ *   04:00–05:59  पहाटे        pre-dawn
+ *   06:00–11:59  सकाळी        morning
+ *   12:00–15:59  दुपारी       afternoon
+ *   16:00–19:59  संध्याकाळी   evening
+ *   20:00–03:59  रात्री        night  (wraps midnight)
+ * </pre>
+ *
+ * @param fallback what to render when the input is absent or unparseable.
+ *        Defaults to empty, so a missing timestamp renders nothing rather than
+ *        inventing a time of day — the same rule the rest of this module keeps.
+ */
+export function formatFarmerTime(
+    input: Date | string | number | null | undefined,
+    fallback = '',
+): string {
+    const r = toDate(input);
+    if (!r) return fallback;
+
+    // Reuse the 24-hour view purely to read the hour; the rendered string is
+    // built below. Going through partsOf() keeps this on the one IST-pinned
+    // path rather than adding a second clock the sweep guard would have to
+    // learn about.
+    const p = partsOf(formatter('farmerHour', FARMER_HOUR_OPTS, r.wallClock), r.date);
+    if (!p.hour || !p.minute) return fallback;
+
+    const hour24 = Number(p.hour);
+    if (!Number.isFinite(hour24)) return fallback;
+
+    const period = marathiDayPeriod(hour24);
+    const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+    return `${period} ${hour12}:${p.minute}`;
+}
+
+/** The day-period word for a 0–23 hour. Exported for the guard's fixtures. */
+export function marathiDayPeriod(hour24: number): string {
+    if (hour24 >= 4 && hour24 < 6) return 'पहाटे';
+    if (hour24 >= 6 && hour24 < 12) return 'सकाळी';
+    if (hour24 >= 12 && hour24 < 16) return 'दुपारी';
+    if (hour24 >= 16 && hour24 < 20) return 'संध्याकाळी';
+    return 'रात्री';
 }
 
 /** `h:mm:ss AM` — for the one admin surface that shows seconds. */

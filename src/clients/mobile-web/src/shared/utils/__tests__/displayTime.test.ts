@@ -21,6 +21,8 @@ import {
     formatDisplayTimeFromHHmm,
     formatDisplayTimeWithSeconds,
     formatDisplayTimestamp,
+    formatFarmerTime,
+    marathiDayPeriod,
     DISPLAY_TIME_ZONE,
 } from '../displayTime';
 
@@ -188,5 +190,72 @@ describe('formatDisplayTimeFromHHmm — stored wall-clock config', () => {
         expect(formatDisplayTimeFromHHmm('nonsense')).toBe('nonsense');
         expect(formatDisplayTimeFromHHmm('25:00')).toBe('25:00');
         expect(formatDisplayTimeFromHHmm('12:75')).toBe('12:75');
+    });
+});
+
+/**
+ * Founder direction, 2026-08-23: *"Farmer-facing time should be natural
+ * language for the farmer, not technical clock notation."*
+ *
+ * These assert PRESENTATION only. Every case below feeds `formatFarmerTime` the
+ * same instant `formatDisplayTime` gets and checks the words change while the
+ * clock does not — the underlying timestamp semantics are deliberately
+ * untouched, and the pairing in the first test is what proves it.
+ */
+describe('formatFarmerTime — Marathi day-periods on farmer surfaces', () => {
+    // 09:15 IST == 03:45 UTC. Written as a UTC instant so the test asserts the
+    // IST conversion rather than assuming the runner's zone.
+    const at = (utcIso: string) => new Date(utcIso);
+
+    it('renders the day-period BEFORE the time, as Marathi puts it', () => {
+        expect(formatFarmerTime(at('2026-08-23T03:45:00Z'))).toBe('सकाळी 9:15');
+    });
+
+    it('shows the same clock as the admin formatter, only worded differently', () => {
+        // The point of the whole change: presentation differs, time does not.
+        const instant = at('2026-08-23T03:45:00Z');
+        expect(formatDisplayTime(instant)).toBe('9:15 AM');
+        expect(formatFarmerTime(instant)).toBe('सकाळी 9:15');
+    });
+
+    it('covers every part of the day', () => {
+        expect(formatFarmerTime(at('2026-08-22T23:00:00Z'))).toBe('पहाटे 4:30');       // 04:30
+        expect(formatFarmerTime(at('2026-08-23T03:45:00Z'))).toBe('सकाळी 9:15');       // 09:15
+        expect(formatFarmerTime(at('2026-08-23T08:30:00Z'))).toBe('दुपारी 2:00');      // 14:00
+        expect(formatFarmerTime(at('2026-08-23T12:30:00Z'))).toBe('संध्याकाळी 6:00');  // 18:00
+        expect(formatFarmerTime(at('2026-08-23T16:30:00Z'))).toBe('रात्री 10:00');      // 22:00
+    });
+
+    it('keeps 12-hour numbering correct at noon and midnight', () => {
+        // The two places 12-hour formatting goes wrong, and they are also the
+        // two day-period edges most likely to be got backwards.
+        expect(formatFarmerTime(at('2026-08-23T06:30:00Z'))).toBe('दुपारी 12:00');  // 12:00 noon
+        expect(formatFarmerTime(at('2026-08-22T18:30:00Z'))).toBe('रात्री 12:00');   // 00:00 midnight
+        expect(formatFarmerTime(at('2026-08-22T18:45:00Z'))).toBe('रात्री 12:15');   // 00:15
+    });
+
+    it('places every boundary hour on the intended side', () => {
+        // Written as a table because the boundaries are the one judgment call
+        // in this feature; if the founder wants them moved, this is the list.
+        expect(marathiDayPeriod(3)).toBe('रात्री');
+        expect(marathiDayPeriod(4)).toBe('पहाटे');
+        expect(marathiDayPeriod(5)).toBe('पहाटे');
+        expect(marathiDayPeriod(6)).toBe('सकाळी');
+        expect(marathiDayPeriod(11)).toBe('सकाळी');
+        expect(marathiDayPeriod(12)).toBe('दुपारी');
+        expect(marathiDayPeriod(15)).toBe('दुपारी');
+        expect(marathiDayPeriod(16)).toBe('संध्याकाळी');
+        expect(marathiDayPeriod(19)).toBe('संध्याकाळी');
+        expect(marathiDayPeriod(20)).toBe('रात्री');
+        expect(marathiDayPeriod(0)).toBe('रात्री');
+    });
+
+    it('renders nothing rather than inventing a time of day', () => {
+        // Same rule as the rest of the module: an absent timestamp must not
+        // become a plausible-looking morning.
+        expect(formatFarmerTime(null)).toBe('');
+        expect(formatFarmerTime(undefined)).toBe('');
+        expect(formatFarmerTime('nonsense')).toBe('');
+        expect(formatFarmerTime(null, '—')).toBe('—');
     });
 });

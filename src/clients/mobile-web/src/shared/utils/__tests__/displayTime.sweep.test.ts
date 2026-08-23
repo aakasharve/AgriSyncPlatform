@@ -222,14 +222,21 @@ const format = (f: Finding) => `${f.file}:${f.line} [${f.why}] ${f.text}`;
 // across programs is safe -- it is what TypeScript's own watch mode does.
 const LIB_SOURCE_CACHE = new Map<string, ts.SourceFile | undefined>();
 
-/** Scan a source string with the SAME detector the repository scan uses. */
-function scanText(text: string): Finding[] {
-    const NAME = join(SRC, '__fixture__.ts');
+/**
+ * A compiler host serving ONE in-memory fixture and cached lib declarations.
+ *
+ * Every caller that builds its own `ts.Program` must come through here. One
+ * test previously hand-rolled this same host inline, which is how it kept
+ * paying the full lib-parse cost after the cache landed and then timed out at
+ * 6094ms against the 5000ms default — the caching fix had simply never reached
+ * it. Sharing the host removes the duplication and the divergence together.
+ */
+function fixtureHost(name: string, text: string): ts.CompilerHost {
     // TypeScript asks its host for FORWARD-slash paths even on Windows, so this
     // must normalise or the override never fires and every fixture assertion
     // passes on an empty scan. It did, once.
     const norm = (f: string) => f.split(String.fromCharCode(92)).join('/');
-    const isFixture = (f: string) => norm(f) === norm(NAME);
+    const isFixture = (f: string) => norm(f) === norm(name);
 
     const host = ts.createCompilerHost(COMPILER_OPTIONS);
     const original = host.getSourceFile.bind(host);
@@ -247,8 +254,14 @@ function scanText(text: string): Finding[] {
     };
     host.fileExists = (f) => isFixture(f) || ts.sys.fileExists(f);
     host.readFile = (f) => (isFixture(f) ? text : ts.sys.readFile(f));
+    return host;
+}
 
-    return collectFindings(ts.createProgram([NAME], COMPILER_OPTIONS, host), [NAME], SRC);
+/** Scan a source string with the SAME detector the repository scan uses. */
+function scanText(text: string): Finding[] {
+    const NAME = join(SRC, '__fixture__.ts');
+    return collectFindings(
+        ts.createProgram([NAME], COMPILER_OPTIONS, fixtureHost(NAME, text)), [NAME], SRC);
 }
 
 // ---------------------------------------------------------------------------
@@ -449,15 +462,7 @@ describe('the scanner can see, and the fixtures are really parsed', () => {
         // Called straight, so the function cannot be dead while the suite is green.
         const NAME = join(SRC, '__probe__.ts');
         const text = 'const d = new Date(); const n = 42; export const x = [d, n];';
-        const host = ts.createCompilerHost(COMPILER_OPTIONS);
-        const norm = (f: string) => f.split(String.fromCharCode(92)).join('/');
-        const original = host.getSourceFile.bind(host);
-        host.getSourceFile = (f, v, e, c) =>
-            norm(f) === norm(NAME) ? ts.createSourceFile(f, text, v, true) : original(f, v, e, c);
-        host.fileExists = (f) => norm(f) === norm(NAME) || ts.sys.fileExists(f);
-        host.readFile = (f) => (norm(f) === norm(NAME) ? text : ts.sys.readFile(f));
-
-        const prog = ts.createProgram([NAME], COMPILER_OPTIONS, host);
+        const prog = ts.createProgram([NAME], COMPILER_OPTIONS, fixtureHost(NAME, text));
         const sf = prog.getSourceFile(NAME)!;
         const chk = prog.getTypeChecker();
         const elements: ts.Expression[] = [];
