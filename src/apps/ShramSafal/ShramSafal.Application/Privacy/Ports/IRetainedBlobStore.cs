@@ -50,6 +50,38 @@ public interface IRetainedBlobStore
     Task DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct);
 
     /// <summary>
+    /// Delete ONLY the clips named in <paramref name="clipIds"/>, and only
+    /// where they belong to <paramref name="userId"/>. Both the S3 object and
+    /// the <c>ssf.voice_clips_retained</c> row go, exactly as the per-user
+    /// path does — the sole difference is the blast radius, and that is the
+    /// entire reason this method exists.
+    ///
+    /// <para>
+    /// <b>Why this is separate from <see cref="DeleteRetainedVoiceForUserAsync"/>.</b>
+    /// "Every clip this user owns" is the right shape for DPDP §12 erasure,
+    /// where the caller genuinely means the whole user. It is the wrong shape
+    /// for the retention sweep, which identifies INDIVIDUAL aged clips:
+    /// routing a per-clip candidate set through the per-user delete meant one
+    /// clip crossing the horizon took the farmer's entire Voice Diary with it,
+    /// this morning's recording included. A caller that has already decided
+    /// WHICH clips must die calls this one.
+    /// </para>
+    ///
+    /// <para>
+    /// Idempotent, and fail-safe in the direction that matters: clip ids that
+    /// no longer exist, or that belong to someone else, are skipped silently,
+    /// and an EMPTY <paramref name="clipIds"/> deletes NOTHING. "No targets"
+    /// must never widen into "then delete everything" — that widening is the
+    /// defect this method closes.
+    /// </para>
+    /// </summary>
+    /// <returns>How many clips were actually removed.</returns>
+    Task<int> DeleteRetainedVoiceClipsAsync(
+        Guid userId,
+        IReadOnlyCollection<Guid> clipIds,
+        CancellationToken ct);
+
+    /// <summary>
     /// Persist a single retained voice clip. <paramref name="metadata"/>
     /// carries the row to land in <c>ssf.voice_clips_retained</c>
     /// (clipId PK comes from the client per supervisor risk #1 — the

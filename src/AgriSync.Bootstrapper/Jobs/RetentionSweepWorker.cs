@@ -253,30 +253,42 @@ public sealed class RetentionSweepWorker(
             return (0, 0);
         }
 
-        // Delete S3 objects FIRST (per-user batch — matches the existing
-        // IRetainedBlobStore API). If S3 deletion fails for a user we skip
-        // their DB rows so the next pass retries. Note: the per-user
-        // delete also removes the DB rows inside S3RetainedBlobStore —
-        // we re-query after to compute the actual delta.
-        var deletedClipIdsByUser = candidates
+        // Delete EXACTLY the clips the candidate query identified — S3 object
+        // and metadata row together, inside the port.
+        //
+        // The port also exposes DeleteRetainedVoiceForUserAsync, and this loop
+        // used to call it. That is the right shape for DPDP §12 erasure, which
+        // means the whole user, and a catastrophic one here: the candidate set
+        // above is PER CLIP, so a single five-year-old recording crossing the
+        // horizon deleted every other clip its owner had, including one
+        // recorded that morning. A sweep must never widen its own blast radius
+        // beyond what it decided to remove.
+        //
+        // If the delete fails for a user we skip their audit rows so the next
+        // pass retries the same clips.
+        var candidateClipIdsByUser = candidates
             .GroupBy(c => c.UserId)
             .ToDictionary(g => g.Key, g => g.Select(c => c.ClipId).ToList());
 
-        var successfullySweptUsers = new HashSet<Guid>();
+        var successfullySweptClipIds = new HashSet<Guid>();
         int s3DeleteCount = 0;
-        foreach (var (userId, clipIds) in deletedClipIdsByUser)
+        foreach (var (userId, clipIds) in candidateClipIdsByUser)
         {
             try
             {
-                await retainedBlobStore.DeleteRetainedVoiceForUserAsync(userId, ct).ConfigureAwait(false);
-                s3DeleteCount += clipIds.Count;
-                successfullySweptUsers.Add(userId);
+                // The count comes back from the store rather than from
+                // clipIds.Count, so ssf.retention_sweep_runs reports what was
+                // actually destroyed instead of what we intended to destroy (P4).
+                s3DeleteCount += await retainedBlobStore
+                    .DeleteRetainedVoiceClipsAsync(userId, clipIds, ct)
+                    .ConfigureAwait(false);
+                successfullySweptClipIds.UnionWith(clipIds);
             }
             catch (Exception ex)
             {
                 logger.LogError(ex,
-                    "RetentionSweepWorker: S3 delete failed for user {UserId} (skipping audit + DB delete to preserve consistency).",
-                    userId);
+                    "RetentionSweepWorker: retained-voice delete failed for {ClipCount} clip(s) of user {UserId} (skipping audit + DB delete to preserve consistency).",
+                    clipIds.Count, userId);
             }
         }
 
@@ -288,7 +300,7 @@ public sealed class RetentionSweepWorker(
         // the per-user call above, so the audit row is the durable
         // record that the clip ever existed.
         int rowsRemoved = 0;
-        foreach (var c in candidates.Where(c => successfullySweptUsers.Contains(c.UserId)))
+        foreach (var c in candidates.Where(c => successfullySweptClipIds.Contains(c.ClipId)))
         {
             var sweepReason = c.RecordedAtUtc < ageHorizonUtc
                 ? "age_horizon"
@@ -319,15 +331,16 @@ public sealed class RetentionSweepWorker(
             rowsRemoved++;
         }
 
-        // Belt-and-braces: ensure any orphan metadata rows from a prior
-        // half-failed sweep are cleared for the users we successfully
-        // swept. The S3RetainedBlobStore.DeleteRetainedVoiceForUserAsync
-        // already calls SaveChanges with the row delete; this re-attach
-        // is a defensive no-op when nothing remains.
-        if (successfullySweptUsers.Count > 0)
+        // Belt-and-braces: clear any orphan metadata row left by a prior
+        // half-failed sweep — but ONLY for the clips this pass swept. This
+        // block was keyed on user_id and so carried a second copy of the same
+        // over-reach: it would delete rows for clips that were never
+        // candidates at all. The port already removed these rows inside the
+        // per-clip delete, so this is a defensive no-op when nothing remains.
+        if (successfullySweptClipIds.Count > 0)
         {
             var orphans = await admin.VoiceClipsRetained
-                .Where(c => successfullySweptUsers.Contains(c.UserId))
+                .Where(c => successfullySweptClipIds.Contains(c.ClipId))
                 .ToListAsync(ct).ConfigureAwait(false);
             if (orphans.Count > 0)
             {

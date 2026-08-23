@@ -70,6 +70,73 @@ public sealed class ErasureRequestTests
         act.Should().Throw<InvalidOperationException>();
     }
 
+    // ── erasure-honesty (spec: dfes-companion-2026-07-11) ────────────────
+    // Founder ruling 2026-08-23 ITEM 4: the system must never tell a farmer
+    // something is deleted while ARVE knowingly retains the active copy.
+
+    [Fact]
+    public void AwaitingManualCompletion_records_counts_but_never_stamps_a_completion_time()
+    {
+        var req = ErasureRequest.Submit(Guid.NewGuid(), null, FixedNow);
+        req.MarkInProgress();
+
+        req.MarkAwaitingManualCompletion(42);
+
+        req.Status.Should().Be(ErasureStatus.AwaitingManualCompletion);
+        req.Status.Should().NotBe(ErasureStatus.Completed,
+            "a request with outstanding manual steps is not completed");
+        req.RowsAnonymizedCount.Should().Be(42);
+        req.CompletedAtUtc.Should().BeNull(
+            "nothing is complete yet — a completion timestamp here would be the same lie in another column");
+    }
+
+    [Fact]
+    public void AwaitingManualCompletion_requires_InProgress()
+    {
+        var req = ErasureRequest.Submit(Guid.NewGuid(), null, FixedNow);
+        Action act = () => req.MarkAwaitingManualCompletion(1);
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void FSM_InProgress_to_AwaitingManualCompletion_to_Completed()
+    {
+        var req = ErasureRequest.Submit(Guid.NewGuid(), null, FixedNow);
+        req.MarkInProgress();
+        req.MarkAwaitingManualCompletion(7);
+
+        req.MarkManuallyCompleted(FixedNow.AddHours(30));
+
+        req.Status.Should().Be(ErasureStatus.Completed);
+        req.CompletedAtUtc.Should().Be(FixedNow.AddHours(30),
+            "the completion time is when the person at ARVE finished, not when the worker ran");
+        req.RowsAnonymizedCount.Should().Be(7,
+            "the manual close must not overwrite what the worker recorded");
+    }
+
+    [Fact]
+    public void ManualCompletion_cannot_shortcut_a_request_still_InProgress()
+    {
+        var req = ErasureRequest.Submit(Guid.NewGuid(), null, FixedNow);
+        req.MarkInProgress();
+
+        Action act = () => req.MarkManuallyCompleted(FixedNow.AddHours(1));
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void ManualCompletion_cannot_reopen_a_Failed_request()
+    {
+        var req = ErasureRequest.Submit(Guid.NewGuid(), null, FixedNow);
+        req.MarkInProgress();
+        req.MarkFailed("S3 timeout", FixedNow.AddHours(1));
+
+        Action act = () => req.MarkManuallyCompleted(FixedNow.AddHours(2));
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
     [Fact]
     public void Failed_terminates_with_reason()
     {

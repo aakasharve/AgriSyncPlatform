@@ -15,7 +15,14 @@ import {
 export interface DataRightsRequestRow {
     id: string;
     kind: 'erasure' | 'export';
-    status: 'Requested' | 'InProgress' | 'Completed' | 'Failed';
+    /**
+     * Mirrors the backend ErasureStatus names verbatim.
+     * spec: dfes-companion-2026-07-11 (erasure-honesty) —
+     * 'AwaitingManualCompletion' is the state where the automated pass is
+     * done but ARVE still holds personal data the request was supposed to
+     * remove. It is NOT a success state and must never render as done.
+     */
+    status: 'Requested' | 'InProgress' | 'AwaitingManualCompletion' | 'Completed' | 'Failed';
     requestedAtUtc: string;
     completedAtUtc?: string | null;
     presignedUrl?: string | null;
@@ -35,6 +42,7 @@ const RecentRequestsList: React.FC<Props> = ({ requests, locale }) => {
         switch (s) {
             case 'Requested': return tDataRights(locale, 'recent.statusRequested');
             case 'InProgress': return tDataRights(locale, 'recent.statusInProgress');
+            case 'AwaitingManualCompletion': return tDataRights(locale, 'recent.statusAwaitingManual');
             case 'Completed': return tDataRights(locale, 'recent.statusCompleted');
             case 'Failed': return tDataRights(locale, 'recent.statusFailed');
         }

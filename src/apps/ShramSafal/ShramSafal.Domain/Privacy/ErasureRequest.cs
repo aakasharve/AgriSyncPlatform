@@ -2,14 +2,26 @@
 //
 // Sub-phase 08.1 — DPDP §12 erasure request aggregate. Self-serve or
 // admin-on-behalf-of (OQ-2). Status FSM:
-//   Requested → InProgress → Completed
+//   Requested → InProgress → AwaitingManualCompletion → Completed
+//                       │                          └→ Failed
+//                       ├→ Completed
 //                       └→ Failed
 //
 // The aggregate is async-by-design (OQ-6 verdict — 48h SLA): the
 // endpoint enqueues a row and returns 202 immediately. ErasureWorker
 // (sub-phase 08.2) polls Requested rows, marks InProgress, runs the
 // DS-017 5-rule ANONYMIZE manifest against the user's surviving farm
-// data, then stamps Completed with row counts.
+// data, then stamps a terminal state with row counts.
+//
+// spec: dfes-companion-2026-07-11 (erasure-honesty) — AwaitingManualCompletion
+// added because the previous FSM had no way to say the true thing.
+// ErasureWorker's manifest is ShramSafal-scoped by construction, so parts
+// of a real erasure request are finished by a person at ARVE, not by the
+// worker (see ErasureWorker's "manual steps" block for the enumerated
+// list). Founder ruling 2026-08-23, ITEM 4: "the system must never tell a
+// farmer that something has been deleted when ARVE knowingly continues to
+// retain the active copy." Completed therefore means the WHOLE request is
+// done — including the human part — and nothing else may claim it.
 //
 // Per DS-017 binding contract (2026-05-17): the worker does NOT
 // hard-delete. It REPLACES user-id columns with
@@ -134,6 +146,51 @@ public sealed class ErasureRequest
         CompletedAtUtc = nowUtc;
     }
 
+    /// <summary>
+    /// The worker finished everything it is able to do, but at least one
+    /// part of the request is still knowingly outstanding and has to be
+    /// completed by a person at ARVE. <see cref="CompletedAtUtc"/> stays
+    /// null on purpose — nothing is complete yet, and a timestamp here
+    /// would be the same lie in a different column.
+    /// </summary>
+    public void MarkAwaitingManualCompletion(int rowsAnonymizedCount)
+    {
+        if (Status != ErasureStatus.InProgress)
+        {
+            throw new InvalidOperationException(
+                $"ErasureRequest {Id} cannot transition to AwaitingManualCompletion from {Status}.");
+        }
+        if (rowsAnonymizedCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(rowsAnonymizedCount), rowsAnonymizedCount,
+                "rowsAnonymizedCount must be >= 0");
+        }
+        Status = ErasureStatus.AwaitingManualCompletion;
+        RowsAnonymizedCount = rowsAnonymizedCount;
+    }
+
+    /// <summary>
+    /// Closes a request whose outstanding manual steps a person at ARVE
+    /// has actually carried out. This is the ONLY transition that may
+    /// follow <see cref="ErasureStatus.AwaitingManualCompletion"/> into
+    /// <see cref="ErasureStatus.Completed"/>: the documented manual
+    /// deletion process (founder ruling 2026-08-23, ITEM 4 — acceptable
+    /// for a 10-20 farmer pilot "if a request can be reliably completed
+    /// and verified") ends here, not in a hand-edited status column.
+    /// <see cref="RowsAnonymizedCount"/> is left as the worker recorded it.
+    /// </summary>
+    public void MarkManuallyCompleted(DateTime nowUtc)
+    {
+        if (Status != ErasureStatus.AwaitingManualCompletion)
+        {
+            throw new InvalidOperationException(
+                $"ErasureRequest {Id} cannot be manually completed from {Status}.");
+        }
+        Status = ErasureStatus.Completed;
+        CompletedAtUtc = nowUtc;
+    }
+
     public void MarkFailed(string reason, DateTime nowUtc)
     {
         if (string.IsNullOrWhiteSpace(reason))
@@ -147,9 +204,11 @@ public sealed class ErasureRequest
 }
 
 /// <summary>
-/// Phase 08 — DPDP §12 erasure request FSM. Linear progression
-/// Requested → InProgress → Completed. Failed is a terminal sibling
-/// of Completed reachable only from InProgress.
+/// Phase 08 — DPDP §12 erasure request FSM. Progression
+/// Requested → InProgress → (AwaitingManualCompletion) → Completed.
+/// Failed is a terminal sibling reachable from InProgress.
+/// Persisted as int (see ErasureRequestConfiguration); there is no DB
+/// CHECK constraint on the column, so value 4 needs no migration.
 /// </summary>
 public enum ErasureStatus
 {
@@ -157,4 +216,13 @@ public enum ErasureStatus
     InProgress = 1,
     Completed = 2,
     Failed = 3,
+
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (erasure-honesty). The automated
+    /// ShramSafal-scoped pass ran to the end, but personal data the request
+    /// was supposed to remove is still knowingly held and a person at ARVE
+    /// must remove it. This is NOT a success state and MUST NOT be rendered
+    /// to the farmer as "Completed" / "Deleted" / "पूर्ण".
+    /// </summary>
+    AwaitingManualCompletion = 4,
 }

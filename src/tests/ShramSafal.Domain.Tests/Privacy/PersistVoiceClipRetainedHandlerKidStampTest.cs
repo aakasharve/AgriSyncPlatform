@@ -151,6 +151,10 @@ public sealed class PersistVoiceClipRetainedHandlerKidStampTest
         public Task DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct)
             => Task.CompletedTask;
 
+        public Task<int> DeleteRetainedVoiceClipsAsync(
+            Guid userId, IReadOnlyCollection<Guid> clipIds, CancellationToken ct)
+            => Task.FromResult(0);
+
         public Task<Guid> PersistAsync(VoiceClipRetained metadata, byte[] cipherBytes, CancellationToken ct)
             => Task.FromResult(metadata.ClipId);
 

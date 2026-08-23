@@ -96,6 +96,59 @@ public sealed class S3RetainedBlobStore : IRetainedBlobStore
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
+    public async Task<int> DeleteRetainedVoiceClipsAsync(
+        Guid userId,
+        IReadOnlyCollection<Guid> clipIds,
+        CancellationToken ct)
+    {
+        // No user, or no named targets, means delete NOTHING. Falling through
+        // to the user-wide path from here is precisely the mistake this method
+        // exists to make unrepresentable.
+        if (userId == Guid.Empty || clipIds is null || clipIds.Count == 0)
+        {
+            return 0;
+        }
+
+        var targetIds = clipIds.Distinct().ToList();
+
+        // Ownership is re-checked here rather than trusted from the caller: a
+        // clip id that belongs to somebody else must not be deletable by
+        // naming it alongside a user who does own something.
+        var rows = await _db.VoiceClipsRetained
+            .Where(c => c.UserId == userId && targetIds.Contains(c.ClipId))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        if (rows.Count == 0)
+        {
+            return 0;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_opt.BucketName))
+        {
+            // Same ordering as the per-user path: S3 object first, row second,
+            // so a crash mid-flow leaves a recoverable orphan row rather than
+            // an object no row can locate.
+            foreach (var clip in rows)
+            {
+                try
+                {
+                    await _s3.DeleteObjectAsync(_opt.BucketName, clip.S3Key, ct)
+                        .ConfigureAwait(false);
+                }
+                catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    // Already gone — a re-run that finds the object missing is
+                    // a success, not a failure.
+                }
+            }
+        }
+
+        _db.VoiceClipsRetained.RemoveRange(rows);
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return rows.Count;
+    }
+
     public async Task<Guid> PersistAsync(
         VoiceClipRetained metadata,
         byte[] cipherBytes,

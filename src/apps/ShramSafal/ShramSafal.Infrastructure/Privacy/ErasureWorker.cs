@@ -28,6 +28,38 @@
 // worker catches + logs + marks voice_clips_retained_deferred=true on
 // the request payload.
 //
+// spec: dfes-companion-2026-07-11 (erasure-honesty) — WHAT THIS WORKER
+// DOES NOT DO, and why the terminal state now says so.
+// Founder ruling 2026-08-23 ITEM 4: "the system must never tell a farmer
+// that something has been deleted when ARVE knowingly continues to retain
+// the active copy." Three things this pass knowingly leaves behind:
+//   1. THE ACCOUNT ITSELF. display_name + phone live in the User bounded
+//      context (public.users). Domain layering forbids ShramSafal reaching
+//      into it and nothing in src/apps/User references erasure at all
+//      (verified 2026-08-23), so closing the account is ALWAYS a human
+//      step today. Unconditional — hence Completed is currently never
+//      reached by this worker.
+//   2. THE COLD-TIER RAW AUDIO. AiOrchestrator.TryPersistRawBlobAsync
+//      PUTs the farmer's raw bytes to the content-addressed raw-blob
+//      bucket and stamps the object key on ai_jobs.raw_input_ref. This
+//      worker DELETEs the ai_jobs rows but never calls
+//      IRawBlobStore.DereferenceAsync, so the S3 objects survive — which
+//      is exactly what the served privacy notice already admits
+//      (public/legal/privacy_{en,mr}.md §6 note 3: "those are removed by
+//      hand"). We collect raw_input_ref BEFORE the DELETE and hand the
+//      keys to the completion audit row, because after the DELETE nothing
+//      else links the user to them (ssf.raw_blob_index has no user_id) and
+//      a manual step nobody can perform is not a manual step.
+//      NOTE for whoever automates this later: dereference by
+//      ai_jobs.RAW_INPUT_REF (server-computed SHA-256 of the stored
+//      bytes), NOT by input_content_hash — the latter is the CLIENT-
+//      supplied RequestPayloadHash, is never validated against the bytes,
+//      and is null on at least one orchestrator path that still writes a
+//      blob (AiOrchestrator ~:979).
+//   3. voice_clips_retained, when the retained-store purge defers.
+// The worker enumerates whichever of these apply and lands the request on
+// ErasureStatus.AwaitingManualCompletion instead of Completed.
+//
 // SARVAM_PRIMARY_VOICE_PIPELINE Task 3.4 — extension to the cascade.
 // The voice-spine schema adds three user-keyed surfaces that DELETE
 // rather than ANONYMIZE on erasure:
@@ -372,6 +404,23 @@ public sealed class ErasureWorker(
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
+        // 1b) erasure-honesty: collect the cold-tier raw-blob object keys
+        //     the same way, and for the same reason — after the ai_jobs
+        //     DELETE below nothing links this user to their raw audio
+        //     (ssf.raw_blob_index is keyed on sha256 alone). This worker
+        //     does NOT delete those S3 objects; the keys go into the
+        //     completion audit row so the person at ARVE who does can
+        //     actually find them. RawInputRef, NOT InputContentHash — see
+        //     the header note: InputContentHash is the client-supplied
+        //     RequestPayloadHash and is never validated against the bytes.
+        var userRawBlobKeys = await admin.AiJobs
+            .AsNoTracking()
+            .Where(j => j.UserId == targetUserId && j.RawInputRef != null)
+            .Select(j => j.RawInputRef!)
+            .Distinct()
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
         // 2) Delete ai_jobs WHERE user_id = X. EF's ExecuteDeleteAsync
         //    emits a single SQL DELETE; the configured cascade on
         //    ai_job_attempts (DeleteBehavior.Cascade in
@@ -440,9 +489,42 @@ public sealed class ErasureWorker(
         // AuditEvent per anonymized data row, batched here.
         await EmitPerRowAuditEventsAsync(admin, request, perTableCounts, sentinel, ct).ConfigureAwait(false);
 
-        request.MarkCompleted(totalAnonymized, nowUtc);
+        // ── erasure-honesty: name what is still held, then say so ────────
+        // Every entry here is personal data the request was supposed to
+        // remove and that ARVE knowingly still holds after this pass. If
+        // the list is non-empty the request is NOT Completed — see the
+        // header block for why each entry is outside this worker's reach.
+        var manualStepsOutstanding = new List<string>();
 
-        // Final ErasureRequest/Completed audit row (single, not per-table).
+        // Unconditional: public.users (display_name + phone) is in the User
+        // bounded context. Nothing in src/apps/User implements erasure, and
+        // this worker may not reach across contexts, so it cannot even
+        // observe whether the account is gone — let alone claim it is.
+        manualStepsOutstanding.Add("user_account_and_phone");
+
+        if (userRawBlobKeys.Count > 0)
+        {
+            manualStepsOutstanding.Add("cold_tier_raw_audio");
+        }
+
+        if (voiceClipsDeferred)
+        {
+            manualStepsOutstanding.Add("voice_clips_retained");
+        }
+
+        var fullyErased = manualStepsOutstanding.Count == 0;
+        if (fullyErased)
+        {
+            request.MarkCompleted(totalAnonymized, nowUtc);
+        }
+        else
+        {
+            request.MarkAwaitingManualCompletion(totalAnonymized);
+        }
+
+        // Final single audit row (not per-table). Its action mirrors the
+        // status exactly — an audit ledger that says "Completed" over a
+        // request that is not completed is the same lie one layer down.
         var completionPayload = new
         {
             requestId = request.Id,
@@ -450,12 +532,19 @@ public sealed class ErasureWorker(
             rowsAnonymizedCount = totalAnonymized,
             perTableCounts,
             voiceClipsRetainedDeferred = voiceClipsDeferred,
+            manualStepsOutstanding,
+            // The worklist for the human step. SHA-256 object keys only —
+            // no audio, no transcript, nothing reversible — and they are
+            // recorded because after the ai_jobs DELETE above they are the
+            // only remaining way to locate this farmer's raw audio in the
+            // cold-tier bucket.
+            coldTierRawAudioKeys = userRawBlobKeys,
         };
 
         var completionAudit = AuditEventFactory.Create(
             entityType: "ErasureRequest",
             entityId: request.Id,
-            action: "Completed",
+            action: fullyErased ? "Completed" : "AwaitingManualCompletion",
             actorUserId: sentinel,
             actorRole: "system_erasure_worker",
             payload: completionPayload,
@@ -469,9 +558,24 @@ public sealed class ErasureWorker(
 
         await admin.SaveChangesAsync(ct).ConfigureAwait(false);
 
-        logger.LogInformation(
-            "ErasureWorker completed request {RequestId} for user {UserId}: {Count} rows anonymized.",
-            request.Id, targetUserId, totalAnonymized);
+        if (fullyErased)
+        {
+            logger.LogInformation(
+                "ErasureWorker completed request {RequestId} for user {UserId}: {Count} rows anonymized.",
+                request.Id, targetUserId, totalAnonymized);
+        }
+        else
+        {
+            logger.LogWarning(
+                "ErasureWorker finished its automated pass for request {RequestId} (user {UserId}): "
+                + "{Count} rows anonymized, but {StepCount} manual step(s) remain outstanding [{Steps}] "
+                + "and {BlobCount} cold-tier raw-audio object(s) are still held. Status is "
+                + "AwaitingManualCompletion — a person at ARVE must finish this within the 48h SLA. "
+                + "The object keys are on the ErasureRequest/AwaitingManualCompletion audit row.",
+                request.Id, targetUserId, totalAnonymized,
+                manualStepsOutstanding.Count, string.Join(",", manualStepsOutstanding),
+                userRawBlobKeys.Count);
+        }
     }
 
     // ── Per-table anonymizers ────────────────────────────────────────
@@ -656,7 +760,10 @@ UPDATE ssf.farm_operations
             var req = await admin.ErasureRequests
                 .FirstOrDefaultAsync(r => r.Id == requestId, ct)
                 .ConfigureAwait(false);
-            if (req is not null && req.Status != ErasureStatus.Failed && req.Status != ErasureStatus.Completed)
+            if (req is not null
+                && req.Status != ErasureStatus.Failed
+                && req.Status != ErasureStatus.Completed
+                && req.Status != ErasureStatus.AwaitingManualCompletion)
             {
                 req.MarkFailed(reason.Length > 1000 ? reason[..1000] : reason, DateTime.UtcNow);
                 await admin.SaveChangesAsync(ct).ConfigureAwait(false);
