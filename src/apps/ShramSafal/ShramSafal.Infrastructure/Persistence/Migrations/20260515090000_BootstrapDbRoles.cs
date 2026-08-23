@@ -51,15 +51,38 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
 DECLARE
   v_runner text := current_user;
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agrisync_owner') THEN
+  -- Roles are CLUSTER-wide, not per-database. Two migration runs against two
+  -- different databases in the SAME cluster therefore contend for these three
+  -- names, and `IF NOT EXISTS ... THEN CREATE ROLE` is check-then-act: both
+  -- sessions evaluate NOT EXISTS as true, both issue CREATE, and the loser
+  -- gets `23505 duplicate key value violates unique constraint
+  -- pg_authid_rolname_index.
+  --
+  -- CI hit exactly that on 2026-08-23. Three RequiresPostgres classes, each
+  -- correctly creating its own scratch DATABASE, ran in parallel against the
+  -- one service container and raced here. All three failed within 50ms of
+  -- each other, and the row-level-security test failed in 1ms -- during setup,
+  -- before it asserted anything. Read at a glance it looked like a tenant
+  -- isolation failure. It was the fixture, not the property.
+  --
+  -- Production never sees this: one process migrates at a time. It is fixed
+  -- anyway, because a guard that fails under concurrency is a guard that
+  -- reports a security defect it did not find.
+  BEGIN
     CREATE ROLE agrisync_owner NOLOGIN;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agrisync_app') THEN
+  EXCEPTION WHEN duplicate_object OR unique_violation THEN
+    NULL;  -- another session created it between our check and our CREATE
+  END;
+  BEGIN
     CREATE ROLE agrisync_app LOGIN PASSWORD 'dev_app_change_me';
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='agrisync_readonly') THEN
+  EXCEPTION WHEN duplicate_object OR unique_violation THEN
+    NULL;
+  END;
+  BEGIN
     CREATE ROLE agrisync_readonly LOGIN PASSWORD 'dev_ro_change_me';
-  END IF;
+  EXCEPTION WHEN duplicate_object OR unique_violation THEN
+    NULL;
+  END;
 
   EXECUTE 'ALTER SCHEMA ssf OWNER TO agrisync_owner';
   EXECUTE 'GRANT USAGE ON SCHEMA ssf TO agrisync_app, agrisync_readonly';
