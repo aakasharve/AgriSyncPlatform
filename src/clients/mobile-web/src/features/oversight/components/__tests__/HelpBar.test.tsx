@@ -3,7 +3,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: owner-oversight-loop (Task 13, change 5)
+ * spec: owner-oversight-loop (Task 13, change 5; Task 15)
  *
  * Pins `HelpBar`'s founder-approved copy AND the honest-disabled talk
  * button — the named invariant the task brief singles out: "do not wire it
@@ -60,9 +60,21 @@ describe('HelpBar — closing help strip (Task 13, change 5)', () => {
 
         const img = screen.getByTestId('help-bar').querySelector('img') as HTMLImageElement;
         expect(img).toBeTruthy();
-        expect(img.getAttribute('src')).toBe('/images/sathi/sathi-guide.png');
+        expect(img.getAttribute('src')).toBe('/images/sathi/sathi-points-down-both.png');
         expect(img.getAttribute('loading')).toBe('lazy');
         expect(img.getAttribute('width')).toBe('1086');
         expect(img.getAttribute('height')).toBe('1448');
+    });
+
+    it('the face-crop box preserves the source\'s exact 1086:1448 ratio (no distortion)', () => {
+        // Task 15 — 66×88 was chosen so 66/88 === 1086/1448 exactly, so
+        // `object-cover` on this box does no actual cropping/zooming; the
+        // circular `overflow-hidden` parent is what windows the face out.
+        render(<HelpBar />);
+
+        const img = screen.getByTestId('help-bar').querySelector('img') as HTMLImageElement;
+        expect(img.className).toContain('h-[88px]');
+        expect(img.className).toContain('w-[66px]');
+        expect(66 / 88).toBeCloseTo(1086 / 1448, 5);
     });
 });

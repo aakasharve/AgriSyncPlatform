@@ -22,6 +22,24 @@
  * window now starts flush at the image's own top edge instead of guessing
  * an 18px shift. Same asset, same `object-cover`, only the numbers change.
  *
+ * TASK 15 — NEW SOURCE ASSET, RE-TUNED CROP
+ * --------------------------------------------
+ * `sathi-guide.png` replaced by `sathi-points-down-both.png` (same asset
+ * `SathiGuideCard` now uses — one image, two crops). This asset's face
+ * sits higher and larger in the frame, so the old 84×112 box (top ~39% of
+ * 1448px visible) doesn't carry over unchanged: it either overshoots into
+ * the collar or undershoots the mouth depending on the source's exact
+ * proportions, and this is a DIFFERENT source, not the same one at a new
+ * path. Re-measured directly: rendering the source into a box that keeps
+ * its exact 1086:1448 ratio (66×88, chosen SO 66/88 = 1086/1448 exactly —
+ * no distortion) and windowing the top-centre 44×44 circle out of that box
+ * puts turban-crown through open-mouth-and-moustache inside the circle,
+ * with the ears' outer edges just past the circle's rim — confirmed by
+ * rendering that exact crop before committing to the numbers (not
+ * eyeballed off the full image). Same mechanics as Task 14: `object-cover`
+ * does no actual cropping here either (box ratio == source ratio), the
+ * circular `overflow-hidden` parent is what windows the face out.
+ *
  * THE BUTTON IS HONESTLY DISABLED — READ BEFORE RE-WIRING
  * ----------------------------------------------------------
  * The task brief: "Wire the button to the app's existing voice/assistant
@@ -68,21 +86,19 @@ const HelpBar: React.FC = () => {
             data-testid="help-bar"
             className="mb-4 mt-6 flex items-center gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/60 px-3.5 py-3"
         >
-            {/* Head-and-shoulders crop (Task 14, change 7) — the rendered
-                box (84×112) is deliberately far larger than the source's
-                own ratio would need for a 44px circle, so `object-cover`
-                zooms in: only the top ~39% of the 1448px-tall source is
-                ever inside the circle (turban through the collar), flush
-                with the image's own top edge (no vertical offset). Reads
-                as a face in a circle, not a shrunken body. */}
+            {/* Face crop (Task 15) — the rendered box (66×88) preserves the
+                source's exact 1086:1448 ratio, so `object-cover` scales
+                without cropping; the circular `overflow-hidden` parent
+                then windows only the top-centre 44×44 of that box, which
+                measured out to turban-through-moustache on this asset. */}
             <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full border-2 border-white shadow-sm">
                 <img
-                    src="/images/sathi/sathi-guide.png"
+                    src="/images/sathi/sathi-points-down-both.png"
                     alt=""
                     loading="lazy"
                     width={1086}
                     height={1448}
-                    className="absolute left-1/2 top-0 h-[112px] w-[84px] -translate-x-1/2 object-cover"
+                    className="absolute left-1/2 top-0 h-[88px] w-[66px] -translate-x-1/2 object-cover"
                 />
             </span>
 

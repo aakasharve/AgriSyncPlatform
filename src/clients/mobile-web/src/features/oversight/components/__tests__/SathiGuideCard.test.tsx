@@ -3,7 +3,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: owner-oversight-loop (Task 13, change 3; Task 14, changes 1-2)
+ * spec: owner-oversight-loop (Task 13, change 3; Task 14, changes 1-2; Task 15)
  *
  * Pins `SathiGuideCard`'s founder-approved copy and the headline's emerald
  * emphasis split.
@@ -54,30 +54,30 @@ describe('SathiGuideCard — the centrepiece guide card (Task 13, change 3)', ()
         expect(emphasis.className).toContain('emerald');
     });
 
-    it('renders the whole-figure Sathi image, left of the text, with explicit width/height and lazy loading', () => {
-        // Task 14, change 1 — `sathi-guide.png` (Task 13's default) is
-        // cropped at the waist; the founder now explicitly asks for the
-        // WHOLE figure, and for it to sit on the LEFT so his gesture points
-        // into the card's content instead of away from it.
-        // `sathi-point-down.png` is the one asset that is a full standing
-        // figure in the same 1086×1448 frame.
+    it('renders the whole-figure Sathi image, below the text and centred, with explicit width/height and lazy loading', () => {
+        // Task 15 — the new asset (`sathi-points-down-both.png`) is a
+        // symmetric, both-hands, straight-down gesture; a side-by-side
+        // left/right split (Task 14) would point half the gesture off the
+        // card. Re-composed as a single column instead: text block first,
+        // character second, centred, so his fingers lead the eye straight
+        // down into the plot selector immediately beneath this card.
         render(<SathiGuideCard />);
 
         const card = screen.getByTestId('sathi-guide-card');
         const img = card.querySelector('img') as HTMLImageElement;
         expect(img).toBeTruthy();
-        expect(img.getAttribute('src')).toBe('/images/sathi/sathi-point-down.png');
+        expect(img.getAttribute('src')).toBe('/images/sathi/sathi-points-down-both.png');
         expect(img.getAttribute('loading')).toBe('lazy');
         expect(img.getAttribute('width')).toBe('1086');
         expect(img.getAttribute('height')).toBe('1448');
+        expect(img.className).toContain('mx-auto');
 
-        // LEFT of the text — the image is the first element child, the text
-        // block the second, in a flex row (reversing Task 13's
-        // bottom-right-bled placement).
+        // BELOW the text — the text block is the first element child, the
+        // image the second (and last), in a flex column.
         const children = Array.from(card.children);
         const imgIndex = children.indexOf(img);
-        expect(imgIndex).toBe(0);
-        expect(imgIndex).toBeLessThan(children.length - 1);
+        expect(imgIndex).toBe(children.length - 1);
+        expect(imgIndex).toBeGreaterThan(0);
     });
 
     it('english language resolves the english headline and emphasises "plot"', () => {

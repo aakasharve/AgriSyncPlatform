@@ -54,13 +54,43 @@
  * second line. Same two translation keys as Task 13 — no copy changed,
  * only which one is louder.
  *
- * IMAGE WEIGHT — flagged, not silently shipped: both PNGs are ~1MB
+ * IMAGE WEIGHT — flagged, not silently shipped: the PNG is ~1.3MB
  * (1086×1448 source). `loading="lazy"` plus explicit `width`/`height`
  * (the source's real intrinsic pixels, so the browser can reserve the
  * correct aspect ratio before the file loads — CSS controls the actual
  * rendered size) avoid layout shift, per the task-13 brief. Optimising the
  * asset itself (WebP/compression) is out of this task's scope and is
  * called out again in the task-13 report for a rural-bandwidth follow-up.
+ *
+ * TASK 15 — NEW ASSET, RE-COMPOSED (not swapped)
+ * -----------------------------------------------
+ * Founder supplied a new character asset, `sathi-points-down-both.png`:
+ * head-and-torso, front-facing, BOTH hands raised with index fingers
+ * pointing straight down, symmetrically. Task 14's left/right split
+ * (`sathi-point-down.png` on the LEFT, text on the RIGHT) was built for a
+ * side-facing full-body figure whose single hand pointed sideways-and-down
+ * across the card into the text and, from there, at the plot selector
+ * below. That reasoning does not transfer: a symmetric two-handed downward
+ * gesture placed on one side of a row points at nothing — half his
+ * intent (the second hand) would aim off the card entirely.
+ *
+ * Re-composed instead of resized: text now sits FIRST, full-width, at the
+ * card's top (greeting → headline → divider → both instruction lines,
+ * copy and emphasis UNCHANGED from Task 14). The character sits SECOND,
+ * centred horizontally, flush against the card's own bottom edge with no
+ * bottom padding — his fingertips are the last thing rendered before the
+ * card ends, immediately above `CropSelector`'s `plotSectionHeader`
+ * ("प्लॉट निवडा") that `mainView.tsx` renders directly beneath this
+ * component. The eye now travels top-to-bottom through one column:
+ * question → instructions → his fingers → the plot cards — the same
+ * order the gesture itself already points in, so nothing has to jump
+ * sideways to follow it.
+ *
+ * Centred rather than centre-right: the source asset's own non-transparent
+ * content (checked with `sharp().trim()`) is x:[2,1083] of 1086 and
+ * y:[10,1437] of 1448 — the figure is already dead-centre in its own
+ * frame with near-zero side padding, so a horizontal offset would only
+ * fight the asset, not the layout.
  */
 import React from 'react';
 import { Leaf } from 'lucide-react';
@@ -119,23 +149,9 @@ const SathiGuideCard: React.FC = () => {
     return (
         <div
             data-testid="sathi-guide-card"
-            className="relative mb-6 flex items-end overflow-hidden rounded-[28px] border border-emerald-100 bg-gradient-to-br from-emerald-50 via-lime-50 to-emerald-100/70 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500"
+            className="mb-6 flex flex-col overflow-hidden rounded-[28px] border border-emerald-100 bg-gradient-to-br from-emerald-50 via-lime-50 to-emerald-100/70 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500"
         >
-            {/* Change 1 — LEFT, whole figure. `aspect-[1086/1448]` locks the
-                box to the source's own ratio, so `h-*` alone decides the
-                size and the figure can never be squashed. Bled flush to the
-                card's left + bottom edges, same "bled" aesthetic Task 13
-                gave the old bottom-right placement. */}
-            <img
-                src="/images/sathi/sathi-point-down.png"
-                alt=""
-                loading="lazy"
-                width={1086}
-                height={1448}
-                className="h-[224px] w-auto shrink-0 aspect-[1086/1448] object-contain object-bottom sm:h-[248px]"
-            />
-
-            <div className="min-w-0 flex-1 py-5 pl-1 pr-5">
+            <div className="px-5 pt-5">
                 <p
                     className="flex items-center gap-1.5 text-[14px] font-extrabold text-stone-800"
                     style={fontStyleFor(greeting)}
@@ -168,6 +184,23 @@ const SathiGuideCard: React.FC = () => {
                     </p>
                 </div>
             </div>
+
+            {/* Task 15 — centred, bottom-anchored, no bottom padding: his
+                fingertips sit at the card's own bottom edge (the source's
+                non-transparent content already ends ~11px short of the
+                frame's own bottom, so "flush" here means no added gap, not
+                an actual crop of the figure). `object-contain` inside
+                `h-*`/`w-auto` keeps the source's true 1086:1448 ratio
+                regardless of the height chosen for "a sensible card
+                height" — the figure can never be squashed. */}
+            <img
+                src="/images/sathi/sathi-points-down-both.png"
+                alt=""
+                loading="lazy"
+                width={1086}
+                height={1448}
+                className="mx-auto mt-1 h-[186px] w-auto shrink-0 object-contain object-bottom sm:h-[206px]"
+            />
         </div>
     );
 };
