@@ -30,6 +30,12 @@ import { MeterDisplay } from '../../features/logs/components/MeterDisplay';
 // which owns the decision to render the panel (it is the component that knows
 // whether the farmer's context is the whole farm).
 import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
+// spec: owner-oversight-loop (Task 13, changes 3 + 5) — real components
+// (not inlined here), because both call `useLanguage()` internally and this
+// file's render functions are plain functions, not components — see
+// `mainViewComponents.tsx`'s header for why that hook rule forces the split.
+import SathiGuideCard from '../../features/oversight/components/SathiGuideCard';
+import HelpBar from '../../features/oversight/components/HelpBar';
 import {
     LabourLogBanner,
     NotQueuedForServerBadge,
@@ -175,6 +181,11 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                         <LabourLogBanner onBackToLabour={() => setCurrentRoute('labour')} />
                     )}
 
+                    {/* spec: owner-oversight-loop (Task 13, change 3) — the
+                        Sathi guide card, above the plot selector, per the
+                        founder's own reference image. */}
+                    {!recordingSegment && <SathiGuideCard />}
+
                     {!recordingSegment && (
                         <div id="crop-selector-container" className="mb-6 animate-in slide-in-from-top-4 duration-500">
                             <CropSelector
@@ -205,9 +216,17 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                     }
                                 }}
                                 disabled={false}
+                                // spec: owner-oversight-loop (Task 13, change
+                                // 4) — "संपूर्ण शेत" demoted out of the
+                                // carousel, below as its own quiet row.
+                                hideGlobalCard
                             />
                         </div>
                     )}
+
+                    {/* spec: owner-oversight-loop (Task 13, change 5) — the
+                        closing help bar. */}
+                    {!recordingSegment && <HelpBar />}
 
                     {/* spec: owner-oversight-loop (Task 7, design doc §4.2,
                         §5) — Running Cost, MOVED below the plot selector:

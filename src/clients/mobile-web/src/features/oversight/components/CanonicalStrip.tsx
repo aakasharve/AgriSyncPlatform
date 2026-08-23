@@ -12,8 +12,16 @@
  * and the header-card mock referenced in the same task brief (the waiting
  * tray) — both supersede Task 11's shells below, not Task 4's.
  *
- *   Row 1:  [avatar][farm]         [Log | Reflect | Compare]      [weather]
- *   Row 2:  [ waiting tray — FULL WIDTH, inset ~12px both sides    N  ⌄ ]
+ *   Row 1:    [avatar][farm]                                      [weather]
+ *   Row 1.5:  [ आजची कामे ][ माझं शेत ][ तुलना ]  — OversightNavCards, Task 13
+ *   Row 2:    [ waiting tray — FULL WIDTH, inset ~12px both sides   N  ⌄ ]
+ *
+ * Task 13 (founder-approved reference image + his own Marathi table) moved
+ * the centre [Log | Reflect | Compare] toggle OUT of row 1 into its own row
+ * beneath it (`AppHeader.tsx`'s `OversightNavCards`, not this file) — see
+ * that component for the restyle. This file's own row 2 is unmoved; it
+ * gains a subtitle line under the (now founder-approved) waiting title,
+ * documented at `subtitleText` below.
  *
  * This file owns two separate pieces:
  *
@@ -47,7 +55,7 @@
 import React from 'react';
 import { Leaf, ChevronDown, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import type { Language } from '../../../i18n/language';
-import { oversightTranslations, resolveOversightString } from '../../../i18n/oversightTranslations';
+import { oversightTranslations, resolveOversightString, PENDING_FOUNDER_STRINGS } from '../../../i18n/oversightTranslations';
 
 // Devanagari block. Used only to pick which of the two locked fonts a
 // resolved string needs (root CLAUDE.md Font Rules) — never to decide
@@ -217,19 +225,28 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
     onToggleWaiting,
 }) => {
     const isWaiting = waitingCount > 0;
-    const primaryLabelText = resolveOversightString(language, isWaiting ? 'waitingLabel' : 'restState');
+    const primaryKey = isWaiting ? 'waitingLabel' : 'restState';
+    const primaryLabelText = resolveOversightString(language, primaryKey);
 
-    // `waitingLabel`/`restState` are agent placeholders, not yet
-    // founder-approved copy (spec §6.2, `PENDING_FOUNDER_STRINGS`). The
-    // house pattern for "Marathi CTA + a small English caption beneath" is
-    // already shipped (`FarmContextSwitcher.tsx`'s footer buttons) — reused
-    // here so the un-approved string visibly reads as a placeholder rather
-    // than signed-off copy. Only shown when the resolved primary text is
-    // itself Marathi; when `language` is 'en' the primary line already IS
-    // this text, so a second copy would just be a literal duplicate.
-    const englishCaption = language === 'mr'
-        ? oversightTranslations.en[isWaiting ? 'waitingLabel' : 'restState'].toUpperCase()
+    // Task 13 — `waitingLabel` graduated to founder-approved copy (his own
+    // reference-image table; see `oversightTranslations.ts`'s header,
+    // category (d)). `restState` has NOT — the founder's table covers the
+    // waiting state only. So the placeholder caption below is now driven by
+    // `PENDING_FOUNDER_STRINGS.includes(primaryKey)`, not a blanket
+    // `language === 'mr'` check — it must disappear now that its one prior
+    // reason to exist (flagging unapproved copy, spec §6.2) no longer
+    // applies to the waiting state, while staying exactly as before for the
+    // still-pending rest state.
+    const isPrimaryPending = PENDING_FOUNDER_STRINGS.includes(primaryKey);
+    const englishCaption = language === 'mr' && isPrimaryPending
+        ? oversightTranslations.en[primaryKey].toUpperCase()
         : null;
+
+    // Task 13 — the founder's reference adds a subtitle line under the
+    // (now approved) waiting title. Waiting state only; the rest state
+    // carries no subtitle in the founder's table, so this key is never
+    // resolved for it.
+    const subtitleText = isWaiting ? resolveOversightString(language, 'waitingSubtitle') : null;
 
     return (
         <button
@@ -239,7 +256,7 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
             aria-label={primaryLabelText}
             className={`relative flex w-full items-center gap-2.5 rounded-2xl border px-3 text-left transition-colors ${
                 isWaiting
-                    ? 'border-amber-200 bg-gradient-to-b from-[#FFFDF7] to-amber-50 shadow-[0_3px_10px_-4px_rgba(217,119,6,0.38)]'
+                    ? 'border-amber-200 bg-gradient-to-b from-[#FFFDF7] to-amber-50 py-2.5 shadow-[0_3px_10px_-4px_rgba(217,119,6,0.38)]'
                     : 'border-stone-200 bg-white'
             }`}
             style={{ minHeight: STRIP_MIN_HEIGHT }}
@@ -275,6 +292,15 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
                 >
                     {primaryLabelText}
                 </span>
+                {subtitleText && (
+                    <span
+                        data-testid="canonical-strip-waiting-subtitle"
+                        className="block truncate text-[10.5px] font-semibold leading-tight text-amber-700/70"
+                        style={fontStyleFor(subtitleText)}
+                    >
+                        {subtitleText}
+                    </span>
+                )}
                 {englishCaption && (
                     <span
                         data-testid="canonical-strip-waiting-caption"

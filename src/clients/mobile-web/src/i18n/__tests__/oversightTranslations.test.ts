@@ -135,8 +135,11 @@ describe('oversightTranslations — pending_founder_strings_are_all_declared_key
     });
 
     it('every spec §6.2 placeholder AND every Ruling-7 keyless-but-declared key is represented in PENDING_FOUNDER_STRINGS', () => {
+        // `waitingLabel` is deliberately absent — Task 13 graduated it to
+        // founder-approved copy (his own reference-image table), so it must
+        // NOT be flagged pending any more. See oversightTranslations.ts's
+        // header, category (d).
         const expectedPending = [
-            'waitingLabel',
             'restState',
             'seenControl',
             'decisionLine',

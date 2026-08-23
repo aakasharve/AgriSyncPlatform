@@ -7,7 +7,6 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { User2, Leaf, X } from 'lucide-react';
 import { AppRoute, PageView, DetailedWeather } from '../../../types';
-import PageToggle from '../../../shared/components/ui/PageToggle';
 import { useLanguage } from '../../../i18n/LanguageContext';
 
 import { FarmOperator } from '../../../domain/types/farm.types';
@@ -30,6 +29,13 @@ import type { WeatherStatus } from '../../weather/useWeatherMonitor';
 import CanonicalStrip, { FarmIdentityElement } from '../../oversight/components/CanonicalStrip';
 import CompactWeatherChip from '../../oversight/components/CompactWeatherChip';
 import WaitingDrawer from '../../oversight/components/WaitingDrawer';
+// Task 13 — replaces the `PageToggle` segmented pill that used to sit here
+// in row 1's centre (see `CanonicalStrip.tsx`'s header comment for the row
+// diagram this moved to). `PageToggle` itself is left in place, unused by
+// this file — its own module has no other importer, but deleting a
+// still-compiling, still-exported component is a separate call from this
+// task's scope.
+import OversightNavCards from '../../oversight/components/OversightNavCards';
 import { buildOversightModel, type OversightDecision } from '../../oversight/oversightSelectors';
 import { useOversightAcknowledgement } from '../../oversight/useOversightAcknowledgement';
 import { LocalOversightAcknowledgementStore } from '../../oversight/LocalOversightAcknowledgementStore';
@@ -130,6 +136,17 @@ export const getUserColor = (name: string) => {
   }
   return colors[Math.abs(hash) % colors.length];
 };
+
+// The exact route list `PageToggle` used to be gated on, in row 1's centre
+// (Task 13 moved the nav itself into `OversightNavCards`, its own row below
+// row 1 — see `CanonicalStrip.tsx`'s header comment for the row diagram).
+// Named once so row 1's now-empty centre and the new nav-cards row can never
+// drift from each other.
+const PAGE_TOGGLE_ROUTES: readonly AppRoute[] = [
+  'main', 'schedule', 'procurement', 'income', 'profile', 'settings',
+  'finance-manager', 'finance-ledger', 'finance-price-book',
+  'finance-review-inbox', 'finance-reports', 'finance-settings',
+];
 
 const AppHeader: React.FC<AppHeaderProps> = ({
   currentRoute,
@@ -236,6 +253,11 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   // split always reflects the real account.
   const farmCount = farmContext?.farms.length ?? 0;
 
+  // Task 13 — same condition `PageToggle` used to gate row 1's centre on;
+  // now decides whether the `OversightNavCards` row renders at all (its own
+  // row below row 1, not inside it — see `PAGE_TOGGLE_ROUTES`'s comment).
+  const showNavCards = PAGE_TOGGLE_ROUTES.includes(currentRoute);
+
   return (
     // Task 12 (`G:\VALIDATION\farm-selector-contextual.html`'s `.hdr` rule):
     // "the header becomes a card" — a rounded bottom + a soft downward
@@ -279,20 +301,15 @@ const AppHeader: React.FC<AppHeaderProps> = ({
           )}
         </div>
 
-        {/* CENTER: Toggle (Visible on all core pages) */}
+        {/* CENTER: Task 13 — the Log/Reflect/Compare toggle that used to
+            render here moved OUT of row 1 entirely, into its own row below
+            (`OversightNavCards`, rendered after this row 1 div). On routes
+            where it used to appear, row 1's centre is now empty — matching
+            the founder's reference, whose row 1 carries nothing between the
+            farm identity and the weather chip. Every other route keeps its
+            existing brand/owner-chip centre, unchanged. */}
         <div className="min-w-0 flex-1 flex items-center justify-center">
-          {['main', 'schedule', 'procurement', 'income', 'profile', 'settings', 'finance-manager', 'finance-ledger', 'finance-price-book', 'finance-review-inbox', 'finance-reports', 'finance-settings'].includes(currentRoute) ? (
-            <div className="w-full max-w-[220px]">
-              <PageToggle
-                view={currentView}
-                onChange={(v) => {
-                  onViewChange(v);
-                  if (currentRoute !== 'main') onNavigate('main');
-                }}
-                disabled={disabled}
-              />
-            </div>
-          ) : (
+          {!showNavCards && (
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 bg-emerald-600 rounded-lg flex items-center justify-center text-white">
                 <Leaf size={16} fill="white" strokeWidth={0} />
@@ -354,6 +371,27 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         </div>
 
       </div>
+
+      {/* Task 13 (founder reference image + his own Marathi table) — the
+          nav-cards row. Renders "in its own row below the header, not
+          inside it" (the founder's own words): a sibling of row 1's div
+          above, not a child of it, so the three cards never share row 1's
+          flex layout with the avatar/farm/weather elements. Same route
+          gate `PageToggle` used to render on (`showNavCards`), so every
+          page that could reach Log/Reflect/Compare before still can. */}
+      {showNavCards && (
+        <div className="mx-auto w-full max-w-[480px] px-3 pb-2.5 md:max-w-[600px] xl:max-w-[640px]">
+          <OversightNavCards
+            language={language}
+            view={currentView}
+            onChange={(v) => {
+              onViewChange(v);
+              if (currentRoute !== 'main') onNavigate('main');
+            }}
+            disabled={disabled}
+          />
+        </div>
+      )}
 
       {/* Owner Oversight Loop (spec §2) — the canonical strip, row 2: the
           waiting button alone, full width (Task 11 founder restructure).

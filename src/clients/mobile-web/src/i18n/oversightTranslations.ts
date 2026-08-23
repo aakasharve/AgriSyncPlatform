@@ -145,6 +145,26 @@
  * failed acknowledgement write, and Ruling 7's own precedent (`entries`
  * serving two roles rather than gaining a duplicate key) is the reason to
  * reuse it here too instead of adding a near-identical third key.
+ *
+ * (d) FOUNDER-APPROVED — Task 13, verbatim from his own reference-image table
+ * -----------------------------------------------------------------------------
+ * The founder supplied a screen reference (`log screen re design reference.png`)
+ * with every Marathi string on it typed by his own hand, and a table pairing
+ * each UI location to exact copy. Every key below is transcribed
+ * character-for-character from that table — `navToday`, `navMyFarm`,
+ * `navCompare`, `waitingSubtitle`, `guideGreeting`, `guideHeadline`,
+ * `guideLine1`, `guideLine2`, `plotSectionHeader`, `plotSectionHint`,
+ * `entireFarmLabel`, `entireFarmHint`, `helpTitle`, `helpSubtitle`,
+ * `helpButtonLabel`. None are placeholders; none are in
+ * `PENDING_FOUNDER_STRINGS`. `en` values are ordinary English translations of
+ * the approved Marathi (translating INTO English is not the Hard Rule's
+ * concern — the rule guards against inventing farmer-facing MARATHI).
+ *
+ * `waitingLabel` ALSO graduates out of (b)/PENDING here: the founder's table
+ * gives "तुमच्यासाठी बाकी" for the same waiting-bar title `waitingLabel`
+ * already names, correcting the agent placeholder "तुम्हांसाठी बाकी" (wrong
+ * spelling) that shipped in Task 4. Only the `mr` value and its PENDING
+ * listing change; the key, its `en` value and every consumer are untouched.
  */
 import type { Language } from './language';
 
@@ -235,6 +255,50 @@ export interface OversightTranslations {
      * no count in the spec's own wording.
      */
     dayNotClosedLine: string;
+
+    // ── Founder-approved (Task 13, category (d)) — verbatim from his own
+    // reference-image table. Real `mr` in both languages; none pending. ────
+
+    /** Nav card 1 — the log screen (spec: owner-oversight-loop, Task 13). */
+    navToday: string;
+    /** Nav card 2 — the reflect/analysis screen. */
+    navMyFarm: string;
+    /** Nav card 3 — the compare screen. Same word as `header.compare`
+     * (`translations.ts`), independently declared here per this file's own
+     * no-cross-import convention for founder copy. */
+    navCompare: string;
+    /** Waiting-bar subtitle, new under the (now approved) `waitingLabel`
+     * title. Only rendered in the waiting state, never rest. */
+    waitingSubtitle: string;
+    /** Sathi guide card — greeting line, beside the leaf mark. */
+    guideGreeting: string;
+    /**
+     * Sathi guide card — the headline, the largest text on the redesigned
+     * screen. Contains the word the founder marked for emerald emphasis
+     * ("प्लॉटवर" / "plot") — the consuming component splits on it at
+     * render time rather than this file carrying three separate keys, so
+     * the full sentence stays the single source of truth.
+     */
+    guideHeadline: string;
+    /** Sathi guide card — first instruction line, below the divider. */
+    guideLine1: string;
+    /** Sathi guide card — second instruction line. */
+    guideLine2: string;
+    /** Plot-selector section header (replaces the old English dev copy,
+     * gated behind `CropSelector`'s `hideGlobalCard` opt-in). */
+    plotSectionHeader: string;
+    /** Plot-selector section hint, below the header. */
+    plotSectionHint: string;
+    /** The demoted "Entire Farm" list row's label (spec Task 13 change 4). */
+    entireFarmLabel: string;
+    /** The demoted "Entire Farm" row's hint line. */
+    entireFarmHint: string;
+    /** Help bar — title line. */
+    helpTitle: string;
+    /** Help bar — sub line, under the title. */
+    helpSubtitle: string;
+    /** Help bar — the emerald pill button's label. */
+    helpButtonLabel: string;
 }
 
 export const oversightTranslations: Record<Language, OversightTranslations> = {
@@ -271,6 +335,22 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         bandSinceLastLookedHeader: 'Since you last looked',
         sinceLastLookedTail: 'since you last looked — {days} days',
         dayNotClosedLine: "Yesterday's day was not closed",
+
+        navToday: "Today's Tasks",
+        navMyFarm: 'My Farm',
+        navCompare: 'Compare',
+        waitingSubtitle: 'You still have some tasks to finish.',
+        guideGreeting: 'Hello!',
+        guideHeadline: 'Which plot did you work on today?',
+        guideLine1: 'Select one or more plots.',
+        guideLine2: 'If the work isn\'t tied to a plot, choose "Entire Farm" below.',
+        plotSectionHeader: 'Select plot',
+        plotSectionHint: 'You can select more than one plot',
+        entireFarmLabel: 'Entire Farm',
+        entireFarmHint: 'Choose this when it can\'t be attributed to a plot',
+        helpTitle: 'Having trouble?',
+        helpSubtitle: 'I can help.',
+        helpButtonLabel: 'Talk to Shram Sathi',
     },
     mr: {
         welcomeBack: 'पुन्हा स्वागत! शेतात काय चाललं?',
@@ -288,7 +368,7 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         attention: 'लक्ष द्या',
         allFarmsOnTrack: 'सगळ्या शेती आज व्यवस्थित आहेत',
 
-        waitingLabel: 'तुम्हांसाठी बाकी',
+        waitingLabel: 'तुमच्यासाठी बाकी',
         restState: 'काही बाकी नाही',
         seenControl: 'मी हे पाहिलं',
         decisionLine: '{count} कामे तपासायचे आहे',
@@ -311,6 +391,24 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         // exists anywhere this task may cite for either concept.
         sinceLastLookedTail: '',
         dayNotClosedLine: '',
+
+        // Task 13, category (d) — verbatim from the founder's own reference
+        // table. See this file's header for provenance.
+        navToday: 'आजची कामे',
+        navMyFarm: 'माझं शेत',
+        navCompare: 'तुलना',
+        waitingSubtitle: 'तुमची काही पूर्ण होण्याची कामे बाकी आहेत.',
+        guideGreeting: 'नमस्कार!',
+        guideHeadline: 'आज कोणत्या प्लॉटवर काम केलं?',
+        guideLine1: 'एक किंवा अनेक प्लॉट निवडा.',
+        guideLine2: 'प्लॉटशी संबंध नसलेलं काम असेल तर खाली "संपूर्ण शेत" निवडा.',
+        plotSectionHeader: 'प्लॉट निवडा',
+        plotSectionHint: 'एकापेक्षा जास्त प्लॉट निवडू शकता',
+        entireFarmLabel: 'संपूर्ण शेत',
+        entireFarmHint: 'प्लॉटनुसार सांगता येत नसेल तेव्हा निवडा',
+        helpTitle: 'काही अडचण आहे का?',
+        helpSubtitle: 'मी मदत करतो.',
+        helpButtonLabel: 'श्रम साथीशी बोला',
     },
 };
 
@@ -321,9 +419,13 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
  * decide whether to render the `en` value beside the `mr` one;
  * `__tests__/oversightTranslations.test.ts` asserts every entry here
  * names a real key so the list can never point at a typo.
+ *
+ * `waitingLabel` is NOT here (Task 13 graduated it to founder-approved —
+ * see this file's header, category (d)). `restState` remains pending: the
+ * founder's reference table covers the waiting state only, not the rest
+ * state's copy.
  */
 export const PENDING_FOUNDER_STRINGS: readonly string[] = [
-    'waitingLabel',
     'restState',
     'seenControl',
     'decisionLine',

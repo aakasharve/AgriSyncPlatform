@@ -4,9 +4,21 @@
 */
 
 import React from 'react';
-import { Layers, CheckCircle2, MapPin } from 'lucide-react';
+import { Layers, CheckCircle2, MapPin, Home, ChevronRight } from 'lucide-react';
 import { CropProfile } from '../../../types';
 import { getCropTheme } from '../../../shared/utils/colorTheme';
+import { useLanguage } from '../../../i18n/LanguageContext';
+import { resolveOversightString } from '../../../i18n/oversightTranslations';
+
+// Same font-selection convention every oversight component uses (root
+// CLAUDE.md Font Rules) — only used below when `hideGlobalCard` opts a
+// caller into the founder-approved Task 13 copy.
+const DEVANAGARI_PATTERN = /[ऀ-ॿ]/;
+const MARATHI_BODY_FONT = { fontFamily: "'Noto Sans Devanagari', sans-serif" } as const;
+const ENGLISH_FONT = { fontFamily: "'DM Sans', sans-serif" } as const;
+function fontStyleFor(text: string): React.CSSProperties {
+    return DEVANAGARI_PATTERN.test(text) ? MARATHI_BODY_FONT : ENGLISH_FONT;
+}
 
 interface CropSelectorProps {
     mode: 'log' | 'reflect';
@@ -17,6 +29,23 @@ interface CropSelectorProps {
     disabled?: boolean;
     compact?: boolean;
     showPlots?: boolean; // New prop to force plot display in compact mode
+    /**
+     * spec: owner-oversight-loop (Task 13, change 4) — narrow, opt-in. When
+     * `true`:
+     *   - the "Entire Farm" card is suppressed from the horizontal carousel
+     *     (it no longer sits first, equal-weight with the crops);
+     *   - the SAME selection (`handleGlobalToggle`/`isGlobalSelected` below
+     *     — unchanged logic, not re-implemented) instead renders as a
+     *     quiet, muted, full-width list row BELOW the crop cards;
+     *   - the `mode === 'log'` section header/hint swap from this
+     *     component's original English dev copy to the founder's own
+     *     approved Marathi (`oversightTranslations.ts`'s `plotSectionHeader`
+     *     / `plotSectionHint`).
+     * Default `false` (or omitted) leaves every existing consumer
+     * (`Attendance.tsx`) byte-identical — this prop only ADDS a path,
+     * nothing already shipping is restructured.
+     */
+    hideGlobalCard?: boolean;
 }
 
 // --- NEW COMPONENT: CropSymbol (Photo/Emoji Replacement) ---
@@ -127,8 +156,10 @@ const CropSelector: React.FC<CropSelectorProps> = ({
     onSelectionChange,
     disabled,
     compact = false,
-    showPlots = false
+    showPlots = false,
+    hideGlobalCard = false
 }) => {
+    const { language } = useLanguage();
 
     const handleGlobalToggle = () => {
         if (disabled) return;
@@ -212,10 +243,8 @@ const CropSelector: React.FC<CropSelectorProps> = ({
 
     const isGlobalSelected = selectedCrops.includes('FARM_GLOBAL');
 
-    const cardPadding = compact ? 'p-2' : 'p-4';
     const fontSize = compact ? 'text-xs' : 'text-lg';
     const minHeight = compact ? 'auto' : (mode === 'log' ? '140px' : 'auto');
-    const gap = compact ? 'gap-2' : 'gap-3 sm:gap-4';
 
     return (
         <div className="w-full space-y-4">
@@ -226,12 +255,16 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                     <label className="text-xl font-bold text-slate-800 flex items-center">
                         {mode === 'log' ? (
                             <div className="flex flex-col">
-                                <span className="flex items-center">
+                                <span className="flex items-center" style={hideGlobalCard ? fontStyleFor(resolveOversightString(language, 'plotSectionHeader')) : undefined}>
                                     <MapPin className="mr-2 text-emerald-600 animate-bounce" size={24} />
-                                    Select the plots you worked on today
+                                    {hideGlobalCard
+                                        ? resolveOversightString(language, 'plotSectionHeader')
+                                        : 'Select the plots you worked on today'}
                                 </span>
-                                <span className="text-xs font-normal text-slate-500 mt-1 pl-8">
-                                    You can select multiple crops or multiple plots where same work was executed
+                                <span className="text-xs font-normal text-slate-500 mt-1 pl-8" style={hideGlobalCard ? fontStyleFor(resolveOversightString(language, 'plotSectionHint')) : undefined}>
+                                    {hideGlobalCard
+                                        ? resolveOversightString(language, 'plotSectionHint')
+                                        : 'You can select multiple crops or multiple plots where same work was executed'}
                                 </span>
                             </div>
                         ) : (
@@ -254,8 +287,13 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                 flex overflow-x-auto pb-8 pt-4 px-4 snap-x snap-mandatory scrollbar-hide -mx-4 sm:mx-0
                 ${compact ? 'gap-4' : 'gap-6'}
             `}>
-                {/* 1. Global / Farm Card */}
-                {!compact && (
+                {/* 1. Global / Farm Card — spec: owner-oversight-loop (Task
+                    13, change 4): "must be visually secondary". Suppressed
+                    here when `hideGlobalCard` is set; the SAME selection
+                    (`handleGlobalToggle`/`isGlobalSelected`, unchanged)
+                    renders instead as a quiet list row below the carousel —
+                    see that block, after the crop cards. */}
+                {!compact && !hideGlobalCard && (
                     <button
                         onClick={handleGlobalToggle}
                         disabled={disabled}
@@ -376,6 +414,50 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                     );
                 })}
             </div>
+
+            {/* spec: owner-oversight-loop (Task 13, change 4) — the demoted
+                "Entire Farm" row. Same handler/selection state as the
+                suppressed card above (`handleGlobalToggle`/
+                `isGlobalSelected`) — this is a restyle of the SAME
+                selection, not a second implementation, so it "select[s]
+                FARM_GLOBAL with exactly the existing behaviour" per the
+                task brief. Deliberately muted: stone palette, a plain house
+                icon (not a photo circle), no emerald — matching the
+                founder's own instruction, not the emphasis the crop cards
+                above still carry. */}
+            {!compact && hideGlobalCard && (
+                <button
+                    type="button"
+                    onClick={handleGlobalToggle}
+                    disabled={disabled}
+                    data-testid="crop-selector-entire-farm-row"
+                    aria-pressed={isGlobalSelected}
+                    className="flex w-full items-center gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-left transition-colors hover:bg-stone-50 disabled:opacity-60"
+                >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-stone-100 text-stone-500">
+                        <Home size={18} strokeWidth={2.25} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                        <span
+                            className="block truncate text-sm font-bold text-stone-700"
+                            style={fontStyleFor(resolveOversightString(language, 'entireFarmLabel'))}
+                        >
+                            {resolveOversightString(language, 'entireFarmLabel')}
+                        </span>
+                        <span
+                            className="block truncate text-xs text-stone-400"
+                            style={fontStyleFor(resolveOversightString(language, 'entireFarmHint'))}
+                        >
+                            {resolveOversightString(language, 'entireFarmHint')}
+                        </span>
+                    </span>
+                    {isGlobalSelected ? (
+                        <CheckCircle2 size={18} className="shrink-0 text-stone-400" />
+                    ) : (
+                        <ChevronRight size={16} className="shrink-0 text-stone-300" />
+                    )}
+                </button>
+            )}
 
             {/* --- INTEGRATED PLOT SELECTION TRAY (CLEAN BANNER STYLE) --- */}
             {/* Show if strict requirements met OR if showPlots prop is true */}

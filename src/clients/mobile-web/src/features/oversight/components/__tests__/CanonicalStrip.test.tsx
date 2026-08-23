@@ -130,20 +130,46 @@ describe('CanonicalStrip — row 2, the waiting button alone, full width', () =>
         expect(screen.queryByText(oversightTranslations.mr.waitingLabel)).not.toBeInTheDocument();
     });
 
-    it('marathi_mode_shows_an_english_caption_that_derives_from_the_same_placeholder_key', () => {
+    it('marathi_mode_still_shows_the_placeholder_english_caption_for_the_still_pending_rest_state', () => {
         // Spec §6.2: unapproved placeholder copy "ship[s] ... with the
-        // English fallback visible." Proves the caption is literally
-        // `oversightTranslations.en[<same key as the primary Marathi
-        // line>]` (uppercased) — not a second, independently-invented
-        // literal — for both the waiting and the rest label.
-        const { rerender } = render(<CanonicalStrip {...baseStripProps({ language: 'mr', waitingCount: 6 })} />);
-        expect(screen.getByTestId('canonical-strip-waiting-caption')).toHaveTextContent(
-            oversightTranslations.en.waitingLabel.toUpperCase(),
-        );
-
-        rerender(<CanonicalStrip {...baseStripProps({ language: 'mr', waitingCount: 0 })} />);
+        // English fallback visible." `restState` is still pending (Task 13's
+        // founder table covers the waiting state only), so this Task-4
+        // behaviour is unchanged for it.
+        render(<CanonicalStrip {...baseStripProps({ language: 'mr', waitingCount: 0 })} />);
         expect(screen.getByTestId('canonical-strip-waiting-caption')).toHaveTextContent(
             oversightTranslations.en.restState.toUpperCase(),
+        );
+    });
+
+    it('waiting_state_renders_the_founder_approved_subtitle_and_no_english_caption', () => {
+        // Task 13 — `waitingLabel` graduated to founder-approved copy (his
+        // own reference-image table), so the placeholder-caption pattern
+        // must NOT render for it any more; the new subtitle line replaces
+        // it. Both assertions matter: the subtitle actually being the real
+        // approved string, and the caption actually being gone (not merely
+        // additive) — proves `PENDING_FOUNDER_STRINGS.includes(primaryKey)`
+        // is driving the caption, not a hardcoded language check.
+        render(<CanonicalStrip {...baseStripProps({ language: 'mr', waitingCount: 6 })} />);
+        expect(screen.getByTestId('canonical-strip-waiting-subtitle')).toHaveTextContent(
+            oversightTranslations.mr.waitingSubtitle,
+        );
+        expect(screen.queryByTestId('canonical-strip-waiting-caption')).not.toBeInTheDocument();
+    });
+
+    it('rest_state_never_renders_the_waiting_subtitle', () => {
+        // The founder's table has no subtitle for the rest state — proves
+        // `subtitleText` is gated on `isWaiting`, not rendered unconditionally.
+        render(<CanonicalStrip {...baseStripProps({ language: 'mr', waitingCount: 0 })} />);
+        expect(screen.queryByTestId('canonical-strip-waiting-subtitle')).not.toBeInTheDocument();
+    });
+
+    it('english_mode_waiting_state_also_shows_the_real_subtitle_translation', () => {
+        // `waitingSubtitle` is a fully-approved key with a real `en` value
+        // (not a placeholder) — it should render in English mode too, same
+        // as `waitingLabel` itself.
+        render(<CanonicalStrip {...baseStripProps({ language: 'en', waitingCount: 6 })} />);
+        expect(screen.getByTestId('canonical-strip-waiting-subtitle')).toHaveTextContent(
+            oversightTranslations.en.waitingSubtitle,
         );
     });
 
