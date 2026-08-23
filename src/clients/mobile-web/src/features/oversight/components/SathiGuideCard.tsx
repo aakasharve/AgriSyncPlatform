@@ -44,11 +44,27 @@
  *      how tall the text column beside him makes the row). The text column
  *      is second (RIGHT), `flex-1`, occupying the remaining ~60%.
  *
- *   2. THE HILL — a green curved hill/field shape rises from the card's
- *      bottom-left in the reference, and the character stands on it. Built
- *      with inline SVG (`GuideCardHill`, `SathiGuideCardDecor.tsx`) — no
- *      new image asset, per the task brief. It sits behind the character
- *      image in the same relatively-positioned column.
+ *   2. THE HILL — REMOVED in the founder's next review round (verbatim:
+ *      "the hill has to go"). Task 17 originally built a green curved hill
+ *      SVG (`GuideCardHill`) the character stood on; it is now deleted from
+ *      `SathiGuideCardDecor.tsx` entirely, along with the reserved bottom
+ *      strip that used to keep a sliver of it visible under his feet. The
+ *      character column's own box now goes edge-to-edge again.
+ *
+ *      That same review round replaced it with the opposite instruction —
+ *      the founder, on the screenshot: "his fingers should come out of that
+ *      frame/component so that it would feel realistic." The character
+ *      `<img>` is now pulled BELOW the column's (and the card's) own bottom
+ *      edge by a fixed 20px (`h-[calc(100%+20px)]`), and the card switched from
+ *      `overflow-hidden` to `overflow-visible` so that overflow can actually
+ *      render instead of being clipped. 20px sits safely inside the card's
+ *      own `mb-6` (24px) gap to the plot selector below, so the overflow is
+ *      never able to visually cover — or, since it also carries
+ *      `pointer-events-none`, ever able to intercept a tap on — the
+ *      `प्लॉट निवडा` heading or the crop carousel beneath it. The leaf
+ *      watermarks (unaffected by any of this) stay clipped to the card
+ *      because `GuideCardLeafWatermarks` carries its own `overflow-hidden`
+ *      on its own wrapper — independent of the card's own overflow setting.
  *
  *   3. THREE INSTRUCTION LINES, NOT TWO — `guideLine2` is a genuinely new
  *      key (you may pick more than one plot for the SAME task); the old
@@ -77,7 +93,7 @@ import React from 'react';
 import { Leaf, Layers, Sprout, type LucideIcon } from 'lucide-react';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { resolveOversightString } from '../../../i18n/oversightTranslations';
-import { GuideCardHill, GuideCardLeafWatermarks } from './SathiGuideCardDecor';
+import { GuideCardLeafWatermarks } from './SathiGuideCardDecor';
 
 // Same font-selection convention every oversight component uses (root
 // CLAUDE.md Font Rules). The headline gets its OWN variant — Noto Serif
@@ -137,34 +153,55 @@ const SathiGuideCard: React.FC = () => {
     return (
         <div
             data-testid="sathi-guide-card"
-            className="relative mb-6 flex overflow-hidden rounded-[28px] border border-emerald-100 bg-gradient-to-br from-emerald-50 via-lime-50 to-emerald-100/70 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500"
+            // Founder review round (post-Task 17) — Fix 3: "separation of
+            // uploaded image ... it seems overlapping" — `mt-4` gives the
+            // card its own breathing room from the header block above (that
+            // gap was 0px: `<main>` carries no top padding and this used to
+            // be its first child edge-to-edge). Boundary bumped one standard
+            // step in the app's own card language — `border-emerald-100` ->
+            // `-200`, `shadow-sm` -> `shadow-md` — never a bespoke shadow
+            // (see `CanonicalStrip.tsx`'s own header comment for why a
+            // one-off shadow was already rejected once on this feature).
+            // Fix 2 — `overflow-hidden` -> `overflow-visible` is what lets
+            // the character's `<img>` below actually render past this box
+            // instead of being clipped by it.
+            className="relative mt-4 mb-6 flex overflow-visible rounded-[28px] border border-emerald-200 bg-gradient-to-br from-emerald-50 via-lime-50 to-emerald-100/70 shadow-md animate-in fade-in slide-in-from-top-4 duration-500"
         >
             <GuideCardLeafWatermarks />
 
             {/* Task 17, change 1 — character LEFT, ~40% of the card, full
                 row height. `self-stretch` makes this column as tall as the
                 text column beside it; `object-contain object-bottom` on the
-                image inside it means the source's true 1086:1448 ratio is
-                preserved no matter how tall that makes the column — it is
-                sized DOWN to fit, never squashed. The inner box stops 14%
-                short of the column's true bottom (change 2's hill sits
-                BEHIND the whole column at `bottom-0`) so a visible strip of
-                hill always shows under his feet — without that reserved
-                strip, the character's own bottom-anchored image would cover
-                the hill completely, since his silhouette already reaches
-                almost to the frame's own edge. */}
-            <div className="relative z-[1] w-[40%] shrink-0 self-stretch overflow-hidden">
-                <GuideCardHill />
-                <div className="absolute top-0 right-0 left-0 bottom-[14%] z-10 flex items-end justify-center">
-                    <img
-                        src="/images/sathi/sathi-points-down-both.png"
-                        alt=""
-                        loading="lazy"
-                        width={1086}
-                        height={1448}
-                        className="h-full w-full object-contain object-bottom"
-                    />
-                </div>
+                image means the source's true 1086:1448 ratio is preserved no
+                matter how tall that makes the column — it is sized DOWN to
+                fit, never squashed.
+
+                Founder review round (post-Task 17), Fix 2 — the image's box
+                is `top-0` with `h-[calc(100%+20px)]`: 20px TALLER than the
+                column it sits in, anchored at the same top, so its bottom
+                edge lands 20px past this column's (and the card's) bottom
+                edge — his pointing hands break out of the frame, per the
+                founder's own ask, rather than reading as pasted onto a flat
+                panel. (Deliberately NOT `top-0 -bottom-5` with `h-full` —
+                that combination is CSS-over-constrained for an absolutely
+                positioned replaced element: the explicit `height` wins and
+                `bottom` is silently ignored, which measured as ZERO
+                overflow when first tried here.) `pointer-events-none` keeps
+                the overflow strictly decorative: it can never sit on top of
+                and swallow a tap meant for the plot-selector heading/
+                carousel directly below (`#crop-selector-container` in
+                `mainView.tsx`), and 20px stays safely inside this card's own
+                `mb-6` (24px) gap to that section so the overflow never
+                visually reaches it either. */}
+            <div className="relative z-[1] w-[40%] shrink-0 self-stretch">
+                <img
+                    src="/images/sathi/sathi-points-down-both.png"
+                    alt=""
+                    loading="lazy"
+                    width={1086}
+                    height={1448}
+                    className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[calc(100%+20px)] w-full object-contain object-bottom"
+                />
             </div>
 
             {/* Task 17, change 1 — text column RIGHT, `flex-1` (~60%). */}

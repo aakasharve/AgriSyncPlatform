@@ -95,11 +95,32 @@ describe('SathiGuideCard — the centrepiece guide card (Task 13, change 3)', ()
         expect(textColumn.contains(img)).toBe(false);
     });
 
-    it('the character stands on the hill graphic (Task 17, change 2)', () => {
+    it('the hill is gone; the character overflows past the card\'s bottom edge, and the leaf watermarks stay clipped (founder review round, post-Task 17)', () => {
         render(<SathiGuideCard />);
 
-        expect(screen.getByTestId('sathi-guide-hill')).toBeInTheDocument();
+        // Fix 1 — the hill graphic no longer exists anywhere in the tree.
+        expect(screen.queryByTestId('sathi-guide-hill')).not.toBeInTheDocument();
+
+        // The leaf watermarks are unaffected and still present.
         expect(screen.getByTestId('sathi-guide-leaf-watermarks')).toBeInTheDocument();
+
+        // Fix 2 — the card allows overflow (so the character can break out
+        // of it) and no longer clips its own contents.
+        const card = screen.getByTestId('sathi-guide-card');
+        expect(card.className).toContain('overflow-visible');
+        expect(card.className).not.toContain('overflow-hidden');
+
+        // The leaf watermarks clip themselves independently of the card's
+        // own overflow setting, so they can never escape it.
+        const watermarks = screen.getByTestId('sathi-guide-leaf-watermarks');
+        expect(watermarks.className).toContain('overflow-hidden');
+
+        // The character image is pulled past the column's own bottom edge
+        // with a negative offset, and is inert to pointer events so it can
+        // never cover a tap meant for the plot selector below it.
+        const img = card.querySelector('img') as HTMLImageElement;
+        expect(img.className).toContain('h-[calc(100%+20px)]');
+        expect(img.className).toContain('pointer-events-none');
     });
 
     it('renders three instruction rows, each with its own icon glyph', () => {

@@ -4,51 +4,20 @@
  *
  * spec: owner-oversight-loop (Task 17)
  *
- * SathiGuideCard's two purely-decorative layers — the green hill the
- * character stands on, and the faint background leaf watermarks — split out
- * of `SathiGuideCard.tsx` into their own file per the task brief ("If the
- * card grows past a comfortable size with the hill and leaf SVGs, extract
- * them into a sibling component"). Both are inline SVG/CSS only; no image
- * asset, no npm dependency, per the same brief.
+ * SathiGuideCard's purely-decorative background layer — the faint leaf
+ * watermarks — split out of `SathiGuideCard.tsx` into its own file per the
+ * task brief ("If the card grows past a comfortable size with the hill and
+ * leaf SVGs, extract them into a sibling component"). Inline SVG/CSS only;
+ * no image asset, no npm dependency, per the same brief.
+ *
+ * Founder review round (post-Task 17) — this file used to also export
+ * `GuideCardHill`, the green curved hill/field shape the character stood
+ * on. Deleted outright on direct founder feedback ("the hill has to go");
+ * see `SathiGuideCard.tsx`'s own header, Task 17 change 2, for the full
+ * removal note and what replaced it. Only the leaf watermarks remain, which
+ * the founder did not object to.
  */
 import React from 'react';
-
-/**
- * GuideCardHill — the curved green hill/field shape anchoring the character
- * to the bottom of the card, per the founder's reference image.
- * `preserveAspectRatio="none"` lets one path stretch to the card's actual
- * rendered width at any viewport — it is a ground line, not a to-scale
- * illustration. Renders BEHIND the character image (`SathiGuideCard.tsx`
- * stacks the `<img>` above it in the same relatively-positioned column).
- */
-export const GuideCardHill: React.FC = () => (
-    <svg
-        aria-hidden="true"
-        data-testid="sathi-guide-hill"
-        viewBox="0 0 200 100"
-        preserveAspectRatio="none"
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-[40%] w-full"
-    >
-        <defs>
-            <linearGradient id="sathiHillFill" x1="0" y1="1" x2="1" y2="0.2">
-                <stop offset="0%" stopColor="#16a34a" />
-                <stop offset="100%" stopColor="#86efac" stopOpacity="0" />
-            </linearGradient>
-        </defs>
-        <path
-            d="M0,100 L0,58 C34,36 68,66 104,50 C138,34 166,46 200,40 L200,100 Z"
-            fill="url(#sathiHillFill)"
-        />
-        <path
-            d="M0,58 C34,36 68,66 104,50 C138,34 166,46 200,40"
-            fill="none"
-            stroke="#ffffff"
-            strokeOpacity="0.45"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-        />
-    </svg>
-);
 
 /** One leaf glyph's placement — percentage-based so it scales with the card. */
 interface LeafSpot {
