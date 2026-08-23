@@ -7,7 +7,10 @@ import { recordAiFailureSignature } from './AiDoomLoopDetector';
 // spec: voice-diary-e2e-2026-05-17 (D.16) — opportunistic retained-tier
 // archive immediately after a successful AI parse. The function is a
 // no-op when the user has not granted FullHistoryJournal.
-import { archiveToRetainedTierIfConsented } from '../voice/VoiceClipRetention';
+import {
+    archiveToRetainedTierIfConsented,
+    retryPendingRetainedArchives,
+} from '../voice/VoiceClipRetention';
 
 const MAX_RETRIES = 5;
 const BATCH_LIMIT = 10;
@@ -67,6 +70,23 @@ export class AiJobWorker {
 
             await this.processJob(job);
         }
+
+        // spec: dfes-companion-2026-07-11 (farm-memory).
+        //
+        // Drain the retained-tier backlog. The archive hook below fires
+        // once per successful parse and swallows its failures, so a clip
+        // recorded out of signal never reached the cloud and nothing ever
+        // tried again. The local sweep now keeps those clips rather than
+        // deleting them at 30 days, which is only half an answer: without
+        // something to finish the upload they would simply accumulate on
+        // the phone forever. This is that something.
+        //
+        // Here rather than at app boot because this method already holds
+        // the two conditions an upload needs — online, and authenticated —
+        // and BackgroundSyncWorker calls it on every tick, so a phone that
+        // regains signal without being restarted still drains. Bounded and
+        // idempotent inside; a still-offline tick costs one no-op.
+        await retryPendingRetainedArchives();
     }
 
     private static async processJob(job: PendingAiJobWithId): Promise<void> {

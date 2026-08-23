@@ -5,19 +5,42 @@
 // the envelope-encryption seal/open hooks so every persist hits the
 // AES-GCM seal path and every read recovers plaintext via the DEK.
 //
-// Retention rule is unchanged: clips expire 30 days after recording,
-// `purgeExpiredProcessingVoiceClips` deletes them on the next sweep.
+// Retention rule: clips expire 30 days after recording, and
+// `purgeExpiredProcessingVoiceClips` deletes them on the next sweep —
+// with one exception added 2026-08-23, see below.
 //
 // spec: voice-diary-e2e-2026-05-17 (D.14)
 //
 // ADDITIVE EXTENSION — `archiveToRetainedTierIfConsented(clipId)` reads
 // the user's FullHistoryJournal consent state and, when granted, calls
 // `voiceDiaryApiClient.persistRetainedVoiceClip` with the sealed
-// ciphertext + envelope metadata. `purgeExpiredProcessingVoiceClips`
-// is UNCHANGED — the local 30-day sweep still runs because the S3 copy
-// holds the retained tier independently. Per supervisor risk #1, the
-// local Dexie `voiceClips.id` is reused verbatim as the server PK so
-// the unified VoiceDiary view de-dups cleanly.
+// ciphertext + envelope metadata. Per supervisor risk #1, the local
+// Dexie `voiceClips.id` is reused verbatim as the server PK so the
+// unified VoiceDiary view de-dups cleanly.
+//
+// spec: dfes-companion-2026-07-11 (farm-memory) — founder ruling
+// 2026-08-23, doctrine P10.
+//
+// That ship left the local sweep untouched on the reasoning that "the S3
+// copy holds the retained tier independently". True when the S3 copy
+// exists. The archive below is best-effort and swallows its failures, so
+// on a phone that was offline — the normal condition in a Tier-3 village
+// — no S3 copy is made, nothing retries, and thirty days later the sweep
+// deletes the only copy that ever existed. The farmer intended that
+// recording to be Farm Memory, the app agreed, and it vanished without
+// either of them being told.
+//
+// P10 says acknowledged work must be reconstructable without the
+// originating device, so the local timer alone cannot be authority to
+// delete. The sequence is: capture -> attempt durable storage -> SERVER
+// ACKNOWLEDGEMENT -> only then is the local copy eligible for cleanup.
+// `s3RetainedKey` is that acknowledgement; it is stamped only after
+// `persistRetainedVoiceClip` returns.
+//
+// This is deliberately NOT a second deletion rule. Nothing new gets
+// deleted and no clip acquires a shorter life. One class of clip —
+// unsynchronised Farm Memory — stops being deleted, and
+// `retryPendingRetainedArchives` gives it the way out it never had.
 
 import { getDatabase, type VoiceClipCacheRecord, type VoiceClipStatus } from '../storage/DexieDatabase';
 import { sealVoiceClip, openVoiceClip } from '../security/voiceEnvelope';
@@ -33,12 +56,116 @@ export function computeProcessingVoiceClipExpiry(recordedAtUtc: string): string 
     return new Date(baseMs + PROCESSING_VOICE_CLIP_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
 }
 
+/**
+ * appMeta key holding the last answer the server gave for
+ * `FullHistoryJournal`. The sweep needs to know whether this farmer has
+ * Farm Memory switched on, and the sweep runs on boot and on page open,
+ * including with no network. Caching the last known answer is what lets
+ * the offline sweep make the right call instead of guessing.
+ */
+const FARM_MEMORY_ENABLED_META_KEY = 'voice_diary_farm_memory_enabled';
+
+async function rememberFarmMemoryEnabled(enabled: boolean): Promise<void> {
+    try {
+        await getDatabase().appMeta.put({
+            key: FARM_MEMORY_ENABLED_META_KEY,
+            value: enabled,
+            updatedAt: new Date().toISOString(),
+        });
+    } catch {
+        // A cache write failing must not break the archive path. The
+        // sweep falls back to asking the server, and failing that to the
+        // keep-it branch.
+    }
+}
+
+/**
+ * Is this farmer's voice being kept as Farm Memory?
+ *
+ * Server first, because the server is authoritative and the answer may
+ * have changed on another device. Cache second, because the sweep must
+ * still work offline. And when there is neither — a device that has
+ * never once heard back about consent — the answer is `true`.
+ *
+ * That last default is the one worth defending. It is the fail-safe
+ * direction: guessing "on" costs some phone storage until the next time
+ * the app reaches the server, while guessing "off" deletes recordings
+ * that may be the only copy in existence. Unsynchronised Farm Memory is
+ * never silently destroyed, and an unknown is not a licence to destroy.
+ */
+async function resolveFarmMemoryEnabled(): Promise<boolean> {
+    try {
+        const dto = await agriSyncClient.getConsent();
+        const enabled = dto.fullHistoryJournal === true;
+        await rememberFarmMemoryEnabled(enabled);
+        return enabled;
+    } catch {
+        // Offline, or no consent record yet. Fall through to the cache.
+    }
+
+    try {
+        const cached = await getDatabase().appMeta.get(FARM_MEMORY_ENABLED_META_KEY);
+        if (cached && typeof cached.value === 'boolean') {
+            return cached.value;
+        }
+    } catch {
+        // Cache unreadable — treated the same as never written.
+    }
+
+    return true;
+}
+
+/**
+ * Delete voice clips whose 30-day processing window has closed.
+ *
+ * Clips still awaiting durable storage are EXCLUDED. See the module
+ * header: an expired clip that this farmer meant to keep, and that the
+ * server has never acknowledged, is the only copy of something he was
+ * promised would be kept. The timer is not authority to delete it.
+ *
+ * The consent lookup only happens when the answer could change the
+ * outcome — that is, when at least one expiring clip has no
+ * `s3RetainedKey`. On the overwhelmingly common path (nothing expired,
+ * or everything expired is already in the cloud) this costs no network
+ * call at all, which matters because the sweep runs on app boot.
+ *
+ * @returns how many rows were deleted.
+ */
 export async function purgeExpiredProcessingVoiceClips(nowUtc: string = new Date().toISOString()): Promise<number> {
     const db = getDatabase();
-    return db.voiceClips
+    const expired = await db.voiceClips
         .where('expiresAtUtc')
         .belowOrEqual(nowUtc)
-        .delete();
+        .toArray();
+
+    if (expired.length === 0) {
+        return 0;
+    }
+
+    const unacknowledged = expired.filter(clip => !clip.s3RetainedKey);
+    if (unacknowledged.length === 0) {
+        await db.voiceClips.bulkDelete(expired.map(clip => clip.id));
+        return expired.length;
+    }
+
+    // Only now does consent matter, so only now do we go and find out.
+    const farmMemoryEnabled = await resolveFarmMemoryEnabled();
+
+    const deletable = farmMemoryEnabled
+        // Farm Memory is on: an unacknowledged clip is unsynchronised
+        // history, and it stays until the upload succeeds.
+        ? expired.filter(clip => !!clip.s3RetainedKey)
+        // Farm Memory is off: nothing was ever going to be uploaded, and
+        // "30 days only" is exactly what this farmer was told. Unchanged
+        // behaviour.
+        : expired;
+
+    if (deletable.length === 0) {
+        return 0;
+    }
+
+    await db.voiceClips.bulkDelete(deletable.map(clip => clip.id));
+    return deletable.length;
 }
 
 /**
@@ -162,8 +289,13 @@ export async function archiveToRetainedTierIfConsented(clipId: string): Promise<
     try {
         const dto = await agriSyncClient.getConsent();
         consentGranted = dto.fullHistoryJournal === true;
+        // Remember it for the offline sweep — see resolveFarmMemoryEnabled.
+        await rememberFarmMemoryEnabled(consentGranted);
     } catch {
         // No prior consent record / network failure — treat as not granted.
+        // Note this only skips the ARCHIVE. It does not authorise the sweep
+        // to delete anything: the sweep resolves consent for itself, and a
+        // clip with no s3RetainedKey survives until that upload succeeds.
         return false;
     }
     if (!consentGranted) {
@@ -235,4 +367,70 @@ export async function archiveToRetainedTierIfConsented(clipId: string): Promise<
         });
         return false;
     }
+}
+
+/**
+ * How many recordings are still waiting to reach the farmer's cloud.
+ * Drives the "not yet saved" indicator: a farmer must be able to tell
+ * that something has not safely synced, rather than discovering it years
+ * later when he goes looking for it.
+ */
+export async function countPendingRetainedArchives(): Promise<number> {
+    try {
+        return await getDatabase().voiceClips
+            .filter(clip => !clip.s3RetainedKey)
+            .count();
+    } catch {
+        return 0;
+    }
+}
+
+/** Upper bound on uploads re-attempted in a single sweep. */
+export const MAX_RETAINED_ARCHIVE_RETRIES_PER_SWEEP = 5;
+
+/**
+ * Re-attempt the retained-tier upload for clips the server has never
+ * acknowledged.
+ *
+ * spec: dfes-companion-2026-07-11 (farm-memory)
+ *
+ * The archive hook fires exactly once, from AiJobWorker, on a successful
+ * voice parse. If that one attempt failed — offline, 500, expired token
+ * — nothing ever tried again. Now that the sweep no longer deletes
+ * unacknowledged clips, "never retries" would become "accumulates
+ * forever", which is the storage-pressure failure mode. The answer to it
+ * is to make the upload finish, not to make the recording disappear.
+ *
+ * Bounded on purpose: a phone returning from three weeks offline should
+ * not open twenty parallel uploads on the first screen. It takes the
+ * oldest few per sweep and lets subsequent sweeps drain the rest.
+ * `archiveToRetainedTierIfConsented` is already idempotent and already
+ * swallows its own failures, so a clip that fails again simply stays in
+ * the queue.
+ *
+ * @returns how many clips were successfully archived this pass.
+ */
+export async function retryPendingRetainedArchives(): Promise<number> {
+    let pending: VoiceClipCacheRecord[];
+    try {
+        pending = await getDatabase().voiceClips
+            .filter(clip => !clip.s3RetainedKey && clip.status === 'parsed')
+            .sortBy('recordedAtUtc');
+    } catch {
+        return 0;
+    }
+
+    // Oldest first: the clip closest to being the farmer's only surviving
+    // copy of something recorded long ago is the one to rescue first.
+    const batch = pending.slice(0, MAX_RETAINED_ARCHIVE_RETRIES_PER_SWEEP);
+    let archived = 0;
+    for (const clip of batch) {
+        // Sequential, not Promise.all: these are large uploads on a weak
+        // connection, and firing them together is how the whole batch
+        // times out.
+        if (await archiveToRetainedTierIfConsented(clip.id)) {
+            archived++;
+        }
+    }
+    return archived;
 }

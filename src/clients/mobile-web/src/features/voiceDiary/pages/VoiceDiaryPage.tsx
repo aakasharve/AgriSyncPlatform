@@ -75,28 +75,39 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
             records.sort((a, b) => Date.parse(b.recordedAtUtc) - Date.parse(a.recordedAtUtc));
             setLocalClips(records);
 
-            // Only hit the retained-tier API when consent has been granted —
-            // the backend would reject the call with ConsentRequired anyway,
-            // but skipping it avoids a noisy 4xx on every page open.
-            if (consentGranted) {
-                const today = new Date();
-                const from = new Date(today.getTime() - DEFAULT_RANGE_DAYS * 24 * 3600 * 1000);
-                const fromKey = from.toISOString().slice(0, 10);
-                const toKey = today.toISOString().slice(0, 10);
-                try {
-                    const cloud = await getVoiceDiaryByRange(fromKey, toKey);
-                    setCloudClips(cloud);
-                } catch {
-                    // Retained tier unreachable — fall back to local-only view.
-                    setCloudClips([]);
-                }
-            } else {
-                setCloudClips([]);
+            // spec: dfes-companion-2026-07-11 (farm-memory) — ADR-DS-017 (c).
+            //
+            // Always fetch. This used to be gated on consentGranted and
+            // blanked the list otherwise, which meant the farmer who
+            // switched retention off watched his entire saved history
+            // vanish from the screen the same second — before any server
+            // sweep, and now permanently, since the server keeps it. The
+            // toggle governs whether NEW voice is saved; it was never
+            // supposed to govern whether saved voice can be seen.
+            //
+            // The comment that used to sit here claimed the backend would
+            // reject this call with ConsentRequired. It does not:
+            // GetVoiceDiaryByRangeHandler has no consent gate and returns
+            // the caller's own retained clips, and a user who never granted
+            // simply has none, so the response is a cheap empty list rather
+            // than a 4xx.
+            const today = new Date();
+            const from = new Date(today.getTime() - DEFAULT_RANGE_DAYS * 24 * 3600 * 1000);
+            const fromKey = from.toISOString().slice(0, 10);
+            const toKey = today.toISOString().slice(0, 10);
+            try {
+                const cloud = await getVoiceDiaryByRange(fromKey, toKey);
+                setCloudClips(cloud);
+            } catch {
+                // Retained tier unreachable — fall back to local-only view.
+                // Leave whatever was already loaded rather than blanking:
+                // a network blip must not look like deleted history.
+                setCloudClips(prev => prev);
             }
         } finally {
             setLoading(false);
         }
-    }, [consentGranted]);
+    }, []);
 
     useEffect(() => {
         if (!consentLoaded) return;
@@ -121,6 +132,12 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
                 lastError: record.lastError,
                 source: 'local',
                 localRecord: record,
+                // spec: dfes-companion-2026-07-11 (farm-memory). A local
+                // row with no s3RetainedKey has not been acknowledged by
+                // the server. That only matters to a farmer who keeps his
+                // voice — for everyone else the 30-day local journal is
+                // the whole promise and there is nothing pending.
+                pendingCloudSave: consentGranted && !record.s3RetainedKey,
             });
         }
         for (const cloud of cloudClips) {
@@ -133,12 +150,16 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
                 lastError: existing?.lastError,
                 source: 'cloud',
                 localRecord: existing?.localRecord,
+                // The retained tier answered with this clip, which IS the
+                // acknowledgement. Nothing pending, whatever the local
+                // row happens to say.
+                pendingCloudSave: false,
             });
         }
         return Array.from(map.values()).sort(
             (a, b) => Date.parse(b.recordedAtUtc) - Date.parse(a.recordedAtUtc),
         );
-    }, [localClips, cloudClips]);
+    }, [localClips, cloudClips, consentGranted]);
 
     const countsByDate = useMemo(() => {
         return unifiedClips.reduce<Record<string, number>>((acc, clip) => {

@@ -64,7 +64,34 @@ export interface VoiceDiaryBundle {
         secondaryCta: string;
         attestation: string;
     };
+    /**
+     * spec: dfes-companion-2026-07-11 (farm-memory) — ADR-DS-017 (c).
+     * Turning retention OFF and deleting saved history are two different
+     * intentions. The toggle used to post OFF on the first tap with no
+     * confirmation and no statement of consequence, which left the farmer
+     * with no way to tell which of the two he had just done. These strings
+     * back the second confirmation, and their whole job is to say the part
+     * that was missing: what is already saved stays.
+     */
+    stopFutureConfirm: {
+        headline: string;
+        headlineEn: string;
+        body: string;
+        bodyEn: string;
+        keptNote: string;
+        keptNoteEn: string;
+        primaryCta: string;
+        secondaryCta: string;
+    };
     clipBadge: {
+        /**
+         * spec: dfes-companion-2026-07-11 (farm-memory).
+         * Shown on a clip the farmer meant to keep whose upload has not
+         * been acknowledged by the server yet. Its job is to make a
+         * not-yet-safe recording visible instead of letting him assume
+         * everything he records is already kept.
+         */
+        pendingCloudSave: string;
         local: string;
         cloud: string;
         processed: string;
@@ -122,7 +149,18 @@ const mr: VoiceDiaryBundle = {
         secondaryCta: tagLegalString('नंतर / Not now'),
         attestation: tagLegalString('DPDP §6 — Consent recorded with full attestation'),
     },
+    stopFutureConfirm: {
+        headline: tagLegalString('यापुढे नवीन आवाज साठवणे बंद करायचे?'),
+        headlineEn: tagLegalString('Stop saving future voice?'),
+        body: tagLegalString('यापुढच्या नवीन आवाजी नोंदी क्लाउडमध्ये साठवल्या जाणार नाहीत.'),
+        bodyEn: tagLegalString('New recordings will no longer be saved to your cloud.'),
+        keptNote: tagLegalString('तुमच्या आधीच्या सर्व नोंदी जशाच्या तशा राहतील. त्या मिटवायच्या असतील तर ती वेगळी कृती आहे.'),
+        keptNoteEn: tagLegalString('Everything you have already saved stays. Deleting it is a separate action.'),
+        primaryCta: tagLegalString('होय, यापुढे साठवू नका'),
+        secondaryCta: tagLegalString('नको / Cancel'),
+    },
     clipBadge: {
+        pendingCloudSave: tagLegalString('अजून क्लाउडमध्ये सेव्ह झाले नाही'),
         local: tagLegalString('क्लाउड · cloud'),
         cloud: tagLegalString('क्लाउड · cloud'),
         processed: tagLegalString('प्रक्रिया झाली'),
@@ -183,7 +221,18 @@ const hi: VoiceDiaryBundle = {
         secondaryCta: tagLegalString('बाद में / Not now'),
         attestation: tagLegalString('DPDP §6 — Consent recorded with full attestation'),
     },
+    stopFutureConfirm: {
+        headline: tagLegalString('आगे से नई आवाज़ सहेजना बंद करें?'),
+        headlineEn: tagLegalString('Stop saving future voice?'),
+        body: tagLegalString('आगे की नई आवाज़ रिकॉर्डिंग्स आपके क्लाउड में सहेजी नहीं जाएंगी.'),
+        bodyEn: tagLegalString('New recordings will no longer be saved to your cloud.'),
+        keptNote: tagLegalString('आपकी पहले से सहेजी गई सभी रिकॉर्डिंग्स वैसी ही रहेंगी. उन्हें मिटाना एक अलग काम है.'),
+        keptNoteEn: tagLegalString('Everything you have already saved stays. Deleting it is a separate action.'),
+        primaryCta: tagLegalString('हाँ, आगे से न सहेजें'),
+        secondaryCta: tagLegalString('रहने दें / Cancel'),
+    },
     clipBadge: {
+        pendingCloudSave: tagLegalString('अभी क्लाउड में सेव नहीं हुआ'),
         local: tagLegalString('लोकल · local'),
         cloud: tagLegalString('क्लाउड · cloud'),
         processed: tagLegalString('प्रोसेस हुआ'),
@@ -241,7 +290,18 @@ const en: VoiceDiaryBundle = {
         secondaryCta: tagLegalString('Not now'),
         attestation: tagLegalString('DPDP §6 — Consent recorded with full attestation'),
     },
+    stopFutureConfirm: {
+        headline: tagLegalString('Stop saving future voice?'),
+        headlineEn: tagLegalString('Stop saving future voice?'),
+        body: tagLegalString('New recordings will no longer be saved to your cloud.'),
+        bodyEn: tagLegalString('New recordings will no longer be saved to your cloud.'),
+        keptNote: tagLegalString('Everything you have already saved stays where it is. Deleting your saved history is a separate action.'),
+        keptNoteEn: tagLegalString('Everything you have already saved stays where it is. Deleting your saved history is a separate action.'),
+        primaryCta: tagLegalString('Yes, stop saving'),
+        secondaryCta: tagLegalString('Cancel'),
+    },
     clipBadge: {
+        pendingCloudSave: tagLegalString('Not saved to cloud yet'),
         local: tagLegalString('local'),
         cloud: tagLegalString('cloud'),
         processed: tagLegalString('processed'),
