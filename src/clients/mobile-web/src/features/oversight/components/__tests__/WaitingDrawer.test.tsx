@@ -201,13 +201,17 @@ describe('WaitingDrawer', () => {
 
     it('a_failed_acknowledgement_shows_a_retry_affordance', () => {
         // Spec §P-D: "On failure ... a small, clear retry state appears."
+        // `retryAffordance` graduated to founder-approved Marathi 2026-08-23
+        // (oversightTranslations.ts header, "OVERSIGHT-LOOP STRING
+        // GRADUATION") — `baseProps`'s default `language: 'mr'` now renders
+        // the real mr copy, not the en fallback.
         const { rerender } = render(<WaitingDrawer {...baseProps({ status: 'idle' })} />);
         expect(screen.queryByTestId('waiting-drawer-seen-retry')).not.toBeInTheDocument();
 
         rerender(<WaitingDrawer {...baseProps({ status: 'failed' })} />);
         const retry = screen.getByTestId('waiting-drawer-seen-retry');
         expect(retry).toBeInTheDocument();
-        expect(retry).toHaveTextContent(oversightTranslations.en.retryAffordance);
+        expect(retry).toHaveTextContent(oversightTranslations.mr.retryAffordance);
 
         // The Seen button itself must stay clickable while failed (only
         // 'saving' disables it) so retrying is possible.

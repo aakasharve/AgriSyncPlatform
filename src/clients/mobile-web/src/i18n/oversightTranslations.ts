@@ -203,6 +203,45 @@
  *   graduated — it carries new founder copy in the same slot: "काही
  *   राहिलेल्या कामांकडे तुमचे लक्ष देणे गरजेचे आहे", transcribed exactly,
  *   including the deliberate absence of a trailing danda/full stop.
+ *
+ * OVERSIGHT-LOOP STRING GRADUATION (GROUPS A & B) — founder message, 2026-08-23
+ * -----------------------------------------------------------------------------
+ * The founder ruled on ten more farmer-facing Marathi strings directly, in
+ * his own words, in a coordinator message — same (d) provenance rule as the
+ * RESTSTATE graduation immediately above, same date:
+ *
+ *   GROUP A — the eight Ruling-7/8 keyless-but-declared keys
+ *   (`talliesPeopleUnit`, `plotsUnit`, `bandDecisionsHeader`,
+ *   `bandSinceLastLookedHeader`, `sinceLastLookedTail`, `dayNotClosedLine`,
+ *   `seenControlHint`, `retryAffordance`) GRADUATE out of (c)/PENDING here —
+ *   every `mr: ''` becomes real Marathi, transcribed character-for-character
+ *   from his table, including `seenControlHint`'s single curly quotes
+ *   (U+2018/U+2019) around पाहिलं — same convention `guideLine3` already
+ *   uses for ‘संपूर्ण शेत’, not straight ASCII apostrophes. `dayNotClosedLine`
+ *   uses "पूर्ण" ("day not COMPLETED"), never "बंद" ("closed") — the बंद
+ *   metaphor is banned everywhere per commit `c66d1817` ("a day is completed
+ *   by telling Sathi everything, not by closing a book").
+ *
+ *   GROUP B — two already-approved (b) templates are REWORDED (their
+ *   `PENDING_FOUNDER_STRINGS` entries are removed too — the founder ruled on
+ *   the exact final copy for both, so nothing about either is left pending):
+ *     `decisionLine` — grammar-only fix, subject-verb agreement for a
+ *     plural count: "{count} कामे तपासायचे आहे" -> "{count} कामे तपासायची
+ *     आहेत".
+ *     `failedSends` — substantive reword. The old copy named a passive
+ *     state ("records could not be sent"); the founder's replacement names
+ *     the problem and offers help: "{count} नोंदी पाठवता आल्या नाहीत" ->
+ *     "{count} कामे अडकली आहेत — मी मदत करतो". This uses "कामे", not "नोंदी"
+ *     — BECAUSE THE FOUNDER RULED ON THIS SPECIFIC STRING, not because open
+ *     founder question #1 (`shram-sathi-FINAL-strings.md`, whether "नोंदी"
+ *     is banned in Sathi's own first-person lines vs "कामे") is settled. A
+ *     previous agent resolved that general question by inference and was
+ *     reverted (commit `06797135`); this key's wording is direct founder
+ *     transcription, not inference, and does NOT extend to `closeToday` or
+ *     any other `dfesTranslations.ts` string.
+ *
+ * Only the ten `mr` values above and their `PENDING_FOUNDER_STRINGS` listing
+ * change; every key, its `en` value and every consumer are untouched.
  */
 import type { Language } from './language';
 
@@ -419,26 +458,24 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         waitingLabel: 'तुमच्यासाठी बाकी',
         restState: 'आज पर्यन्त सर्व कामे पूर्ण आहेत',
         seenControl: 'मी हे पाहिलं',
-        decisionLine: '{count} कामे तपासायचे आहे',
+        decisionLine: '{count} कामे तपासायची आहेत',
         delegatedLine: '{count} कामे — {name} ठरवतील',
-        failedSends: '{count} नोंदी पाठवता आल्या नाहीत',
+        failedSends: '{count} कामे अडकली आहेत — मी मदत करतो',
         recordBarIdle: 'आधी प्लॉट निवडा',
         recordBarActive: 'बोला',
 
-        // Ruling 7 — keyless-but-declared. Empty on purpose: no Marathi
-        // exists anywhere for these six concepts, and inventing it is the
-        // one thing the Hard Rule forbids. Read through
-        // `resolveOversightString()`, never this field, direct.
-        talliesPeopleUnit: '',
-        plotsUnit: '',
-        seenControlHint: '',
-        retryAffordance: '',
-        bandDecisionsHeader: '',
-        bandSinceLastLookedHeader: '',
-        // Task 5 / Ruling 8 — same reasoning as the six above: no Marathi
-        // exists anywhere this task may cite for either concept.
-        sinceLastLookedTail: '',
-        dayNotClosedLine: '',
+        // GRADUATED 2026-08-23 — founder-approved, transcribed verbatim from
+        // his own coordinator message (see this file's header, "OVERSIGHT-
+        // LOOP STRING GRADUATION" paragraph). No longer keyless-but-declared
+        // — Ruling 7/8's `mr: ''` placeholders are gone.
+        talliesPeopleUnit: 'माणसं',
+        plotsUnit: 'प्लॉट',
+        seenControlHint: 'यानं फक्त ‘पाहिलं’ एवढंच कळतं — मंजुरी मिळत नाही.',
+        retryAffordance: 'पुन्हा पाठवा',
+        bandDecisionsHeader: 'तुम्ही ठरवायचं आहे',
+        bandSinceLastLookedHeader: 'तुम्ही शेवटचं पाहिल्यानंतर',
+        sinceLastLookedTail: 'तुम्ही शेवटचं पाहिल्यानंतर — {days} दिवस',
+        dayNotClosedLine: 'काल दिवस पूर्ण झाला नाही',
 
         // Task 13, category (d) — verbatim from the founder's own reference
         // table. See this file's header for provenance.
@@ -463,43 +500,47 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
 
 /**
  * Every key in this module that is NOT yet a founder-approved string —
- * category (b) placeholders (spec §6.2) and category (c) keyless-but-
- * declared keys (Ruling 7) alike. A consuming component uses this to
- * decide whether to render the `en` value beside the `mr` one;
- * `__tests__/oversightTranslations.test.ts` asserts every entry here
- * names a real key so the list can never point at a typo.
+ * category (b) placeholders (spec §6.2) only, as of 2026-08-23. Category
+ * (c) keyless-but-declared keys (Ruling 7/8) are ALL graduated out now (see
+ * below). A consuming component uses this to decide whether to render the
+ * `en` value beside the `mr` one; `__tests__/oversightTranslations.test.ts`
+ * asserts every entry here names a real key so the list can never point at
+ * a typo.
  *
  * `waitingLabel` is NOT here (Task 13 graduated it to founder-approved —
  * see this file's header, category (d)). `restState` is NOT here either —
  * the founder supplied it directly, in his own words, in a coordinator
  * message dated 2026-08-23 (see this file's header, category (d), the
  * "RESTSTATE GRADUATION" paragraph).
+ *
+ * `talliesPeopleUnit`, `plotsUnit`, `bandDecisionsHeader`,
+ * `bandSinceLastLookedHeader`, `sinceLastLookedTail`, `dayNotClosedLine`,
+ * `seenControlHint`, `retryAffordance`, `decisionLine` and `failedSends` are
+ * NOT here either — a further founder message, same date (2026-08-23),
+ * ruled on all ten (see this file's header, "OVERSIGHT-LOOP STRING
+ * GRADUATION" paragraph). Only `seenControl`, `delegatedLine`,
+ * `recordBarIdle` and `recordBarActive` remain pending.
  */
 export const PENDING_FOUNDER_STRINGS: readonly string[] = [
     'seenControl',
-    'decisionLine',
     'delegatedLine',
-    'failedSends',
     'recordBarIdle',
     'recordBarActive',
-    'talliesPeopleUnit',
-    'plotsUnit',
-    'seenControlHint',
-    'retryAffordance',
-    'bandDecisionsHeader',
-    'bandSinceLastLookedHeader',
-    'sinceLastLookedTail',
-    'dayNotClosedLine',
 ];
 
 /**
  * The one mechanical place `mr: ''` (Ruling 7, category (c)) turns into
  * real text on screen. Reading `oversightTranslations.mr[key]` directly for
- * one of the six keyless-but-declared keys renders an empty string — a
- * blank label, which spec §P-H/§6.2's whole point (a visible English
- * fallback) exists to prevent. This returns `en` whenever the requested
- * language's value is empty, in either language, so a consuming component
- * never has to know — or remember — which keys are hollow.
+ * a keyless-but-declared key renders an empty string — a blank label, which
+ * spec §P-H/§6.2's whole point (a visible English fallback) exists to
+ * prevent. This returns `en` whenever the requested language's value is
+ * empty, in either language, so a consuming component never has to know —
+ * or remember — which keys are hollow. As of 2026-08-23 (see this file's
+ * header, "OVERSIGHT-LOOP STRING GRADUATION") no key in this module
+ * currently has an empty `mr` — Ruling 7/8's eight keyless-but-declared keys
+ * all graduated to real founder Marathi — but the function stays: it is
+ * generic fallback infrastructure for whichever key next ships as `mr: ''`,
+ * not code specific to those eight.
  */
 export function resolveOversightString(
     language: Language,
