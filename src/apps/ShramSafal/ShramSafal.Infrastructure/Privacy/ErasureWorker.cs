@@ -594,7 +594,15 @@ public sealed class ErasureWorker(
                 targetUserId, retainedOutcome.MetadataRowsRemoved, retainedClips.Count);
         }
 
+        // Reported like the other DELETE-manifest tables (ai_jobs,
+        // transcript_history, golden_set_candidate): a table-level count
+        // whose ScrubbedColumnsFor sentinel is "deleted", so the audit row
+        // cannot be read as "anonymized in place". Without that entry the
+        // generic emitter would claim N rows anonymized with an empty
+        // scrubbed-columns list — a self-contradicting record, and the
+        // exact kind of false claim this change exists to remove.
         perTableCounts["voice_clips_retained"] = retainedOutcome.MetadataRowsRemoved;
+        totalAnonymized += retainedOutcome.MetadataRowsRemoved;
 
         // Per-row audit emission per DS-017 rule (d). We emit one
         // aggregate "ErasureAnonymize/Applied" row per TABLE (carrying
@@ -806,6 +814,11 @@ UPDATE ssf.farm_operations
         "ai_jobs" => new[] { "deleted" },
         "transcript_history" => new[] { "deleted" },
         "golden_set_candidate" => new[] { "deleted" },
+        // spec: dfes-companion-2026-07-11 (farm-memory). Retained voice is
+        // purged outright, never scrubbed — there is nothing to anonymize
+        // inside raw audio (ADR-DS-017 rule (c)). Same "deleted" sentinel
+        // as the voice-spine tables above.
+        "voice_clips_retained" => new[] { "deleted" },
         _ => Array.Empty<string>(),
     };
 
