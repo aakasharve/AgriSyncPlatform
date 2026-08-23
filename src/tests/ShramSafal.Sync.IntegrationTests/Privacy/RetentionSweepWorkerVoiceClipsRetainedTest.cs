@@ -9,7 +9,7 @@
 //   - 2 users (UserA with consent withdrawn, UserB with consent live)
 //   - 3 VoiceClipRetained rows for UserA + 1 for UserB
 //   - UserConsentState rows matching consent intent
-//   - In-memory IRetainedBlobStore (records per-user delete calls)
+//   - In-memory IRetainedBlobStore (records which clips the sweep named)
 //
 // Runs the worker once, then asserts:
 //   - 3 rows deleted from ssf.voice_clips_retained for UserA
@@ -71,6 +71,7 @@ public sealed class RetentionSweepWorkerVoiceClipsRetainedTest : IAsyncLifetime
     private RecordingRetainedBlobStore _blobStore = default!;
     private readonly Guid _userA = Guid.NewGuid();
     private readonly Guid _userB = Guid.NewGuid();
+    private readonly List<Guid> _userAClipIds = new();
     private const string UserAKid = "kid-2026-05-21-a";
     private const string UserBKid = "kid-2026-05-21-b";
 
@@ -176,9 +177,17 @@ public sealed class RetentionSweepWorkerVoiceClipsRetainedTest : IAsyncLifetime
                 "ADR-DS-009 audit-payload kid stamp — payload MUST embed UserA's CurrentTokenKid");
         }
 
-        // The blob-store fake must have been called for UserA but NOT UserB.
-        _blobStore.DeleteCalls.Should().Contain(_userA);
-        _blobStore.DeleteCalls.Should().NotContain(_userB);
+        // The sweep must name the clips it selected. UserA's three are all
+        // selected here (their owner withdrew consent, which covers every clip
+        // he owns), but they must arrive as three clip ids and not as one user
+        // id — routing a candidate set through the whole-user delete is what
+        // let a single aged clip destroy an untouched Voice Diary.
+        _blobStore.DeleteCalls.Should().BeEmpty(
+            "DeleteRetainedVoiceForUserAsync belongs to DPDP §12 erasure; the retention sweep must never call it");
+        _blobStore.DeletedClipIds.Should().HaveCount(3,
+            "UserA's three clips were the candidate set, named individually");
+        _blobStore.DeletedClipIds.Should().OnlyContain(id => _userAClipIds.Contains(id),
+            "UserB's clip was never a candidate and must not appear in any delete call");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────
@@ -204,7 +213,9 @@ public sealed class RetentionSweepWorkerVoiceClipsRetainedTest : IAsyncLifetime
         // UserA: 3 retained clips.
         for (var i = 0; i < 3; i++)
         {
-            await InsertVoiceClipRetainedAsync(db, _userA, Guid.NewGuid());
+            var clipId = Guid.NewGuid();
+            _userAClipIds.Add(clipId);
+            await InsertVoiceClipRetainedAsync(db, _userA, clipId);
         }
         // UserB: 1 retained clip.
         await InsertVoiceClipRetainedAsync(db, _userB, Guid.NewGuid());
@@ -339,16 +350,23 @@ public sealed class RetentionSweepWorkerVoiceClipsRetainedTest : IAsyncLifetime
 
 /// <summary>
 /// Phase 07 spine-hardening — recording fake for IRetainedBlobStore.
-/// Captures per-user delete calls AND performs the matching DB row
-/// delete so the worker observes the same end-state the real
-/// S3RetainedBlobStore would produce (real adapter deletes rows in
-/// the same call). Stateless beyond the call log; new instance per
-/// test.
+/// Captures BOTH delete paths separately — the whole-user one (DPDP §12
+/// erasure) and the clip-scoped one (the retention sweep) — and performs
+/// the matching DB row delete so the worker observes the same end-state
+/// the real S3RetainedBlobStore would produce (real adapter deletes rows
+/// in the same call). Keeping the two logs apart is deliberate: the sweep
+/// calling the wrong one is exactly the data-loss defect. Stateless
+/// beyond the call log; new instance per test.
 /// </summary>
 internal sealed class RecordingRetainedBlobStore : IRetainedBlobStore
 {
     private readonly IConfiguration _config;
+
+    /// <summary>Users handed to the whole-user delete path (DPDP §12 erasure's shape).</summary>
     public List<Guid> DeleteCalls { get; } = new();
+
+    /// <summary>Clips handed to the clip-scoped delete path — the one the sweep uses.</summary>
+    public List<Guid> DeletedClipIds { get; } = new();
 
     public RecordingRetainedBlobStore(IConfiguration config)
     {
@@ -363,16 +381,38 @@ internal sealed class RecordingRetainedBlobStore : IRetainedBlobStore
         // contract: remove the metadata rows in addition to the S3
         // objects. We hold no S3; the DB row delete is the side-effect
         // the worker (and the integration test) care about.
-        var conn = _config.GetConnectionString("ShramSafalDb_Migration")
-            ?? _config.GetConnectionString("ShramSafalDb")
-            ?? throw new InvalidOperationException("No ShramSafalDb connection string available.");
-        await using var db = new NpgsqlConnection(conn);
+        await using var db = new NpgsqlConnection(ResolveConn());
         await db.OpenAsync(ct);
         await using var cmd = db.CreateCommand();
         cmd.CommandText = "DELETE FROM ssf.voice_clips_retained WHERE user_id = @uid";
         cmd.Parameters.AddWithValue("uid", userId);
         await cmd.ExecuteNonQueryAsync(ct);
     }
+
+    public async Task<int> DeleteRetainedVoiceClipsAsync(
+        Guid userId, IReadOnlyCollection<Guid> clipIds, CancellationToken ct)
+    {
+        DeletedClipIds.AddRange(clipIds);
+
+        if (clipIds.Count == 0)
+        {
+            return 0;
+        }
+
+        await using var db = new NpgsqlConnection(ResolveConn());
+        await db.OpenAsync(ct);
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText =
+            "DELETE FROM ssf.voice_clips_retained WHERE user_id = @uid AND clip_id = ANY(@cids)";
+        cmd.Parameters.AddWithValue("uid", userId);
+        cmd.Parameters.AddWithValue("cids", clipIds.ToArray());
+        return await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private string ResolveConn() =>
+        _config.GetConnectionString("ShramSafalDb_Migration")
+        ?? _config.GetConnectionString("ShramSafalDb")
+        ?? throw new InvalidOperationException("No ShramSafalDb connection string available.");
 
     public Task<Guid> PersistAsync(VoiceClipRetained metadata, byte[] cipherBytes, CancellationToken ct)
         => Task.FromResult(metadata.ClipId);

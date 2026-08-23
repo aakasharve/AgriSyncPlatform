@@ -172,12 +172,29 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         await using var raw = new NpgsqlConnection(_pg.GetConnectionString());
         await raw.OpenAsync();
 
-        // ErasureRequest itself should be Completed.
+        // ErasureRequest lands on AwaitingManualCompletion, NOT Completed.
+        // spec: dfes-companion-2026-07-11 (erasure-honesty). The worker's
+        // manifest is ShramSafal-scoped: it cannot reach the User context
+        // (public.users display_name + phone) and does not delete the
+        // cold-tier raw audio, so a person at ARVE finishes the request.
+        // Founder ruling 2026-08-23 ITEM 4 forbids reporting Completed
+        // while that data is knowingly retained.
         var status = (int)(await ScalarAsync(raw,
             "SELECT status FROM ssf.erasure_requests WHERE id = @id",
             ("id", requestId)))!;
-        status.Should().Be((int)ErasureStatus.Completed,
-            "ErasureWorker must transition the request to Completed within one pass");
+        status.Should().Be((int)ErasureStatus.AwaitingManualCompletion,
+            "ErasureWorker must finish its automated pass within one poll, and must not claim "
+            + "Completed while the account and any cold-tier raw audio are still held");
+
+        // ...and it must NOT stamp a completion time it has not earned.
+        // Phrased as a no-rows probe on purpose: ExecuteScalarAsync hands
+        // back DBNull.Value (not null) for a NULL column, so asserting
+        // BeNull on a plain SELECT would pass for the wrong reason.
+        var completedAt = await ScalarAsync(raw,
+            "SELECT completed_at_utc FROM ssf.erasure_requests WHERE id = @id AND completed_at_utc IS NOT NULL",
+            ("id", requestId));
+        completedAt.Should().BeNull(
+            "completed_at_utc is the timestamp of a finished erasure; nothing has finished yet");
 
         // daily_logs: operator_user_id should be the sentinel, KEEP
         // fields (farm_id, plot_id) should still be present.
@@ -357,10 +374,18 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         auditCount.Should().BeGreaterThan(0,
             "DS-017 rule (d): ErasureWorker must emit ErasureAnonymize/Applied AuditEvent rows for the anonymized tables");
 
+        // The audit action mirrors the status exactly — an audit ledger
+        // reading "Completed" over a request that is not completed is the
+        // same lie one layer down (spec: erasure-honesty).
         var completionCountObj = await ScalarAsync(raw,
-            "SELECT count(*) FROM ssf.audit_events WHERE entity_type = 'ErasureRequest' AND action = 'Completed'");
+            "SELECT count(*) FROM ssf.audit_events WHERE entity_type = 'ErasureRequest' AND action = 'AwaitingManualCompletion'");
         Convert.ToInt32(completionCountObj!).Should().Be(1,
-            "ErasureWorker must emit exactly one ErasureRequest/Completed audit row per processed request");
+            "ErasureWorker must emit exactly one terminal ErasureRequest audit row per processed request");
+
+        var falseCompletionObj = await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.audit_events WHERE entity_type = 'ErasureRequest' AND action = 'Completed'");
+        Convert.ToInt32(falseCompletionObj!).Should().Be(0,
+            "no ErasureRequest/Completed audit row may exist while the account and raw audio are still held");
 
         // ── 6. SARVAM_PRIMARY_VOICE_PIPELINE Task 3.4 cascade assertions ──
         // The voice-spine cascade follows a DELETE manifest (vs the
@@ -897,6 +922,23 @@ internal sealed class InMemoryRetainedBlobStore : IRetainedBlobStore
             _store.Remove(key);
         }
         return Task.CompletedTask;
+    }
+
+    public Task<int> DeleteRetainedVoiceClipsAsync(
+        Guid userId, IReadOnlyCollection<Guid> clipIds, CancellationToken ct)
+    {
+        // Clip-scoped sibling of the delete above. Ownership is re-checked so
+        // naming another user's clip removes nothing.
+        var removed = 0;
+        foreach (var clipId in clipIds)
+        {
+            if (_store.TryGetValue(clipId, out var entry) && entry.Meta.UserId == userId)
+            {
+                _store.Remove(clipId);
+                removed++;
+            }
+        }
+        return Task.FromResult(removed);
     }
 
     public Task<Guid> PersistAsync(VoiceClipRetained metadata, byte[] cipherBytes, CancellationToken ct)
