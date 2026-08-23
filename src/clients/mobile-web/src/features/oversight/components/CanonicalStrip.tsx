@@ -244,14 +244,13 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
     const primaryLabelText = resolveOversightString(language, primaryKey);
 
     // Task 13 — `waitingLabel` graduated to founder-approved copy (his own
-    // reference-image table; see `oversightTranslations.ts`'s header,
-    // category (d)). `restState` has NOT — the founder's table covers the
-    // waiting state only. So the placeholder caption below is now driven by
-    // `PENDING_FOUNDER_STRINGS.includes(primaryKey)`, not a blanket
-    // `language === 'mr'` check — it must disappear now that its one prior
-    // reason to exist (flagging unapproved copy, spec §6.2) no longer
-    // applies to the waiting state, while staying exactly as before for the
-    // still-pending rest state.
+    // reference-image table). A later founder message (2026-08-23)
+    // graduated `restState` the same way (see `oversightTranslations.ts`'s
+    // header, category (d), "RESTSTATE GRADUATION"). So the placeholder
+    // caption below is driven by `PENDING_FOUNDER_STRINGS.includes(primaryKey)`,
+    // not a blanket `language === 'mr'` check — it disappears for either
+    // state once that state's key stops being pending, and only ever
+    // reappears if a key is added back to `PENDING_FOUNDER_STRINGS`.
     const isPrimaryPending = PENDING_FOUNDER_STRINGS.includes(primaryKey);
     const englishCaption = language === 'mr' && isPrimaryPending
         ? oversightTranslations.en[primaryKey].toUpperCase()

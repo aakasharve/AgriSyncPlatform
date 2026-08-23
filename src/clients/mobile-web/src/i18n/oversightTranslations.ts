@@ -184,6 +184,25 @@
  * All three are transcribed character-for-character from the founder's new
  * reference table, same (d) provenance rule as every other key in this
  * section.
+ *
+ * RESTSTATE GRADUATION + WAITINGSUBTITLE UPDATE — founder message, 2026-08-23
+ * -----------------------------------------------------------------------------
+ * The founder supplied two farmer-facing Marathi strings directly, in his own
+ * words, in a coordinator message (not a reference image this time — same
+ * (d) provenance rule, different medium):
+ *
+ *   `restState` GRADUATES out of (b)/PENDING here — his table (Task 13)
+ *   covered only the waiting state, never the rest state, so `restState` had
+ *   remained a spec §6.2 placeholder until now. His new copy: "आज पर्यन्त सर्व
+ *   कामे पूर्ण आहेत" — transcribed exactly, including "पर्यन्त" spelled that
+ *   way (not normalised to the more common "पर्यंत"). Only the `mr` value and
+ *   its `PENDING_FOUNDER_STRINGS` listing change; the key, its `en` value and
+ *   every consumer are untouched.
+ *
+ *   `waitingSubtitle` (already founder-approved, Task 13) is REWORDED, not
+ *   graduated — it carries new founder copy in the same slot: "काही
+ *   राहिलेल्या कामांकडे तुमचे लक्ष देणे गरजेचे आहे", transcribed exactly,
+ *   including the deliberate absence of a trailing danda/full stop.
  */
 import type { Language } from './language';
 
@@ -398,7 +417,7 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         allFarmsOnTrack: 'सगळ्या शेती आज व्यवस्थित आहेत',
 
         waitingLabel: 'तुमच्यासाठी बाकी',
-        restState: 'काही बाकी नाही',
+        restState: 'आज पर्यन्त सर्व कामे पूर्ण आहेत',
         seenControl: 'मी हे पाहिलं',
         decisionLine: '{count} कामे तपासायचे आहे',
         delegatedLine: '{count} कामे — {name} ठरवतील',
@@ -426,7 +445,7 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         navToday: 'आजची कामे',
         navMyFarm: 'माझं शेत',
         navCompare: 'तुलना',
-        waitingSubtitle: 'तुमची काही पूर्ण होण्याची कामे बाकी आहेत.',
+        waitingSubtitle: 'काही राहिलेल्या कामांकडे तुमचे लक्ष देणे गरजेचे आहे',
         guideGreeting: 'नमस्कार!',
         guideHeadline: 'आज कोणत्या प्लॉटवर काम केलं?',
         guideLine1: 'एक किंवा अनेक प्लॉट निवडा.',
@@ -451,12 +470,12 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
  * names a real key so the list can never point at a typo.
  *
  * `waitingLabel` is NOT here (Task 13 graduated it to founder-approved —
- * see this file's header, category (d)). `restState` remains pending: the
- * founder's reference table covers the waiting state only, not the rest
- * state's copy.
+ * see this file's header, category (d)). `restState` is NOT here either —
+ * the founder supplied it directly, in his own words, in a coordinator
+ * message dated 2026-08-23 (see this file's header, category (d), the
+ * "RESTSTATE GRADUATION" paragraph).
  */
 export const PENDING_FOUNDER_STRINGS: readonly string[] = [
-    'restState',
     'seenControl',
     'decisionLine',
     'delegatedLine',

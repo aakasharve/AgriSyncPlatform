@@ -135,12 +135,13 @@ describe('oversightTranslations — pending_founder_strings_are_all_declared_key
     });
 
     it('every spec §6.2 placeholder AND every Ruling-7 keyless-but-declared key is represented in PENDING_FOUNDER_STRINGS', () => {
-        // `waitingLabel` is deliberately absent — Task 13 graduated it to
-        // founder-approved copy (his own reference-image table), so it must
-        // NOT be flagged pending any more. See oversightTranslations.ts's
-        // header, category (d).
+        // `waitingLabel` and `restState` are both deliberately absent —
+        // Task 13 graduated `waitingLabel` to founder-approved copy (his own
+        // reference-image table), and a later founder message (2026-08-23)
+        // graduated `restState` the same way, so neither must be flagged
+        // pending any more. See oversightTranslations.ts's header, category
+        // (d).
         const expectedPending = [
-            'restState',
             'seenControl',
             'decisionLine',
             'delegatedLine',
@@ -197,5 +198,6 @@ describe('oversightTranslations — pending_strings_render_english_when_marathi_
         // win when it actually exists.
         expect(resolveOversightString('mr', 'welcomeBack')).toBe(oversightTranslations.mr.welcomeBack);
         expect(resolveOversightString('mr', 'waitingLabel')).toBe(oversightTranslations.mr.waitingLabel);
+        expect(resolveOversightString('mr', 'restState')).toBe(oversightTranslations.mr.restState);
     });
 });

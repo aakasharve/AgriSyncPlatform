@@ -96,6 +96,19 @@ import {
 // touching `PREVIEW_FARMS`'s own single-farm reasoning (see that file).
 const IS_MULTI_FARM_PREVIEW = typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('farms') === 'multi';
+
+// Founder ask (2026-08-23): "show me what it looks like when nothing is
+// pending." `?preview=oversight&waiting=none` zeroes out the oversight
+// briefing `AppHeader` feeds `CanonicalStrip`/`WaitingDrawer`, so the rest
+// state (`oversightTranslations.mr.restState`) — otherwise unreachable by
+// clicking, because the seeded fixture below always has waiting items — can
+// be browser-verified. Same query-param-toggle style Task 12 established
+// for `farms=multi` above, added to rather than inventing a second pattern.
+// Only zeroes the header's OWN inputs (`oversightData` below); `history`
+// itself is untouched, so Log/Reflect/Compare keep showing the same seeded
+// activity in either mode.
+const IS_ZERO_WAITING_PREVIEW = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('waiting') === 'none';
 import { usePreviewRouterCtx } from './preview/usePreviewRouterCtx';
 
 const ENGLISH_FONT = { fontFamily: "'DM Sans', sans-serif" } as const;
@@ -186,11 +199,17 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
                     onJoinViaQr: () => { /* out of scope for this preview */ },
                 }}
                 oversightData={{
-                    logs: history,
+                    // `?waiting=none` (see this file's header) zeroes every
+                    // input `buildOversightModel` turns into a waiting item
+                    // — an empty `logs` array (no people/unattributed rows),
+                    // `unverifiedCount: 0`, `yesterdayNotClosed: false` —
+                    // without touching `history` itself, which the main
+                    // views below still render unmodified either way.
+                    logs: IS_ZERO_WAITING_PREVIEW ? [] : history,
                     operatorNameById: oversightHeaderInputs.operatorNameById,
                     plotCount: oversightHeaderInputs.plotCount,
-                    unverifiedCount: oversightHeaderInputs.unverifiedCount,
-                    yesterdayNotClosed: oversightHeaderInputs.yesterdayNotClosed,
+                    unverifiedCount: IS_ZERO_WAITING_PREVIEW ? 0 : oversightHeaderInputs.unverifiedCount,
+                    yesterdayNotClosed: IS_ZERO_WAITING_PREVIEW ? false : oversightHeaderInputs.yesterdayNotClosed,
                     // Same honest `null` AppContent.tsx passes — naming a
                     // delegate needs a server-governed permission grant this
                     // preview (and the shipped app) cannot honestly assert.

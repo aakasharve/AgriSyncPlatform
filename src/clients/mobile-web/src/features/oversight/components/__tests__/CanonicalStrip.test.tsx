@@ -146,15 +146,19 @@ describe('CanonicalStrip — row 2, the waiting button alone, full width', () =>
         expect(screen.queryByText(oversightTranslations.mr.waitingLabel)).not.toBeInTheDocument();
     });
 
-    it('marathi_mode_still_shows_the_placeholder_english_caption_for_the_still_pending_rest_state', () => {
-        // Spec §6.2: unapproved placeholder copy "ship[s] ... with the
-        // English fallback visible." `restState` is still pending (Task 13's
-        // founder table covers the waiting state only), so this Task-4
-        // behaviour is unchanged for it.
+    it('marathi_mode_rest_state_shows_the_founder_approved_copy_and_no_english_caption', () => {
+        // A later founder message (2026-08-23) graduated `restState` to
+        // founder-approved copy the same way Task 13 graduated
+        // `waitingLabel` — so the placeholder-caption pattern must NOT
+        // render for it any more (spec §6.2's caption only exists for
+        // unapproved copy). Both assertions matter: the primary label
+        // actually being the real approved string, and the caption actually
+        // being gone (not merely additive) — proves
+        // `PENDING_FOUNDER_STRINGS.includes(primaryKey)` is driving the
+        // caption, not a hardcoded language check.
         render(<CanonicalStrip {...baseStripProps({ language: 'mr', waitingCount: 0 })} />);
-        expect(screen.getByTestId('canonical-strip-waiting-caption')).toHaveTextContent(
-            oversightTranslations.en.restState.toUpperCase(),
-        );
+        expect(screen.getByText(oversightTranslations.mr.restState)).toBeInTheDocument();
+        expect(screen.queryByTestId('canonical-strip-waiting-caption')).not.toBeInTheDocument();
     });
 
     it('waiting_state_renders_the_founder_approved_subtitle_and_no_english_caption', () => {
