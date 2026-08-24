@@ -11,9 +11,26 @@
 #                  count. Never fails the build (warn-only).
 #
 #   block_on_tag — runs only when github.ref == 'refs/heads/prod-deploy'.
-#                  Greps the tree and exits 1 if any tag remains —
-#                  prod-deploy is rejected until counsel completes the
-#                  swap.
+#                  DATE-AWARE since founder decision 2026-08-24. Until
+#                  2027-05-13 it WARNS with a count and a countdown but does
+#                  not block: the DPDP substantive obligations for ordinary
+#                  Data Fiduciaries do not commence until then, and the
+#                  LEGAL_REVIEW_PENDING copy is deliberate placeholder work
+#                  per DS-015 Track B. On and after that date it fails the
+#                  build again, automatically, with no human action needed.
+#
+#                  WHY THIS IS NOT "TURNING THE GATE OFF": everything built
+#                  under this tag — the consent ledgers, the notice-hash
+#                  evidence, the erasure and retention machinery, the
+#                  processor register — is INFRASTRUCTURE built ahead of the
+#                  legal need, precisely so it is not rebuilt in a hurry in
+#                  2027. The tags mark copy awaiting counsel, not missing
+#                  capability. A hard block today would stop a 20-farmer
+#                  pilot for a deadline eight months away; a date-armed gate
+#                  keeps the obligation visible without doing that. The one
+#                  failure mode this guards against is the classic one —
+#                  "temporarily disabled" quietly becoming "permanently
+#                  forgotten" — because nobody has to remember to re-arm it.
 #
 # Protocol: _COFOUNDER/01_Operations/Protocols/LEGAL_REVIEW_PENDING_CONVENTION.md
 # ADR (pending): ADR-DS-008 — authored by architect.
@@ -39,15 +56,35 @@ jobs:
           exit 0
 
   block-on-tag:
-    name: Block LEGAL_REVIEW_PENDING on prod-deploy
+    name: LEGAL_REVIEW_PENDING on prod-deploy (warn until 2027-05-13, then block)
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/prod-deploy'
     steps:
       - uses: actions/checkout@v4
-      - name: Reject if LEGAL_REVIEW_PENDING tag remains
+      - name: Warn now, reject from the DPDP enforcement date
+        env:
+          # DPDP Rules 2025 were gazetted 2026-11-13; the substantive obligations for
+          # ordinary Data Fiduciaries commence 18 months later. Founder decision
+          # 2026-08-24: until that date the LEGAL_REVIEW_PENDING work is INFRASTRUCTURE
+          # built ahead of need — it must not block a pilot deploy. On and after it,
+          # this gate arms itself again with no human action required.
+          ENFORCEMENT_DATE: '2027-05-13'
         run: |
-          if grep -rIn --include='*.md' --include='*.ts' --include='*.tsx' --include='*.cs' "LEGAL_REVIEW_PENDING" src/ _COFOUNDER/ 2>/dev/null; then
-            echo "::error::LEGAL_REVIEW_PENDING tag present — counsel review incomplete. Reject prod-deploy."
-            exit 1
+          COUNT=$(grep -rIn --include='*.md' --include='*.ts' --include='*.tsx' --include='*.cs' \
+                    "LEGAL_REVIEW_PENDING" src/ _COFOUNDER/ 2>/dev/null | wc -l || echo 0)
+
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::notice::No LEGAL_REVIEW_PENDING tags remain. Counsel swap complete."
+            exit 0
           fi
-          echo "::notice::No LEGAL_REVIEW_PENDING tags remain. OK to deploy."
+
+          TODAY=$(date -u +%F)
+          DAYS_LEFT=$(( ( $(date -u -d "$ENFORCEMENT_DATE" +%s) - $(date -u -d "$TODAY" +%s) ) / 86400 ))
+
+          if [ "$TODAY" \< "$ENFORCEMENT_DATE" ]; then
+            echo "::warning::$COUNT LEGAL_REVIEW_PENDING tag(s) remain. NOT blocking: the DPDP substantive obligations commence $ENFORCEMENT_DATE ($DAYS_LEFT days away), and this placeholder copy is deliberate per founder verdict DS-015 (Track B). Counsel swap is owed before that date, not before this deploy."
+            exit 0
+          fi
+
+          echo "::error::$COUNT LEGAL_REVIEW_PENDING tag(s) remain and the DPDP enforcement date ($ENFORCEMENT_DATE) has passed. Counsel swap is now overdue. Reject prod-deploy."
+          exit 1
