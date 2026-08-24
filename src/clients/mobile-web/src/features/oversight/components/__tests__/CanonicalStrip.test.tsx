@@ -181,6 +181,34 @@ describe('CanonicalStrip — row 2, the waiting button alone, full width', () =>
         expect(screen.queryByTestId('canonical-strip-waiting-caption')).not.toBeInTheDocument();
     });
 
+    it('the_waiting_subtitle_wraps_and_is_never_clipped', () => {
+        // CHANGE 1. MEASURED in a real browser: the founder's Marathi
+        // subtitle needs ~212px and the slot gives it 176px at 320px wide,
+        // so `truncate` cut 36px of the sentence into an ellipsis on the
+        // narrowest phones this app supports. A semi-literate reader loses
+        // the words that say what is wanted of him and gets no usable signal
+        // that anything was removed.
+        //
+        // Asserted as CLASSES because jsdom does no layout — there is no
+        // width, no line box and no ellipsis to observe here. The three
+        // classes below are exactly the three mechanisms in this codebase
+        // that can clip a line, so their absence is the whole claim:
+        // `truncate` (overflow-hidden + text-ellipsis + whitespace-nowrap),
+        // `text-ellipsis` on its own, and `line-clamp-*` (a clamp is the
+        // same defect deferred — it would clip a THREE-line string exactly
+        // as `truncate` clipped this two-line one). The measured widths at
+        // 390/360/320 are in the task report; this test is what stops the
+        // class coming back.
+        render(<CanonicalStrip {...baseStripProps({ language: 'mr', waitingCount: 6 })} />);
+
+        const subtitle = screen.getByTestId('canonical-strip-waiting-subtitle');
+        expect(subtitle.className).not.toMatch(/\btruncate\b/);
+        expect(subtitle.className).not.toMatch(/\btext-ellipsis\b/);
+        expect(subtitle.className).not.toMatch(/\bline-clamp-/);
+        // The whole sentence is still the rendered content, not a prefix.
+        expect(subtitle).toHaveTextContent(oversightTranslations.mr.waitingSubtitle);
+    });
+
     it('rest_state_never_renders_the_waiting_subtitle', () => {
         // The founder's table has no subtitle for the rest state — proves
         // `subtitleText` is gated on `isWaiting`, not rendered unconditionally.

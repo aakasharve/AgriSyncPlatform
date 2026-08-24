@@ -372,10 +372,35 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
                 >
                     {primaryLabelText}
                 </span>
+                {/* CHANGE 1 — WRAPS, NEVER TRUNCATES.
+                    MEASURED in a real browser at deviceScaleFactor 2, with
+                    the founder's own Marathi (`waitingSubtitle`, category
+                    (d)) and this exact type ramp: the sentence needs ~212px.
+                    The slot gives it 246px at 390px wide and 216px at 360px
+                    — it fits both — but only 176px at 320px, where
+                    `truncate` clipped 36px of it into an ellipsis. A
+                    half-sentence ending in "…" is worse than a second line
+                    for a semi-literate reader: he loses the words that say
+                    what is wanted of him, and gets no signal that anything
+                    was removed beyond three dots he may not read as
+                    "continues".
+                    So: no `truncate`, no `line-clamp` either. A clamp is the
+                    same defect deferred to whatever string comes next — it
+                    would clip a three-line sentence exactly as `truncate`
+                    clipped this one. The bar grows instead; that is the
+                    honest trade and it costs ~15px, only at 320px, and only
+                    in the waiting state (the rest state carries no subtitle
+                    at all, so spec §2.2's "rest state keeps its exact place
+                    and size" is untouched).
+                    `leading-[1.45]` rather than `leading-tight`: Devanagari
+                    carries matras above AND below the line (ि ी ू ृ), which
+                    collide between stacked lines at 1.25. This is the first
+                    time this string can occupy two lines, so it is the first
+                    time the leading matters. */}
                 {subtitleText && (
                     <span
                         data-testid="canonical-strip-waiting-subtitle"
-                        className="block truncate text-[10.5px] font-semibold leading-tight text-amber-700/70"
+                        className="block text-[10.5px] font-semibold leading-[1.45] text-amber-700/70"
                         style={fontStyleFor(subtitleText)}
                     >
                         {subtitleText}
