@@ -263,6 +263,23 @@
  * Marathi is founder-authored and is NOT touched; the English is an
  * ordinary translation of it (translating INTO English is not the Hard
  * Rule's concern, same note as category (d) above), so the English moved.
+ *
+ * CHANGE 2 — ONE MORE (c) KEY: `unknownState`, THE END OF THE ENDLESS SPINNER
+ * -----------------------------------------------------------------------------
+ * `checkingState` had no bound. `useSyncQueueStatus` sets `hasLoaded` only
+ * after a fully successful Dexie read and re-reads every 3s forever, and
+ * `useAppData` runs its load pass ONCE with no retry at all — so a device
+ * whose first read throws stays "Checking…" for as long as the app is open.
+ * A spinner that never stops reads as "broken" to a farmer, and it tells him
+ * nothing about his own work.
+ *
+ * `unknownState` is what the strip says once it has stopped trying: an
+ * honest "we could not establish this", never a spinner, never the green
+ * tick, never a count nobody measured. Category (c), same terms as
+ * `checkingState`: `mr: ''` (no agent Marathi), a real English value read
+ * through by `resolveOversightString()`, and a `PENDING_FOUNDER_STRINGS`
+ * entry so the founder sees it is not yet his. Seventh entry; the list held
+ * exactly six before this change.
  */
 import type { Language } from './language';
 
@@ -312,6 +329,23 @@ export interface OversightTranslations {
      * `resolveOversightString()`. Listed in `PENDING_FOUNDER_STRINGS`.
      */
     checkingState: string;
+    /**
+     * Canonical-strip state once the app has STOPPED trying to read the data
+     * behind the rest state (change 2). `checkingState` says "reading";
+     * this says "we could not establish it, and we will not pretend
+     * otherwise" — the honest terminus a spinner has to have, because the
+     * two sources behind `waitingCount` can both fail permanently
+     * (`useAppData`'s load pass never retries; `useSyncQueueStatus.hasLoaded`
+     * only ever flips on a fully successful Dexie read).
+     *
+     * Deliberately NOT worded as a transient ("…right now") and NOT worded
+     * as a fault ("something went wrong"): it is the exact negation of
+     * `restState`'s claim and nothing more, so it stays true whatever caused
+     * it. Keyless-but-declared (category (c)): `mr: ''` until the founder
+     * supplies real Marathi, English fallback in the meantime via
+     * `resolveOversightString()`. Listed in `PENDING_FOUNDER_STRINGS`.
+     */
+    unknownState: string;
     /**
      * Drawer Band 2's acknowledgement control (spec §3, §6.2). Must never
      * read as a decision — see the file-header note on `मंजूर`/`खात्री`.
@@ -464,6 +498,12 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         // work, not an empty queue. Was 'Nothing waiting'.
         restState: 'All work is complete as of today',
         checkingState: 'Checking…',
+        // Change 2 — the exact negation of `restState` above, and nothing
+        // more. No cause named (there are two, and neither is the farmer's
+        // doing), no "right now" (one of the two is not transient), no
+        // apology. Short enough to render unclipped in the strip's title
+        // slot at 320px — measured, see the change-2 report.
+        unknownState: 'Cannot confirm all work is done',
         seenControl: 'I have seen this',
         decisionLine: '{count} tasks need review',
         delegatedLine: '{count} tasks — {name} will decide',
@@ -522,6 +562,11 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         // invented here; `resolveOversightString()` reads through to the
         // English until the founder supplies his own words.
         checkingState: '',
+        // Change 2 — category (c), keyless-but-declared, same terms as
+        // `checkingState` directly above. NO Marathi is invented here;
+        // `resolveOversightString()` reads through to the English until the
+        // founder supplies his own words.
+        unknownState: '',
         seenControl: 'मी हे पाहिलं',
         decisionLine: '{count} कामे तपासायची आहेत',
         delegatedLine: '{count} कामे — {name} ठरवतील',
@@ -609,6 +654,7 @@ export const PENDING_FOUNDER_STRINGS: readonly string[] = [
     'recordBarActive',
     'checkingState',
     'unsendableRecordsLine',
+    'unknownState',
 ];
 
 /**

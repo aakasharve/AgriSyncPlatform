@@ -16,8 +16,8 @@
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 
 import CanonicalStrip, { FarmIdentityElement } from '../CanonicalStrip';
 import type { CanonicalStripProps, FarmIdentityElementProps } from '../CanonicalStrip';
@@ -314,6 +314,114 @@ describe('CanonicalStrip — the rest state is a claim, and a claim needs eviden
         render(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: false, language: 'mr' })} />);
 
         expect(screen.getAllByText(oversightTranslations.en.checkingState)).toHaveLength(1);
+        expect(screen.queryByTestId('canonical-strip-waiting-caption')).not.toBeInTheDocument();
+    });
+});
+
+describe('CanonicalStrip — "Checking…" has a terminus (change 2)', () => {
+    // Real timers would make these tests take 8 seconds each and would make
+    // the boundary itself untestable. `vi.useFakeTimers()` lets the ONE
+    // number that matters — `CHECKING_TIMEOUT_MS` — be crossed deliberately.
+    beforeEach(() => {
+        vi.useFakeTimers();
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('the_checking_state_stops_spinning_and_admits_it_cannot_confirm', () => {
+        // The defect: `useAppData` runs ONE load pass with no retry, and
+        // `useSyncQueueStatus.hasLoaded` flips only on a fully successful
+        // Dexie read. Either failing left the strip spinning for the whole
+        // session — which a farmer reads as "broken", with nothing said
+        // about his own work.
+        render(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: false })} />);
+        expect(screen.getByTestId('canonical-strip-waiting-checking-icon')).toBeInTheDocument();
+
+        act(() => { vi.advanceTimersByTime(8000); });
+
+        // Spinner gone, and NOT replaced by either of the two things that
+        // would be a lie: a green tick, or a count.
+        expect(screen.queryByTestId('canonical-strip-waiting-checking-icon')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('canonical-strip-waiting-rest-tick')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('canonical-strip-waiting-count')).not.toBeInTheDocument();
+        expect(screen.getByTestId('canonical-strip-waiting-unknown-icon')).toBeInTheDocument();
+        expect(screen.getByText(oversightTranslations.en.unknownState)).toBeInTheDocument();
+    });
+
+    it('the_unknown_state_never_claims_completion_and_never_asks_for_action', () => {
+        // §P-G: colour is read before text. Emerald means approved/complete
+        // — the one thing that is not true here. Amber means "this needs
+        // you" — also wrong: the farmer can do nothing about a failed read,
+        // and an amber strip he cannot resolve is exactly the blindness
+        // spec §7 warns about. Stone is this strip's word for "we cannot
+        // say", already carried by the checking state.
+        render(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: false })} />);
+        act(() => { vi.advanceTimersByTime(8000); });
+
+        const icon = screen.getByTestId('canonical-strip-waiting-unknown-icon');
+        expect(icon.className).not.toContain('emerald');
+        expect(icon.className).not.toContain('amber');
+        expect(icon.className).toMatch(/stone/);
+        expect(screen.getByTestId('canonical-strip-waiting-button').className).not.toContain('amber');
+        // The claim itself must not be on screen in either language.
+        expect(screen.queryByText(oversightTranslations.mr.restState)).not.toBeInTheDocument();
+        expect(screen.queryByText(oversightTranslations.en.restState)).not.toBeInTheDocument();
+    });
+
+    it('the_timeout_never_fires_once_the_data_actually_resolves', () => {
+        // The timeout is a terminus for an unanswered read, not a deadline
+        // on the app. Data that lands at 7.9s must render the REAL state and
+        // stay there — a pending timer that fired afterwards would flip a
+        // truthful strip into "cannot confirm" for no reason.
+        const { rerender } = render(
+            <CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: false })} />,
+        );
+        act(() => { vi.advanceTimersByTime(7900); });
+        expect(screen.getByTestId('canonical-strip-waiting-checking-icon')).toBeInTheDocument();
+
+        rerender(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: true })} />);
+        act(() => { vi.advanceTimersByTime(60000); });
+
+        expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
+        expect(screen.queryByTestId('canonical-strip-waiting-unknown-icon')).not.toBeInTheDocument();
+    });
+
+    it('a_second_read_gets_its_own_full_checking_window', () => {
+        // `dataResolved` is not monotonic: it is `useAppData.dataLoaded &&
+        // useSyncQueueStatus.hasLoaded`, and `useAppData` re-runs its load
+        // pass (resetting `dataLoaded` to false) whenever its data source
+        // changes. A give-up left over from an EARLIER read would then send
+        // the strip straight to "cannot confirm" without ever trying — the
+        // component would have stopped reading before the read began.
+        const { rerender } = render(
+            <CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: false })} />,
+        );
+        act(() => { vi.advanceTimersByTime(8000); });
+        expect(screen.getByTestId('canonical-strip-waiting-unknown-icon')).toBeInTheDocument();
+
+        rerender(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: true })} />);
+        expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
+
+        // Second read starts. It must get the SPINNER and its own full
+        // window, not inherit the first read's verdict.
+        rerender(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: false })} />);
+        expect(screen.getByTestId('canonical-strip-waiting-checking-icon')).toBeInTheDocument();
+        expect(screen.queryByTestId('canonical-strip-waiting-unknown-icon')).not.toBeInTheDocument();
+
+        act(() => { vi.advanceTimersByTime(8000); });
+        expect(screen.getByTestId('canonical-strip-waiting-unknown-icon')).toBeInTheDocument();
+    });
+
+    it('the_unknown_label_falls_back_to_english_without_printing_it_twice', () => {
+        // `unknownState` is a category (c) key (`mr: ''`, PENDING) — same
+        // terms as `checkingState`. No Marathi is invented, English is read
+        // through, and the placeholder caption (which exists to show English
+        // BESIDE Marathi) must not print the same sentence twice.
+        render(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: false, language: 'mr' })} />);
+        act(() => { vi.advanceTimersByTime(8000); });
+
+        expect(screen.getAllByText(oversightTranslations.en.unknownState)).toHaveLength(1);
         expect(screen.queryByTestId('canonical-strip-waiting-caption')).not.toBeInTheDocument();
     });
 });

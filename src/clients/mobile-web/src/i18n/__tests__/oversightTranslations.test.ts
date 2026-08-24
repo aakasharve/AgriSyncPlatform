@@ -143,6 +143,10 @@ const FOUNDER_APPROVED_KEYS: (keyof OversightTranslations)[] = [
 // weakened into a check that could pass for an accidental blank.
 const KEYLESS_BUT_DECLARED_KEYS: (keyof OversightTranslations)[] = [
     'checkingState',
+    // Change 2 — the canonical strip's terminus once it has stopped trying
+    // to read the data behind the rest state. Same terms as `checkingState`
+    // above: no agent Marathi, English read through, founder flagged.
+    'unknownState',
     // Finding F6 — the waiting drawer's row for records that reached no
     // sync queue. No Marathi is invented for it; the one existing Marathi
     // string that came close (`failedSends`) promises "मी मदत करतो", a
@@ -182,6 +186,7 @@ const EXPECTED_MR: Record<keyof OversightTranslations, string> = {
     // (c) keyless-but-declared — '' is the value, deliberately.
     checkingState: '',
     unsendableRecordsLine: '',
+    unknownState: '',
 
     // (b) spec §6.2 placeholders, still pending the founder.
     seenControl: 'मी हे पाहिलं',
@@ -232,9 +237,16 @@ const EXPECTED_MR: Record<keyof OversightTranslations, string> = {
 // English-reading user and a Marathi-reading user were told different
 // things by the same line. `checkingState` is the state that must exist so
 // neither of them is told either thing before the data is read.
+//
+// `unknownState` (change 2) is pinned for the same reason as those two: it
+// is the strip's third statement about the same fact, and the three must
+// stay mutually consistent — "complete" / "still reading" / "cannot say".
+// It is also the string a Marathi-reading farmer actually sees today, since
+// its `mr` is deliberately empty and reads through to this value.
 const EXPECTED_EN: Partial<Record<keyof OversightTranslations, string>> = {
     restState: 'All work is complete as of today',
     checkingState: 'Checking…',
+    unknownState: 'Cannot confirm all work is done',
 };
 
 describe('oversightTranslations — every_key_has_both_mr_and_en', () => {
@@ -315,7 +327,7 @@ describe('oversightTranslations — pending_founder_strings_are_all_declared_key
         expect(PENDING_FOUNDER_STRINGS.length).toBeGreaterThan(0);
     });
 
-    it('exactly the six still-unresolved keys are in PENDING_FOUNDER_STRINGS', () => {
+    it('exactly the seven still-unresolved keys are in PENDING_FOUNDER_STRINGS', () => {
         // `waitingLabel` and `restState` are absent — Task 13 graduated
         // `waitingLabel` to founder-approved copy (his own reference-image
         // table), and a later founder message (2026-08-23) graduated
@@ -336,6 +348,11 @@ describe('oversightTranslations — pending_founder_strings_are_all_declared_key
         // queue. `failedSends` was the only near-fit Marathi in the module
         // and it promises a retry ("मी मदत करतो") that this class of record
         // can never be given, so it was not reused and nothing was invented.
+        //
+        // `unknownState` (change 2) is the SEVENTH, on the same terms as the
+        // fifth and sixth: the canonical strip needed a terminus for its
+        // "Checking…" state — which had no bound and could spin for the
+        // whole session — and no Marathi was invented for it.
         const expectedPending = [
             'seenControl',
             'delegatedLine',
@@ -343,6 +360,7 @@ describe('oversightTranslations — pending_founder_strings_are_all_declared_key
             'recordBarActive',
             'checkingState',
             'unsendableRecordsLine',
+            'unknownState',
         ];
         expect([...PENDING_FOUNDER_STRINGS].sort()).toEqual(expectedPending.sort());
     });

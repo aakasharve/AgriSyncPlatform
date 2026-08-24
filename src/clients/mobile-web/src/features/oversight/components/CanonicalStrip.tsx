@@ -63,9 +63,27 @@
  * its own doc comment. Same slot, same 52px, same layout — only the icon,
  * the tint and the label differ, so the strip stays the fixed landmark
  * spec §2.2 requires.
+ *
+ * CHANGE 2 — AND NOW FOUR: "CHECKING…" NEEDED A TERMINUS
+ * ---------------------------------------------------------
+ * waiting · checking · UNKNOWN · rest. F7(a) gave the strip an honest
+ * "we have not read this yet" state but no way out of it. Neither source
+ * behind `dataResolved` guarantees an answer: `useAppData` runs ONE load
+ * pass with no retry, and `useSyncQueueStatus.hasLoaded` flips only on a
+ * fully successful Dexie read. Either failing leaves the strip spinning for
+ * the whole session — which a farmer reads as "broken", while telling him
+ * nothing about his own work.
+ *
+ * So the checking state is now bounded by `CHECKING_TIMEOUT_MS` (see that
+ * constant for how the number is derived from those two sources' real
+ * behaviour, not chosen). Past it the strip renders `unknownState`: a still
+ * question mark, stone not emerald and not amber, and a label that is the
+ * exact negation of the rest state's claim. Not a spinner, not a green
+ * tick, not a fabricated count — the three things a bounded honest state
+ * exists to prevent.
  */
 import React from 'react';
-import { LandPlot, ChevronDown, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
+import { LandPlot, ChevronDown, AlertTriangle, CheckCircle2, Loader2, HelpCircle } from 'lucide-react';
 import type { Language } from '../../../i18n/language';
 import { oversightTranslations, resolveOversightString, PENDING_FOUNDER_STRINGS } from '../../../i18n/oversightTranslations';
 
@@ -84,6 +102,37 @@ function fontStyleFor(text: string): React.CSSProperties {
 // button's own constant so its two states (waiting/rest) can never drift
 // from each other.
 const STRIP_MIN_HEIGHT = '52px';
+
+/**
+ * CHANGE 2 — HOW LONG THE STRIP MAY SAY "CHECKING…" BEFORE IT ADMITS IT
+ * CANNOT SAY.
+ *
+ * DERIVED FROM THE TWO SOURCES BEHIND `dataResolved`, not chosen for the
+ * round number:
+ *
+ *   `useSyncQueueStatus` (`features/sync/hooks/useSyncQueueStatus.ts`) reads
+ *   Dexie once on mount and then every 3000ms, forever, and sets `hasLoaded`
+ *   ONLY after every read in the pass resolved — its `catch` deliberately
+ *   leaves the flag alone, so a throwing read never licenses a completion
+ *   claim.
+ *
+ *   `useAppData` (`app/hooks/useAppData.ts`) sets `dataLoaded` on the last
+ *   line of a single load pass. There is NO retry: if any `await` in that
+ *   pass throws, the flag stays `false` for the life of the session.
+ *
+ * 8000ms therefore covers three whole sync-queue attempts (t=0, 3000, 6000)
+ * plus ~2s of slack for the third to resolve on a slow phone, and it is well
+ * past the point where `useAppData`'s one non-retrying pass would have
+ * finished. A device still unresolved after that is not slow — it is stuck,
+ * and the honest thing is to stop spinning and say so.
+ *
+ * The cost of being wrong is deliberately asymmetric and cheap: the strip
+ * says "cannot confirm" for a moment and then, the instant `dataResolved`
+ * flips true, renders the real state. Nothing is lost. The reverse — a
+ * spinner that never stops — is what a farmer reads as "broken", with no
+ * information about his own work to show for it.
+ */
+const CHECKING_TIMEOUT_MS = 8000;
 
 export interface FarmIdentityElementProps {
     /** Drives every string in this component via `resolveOversightString`. */
@@ -275,13 +324,49 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
     dataResolved,
     onToggleWaiting,
 }) => {
+    // CHANGE 2 — THE ONE PIECE OF STATE IN THIS FILE, AND IT IS A CLOCK.
+    //
+    // This component's contract is "props in, markup out" (file header), and
+    // that still holds: nothing below fetches, reads Dexie, or derives a
+    // fact about the farm. What it measures is how long THIS component has
+    // been unable to say anything — a property of the render, not of the
+    // data — so it belongs here rather than as a fourth flag threaded down
+    // from `AppHeader`, which would need the identical timer anyway and
+    // would put a rendering concern in a data-assembling component.
+    //
+    // The effect is keyed on `dataResolved` alone, so:
+    //   resolved      -> no timer at all, and any earlier give-up is cleared
+    //                    (a later re-hydration always wins over an old one).
+    //   not resolved  -> reset to "still checking", then one timer.
+    const [checkingTimedOut, setCheckingTimedOut] = React.useState(false);
+    React.useEffect(() => {
+        setCheckingTimedOut(false);
+        if (dataResolved) {
+            return;
+        }
+        const timer = window.setTimeout(() => setCheckingTimedOut(true), CHECKING_TIMEOUT_MS);
+        return () => window.clearTimeout(timer);
+    }, [dataResolved]);
+
     const isWaiting = waitingCount > 0;
     // FINDING F7(a) — the rest state is a CLAIM, and a claim needs evidence.
     // A zero that has not been measured yet is "we do not know", not "there
     // is nothing", so it renders as its own third state rather than
     // borrowing the completed-work one. See `dataResolved`'s prop doc.
-    const isChecking = !isWaiting && !dataResolved;
-    const primaryKey = isWaiting ? 'waitingLabel' : (isChecking ? 'checkingState' : 'restState');
+    //
+    // CHANGE 2 splits that third state in two. "We are reading" is only
+    // honest while something is still expected to arrive; past
+    // `CHECKING_TIMEOUT_MS` (see its own doc for how that number is derived
+    // from the two sources' real retry behaviour) the spinner becomes a
+    // claim of its own — "hold on, this is about to resolve" — that nothing
+    // supports. So it stops, and the strip says the only true thing left:
+    // it cannot confirm. Never a tick, never a fabricated count, never an
+    // endless spinner.
+    const isChecking = !isWaiting && !dataResolved && !checkingTimedOut;
+    const isUnknown = !isWaiting && !isChecking && !dataResolved;
+    const primaryKey = isWaiting
+        ? 'waitingLabel'
+        : (isChecking ? 'checkingState' : (isUnknown ? 'unknownState' : 'restState'));
     const primaryLabelText = resolveOversightString(language, primaryKey);
 
     // Task 13 — `waitingLabel` graduated to founder-approved copy (his own
@@ -338,27 +423,41 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
                 }`}
             />
 
-            {/* Three states, one slot, one size — the strip stays a fixed
+            {/* FOUR states, one slot, one size — the strip stays a fixed
                 landmark (spec §2.2). The checking state is deliberately
                 STONE, not emerald: the green tick IS the completion claim
                 as far as a farmer reading colour before text is concerned
                 (§P-G's own reasoning), so it may not appear until the
-                claim is true. Finding F7(a). */}
+                claim is true. Finding F7(a).
+
+                CHANGE 2 — the unknown state shares the checking state's
+                STONE treatment on purpose. Colour must carry "we cannot
+                say" in both, and stone is already this strip's word for it;
+                amber would say "this needs you" (§P-G) about a situation the
+                farmer cannot act on, and emerald would say the one thing
+                that is not true. Only the GLYPH changes, from a spinner to a
+                question mark — motion is what promises "about to resolve",
+                so the stillness is the whole point. */}
             <span
                 className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
                     isWaiting
                         ? 'bg-amber-700 text-white'
-                        : (isChecking ? 'bg-stone-100 text-stone-400' : 'bg-emerald-50 text-emerald-600')
+                        : (isChecking || isUnknown ? 'bg-stone-100 text-stone-400' : 'bg-emerald-50 text-emerald-600')
                 }`}
                 data-testid={
                     isWaiting
                         ? 'canonical-strip-waiting-icon'
-                        : (isChecking ? 'canonical-strip-waiting-checking-icon' : 'canonical-strip-waiting-rest-tick')
+                        : (isChecking
+                            ? 'canonical-strip-waiting-checking-icon'
+                            : (isUnknown
+                                ? 'canonical-strip-waiting-unknown-icon'
+                                : 'canonical-strip-waiting-rest-tick'))
                 }
             >
                 {isWaiting && <AlertTriangle size={14} strokeWidth={2.25} />}
                 {!isWaiting && isChecking && <Loader2 size={15} strokeWidth={2.25} className="animate-spin" />}
-                {!isWaiting && !isChecking && <CheckCircle2 size={16} strokeWidth={2.25} />}
+                {!isWaiting && isUnknown && <HelpCircle size={16} strokeWidth={2.25} />}
+                {!isWaiting && !isChecking && !isUnknown && <CheckCircle2 size={16} strokeWidth={2.25} />}
             </span>
 
             <span className="min-w-0 flex-1 pt-1">
@@ -366,7 +465,7 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
                     className={`block truncate text-[13px] font-extrabold leading-tight ${
                         isWaiting
                             ? 'text-amber-900'
-                            : (isChecking ? 'text-stone-500' : 'text-stone-800')
+                            : (isChecking || isUnknown ? 'text-stone-500' : 'text-stone-800')
                     }`}
                     style={fontStyleFor(primaryLabelText)}
                 >
