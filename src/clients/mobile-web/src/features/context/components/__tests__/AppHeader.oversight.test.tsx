@@ -55,6 +55,7 @@ import type { SyncQueueStatus } from '../../../sync/hooks/useSyncQueueStatus';
 import { SYNC_HONESTY_I18N_KEYS } from '../../../sync/status/syncHonestyState';
 import type { DailyLog } from '../../../../domain/types/log.types';
 import type { DetailedWeather } from '../../../../types';
+import { oversightTranslations } from '../../../../i18n/oversightTranslations';
 
 const queueRef: { current: SyncQueueStatus } = {
     current: {
@@ -342,6 +343,70 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
 
         // 4. No unattributed row — every log in this fixture named its creator.
         expect(screen.queryByTestId('waiting-drawer-unattributed-row')).not.toBeInTheDocument();
+    });
+
+    it('a_farm_whose_records_have_no_creator_never_shows_the_rest_state', async () => {
+        // Finding F8, end to end. Every write site of
+        // `meta.createdByOperatorId` copies an OPTIONAL value
+        // (`profile.activeOperatorId`, `domain/types/farm.types.ts:325`), so
+        // this fixture — two real, plotted logs with no captured creator —
+        // is a shape production genuinely produces. Before F8 it rendered
+        // the green tick and "आज पर्यन्त सर्व कामे पूर्ण आहेत" over records
+        // the owner had never seen, with no badge to make him open the
+        // drawer that was already holding the अज्ञात row.
+        const logs: DailyLog[] = [
+            makeLog({
+                id: 'log-anon-1',
+                meta: { createdAtISO: '2026-08-14T09:00:00.000Z' },
+                context: {
+                    selection: [{
+                        cropId: 'crop-1', cropName: 'Grapes',
+                        selectedPlotIds: ['plot-1'], selectedPlotNames: ['Grapes A'],
+                    }],
+                },
+            }),
+            makeLog({
+                id: 'log-anon-2',
+                meta: { createdAtISO: '2026-08-14T15:00:00.000Z' },
+                context: {
+                    selection: [{
+                        cropId: 'crop-2', cropName: 'Sugarcane',
+                        selectedPlotIds: ['plot-2'], selectedPlotNames: ['Sugarcane B'],
+                    }],
+                },
+            }),
+        ];
+
+        await act(async () => {
+            renderHeader({
+                oversightData: {
+                    logs,
+                    operatorNameById: {},
+                    plotCount: 4,
+                    unverifiedCount: 0,
+                    yesterdayNotClosed: false,
+                    approvalHolderName: null,
+                },
+            });
+        });
+
+        // 1. NO rest state — no green tick, no "all work complete" claim.
+        expect(screen.queryByTestId('canonical-strip-waiting-rest-tick')).not.toBeInTheDocument();
+        expect(screen.queryByText(oversightTranslations.mr.restState)).not.toBeInTheDocument();
+
+        // 2. A real badge instead: the one अज्ञात row this fixture produces.
+        expect(screen.getByTestId('canonical-strip-waiting-count')).toHaveTextContent('1');
+
+        // 3. Opening the drawer proves the count is standing for something
+        //    real — the unattributed row, holding both records, with the
+        //    people tally still honestly 0 (spec §P-F: "records with no
+        //    person" is not a person, and F8 does not change that).
+        fireEvent.click(screen.getByTestId('canonical-strip-waiting-button'));
+        const unattributedRow = screen.getByTestId('waiting-drawer-unattributed-row');
+        expect(unattributedRow).toHaveTextContent(oversightTranslations.mr.unknown);
+        expect(unattributedRow).toHaveTextContent('2');
+        expect(screen.getByTestId('waiting-drawer-tally-people')).toHaveTextContent('0');
+        expect(screen.getByTestId('waiting-drawer-tally-records')).toHaveTextContent('2');
     });
 
     it('omitting oversightData falls back to the same honest zeros/empties as before', async () => {

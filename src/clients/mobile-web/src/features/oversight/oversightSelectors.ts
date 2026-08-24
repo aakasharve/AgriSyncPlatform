@@ -20,6 +20,28 @@
  *    `unattributed` and are NEVER folded into `people`, so the named-people
  *    tally stays honest (a person can only be counted if they were named).
  *
+ * UNKNOWN IS NOT NONE (finding F8 — read before touching `waitingCount`):
+ *  Keeping `unattributed` out of `people` is right for the PEOPLE tally
+ *  (spec §P-F / DoD #6) and was wrong for the WAITING count. Every
+ *  `createdByOperatorId` write site in this app is optional at the type
+ *  level — `LogFactory.ts:238`/`:456` and `log-partition-builders.ts:279`/
+ *  `:424` all copy `profile.activeOperatorId`, declared `activeOperatorId?:
+ *  string` (`domain/types/farm.types.ts:325`) — so a farm can legitimately
+ *  hold nothing but unattributed records. That farm used to produce
+ *  `people = []`, `decisions = []` and therefore `waitingCount = 0`, which
+ *  `CanonicalStrip` renders as the REST state: a green tick and "आज पर्यन्त
+ *  सर्व कामे पूर्ण आहेत" ("all work is complete as of today") over records
+ *  the owner had never seen, with no badge giving him a reason to open the
+ *  drawer that was holding an `अज्ञात` row the whole time. A zero meaning
+ *  UNKNOWN was being reported as NONE.
+ *
+ *  `waitingCount` therefore counts the unattributed BUCKET as the one row
+ *  it actually renders as, exactly the way each named person counts as the
+ *  one row they render as — derived from the records, never a literal, and
+ *  never a fabricated person (the row stays nameless: `अज्ञात`, spec §P-F).
+ *  The consequence that matters: `waitingCount === 0` is now reachable only
+ *  when there are no decisions AND no unseen records of any kind.
+ *
  * SERVER-TIMESTAMP DECISION (read before touching the "unseen" filter):
  *  The pure domain type `DailyLog` carries no server-received timestamp —
  *  that field (`serverModifiedAtUtc`) exists only on the Dexie *storage*
@@ -64,7 +86,19 @@ export interface OversightModel {
     totalRecords: number; // includes unattributed
     totalPlots: number; // distinct across everything
     decisions: OversightDecision[];
-    waitingCount: number; // decisions.length + people.length
+    /**
+     * How many rows the drawer is holding for the owner: one per decision,
+     * one per named person, and one for the unattributed bucket when it
+     * exists. NOT a record count — `totalRecords` is that — and NOT a
+     * people count, which is `people.length` and still excludes
+     * `unattributed` (spec §P-F, DoD #6).
+     *
+     * The `unattributed` term is finding F8's fix: see the module header's
+     * "UNKNOWN IS NOT NONE". Zero here must mean "genuinely nothing
+     * outstanding", because zero is what turns the canonical strip into the
+     * rest state — a positive claim that all work is complete.
+     */
+    waitingCount: number;
     sinceDays: number | null; // null when no checkpoint yet
     /**
      * Ruling 1 (controller override, task-1 brief §Controller rulings): the
@@ -234,7 +268,11 @@ export function buildOversightModel(input: {
         totalRecords: unseenLogs.length,
         totalPlots: allPlotNames.size,
         decisions,
-        waitingCount: decisions.length + people.length,
+        // Finding F8 — the unattributed bucket is ONE waiting row, counted
+        // like any other row, so unseen work with no captured creator can
+        // never leave the strip claiming the rest state. See the module
+        // header's "UNKNOWN IS NOT NONE".
+        waitingCount: decisions.length + people.length + (unattributed === null ? 0 : 1),
         sinceDays: checkpointISO === null ? null : daysBetween(checkpointISO, nowISO),
         boundaryApproximate: true, // see module-level SERVER-TIMESTAMP DECISION
     };

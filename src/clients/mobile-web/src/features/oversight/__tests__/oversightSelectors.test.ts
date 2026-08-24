@@ -195,6 +195,114 @@ describe('buildOversightModel', () => {
         expect(person.workCategories).not.toContain('observation');
     });
 
+    // ── Finding F8 — "a zero meaning UNKNOWN was reported as NONE" ────────
+    //
+    // `waitingCount === 0` is what turns `CanonicalStrip` into the REST
+    // state: a green tick plus "आज पर्यन्त सर्व कामे पूर्ण आहेत" ("all work is
+    // complete as of today") and no count badge. These four tests pin that
+    // this claim can only be reached when it is TRUE.
+
+    it('unattributed_work_is_counted_in_the_waiting_count', () => {
+        // The exact production shape: every write site of
+        // `meta.createdByOperatorId` copies an OPTIONAL value
+        // (`profile.activeOperatorId`, `farm.types.ts:325`), so a farm can
+        // legitimately hold nothing but creator-less records. Before F8 this
+        // farm produced people=[], decisions=[] and waitingCount=0 — the
+        // rest state, over records the owner had never seen.
+        const logs: DailyLog[] = [
+            makeLog({ id: 'l1', meta: { createdAtISO: '2026-08-10T00:00:00.000Z' } }),
+            makeLog({ id: 'l2', meta: { createdAtISO: '2026-08-11T00:00:00.000Z' } }),
+            makeLog({ id: 'l3' }), // no meta at all
+        ];
+
+        const model = buildOversightModel({ ...baseInput, logs });
+
+        expect(model.people).toHaveLength(0);
+        expect(model.decisions).toHaveLength(0);
+        expect(model.unattributed?.recordCount).toBe(3);
+        expect(model.totalRecords).toBe(3);
+        // The whole point: NOT zero. The owner keeps a reason to look.
+        expect(model.waitingCount).toBe(1);
+    });
+
+    it('the_unattributed_bucket_counts_as_one_row_not_one_per_record', () => {
+        // Derived exactly the way every other term is — one per row the
+        // drawer actually renders (spec §P-H, "fifty records from four
+        // people produce ONE briefing"). Two fixtures of very different
+        // record counts must both contribute exactly 1, which no invented
+        // number would do.
+        const twoRecords = buildOversightModel({
+            ...baseInput,
+            logs: [
+                makeLog({ id: 'a1', meta: { createdAtISO: '2026-08-10T00:00:00.000Z' } }),
+                makeLog({ id: 'a2', meta: { createdAtISO: '2026-08-11T00:00:00.000Z' } }),
+            ],
+        });
+        const nineRecords = buildOversightModel({
+            ...baseInput,
+            logs: Array.from({ length: 9 }, (_, i) =>
+                makeLog({ id: `b${i}`, meta: { createdAtISO: '2026-08-10T00:00:00.000Z' } })),
+        });
+
+        expect(twoRecords.unattributed?.recordCount).toBe(2);
+        expect(nineRecords.unattributed?.recordCount).toBe(9);
+        expect(twoRecords.waitingCount).toBe(1);
+        expect(nineRecords.waitingCount).toBe(1);
+    });
+
+    it('waiting_count_sums_decisions_named_people_and_the_unattributed_row', () => {
+        // All three terms present at once, each a distinctive size, so a
+        // dropped or double-counted term shows up as a different total.
+        const logs: DailyLog[] = [
+            makeLog({ id: 'l1', meta: { createdAtISO: '2026-08-10T00:00:00.000Z', createdByOperatorId: 'op-1' } }),
+            makeLog({ id: 'l2', meta: { createdAtISO: '2026-08-11T00:00:00.000Z', createdByOperatorId: 'op-2' } }),
+            makeLog({ id: 'l3', meta: { createdAtISO: '2026-08-12T00:00:00.000Z' } }),
+            makeLog({ id: 'l4', meta: { createdAtISO: '2026-08-13T00:00:00.000Z' } }),
+        ];
+
+        const model = buildOversightModel({
+            ...baseInput,
+            logs,
+            operatorNameById: { 'op-1': 'Ramesh', 'op-2': 'Sunita' },
+            unverifiedCount: 6,
+            yesterdayNotClosed: true,
+            failedSendCount: 2,
+        });
+
+        expect(model.decisions).toHaveLength(3);
+        expect(model.people).toHaveLength(2);
+        expect(model.unattributed).not.toBeNull();
+        expect(model.waitingCount).toBe(3 + 2 + 1);
+        // The people tally itself is UNCHANGED by F8 — spec §P-F / DoD #6:
+        // "records with no person" is still not a person.
+        expect(model.people.length).toBe(2);
+    });
+
+    it('waiting_count_is_zero_only_when_there_is_genuinely_nothing_outstanding', () => {
+        const nothing = buildOversightModel({ ...baseInput, logs: [] });
+        expect(nothing.waitingCount).toBe(0);
+        expect(nothing.unattributed).toBeNull();
+
+        // A single unattributed record that the checkpoint has NOT yet
+        // covered is enough to leave the rest state — and one the
+        // checkpoint HAS covered correctly returns to it, so the guard is a
+        // real condition rather than a constant.
+        const unseen = buildOversightModel({
+            ...baseInput,
+            checkpointISO: '2026-08-01T00:00:00.000Z',
+            logs: [makeLog({ id: 'l1', meta: { createdAtISO: '2026-08-05T00:00:00.000Z' } })],
+        });
+        expect(unseen.waitingCount).toBe(1);
+
+        const seen = buildOversightModel({
+            ...baseInput,
+            checkpointISO: '2026-08-10T00:00:00.000Z',
+            logs: [makeLog({ id: 'l1', meta: { createdAtISO: '2026-08-05T00:00:00.000Z' } })],
+        });
+        expect(seen.unattributed).toBeNull();
+        expect(seen.waitingCount).toBe(0);
+    });
+
     it('missing_server_timestamps_set_boundaryApproximate_true', () => {
         // DailyLog carries no server-received timestamp on the pure domain
         // type (only the Dexie storage record does) — so the boundary this
