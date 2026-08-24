@@ -310,15 +310,17 @@ describe('CanonicalStrip — the rest state is a claim, and a claim needs eviden
         expect(screen.queryByTestId('canonical-strip-waiting-checking-icon')).not.toBeInTheDocument();
     });
 
-    it('the_checking_label_falls_back_to_english_without_printing_it_twice', () => {
-        // `checkingState` is a category (c) key (`mr: ''`, PENDING) — no
-        // Marathi is invented for it, so `resolveOversightString` reads
-        // through to English. The placeholder CAPTION exists to show English
-        // BESIDE a Marathi placeholder; with no Marathi to sit beside, a
-        // caption would print the same sentence twice, uppercased.
+    it('the_checking_label_is_the_founders_marathi_and_carries_no_english_caption', () => {
+        // `checkingState` shipped as category (c) (`mr: ''`) and read
+        // through to English. The founder supplied his own Marathi on
+        // 2026-08-24, so it graduated out of `PENDING_FOUNDER_STRINGS` — a
+        // Marathi farmer now reads Marathi here, and the placeholder caption
+        // (which exists only to show English beside UNAPPROVED copy) must
+        // not render for it.
         render(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: false, language: 'mr' })} />);
 
-        expect(screen.getAllByText(oversightTranslations.en.checkingState)).toHaveLength(1);
+        expect(screen.getByText(oversightTranslations.mr.checkingState)).toBeInTheDocument();
+        expect(screen.queryByText(oversightTranslations.en.checkingState)).not.toBeInTheDocument();
         expect(screen.queryByTestId('canonical-strip-waiting-caption')).not.toBeInTheDocument();
     });
 });
@@ -351,7 +353,9 @@ describe('CanonicalStrip — "Checking…" has a terminus (change 2)', () => {
         expect(screen.queryByTestId('canonical-strip-waiting-rest-tick')).not.toBeInTheDocument();
         expect(screen.queryByTestId('canonical-strip-waiting-count')).not.toBeInTheDocument();
         expect(screen.getByTestId('canonical-strip-waiting-unknown-icon')).toBeInTheDocument();
-        expect(screen.getByText(oversightTranslations.en.unknownState)).toBeInTheDocument();
+        // `baseStripProps` renders in Marathi; `unknownState` graduated to
+        // the founder's own Marathi 2026-08-24, so that is what shows.
+        expect(screen.getByText(oversightTranslations.mr.unknownState)).toBeInTheDocument();
     });
 
     it('the_unknown_state_never_claims_completion_and_never_asks_for_action', () => {
@@ -418,16 +422,57 @@ describe('CanonicalStrip — "Checking…" has a terminus (change 2)', () => {
         expect(screen.getByTestId('canonical-strip-waiting-unknown-icon')).toBeInTheDocument();
     });
 
-    it('the_unknown_label_falls_back_to_english_without_printing_it_twice', () => {
-        // `unknownState` is a category (c) key (`mr: ''`, PENDING) — same
-        // terms as `checkingState`. No Marathi is invented, English is read
-        // through, and the placeholder caption (which exists to show English
-        // BESIDE Marathi) must not print the same sentence twice.
+    it('the_unknown_label_is_the_founders_marathi_and_carries_no_english_caption', () => {
+        // Same terms as `checkingState`: shipped `mr: ''`, graduated to the
+        // founder's own Marathi 2026-08-24, out of `PENDING_FOUNDER_STRINGS`
+        // — so the placeholder caption (which exists only to show English
+        // beside UNAPPROVED copy) must not render.
         render(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: false, language: 'mr' })} />);
         act(() => { vi.advanceTimersByTime(8000); });
 
-        expect(screen.getAllByText(oversightTranslations.en.unknownState)).toHaveLength(1);
+        expect(screen.getByText(oversightTranslations.mr.unknownState)).toBeInTheDocument();
+        expect(screen.queryByText(oversightTranslations.en.unknownState)).not.toBeInTheDocument();
         expect(screen.queryByTestId('canonical-strip-waiting-caption')).not.toBeInTheDocument();
+    });
+
+    it('the_unknown_label_renders_in_the_locked_marathi_body_font', () => {
+        // Root CLAUDE.md's font rule, pinned where it can actually regress:
+        // `CanonicalStrip` picks the font from the TEXT (`fontStyleFor`), so
+        // a string that stopped containing Devanagari — or a component that
+        // stopped setting the family — would silently hand a farmer DM Sans
+        // or a generic fallback for Devanagari glyphs.
+        render(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: false, language: 'mr' })} />);
+        act(() => { vi.advanceTimersByTime(8000); });
+
+        const label = screen.getByText(oversightTranslations.mr.unknownState);
+        expect(label).toHaveStyle({ fontFamily: "'Noto Sans Devanagari', sans-serif" });
+    });
+
+    it('the_unknown_label_is_still_clipped_by_truncate_at_every_supported_width', () => {
+        // NOT an endorsement — a RECORD, so the founder's decision is
+        // visible in code rather than only in a report.
+        //
+        // MEASURED at 390/360/320px in headless Chromium with the real
+        // Google font (numbers in the task report): the founder's
+        // `unknownState` needs ~336px and this slot gives 278/248/208px, so
+        // `truncate` clips it on every phone this app supports. The brief
+        // that applied his Marathi says "do not shrink a font or truncate to
+        // make it fit; report the measurement" — so nothing here was
+        // resized, and the class was NOT removed either: dropping it changes
+        // how the shared title slot renders `waitingLabel` and `restState`
+        // too, which is a layout decision he has not made.
+        //
+        // Asserted as a CLASS because jsdom does no layout — there is no
+        // width, no line box and no ellipsis to observe here. When he rules
+        // on the wrap, this test is the one to invert.
+        render(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: false, language: 'mr' })} />);
+        act(() => { vi.advanceTimersByTime(8000); });
+
+        const label = screen.getByText(oversightTranslations.mr.unknownState);
+        expect(label.className).toMatch(/\btruncate\b/);
+        // Whatever the CSS does to it, the DOM still carries the whole
+        // sentence — nothing is shortened in the data.
+        expect(label).toHaveTextContent(oversightTranslations.mr.unknownState);
     });
 });
 
@@ -455,7 +500,7 @@ describe('CanonicalStrip — a multi-farm account gets no completion claim (chan
         // both. Never a spinner: nothing here is still being read.
         expect(screen.getByTestId('canonical-strip-waiting-unknown-icon')).toBeInTheDocument();
         expect(screen.queryByTestId('canonical-strip-waiting-checking-icon')).not.toBeInTheDocument();
-        expect(screen.getByText(oversightTranslations.en.unknownState)).toBeInTheDocument();
+        expect(screen.getByText(oversightTranslations.mr.unknownState)).toBeInTheDocument();
     });
 
     it('a_single_farm_account_still_gets_the_rest_state', () => {

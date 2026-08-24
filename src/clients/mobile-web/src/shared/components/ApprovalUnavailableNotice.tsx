@@ -31,9 +31,16 @@
  * says "there is nothing here for you to do" — so it takes neither colour.
  *
  * FONTS: `font-family` is set explicitly per string, chosen from the text
- * itself, because these two keys ship as English today and become Marathi
- * the moment the founder supplies it. A CSS-inherited font would silently
- * render Devanagari in DM Sans on that day.
+ * itself. That mattered the day the founder supplied Marathi for both keys
+ * (2026-08-24) — a CSS-inherited font would have rendered his Devanagari in
+ * DM Sans. Both of his lines are MIXED SCRIPT: they carry the Latin word
+ * `approval`, deliberately (see `i18n/approvalAvailabilityTranslations.ts`).
+ * `fontStyleFor` therefore selects the Marathi body font for the whole
+ * line, which is correct rather than a compromise — 'Noto Sans Devanagari'
+ * carries Latin glyphs of its own, so the Latin word renders IN that face
+ * and never falls through to a generic `sans-serif`. Verified with Chrome's
+ * `CSS.getPlatformFontsForNode`, not assumed; pinned by
+ * `__tests__/ApprovalUnavailableNotice.marathi.test.tsx`.
  */
 import React from 'react';
 import { Info } from 'lucide-react';

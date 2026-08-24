@@ -60,11 +60,30 @@
  * `EXPECTED_EN` pins only the two English values that make a CLAIM rather
  * than merely translate one — see its own comment. English is not
  * founder-gated, so the rest is left free.
+ *
+ * 2026-08-24 — THE MODULE HAS NO HOLLOW KEYS LEFT
+ * -------------------------------------------------
+ * The founder ruled on the last three `mr: ''` keys (`checkingState`,
+ * `unknownState`, `unsendableRecordsLine`). Consequences for this file,
+ * each one deliberate:
+ *
+ *   - `KEYLESS_BUT_DECLARED_KEYS` is now EMPTY. The tests that used it are
+ *     rewritten to assert the SET of hollow keys equals that empty list,
+ *     rather than looping over it — a loop over an empty array is a test
+ *     that cannot fail, which is worth nothing.
+ *   - `EXPECTED_MR` gains three real literals in place of three `''`. It is
+ *     still `Record<keyof OversightTranslations, string>`, so a key added
+ *     to the interface without a literal here is a `tsc` error.
+ *   - `PENDING_FOUNDER_STRINGS` is down to four.
  */
 import { describe, it, expect } from 'vitest';
 
 import { oversightTranslations, PENDING_FOUNDER_STRINGS, resolveOversightString } from '../oversightTranslations';
 import type { OversightTranslations } from '../oversightTranslations';
+// The ONE substitution helper every `{count}` template in this module is
+// rendered through. Imported so the 2026-08-24 token correction is proven
+// against the real substituter, not a re-implementation of it here.
+import { formatOversightTemplate } from '../../features/oversight/formatOversightTemplate';
 import { dfesTranslations } from '../dfesTranslations';
 import type { DfesTranslations } from '../dfesTranslations';
 import type { Language } from '../language';
@@ -136,23 +155,27 @@ const FOUNDER_APPROVED_KEYS: (keyof OversightTranslations)[] = [
     'helpButtonLabel',
 ];
 
-// Category (c) — keyless-but-declared: `mr: ''` BY DESIGN, the honest
-// encoding of "the founder has not written this yet". Not a defect and not
-// an oversight, so the "every mr value is non-empty" checks below except
-// exactly these and then assert the opposite for them, rather than being
-// weakened into a check that could pass for an accidental blank.
-const KEYLESS_BUT_DECLARED_KEYS: (keyof OversightTranslations)[] = [
+// The keys whose `mr` is `''` BY DESIGN — category (c), the honest encoding
+// of "the founder has not written this yet".
+//
+// EMPTY as of 2026-08-24: `checkingState`, `unknownState` and
+// `unsendableRecordsLine` were the last three, and the founder ruled on all
+// three (see `oversightTranslations.ts`'s header, "THE LAST THREE (c) KEYS
+// GRADUATE"). The list is KEPT rather than deleted because the tests below
+// compare the module's ACTUAL hollow set against it — so "nothing is
+// hollow" is an assertion, not an absence, and an accidental blank on any
+// key fails immediately.
+const KEYLESS_BUT_DECLARED_KEYS: (keyof OversightTranslations)[] = [];
+
+// The three keys the founder ruled on 2026-08-24, graduating out of
+// `mr: ''`. Named as a group so the byte-pinning below addresses them
+// directly, the way Groups A and B are addressed.
+const GRADUATED_2026_08_24_KEYS: (keyof OversightTranslations)[] = [
     'checkingState',
-    // Change 2 — the canonical strip's terminus once it has stopped trying
-    // to read the data behind the rest state. Same terms as `checkingState`
-    // above: no agent Marathi, English read through, founder flagged.
     'unknownState',
-    // Finding F6 — the waiting drawer's row for records that reached no
-    // sync queue. No Marathi is invented for it; the one existing Marathi
-    // string that came close (`failedSends`) promises "मी मदत करतो", a
-    // retry these records can never get, so it was NOT reused.
     'unsendableRecordsLine',
 ];
+
 
 // THE ORACLE (finding F7(b)). One literal per key, for EVERY key —
 // `Record<keyof OversightTranslations, string>` makes a missing entry a
@@ -183,10 +206,15 @@ const EXPECTED_MR: Record<keyof OversightTranslations, string> = {
     waitingLabel: 'तुमच्यासाठी बाकी',
     restState: 'आज पर्यन्त सर्व कामे पूर्ण आहेत',
 
-    // (c) keyless-but-declared — '' is the value, deliberately.
-    checkingState: '',
-    unsendableRecordsLine: '',
-    unknownState: '',
+    // (d) founder-approved 2026-08-24 — the last three ex-`mr: ''` keys.
+    // `unsendableRecordsLine` carries the `{count}` token
+    // `formatOversightTemplate` substitutes; the founder wrote `{counts }`,
+    // which matches no token and would have printed those nine characters
+    // to a farmer. Token corrected, space moved outside the braces, not one
+    // Devanagari character changed.
+    checkingState: 'तपासात आहे',
+    unknownState: 'निश्चित सांगता येत नाही की सर्व कामे झाली',
+    unsendableRecordsLine: '{count} श्रम सफल पर्यन्त पोहचू शकले नाहीत',
 
     // (b) spec §6.2 placeholders, still pending the founder.
     seenControl: 'मी हे पाहिलं',
@@ -269,10 +297,12 @@ describe('oversightTranslations — every_key_has_both_mr_and_en', () => {
     it('every mr value is a non-empty string, except the keyless-but-declared ones', () => {
         // Category (c) keys (`mr: ''`) are the ONE legitimate exception —
         // the honest encoding of "the founder has not written this yet".
-        // They are excepted by NAME, and the test immediately below asserts
-        // the opposite for them, so an accidental blank on any other key
-        // still fails here and a category (c) key that quietly acquired
-        // agent-written Marathi fails there.
+        // They are excepted by NAME, and the test immediately below pins the
+        // exception list against the module's ACTUAL hollow set, so an
+        // accidental blank on any other key still fails here.
+        //
+        // 2026-08-24: that list is empty, so this now asserts every single
+        // `mr` value is real text.
         for (const [key, value] of Object.entries(oversightTranslations.mr)) {
             expect(typeof value, `mr.${key} should be a string`).toBe('string');
             if (KEYLESS_BUT_DECLARED_KEYS.includes(key as keyof OversightTranslations)) continue;
@@ -280,14 +310,30 @@ describe('oversightTranslations — every_key_has_both_mr_and_en', () => {
         }
     });
 
-    it('every keyless-but-declared key is EXACTLY empty and flagged pending', () => {
-        // The other half of the exception above. `mr: ''` is a claim in
-        // itself — "no agent wrote Marathi here" — so it is asserted, not
-        // merely tolerated. Whitespace would defeat
-        // `resolveOversightString`'s `!== ''` check and put a blank label on
-        // a farmer's screen, which is the one outcome Ruling 7 named.
-        for (const key of KEYLESS_BUT_DECLARED_KEYS) {
-            expect(oversightTranslations.mr[key], `mr.${key} must be exactly ''`).toBe('');
+    it('the hollow keys are EXACTLY the declared keyless-but-declared ones — no more, no fewer', () => {
+        // The other half of the exception above, written as a SET equality
+        // rather than a loop. As of 2026-08-24 `KEYLESS_BUT_DECLARED_KEYS`
+        // is empty, and a loop over an empty array is a test that cannot
+        // fail; this shape keeps failing usefully in both directions —
+        // a key that quietly went blank, and a declared-hollow key that
+        // quietly acquired agent-written Marathi.
+        //
+        // `=== ''` and not `.trim() === ''` on purpose: whitespace would
+        // defeat `resolveOversightString`'s own `!== ''` check and put a
+        // blank label on a farmer's screen, so a whitespace-only value is a
+        // defect that must surface as a NON-hollow key here and then fail
+        // the non-empty check above... which it would not. So it is caught
+        // explicitly instead.
+        const hollow = (Object.keys(oversightTranslations.mr) as (keyof OversightTranslations)[])
+            .filter((key) => oversightTranslations.mr[key] === '');
+        expect([...hollow].sort()).toEqual([...KEYLESS_BUT_DECLARED_KEYS].sort());
+
+        for (const [key, value] of Object.entries(oversightTranslations.mr)) {
+            expect(value.trim() === '' && value !== '', `mr.${key} is whitespace-only`).toBe(false);
+        }
+
+        // Anything hollow must also be flagged for the founder.
+        for (const key of hollow) {
             expect(
                 PENDING_FOUNDER_STRINGS.includes(key),
                 `${key} has no Marathi and must be flagged for the founder`,
@@ -327,42 +373,34 @@ describe('oversightTranslations — pending_founder_strings_are_all_declared_key
         expect(PENDING_FOUNDER_STRINGS.length).toBeGreaterThan(0);
     });
 
-    it('exactly the seven still-unresolved keys are in PENDING_FOUNDER_STRINGS', () => {
-        // `waitingLabel` and `restState` are absent — Task 13 graduated
-        // `waitingLabel` to founder-approved copy (his own reference-image
-        // table), and a later founder message (2026-08-23) graduated
-        // `restState` the same way. As of the SAME 2026-08-23 message,
-        // Group A (the eight ex-Ruling-7/8 keyless keys) and Group B
-        // (`decisionLine`, `failedSends`) are ALSO absent — see
-        // oversightTranslations.ts's header, "OVERSIGHT-LOOP STRING
-        // GRADUATION".
+    it('exactly the four still-unresolved keys are in PENDING_FOUNDER_STRINGS', () => {
+        // Down from seven: the founder ruled on `checkingState`,
+        // `unknownState` and `unsendableRecordsLine` on 2026-08-24 and
+        // supplied the Marathi for all three.
         //
-        // `checkingState` (finding F7) is the fifth: a new category (c) key
-        // shipped with `mr: ''` rather than inventing Marathi for the
-        // canonical strip's "still reading the data" state. This list held
-        // exactly four before that change — the count is asserted here so
-        // an addition is always deliberate and always reported.
+        // What is left is the spec §6.2 (b) placeholders he has not been
+        // asked about. All four already carry the spec table's Devanagari,
+        // so none is blank — they are pending APPROVAL, not pending WORDS.
         //
-        // `unsendableRecordsLine` (finding F6) is the sixth, on the same
-        // terms: the waiting drawer's row for records that reached no sync
-        // queue. `failedSends` was the only near-fit Marathi in the module
-        // and it promises a retry ("मी मदत करतो") that this class of record
-        // can never be given, so it was not reused and nothing was invented.
-        //
-        // `unknownState` (change 2) is the SEVENTH, on the same terms as the
-        // fifth and sixth: the canonical strip needed a terminus for its
-        // "Checking…" state — which had no bound and could spin for the
-        // whole session — and no Marathi was invented for it.
+        // The count is asserted as an exact set so that both directions are
+        // caught: a key added back without a ruling, and a key quietly
+        // dropped from the founder's queue without one either.
         const expectedPending = [
             'seenControl',
             'delegatedLine',
             'recordBarIdle',
             'recordBarActive',
-            'checkingState',
-            'unsendableRecordsLine',
-            'unknownState',
         ];
         expect([...PENDING_FOUNDER_STRINGS].sort()).toEqual(expectedPending.sort());
+    });
+
+    it('no key the founder ruled on 2026-08-24 is ever flagged pending again', () => {
+        for (const key of GRADUATED_2026_08_24_KEYS) {
+            expect(
+                PENDING_FOUNDER_STRINGS.includes(key),
+                `${key} is the founder's own copy and must not be pending`,
+            ).toBe(false);
+        }
     });
 
     it('no Group A or Group B (2026-08-23 graduated) key is ever flagged pending', () => {
@@ -459,6 +497,56 @@ describe('oversightTranslations — GROUP A & GROUP B, founder-approved 2026-08-
     });
 });
 
+describe('oversightTranslations — the last three (c) keys, founder-approved 2026-08-24', () => {
+    it('every 2026-08-24 mr value is byte-identical to the founder\'s message', () => {
+        for (const key of GRADUATED_2026_08_24_KEYS) {
+            expect(oversightTranslations.mr[key], `mr.${key} drifted from the founder's ruled copy`).toBe(EXPECTED_MR[key]);
+            expect(oversightTranslations.mr[key].length, `mr.${key} must not be empty any more`).toBeGreaterThan(0);
+        }
+    });
+
+    it('restState and unknownState keep his spelling पर्यन्त / आजून untouched', () => {
+        // His spelling, not the more common "पर्यंत". Normalising it would
+        // be the exact "correction" the Hard Rule forbids, and it is the
+        // kind of edit a spell-checking agent makes without noticing.
+        expect(oversightTranslations.mr.restState).toContain('पर्यन्त');
+        expect(oversightTranslations.mr.unsendableRecordsLine).toContain('पर्यन्त');
+        expect(oversightTranslations.mr.unsendableRecordsLine).not.toContain('पर्यंत');
+    });
+
+    it('unknownState still names only the outcome, never either cause', () => {
+        // The wording is load-bearing: ONE key carries two different
+        // situations — a read that never finished, and a multi-farm account
+        // whose completion claim has no statable subject
+        // (`CanonicalStrip.tsx`'s `farmCount` prop doc). Naming either cause
+        // would make the line false for the other. The founder's Marathi
+        // keeps that property; these assertions stop a future "clarifying"
+        // reword from breaking it.
+        const mr = oversightTranslations.mr.unknownState;
+        expect(mr).not.toContain('शेत');      // no farm/scope named
+        expect(mr).not.toContain('चूक');      // not phrased as a fault
+        expect(mr).not.toContain('इंटरनेट');  // no cause named
+    });
+
+    it('unsendableRecordsLine substitutes a real count and never promises a retry', () => {
+        // The token is what `formatOversightTemplate` splits on. The
+        // founder wrote `{counts }`; that matches no token, so a farmer
+        // would have read the characters `{counts }` where his record count
+        // belongs. Pinned as `{count}` here, and exercised end-to-end by
+        // `AppHeader.oversight.test.tsx`'s
+        // `the_unqueueable_row_never_borrows_the_failed_send_promise_of_a_retry`.
+        const mr = oversightTranslations.mr.unsendableRecordsLine;
+        expect(mr).toContain('{count}');
+        expect(mr).not.toContain('{counts');
+        expect(formatOversightTemplate(mr, { count: 2 })).toBe('2 श्रम सफल पर्यन्त पोहचू शकले नाहीत');
+        // Finding F6's constraint, re-proven against the new copy: nothing
+        // will ever send these records, so the row may not borrow
+        // `failedSends`' promise of help.
+        expect(mr).not.toContain('मी मदत करतो');
+        expect(mr).not.toContain('अडकली');
+    });
+});
+
 describe('oversightTranslations — the Seen control never implies a decision (spec §P-G, §6.2)', () => {
     it('seenControl carries neither मंजूर (approve) nor खात्री (confirm)', () => {
         expect(oversightTranslations.mr.seenControl).not.toContain('मंजूर');
@@ -496,15 +584,31 @@ describe('oversightTranslations — graduated_group_a_and_b_strings_never_fall_b
         expect(resolveOversightString('mr', 'restState')).toBe(oversightTranslations.mr.restState);
     });
 
-    it('a_keyless_but_declared_key_reads_through_to_english_never_a_blank_label', () => {
-        // Ruling 7's original ask, load-bearing again as of finding F7:
-        // `checkingState` ships `mr: ''`, so this is the code path that
-        // decides between an English sentence a farmer can read and an
-        // empty label he cannot. It must never return `''`.
-        for (const key of KEYLESS_BUT_DECLARED_KEYS) {
-            const resolved = resolveOversightString('mr', key);
-            expect(resolved, `resolveOversightString('mr', '${key}') must not be blank`).not.toBe('');
-            expect(resolved).toBe(oversightTranslations.en[key]);
+    it('resolveOversightString never returns a blank label, for any key, in either language', () => {
+        // Ruling 7's original ask, restated so it survives the 2026-08-24
+        // graduation. It used to loop over `KEYLESS_BUT_DECLARED_KEYS` and
+        // assert the English fallback; that list is now empty, and a loop
+        // over an empty array asserts nothing. So the property is stated
+        // over EVERY key instead — a blank label on a farmer's screen is the
+        // outcome Ruling 7 named, and it is forbidden whether it arrives via
+        // a hollow `mr`, a hollow `en`, or a future key that is both.
+        for (const language of LANGUAGES) {
+            for (const key of Object.keys(oversightTranslations.mr) as (keyof OversightTranslations)[]) {
+                const resolved = resolveOversightString(language, key);
+                expect(resolved, `resolveOversightString('${language}', '${key}') must not be blank`).not.toBe('');
+            }
+        }
+    });
+
+    it('no key reads through to English any more — every mr value is real text', () => {
+        // The other half, and the one that would catch a silent regression
+        // to `mr: ''`. As of 2026-08-24 the fallback branch is unexercised:
+        // asking for 'mr' returns the Marathi, for every single key.
+        for (const key of Object.keys(oversightTranslations.mr) as (keyof OversightTranslations)[]) {
+            expect(
+                resolveOversightString('mr', key),
+                `resolveOversightString('mr', '${key}') fell back to English — a key went hollow`,
+            ).toBe(oversightTranslations.mr[key]);
         }
     });
 });

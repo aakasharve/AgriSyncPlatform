@@ -986,11 +986,18 @@ describe('AppHeader — every tappable decision row has a destination (F2)', () 
         // The register this row must NOT use. `failedSends` reads
         // "{count} कामे अडकली आहेत — मी मदत करतो" ("stuck — I will help"),
         // which promises a retry. Nothing will ever send an unqueueable
-        // record, so that promise would be false (`P5`). No Marathi is
-        // invented for the replacement either — `unsendableRecordsLine`
-        // ships `mr: ''` pending the founder, so it resolves through to the
-        // English, which is `SyncStatusDrawer`'s own honest wording about
-        // exactly these records.
+        // record, so that promise would be false (`P5`).
+        //
+        // `unsendableRecordsLine` shipped `mr: ''` and resolved through to
+        // English; the founder supplied his own Marathi for it on
+        // 2026-08-24 and this suite renders in Marathi, so the row now
+        // carries HIS words — and, critically, the real count substituted
+        // into them. He wrote the token as `{counts }`, which
+        // `formatOversightTemplate` (a literal `{count}` split) would not
+        // have matched: the farmer would have read the characters
+        // `{counts }` where the 2 is below. This assertion is the end-to-end
+        // proof that the corrected token substitutes, rendered from a real
+        // model rather than checked against the string constant.
         unqueueableRef.current = 2;
 
         await act(async () => {
@@ -1000,7 +1007,8 @@ describe('AppHeader — every tappable decision row has a destination (F2)', () 
         fireEvent.click(screen.getByTestId('canonical-strip-waiting-button'));
         const row = screen.getByTestId('waiting-drawer-decision-unqueueable');
 
-        expect(row).toHaveTextContent('2 records will not reach your farm records');
+        expect(row).toHaveTextContent('2 श्रम सफल पर्यन्त पोहचू शकले नाहीत');
+        expect(row.textContent ?? '').not.toContain('{count');
         expect(row.textContent ?? '').not.toContain('अडकली');
         expect(row.textContent ?? '').not.toContain('मी मदत करतो');
         // And it is a genuinely separate row, not a relabelled failedSend:

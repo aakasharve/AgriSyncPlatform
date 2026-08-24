@@ -77,15 +77,17 @@
  * (b) PLACEHOLDERS — spec §6.2, table row cited per key
  * -------------------------------------------------------
  * `waitingLabel`, `restState`, `seenControl`, `decisionLine`,
- * `delegatedLine`, `failedSends`, `recordBarIdle` and `recordBarActive`
- * carry the exact Devanagari from spec §6.2's table (design doc lines
- * 294–300). Three are templates (`decisionLine`, `delegatedLine`,
- * `failedSends`) — the spec's worked examples use a literal Devanagari
- * numeral (e.g. `६ कामे तपासायचे आहे`) to illustrate the shape; this file
- * replaces the count/name with `{count}`/`{name}` placeholders and keeps
- * every surrounding word and its position exactly as given. `recordBarIdle`
- * / `recordBarActive` split the table's single `आधी प्लॉट निवडा / बोला` row
- * on its own ` / ` — the two states shown on one row in the doc.
+ * `delegatedLine` and `failedSends` carry the exact Devanagari from spec
+ * §6.2's table (design doc lines 294–300). Three are templates
+ * (`decisionLine`, `delegatedLine`, `failedSends`) — the spec's worked
+ * examples use a literal Devanagari numeral (e.g. `६ कामे तपासायचे आहे`) to
+ * illustrate the shape; this file replaces the count/name with
+ * `{count}`/`{name}` placeholders and keeps every surrounding word and its
+ * position exactly as given.
+ *
+ * `recordBarIdle` / `recordBarActive` split the table's single
+ * `आधी प्लॉट निवडा / बोला` row on its own ` / ` — the two states shown on
+ * one row in the doc.
  *
  * `seenControl` ('मी हे पाहिलं') deliberately contains neither `मंजूर`
  * (approve) nor `खात्री` (confirm) — both already mean a decision
@@ -280,6 +282,39 @@
  * through by `resolveOversightString()`, and a `PENDING_FOUNDER_STRINGS`
  * entry so the founder sees it is not yet his. Seventh entry; the list held
  * exactly six before this change.
+ *
+ * THE LAST THREE (c) KEYS GRADUATE — founder message, 2026-08-24
+ * ----------------------------------------------------------------
+ * The founder ruled on the three keys the two paragraphs above were still
+ * holding open, in his own words, in a coordinator message — same (d)
+ * provenance rule and same medium as the 2026-08-23 graduations above:
+ *
+ *   `checkingState`      — 'तपासात आहे'
+ *   `unknownState`       — 'निश्चित सांगता येत नाही की सर्व कामे झाली'
+ *   `unsendableRecordsLine` — '{count} श्रम सफल पर्यन्त पोहचू शकले नाहीत'
+ *
+ * Transcribed character-for-character, INCLUDING his spelling of "पर्यन्त"
+ * (not normalised to the more common "पर्यंत" — the same spelling `restState`
+ * already carries from him) and the deliberate absence of a trailing danda
+ * or full stop on all three. Only the `mr` values and their
+ * `PENDING_FOUNDER_STRINGS` listings change; every key, every `en` value and
+ * every consumer are untouched.
+ *
+ * ONE MECHANICAL CORRECTION, CLEARED WITH HIM BEFORE IT WAS MADE: he wrote
+ * the third as `{counts }श्रम सफल पर्यन्त पोहचू शकले नाहीत`. Substitution
+ * here is `features/oversight/formatOversightTemplate.ts`, which splits on
+ * the literal token `{count}` — so `{counts }` matches nothing and the
+ * farmer would read the characters `{counts }` where his record count
+ * belongs. The token is therefore `{count}` and the space moved outside the
+ * braces. HIS WORDS ARE UNTOUCHED: not one Devanagari character differs.
+ * `AppHeader.oversight.test.tsx`'s
+ * `the_unqueueable_row_never_borrows_the_failed_send_promise_of_a_retry`
+ * renders this row from a real model and asserts the NUMBER appears, so the
+ * substitution is proven end-to-end, not assumed.
+ *
+ * After this message `PENDING_FOUNDER_STRINGS` holds four keys —
+ * `seenControl`, `delegatedLine` and the two record-bar labels — and NO key
+ * in this module has an empty `mr` any more.
  */
 import type { Language } from './language';
 
@@ -306,8 +341,9 @@ export interface OversightTranslations {
     attention: string;
     allFarmsOnTrack: string;
 
-    // ── NOT approved — placeholders (spec §6.2). Listed in
-    // PENDING_FOUNDER_STRINGS below; founder must supply real copy. ──────
+    // ── The spec §6.2 block. It began as eight (b) placeholders; several
+    // have since been ruled on by the founder. Each key's own comment says
+    // which it is; PENDING_FOUNDER_STRINGS below is the list. ───────────
 
     /** Canonical-strip waiting button label (spec §2.2, §6.2). */
     waitingLabel: string;
@@ -323,10 +359,11 @@ export interface OversightTranslations {
     /**
      * Canonical-strip state while the data behind the rest state is still
      * being read — Dexie's sync queue (`useSyncQueueStatus.hasLoaded`) and
-     * the app's own hydration (`useAppData.dataLoaded`). Keyless-but-
-     * declared (category (c)): `mr: ''` until the founder supplies real
-     * Marathi, English fallback in the meantime via
-     * `resolveOversightString()`. Listed in `PENDING_FOUNDER_STRINGS`.
+     * the app's own hydration (`useAppData.dataLoaded`). Shipped as category
+     * (c) (`mr: ''`) under finding F7; GRADUATED to the founder's own
+     * Marathi 2026-08-24 (see this file's header, "THE LAST THREE (c) KEYS
+     * GRADUATE"), so it is no longer pending and no longer reads through to
+     * English.
      */
     checkingState: string;
     /**
@@ -346,11 +383,13 @@ export interface OversightTranslations {
      * data is not farm-scoped and so the completion claim has no statable
      * subject (`app/helpers/appContentOversightInputs.ts`). One is a failed
      * read, the other is a structural limit; naming either cause in the
-     * string would make it false for the other.
+     * string would make it false for the other. The founder's Marathi below
+     * keeps that property: it names only the outcome.
      *
-     * Keyless-but-declared (category (c)): `mr: ''` until the founder
-     * supplies real Marathi, English fallback in the meantime via
-     * `resolveOversightString()`. Listed in `PENDING_FOUNDER_STRINGS`.
+     * Shipped as category (c) (`mr: ''`) under change 2; GRADUATED to the
+     * founder's own Marathi 2026-08-24 (see this file's header, "THE LAST
+     * THREE (c) KEYS GRADUATE"). No longer pending, no longer reads through
+     * to English.
      */
     unknownState: string;
     /**
@@ -384,11 +423,14 @@ export interface OversightTranslations {
      * promise would be false (`P5`: never teach the farmer a button works
      * when it does not). The English below is the same register
      * `SyncStatusDrawer` — the surface this row opens — already uses about
-     * exactly these records: "will not reach your farm records".
+     * exactly these records: "will not reach your farm records". The
+     * founder's Marathi keeps that property too: it names श्रम सफल as the
+     * place the records did not reach, and promises nothing.
      *
-     * Category (c): `mr: ''` until the founder supplies his own words, read
-     * through `resolveOversightString()`. Listed in
-     * `PENDING_FOUNDER_STRINGS`.
+     * Shipped as category (c) (`mr: ''`) under finding F6; GRADUATED to the
+     * founder's own Marathi 2026-08-24 (see this file's header, "THE LAST
+     * THREE (c) KEYS GRADUATE", including the one mechanical `{count}`
+     * correction made to his token — never to his words).
      */
     unsendableRecordsLine: string;
     /** Record bar before a plot is chosen (spec §5.2, §6.2). */
@@ -396,11 +438,12 @@ export interface OversightTranslations {
     /** Record bar once a plot is chosen (spec §5.2, §6.2). */
     recordBarActive: string;
 
-    // ── Keyless-but-declared (Controller Ruling 7). `mr` is '' by design
-    // — read through `resolveOversightString()`, never this field, direct.
-    // Listed in PENDING_FOUNDER_STRINGS below. ───────────────────────────
+    // ── Declared keyless under Controller Ruling 7/8 (`mr: ''`), ALL
+    // graduated to the founder's own Marathi on 2026-08-23. None is
+    // pending and none is empty — see the header's "OVERSIGHT-LOOP STRING
+    // GRADUATION (GROUPS A & B)". ────────────────────────────────────────
 
-    /** Tallies' people-count unit word (spec §3). No Marathi source exists. */
+    /** Tallies' people-count unit word (spec §3). */
     talliesPeopleUnit: string;
     /**
      * Tallies' AND the per-person row's plot-count unit word (spec §3 —
@@ -565,25 +608,22 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
 
         waitingLabel: 'तुमच्यासाठी बाकी',
         restState: 'आज पर्यन्त सर्व कामे पूर्ण आहेत',
-        // Finding F7 — category (c), keyless-but-declared. NO Marathi is
-        // invented here; `resolveOversightString()` reads through to the
-        // English until the founder supplies his own words.
-        checkingState: '',
-        // Change 2 — category (c), keyless-but-declared, same terms as
-        // `checkingState` directly above. NO Marathi is invented here;
-        // `resolveOversightString()` reads through to the English until the
-        // founder supplies his own words.
-        unknownState: '',
+        // GRADUATED 2026-08-24 — founder-approved, transcribed verbatim from
+        // his own coordinator message (see this file's header, "THE LAST
+        // THREE (c) KEYS GRADUATE"). These three were the module's last
+        // `mr: ''` keys; none is empty and none is pending any more.
+        checkingState: 'तपासात आहे',
+        unknownState: 'निश्चित सांगता येत नाही की सर्व कामे झाली',
         seenControl: 'मी हे पाहिलं',
         decisionLine: '{count} कामे तपासायची आहेत',
         delegatedLine: '{count} कामे — {name} ठरवतील',
         failedSends: '{count} कामे अडकली आहेत — मी मदत करतो',
-        // Finding F6 — category (c), keyless-but-declared. NO Marathi is
-        // invented here. The nearest existing Marathi (`failedSends`) says
-        // "मी मदत करतो", which would be a promise this class of record can
-        // never keep, so it is NOT borrowed. `resolveOversightString()`
-        // reads through to the English until the founder rules.
-        unsendableRecordsLine: '',
+        // GRADUATED 2026-08-24 with the two above. `{count}` is the token
+        // `formatOversightTemplate` substitutes; the founder wrote
+        // `{counts }`, which would have printed those nine characters to a
+        // farmer. Token corrected, space moved outside the braces, his
+        // Devanagari untouched — full note in this file's header.
+        unsendableRecordsLine: '{count} श्रम सफल पर्यन्त पोहचू शकले नाहीत',
         recordBarIdle: 'आधी प्लॉट निवडा',
         recordBarActive: 'बोला',
 
@@ -622,46 +662,31 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
 };
 
 /**
- * Every key in this module that is NOT yet a founder-approved string —
- * category (b) placeholders (spec §6.2) only, as of 2026-08-23. Category
- * (c) keyless-but-declared keys (Ruling 7/8) are ALL graduated out now (see
- * below). A consuming component uses this to decide whether to render the
- * `en` value beside the `mr` one; `__tests__/oversightTranslations.test.ts`
- * asserts every entry here names a real key so the list can never point at
- * a typo.
+ * Every key in this module that is NOT yet a founder-approved string. Four
+ * remain, all spec §6.2 (b) placeholders carrying the Devanagari from that
+ * table. A consuming component uses this list to decide whether to render
+ * the `en` value beside the `mr` one;
+ * `__tests__/oversightTranslations.test.ts` asserts every entry names a real
+ * key, so the list can never point at a typo.
  *
- * `waitingLabel` is NOT here (Task 13 graduated it to founder-approved —
- * see this file's header, category (d)). `restState` is NOT here either —
- * the founder supplied it directly, in his own words, in a coordinator
- * message dated 2026-08-23 (see this file's header, category (d), the
- * "RESTSTATE GRADUATION" paragraph).
+ * HOW IT GOT TO FOUR — every removal is a founder ruling, none is drift:
  *
- * `talliesPeopleUnit`, `plotsUnit`, `bandDecisionsHeader`,
- * `bandSinceLastLookedHeader`, `sinceLastLookedTail`, `dayNotClosedLine`,
- * `seenControlHint`, `retryAffordance`, `decisionLine` and `failedSends` are
- * NOT here either — a further founder message, same date (2026-08-23),
- * ruled on all ten (see this file's header, "OVERSIGHT-LOOP STRING
- * GRADUATION" paragraph).
+ *   Task 13    `waitingLabel` — his own reference-image table.
+ *   2026-08-23 `restState`, then Groups A & B (`talliesPeopleUnit`,
+ *              `plotsUnit`, `bandDecisionsHeader`,
+ *              `bandSinceLastLookedHeader`, `sinceLastLookedTail`,
+ *              `dayNotClosedLine`, `seenControlHint`, `retryAffordance`,
+ *              `decisionLine`, `failedSends`) — two coordinator messages.
+ *   2026-08-24 `checkingState`, `unknownState`, `unsendableRecordsLine`
+ *              graduate (header: "THE LAST THREE (c) KEYS GRADUATE").
  *
- * `checkingState` (finding F7) is the one category (c) key in the module
- * again — `mr: ''`, English fallback — so this list went from exactly four
- * entries to exactly five. That is a deliberate, reported addition, not
- * drift: see this file's header, "FINDING F7".
- *
- * `unsendableRecordsLine` (finding F6) is the SECOND category (c) key, so
- * the list is now exactly six. Also deliberate and also reported: the
- * waiting drawer needed a row for records that reached no sync queue at
- * all, and the only Marathi that could have been reused (`failedSends`)
- * promises a retry these records will never get. Founder must rule.
+ * With those three graduated, NO key in this module has an empty `mr`.
  */
 export const PENDING_FOUNDER_STRINGS: readonly string[] = [
     'seenControl',
     'delegatedLine',
     'recordBarIdle',
     'recordBarActive',
-    'checkingState',
-    'unsendableRecordsLine',
-    'unknownState',
 ];
 
 /**
@@ -671,15 +696,18 @@ export const PENDING_FOUNDER_STRINGS: readonly string[] = [
  * spec §P-H/§6.2's whole point (a visible English fallback) exists to
  * prevent. This returns `en` whenever the requested language's value is
  * empty, in either language, so a consuming component never has to know —
- * or remember — which keys are hollow. As of 2026-08-23 (see this file's
- * header, "OVERSIGHT-LOOP STRING GRADUATION") no key in this module
- * currently has an empty `mr` — Ruling 7/8's eight keyless-but-declared keys
- * all graduated to real founder Marathi — but the function stays: it is
- * generic fallback infrastructure for whichever key next ships as `mr: ''`,
- * not code specific to those eight. Finding F7 made it load-bearing again:
- * `checkingState` ships `mr: ''` and reaches the farmer through this
- * function, and finding F6 added a second such key,
- * `unsendableRecordsLine`.
+ * or remember — which keys are hollow.
+ *
+ * AS OF 2026-08-24 THE FALLBACK BRANCH IS UNEXERCISED: the founder's last
+ * three rulings (header, "THE LAST THREE (c) KEYS GRADUATE") emptied the
+ * module of `mr: ''` keys, so every call returns the requested language's
+ * own value. The function stays anyway — it is generic infrastructure for
+ * whichever key next ships hollow, and every consumer already routes through
+ * it, so a future `mr: ''` needs no call-site change. Every consumer calls
+ * it for EVERY string, not only the keys that once needed it; that is the
+ * property that makes the next hollow key safe by default.
+ * `__tests__/oversightTranslations.test.ts` pins both halves: no key is
+ * hollow today, and no call ever returns `''`.
  */
 export function resolveOversightString(
     language: Language,
