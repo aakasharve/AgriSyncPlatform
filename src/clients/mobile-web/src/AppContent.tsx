@@ -42,6 +42,14 @@ import { buildOversightHeaderInputs } from './app/helpers/appContentOversightInp
 // swipe path (`core/navigation/MainViewTransition.tsx`, wired in
 // `AppRouter.tsx`) both call it, so the two can never drift apart.
 import { isRecordingPathBusy } from './shared/utils/recordingPathBusy';
+// spec: owner-oversight-loop (Task 8, design doc §5.2) — the record bar is
+// pinned HERE, as a sibling of <main> and <nav>, because <main> is the
+// element that scrolls: anything rendered inside it (i.e. anywhere in
+// `AppRouter`/`mainView`) scrolls away by construction, which is the defect
+// this bar exists to remove. Its placement outside `AppRouter`'s tree is
+// also what makes it structurally incapable of unmounting `AudioRecorder`.
+import RecordBar, { mainPaddingBottomFor, shouldShowRecordBar } from './features/oversight/components/RecordBar';
+import { scrollRecorderIntoView } from './shared/utils/homeScreenScroll';
 
 interface AppContentProps {
     crops: CropProfile[];
@@ -113,6 +121,19 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
         [data.history, data.crops, data.farmerProfile.operators, data.plannedTasks],
     );
 
+    // spec: owner-oversight-loop (Task 8) — one predicate, two uses: whether
+    // to paint the bar, and how much room <main> must leave under the page
+    // so its last card is not hidden behind it. Deriving both from the same
+    // call is what stops the padding and the bar disagreeing.
+    const recordBarVisible = shouldShowRecordBar({
+        currentRoute: navigation.currentRoute,
+        mainView: navigation.mainView,
+        status: voice.status,
+        recordingSegment: voice.recordingSegment,
+        mode: voice.mode,
+        keyboardOpen: isKeyboardOpen,
+    });
+
     return (
         <div className="relative flex h-full flex-col bg-transparent text-stone-800 font-sans selection:bg-emerald-200">
             <AiTestModeBanner />
@@ -166,7 +187,7 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 style={{
                     paddingBottom: isKeyboardOpen
                         ? '1.5rem'
-                        : 'calc(6rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))',
+                        : mainPaddingBottomFor(recordBarVisible),
                 }}
             >
                 <AppFeatureProviders app={app} helpers={featureHelpers}>
@@ -196,6 +217,19 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                     event={weather.pendingWeatherEvent}
                     onReact={(reaction) => weather.handleWeatherReaction(reaction)}
                     onDismiss={() => weather.setPendingWeatherEvent(null)}
+                />
+            )}
+
+            {/* spec: owner-oversight-loop (design doc §5.2) — "Tap 1 a plot.
+                Tap 2 the record bar." Pinned above the navigation so the
+                primary action of the app never leaves the screen. `active`
+                is `hasActiveLogContext`, the SAME value `AudioRecorder`'s
+                own `disabled` prop is derived from, so bar and recorder can
+                never disagree about whether the farmer may speak. */}
+            {recordBarVisible && (
+                <RecordBar
+                    active={context.hasActiveLogContext}
+                    onActivate={scrollRecorderIntoView}
                 />
             )}
 
