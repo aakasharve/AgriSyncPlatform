@@ -56,6 +56,9 @@ import { SYNC_HONESTY_I18N_KEYS } from '../../../sync/status/syncHonestyState';
 import type { DailyLog } from '../../../../domain/types/log.types';
 import type { DetailedWeather } from '../../../../types';
 import { oversightTranslations } from '../../../../i18n/oversightTranslations';
+// Findings F2/F3 — the two cross-tree hops the drawer's rows and the
+// "Close Day" affordances depend on. See that module's header.
+import { requestOpenWaitingDrawer } from '../../../oversight/oversightNavigationEvents';
 
 const queueRef: { current: SyncQueueStatus } = {
     current: {
@@ -700,5 +703,27 @@ describe('AppHeader — the farm element is contextual on the real farm list (Ta
         // Still opens the SAME existing `FarmSwitcherSheet` (spec §2.1).
         fireEvent.click(el);
         expect(screen.getByTestId('farm-switcher-sheet')).toBeInTheDocument();
+    });
+});
+
+describe('AppHeader — the waiting drawer can be opened from outside (F3)', () => {
+    it('the_header_opens_the_waiting_drawer_when_another_surface_requests_it', async () => {
+        // SchedulerPage's "Close Day" button and the `?nudge=close-day`
+        // notification deep-link both land here (spec §4.2 routes the Daily
+        // Closure card into this drawer). Neither has a prop path to this
+        // component's local `isWaitingDrawerOpen`, so both dispatch
+        // `OPEN_WAITING_DRAWER_EVENT` — this is the listener that makes them
+        // land rather than navigate and do nothing.
+        await act(async () => {
+            renderHeader();
+        });
+
+        expect(screen.queryByTestId('waiting-drawer-sheet')).not.toBeInTheDocument();
+
+        await act(async () => {
+            requestOpenWaitingDrawer();
+        });
+
+        expect(screen.getByTestId('waiting-drawer-sheet')).toBeInTheDocument();
     });
 });

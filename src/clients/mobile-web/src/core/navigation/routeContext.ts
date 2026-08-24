@@ -139,10 +139,12 @@ export interface AppRouterContext {
     setShowQuickLog: React.Dispatch<React.SetStateAction<boolean>>;
     reflectFocusRequest: { logId: string; date: string; plotId?: string } | null;
     setReflectFocusRequest: React.Dispatch<React.SetStateAction<{ logId: string; date: string; plotId?: string } | null>>;
-    showCloseDaySummary: boolean;
-    setShowCloseDaySummary: React.Dispatch<React.SetStateAction<boolean>>;
-    showCloseYesterdaySummary: boolean;
-    setShowCloseYesterdaySummary: React.Dispatch<React.SetStateAction<boolean>>;
+    // FINDING F3 — `showCloseDaySummary` / `showCloseYesterdaySummary` were
+    // removed from this contract. Their only readers went with the Daily
+    // Closure card in commit `0e4ad118` (spec §4.2 moved it into the waiting
+    // drawer), so the fields survived as a type that let three call sites
+    // keep writing to nothing. Keeping them typed here is what made the dead
+    // path compile.
 
     // derived presentation
     ownerDisplayName: string;

@@ -89,12 +89,18 @@ const AppRouter: React.FC = () => {
     const handleVerifyLog = trust.handleVerifyLog;
     const history = isDemoMode ? mockHistory : realHistory;
 
-    // DFES Phase 0: Review Inbox / QuickLog / Reflect-focus / close-day modals.
+    // DFES Phase 0: Review Inbox / QuickLog / Reflect-focus modals.
+    //
+    // FINDING F3 — `showCloseDaySummary` / `showCloseYesterdaySummary` used
+    // to live here too. Commit `0e4ad118` deleted their only readers from
+    // `mainView.tsx` (spec §4.2 moved the Daily Closure card and the
+    // yesterday-not-closed block into the waiting drawer), leaving two
+    // booleans that three live code paths still WROTE and nothing rendered.
+    // They are gone rather than re-read: the drawer is the destination now,
+    // and a flag no component reads is a promise the UI cannot keep.
     const [showReviewInbox, setShowReviewInbox] = React.useState(false);
     const [showQuickLog, setShowQuickLog] = React.useState(false);
     const [reflectFocusRequest, setReflectFocusRequest] = React.useState<{ logId: string; date: string; plotId?: string } | null>(null);
-    const [showCloseDaySummary, setShowCloseDaySummary] = React.useState(false);
-    const [showCloseYesterdaySummary, setShowCloseYesterdaySummary] = React.useState(false);
 
     // Convert a DailyLog to an editable AgriLogResponse (manual ledger edit flow).
     const handleEditLog = (log: DailyLog) => {
@@ -148,10 +154,6 @@ const AppRouter: React.FC = () => {
     useNudgeRouteEffect({
         setCurrentRoute,
         setMainView,
-        setShowCloseDaySummary,
-        setShowCloseYesterdaySummary,
-        setShowReviewInbox,
-        todayUnverifiedCount: derivations.todayDayState.unverifiedCount,
     });
 
     // spec: 2026-07-13-labour-attendance-approval-design (Task 3.6) —
@@ -209,8 +211,6 @@ const AppRouter: React.FC = () => {
         showReviewInbox, setShowReviewInbox,
         showQuickLog, setShowQuickLog,
         reflectFocusRequest, setReflectFocusRequest,
-        showCloseDaySummary, setShowCloseDaySummary,
-        showCloseYesterdaySummary, setShowCloseYesterdaySummary,
         ownerDisplayName: derivations.ownerDisplayName,
         operatorNameById: derivations.operatorNameById,
         todayDateKey: derivations.todayDateKey,

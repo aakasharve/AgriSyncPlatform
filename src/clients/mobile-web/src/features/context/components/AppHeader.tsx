@@ -41,6 +41,10 @@ import OversightOverlay from '../../oversight/components/OversightOverlay';
 // task's scope.
 import OversightNavCards from '../../oversight/components/OversightNavCards';
 import { buildOversightModel, type OversightDecision } from '../../oversight/oversightSelectors';
+// Findings F2/F3 — the two cross-tree "open this surface" hops. See that
+// module's header for why a window event and not a prop path.
+import { OPEN_WAITING_DRAWER_EVENT } from '../../oversight/oversightNavigationEvents';
+import { useOpenSurfaceRequest } from '../../oversight/useOpenSurfaceRequest';
 import { useOversightAcknowledgement } from '../../oversight/useOversightAcknowledgement';
 import { LocalOversightAcknowledgementStore } from '../../oversight/LocalOversightAcknowledgementStore';
 import { systemClock } from '../../../core/domain/services/Clock';
@@ -166,6 +170,13 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   const [isFarmSwitcherOpen, setIsFarmSwitcherOpen] = React.useState(false);
   const [isWaitingDrawerOpen, setIsWaitingDrawerOpen] = React.useState(false);
   const queueStatus = useSyncQueueStatus();
+
+  // FINDING F3 — the waiting drawer is the destination "Close Day" and the
+  // `?nudge=close-day` notification deep-link now land on (spec §4.2 routes
+  // the Daily Closure card here). Both dispatchers sit inside `AppRouter`,
+  // on the other side of `AppContent.tsx`'s provider boundary, with no prop
+  // path to this component's local `isWaitingDrawerOpen` — hence the event.
+  useOpenSurfaceRequest(OPEN_WAITING_DRAWER_EVENT, () => setIsWaitingDrawerOpen(true));
 
   const userColorClass = activeOperator ? getUserColor(activeOperator.name) : 'border-stone-200 text-stone-500 bg-stone-50';
 

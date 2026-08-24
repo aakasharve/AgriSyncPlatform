@@ -150,8 +150,6 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
     const [showReviewInbox, setShowReviewInbox] = useState(false);
     const [showQuickLog, setShowQuickLog] = useState(false);
     const [reflectFocusRequest, setReflectFocusRequest] = useState<{ logId: string; date: string; plotId?: string } | null>(null);
-    const [showCloseDaySummary, setShowCloseDaySummary] = useState(false);
-    const [showCloseYesterdaySummary, setShowCloseYesterdaySummary] = useState(false);
     const [userResources, setUserResources] = useState<ResourceItem[]>([]);
     const [showTaskCreationSheet, setShowTaskCreationSheet] = useState(false);
 
@@ -302,8 +300,6 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
         showReviewInbox, setShowReviewInbox,
         showQuickLog, setShowQuickLog,
         reflectFocusRequest, setReflectFocusRequest,
-        showCloseDaySummary, setShowCloseDaySummary,
-        showCloseYesterdaySummary, setShowCloseYesterdaySummary,
 
         ownerDisplayName: derivations.ownerDisplayName,
         operatorNameById: derivations.operatorNameById,
