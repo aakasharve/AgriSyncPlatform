@@ -311,15 +311,24 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         <div className="min-w-0 flex-1 flex items-center justify-center">
           {!showNavCards && (
             <div className="flex items-center gap-2">
+              {/* Founder ruling 2026-08-24: the wordmark is a BRAND ASSET, not
+                  a text span — the real lockup sets "Shram" green and "Safal"
+                  blue in the brand italic, which `font-bold text-lg` could only
+                  approximate. `logo-full.webp` (1100x330) carries the shield and
+                  the wordmark as ONE image, so it replaces both the separate
+                  mark and the span. Measured: 28px tall renders 93px wide
+                  against the 136px those two occupied, which also buys back
+                  43px in a row-1 that was already overflowing (370px of
+                  children in a 390px header). Height stays 28px so the header
+                  row does not move. */}
               <img
-                src="/brand/logo-mark.webp"
-                alt=""
-                width={28}
+                src="/brand/logo-full.webp"
+                alt="Shram Safal"
+                width={93}
                 height={28}
                 loading="eager"
-                className="w-7 h-7"
+                className="h-7 w-auto shrink-0"
               />
-              <span className="font-bold text-lg text-stone-800">ShramSafal</span>
               {activeOperator && (
                 <div className="flex items-center gap-1.5 px-2 py-0.5 bg-stone-100/50 border border-stone-200 rounded-full">
                   <span className="text-[10px] uppercase font-bold text-stone-500 tracking-wide">Owner</span>
