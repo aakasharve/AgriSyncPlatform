@@ -75,11 +75,17 @@ import ActionToast from '../../shared/components/ui/ActionToast';
 import AppHeader from '../context/components/AppHeader';
 import BottomNavigation from '../context/components/BottomNavigation';
 import { renderCompareView, renderLogView, renderReflectView } from '../../core/navigation/mainView';
-import { RouteLoader } from '../../core/navigation/lazyComponents';
+import { RouteLoader, ReviewInboxSheet } from '../../core/navigation/lazyComponents';
 import MainViewTransition from '../../core/navigation/MainViewTransition';
 import { isRecordingPathBusy } from '../../shared/utils/recordingPathBusy';
 import { buildOversightHeaderInputs } from '../../app/helpers/appContentOversightInputs';
+import { LogVerificationStatus } from '../../types';
 import type { CropProfile, DailyLog, FarmerProfile, LedgerDefaults, PlannedTask } from '../../types';
+// Finding F2 — this preview mounts the real `AppHeader`, so the waiting
+// drawer's `approval` row is live here too; these are what stop it being a
+// dead end in the one surface the founder reviews on. See below.
+import { OPEN_REVIEW_INBOX_EVENT } from './oversightNavigationEvents';
+import { useOpenSurfaceRequest } from './useOpenSurfaceRequest';
 
 import {
     PREVIEW_CROPS,
@@ -178,6 +184,17 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
 
     const activeOperator = farmerProfile.operators.find(op => op.id === farmerProfile.activeOperatorId);
 
+    // FINDING F2 — the waiting drawer's `approval` row opens
+    // `ReviewInboxSheet`. In the real app `AppRouter` owns that sheet
+    // (`core/navigation/globalSheets.tsx`); this preview deliberately does
+    // NOT mount `renderGlobalSheets` (it would also drag in the conflict
+    // badge and the QuickLog FAB, neither of which this preview is about),
+    // so without this listener + sheet the row would land nowhere HERE —
+    // in the exact surface the founder reviews on. Same wiring, same props
+    // as `globalSheets.tsx`; `ctx.handleVerifyLog` is the preview's honest
+    // "disabled in this preview" stub, so nothing is faked as approved.
+    useOpenSurfaceRequest(OPEN_REVIEW_INBOX_EVENT, () => ctx.setShowReviewInbox(true));
+
     return (
         <div className="relative flex h-full flex-col bg-transparent text-stone-800">
             <PreviewBanner />
@@ -266,6 +283,19 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
                 onNavigate={ctx.setCurrentRoute}
                 onViewChange={ctx.setMainView}
             />
+
+            <Suspense fallback={null}>
+                <ReviewInboxSheet
+                    isOpen={ctx.showReviewInbox}
+                    onClose={() => ctx.setShowReviewInbox(false)}
+                    logs={ctx.history}
+                    operators={ctx.farmerProfile.operators}
+                    currentOperatorId={ctx.farmerProfile.activeOperatorId || 'owner'}
+                    onApproveLog={(logId: string) => ctx.handleVerifyLog(logId, LogVerificationStatus.APPROVED)}
+                    onApproveAll={(logIds: string[]) => logIds.forEach(id => ctx.handleVerifyLog(id, LogVerificationStatus.APPROVED))}
+                    onDisputeLog={(logId: string, note: string) => ctx.handleVerifyLog(logId, LogVerificationStatus.REJECTED, note)}
+                />
+            </Suspense>
 
             {notice && (
                 <ActionToast message={notice} type="partial" onDismiss={dismissNotice} />
