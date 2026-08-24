@@ -242,6 +242,27 @@
  *
  * Only the ten `mr` values above and their `PENDING_FOUNDER_STRINGS` listing
  * change; every key, its `en` value and every consumer are untouched.
+ *
+ * FINDING F7 — ONE NEW (c) KEY, AND ONE ENGLISH RECONCILIATION
+ * --------------------------------------------------------------
+ * `checkingState` is a category (c) key: `mr: ''`, English populated,
+ * listed in `PENDING_FOUNDER_STRINGS`. It is the canonical strip's label
+ * while the data behind it is still being read — the state that must exist
+ * so `restState` ("all work is complete as of today") is never rendered
+ * from data nobody has loaded yet. No Marathi is invented for it. Category
+ * (c) is exactly the mechanism the Hard Rule leaves open for this: an
+ * honest empty, an English fallback the farmer can still read, and a
+ * founder-facing flag. It is the FIFTH entry in `PENDING_FOUNDER_STRINGS`,
+ * which held exactly four before this change.
+ *
+ * `en.restState` is RECONCILED, not reworded-by-invention: it read
+ * "Nothing waiting" while the founder's Marathi in the same slot asserts
+ * that work is complete ("आज पर्यन्त सर्व कामे पूर्ण आहेत"). Two languages,
+ * one key, two different claims — an English-speaking user and a Marathi-
+ * speaking user were being told different things by the same line. The
+ * Marathi is founder-authored and is NOT touched; the English is an
+ * ordinary translation of it (translating INTO English is not the Hard
+ * Rule's concern, same note as category (d) above), so the English moved.
  */
 import type { Language } from './language';
 
@@ -273,8 +294,24 @@ export interface OversightTranslations {
 
     /** Canonical-strip waiting button label (spec §2.2, §6.2). */
     waitingLabel: string;
-    /** Canonical-strip rest state, once nothing is waiting (spec §2.2, §6.2). */
+    /**
+     * Canonical-strip rest state, once nothing is waiting (spec §2.2, §6.2).
+     *
+     * The `mr` value is founder-authored and asserts that work is COMPLETE,
+     * not merely that a queue is empty — so it may only render when that is
+     * actually known to be true. See `checkingState` for the state that
+     * covers "not known yet" (finding F7(a)).
+     */
     restState: string;
+    /**
+     * Canonical-strip state while the data behind the rest state is still
+     * being read — Dexie's sync queue (`useSyncQueueStatus.hasLoaded`) and
+     * the app's own hydration (`useAppData.dataLoaded`). Keyless-but-
+     * declared (category (c)): `mr: ''` until the founder supplies real
+     * Marathi, English fallback in the meantime via
+     * `resolveOversightString()`. Listed in `PENDING_FOUNDER_STRINGS`.
+     */
+    checkingState: string;
     /**
      * Drawer Band 2's acknowledgement control (spec §3, §6.2). Must never
      * read as a decision — see the file-header note on `मंजूर`/`खात्री`.
@@ -405,7 +442,11 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         allFarmsOnTrack: 'All your farms are on track today',
 
         waitingLabel: 'Waiting for you',
-        restState: 'Nothing waiting',
+        // Finding F7 — reconciled with the founder's Marathi in the same
+        // slot ("आज पर्यन्त सर्व कामे पूर्ण आहेत"), which asserts completed
+        // work, not an empty queue. Was 'Nothing waiting'.
+        restState: 'All work is complete as of today',
+        checkingState: 'Checking…',
         seenControl: 'I have seen this',
         decisionLine: '{count} tasks need review',
         delegatedLine: '{count} tasks — {name} will decide',
@@ -457,6 +498,10 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
 
         waitingLabel: 'तुमच्यासाठी बाकी',
         restState: 'आज पर्यन्त सर्व कामे पूर्ण आहेत',
+        // Finding F7 — category (c), keyless-but-declared. NO Marathi is
+        // invented here; `resolveOversightString()` reads through to the
+        // English until the founder supplies his own words.
+        checkingState: '',
         seenControl: 'मी हे पाहिलं',
         decisionLine: '{count} कामे तपासायची आहेत',
         delegatedLine: '{count} कामे — {name} ठरवतील',
@@ -518,14 +563,19 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
  * `seenControlHint`, `retryAffordance`, `decisionLine` and `failedSends` are
  * NOT here either — a further founder message, same date (2026-08-23),
  * ruled on all ten (see this file's header, "OVERSIGHT-LOOP STRING
- * GRADUATION" paragraph). Only `seenControl`, `delegatedLine`,
- * `recordBarIdle` and `recordBarActive` remain pending.
+ * GRADUATION" paragraph).
+ *
+ * `checkingState` (finding F7) is the one category (c) key in the module
+ * again — `mr: ''`, English fallback — so this list went from exactly four
+ * entries to exactly five. That is a deliberate, reported addition, not
+ * drift: see this file's header, "FINDING F7".
  */
 export const PENDING_FOUNDER_STRINGS: readonly string[] = [
     'seenControl',
     'delegatedLine',
     'recordBarIdle',
     'recordBarActive',
+    'checkingState',
 ];
 
 /**
@@ -540,7 +590,9 @@ export const PENDING_FOUNDER_STRINGS: readonly string[] = [
  * currently has an empty `mr` — Ruling 7/8's eight keyless-but-declared keys
  * all graduated to real founder Marathi — but the function stays: it is
  * generic fallback infrastructure for whichever key next ships as `mr: ''`,
- * not code specific to those eight.
+ * not code specific to those eight. Finding F7 made it load-bearing again:
+ * `checkingState` ships `mr: ''` and reaches the farmer through this
+ * function.
  */
 export function resolveOversightString(
     language: Language,

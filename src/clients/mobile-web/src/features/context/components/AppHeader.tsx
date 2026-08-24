@@ -85,6 +85,15 @@ interface AppHeaderProps {
      * `oversightModel` construction for why naming a delegate is not yet
      * something this task can honestly do. */
     approvalHolderName: string | null;
+    /**
+     * `useAppData.dataLoaded` — whether the arrays above are a MEASURED
+     * empty or merely not loaded yet (finding F7(a)). Required, so `tsc`
+     * names every construction site rather than letting one default it to
+     * `true` by omission. Combined with `useSyncQueueStatus.hasLoaded`
+     * below into the single `dataResolved` flag `CanonicalStrip` needs to
+     * know whether it may claim that all work is complete.
+     */
+    dataLoaded: boolean;
   };
   /**
    * Weather chip data for row 1 (Task 11 — founder header restructure: the
@@ -214,6 +223,20 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     failedSendCount,
     approvalHolderName: oversightData?.approvalHolderName ?? null,
   });
+
+  // FINDING F7(a) — may the strip claim "all work is complete"?
+  //
+  // Only if BOTH asynchronous sources behind `waitingCount` have actually
+  // been read: the Dexie sync queue (`useSyncQueueStatus`, which starts at
+  // `EMPTY_STATUS` and fills in on its first poll) and the app's own
+  // hydration (`useAppData`, whose `history`/`crops` start empty). Either
+  // one still unread means every zero above is "unknown", not "none".
+  //
+  // A caller that omits `oversightData` entirely (every test but the "real
+  // data" ones) is UNRESOLVED by definition — it supplied no data at all,
+  // so it has certainly not proven that nothing is outstanding. `?? false`
+  // is the honest default here, exactly like the zeros above.
+  const dataResolved = (oversightData?.dataLoaded ?? false) && queueStatus.hasLoaded;
 
   // Ruling 4 (plan ledger) — removing the sync chip orphans this header's
   // only opener of `SyncStatusDrawer`. `failedSend` is the one decision kind
@@ -454,6 +477,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
           <CanonicalStrip
             language={language}
             waitingCount={oversightModel.waitingCount}
+            dataResolved={dataResolved}
             onToggleWaiting={() => setIsWaitingDrawerOpen(true)}
           />
         </div>

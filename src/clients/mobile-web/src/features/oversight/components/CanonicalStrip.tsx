@@ -51,9 +51,21 @@
  *
  * Both presentational only — props in, markup out. No data fetching, no
  * Dexie, no hooks that read storage.
+ *
+ * FINDING F7(a) — THERE ARE THREE STATES, NOT TWO
+ * -------------------------------------------------
+ * waiting · checking · rest. The rest state is not "the absence of
+ * waiting" — it is a positive claim, in the founder's own words, that all
+ * work is complete as of today. Every input behind `waitingCount` starts
+ * empty and fills in asynchronously, so "not waiting" and "nothing
+ * outstanding" are different facts, and this component now renders them
+ * differently. `dataResolved` (required prop) is what separates them; see
+ * its own doc comment. Same slot, same 52px, same layout — only the icon,
+ * the tint and the label differ, so the strip stays the fixed landmark
+ * spec §2.2 requires.
  */
 import React from 'react';
-import { LandPlot, ChevronDown, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { LandPlot, ChevronDown, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import type { Language } from '../../../i18n/language';
 import { oversightTranslations, resolveOversightString, PENDING_FOUNDER_STRINGS } from '../../../i18n/oversightTranslations';
 
@@ -204,6 +216,29 @@ export interface CanonicalStripProps {
      * real records. A numeric literal here anywhere is a defect.
      */
     waitingCount: number;
+    /**
+     * Whether the data `waitingCount` was derived from has actually been
+     * READ yet — `useSyncQueueStatus.hasLoaded && useAppData.dataLoaded`,
+     * both threaded through `AppHeader`.
+     *
+     * Finding F7(a). `waitingCount === 0` is what turns this button into the
+     * rest state, and the rest state is a positive claim in the founder's
+     * own words: "आज पर्यन्त सर्व कामे पूर्ण आहेत" — all work is complete as
+     * of today. Every source behind that number starts empty and fills in
+     * asynchronously, so without this flag the claim renders during the
+     * first-load window, from the absence of rows nobody has read.
+     *
+     * REQUIRED, never optional: an optional flag invites `?? true` at a call
+     * site, which is the same "strengthen the claim by silence" this exists
+     * to stop. `false` costs nothing — a strip that says "checking" for one
+     * extra frame is honest; a green tick over unread data is not.
+     *
+     * It gates ONLY the rest state. A non-zero `waitingCount` mid-load is a
+     * real, derived count that may still GROW — reporting it early
+     * understates, which is a different and much smaller sin than claiming
+     * completion.
+     */
+    dataResolved: boolean;
     /** Opens the waiting drawer (spec §3). */
     onToggleWaiting: () => void;
 }
@@ -237,10 +272,16 @@ export interface CanonicalStripProps {
 const CanonicalStrip: React.FC<CanonicalStripProps> = ({
     language,
     waitingCount,
+    dataResolved,
     onToggleWaiting,
 }) => {
     const isWaiting = waitingCount > 0;
-    const primaryKey = isWaiting ? 'waitingLabel' : 'restState';
+    // FINDING F7(a) — the rest state is a CLAIM, and a claim needs evidence.
+    // A zero that has not been measured yet is "we do not know", not "there
+    // is nothing", so it renders as its own third state rather than
+    // borrowing the completed-work one. See `dataResolved`'s prop doc.
+    const isChecking = !isWaiting && !dataResolved;
+    const primaryKey = isWaiting ? 'waitingLabel' : (isChecking ? 'checkingState' : 'restState');
     const primaryLabelText = resolveOversightString(language, primaryKey);
 
     // Task 13 — `waitingLabel` graduated to founder-approved copy (his own
@@ -251,8 +292,19 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
     // not a blanket `language === 'mr'` check — it disappears for either
     // state once that state's key stops being pending, and only ever
     // reappears if a key is added back to `PENDING_FOUNDER_STRINGS`.
+    //
+    // Finding F7 addendum — the caption exists to show the English BESIDE a
+    // Marathi placeholder. A category (c) key (`mr: ''`, e.g.
+    // `checkingState`) has no Marathi to sit beside: `resolveOversightString`
+    // has already read through to English, so a caption would print the same
+    // sentence twice, uppercased. The comparison below is the mechanical
+    // form of that rule — it also subsumes the pre-existing
+    // `english_mode_does_not_double_up_the_caption` case, which is why the
+    // `language === 'mr'` term is kept rather than replaced by it.
     const isPrimaryPending = PENDING_FOUNDER_STRINGS.includes(primaryKey);
-    const englishCaption = language === 'mr' && isPrimaryPending
+    const englishCaption = language === 'mr'
+        && isPrimaryPending
+        && primaryLabelText !== oversightTranslations.en[primaryKey]
         ? oversightTranslations.en[primaryKey].toUpperCase()
         : null;
 
@@ -286,21 +338,35 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
                 }`}
             />
 
+            {/* Three states, one slot, one size — the strip stays a fixed
+                landmark (spec §2.2). The checking state is deliberately
+                STONE, not emerald: the green tick IS the completion claim
+                as far as a farmer reading colour before text is concerned
+                (§P-G's own reasoning), so it may not appear until the
+                claim is true. Finding F7(a). */}
             <span
                 className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-                    isWaiting ? 'bg-amber-700 text-white' : 'bg-emerald-50 text-emerald-600'
+                    isWaiting
+                        ? 'bg-amber-700 text-white'
+                        : (isChecking ? 'bg-stone-100 text-stone-400' : 'bg-emerald-50 text-emerald-600')
                 }`}
-                data-testid={isWaiting ? 'canonical-strip-waiting-icon' : 'canonical-strip-waiting-rest-tick'}
+                data-testid={
+                    isWaiting
+                        ? 'canonical-strip-waiting-icon'
+                        : (isChecking ? 'canonical-strip-waiting-checking-icon' : 'canonical-strip-waiting-rest-tick')
+                }
             >
-                {isWaiting
-                    ? <AlertTriangle size={14} strokeWidth={2.25} />
-                    : <CheckCircle2 size={16} strokeWidth={2.25} />}
+                {isWaiting && <AlertTriangle size={14} strokeWidth={2.25} />}
+                {!isWaiting && isChecking && <Loader2 size={15} strokeWidth={2.25} className="animate-spin" />}
+                {!isWaiting && !isChecking && <CheckCircle2 size={16} strokeWidth={2.25} />}
             </span>
 
             <span className="min-w-0 flex-1 pt-1">
                 <span
                     className={`block truncate text-[13px] font-extrabold leading-tight ${
-                        isWaiting ? 'text-amber-900' : 'text-stone-800'
+                        isWaiting
+                            ? 'text-amber-900'
+                            : (isChecking ? 'text-stone-500' : 'text-stone-800')
                     }`}
                     style={fontStyleFor(primaryLabelText)}
                 >

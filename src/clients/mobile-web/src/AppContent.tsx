@@ -139,6 +139,11 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                     // Genuinely unreachable honestly, not fabricated — see
                     // AppHeader.tsx's own doc comment on this field.
                     approvalHolderName: null,
+                    // Finding F7(a) — whether `data.history`/`data.crops`
+                    // above are a measured empty or simply not hydrated
+                    // yet. The strip may not claim "all work is complete"
+                    // from arrays nobody has read.
+                    dataLoaded: data.dataLoaded,
                 }}
                 // spec: owner-oversight-loop (Task 11) — the weather chip
                 // moved from mainView.tsx's home screen into AppHeader row

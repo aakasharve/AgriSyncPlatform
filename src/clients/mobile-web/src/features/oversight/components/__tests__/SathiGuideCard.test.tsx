@@ -27,7 +27,7 @@ vi.mock('../../../../i18n/LanguageContext', () => ({
     }),
 }));
 
-import SathiGuideCard from '../SathiGuideCard';
+import SathiGuideCard, { EMPHASIS_WORD } from '../SathiGuideCard';
 
 afterEach(() => {
     cleanup();
@@ -66,6 +66,49 @@ describe('SathiGuideCard — the centrepiece guide card (Task 13, change 3)', ()
         const emphasis = screen.getByText('प्लॉटवर');
         expect(emphasis.tagName).toBe('SPAN');
         expect(emphasis.className).toContain('emerald');
+    });
+
+    it('the_emphasis_word_is_a_substring_of_the_founder_headline_in_every_language', () => {
+        // FINDING F7(b). `EMPHASIS_WORD` is a hardcoded constant in
+        // `SathiGuideCard.tsx`; the component finds it inside
+        // `guideHeadline` with `indexOf` and, when that returns -1, renders
+        // the headline UNEMPHASISED and says nothing. So a founder reword of
+        // the headline that no longer contains this exact word would
+        // silently drop the emerald emphasis he asked for — it would still
+        // compile, still render, still pass the test directly above (which
+        // only checks the word when the split already worked).
+        //
+        // This asserts the RELATIONSHIP itself, in both languages,
+        // independently of rendering: the constant and the copy must stay
+        // joined. The two are in different files, so nothing else connects
+        // them.
+        for (const language of ['mr', 'en'] as const) {
+            const headline = oversightTranslations[language].guideHeadline;
+            const word = EMPHASIS_WORD[language];
+            expect(word.length, `EMPHASIS_WORD.${language} must not be empty`).toBeGreaterThan(0);
+            expect(
+                headline.includes(word),
+                `EMPHASIS_WORD.${language} ("${word}") is no longer inside guideHeadline ("${headline}") — the emerald emphasis would silently disappear`,
+            ).toBe(true);
+        }
+    });
+
+    it('the_emphasised_node_renders_exactly_the_constant_in_both_languages', () => {
+        // The runtime half of the pin above: the emerald span's text is the
+        // constant itself, not merely "some emerald text". Proves the split
+        // actually took the `indexOf` branch rather than falling through to
+        // the unemphasised headline.
+        for (const language of ['mr', 'en'] as const) {
+            currentLanguage = language;
+            render(<SathiGuideCard />);
+
+            const emphasis = screen.getByText(EMPHASIS_WORD[language]);
+            expect(emphasis.tagName, language).toBe('SPAN');
+            expect(emphasis.className, language).toContain('emerald');
+            expect(emphasis.textContent, language).toBe(EMPHASIS_WORD[language]);
+
+            cleanup();
+        }
     });
 
     it('renders the character LEFT (~40% of the card) with the text column RIGHT, per the founder\'s reference image (Task 17)', () => {

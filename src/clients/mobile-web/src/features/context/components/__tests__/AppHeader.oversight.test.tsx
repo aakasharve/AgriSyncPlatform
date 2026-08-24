@@ -68,6 +68,11 @@ const queueRef: { current: SyncQueueStatus } = {
         pendingAiJobs: 0,
         isOnline: true,
         lastSyncAt: null,
+        // Finding F7(a) — the DEFAULT for this suite is a queue that has
+        // already been read, so the tests below exercise the resolved
+        // states. `the_rest_state_never_renders_before_the_data_behind_it_
+        // resolves` flips this to `false` deliberately.
+        hasLoaded: true,
     },
 };
 
@@ -168,6 +173,7 @@ afterEach(() => {
         pendingAiJobs: 0,
         isOnline: true,
         lastSyncAt: null,
+        hasLoaded: true,
     };
 });
 
@@ -226,8 +232,23 @@ describe('AppHeader — the sync chip is gone', () => {
     });
 
     it('renders no sync chip even when nothing is outstanding', async () => {
+        // Finding F7(a) — "nothing is outstanding" is now a RESOLVED state,
+        // not merely an unsupplied one, so this test supplies the evidence
+        // for the claim it asserts: a read queue (`hasLoaded`, the suite
+        // default) plus hydrated, genuinely empty oversight data. That is
+        // what makes the rest tick below correct rather than premature.
         await act(async () => {
-            renderHeader();
+            renderHeader({
+                oversightData: {
+                    logs: [],
+                    operatorNameById: {},
+                    plotCount: 4,
+                    unverifiedCount: 0,
+                    yesterdayNotClosed: false,
+                    approvalHolderName: null,
+                    dataLoaded: true,
+                },
+            });
         });
 
         expect(screen.queryByTestId('sync-status-indicator')).not.toBeInTheDocument();
@@ -316,6 +337,7 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
                     unverifiedCount: 0,
                     yesterdayNotClosed: false,
                     approvalHolderName: null,
+                    dataLoaded: true,
                 },
             });
         });
@@ -386,6 +408,7 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
                     unverifiedCount: 0,
                     yesterdayNotClosed: false,
                     approvalHolderName: null,
+                    dataLoaded: true,
                 },
             });
         });
@@ -422,8 +445,83 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
         // fallback directly.
         expect(screen.getByTestId('canonical-strip-farm-chip')).toHaveTextContent('0');
         expect(screen.getByTestId('canonical-strip-farm-chip')).not.toHaveTextContent('4');
-        expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
         expect(screen.queryByTestId('canonical-strip-waiting-count')).not.toBeInTheDocument();
+
+        // Finding F7(a) — the honest fallback for "no data was supplied at
+        // all" is the CHECKING state, not the rest state. A caller that
+        // handed this header nothing has certainly not proven that all work
+        // is complete, so the green tick and the founder's completion
+        // sentence must both stay away.
+        expect(screen.getByTestId('canonical-strip-waiting-checking-icon')).toBeInTheDocument();
+        expect(screen.queryByTestId('canonical-strip-waiting-rest-tick')).not.toBeInTheDocument();
+        expect(screen.queryByText(oversightTranslations.mr.restState)).not.toBeInTheDocument();
+    });
+
+    it('the_rest_state_never_renders_before_the_data_behind_it_resolves', async () => {
+        // Finding F7(a), the first-load window, reproduced exactly:
+        // `useSyncQueueStatus` starts at `EMPTY_STATUS` (`hasLoaded: false`)
+        // and `useAppData` starts with empty arrays (`dataLoaded: false`).
+        // Every count reads 0, so `waitingCount` reads 0 — and 0 used to
+        // mean the green tick plus "आज पर्यन्त सर्व कामे पूर्ण आहेत" over
+        // data nobody had read.
+        //
+        // Each half is flipped independently below, so neither can carry
+        // the test on its own.
+        const unresolvedCases: Array<[string, boolean, boolean]> = [
+            ['neither source read', false, false],
+            ['queue read, app data not', true, false],
+            ['app data read, queue not', false, true],
+        ];
+
+        for (const [label, queueLoaded, appDataLoaded] of unresolvedCases) {
+            queueRef.current = { ...queueRef.current, hasLoaded: queueLoaded };
+
+            await act(async () => {
+                renderHeader({
+                    oversightData: {
+                        logs: [],
+                        operatorNameById: {},
+                        plotCount: 4,
+                        unverifiedCount: 0,
+                        yesterdayNotClosed: false,
+                        approvalHolderName: null,
+                        dataLoaded: appDataLoaded,
+                    },
+                });
+            });
+
+            expect(screen.queryByTestId('canonical-strip-waiting-rest-tick'), label).not.toBeInTheDocument();
+            expect(screen.queryByText(oversightTranslations.mr.restState), label).not.toBeInTheDocument();
+            // The strip keeps its place and its size — the layout never
+            // reshuffles when the data lands (spec §2.2).
+            const button = screen.getByTestId('canonical-strip-waiting-button');
+            expect(button, label).toBeInTheDocument();
+            expect(button, label).toHaveStyle({ minHeight: '52px' });
+
+            cleanup();
+        }
+
+        // Control: BOTH resolved, same otherwise-identical fixture -> the
+        // claim becomes legitimate and the rest state appears. Without this
+        // the assertions above would pass against a strip that had simply
+        // lost its rest state altogether.
+        queueRef.current = { ...queueRef.current, hasLoaded: true };
+        await act(async () => {
+            renderHeader({
+                oversightData: {
+                    logs: [],
+                    operatorNameById: {},
+                    plotCount: 4,
+                    unverifiedCount: 0,
+                    yesterdayNotClosed: false,
+                    approvalHolderName: null,
+                    dataLoaded: true,
+                },
+            });
+        });
+
+        expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
+        expect(screen.getByText(oversightTranslations.mr.restState)).toBeInTheDocument();
     });
 });
 

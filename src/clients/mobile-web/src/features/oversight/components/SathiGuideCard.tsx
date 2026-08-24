@@ -118,7 +118,14 @@ function headlineFontStyleFor(text: string): React.CSSProperties {
 // Splitting on that substring at render time — rather than `guideHeadline`
 // being three separate translation keys — keeps the FULL sentence the one
 // source of truth in `oversightTranslations.ts`.
-const EMPHASIS_WORD: Record<'en' | 'mr', string> = { en: 'plot', mr: 'प्लॉटवर' };
+// FINDING F7(b) — EXPORTED so the relationship this constant depends on can
+// be pinned by a test rather than assumed. The split is silent when it
+// fails: `indexOf` returning -1 renders the headline unemphasised, which
+// looks like a design choice, not a bug. A founder reword of `guideHeadline`
+// that no longer contains this word would therefore remove the emerald
+// emphasis with nothing failing anywhere. `the_emphasis_word_is_a_substring
+// _of_the_founder_headline_in_every_language` is what now catches it.
+export const EMPHASIS_WORD: Record<'en' | 'mr', string> = { en: 'plot', mr: 'प्लॉटवर' };
 
 // The three instruction rows, in the reference's own order. Icons are the
 // closest semantic lucide-react match to the reference's own circular

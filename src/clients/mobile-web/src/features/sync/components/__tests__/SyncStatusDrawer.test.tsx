@@ -39,6 +39,10 @@ const queueStatus: { current: SyncQueueStatus } = {
         pendingAiJobs: 0,
         isOnline: true,
         lastSyncAt: null,
+        // Finding F7(a) — this fixture stands for a queue that HAS been
+        // read; the drawer's own assertions are all about what it does with
+        // real counts, not about the pre-read window.
+        hasLoaded: true,
     },
 };
 

@@ -31,6 +31,11 @@ function baseStripProps(overrides: Partial<CanonicalStripProps> = {}): Canonical
     return {
         language: 'mr',
         waitingCount: 0,
+        // Finding F7(a) — the DEFAULT here is "the data behind the count has
+        // been read", so every pre-existing test keeps exercising the two
+        // states it was written for. The `false` case has its own describe
+        // block at the bottom of this file.
+        dataResolved: true,
         onToggleWaiting: vi.fn(),
         ...overrides,
     };
@@ -209,6 +214,79 @@ describe('CanonicalStrip — row 2, the waiting button alone, full width', () =>
 
         expect(screen.queryByTestId('canonical-strip-farm-chip')).not.toBeInTheDocument();
         expect(screen.getByTestId('canonical-strip-waiting-button').className).toContain('w-full');
+    });
+});
+
+describe('CanonicalStrip — the rest state is a claim, and a claim needs evidence (F7a)', () => {
+    it('the_rest_state_is_not_rendered_while_dataResolved_is_false', () => {
+        // The rest state says, in the founder's own words, "आज पर्यन्त सर्व
+        // कामे पूर्ण आहेत" — all work is complete as of today. Every input
+        // behind `waitingCount` starts empty and fills in asynchronously
+        // (`useSyncQueueStatus` at `EMPTY_STATUS`, `useAppData` at `[]`), so
+        // a zero that has not been measured yet must not reach that
+        // sentence, nor the green tick that carries it for a farmer reading
+        // colour before text.
+        render(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: false })} />);
+
+        expect(screen.queryByTestId('canonical-strip-waiting-rest-tick')).not.toBeInTheDocument();
+        expect(screen.queryByText(oversightTranslations.mr.restState)).not.toBeInTheDocument();
+        expect(screen.getByTestId('canonical-strip-waiting-checking-icon')).toBeInTheDocument();
+    });
+
+    it('the_checking_state_never_borrows_the_completion_colour', () => {
+        // §P-G's own reasoning: colour is read before text. Emerald already
+        // means "approved/complete" in this app, so it may not appear until
+        // the claim is actually true. The waiting amber is equally wrong —
+        // nothing has been shown to need him either.
+        render(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: false })} />);
+
+        const icon = screen.getByTestId('canonical-strip-waiting-checking-icon');
+        expect(icon.className).not.toContain('emerald');
+        expect(icon.className).not.toContain('amber');
+        expect(icon.className).toMatch(/stone/);
+        expect(screen.getByTestId('canonical-strip-waiting-button').className).not.toContain('amber');
+    });
+
+    it('the_checking_state_keeps_the_strip_a_fixed_landmark_and_shows_no_count', () => {
+        // Spec §2.2 — same place, same size, no reshuffle when the data
+        // lands. `rerender` on ONE instance is what catches a remount.
+        const { rerender } = render(
+            <CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: false })} />,
+        );
+        const checkingButton = screen.getByTestId('canonical-strip-waiting-button');
+        expect(checkingButton).toHaveStyle({ minHeight: '52px' });
+        // No badge: there is no measured number to show.
+        expect(screen.queryByTestId('canonical-strip-waiting-count')).not.toBeInTheDocument();
+
+        rerender(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: true })} />);
+        const restButton = screen.getByTestId('canonical-strip-waiting-button');
+        expect(restButton).toBe(checkingButton);
+        expect(restButton).toHaveStyle({ minHeight: '52px' });
+        expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
+    });
+
+    it('a_real_derived_count_still_shows_while_the_data_is_still_resolving', () => {
+        // The gate covers the REST state only. A non-zero count mid-load is
+        // a real, derived number that may still grow — reporting it early
+        // understates, which is a different and far smaller sin than
+        // claiming completion. Suppressing it would hide real work.
+        render(<CanonicalStrip {...baseStripProps({ waitingCount: 4, dataResolved: false })} />);
+
+        expect(screen.getByTestId('canonical-strip-waiting-count')).toHaveTextContent('4');
+        expect(screen.getByTestId('canonical-strip-waiting-icon')).toBeInTheDocument();
+        expect(screen.queryByTestId('canonical-strip-waiting-checking-icon')).not.toBeInTheDocument();
+    });
+
+    it('the_checking_label_falls_back_to_english_without_printing_it_twice', () => {
+        // `checkingState` is a category (c) key (`mr: ''`, PENDING) — no
+        // Marathi is invented for it, so `resolveOversightString` reads
+        // through to English. The placeholder CAPTION exists to show English
+        // BESIDE a Marathi placeholder; with no Marathi to sit beside, a
+        // caption would print the same sentence twice, uppercased.
+        render(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: false, language: 'mr' })} />);
+
+        expect(screen.getAllByText(oversightTranslations.en.checkingState)).toHaveLength(1);
+        expect(screen.queryByTestId('canonical-strip-waiting-caption')).not.toBeInTheDocument();
     });
 });
 

@@ -215,6 +215,13 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
                     // delegate needs a server-governed permission grant this
                     // preview (and the shipped app) cannot honestly assert.
                     approvalHolderName: null,
+                    // Finding F7(a) — this preview's data is a SYNCHRONOUS
+                    // in-memory fixture (`previewAppFixtures.ts`), already
+                    // fully present at first render, so `true` here is a
+                    // measured fact about this tree, not a default. It is
+                    // what keeps `?waiting=none` able to show the founder
+                    // the real rest state.
+                    dataLoaded: true,
                 }}
                 // spec: owner-oversight-loop (Task 11) — same seeded honest
                 // "no-location" weather stub `usePreviewRouterCtx` already
