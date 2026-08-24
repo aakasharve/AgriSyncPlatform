@@ -81,6 +81,17 @@
  * exact negation of the rest state's claim. Not a spinner, not a green
  * tick, not a fabricated count — the three things a bounded honest state
  * exists to prevent.
+ *
+ * CHANGE 3 — THE SAME NON-CLAIM, FOR A SECOND REASON: MULTIPLE FARMS
+ * ---------------------------------------------------------------------
+ * The rest state names a subject as well as a fact, and the subject a
+ * farmer reads it against is the farm named in the chip beside it. On an
+ * account with more than one farm the app cannot make that scoped claim —
+ * `appContentOversightInputs.ts` says so in its own words — so it makes
+ * none: `farmCount >= 2` routes to the SAME `unknownState` surface, whose
+ * wording names the outcome and never the cause precisely so it can carry
+ * both. Full reasoning, including why filtering by farm would be worse than
+ * suppressing, is on the `farmCount` prop below.
  */
 import React from 'react';
 import { LandPlot, ChevronDown, AlertTriangle, CheckCircle2, Loader2, HelpCircle } from 'lucide-react';
@@ -288,6 +299,46 @@ export interface CanonicalStripProps {
      * completion.
      */
     dataResolved: boolean;
+    /**
+     * The account's TOTAL farm count — the SAME number, from the same
+     * source, that `FarmIdentityElement` above already takes
+     * (`farmContext.farms.length`, derived once in `AppHeader.tsx`, never a
+     * literal).
+     *
+     * CHANGE 3 — WHY A LAYOUT COMPONENT NEEDS THIS.
+     *
+     * The rest state's founder Marathi ("आज पर्यन्त सर्व कामे पूर्ण आहेत")
+     * is a claim about a SUBJECT, and the subject a farmer reads it against
+     * is the farm named in the chip 100px to its left. The app cannot make
+     * that scoped claim. Its own reducer says so in its own words:
+     * `app/helpers/appContentOversightInputs.ts` — "`history`/`crops` come
+     * from `dataSource.{logs,crops}.getAll()` ... this data is NOT scoped to
+     * `currentFarmId` for an account with more than one farm."
+     *
+     * That mis-scoping is already visible on the same strip: the chip's plot
+     * count is `oversightHeaderInputs.plotCount`, the sum of EVERY farm's
+     * plots, printed under ONE farm's name. Rendering a completion claim in
+     * that frame attaches a sentence to a subject it was not computed for.
+     *
+     * Stated precisely, because the imprecise version is the tempting one:
+     * the arithmetic behind `waitingCount === 0` is a SUPERSET check (all
+     * farms, not this one), so it does not produce a numerically false zero.
+     * The defect is the subject, not the sum — and a claim whose scope the
+     * app cannot state is one it should not make (spec §P-F).
+     *
+     * NOT A FILTER. Filtering these logs by farm would be far worse:
+     * `meta.farmId` is present on synced records (the server's own value,
+     * read back in `logsReconciler.ts`) but absent on locally-created ones
+     * whenever `SessionStore.getCurrentFarmId()` was null at save time
+     * (`stampCreationFarmId` is a deliberate no-op then). Filtering on an
+     * inconsistently-present field would silently HIDE the farmer's own
+     * unsynced work. So: suppress the claim, touch no data.
+     *
+     * REQUIRED, never optional, for the same reason `dataResolved` is: an
+     * optional count invites `?? 1` at a call site, and `1` is exactly the
+     * value that re-enables the claim.
+     */
+    farmCount: number;
     /** Opens the waiting drawer (spec §3). */
     onToggleWaiting: () => void;
 }
@@ -322,6 +373,7 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
     language,
     waitingCount,
     dataResolved,
+    farmCount,
     onToggleWaiting,
 }) => {
     // CHANGE 2 — THE ONE PIECE OF STATE IN THIS FILE, AND IT IS A CLOCK.
@@ -363,7 +415,17 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
     // it cannot confirm. Never a tick, never a fabricated count, never an
     // endless spinner.
     const isChecking = !isWaiting && !dataResolved && !checkingTimedOut;
-    const isUnknown = !isWaiting && !isChecking && !dataResolved;
+    // CHANGE 3 — the SECOND thing that makes the completion claim
+    // unavailable, and it is not a failure at all: an account holding more
+    // than one farm. See `farmCount`'s prop doc for why the claim is
+    // suppressed rather than filtered. Both causes land on the same
+    // non-claiming surface deliberately: `unknownState` is worded as the
+    // outcome ("cannot confirm"), never the cause, so it stays true for a
+    // read that never finished AND for a scope the app cannot state.
+    // Ordered after `isChecking` so a multi-farm account still sees the
+    // spinner while its data is genuinely loading, not a verdict before the
+    // read.
+    const isUnknown = !isWaiting && !isChecking && (!dataResolved || farmCount >= 2);
     const primaryKey = isWaiting
         ? 'waitingLabel'
         : (isChecking ? 'checkingState' : (isUnknown ? 'unknownState' : 'restState'));

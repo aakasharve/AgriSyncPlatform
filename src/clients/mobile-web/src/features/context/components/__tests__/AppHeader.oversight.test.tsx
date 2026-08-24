@@ -720,6 +720,51 @@ describe('AppHeader — the farm element is contextual on the real farm list (Ta
         fireEvent.click(el);
         expect(screen.getByTestId('farm-switcher-sheet')).toBeInTheDocument();
     });
+
+    it('the_real_farm_list_decides_whether_the_completion_claim_may_render', async () => {
+        // CHANGE 3, proven end-to-end rather than by passing `farmCount`
+        // straight to the strip: these are real `farmContext.farms` arrays,
+        // and `AppHeader` is the one place the count is derived from them.
+        //
+        // The claim being gated ("आज पर्यन्त सर्व कामे पूर्ण आहेत") is scoped
+        // by a farmer to the farm named in the chip beside it, and the app
+        // cannot make that scoped claim: `appContentOversightInputs.ts`
+        // states that `history`/`crops` come from
+        // `dataSource.{logs,crops}.getAll()` and are "NOT scoped to
+        // `currentFarmId` for an account with more than one farm".
+        //
+        // Everything else about the two renders is identical — same
+        // resolved data, same zero counts — so the farm list is the only
+        // variable, which is what makes this a test of the rule and not of
+        // the fixture.
+        const resolvedNothingOutstanding = {
+            logs: [],
+            operatorNameById: {},
+            plotCount: 4,
+            unverifiedCount: 0,
+            yesterdayNotClosed: false,
+            approvalHolderName: null,
+            dataLoaded: true,
+        };
+
+        await act(async () => {
+            renderHeader({ farmContext: multiFarmContext, oversightData: resolvedNothingOutstanding });
+        });
+        expect(screen.queryByText(oversightTranslations.mr.restState)).not.toBeInTheDocument();
+        expect(screen.queryByTestId('canonical-strip-waiting-rest-tick')).not.toBeInTheDocument();
+        expect(screen.getByTestId('canonical-strip-waiting-unknown-icon')).toBeInTheDocument();
+
+        cleanup();
+
+        // Control: one farm, everything else byte-identical -> the claim is
+        // scopeable and the rest state is back. Without this the assertions
+        // above would pass against a strip that had lost its rest state.
+        await act(async () => {
+            renderHeader({ farmContext: singleFarmContext, oversightData: resolvedNothingOutstanding });
+        });
+        expect(screen.getByText(oversightTranslations.mr.restState)).toBeInTheDocument();
+        expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
+    });
 });
 
 // ---------------------------------------------------------------------------

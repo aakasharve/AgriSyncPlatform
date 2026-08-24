@@ -341,7 +341,14 @@ export interface OversightTranslations {
      * Deliberately NOT worded as a transient ("…right now") and NOT worded
      * as a fault ("something went wrong"): it is the exact negation of
      * `restState`'s claim and nothing more, so it stays true whatever caused
-     * it. Keyless-but-declared (category (c)): `mr: ''` until the founder
+     * it. That wording is load-bearing — change 3 gives the same key a
+     * SECOND cause, an account holding more than one farm, where the app's
+     * data is not farm-scoped and so the completion claim has no statable
+     * subject (`app/helpers/appContentOversightInputs.ts`). One is a failed
+     * read, the other is a structural limit; naming either cause in the
+     * string would make it false for the other.
+     *
+     * Keyless-but-declared (category (c)): `mr: ''` until the founder
      * supplies real Marathi, English fallback in the meantime via
      * `resolveOversightString()`. Listed in `PENDING_FOUNDER_STRINGS`.
      */

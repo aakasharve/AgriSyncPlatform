@@ -36,6 +36,11 @@ function baseStripProps(overrides: Partial<CanonicalStripProps> = {}): Canonical
         // states it was written for. The `false` case has its own describe
         // block at the bottom of this file.
         dataResolved: true,
+        // Change 3 — the DEFAULT is a single-farm account, which is what
+        // most farmers have and what every pre-existing test was written
+        // against, so those keep exercising the states they were written
+        // for. The `>= 2` case has its own describe block below.
+        farmCount: 1,
         onToggleWaiting: vi.fn(),
         ...overrides,
     };
@@ -423,6 +428,99 @@ describe('CanonicalStrip — "Checking…" has a terminus (change 2)', () => {
 
         expect(screen.getAllByText(oversightTranslations.en.unknownState)).toHaveLength(1);
         expect(screen.queryByTestId('canonical-strip-waiting-caption')).not.toBeInTheDocument();
+    });
+});
+
+describe('CanonicalStrip — a multi-farm account gets no completion claim (change 3)', () => {
+    it('the_rest_state_never_renders_on_a_multi_farm_account', () => {
+        // "आज पर्यन्त सर्व कामे पूर्ण आहेत" names a subject as well as a
+        // fact, and the subject a farmer reads it against is the farm named
+        // in the chip beside it. The app cannot make that scoped claim:
+        // `app/helpers/appContentOversightInputs.ts` states in its own words
+        // that `history`/`crops` come from `dataSource.{logs,crops}.getAll()`
+        // and are "NOT scoped to `currentFarmId` for an account with more
+        // than one farm". Same strip already prints a cross-farm plot sum
+        // under one farm's name, so the frame is mis-scoped too.
+        //
+        // Suppressed, NOT filtered: `meta.farmId` is present on synced logs
+        // and absent on locally-created ones whose farm was unknown at save
+        // time, so filtering on it would hide the farmer's own unsynced work.
+        render(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: true, farmCount: 2 })} />);
+
+        expect(screen.queryByText(oversightTranslations.mr.restState)).not.toBeInTheDocument();
+        expect(screen.queryByText(oversightTranslations.en.restState)).not.toBeInTheDocument();
+        expect(screen.queryByTestId('canonical-strip-waiting-rest-tick')).not.toBeInTheDocument();
+        // Lands on the SAME non-claiming surface the timed-out read uses —
+        // its wording names the outcome, never the cause, so one key carries
+        // both. Never a spinner: nothing here is still being read.
+        expect(screen.getByTestId('canonical-strip-waiting-unknown-icon')).toBeInTheDocument();
+        expect(screen.queryByTestId('canonical-strip-waiting-checking-icon')).not.toBeInTheDocument();
+        expect(screen.getByText(oversightTranslations.en.unknownState)).toBeInTheDocument();
+    });
+
+    it('a_single_farm_account_still_gets_the_rest_state', () => {
+        // The other half, and the one that stops the fix from being "delete
+        // the rest state". Most farmers have exactly one farm and the claim
+        // is scopeable for them — spec §2.2's rest state must survive intact.
+        render(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: true, farmCount: 1 })} />);
+
+        expect(screen.getByText(oversightTranslations.mr.restState)).toBeInTheDocument();
+        expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
+        expect(screen.queryByTestId('canonical-strip-waiting-unknown-icon')).not.toBeInTheDocument();
+    });
+
+    it('a_multi_farm_account_still_sees_its_real_waiting_count', () => {
+        // Only the CLAIM is suppressed. A non-zero count is a derived,
+        // real number; hiding it would hide work the owner has to act on,
+        // which is a far worse trade than a strip that declines to say
+        // "everything is done".
+        render(<CanonicalStrip {...baseStripProps({ waitingCount: 6, dataResolved: true, farmCount: 3 })} />);
+
+        expect(screen.getByTestId('canonical-strip-waiting-count')).toHaveTextContent('6');
+        expect(screen.getByTestId('canonical-strip-waiting-icon')).toBeInTheDocument();
+        expect(screen.queryByTestId('canonical-strip-waiting-unknown-icon')).not.toBeInTheDocument();
+    });
+
+    it('a_multi_farm_account_still_shows_the_spinner_while_its_data_loads', () => {
+        // Ordering matters: the multi-farm verdict must come AFTER the
+        // checking state, not instead of it. Otherwise an account with two
+        // farms would render "cannot confirm" before a single row had been
+        // read — the right words for the wrong reason, and it would mask a
+        // genuinely stuck read behind a permanent structural one.
+        render(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: false, farmCount: 2 })} />);
+
+        const icon = screen.getByTestId('canonical-strip-waiting-checking-icon');
+        expect(icon).toBeInTheDocument();
+        expect(screen.queryByTestId('canonical-strip-waiting-unknown-icon')).not.toBeInTheDocument();
+        // The testid alone is NOT enough here, and this is the assertion
+        // that proves it: the testid lives on the shared wrapper span, so a
+        // state machine whose branches overlap would keep the right testid
+        // while rendering BOTH glyphs inside it — a spinner with a question
+        // mark stacked on top. Exactly one icon, always.
+        expect(icon.querySelectorAll('svg')).toHaveLength(1);
+    });
+
+    it('exactly_one_glyph_renders_in_every_state', () => {
+        // The four states are mutually exclusive by construction, not by
+        // the order of the ternaries that pick the label. This walks every
+        // combination that can reach the icon slot and asserts one glyph in
+        // each — the general form of the overlap the test above catches for
+        // one case.
+        const cases: Partial<CanonicalStripProps>[] = [
+            { waitingCount: 6, dataResolved: true, farmCount: 1 },
+            { waitingCount: 6, dataResolved: false, farmCount: 4 },
+            { waitingCount: 0, dataResolved: false, farmCount: 1 },
+            { waitingCount: 0, dataResolved: false, farmCount: 4 },
+            { waitingCount: 0, dataResolved: true, farmCount: 1 },
+            { waitingCount: 0, dataResolved: true, farmCount: 4 },
+        ];
+        for (const props of cases) {
+            const { container } = render(<CanonicalStrip {...baseStripProps(props)} />);
+            const slot = container.querySelector('[data-testid^="canonical-strip-waiting-"][class*="h-7"]');
+            expect(slot, JSON.stringify(props)).not.toBeNull();
+            expect(slot!.querySelectorAll('svg'), JSON.stringify(props)).toHaveLength(1);
+            cleanup();
+        }
     });
 });
 

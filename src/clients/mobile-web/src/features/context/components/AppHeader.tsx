@@ -567,6 +567,15 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             language={language}
             waitingCount={oversightModel.waitingCount}
             dataResolved={dataResolved}
+            // CHANGE 3 — the SAME `farmCount` the farm chip above already
+            // uses, derived once (see its own comment). The strip needs it
+            // to know whether it may claim "all work is complete": the
+            // inputs it derives that from are NOT farm-scoped for an account
+            // with 2+ farms, which is `appContentOversightInputs.ts`'s own
+            // documented characteristic, not a new finding. See
+            // `CanonicalStrip`'s `farmCount` prop doc for the full argument
+            // and for why suppressing beats filtering here.
+            farmCount={farmCount}
             onToggleWaiting={() => setIsWaitingDrawerOpen(true)}
           />
         </div>
