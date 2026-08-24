@@ -82,8 +82,6 @@ import { isRecordingPathBusy } from '../../shared/utils/recordingPathBusy';
 // visibility predicate and the SAME `<main>` padding helper `AppContent.tsx`
 // uses. This preview is the surface the founder reviews on, so a
 // hand-rolled stand-in here would prove nothing about the shipped screen.
-import RecordBar, { mainPaddingBottomFor, shouldShowRecordBar } from './components/RecordBar';
-import { scrollRecorderIntoView } from '../../shared/utils/homeScreenScroll';
 import { buildOversightHeaderInputs } from '../../app/helpers/appContentOversightInputs';
 import type { CropProfile, DailyLog, FarmerProfile, LedgerDefaults, PlannedTask } from '../../types';
 // Finding F2 — this preview mounts the real `AppHeader`, so the waiting
@@ -206,16 +204,6 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
     // available yet. Nothing is faked as approved because nothing can be.
     useOpenSurfaceRequest(OPEN_REVIEW_INBOX_EVENT, () => ctx.setShowReviewInbox(true));
 
-    // spec: owner-oversight-loop (Task 8) — identical derivation to
-    // `AppContent.tsx`'s, off this preview's own router context.
-    const recordBarVisible = shouldShowRecordBar({
-        currentRoute: ctx.currentRoute,
-        mainView: ctx.mainView,
-        status: ctx.status,
-        recordingSegment: ctx.recordingSegment,
-        mode: ctx.mode,
-    });
-
     return (
         <div className="relative flex h-full flex-col bg-transparent text-stone-800">
             <PreviewBanner />
@@ -275,7 +263,6 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
 
             <main
                 className="page-content relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-none"
-                style={{ paddingBottom: mainPaddingBottomFor(recordBarVisible) }}
             >
                 {ctx.currentRoute !== 'main' ? (
                     <UnhandledRouteNotice route={ctx.currentRoute} onBack={() => ctx.setCurrentRoute('main')} />
@@ -297,13 +284,6 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
                     </Suspense>
                 )}
             </main>
-
-            {recordBarVisible && (
-                <RecordBar
-                    active={ctx.hasActiveLogContext}
-                    onActivate={scrollRecorderIntoView}
-                />
-            )}
 
             <BottomNavigation
                 currentRoute={ctx.currentRoute}

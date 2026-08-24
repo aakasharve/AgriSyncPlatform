@@ -36,11 +36,6 @@ import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
 // `mainViewComponents.tsx`'s header for why that hook rule forces the split.
 import SathiGuideCard from '../../features/oversight/components/SathiGuideCard';
 import HelpBar from '../../features/oversight/components/HelpBar';
-// spec: owner-oversight-loop (Task 8, design doc §5.2) — the tray
-// auto-scroll that makes the pinned record bar affordable. See
-// `shared/utils/homeScreenScroll.ts` for why plain `scrollIntoView` is not
-// enough once anything is pinned over the scrollport.
-import { scrollPlotTrayIntoView } from '../../shared/utils/homeScreenScroll';
 import {
     LabourLogBanner,
     NotQueuedForServerBadge,
@@ -209,17 +204,6 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                 })()}
                                 onSelectionChange={(newCrops, newPlots) => {
                                     const flattenedPlots = Object.values(newPlots).flat();
-                                    // spec: owner-oversight-loop (Task 8,
-                                    // design doc §5.2) — measured BEFORE the
-                                    // scope write, because `logScope` is this
-                                    // render's snapshot and is what tells a
-                                    // CROP tap apart from a PLOT tap inside
-                                    // the tray. Only the former opens a tray,
-                                    // and only the former should move the
-                                    // page under the farmer's thumb.
-                                    const cropSelectionChanged =
-                                        newCrops.length !== logScope.selectedCropIds.length
-                                        || newCrops.some(id => !logScope.selectedCropIds.includes(id));
                                     setLogScope({
                                         selectedCropIds: newCrops,
                                         selectedPlotIds: flattenedPlots,
@@ -229,20 +213,6 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                     // Auto-switch to voice mode to show the recorder immediately
                                     if (flattenedPlots.length > 0) {
                                         setMode('voice');
-                                    }
-                                    // spec: owner-oversight-loop (Task 8,
-                                    // design doc §5.2) — "with the plot tray
-                                    // open the real CropSelector needs 767px
-                                    // against 571px of visible screen. Do not
-                                    // shrink the component. Auto-scroll the
-                                    // tray into view on crop select." The
-                                    // remedy is BEHAVIOUR: the component is
-                                    // untouched (DoD #9) and the tray is
-                                    // brought to the farmer instead. Ships
-                                    // with the pinned record bar, never
-                                    // without it — see homeScreenScroll.ts.
-                                    if (cropSelectionChanged) {
-                                        scrollPlotTrayIntoView();
                                     }
                                 }}
                                 disabled={false}
@@ -320,15 +290,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                     <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {getContextColorIndicator()}
 
-                        {/* spec: owner-oversight-loop (Task 8) — the scroll
-                            target the pinned record bar aims at. An `id`
-                            only: no wrapper element was added and no class
-                            changed, so this box is the same box it was, and
-                            `#crop-selector-container` above already
-                            establishes this exact convention for the mirror
-                            gesture (the DISABLED recorder scrolling the plot
-                            selector into view). */}
-                        <div id="voice-recorder-container" className={`transition-all duration-500 ${!isContextReady ? 'opacity-90' : ''}`}>
+                        <div className={`transition-all duration-500 ${!isContextReady ? 'opacity-90' : ''}`}>
                             {mode === 'voice' ? (
                                 <>
                                     {DEFAULT_VOICE_CONFIG.streamingPcm.enabled ? (
