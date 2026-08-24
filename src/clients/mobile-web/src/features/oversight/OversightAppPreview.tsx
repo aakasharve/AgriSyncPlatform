@@ -78,8 +78,13 @@ import { renderCompareView, renderLogView, renderReflectView } from '../../core/
 import { RouteLoader, ReviewInboxSheet } from '../../core/navigation/lazyComponents';
 import MainViewTransition from '../../core/navigation/MainViewTransition';
 import { isRecordingPathBusy } from '../../shared/utils/recordingPathBusy';
+// spec: owner-oversight-loop (Task 8) — the SAME pinned bar, the SAME
+// visibility predicate and the SAME `<main>` padding helper `AppContent.tsx`
+// uses. This preview is the surface the founder reviews on, so a
+// hand-rolled stand-in here would prove nothing about the shipped screen.
+import RecordBar, { mainPaddingBottomFor, shouldShowRecordBar } from './components/RecordBar';
+import { scrollRecorderIntoView } from '../../shared/utils/homeScreenScroll';
 import { buildOversightHeaderInputs } from '../../app/helpers/appContentOversightInputs';
-import { LogVerificationStatus } from '../../types';
 import type { CropProfile, DailyLog, FarmerProfile, LedgerDefaults, PlannedTask } from '../../types';
 // Finding F2 — this preview mounts the real `AppHeader`, so the waiting
 // drawer's `approval` row is live here too; these are what stop it being a
@@ -191,9 +196,25 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
     // badge and the QuickLog FAB, neither of which this preview is about),
     // so without this listener + sheet the row would land nowhere HERE —
     // in the exact surface the founder reviews on. Same wiring, same props
-    // as `globalSheets.tsx`; `ctx.handleVerifyLog` is the preview's honest
-    // "disabled in this preview" stub, so nothing is faked as approved.
+    // as `globalSheets.tsx`.
+    //
+    // The three approve/dispute callbacks that used to be passed here are
+    // GONE from the sheet's own interface — they queued `verify_log_v2`,
+    // which no server handler accepts (see `ReviewInboxSheet.tsx`'s
+    // header). The preview therefore shows the founder exactly what a
+    // farmer now sees: the entries, and one line saying approving is not
+    // available yet. Nothing is faked as approved because nothing can be.
     useOpenSurfaceRequest(OPEN_REVIEW_INBOX_EVENT, () => ctx.setShowReviewInbox(true));
+
+    // spec: owner-oversight-loop (Task 8) — identical derivation to
+    // `AppContent.tsx`'s, off this preview's own router context.
+    const recordBarVisible = shouldShowRecordBar({
+        currentRoute: ctx.currentRoute,
+        mainView: ctx.mainView,
+        status: ctx.status,
+        recordingSegment: ctx.recordingSegment,
+        mode: ctx.mode,
+    });
 
     return (
         <div className="relative flex h-full flex-col bg-transparent text-stone-800">
@@ -254,7 +275,7 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
 
             <main
                 className="page-content relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-none"
-                style={{ paddingBottom: 'calc(6rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))' }}
+                style={{ paddingBottom: mainPaddingBottomFor(recordBarVisible) }}
             >
                 {ctx.currentRoute !== 'main' ? (
                     <UnhandledRouteNotice route={ctx.currentRoute} onBack={() => ctx.setCurrentRoute('main')} />
@@ -277,6 +298,13 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
                 )}
             </main>
 
+            {recordBarVisible && (
+                <RecordBar
+                    active={ctx.hasActiveLogContext}
+                    onActivate={scrollRecorderIntoView}
+                />
+            )}
+
             <BottomNavigation
                 currentRoute={ctx.currentRoute}
                 currentView={ctx.mainView}
@@ -291,9 +319,6 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
                     logs={ctx.history}
                     operators={ctx.farmerProfile.operators}
                     currentOperatorId={ctx.farmerProfile.activeOperatorId || 'owner'}
-                    onApproveLog={(logId: string) => ctx.handleVerifyLog(logId, LogVerificationStatus.APPROVED)}
-                    onApproveAll={(logIds: string[]) => logIds.forEach(id => ctx.handleVerifyLog(id, LogVerificationStatus.APPROVED))}
-                    onDisputeLog={(logId: string, note: string) => ctx.handleVerifyLog(logId, LogVerificationStatus.REJECTED, note)}
                 />
             </Suspense>
 

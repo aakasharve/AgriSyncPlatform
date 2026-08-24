@@ -52,7 +52,20 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     tasks,
     onUpdateTask,
     onAddTask,
-    onVerifyLog,
+    // `onVerifyLog` IS still declared on `ReflectPageProps` and IS still
+    // passed by `core/navigation/mainView.tsx` — it is deliberately not
+    // destructured here, because nothing on this page calls it any more.
+    //
+    // Its only consumer was `ReviewInbox`'s Approve button, removed because
+    // it enqueued `verify_log_v2`, a mutation `PushSyncBatchHandler.cs`
+    // answers with `MUTATION_TYPE_UNIMPLEMENTED` (see `ReviewInbox.tsx`'s
+    // header for the trail, and for why the working v1 mutation is NOT the
+    // fix — it switches on a job-card payout path).
+    //
+    // The prop stays declared so `mainView.tsx`'s `onVerifyLog={ctx.
+    // handleVerifyLog}` keeps compiling; that file is out of this change's
+    // scope. Delete both together when approval is genuinely re-enabled or
+    // genuinely retired. spec: owner-oversight-loop
     currentOperator,
     operators = [],
     navigate
@@ -72,7 +85,11 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
 
     // Filter Pending Logs for Inbox
     const pendingLogs = history.filter(log => log.verification?.status === LogVerificationStatus.PENDING);
-    const showInbox = onVerifyLog && pendingLogs.length > 0 && currentOperator?.isVerifier;
+    // The `onVerifyLog &&` term that used to open this condition is gone
+    // with the Approve button it gated (spec: owner-oversight-loop). The
+    // inbox is now a READ surface, so its visibility depends only on there
+    // being something to read and on this operator being allowed to see it.
+    const showInbox = pendingLogs.length > 0 && currentOperator?.isVerifier;
     const { currentFarmId } = useFarmContext();
     const [currentDate, setCurrentDate] = useState(new Date());
     const [calendarViewDate, setCalendarViewDate] = useState(new Date());
@@ -531,7 +548,6 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                     <ReviewInbox
                         pendingLogs={pendingLogs}
                         operators={operators}
-                        onVerify={onVerifyLog!}
                         onViewLog={(log) => {
                             setCurrentDate(new Date(log.date));
                         }}
