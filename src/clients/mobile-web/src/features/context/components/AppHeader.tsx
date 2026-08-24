@@ -12,7 +12,7 @@ import { FarmOperator } from '../../../domain/types/farm.types';
 import type { DailyLog } from '../../../domain/types/log.types';
 import { FarmSwitcherSheet } from './FarmContextSwitcher';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
-import { useSyncQueueStatus, SyncStatusDrawer } from '../../sync';
+import { useSyncQueueStatus, useUnqueueableLogCount, SyncStatusDrawer } from '../../sync';
 import type { WeatherStatus } from '../../weather/useWeatherMonitor';
 
 // Owner Oversight Loop (spec: owner-oversight-loop). Replaces the old
@@ -174,6 +174,15 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   const [isWaitingDrawerOpen, setIsWaitingDrawerOpen] = React.useState(false);
   const queueStatus = useSyncQueueStatus();
 
+  // FINDING F6 — the one class of dropped record `queueStatus` structurally
+  // CANNOT see. `resolveSyncTarget` refused these logs, so no mutation row,
+  // no outbox row, nothing was ever written; `useSyncQueueStatus` polls
+  // Dexie tables and every one of its counts is a table count, so all of
+  // them read 0 for a record that was silently dropped. The fact lives only
+  // in `features/sync/status/unqueueableLogs.ts`, which this hook reads.
+  // Subscribed, not polled — see that hook's own header.
+  const unqueueableCount = useUnqueueableLogCount();
+
   // FINDING F3 — the waiting drawer is the destination "Close Day" and the
   // `?nudge=close-day` notification deep-link now land on (spec §4.2 routes
   // the Daily Closure card here). Both dispatchers sit inside `AppRouter`,
@@ -235,6 +244,12 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     unverifiedCount: oversightData?.unverifiedCount ?? 0,
     yesterdayNotClosed: oversightData?.yesterdayNotClosed ?? false,
     failedSendCount,
+    // FINDING F6 — no `?? 0` and no prop: this is read directly from the
+    // hook above, so it is always the real session count. It is a SEPARATE
+    // input from `failedSendCount` and is never summed into it — see
+    // `OversightDecision['kind']`'s note for why the two facts must not
+    // merge.
+    unqueueableCount,
     approvalHolderName: oversightData?.approvalHolderName ?? null,
   });
 
@@ -267,12 +282,14 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   // "६ कामे तपासायची आहेत", tapped the chevron, and nothing happened.
   //
   // Spec §3: "Tapping any row opens the existing filtered detail view."
-  // All three kinds now do — none is invented for this fix, each is a
+  // All four kinds now do — none is invented for this fix, each is a
   // surface that already exists and already works:
   //
   //   failedSend   -> `SyncStatusDrawer`, this header's own sheet. Deleting
   //                   the sync chip (spec §4.1) orphaned its only opener;
-  //                   this row is it (Ruling 4). Unchanged by F2.
+  //                   this row is it (Ruling 4). Unchanged by F2 and by F6.
+  //   unqueueable  -> the same sheet, whose unqueueable block was the OTHER
+  //                   thing the deleted chip used to reach (finding F6).
   //   approval     -> `ReviewInboxSheet` — the app's existing batch
   //                   approve/dispute surface, mounted by `AppRouter`
   //                   (`core/navigation/globalSheets.tsx`). `AppHeader`
@@ -298,6 +315,19 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     setIsWaitingDrawerOpen(false);
     switch (decision.kind) {
       case 'failedSend':
+        setIsSyncDrawerOpen(true);
+        return;
+      case 'unqueueable':
+        // FINDING F6 — the SAME sheet, for a different reason, and this row
+        // is now its only other opener. `SyncStatusDrawer` already renders a
+        // dedicated block for exactly this class of record ("N records will
+        // not reach your farm records / Saved on this phone. Nothing will
+        // send it.") — that block has been correct since finding F-2 and was
+        // simply unreachable: the chip that used to open the sheet on
+        // `ON_PHONE` is deleted (spec §4.1), and these records raise no
+        // `NEEDS_FIX`, so they never produced a `failedSend` row either. A
+        // farmer whose records were dropped could not reach the one screen
+        // that says so. This is that route.
         setIsSyncDrawerOpen(true);
         return;
       case 'approval':

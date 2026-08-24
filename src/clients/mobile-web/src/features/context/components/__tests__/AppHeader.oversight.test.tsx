@@ -85,6 +85,9 @@ const queueRef: { current: SyncQueueStatus } = {
     },
 };
 
+/** Finding F6 — this session's dropped-record count, per test. */
+const unqueueableRef = { current: 0 };
+
 vi.mock('../../../../i18n/LanguageContext', () => ({
     useLanguage: () => ({
         language: 'mr' as Language,
@@ -103,6 +106,12 @@ vi.mock('../../../../shared/components/ui/PageToggle', () => ({
 // internals (already covered by `SyncStatusDrawer.test.tsx`).
 vi.mock('../../../sync', () => ({
     useSyncQueueStatus: () => queueRef.current,
+    // Finding F6 — the count of records that reached NO sync queue. It is
+    // NOT part of `SyncQueueStatus` (that type is a snapshot of Dexie, and
+    // these records leave no Dexie row at all — see
+    // `features/sync/status/unqueueableLogs.ts`), so it is driven by its own
+    // ref exactly as production drives it from its own registry.
+    useUnqueueableLogCount: () => unqueueableRef.current,
     SyncStatusDrawer: ({ isOpen }: { isOpen: boolean }) =>
         isOpen ? <div data-testid="sync-status-drawer-stub" /> : null,
 }));
@@ -184,6 +193,7 @@ afterEach(() => {
         lastSyncAt: null,
         hasLoaded: true,
     };
+    unqueueableRef.current = 0;
 });
 
 describe('AppHeader — the canonical strip renders on every route', () => {
@@ -781,6 +791,24 @@ describe('AppHeader — every tappable decision row has a destination (F2)', () 
             },
             expectLanded: () => expect(screen.getByTestId('sync-status-drawer-stub')).toBeInTheDocument(),
         },
+        // FINDING F6 — the SAME sheet, reached for a different reason.
+        // `SyncStatusDrawer` has rendered an honest block about exactly
+        // these records since finding F-2 ("N records will not reach your
+        // farm records / Saved on this phone. Nothing will send it."), and
+        // that block had no reachable opener at all: the sync chip that used
+        // to open the sheet on `ON_PHONE` is deleted (spec §4.1), and these
+        // records never raise `NEEDS_FIX`, so they produce no `failedSend`
+        // row either. Note the queue is left at ALL ZEROES on purpose —
+        // that is the whole point of the finding. A dropped record leaves no
+        // Dexie row, so every `SyncQueueStatus` count reads 0 and only
+        // `useUnqueueableLogCount` knows.
+        unqueueable: {
+            arrange: () => {
+                unqueueableRef.current = 2;
+                return {};
+            },
+            expectLanded: () => expect(screen.getByTestId('sync-status-drawer-stub')).toBeInTheDocument(),
+        },
     };
 
     let reviewInboxRequestCount = 0;
@@ -849,6 +877,45 @@ describe('AppHeader — every tappable decision row has a destination (F2)', () 
 
         fireEvent.click(row);
         expect(screen.getByTestId('waiting-drawer-sheet')).toBeInTheDocument();
+    });
+
+    it('the_unqueueable_row_is_absent_when_no_record_was_dropped', async () => {
+        // Founder ruling 2026-08-24: "if there is nothing the user must
+        // know, do not show it." `unqueueableRef` is 0 here (the suite
+        // default), and a row saying "0 records will not reach your farm
+        // records" is plumbing, not a task.
+        await act(async () => {
+            renderHeader();
+        });
+
+        fireEvent.click(screen.getByTestId('canonical-strip-waiting-button'));
+        expect(screen.queryByTestId('waiting-drawer-decision-unqueueable')).not.toBeInTheDocument();
+    });
+
+    it('the_unqueueable_row_never_borrows_the_failed_send_promise_of_a_retry', async () => {
+        // The register this row must NOT use. `failedSends` reads
+        // "{count} कामे अडकली आहेत — मी मदत करतो" ("stuck — I will help"),
+        // which promises a retry. Nothing will ever send an unqueueable
+        // record, so that promise would be false (`P5`). No Marathi is
+        // invented for the replacement either — `unsendableRecordsLine`
+        // ships `mr: ''` pending the founder, so it resolves through to the
+        // English, which is `SyncStatusDrawer`'s own honest wording about
+        // exactly these records.
+        unqueueableRef.current = 2;
+
+        await act(async () => {
+            renderHeader();
+        });
+
+        fireEvent.click(screen.getByTestId('canonical-strip-waiting-button'));
+        const row = screen.getByTestId('waiting-drawer-decision-unqueueable');
+
+        expect(row).toHaveTextContent('2 records will not reach your farm records');
+        expect(row.textContent ?? '').not.toContain('अडकली');
+        expect(row.textContent ?? '').not.toContain('मी मदत करतो');
+        // And it is a genuinely separate row, not a relabelled failedSend:
+        // the queue is empty, so no failedSend row exists at all here.
+        expect(screen.queryByTestId('waiting-drawer-decision-failedSend')).not.toBeInTheDocument();
     });
 });
 

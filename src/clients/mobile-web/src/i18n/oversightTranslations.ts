@@ -333,6 +333,23 @@ export interface OversightTranslations {
      * plumbing (spec §4.1, §6.2). Template — `{count}`.
      */
     failedSends: string;
+    /**
+     * Drawer Band 1 row: records that reached NO sync queue at all — finding
+     * F6 (spec §4.1). Template — `{count}`.
+     *
+     * DELIBERATELY NOT `failedSends`, and deliberately not worded like it.
+     * `failedSends` says "अडकली आहेत — मी मदत करतो" ("stuck — I will help"),
+     * which promises a retry. Nothing will ever send THESE records, so that
+     * promise would be false (`P5`: never teach the farmer a button works
+     * when it does not). The English below is the same register
+     * `SyncStatusDrawer` — the surface this row opens — already uses about
+     * exactly these records: "will not reach your farm records".
+     *
+     * Category (c): `mr: ''` until the founder supplies his own words, read
+     * through `resolveOversightString()`. Listed in
+     * `PENDING_FOUNDER_STRINGS`.
+     */
+    unsendableRecordsLine: string;
     /** Record bar before a plot is chosen (spec §5.2, §6.2). */
     recordBarIdle: string;
     /** Record bar once a plot is chosen (spec §5.2, §6.2). */
@@ -451,6 +468,9 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         decisionLine: '{count} tasks need review',
         delegatedLine: '{count} tasks — {name} will decide',
         failedSends: '{count} records could not be sent',
+        // Finding F6 — matches `SyncStatusDrawer`'s own wording about these
+        // exact records. States what they are; promises no retry.
+        unsendableRecordsLine: '{count} records will not reach your farm records',
         recordBarIdle: 'Choose a plot first',
         recordBarActive: 'Speak',
 
@@ -506,6 +526,12 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         decisionLine: '{count} कामे तपासायची आहेत',
         delegatedLine: '{count} कामे — {name} ठरवतील',
         failedSends: '{count} कामे अडकली आहेत — मी मदत करतो',
+        // Finding F6 — category (c), keyless-but-declared. NO Marathi is
+        // invented here. The nearest existing Marathi (`failedSends`) says
+        // "मी मदत करतो", which would be a promise this class of record can
+        // never keep, so it is NOT borrowed. `resolveOversightString()`
+        // reads through to the English until the founder rules.
+        unsendableRecordsLine: '',
         recordBarIdle: 'आधी प्लॉट निवडा',
         recordBarActive: 'बोला',
 
@@ -569,6 +595,12 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
  * again — `mr: ''`, English fallback — so this list went from exactly four
  * entries to exactly five. That is a deliberate, reported addition, not
  * drift: see this file's header, "FINDING F7".
+ *
+ * `unsendableRecordsLine` (finding F6) is the SECOND category (c) key, so
+ * the list is now exactly six. Also deliberate and also reported: the
+ * waiting drawer needed a row for records that reached no sync queue at
+ * all, and the only Marathi that could have been reused (`failedSends`)
+ * promises a retry these records will never get. Founder must rule.
  */
 export const PENDING_FOUNDER_STRINGS: readonly string[] = [
     'seenControl',
@@ -576,6 +608,7 @@ export const PENDING_FOUNDER_STRINGS: readonly string[] = [
     'recordBarIdle',
     'recordBarActive',
     'checkingState',
+    'unsendableRecordsLine',
 ];
 
 /**
@@ -592,7 +625,8 @@ export const PENDING_FOUNDER_STRINGS: readonly string[] = [
  * generic fallback infrastructure for whichever key next ships as `mr: ''`,
  * not code specific to those eight. Finding F7 made it load-bearing again:
  * `checkingState` ships `mr: ''` and reaches the farmer through this
- * function.
+ * function, and finding F6 added a second such key,
+ * `unsendableRecordsLine`.
  */
 export function resolveOversightString(
     language: Language,

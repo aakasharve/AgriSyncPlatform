@@ -56,6 +56,7 @@ const baseInput = {
     unverifiedCount: 0,
     yesterdayNotClosed: false,
     failedSendCount: 0,
+    unqueueableCount: 0,
     approvalHolderName: null as string | null,
 };
 
@@ -301,6 +302,69 @@ describe('buildOversightModel', () => {
         });
         expect(seen.unattributed).toBeNull();
         expect(seen.waitingCount).toBe(0);
+    });
+
+    // -----------------------------------------------------------------
+    // FINDING F6 — the record that reached NO sync queue gets its own row.
+    //
+    // `resolveSyncTarget` refuses some logs (a plot with no crop cycle
+    // pulled down yet, a संपूर्ण शेत log) and the save writes no queue row
+    // at all. `deriveSyncHonestyState` deliberately never raises
+    // `NEEDS_FIX` for those — there is nothing to retry and nowhere to
+    // send — so they contribute nothing to `failedSendCount`, and with the
+    // sync chip deleted (spec §4.1) they reached no surface whatsoever.
+    // -----------------------------------------------------------------
+    it('a_record_that_reached_no_queue_gets_its_own_waiting_row', () => {
+        const model = buildOversightModel({ ...baseInput, logs: [], unqueueableCount: 2 });
+
+        const unqueueable = model.decisions.filter((d) => d.kind === 'unqueueable');
+        expect(unqueueable).toHaveLength(1);
+        expect(unqueueable[0].count).toBe(2);
+        expect(unqueueable[0].holderName).toBeNull();
+    });
+
+    it('the_unqueueable_row_is_absent_when_nothing_was_dropped', () => {
+        // Founder ruling 2026-08-24: "if there is nothing the user must
+        // know, do not show it." Zero dropped records is nothing to know.
+        const model = buildOversightModel({ ...baseInput, logs: [], unqueueableCount: 0 });
+        expect(model.decisions.some((d) => d.kind === 'unqueueable')).toBe(false);
+    });
+
+    it('unqueueable_is_never_merged_into_the_failed_send_row', () => {
+        // Two separate facts with separate evidence and separate remedies:
+        // a failed send CAN be retried, an unqueueable record never can.
+        // One row claiming both counts would offer one row's remedy for
+        // the other row's records.
+        const model = buildOversightModel({
+            ...baseInput,
+            logs: [],
+            failedSendCount: 3,
+            unqueueableCount: 2,
+        });
+
+        const failed = model.decisions.find((d) => d.kind === 'failedSend');
+        const unqueueable = model.decisions.find((d) => d.kind === 'unqueueable');
+        expect(failed?.count).toBe(3);
+        expect(unqueueable?.count).toBe(2);
+        // Neither absorbed the other's total.
+        expect(failed?.count).not.toBe(5);
+        expect(unqueueable?.count).not.toBe(5);
+    });
+
+    it('the_unqueueable_row_flows_into_waiting_count_through_decisions', () => {
+        // `waitingCount` is `decisions.length + people.length +
+        // (unattributed ? 1 : 0)`. The new kind is a DECISION, so it is
+        // picked up by the existing first term — no second term was added
+        // and none may be. This pins that: the delta between the two
+        // models below is exactly one, and it comes from `decisions`.
+        const without = buildOversightModel({ ...baseInput, logs: [], unqueueableCount: 0 });
+        const with_ = buildOversightModel({ ...baseInput, logs: [], unqueueableCount: 1 });
+
+        expect(with_.decisions.length).toBe(without.decisions.length + 1);
+        expect(with_.waitingCount).toBe(without.waitingCount + 1);
+        expect(with_.waitingCount).toBe(
+            with_.decisions.length + with_.people.length + (with_.unattributed === null ? 0 : 1),
+        );
     });
 
     it('missing_server_timestamps_set_boundaryApproximate_true', () => {

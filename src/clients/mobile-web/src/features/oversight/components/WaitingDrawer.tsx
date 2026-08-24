@@ -10,7 +10,11 @@
  * information, in this fixed order —
  *
  *   1. Band 1 · needs your decision  — one amber row PER DECISION KIND
- *      (`model.decisions`), never one card per record.
+ *      (`model.decisions`), never one card per record. Finding F6 added the
+ *      `unqueueable` kind here: records that reached no sync queue at all.
+ *      It is a SEPARATE row from `failedSend` with a separate icon and a
+ *      separate string, because nothing will ever send those records and
+ *      `failedSend`'s copy promises the opposite.
  *   2. Band 2 · since you last looked — the briefing card
  *      (`OversightBriefingCard.tsx`, split out to keep both files under the
  *      800-line cap).
@@ -58,7 +62,7 @@
  * one generic "Retry" key, not a new near-duplicate one).
  */
 import React from 'react';
-import { Eye, Gavel, Clock, AlertTriangle, ChevronRight, RefreshCw } from 'lucide-react';
+import { Eye, Gavel, Clock, AlertTriangle, CloudOff, ChevronRight, RefreshCw } from 'lucide-react';
 
 import type { Language } from '../../../i18n/language';
 import { resolveOversightString } from '../../../i18n/oversightTranslations';
@@ -79,6 +83,11 @@ const DECISION_ICONS: Record<OversightDecision['kind'], React.ComponentType<{ si
     approval: Gavel,
     dayNotClosed: Clock,
     failedSend: AlertTriangle,
+    // Finding F6 — a DIFFERENT glyph from `failedSend`'s on purpose. These
+    // two rows can appear together, and if they shared an icon the owner
+    // would read them as one thing said twice. `AlertTriangle` also carries
+    // "act on me", which is precisely what this row cannot ask for.
+    unqueueable: CloudOff,
 };
 
 /** Resolves a decision's row text — one key per §3's Band-1 table, the
@@ -98,9 +107,21 @@ function decisionRowText(language: Language, decision: OversightDecision): strin
             return resolveOversightString(language, 'dayNotClosedLine');
         case 'failedSend':
             return formatOversightTemplate(resolveOversightString(language, 'failedSends'), { count: decision.count });
-        default:
-            return '';
+        case 'unqueueable':
+            // Finding F6 — its OWN key, never `failedSends`. See that key's
+            // note in `oversightTranslations.ts` for why the retry-promising
+            // wording may not be reused for records nothing will ever send.
+            return formatOversightTemplate(
+                resolveOversightString(language, 'unsendableRecordsLine'),
+                { count: decision.count },
+            );
     }
+    // Totality, not a fallback. The `default: return ''` that stood here
+    // would have rendered finding F6's new kind as a BLANK row — a row the
+    // owner can see and tap that says nothing. `never` makes a future kind
+    // fail `tsc` here the same way it already fails at `DECISION_ICONS`.
+    const exhaustive: never = decision.kind;
+    return exhaustive;
 }
 
 function DecisionRow({

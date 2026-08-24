@@ -143,6 +143,11 @@ const FOUNDER_APPROVED_KEYS: (keyof OversightTranslations)[] = [
 // weakened into a check that could pass for an accidental blank.
 const KEYLESS_BUT_DECLARED_KEYS: (keyof OversightTranslations)[] = [
     'checkingState',
+    // Finding F6 — the waiting drawer's row for records that reached no
+    // sync queue. No Marathi is invented for it; the one existing Marathi
+    // string that came close (`failedSends`) promises "मी मदत करतो", a
+    // retry these records can never get, so it was NOT reused.
+    'unsendableRecordsLine',
 ];
 
 // THE ORACLE (finding F7(b)). One literal per key, for EVERY key —
@@ -176,6 +181,7 @@ const EXPECTED_MR: Record<keyof OversightTranslations, string> = {
 
     // (c) keyless-but-declared — '' is the value, deliberately.
     checkingState: '',
+    unsendableRecordsLine: '',
 
     // (b) spec §6.2 placeholders, still pending the founder.
     seenControl: 'मी हे पाहिलं',
@@ -309,7 +315,7 @@ describe('oversightTranslations — pending_founder_strings_are_all_declared_key
         expect(PENDING_FOUNDER_STRINGS.length).toBeGreaterThan(0);
     });
 
-    it('exactly the five still-unresolved keys are in PENDING_FOUNDER_STRINGS', () => {
+    it('exactly the six still-unresolved keys are in PENDING_FOUNDER_STRINGS', () => {
         // `waitingLabel` and `restState` are absent — Task 13 graduated
         // `waitingLabel` to founder-approved copy (his own reference-image
         // table), and a later founder message (2026-08-23) graduated
@@ -324,12 +330,19 @@ describe('oversightTranslations — pending_founder_strings_are_all_declared_key
         // canonical strip's "still reading the data" state. This list held
         // exactly four before that change — the count is asserted here so
         // an addition is always deliberate and always reported.
+        //
+        // `unsendableRecordsLine` (finding F6) is the sixth, on the same
+        // terms: the waiting drawer's row for records that reached no sync
+        // queue. `failedSends` was the only near-fit Marathi in the module
+        // and it promises a retry ("मी मदत करतो") that this class of record
+        // can never be given, so it was not reused and nothing was invented.
         const expectedPending = [
             'seenControl',
             'delegatedLine',
             'recordBarIdle',
             'recordBarActive',
             'checkingState',
+            'unsendableRecordsLine',
         ];
         expect([...PENDING_FOUNDER_STRINGS].sort()).toEqual(expectedPending.sort());
     });

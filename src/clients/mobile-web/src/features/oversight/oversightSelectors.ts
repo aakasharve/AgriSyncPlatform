@@ -8,8 +8,9 @@
  *
  * Derives the "what happened since I last checked" model an owner sees,
  * purely from already-loaded `DailyLog` records plus a handful of
- * pre-computed counts (unverified / dayNotClosed / failedSend) that belong
- * to other subsystems and are handed in rather than recomputed here.
+ * pre-computed counts (unverified / dayNotClosed / failedSend / unqueueable)
+ * that belong to other subsystems and are handed in rather than recomputed
+ * here.
  *
  * PURITY CONTRACT (binding):
  *  - No Dexie, no React, no `infrastructure/` imports.
@@ -75,7 +76,23 @@ export type OversightWorkCategory =
     | 'irrigation' | 'labour' | 'machinery' | 'inputs' | 'cropActivity' | 'observation';
 
 export interface OversightDecision {
-    kind: 'approval' | 'dayNotClosed' | 'failedSend';
+    /**
+     * `unqueueable` is NOT a second `failedSend` (finding F6). A `failedSend`
+     * record reached a queue and the app gave up retrying it; an
+     * `unqueueable` record reached NO queue at all — `resolveSyncTarget`
+     * refused it, so no row was ever written and nothing in the app will
+     * ever pick it up. See `features/sync/status/unqueueableLogs.ts`.
+     *
+     * They are separate kinds because they are separate facts with separate
+     * evidence, and because merging them would let one count claim the
+     * other's remedy: `failedSend`'s row can honestly offer a retry, and
+     * this one never can. `syncHonestyState.ts` draws the same line and
+     * deliberately refuses to raise `NEEDS_FIX` for the unqueueable set —
+     * that reasoning is respected here, not reversed: this kind exists so
+     * the fact reaches the owner WITHOUT being reclassified as an alarm he
+     * can act on.
+     */
+    kind: 'approval' | 'dayNotClosed' | 'failedSend' | 'unqueueable';
     count: number;
     holderName: string | null; // non-null ONLY when approval is delegated away
 }
@@ -191,6 +208,14 @@ export function buildOversightModel(input: {
     unverifiedCount: number;
     yesterdayNotClosed: boolean;
     failedSendCount: number;
+    /**
+     * Records this session knows reached no sync queue at all (finding F6).
+     * REQUIRED, never optional: an optional count would let a caller omit it
+     * and have the model report "nothing unsent" from silence, which is the
+     * same strengthen-a-claim-by-absence failure `SyncEvidenceSnapshot`
+     * made required for (`useSyncQueueStatus.ts`'s F-2/F4 note).
+     */
+    unqueueableCount: number;
     approvalHolderName: string | null;
 }): OversightModel {
     const {
@@ -201,6 +226,7 @@ export function buildOversightModel(input: {
         unverifiedCount,
         yesterdayNotClosed,
         failedSendCount,
+        unqueueableCount,
         approvalHolderName,
     } = input;
 
@@ -260,6 +286,19 @@ export function buildOversightModel(input: {
     }
     if (failedSendCount > 0) {
         decisions.push({ kind: 'failedSend', count: failedSendCount, holderName: null });
+    }
+    // Finding F6 — the record that reached no queue gets its OWN row, after
+    // the failed-send row and never folded into it. Emitted only when the
+    // count is positive: when nothing was dropped there is nothing the owner
+    // must know, and a row saying so would be plumbing (founder ruling,
+    // 2026-08-24). This is the route by which "a record has NOT reached the
+    // server" survives the deleted sync chip (spec §4.1's binding
+    // constraint) for the one class the chip's `ON_PHONE` state used to
+    // carry and `failedSendCount` cannot: `deriveSyncHonestyState` never
+    // raises `NEEDS_FIX` for these, so they contribute nothing to
+    // `failedSendCount` and would otherwise reach no surface at all.
+    if (unqueueableCount > 0) {
+        decisions.push({ kind: 'unqueueable', count: unqueueableCount, holderName: null });
     }
 
     return {
