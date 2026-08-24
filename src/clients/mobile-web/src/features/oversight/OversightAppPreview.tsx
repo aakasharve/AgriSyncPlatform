@@ -77,6 +77,7 @@ import BottomNavigation from '../context/components/BottomNavigation';
 import { renderCompareView, renderLogView, renderReflectView } from '../../core/navigation/mainView';
 import { RouteLoader } from '../../core/navigation/lazyComponents';
 import MainViewTransition from '../../core/navigation/MainViewTransition';
+import { isRecordingPathBusy } from '../../shared/utils/recordingPathBusy';
 import { buildOversightHeaderInputs } from '../../app/helpers/appContentOversightInputs';
 import type { CropProfile, DailyLog, FarmerProfile, LedgerDefaults, PlannedTask } from '../../types';
 
@@ -186,7 +187,7 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
                 currentView={ctx.mainView}
                 onNavigate={ctx.setCurrentRoute}
                 onViewChange={ctx.setMainView}
-                disabled={false}
+                disabled={isRecordingPathBusy(ctx.status)}
                 activeOperator={activeOperator}
                 farmContext={{
                     farms: IS_MULTI_FARM_PREVIEW ? PREVIEW_FARMS_MULTI : PREVIEW_FARMS,
@@ -239,7 +240,11 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
                             swipe wrapper `AppRouter.tsx` uses, so this
                             preview proves the real behaviour, not a
                             simplified stand-in. */}
-                        <MainViewTransition view={ctx.mainView} onChangeView={ctx.setMainView}>
+                        <MainViewTransition
+                            view={ctx.mainView}
+                            onChangeView={ctx.setMainView}
+                            disabled={isRecordingPathBusy(ctx.status)}
+                        >
                             {renderReflectView(ctx)}
                             {renderCompareView(ctx)}
                             {renderLogView(ctx)}

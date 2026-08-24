@@ -35,6 +35,14 @@
  * `hapticFeedback.medium()` fires on a swipe-driven change — the SAME call
  * `OversightNavCards`'s own tap handler already makes, so tapping and
  * swiping feel identical.
+ *
+ * THE RECORDING PATH IS SACRED (spec §P-I) — `disabled` is REQUIRED, not
+ * optional, and it is the same value `AppContent.tsx` already hands the tap
+ * path (`isRecordingPathBusy`, `shared/utils/recordingPathBusy.ts`). A swipe
+ * that fired `onChangeView` mid-record made `renderLogView` return `null` on
+ * the next render, which unmounts `AudioRecorder` and destroys the live
+ * `MediaRecorder`. Required — not `disabled?:` — so a future caller cannot
+ * quietly drop the guard: `npm run typecheck` refuses to compile without it.
  */
 import React from 'react';
 import type { PageView } from '../../types';
@@ -63,10 +71,14 @@ export interface MainViewTransitionProps {
     /** Fired with the next view, from a swipe. Never called for a tap —
      * `OversightNavCards` already owns that path. */
     onChangeView: (view: PageView) => void;
+    /** The SAME condition the tap path is already gated on — pass
+     * `isRecordingPathBusy(status)`, never a second inline expression. While
+     * true, no swipe may change the view (spec §P-I). Required on purpose. */
+    disabled: boolean;
     children: React.ReactNode;
 }
 
-const MainViewTransition: React.FC<MainViewTransitionProps> = ({ view, onChangeView, children }) => {
+const MainViewTransition: React.FC<MainViewTransitionProps> = ({ view, onChangeView, disabled, children }) => {
     const currentIndex = VIEW_ORDER.indexOf(view);
     // Tracks the PREVIOUS index across renders so the slide direction can be
     // computed without a second prop the caller would have to track itself.
@@ -110,6 +122,11 @@ const MainViewTransition: React.FC<MainViewTransitionProps> = ({ view, onChangeV
     const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
         const gesture = gestureRef.current;
         gestureRef.current = null;
+        // Spec §P-I — the ONE guard site, placed at the decisive moment rather
+        // than at touch-start, so a gesture that BEGAN before recording started
+        // is refused too. Pinned by
+        // `refuses a swipe while the recording path is busy`.
+        if (disabled) return;
         if (!gesture || gesture.ignore || gesture.decided !== 'horizontal') return;
 
         const touch = event.changedTouches[0];

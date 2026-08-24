@@ -24,6 +24,9 @@ import { useUiPref } from '../../shared/hooks/useUiPref';
 import { useAppRouterDerivations } from './hooks/useAppRouterDerivations';
 import { useNudgeRouteEffect } from './hooks/useNudgeRouteEffect';
 import { useLabourLogArrivalScroll } from './hooks/useLabourLogArrivalScroll';
+// spec: owner-oversight-loop (§P-I) — the SAME predicate `AppContent.tsx`
+// hands the tap path as `disabled`. Never re-write the expression here.
+import { isRecordingPathBusy } from '../../shared/utils/recordingPathBusy';
 
 // Sub-plan 04 Task 8 — Routes-as-data decomposition.
 // AppRouter is a thin orchestrator that wires hooks, builds an
@@ -229,8 +232,17 @@ const AppRouter: React.FC = () => {
                 ))}
 
                 {/* Task 14, change 5 — the slide transition + swipe every
-                    other route already has, extended to Log/Reflect/Compare. */}
-                <MainViewTransition view={mainView} onChangeView={setMainView}>
+                    other route already has, extended to Log/Reflect/Compare.
+                    `disabled` (spec §P-I): `renderLogView` returns null the
+                    moment `mainView !== 'log'`, so an unguarded swipe unmounts
+                    the live recorder. `status` here is the SAME `voice.status`
+                    `AppContent.tsx` reads for the tap path's `disabled`, put
+                    through the SAME predicate. */}
+                <MainViewTransition
+                    view={mainView}
+                    onChangeView={setMainView}
+                    disabled={isRecordingPathBusy(status)}
+                >
                     {renderReflectView(ctx)}
                     {renderCompareView(ctx)}
                     {renderLogView(ctx)}

@@ -37,6 +37,11 @@ import {
 // that file's header for what it does and does NOT solve (multi-farm data
 // isolation is a pre-existing, separate gap, not introduced here).
 import { buildOversightHeaderInputs } from './app/helpers/appContentOversightInputs';
+// spec: owner-oversight-loop (§P-I) — the ONE definition of "a view change
+// right now would destroy work in progress". The tap path (below) and the
+// swipe path (`core/navigation/MainViewTransition.tsx`, wired in
+// `AppRouter.tsx`) both call it, so the two can never drift apart.
+import { isRecordingPathBusy } from './shared/utils/recordingPathBusy';
 
 interface AppContentProps {
     crops: CropProfile[];
@@ -116,7 +121,7 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 currentView={navigation.mainView}
                 onNavigate={navigation.setCurrentRoute}
                 onViewChange={navigation.setMainView}
-                disabled={voice.status === 'processing' || voice.status === 'recording'}
+                disabled={isRecordingPathBusy(voice.status)}
                 activeOperator={data.farmerProfile.operators.find(op => op.id === data.farmerProfile.activeOperatorId)}
                 farmContext={myFarms ? {
                     farms: myFarms,
