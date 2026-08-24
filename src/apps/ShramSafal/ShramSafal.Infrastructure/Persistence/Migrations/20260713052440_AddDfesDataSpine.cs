@@ -252,7 +252,47 @@ CREATE POLICY p_user_select_question_events ON ssf.question_events
       )
   ));
 
+-- ── GRANTs — without these both tables are silently unwritable ──
+--
+-- MEASURED, not defensive. 20260515090000_BootstrapDbRoles grants ON ALL TABLES
+-- (only those existing at that moment) and ALTER DEFAULT PRIVILEGES FOR ROLE
+-- <the role that ran it>. Since the connection split of 2026-05-16, migrations
+-- run under the *_Migration connection, so every table created from here on
+-- inherits NOTHING and the app role gets 42501 on first write. The same defect
+-- is documented at 20260815102440_AddRawBlobSubjects.cs:141-175, which names
+-- ssf.field_operators, ssf.field_operator_work_rows and ssf.labour_corrections
+-- as already carrying relacl IS NULL for exactly this reason.
+--
+-- ORDER MATTERS: this must precede the REVOKE below. The REVOKE narrows a real
+-- grant down to append-only; without a grant first it revokes nothing from
+-- nothing and leaves the app role unable to INSERT at all -- the append-only
+-- design would become no-access, silently, and every Sathi question write would
+-- fail in production while the migration reported success.
+--
+-- daily_richness_aggregates takes full CRUD: RecomputeAsync overwrites
+-- components_json on every recompute, so it is not append-only.
+--
+-- Idempotent and role-guarded: a database where the roles were never
+-- bootstrapped (some test harnesses) skips instead of failing.
+--
+-- A CTO-owned sweep migration in Wave 1 will fix this class repo-wide (23
+-- affected tables, 11 already in production). This block is deliberate
+-- belt-and-braces so DFES is correct standalone rather than depending on that
+-- sweep landing first.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'agrisync_app') THEN
+        GRANT SELECT, INSERT, UPDATE, DELETE ON ssf.daily_richness_aggregates TO agrisync_app;
+        GRANT SELECT, INSERT, UPDATE, DELETE ON ssf.question_events TO agrisync_app;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'agrisync_readonly') THEN
+        GRANT SELECT ON ssf.daily_richness_aggregates TO agrisync_readonly;
+        GRANT SELECT ON ssf.question_events TO agrisync_readonly;
+    END IF;
+END $$;
+
 -- Append-only by privilege (mirrors the audit-integrity hardening recipe).
+-- Net effect for question_events after the GRANT above: SELECT + INSERT only.
 REVOKE UPDATE, DELETE ON ssf.question_events FROM agrisync_app;
 ");
         }
