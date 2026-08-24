@@ -43,7 +43,10 @@ import OversightNavCards from '../../oversight/components/OversightNavCards';
 import { buildOversightModel, type OversightDecision } from '../../oversight/oversightSelectors';
 // Findings F2/F3 — the two cross-tree "open this surface" hops. See that
 // module's header for why a window event and not a prop path.
-import { OPEN_WAITING_DRAWER_EVENT } from '../../oversight/oversightNavigationEvents';
+import {
+  OPEN_WAITING_DRAWER_EVENT,
+  requestOpenReviewInbox,
+} from '../../oversight/oversightNavigationEvents';
 import { useOpenSurfaceRequest } from '../../oversight/useOpenSurfaceRequest';
 import { useOversightAcknowledgement } from '../../oversight/useOversightAcknowledgement';
 import { LocalOversightAcknowledgementStore } from '../../oversight/LocalOversightAcknowledgementStore';
@@ -249,16 +252,61 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   // is the honest default here, exactly like the zeros above.
   const dataResolved = (oversightData?.dataLoaded ?? false) && queueStatus.hasLoaded;
 
-  // Ruling 4 (plan ledger) — removing the sync chip orphans this header's
-  // only opener of `SyncStatusDrawer`. `failedSend` is the one decision kind
+  // FINDING F2 — EVERY TAPPABLE DECISION ROW LANDS SOMEWHERE REAL.
+  //
+  // What used to stand here claimed `failedSend` was "the one decision kind
   // that can ever be non-empty from AppHeader's reachable data (the two
-  // inputs above are always 0/false), so it is the one wired open here;
-  // `approval`/`dayNotClosed` never appear from this component and have no
-  // reachable detail view to open yet.
+  // inputs above are always 0/false)". That was true only before Ruling 12.
+  // It is false now, and provably so twenty lines up: `buildOversightModel`
+  // is fed `oversightData.unverifiedCount` and `oversightData.yesterdayNotClosed`,
+  // which `AppContent.tsx` fills from `buildOversightHeaderInputs(...)` —
+  // real counts off `data.history`/`data.crops`/`data.plannedTasks`. So
+  // `oversightSelectors.ts` really does push `approval` and `dayNotClosed`
+  // rows, `WaitingDrawer` really does render them as `<button>`s with a
+  // chevron, and this handler used to ignore both. An owner saw
+  // "६ कामे तपासायची आहेत", tapped the chevron, and nothing happened.
+  //
+  // Spec §3: "Tapping any row opens the existing filtered detail view."
+  // All three kinds now do — none is invented for this fix, each is a
+  // surface that already exists and already works:
+  //
+  //   failedSend   -> `SyncStatusDrawer`, this header's own sheet. Deleting
+  //                   the sync chip (spec §4.1) orphaned its only opener;
+  //                   this row is it (Ruling 4). Unchanged by F2.
+  //   approval     -> `ReviewInboxSheet` — the app's existing batch
+  //                   approve/dispute surface, mounted by `AppRouter`
+  //                   (`core/navigation/globalSheets.tsx`). `AppHeader`
+  //                   renders OUTSIDE that provider tree, so the hop goes
+  //                   through `requestOpenReviewInbox()`; see
+  //                   `oversightNavigationEvents.ts` for why a window event
+  //                   and not a prop. Approving happens THERE — this header
+  //                   never approves (spec §P-A / §3).
+  //   dayNotClosed -> the Reflect view. `dayState.ts:380` derives
+  //                   `isClosed` from exactly two terms (pending planned
+  //                   tasks, unverified entries) and `ReflectPage` is the
+  //                   one screen that shows and can resolve both
+  //                   (`onUpdateTask` + `onVerifyLog`, see
+  //                   `core/navigation/mainView.tsx`'s `renderReflectView`).
+  //                   It is also the destination the deleted "Yesterday not
+  //                   fully closed" block's own "Review summary" button used
+  //                   before commit 0e4ad118 — not a new idea, the same one.
+  //
+  // A DELEGATED approval never reaches this function at all: `WaitingDrawer`
+  // renders that row as a plain <div> with no affordance (spec §3), so there
+  // is no kind left that renders tappable without a destination.
   const handleOpenDecision = (decision: OversightDecision) => {
-    if (decision.kind === 'failedSend') {
-      setIsWaitingDrawerOpen(false);
-      setIsSyncDrawerOpen(true);
+    setIsWaitingDrawerOpen(false);
+    switch (decision.kind) {
+      case 'failedSend':
+        setIsSyncDrawerOpen(true);
+        return;
+      case 'approval':
+        requestOpenReviewInbox();
+        return;
+      case 'dayNotClosed':
+        onViewChange('reflect');
+        if (currentRoute !== 'main') onNavigate('main');
+        return;
     }
   };
 

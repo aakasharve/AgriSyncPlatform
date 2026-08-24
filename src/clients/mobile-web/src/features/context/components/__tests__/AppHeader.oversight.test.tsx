@@ -58,7 +58,13 @@ import type { DetailedWeather } from '../../../../types';
 import { oversightTranslations } from '../../../../i18n/oversightTranslations';
 // Findings F2/F3 — the two cross-tree hops the drawer's rows and the
 // "Close Day" affordances depend on. See that module's header.
-import { requestOpenWaitingDrawer } from '../../../oversight/oversightNavigationEvents';
+import {
+    OPEN_REVIEW_INBOX_EVENT,
+    requestOpenWaitingDrawer,
+} from '../../../oversight/oversightNavigationEvents';
+import type { OversightDecision } from '../../../oversight/oversightSelectors';
+
+type OversightDecisionKind = OversightDecision['kind'];
 
 const queueRef: { current: SyncQueueStatus } = {
     current: {
@@ -703,6 +709,146 @@ describe('AppHeader — the farm element is contextual on the real farm list (Ta
         // Still opens the SAME existing `FarmSwitcherSheet` (spec §2.1).
         fireEvent.click(el);
         expect(screen.getByTestId('farm-switcher-sheet')).toBeInTheDocument();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// FINDING F2 — every decision row the drawer renders as tappable must land on
+// a real destination, and FINDING F3 — the waiting drawer is now the "Close
+// Day" destination, so something outside this component must be able to open
+// it.
+//
+// The comment these tests replace claimed `failedSend` was the only kind that
+// could ever be non-empty here "because the two inputs above are always
+// 0/false". Ruling 12 made that false: `AppContent.tsx` fills
+// `oversightData.unverifiedCount` / `.yesterdayNotClosed` from real records.
+// The `approval` and `dayNotClosed` rows therefore rendered as `<button>`s
+// with a chevron and did nothing on tap. These fixtures reproduce exactly
+// that data shape.
+// ---------------------------------------------------------------------------
+describe('AppHeader — every tappable decision row has a destination (F2)', () => {
+    /** One case per `OversightDecision['kind']`. Typed as a total `Record`
+     * over the union DELIBERATELY: adding a fourth decision kind to
+     * `oversightSelectors.ts` without giving it a destination breaks `tsc`
+     * here, so this list can never silently fall behind the union it claims
+     * to cover. */
+    const DESTINATION_CASES: Record<
+        OversightDecisionKind,
+        {
+            arrange: () => Partial<React.ComponentProps<typeof AppHeader>>;
+            expectLanded: (spies: { onNavigate: ReturnType<typeof vi.fn>; onViewChange: ReturnType<typeof vi.fn>; reviewInboxRequests: () => number }) => void;
+        }
+    > = {
+        approval: {
+            arrange: () => ({
+                oversightData: {
+                    logs: [],
+                    operatorNameById: {},
+                    plotCount: 4,
+                    unverifiedCount: 6,
+                    yesterdayNotClosed: false,
+                    approvalHolderName: null,
+                    dataLoaded: true,
+                },
+            }),
+            // `ReviewInboxSheet` — the app's existing batch approve/dispute
+            // surface — is mounted by `AppRouter`, outside this component's
+            // tree, so the hop is observed exactly as production observes
+            // it: the window event `AppRouter` listens for.
+            expectLanded: ({ reviewInboxRequests }) => expect(reviewInboxRequests()).toBe(1),
+        },
+        dayNotClosed: {
+            arrange: () => ({
+                oversightData: {
+                    logs: [],
+                    operatorNameById: {},
+                    plotCount: 4,
+                    unverifiedCount: 0,
+                    yesterdayNotClosed: true,
+                    approvalHolderName: null,
+                    dataLoaded: true,
+                },
+            }),
+            // The Reflect view: the one screen showing (and able to resolve)
+            // both terms `dayState.ts` derives `isClosed` from — pending
+            // planned tasks and unverified entries.
+            expectLanded: ({ onViewChange }) => expect(onViewChange).toHaveBeenCalledWith('reflect'),
+        },
+        failedSend: {
+            arrange: () => {
+                queueRef.current = { ...queueRef.current, failedCount: 2, failedUploads: 1 };
+                return {};
+            },
+            expectLanded: () => expect(screen.getByTestId('sync-status-drawer-stub')).toBeInTheDocument(),
+        },
+    };
+
+    let reviewInboxRequestCount = 0;
+    const countReviewInboxRequest = () => { reviewInboxRequestCount += 1; };
+
+    beforeEach(() => {
+        reviewInboxRequestCount = 0;
+        window.addEventListener(OPEN_REVIEW_INBOX_EVENT, countReviewInboxRequest);
+    });
+
+    afterEach(() => {
+        window.removeEventListener(OPEN_REVIEW_INBOX_EVENT, countReviewInboxRequest);
+    });
+
+    it.each(Object.keys(DESTINATION_CASES) as OversightDecisionKind[])(
+        'every_tappable_decision_row_lands_on_a_real_destination (%s)',
+        async (kind) => {
+            const testCase = DESTINATION_CASES[kind];
+            const onNavigate = vi.fn();
+            const onViewChange = vi.fn();
+
+            await act(async () => {
+                renderHeader({ onNavigate, onViewChange, ...testCase.arrange() });
+            });
+
+            fireEvent.click(screen.getByTestId('canonical-strip-waiting-button'));
+            const row = screen.getByTestId(`waiting-drawer-decision-${kind}`);
+
+            // It PRESENTS as tappable — a real <button>, which is the promise
+            // this finding is about.
+            expect(row.tagName).toBe('BUTTON');
+
+            fireEvent.click(row);
+
+            // ...and the promise is kept.
+            testCase.expectLanded({ onNavigate, onViewChange, reviewInboxRequests: () => reviewInboxRequestCount });
+
+            // Every destination is a different surface, so the drawer gets
+            // out of its way — the same rule the `onOpenConflicts` comment
+            // already states for this header's other sheet hop.
+            expect(screen.queryByTestId('waiting-drawer-sheet')).not.toBeInTheDocument();
+        },
+    );
+
+    it('a_delegated_approval_row_is_still_not_tappable_at_all', async () => {
+        // Spec §3's delegated case: same row, same position, NO action
+        // affordance. This is the one shape that legitimately has no
+        // destination, and it must not look like it has one.
+        await act(async () => {
+            renderHeader({
+                oversightData: {
+                    logs: [],
+                    operatorNameById: {},
+                    plotCount: 4,
+                    unverifiedCount: 6,
+                    yesterdayNotClosed: false,
+                    approvalHolderName: 'Ganesh Mukadam',
+                    dataLoaded: true,
+                },
+            });
+        });
+
+        fireEvent.click(screen.getByTestId('canonical-strip-waiting-button'));
+        const row = screen.getByTestId('waiting-drawer-decision-approval');
+        expect(row.tagName).not.toBe('BUTTON');
+
+        fireEvent.click(row);
+        expect(screen.getByTestId('waiting-drawer-sheet')).toBeInTheDocument();
     });
 });
 

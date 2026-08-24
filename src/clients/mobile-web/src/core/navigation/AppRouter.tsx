@@ -27,6 +27,10 @@ import { useLabourLogArrivalScroll } from './hooks/useLabourLogArrivalScroll';
 // spec: owner-oversight-loop (§P-I) — the SAME predicate `AppContent.tsx`
 // hands the tap path as `disabled`. Never re-write the expression here.
 import { isRecordingPathBusy } from '../../shared/utils/recordingPathBusy';
+// Finding F2 — the waiting drawer's `approval` row's destination arrives
+// here as a window event; see that module's header for why.
+import { OPEN_REVIEW_INBOX_EVENT } from '../../features/oversight/oversightNavigationEvents';
+import { useOpenSurfaceRequest } from '../../features/oversight/useOpenSurfaceRequest';
 
 // Sub-plan 04 Task 8 — Routes-as-data decomposition.
 // AppRouter is a thin orchestrator that wires hooks, builds an
@@ -155,6 +159,15 @@ const AppRouter: React.FC = () => {
         setCurrentRoute,
         setMainView,
     });
+
+    // FINDING F2 — the waiting drawer's `approval` row opens THIS router's
+    // `ReviewInboxSheet` (mounted in `globalSheets.tsx`). The row lives in
+    // `AppHeader`, which renders as a sibling of `<AppFeatureProviders>` in
+    // `AppContent.tsx` and has no prop path to `setShowReviewInbox` — so the
+    // hop arrives as a window event. See
+    // `features/oversight/oversightNavigationEvents.ts` for why, and for the
+    // effect-ordering check.
+    useOpenSurfaceRequest(OPEN_REVIEW_INBOX_EVENT, () => setShowReviewInbox(true));
 
     // spec: 2026-07-13-labour-attendance-approval-design (Task 3.6) —
     // arriving at the log page with logIntent === 'labour' auto-scrolls the
