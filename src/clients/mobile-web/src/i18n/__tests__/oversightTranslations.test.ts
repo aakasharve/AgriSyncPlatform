@@ -61,20 +61,23 @@
  * than merely translate one — see its own comment. English is not
  * founder-gated, so the rest is left free.
  *
- * 2026-08-24 — THE MODULE HAS NO HOLLOW KEYS LEFT
- * -------------------------------------------------
+ * 2026-08-24 — THE MODULE HAS NO HOLLOW KEYS LEFT, AND TWO FEWER KEYS
+ * ---------------------------------------------------------------------
  * The founder ruled on the last three `mr: ''` keys (`checkingState`,
- * `unknownState`, `unsendableRecordsLine`). Consequences for this file,
- * each one deliberate:
+ * `unknownState`, `unsendableRecordsLine`) and DELETED two others
+ * (`recordBarIdle`, `recordBarActive` — the reverted record bar's labels,
+ * commit `ae8be8a1`). Consequences for this file, each one deliberate:
  *
  *   - `KEYLESS_BUT_DECLARED_KEYS` is now EMPTY. The tests that used it are
  *     rewritten to assert the SET of hollow keys equals that empty list,
  *     rather than looping over it — a loop over an empty array is a test
  *     that cannot fail, which is worth nothing.
- *   - `EXPECTED_MR` gains three real literals in place of three `''`. It is
- *     still `Record<keyof OversightTranslations, string>`, so a key added
- *     to the interface without a literal here is a `tsc` error.
- *   - `PENDING_FOUNDER_STRINGS` is down to four.
+ *   - `EXPECTED_MR` loses two entries and gains three real literals. It is
+ *     still `Record<keyof OversightTranslations, string>`, so a key deleted
+ *     from the interface but left here is a `tsc` error, exactly as an
+ *     added-but-unpinned key is.
+ *   - `PENDING_FOUNDER_STRINGS` is down to two: `seenControl` and
+ *     `delegatedLine`.
  */
 import { describe, it, expect } from 'vitest';
 
@@ -176,6 +179,13 @@ const GRADUATED_2026_08_24_KEYS: (keyof OversightTranslations)[] = [
     'unsendableRecordsLine',
 ];
 
+// The two keys DELETED in the same founder message — the reverted record
+// bar's labels (`ae8be8a1`). Asserted as absent, by name, because "leaving
+// dead keys is how a future agent rebuilds the thing he just removed": a
+// silent re-addition would otherwise only be caught by a human reading the
+// diff. `as string[]` because these are no longer `keyof
+// OversightTranslations` — that is the point of the test.
+const DELETED_2026_08_24_KEYS: string[] = ['recordBarIdle', 'recordBarActive'];
 
 // THE ORACLE (finding F7(b)). One literal per key, for EVERY key —
 // `Record<keyof OversightTranslations, string>` makes a missing entry a
@@ -218,8 +228,6 @@ const EXPECTED_MR: Record<keyof OversightTranslations, string> = {
 
     // (b) spec §6.2 placeholders, still pending the founder.
     seenControl: 'मी हे पाहिलं',
-    recordBarIdle: 'आधी प्लॉट निवडा',
-    recordBarActive: 'बोला',
     delegatedLine: '{count} कामे — {name} ठरवतील',
 
     // Group B — reworded to final founder copy 2026-08-23.
@@ -373,14 +381,17 @@ describe('oversightTranslations — pending_founder_strings_are_all_declared_key
         expect(PENDING_FOUNDER_STRINGS.length).toBeGreaterThan(0);
     });
 
-    it('exactly the four still-unresolved keys are in PENDING_FOUNDER_STRINGS', () => {
-        // Down from seven: the founder ruled on `checkingState`,
-        // `unknownState` and `unsendableRecordsLine` on 2026-08-24 and
-        // supplied the Marathi for all three.
+    it('exactly the two still-unresolved keys are in PENDING_FOUNDER_STRINGS', () => {
+        // Down from seven, in one founder message dated 2026-08-24: three
+        // keys graduated (`checkingState`, `unknownState`,
+        // `unsendableRecordsLine` — he supplied the Marathi) and two were
+        // DELETED outright (`recordBarIdle`, `recordBarActive` — the
+        // reverted record bar's labels, `ae8be8a1`).
         //
-        // What is left is the spec §6.2 (b) placeholders he has not been
-        // asked about. All four already carry the spec table's Devanagari,
-        // so none is blank — they are pending APPROVAL, not pending WORDS.
+        // What is left is exactly the two spec §6.2 (b) placeholders he was
+        // never asked about: `seenControl` and `delegatedLine`. Both already
+        // carry the spec table's Devanagari, so neither is blank — they are
+        // pending APPROVAL, not pending WORDS.
         //
         // The count is asserted as an exact set so that both directions are
         // caught: a key added back without a ruling, and a key quietly
@@ -388,8 +399,6 @@ describe('oversightTranslations — pending_founder_strings_are_all_declared_key
         const expectedPending = [
             'seenControl',
             'delegatedLine',
-            'recordBarIdle',
-            'recordBarActive',
         ];
         expect([...PENDING_FOUNDER_STRINGS].sort()).toEqual(expectedPending.sort());
     });
@@ -400,6 +409,21 @@ describe('oversightTranslations — pending_founder_strings_are_all_declared_key
                 PENDING_FOUNDER_STRINGS.includes(key),
                 `${key} is the founder's own copy and must not be pending`,
             ).toBe(false);
+        }
+    });
+
+    it('the_deleted_record_bar_keys_never_come_back', () => {
+        // The record bar was reverted at the founder's instruction
+        // (`ae8be8a1`) and he ruled that its two labels be deleted, not
+        // commented out — "leaving dead keys is how a future agent rebuilds
+        // the thing he just removed". Absence is asserted at every place a
+        // key can hide: both language literals, the pending list, and the
+        // byte-pinning oracle.
+        for (const key of DELETED_2026_08_24_KEYS) {
+            expect(Object.keys(oversightTranslations.mr), `mr still declares ${key}`).not.toContain(key);
+            expect(Object.keys(oversightTranslations.en), `en still declares ${key}`).not.toContain(key);
+            expect([...PENDING_FOUNDER_STRINGS], `${key} is still flagged pending`).not.toContain(key);
+            expect(Object.keys(EXPECTED_MR), `the oracle still pins ${key}`).not.toContain(key);
         }
     });
 

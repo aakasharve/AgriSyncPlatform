@@ -85,9 +85,9 @@
  * `{count}`/`{name}` placeholders and keeps every surrounding word and its
  * position exactly as given.
  *
- * `recordBarIdle` / `recordBarActive` split the table's single
- * `आधी प्लॉट निवडा / बोला` row on its own ` / ` — the two states shown on
- * one row in the doc.
+ * Spec §6.2's table also carried a `आधी प्लॉट निवडा / बोला` row, split here
+ * into `recordBarIdle` / `recordBarActive`. Both keys are GONE as of
+ * 2026-08-24 — see "RECORD-BAR KEYS DELETED" at the end of this header.
  *
  * `seenControl` ('मी हे पाहिलं') deliberately contains neither `मंजूर`
  * (approve) nor `खात्री` (confirm) — both already mean a decision
@@ -312,9 +312,25 @@
  * renders this row from a real model and asserts the NUMBER appears, so the
  * substitution is proven end-to-end, not assumed.
  *
- * After this message `PENDING_FOUNDER_STRINGS` holds four keys —
- * `seenControl`, `delegatedLine` and the two record-bar labels — and NO key
- * in this module has an empty `mr` any more.
+ * After this message `PENDING_FOUNDER_STRINGS` holds exactly two keys —
+ * `seenControl` and `delegatedLine`, both spec §6.2 (b) placeholders the
+ * founder has not been asked to change — and NO key in this module has an
+ * empty `mr` any more.
+ *
+ * RECORD-BAR KEYS DELETED — same founder message, 2026-08-24
+ * ------------------------------------------------------------
+ * `recordBarIdle` ('आधी प्लॉट निवडा') and `recordBarActive` ('बोला') are
+ * REMOVED — interface member, both language values, and their
+ * `PENDING_FOUNDER_STRINGS` entries. They labelled the record bar, and the
+ * record bar itself was reverted at the founder's own instruction in commit
+ * `ae8be8a1`; a repo-wide search found zero live references outside this
+ * module and its test. He ruled: delete.
+ *
+ * Deleted rather than commented out, deliberately. A commented-out key is an
+ * instruction to a future agent to rebuild the surface he just removed, and
+ * a still-declared key with no consumer reads as an unfinished wiring job
+ * rather than a decision. The record of WHY they went is this paragraph and
+ * the commit that removed them — not a corpse in the type.
  */
 import type { Language } from './language';
 
@@ -341,9 +357,10 @@ export interface OversightTranslations {
     attention: string;
     allFarmsOnTrack: string;
 
-    // ── The spec §6.2 block. It began as eight (b) placeholders; several
-    // have since been ruled on by the founder. Each key's own comment says
-    // which it is; PENDING_FOUNDER_STRINGS below is the list. ───────────
+    // ── The spec §6.2 block. It began as eight (b) placeholders; all but
+    // `seenControl` and `delegatedLine` have since been ruled on by the
+    // founder, and only those two are still in PENDING_FOUNDER_STRINGS
+    // below. Each key's own comment says which it is. ───────────────────
 
     /** Canonical-strip waiting button label (spec §2.2, §6.2). */
     waitingLabel: string;
@@ -433,10 +450,6 @@ export interface OversightTranslations {
      * correction made to his token — never to his words).
      */
     unsendableRecordsLine: string;
-    /** Record bar before a plot is chosen (spec §5.2, §6.2). */
-    recordBarIdle: string;
-    /** Record bar once a plot is chosen (spec §5.2, §6.2). */
-    recordBarActive: string;
 
     // ── Declared keyless under Controller Ruling 7/8 (`mr: ''`), ALL
     // graduated to the founder's own Marathi on 2026-08-23. None is
@@ -561,8 +574,6 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         // Finding F6 — matches `SyncStatusDrawer`'s own wording about these
         // exact records. States what they are; promises no retry.
         unsendableRecordsLine: '{count} records will not reach your farm records',
-        recordBarIdle: 'Choose a plot first',
-        recordBarActive: 'Speak',
 
         talliesPeopleUnit: 'people',
         plotsUnit: 'plots',
@@ -624,8 +635,6 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         // farmer. Token corrected, space moved outside the braces, his
         // Devanagari untouched — full note in this file's header.
         unsendableRecordsLine: '{count} श्रम सफल पर्यन्त पोहचू शकले नाहीत',
-        recordBarIdle: 'आधी प्लॉट निवडा',
-        recordBarActive: 'बोला',
 
         // GRADUATED 2026-08-23 — founder-approved, transcribed verbatim from
         // his own coordinator message (see this file's header, "OVERSIGHT-
@@ -662,14 +671,14 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
 };
 
 /**
- * Every key in this module that is NOT yet a founder-approved string. Four
- * remain, all spec §6.2 (b) placeholders carrying the Devanagari from that
- * table. A consuming component uses this list to decide whether to render
- * the `en` value beside the `mr` one;
+ * Every key in this module that is NOT yet a founder-approved string. Two
+ * remain, both spec §6.2 (b) placeholders carrying the Devanagari from that
+ * table: `seenControl` and `delegatedLine`. A consuming component uses this
+ * list to decide whether to render the `en` value beside the `mr` one;
  * `__tests__/oversightTranslations.test.ts` asserts every entry names a real
  * key, so the list can never point at a typo.
  *
- * HOW IT GOT TO FOUR — every removal is a founder ruling, none is drift:
+ * HOW IT GOT TO TWO — every removal is a founder ruling, none is drift:
  *
  *   Task 13    `waitingLabel` — his own reference-image table.
  *   2026-08-23 `restState`, then Groups A & B (`talliesPeopleUnit`,
@@ -678,15 +687,16 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
  *              `dayNotClosedLine`, `seenControlHint`, `retryAffordance`,
  *              `decisionLine`, `failedSends`) — two coordinator messages.
  *   2026-08-24 `checkingState`, `unknownState`, `unsendableRecordsLine`
- *              graduate (header: "THE LAST THREE (c) KEYS GRADUATE").
+ *              graduate (header: "THE LAST THREE (c) KEYS GRADUATE"), and
+ *              `recordBarIdle` / `recordBarActive` are DELETED outright
+ *              (header: "RECORD-BAR KEYS DELETED") — five entries leave the
+ *              list at once, three by graduation and two by deletion.
  *
- * With those three graduated, NO key in this module has an empty `mr`.
+ * With the last three graduated, NO key in this module has an empty `mr`.
  */
 export const PENDING_FOUNDER_STRINGS: readonly string[] = [
     'seenControl',
     'delegatedLine',
-    'recordBarIdle',
-    'recordBarActive',
 ];
 
 /**
