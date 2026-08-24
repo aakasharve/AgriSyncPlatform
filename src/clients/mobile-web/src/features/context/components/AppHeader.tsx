@@ -436,7 +436,43 @@ const AppHeader: React.FC<AppHeaderProps> = ({
               ends at 144px and the weather chip starts at 309px, so the lockup
               takes 93px of a 165px gap and still clears 36px each side.
               Height stays 28px so the header row does not move. */}
-          <div className="flex items-center gap-2">
+          {/* CHANGE 4 — THE OWNER CHIP IS GONE, AND IT IS THE THING THAT GIVES.
+              MEASURED on the routes that rendered both it and the weather
+              chip (any route outside `PAGE_TOGGLE_ROUTES` — `attention` is
+              the farmer-facing one, reachable from the bottom nav), Marathi,
+              deviceScaleFactor 2:
+
+                390px  owner chip ended at 371.3, weather chip began at 307.8
+                       -> 63.5px of OVERLAP
+                360px  365.3 vs 277.8 -> 87.5px
+                320px  337.1 vs 237.8 -> 99.3px, and at that width the
+                       lockup itself also crossed the weather chip by 1.7px
+                       and the farm chip by 1.8px
+
+              The chip also ran past the viewport's right edge at 360 and 320.
+              This was pre-existing and this file's own comment already
+              admitted it ("the collision with the weather chip that already
+              exists on the other routes") without fixing it.
+
+              WHY THIS ELEMENT AND NOT ANOTHER. It is the only one in row 1
+              that carries no fact the row does not already carry: it renders
+              `activeOperator.name.split(' ')[0]` — the SAME first name the
+              profile avatar renders under itself at the far left of this
+              same row, under the SAME `activeOperator` condition. Spec §4.2
+              already ruled on exactly this duplication when it removed the
+              home screen's owner chip: "redundant — the header already shows
+              the owner." The brand lockup is founder-approved at 120x36 and
+              may not shrink; the weather chip carries a real derived
+              temperature. The duplicate is what gives.
+
+              Its only non-duplicate content was the uppercase English word
+              "Owner", which is also the one piece of untranslated English
+              text row 1 put in front of a Marathi-reading farmer.
+
+              After removal these routes measure identically to the nav-card
+              routes the founder already approved: 10px+ clear on both sides
+              of the lockup at all three widths (see the change-4 report). */}
+          <div className="flex min-w-0 items-center gap-2">
             {/* Sized to OCCUPY the gap, not to sit politely inside it (founder,
                 2026-08-24: "make that bigger and bolder ... we have enough space
                 to breathe"). 36px tall renders 120px wide, up from 93px at
@@ -465,17 +501,6 @@ const AppHeader: React.FC<AppHeaderProps> = ({
               loading="eager"
               className="h-9 w-auto max-w-full object-contain"
             />
-            {/* The owner chip stays route-scoped. Row 1 on the nav-card routes
-                has 165px to spare for the lockup alone; adding this 89px chip
-                would push the group to 145px and reintroduce the collision
-                with the weather chip that already exists on the other
-                routes. */}
-            {!showNavCards && activeOperator && (
-              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-stone-100/50 border border-stone-200 rounded-full">
-                <span className="text-[10px] uppercase font-bold text-stone-500 tracking-wide">Owner</span>
-                <span className="text-xs font-bold text-stone-700">{activeOperator.name.split(' ')[0]}</span>
-              </div>
-            )}
           </div>
         </div>
 

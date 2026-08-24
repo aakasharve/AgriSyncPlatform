@@ -662,6 +662,51 @@ describe('AppHeader — row 1 (task-11 founder restructure)', () => {
         expect(nameLabel.className).not.toContain('text-[9px]');
         expect(nameLabel.className).not.toContain('max-w-[60px]');
     });
+
+    it('the_owner_chip_no_longer_collides_with_the_weather_chip_because_it_is_gone', async () => {
+        // CHANGE 4. MEASURED, Marathi, deviceScaleFactor 2, on the routes
+        // that rendered BOTH (any route outside `PAGE_TOGGLE_ROUTES`;
+        // `attention` is the farmer-facing one, reachable from the bottom
+        // nav): the owner chip ran 63.5px under the weather chip at 390px,
+        // 87.5px at 360px and 99.3px at 320px, and overran the viewport's
+        // right edge at the two narrower widths. Pre-existing, and this
+        // file's own comment admitted it without fixing it.
+        //
+        // The chip is what gives because it is the only element in row 1
+        // carrying no fact the row does not already carry: the SAME
+        // `activeOperator.name.split(' ')[0]` that the profile avatar
+        // renders under itself at the far left of the same row, under the
+        // same condition. Spec §4.2 ruled on exactly this duplication when
+        // it removed the home screen's copy — "redundant, the header
+        // already shows the owner". The lockup is founder-approved at
+        // 120x36; the weather chip carries a real temperature.
+        //
+        // jsdom does no layout, so the clearances are in the task report.
+        // What IS assertable here is the cause: the duplicate element is
+        // absent, and the name it duplicated is still on screen exactly
+        // once.
+        await act(async () => {
+            renderHeader({
+                currentRoute: 'attention',
+                activeOperator: {
+                    id: 'op-1',
+                    name: 'Rokade Patil',
+                    role: 'PRIMARY_OWNER',
+                    capabilities: [],
+                    isVerifier: false,
+                },
+            });
+        });
+
+        // The chip's own untranslated English word — the only piece of
+        // English row 1 put in front of a Marathi-reading farmer.
+        expect(screen.queryByText('Owner')).not.toBeInTheDocument();
+        // The name survives, once: under the avatar, where it always was.
+        expect(screen.getAllByText('Rokade')).toHaveLength(1);
+        // And the two elements it used to sit between are both still here.
+        expect(screen.getByAltText('Shram Safal')).toBeInTheDocument();
+        expect(screen.getByTestId('compact-weather-chip')).toBeInTheDocument();
+    });
 });
 
 describe('AppHeader — the farm element is contextual on the real farm list (Task 12)', () => {
