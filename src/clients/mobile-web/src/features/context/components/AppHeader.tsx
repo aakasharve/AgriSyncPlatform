@@ -309,34 +309,62 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             farm identity and the weather chip. Every other route keeps its
             existing brand/owner-chip centre, unchanged. */}
         <div className="min-w-0 flex-1 flex items-center justify-center">
-          {!showNavCards && (
-            <div className="flex items-center gap-2">
-              {/* Founder ruling 2026-08-24: the wordmark is a BRAND ASSET, not
-                  a text span — the real lockup sets "Shram" green and "Safal"
-                  blue in the brand italic, which `font-bold text-lg` could only
-                  approximate. `logo-full.webp` (1100x330) carries the shield and
-                  the wordmark as ONE image, so it replaces both the separate
-                  mark and the span. Measured: 28px tall renders 93px wide
-                  against the 136px those two occupied, which also buys back
-                  43px in a row-1 that was already overflowing (370px of
-                  children in a 390px header). Height stays 28px so the header
-                  row does not move. */}
-              <img
-                src="/brand/logo-full.webp"
-                alt="Shram Safal"
-                width={93}
-                height={28}
-                loading="eager"
-                className="h-7 w-auto shrink-0"
-              />
-              {activeOperator && (
-                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-stone-100/50 border border-stone-200 rounded-full">
-                  <span className="text-[10px] uppercase font-bold text-stone-500 tracking-wide">Owner</span>
-                  <span className="text-xs font-bold text-stone-700">{activeOperator.name.split(' ')[0]}</span>
-                </div>
-              )}
-            </div>
-          )}
+          {/* Founder ruling 2026-08-24: the wordmark is a BRAND ASSET, not a
+              text span — the real lockup sets "Shram" green and "Safal" blue in
+              the brand italic, which `font-bold text-lg` could only
+              approximate. `logo-full.webp` (1100x330) carries the shield and
+              the wordmark as ONE image, so it replaces both the separate mark
+              and the span.
+
+              It renders on EVERY route, including Log/Reflect/Compare. The
+              earlier `!showNavCards` guard came from the founder's reference
+              design, whose row 1 carried nothing between the farm identity and
+              the weather chip — he has since ruled the brand must be visible
+              top-centre there too. Measured on the log route: the farm chip
+              ends at 144px and the weather chip starts at 309px, so the lockup
+              takes 93px of a 165px gap and still clears 36px each side.
+              Height stays 28px so the header row does not move. */}
+          <div className="flex items-center gap-2">
+            {/* Sized to OCCUPY the gap, not to sit politely inside it (founder,
+                2026-08-24: "make that bigger and bolder ... we have enough space
+                to breathe"). 36px tall renders 120px wide, up from 93px at
+                28px. Measured gap between the farm chip and the weather chip:
+                165px at 390px wide and 135px at 360px, so 120px still clears
+                22px and 7px a side respectively.
+
+                `shrink-0` is deliberately ABSENT. At 320px the gap is only
+                95px, and letting flex shrink the lockup is what keeps it from
+                colliding with the weather chip there — measured 75px wide with
+                10px clear a side. A `shrink-0` would trade a graceful squeeze
+                on the narrowest phones for an actual overlap.
+
+                `object-contain` is what makes that squeeze honest. `h-9` pins
+                the height while `max-w-full` clamps the width, and at 320px
+                that combination resolved to a 75x36 box against the asset's
+                natural 3.33:1 — i.e. the wordmark was rendering HORIZONTALLY
+                SQUASHED, which distorts the brand rather than merely shrinking
+                it. `object-contain` letterboxes inside the clamped box so the
+                lockup stays in proportion at every width. */}
+            <img
+              src="/brand/logo-full.webp"
+              alt="Shram Safal"
+              width={120}
+              height={36}
+              loading="eager"
+              className="h-9 w-auto max-w-full object-contain"
+            />
+            {/* The owner chip stays route-scoped. Row 1 on the nav-card routes
+                has 165px to spare for the lockup alone; adding this 89px chip
+                would push the group to 145px and reintroduce the collision
+                with the weather chip that already exists on the other
+                routes. */}
+            {!showNavCards && activeOperator && (
+              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-stone-100/50 border border-stone-200 rounded-full">
+                <span className="text-[10px] uppercase font-bold text-stone-500 tracking-wide">Owner</span>
+                <span className="text-xs font-bold text-stone-700">{activeOperator.name.split(' ')[0]}</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* RIGHT: Weather + Voice. Task 11 moved the weather chip into row
