@@ -40,6 +40,18 @@
  * does no actual cropping here either (box ratio == source ratio), the
  * circular `overflow-hidden` parent is what windows the face out.
  *
+ * TASK 16 — THE 66px BOX NEVER ACTUALLY RENDERED (a real bug, not a re-tune)
+ * -----------------------------------------------------------------------------
+ * Founder: "that must be zoomed out and face should be properly fit in that
+ * circle." Measured cause: Tailwind preflight's `img { max-width: 100% }`
+ * clamped the `w-[66px]` class to the 44px circle's 40px content box at
+ * runtime — the image rendered 40×88, not 66×88, so `object-cover` cropped
+ * the head horizontally (turban sides cut, face squeezed) while Task 15's
+ * vertical framing was tuned for a box width that never existed on screen.
+ * Fix: `max-w-none` lets the intended width apply, and the box is
+ * re-measured off the source's actual head bounds (not the 1086:1448
+ * ratio) — see the `<img>`'s own comment below for the numbers.
+ *
  * THE BUTTON IS HONESTLY DISABLED — READ BEFORE RE-WIRING
  * ----------------------------------------------------------
  * The task brief: "Wire the button to the app's existing voice/assistant
@@ -86,11 +98,20 @@ const HelpBar: React.FC = () => {
             data-testid="help-bar"
             className="mb-4 mt-6 flex items-center gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/60 px-3.5 py-3"
         >
-            {/* Face crop (Task 15) — the rendered box (66×88) preserves the
-                source's exact 1086:1448 ratio, so `object-cover` scales
-                without cropping; the circular `overflow-hidden` parent
-                then windows only the top-centre 44×44 of that box, which
-                measured out to turban-through-moustache on this asset. */}
+            {/* Face crop (Task 16 — fixes a real render bug, not a re-tune).
+                Task 15's box was classed `w-[66px]` but Tailwind preflight's
+                `img { max-width: 100% }` clamped the rendered width to the
+                44px circle's 40px content box — `object-cover` then cropped
+                the head horizontally (turban sides cut, face squeezed) while
+                the vertical framing was tuned for a 66px box that never
+                existed at runtime. `max-w-none` lets the intended width
+                apply. The box is also re-measured directly off the source
+                (`sathi-points-down-both.png`, 1086×1448 — head incl. turban
+                spans roughly x 225→885, y 15→690, centre ≈ (555, 352)):
+                scale ≈0.0559 gives a 61×81 box, with explicit left/top
+                offsets (no `-translate-x-1/2`, which assumed a centred
+                44px-wide box) so the head sits inside the circle with even
+                margin. */}
             <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full border-2 border-white shadow-sm">
                 <img
                     src="/images/sathi/sathi-points-down-both.png"
@@ -98,7 +119,7 @@ const HelpBar: React.FC = () => {
                     loading="lazy"
                     width={1086}
                     height={1448}
-                    className="absolute left-1/2 top-0 h-[88px] w-[66px] -translate-x-1/2 object-cover"
+                    className="absolute left-[-11px] top-0 h-[81px] w-[61px] max-w-none object-cover"
                 />
             </span>
 

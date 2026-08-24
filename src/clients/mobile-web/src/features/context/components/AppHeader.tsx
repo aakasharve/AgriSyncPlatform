@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { User2, Leaf } from 'lucide-react';
+import { User2 } from 'lucide-react';
 import { AppRoute, PageView, DetailedWeather } from '../../../types';
 import { useLanguage } from '../../../i18n/LanguageContext';
 
@@ -311,9 +311,14 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         <div className="min-w-0 flex-1 flex items-center justify-center">
           {!showNavCards && (
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-emerald-600 rounded-lg flex items-center justify-center text-white">
-                <Leaf size={16} fill="white" strokeWidth={0} />
-              </div>
+              <img
+                src="/brand/logo-mark.webp"
+                alt=""
+                width={28}
+                height={28}
+                loading="eager"
+                className="w-7 h-7"
+              />
               <span className="font-bold text-lg text-stone-800">ShramSafal</span>
               {activeOperator && (
                 <div className="flex items-center gap-1.5 px-2 py-0.5 bg-stone-100/50 border border-stone-200 rounded-full">

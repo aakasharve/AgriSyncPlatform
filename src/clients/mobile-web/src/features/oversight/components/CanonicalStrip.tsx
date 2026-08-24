@@ -53,7 +53,7 @@
  * Dexie, no hooks that read storage.
  */
 import React from 'react';
-import { Leaf, ChevronDown, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { LandPlot, ChevronDown, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import type { Language } from '../../../i18n/language';
 import { oversightTranslations, resolveOversightString, PENDING_FOUNDER_STRINGS } from '../../../i18n/oversightTranslations';
 
@@ -128,9 +128,9 @@ export const FarmIdentityElement: React.FC<FarmIdentityElementProps> = ({
     const plotLine = `${plotCount} ${plotsUnitText}`;
     const isMulti = farmCount >= 2;
 
-    const leafMark = (
+    const farmMark = (
         <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] bg-emerald-600 text-white">
-            <Leaf size={12} strokeWidth={2.25} fill="white" />
+            <LandPlot size={12} strokeWidth={2.25} />
         </span>
     );
 
@@ -161,7 +161,7 @@ export const FarmIdentityElement: React.FC<FarmIdentityElementProps> = ({
                 title={farmName}
                 className="flex max-w-[150px] shrink-0 items-center gap-1.5 py-0.5"
             >
-                {leafMark}
+                {farmMark}
                 <span className="min-w-0">
                     {nameLine('text-stone-800')}
                     {plotLineNode('text-stone-400')}
@@ -179,7 +179,7 @@ export const FarmIdentityElement: React.FC<FarmIdentityElementProps> = ({
             title={farmName}
             className="flex max-w-[178px] shrink-0 items-center gap-1.5 rounded-full bg-emerald-50 py-0.5 pl-1 pr-1.5"
         >
-            {leafMark}
+            {farmMark}
             <span className="min-w-0">
                 {nameLine('text-emerald-900')}
                 {plotLineNode('text-emerald-700/85')}

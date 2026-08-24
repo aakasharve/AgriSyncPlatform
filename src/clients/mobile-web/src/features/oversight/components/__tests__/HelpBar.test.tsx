@@ -66,15 +66,16 @@ describe('HelpBar — closing help strip (Task 13, change 5)', () => {
         expect(img.getAttribute('height')).toBe('1448');
     });
 
-    it('the face-crop box preserves the source\'s exact 1086:1448 ratio (no distortion)', () => {
-        // Task 15 — 66×88 was chosen so 66/88 === 1086/1448 exactly, so
-        // `object-cover` on this box does no actual cropping/zooming; the
-        // circular `overflow-hidden` parent is what windows the face out.
+    it('the face-crop box uses max-w-none so Tailwind preflight cannot clamp its width to the circle', () => {
+        // Task 16 — the bug: `img { max-width: 100% }` (Tailwind preflight)
+        // silently clamped the old `w-[66px]` class to the 44px circle's
+        // 40px content box at runtime, so the intended width never actually
+        // rendered. `max-w-none` is the fix; pin it so it cannot regress.
         render(<HelpBar />);
 
         const img = screen.getByTestId('help-bar').querySelector('img') as HTMLImageElement;
-        expect(img.className).toContain('h-[88px]');
-        expect(img.className).toContain('w-[66px]');
-        expect(66 / 88).toBeCloseTo(1086 / 1448, 5);
+        expect(img.className).toContain('max-w-none');
+        expect(img.className).toContain('h-[81px]');
+        expect(img.className).toContain('w-[61px]');
     });
 });
