@@ -161,6 +161,38 @@ describe('WaitingDrawer', () => {
         expect(onOpenDecision).toHaveBeenCalledWith(decisions[0]);
     });
 
+    it('the_unsendable_row_icon_is_a_concrete_object_not_a_cloud', () => {
+        // CHANGE 5. `CloudOff` said nothing to the reader this row exists
+        // for: a smallholder farmer has no mental model in which a cloud
+        // holds his records, and at this row's 14px its thin
+        // slash-over-cloud collapses into a smudge. `FileX` — a written page
+        // with a cross through it — names two things he can name, and
+        // matches the app's own metaphor for the destination (the farm book,
+        // शेतनोंद / `farmBookOpen`), which is what
+        // `unsendableRecordsLine` describes in words.
+        //
+        // Asserted through lucide's own per-icon class, which is the only
+        // thing distinguishing one rendered <svg> from another here.
+        const decisions: OversightDecision[] = [
+            { kind: 'unqueueable', count: 2, holderName: null },
+            { kind: 'failedSend', count: 1, holderName: null },
+        ];
+        render(<WaitingDrawer {...baseProps({ model: baseModel({ decisions }) })} />);
+
+        const row = screen.getByTestId('waiting-drawer-decision-unqueueable');
+        const icon = row.querySelector('svg');
+        expect(icon).not.toBeNull();
+        expect(icon!.getAttribute('class') ?? '').not.toContain('cloud');
+        expect(icon!.getAttribute('class') ?? '').toContain('lucide-file-x');
+
+        // Finding F6's own constraint, re-proven rather than assumed: this
+        // row must NOT share the "act on me" glyph `failedSend` owns, or the
+        // owner reads two different facts as one thing said twice.
+        const failedIcon = screen.getByTestId('waiting-drawer-decision-failedSend').querySelector('svg');
+        expect(failedIcon!.getAttribute('class')).not.toEqual(icon!.getAttribute('class'));
+        expect(icon!.getAttribute('class') ?? '').not.toContain('triangle');
+    });
+
     it('the_unattributed_row_renders_and_is_excluded_from_the_people_tally', () => {
         // Spec §P-F: "The people tally counts named people only." A model
         // with 2 named people + 1 unattributed bucket must tally 2, not 3.

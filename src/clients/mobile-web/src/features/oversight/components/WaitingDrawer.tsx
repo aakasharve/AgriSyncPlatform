@@ -62,7 +62,7 @@
  * one generic "Retry" key, not a new near-duplicate one).
  */
 import React from 'react';
-import { Eye, Gavel, Clock, AlertTriangle, CloudOff, ChevronRight, RefreshCw } from 'lucide-react';
+import { Eye, Gavel, Clock, AlertTriangle, FileX, ChevronRight, RefreshCw } from 'lucide-react';
 
 import type { Language } from '../../../i18n/language';
 import { resolveOversightString } from '../../../i18n/oversightTranslations';
@@ -87,7 +87,26 @@ const DECISION_ICONS: Record<OversightDecision['kind'], React.ComponentType<{ si
     // two rows can appear together, and if they shared an icon the owner
     // would read them as one thing said twice. `AlertTriangle` also carries
     // "act on me", which is precisely what this row cannot ask for.
-    unqueueable: CloudOff,
+    //
+    // CHANGE 5 — WAS `CloudOff`, AND A CLOUD MEANS NOTHING HERE.
+    // A smallholder farmer has no mental model in which a cloud holds his
+    // records, so the glyph carried no information at any size; rendered at
+    // this row's 14px and compared side by side against the candidates, its
+    // thin diagonal-slash-over-cloud also collapses into a smudge.
+    //
+    // `FileX` is a written page with a cross through it. Both halves are
+    // things he can name: a page IS what a record is to him, and a cross
+    // through it is the plainest available "this one did not go in". It is
+    // also the app's OWN metaphor for the destination — the farm book,
+    // शेतनोंद (`farmBookOpen`) — so the row reads as "a page that never made
+    // it into the book", which is exactly what
+    // `unsendableRecordsLine` says in words.
+    //
+    // Still a STATE, never a request: no triangle, no exclamation, nothing
+    // urgent. That is the F6 constraint above, and `FileX` keeps it —
+    // `failedSend`'s `AlertTriangle` remains the only "act on me" glyph in
+    // this list.
+    unqueueable: FileX,
 };
 
 /** Resolves a decision's row text — one key per §3's Band-1 table, the
