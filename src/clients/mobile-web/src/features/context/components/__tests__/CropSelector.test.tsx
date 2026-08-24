@@ -28,8 +28,19 @@ import type { Language } from '../../../../i18n/language';
 import { oversightTranslations } from '../../../../i18n/oversightTranslations';
 import type { CropProfile } from '../../../../types';
 
+// `CropSelector` reads the language through `useOptionalLanguage` (finding
+// F5 — `useLanguage` throws outside `LanguageProvider`, and this component
+// must not require one). Both are mocked so this file keeps testing the
+// component and not the provider. The NO-PROVIDER case is deliberately NOT
+// tested here — a `vi.mock` is file-scoped, so it would be testing the mock;
+// it lives in `CropSelectorDefaultPath.test.tsx`, which mocks nothing.
 vi.mock('../../../../i18n/LanguageContext', () => ({
     useLanguage: () => ({
+        language: 'mr' as Language,
+        setLanguage: () => { },
+        t: (key: string) => key,
+    }),
+    useOptionalLanguage: () => ({
         language: 'mr' as Language,
         setLanguage: () => { },
         t: (key: string) => key,
@@ -223,13 +234,19 @@ describe('CropSelector — hideGlobalCard opt-in (Task 13, change 4)', () => {
     });
 });
 
-describe('CropSelector — crop card vividness (Task 16, Problem 2)', () => {
+describe('CropSelector — crop card vividness on the OPTED-IN path (Task 16, Problem 2)', () => {
     // Founder: "make the plot selection UI more vivid — the user must be
     // able to know what he selected... but it must be aligned with the
     // aesthetic and UI of the whole app." Assertions below check things a
     // user would actually SEE (a checkmark badge appearing/disappearing,
     // a thicker themed ring, a greyed-and-shrunk sibling) — not a class
     // name that merely happens to differ.
+    //
+    // FINDING F5 — every render below now passes `hideGlobalCard`, the log
+    // screen's opt-in. The founder directed this change and approved it
+    // THERE; it shipped ungated, so `Attendance.tsx` inherited it too. Spec
+    // §5.1 forbids that. The default path is pinned separately, and
+    // oppositely, in `CropSelectorDefaultPath.test.tsx`.
     it('a selected crop card shows a real checkmark badge and a thicker, fully-themed ring', () => {
         render(
             <CropSelector
@@ -239,6 +256,7 @@ describe('CropSelector — crop card vividness (Task 16, Problem 2)', () => {
                 selectedPlots={{}}
                 onSelectionChange={vi.fn()}
                 disabled={false}
+                hideGlobalCard
             />,
         );
 
@@ -263,6 +281,7 @@ describe('CropSelector — crop card vividness (Task 16, Problem 2)', () => {
                 selectedPlots={{}}
                 onSelectionChange={vi.fn()}
                 disabled={false}
+                hideGlobalCard
             />,
         );
 
@@ -296,6 +315,7 @@ describe('CropSelector — crop card vividness (Task 16, Problem 2)', () => {
                 selectedPlots={{}}
                 onSelectionChange={vi.fn()}
                 disabled={false}
+                hideGlobalCard
             />,
         );
 
@@ -312,6 +332,7 @@ describe('CropSelector — crop card vividness (Task 16, Problem 2)', () => {
                 selectedPlots={{}}
                 onSelectionChange={vi.fn()}
                 disabled={false}
+                hideGlobalCard
             />,
         );
 

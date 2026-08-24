@@ -53,3 +53,26 @@ export const useLanguage = () => {
     }
     return context;
 };
+
+/**
+ * The same read, WITHOUT the throw — for a component that must keep working
+ * outside `LanguageProvider`.
+ *
+ * spec: owner-oversight-loop, finding F5. `CropSelector` began calling
+ * `useLanguage()` unconditionally for the founder-approved Marathi on the log
+ * screen. That call throws for every consumer rendered outside this provider,
+ * so a component that previously had no provider dependency at all silently
+ * acquired a hard one. This hook lets such a component ask for the language
+ * and handle "there is none" itself, instead of the whole subtree failing to
+ * render.
+ *
+ * DELIBERATELY returns `undefined` rather than a synthesised default context:
+ * a fabricated `{ language: 'en', setLanguage: noop, t }` would let a caller
+ * silently render English to a Marathi farmer AND swallow a genuinely missing
+ * provider. The caller must decide what "no provider" means for it, in the
+ * open. `useLanguage` is unchanged and stays the right hook everywhere a
+ * provider is guaranteed.
+ */
+export const useOptionalLanguage = (): LanguageContextType | undefined => {
+    return useContext(LanguageContext);
+};

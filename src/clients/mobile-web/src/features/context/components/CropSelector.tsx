@@ -7,7 +7,8 @@ import React from 'react';
 import { Layers, CheckCircle2, MapPin, Home, ChevronRight } from 'lucide-react';
 import { CropProfile } from '../../../types';
 import { getCropTheme } from '../../../shared/utils/colorTheme';
-import { useLanguage } from '../../../i18n/LanguageContext';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import type { Language } from '../../../i18n/language';
 import { resolveOversightString } from '../../../i18n/oversightTranslations';
 
 // Same font-selection convention every oversight component uses (root
@@ -30,20 +31,41 @@ interface CropSelectorProps {
     compact?: boolean;
     showPlots?: boolean; // New prop to force plot display in compact mode
     /**
-     * spec: owner-oversight-loop (Task 13, change 4) — narrow, opt-in. When
-     * `true`:
-     *   - the "Entire Farm" card is suppressed from the horizontal carousel
-     *     (it no longer sits first, equal-weight with the crops);
-     *   - the SAME selection (`handleGlobalToggle`/`isGlobalSelected` below
-     *     — unchanged logic, not re-implemented) instead renders as a
-     *     quiet, muted, full-width list row BELOW the crop cards;
-     *   - the `mode === 'log'` section header/hint swap from this
-     *     component's original English dev copy to the founder's own
-     *     approved Marathi (`oversightTranslations.ts`'s `plotSectionHeader`
-     *     / `plotSectionHint`).
-     * Default `false` (or omitted) leaves every existing consumer
-     * (`Attendance.tsx`) byte-identical — this prop only ADDS a path,
-     * nothing already shipping is restructured.
+     * THE OPT-IN FOR EVERY FOUNDER-DIRECTED LOG-SCREEN CHANGE ON THIS
+     * COMPONENT. `mainView.tsx`'s log screen is the only caller that sets it.
+     *
+     * spec: owner-oversight-loop. §5.1 is explicit that `CropSelector` is not
+     * to be redesigned, so nothing here may reach a consumer that has not
+     * asked for it. When `true`:
+     *   - Task 13, change 4 — the "Entire Farm" card is suppressed from the
+     *     horizontal carousel (it no longer sits first, equal-weight with the
+     *     crops); the SAME selection (`handleGlobalToggle`/`isGlobalSelected`
+     *     below — unchanged logic, not re-implemented) instead renders as a
+     *     quiet, full-width list row BELOW the crop cards;
+     *   - Task 13, change 4 — the `mode === 'log'` section header/hint swap
+     *     from this component's original English dev copy to the founder's
+     *     own approved Marathi (`oversightTranslations.ts`'s
+     *     `plotSectionHeader` / `plotSectionHint`);
+     *   - Task 16, Problem 2 — the founder-directed VIVID selected state on
+     *     the crop cards: `strongFill` + `ring-[4px]` instead of the `-50`
+     *     tint + `ring-[3px]`, a deeper shadow, a harder dim on unselected
+     *     siblings, an opaquer count pill and a larger tick badge with a
+     *     solid white border. He approved this on the log screen and
+     *     re-approved it since; it belongs there and only there.
+     *
+     * WHAT `false`/OMITTED GUARANTEES, AND WHAT IT DOES NOT (finding F5).
+     * Every VISIBLE difference listed above is gated, so `Attendance.tsx` —
+     * the one other consumer, which never passes this prop — renders the
+     * same pixels it rendered before this branch. Pinned class-by-class in
+     * `__tests__/CropSelectorDefaultPath.test.tsx`.
+     *
+     * It is NOT byte-identical, and the earlier version of this comment
+     * claiming so was false. Two non-visual additions apply on BOTH paths and
+     * are deliberate: `data-testid` hooks (`crop-card-*`, `crop-tick-*`,
+     * `crop-selector-entire-farm-row*`, `plot-tray-button`) and
+     * `aria-pressed` on the crop cards — the latter an accessibility fix for
+     * a control that has always been a toggle, and the reason the default
+     * path can now be tested by rendered output at all.
      */
     hideGlobalCard?: boolean;
 }
@@ -159,7 +181,20 @@ const CropSelector: React.FC<CropSelectorProps> = ({
     showPlots = false,
     hideGlobalCard = false
 }) => {
-    const { language } = useLanguage();
+    // Finding F5 — `useLanguage()` THROWS outside `LanguageProvider`
+    // (`i18n/LanguageContext.tsx`). Calling it unconditionally here gave a
+    // component that previously had NO provider dependency a hard one, for
+    // every consumer, in service of copy only the `hideGlobalCard` path
+    // renders. `useOptionalLanguage` asks without throwing.
+    //
+    // The `'en'` fallback is the app's OWN default, not a new guess:
+    // `LanguageProvider` itself starts at `useUiPref<Language>(
+    // 'agrilog_language', 'en')`. It is also unreachable on the default
+    // path — every `resolveOversightString(language, ...)` call below sits
+    // inside a `hideGlobalCard` branch, so a consumer outside a provider
+    // renders no language-driven string at all.
+    const languageContext = useOptionalLanguage();
+    const language: Language = languageContext?.language ?? 'en';
 
     const handleGlobalToggle = () => {
         if (disabled) return;
@@ -347,6 +382,44 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                     const isFocusMode = selectedCrops.length > 0;
                     const isDimmed = isFocusMode && !isSelected;
 
+                    // ---- FINDING F5: the vivid treatment is OPT-IN ----
+                    // The founder directed the vivid selected state (Task 16,
+                    // Problem 2: "the user must be able to know what he
+                    // selected") and approved it ON THE LOG SCREEN. It shipped
+                    // ungated, so `Attendance.tsx` — a screen he never looked
+                    // at — inherited it too. Spec §5.1 ("CropSelector is not to
+                    // be redesigned") makes that a scope defect, not a taste
+                    // one. Each pair below is: [opted-in] / [exactly what main
+                    // rendered before this branch].
+                    const selectedCardClass = hideGlobalCard
+                        ? `${theme.strongFill} ring-[4px] ${theme.border} shadow-[0_20px_50px_-12px_rgba(0,0,0,0.35)] ${theme.slideShadow} scale-110 z-20`
+                        : `${theme.slideBgSelected} ring-[3px] ${theme.border} shadow-[0_20px_50px_-12px_rgba(0,0,0,0.3)] ${theme.slideShadow} scale-110 z-20`;
+                    const dimmedClass = hideGlobalCard
+                        ? 'opacity-40 grayscale scale-90'
+                        : 'opacity-50 grayscale-[0.8] scale-95';
+                    // The photo ring. Opted-in matches the outer ring's
+                    // strength (both at the theme's full `-500` intensity /
+                    // `strongFill`); the default keeps main's pale `-100`
+                    // border over the `-50` tint. The `border` width token
+                    // moved out of the static class list into BOTH default
+                    // branches — same tokens, same computed style, and it
+                    // keeps `border`/`border-2` from ever co-existing on one
+                    // element (where the winner would depend on stylesheet
+                    // order, not on this file).
+                    const photoRingClass = hideGlobalCard
+                        ? (isSelected ? `border-2 ${theme.border} ${theme.strongFill}` : 'border border-slate-100 bg-slate-50')
+                        : (isSelected ? `border ${theme.slideBorder} ${theme.slideBgSelected}` : 'border border-slate-100 bg-slate-50');
+                    const countPillClass = hideGlobalCard
+                        ? `${theme.iconText} bg-white/90 px-2.5 py-1 rounded-full shadow-sm`
+                        : `${theme.iconText} bg-white/60 px-2 py-0.5 rounded-full`;
+                    // Tick badge: larger, with a solid white border (was a
+                    // near-invisible border-white/20) so it reads as a crisp
+                    // filled disc rather than a soft blob.
+                    const tickBadgeClass = hideGlobalCard
+                        ? `absolute -bottom-6 left-1/2 -translate-x-1/2 z-30 ${theme.indicator} text-white rounded-full p-2.5 shadow-2xl border-2 border-white ring-2 ring-white/70 animate-in zoom-in spin-in-12 duration-300`
+                        : `absolute -bottom-5 left-1/2 -translate-x-1/2 z-30 ${theme.indicator} text-white rounded-full p-2 shadow-xl border border-white/20 ring-2 ring-white/50 animate-in zoom-in spin-in-12 duration-300`;
+                    const tickIconSize = hideGlobalCard ? 28 : 24;
+
                     return (
                         <button
                             key={crop.id}
@@ -358,8 +431,8 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                                 relative flex-shrink-0 flex flex-col items-center pt-4 pb-6 px-2 rounded-[2.5rem] transition-all duration-500 group snap-center overflow-visible
                                 ${compact ? 'w-28' : 'w-36'}
                                 ${isSelected
-                                    ? `${theme.strongFill} ring-[4px] ${theme.border} shadow-[0_20px_50px_-12px_rgba(0,0,0,0.35)] ${theme.slideShadow} scale-110 z-20`
-                                    : `bg-white ring-1 ring-slate-100 shadow-sm hover:shadow-md hover:scale-105 hover:z-10 ${isDimmed ? 'opacity-40 grayscale scale-90' : 'opacity-100'}`}
+                                    ? selectedCardClass
+                                    : `bg-white ring-1 ring-slate-100 shadow-sm hover:shadow-md hover:scale-105 hover:z-10 ${isDimmed ? dimmedClass : 'opacity-100'}`}
                             `}
                             style={{ minHeight: minHeight }}
                         >
@@ -368,22 +441,19 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                                 <div className={`absolute inset-0 ${theme.bg} blur-xl -z-10 rounded-[2.5rem]`} />
                             )}
 
-                            {/* Image Container — spec: owner-oversight-loop
-                                (Task 16, Problem 2): the selected ring and
-                                fill now match strength (both at the theme's
-                                full `-500` intensity / `strongFill`), where
-                                before the outer ring was solid-500 but the
-                                inner photo ring was a mismatched pale -100 —
-                                a "not vivid enough" confidence gap the
-                                founder flagged. */}
+                            {/* Image Container — see `photoRingClass` above
+                                for what the opted-in path changes and why the
+                                default path keeps main's markup. */}
                             <div className={`
                                 relative z-10 mb-3 rounded-full p-1 transition-all duration-500
                                 ${isSelected ? `bg-white p-1.5 shadow-inner` : 'bg-transparent'}
                                 ${compact ? 'w-16 h-16' : 'w-20 h-20'}
                             `}>
-                                <div className={`
+                                <div
+                                    data-testid={`crop-photo-ring-${crop.id}`}
+                                    className={`
                                     relative w-full h-full rounded-full flex items-center justify-center overflow-hidden transition-colors duration-500
-                                    ${isSelected ? `border-2 ${theme.border} ${theme.strongFill}` : 'border border-slate-100 bg-slate-50'}
+                                    ${photoRingClass}
                                  `}>
                                     <CropSymbol name={crop.iconName} size={compact ? 'md' : 'xl'} />
                                 </div>
@@ -396,9 +466,11 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                                 </span>
 
                                 {!compact && (
-                                    <span className={`
+                                    <span
+                                        data-testid={`crop-count-pill-${crop.id}`}
+                                        className={`
                                         text-[11px] font-black uppercase tracking-widest transition-colors duration-300
-                                        ${isSelected ? `${theme.iconText} bg-white/90 px-2.5 py-1 rounded-full shadow-sm` : 'text-slate-400'}
+                                        ${isSelected ? countPillClass : 'text-slate-400'}
                                     `}>
                                         {mode === 'reflect' && selectedPlotCount === 0
                                             ? (hasMultiplePlots ? `${crop.plots.length} PLOTS` : '1 PLOT')
@@ -407,21 +479,11 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                                 )}
                             </div>
 
-                            {/* Hanging Checkmark Badge — larger + a solid
-                                white border (was a near-invisible
-                                border-white/20) so the badge reads as a
-                                crisp filled disc, not a soft blob. */}
+                            {/* Hanging Checkmark Badge — see `tickBadgeClass`
+                                above. */}
                             {isSelected && (
-                                <div
-                                    data-testid={`crop-tick-${crop.id}`}
-                                    className={`
-                                    absolute -bottom-6 left-1/2 -translate-x-1/2 z-30
-                                    ${theme.indicator} text-white
-                                    rounded-full p-2.5 shadow-2xl
-                                    border-2 border-white ring-2 ring-white/70
-                                    animate-in zoom-in spin-in-12 duration-300
-                                `}>
-                                    <CheckCircle2 size={28} className="text-white drop-shadow-md" strokeWidth={4} />
+                                <div data-testid={`crop-tick-${crop.id}`} className={tickBadgeClass}>
+                                    <CheckCircle2 size={tickIconSize} className="text-white drop-shadow-md" strokeWidth={4} />
                                 </div>
                             )}
                         </button>
