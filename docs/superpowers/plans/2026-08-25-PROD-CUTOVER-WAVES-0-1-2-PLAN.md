@@ -197,6 +197,14 @@ silence, or merge while any 👁️ item is open.**
 | A10 | Admin-scope paths still return rows | after deploy, one retention/compliance sweeper run returns non-zero where non-zero is expected (**guards §0.2 W1b**) |
 | A11 | RG1–RG5 recorded verbatim | Release Record row, three verdicts, `NOT_PROVEN` never rounded up |
 | **A12** | **Every claim the app makes to a farmer is one the data can back** | **truth audit (T1.12b) returns zero unqualified claims; each finding either fixed or shown to the farmer as approximate/unknown** |
+| **A13** | **The farmer's server-side data survives the cutover, and the backfill actually reached it** | **set difference, not counts** — capture the `ssf.daily_logs` id set (or a checksum over it) plus `plots` / `crop_cycles` / `farms` / `farm_memberships` **before T1.14**, compare after. Post-condition: every surviving log carries `plot_ids`, `scope='Plot'`, and `count(*) FILTER (WHERE plot_id IS NULL)` is still `0`. 🛑 **Measured as `agrisync_admin` (a member of `rds_superuser`) or with the tenant GUC set — the identity is part of the criterion.** Run as `agrisync_app` it reads 0 before and 0 after and passes green having proved nothing. |
+
+> **Why A13 exists, added 2026-08-25.** Nothing in A1–A12 covered it: `A8` is on-device Dexie, `A2` is
+> migration-history bookkeeping rather than row data, `A6b` is boundaries only, `A10` is admin
+> *visibility* rather than survival. The gap was not an oversight — the plan believed production held
+> zero rows, so there was nothing to protect. It holds **141 logs across 96 days, 4 plots, 4 crop
+> cycles and 1 farm**. `141 == 141` does not prove *the same* 141, which is why this is a set
+> difference. Founder requirement, 2026-08-25: *"the pre seeded data must exist in new prod as well."*
 
 > **A12 is founder doctrine, not a nice-to-have** (2026-08-25): *"we as Shram Safal are not going to lie
 > to users — whatever we build, what we say on the app is true in its own sense."* It is the same rule as
@@ -220,8 +228,8 @@ restricted `agent-deployer` role), so the lane's `Deny` list does not apply to i
 | **P3** | `ConnectionStrings__ShramSafalDb_Migration` | **set, real value, user `agrisync_admin`** (len 217) |
 | **P4** | `…_ReadOnly` | **set, real value, user `agrisync_readonly`** (len 204) |
 | **P5** | `ssf.__ef_migrations` | **78 applied, last `20260703210908_RevertChildTableRlsWriteCheckToTrue`** ⇒ all 16 Wave 1 ssf migrations genuinely pending |
-| **P6** | `ssf.ai_jobs` row count | **0** |
-| **P7** | `ssf.daily_logs` row count | **0** |
+| ~~**P6**~~ | ~~`ssf.ai_jobs` row count~~ | ❌ **FALSIFIED 2026-08-25 → `91`.** Read under an RLS-blinded identity. |
+| ~~**P7**~~ | ~~`ssf.daily_logs` row count~~ | ❌ **FALSIFIED 2026-08-25 → `141`.** Same error. See below. |
 | **P8** | role privileges | `agrisync_app` / `agrisync_admin` / `agrisync_readonly` — all `super=false`, `bypassrls=false` |
 | **P9** | ssf tables already `FORCE RLS` | **32**, and the app works today against them |
 
@@ -238,16 +246,48 @@ restricted `agent-deployer` role), so the lane's `Deny` list does not apply to i
    tables, so it *is* subject to `FORCE RLS`. Mitigating evidence: **32 ssf tables already have
    `FORCE RLS` today and production works**, so the tenant-GUC path is already proven under exactly
    this condition. **A10 still verifies it after deploy** — proven pattern is not proof.
-3. 🟢 **§8 S5 (the `ACCESS EXCLUSIVE` lock) is MOOT, and so is the founder ruling it needed.**
-   `ssf.ai_jobs` holds **0 rows**, so `AddRawBlobSubjects`'s backfill has nothing to scan.
-   `ssf.daily_logs` also holds **0 rows**, so `AddDailyLogPlotIdsAndScope`'s full-table
-   `UPDATE … SET plot_ids = ARRAY[plot_id]` rewrites nothing. **No maintenance window is needed and
-   the out-of-band §4 tension does not arise.** Keep both on the boot path.
+3. ⚠️ **§8 S5 — RE-DERIVED 2026-08-25 on real numbers. Same conclusion, different reason.**
+   The original text claimed the lock was moot *because both tables hold 0 rows*. **That premise was
+   false** (`ai_jobs` = 91, `daily_logs` = 141), so the conclusion is not inherited — it is re-derived:
+   - `ssf.ai_jobs` — **91 rows, 22 pages, 504 kB.** `AddRawBlobSubjects` does take the
+     `ACCESS EXCLUSIVE` branch (the runner is `agrisync_app`; `rolsuper OR rolbypassrls` is false), but
+     it holds it over 504 kB. **Momentary, not a maintenance-window event.**
+   - `ssf.daily_logs` — **141 rows, 8 pages, 424 kB.** `AddDailyLogPlotIdsAndScope` now *also* takes an
+     `ACCESS EXCLUSIVE` lock, because the fix applied 2026-08-25 brackets its backfill with
+     `NO FORCE`/`FORCE ROW LEVEL SECURITY`. **This plan previously said that lock did not exist here.
+     It does now, deliberately, and it is the right trade** — without it the `UPDATE` classifies 0 of
+     141 rows and `ADD CONSTRAINT` aborts the boot with 23514, mid-batch. A runner that genuinely
+     bypasses RLS skips the ALTER and takes no lock at all.
+   - **Verdict: no maintenance window is needed and the out-of-band §4 tension does not arise** — on
+     the measured sizes, not on emptiness. Keep both on the boot path.
+   - 🛑 **The founder ruling this decision previously cancelled stays cancelled**, but on this
+     re-derivation. If either table grows by orders of magnitude before T1.14, re-measure first.
 
-> **P7 is the headline.** Production holds **zero farmer logs**. "No live farmers" is no longer
-> inferred from an SMS default — it is measured. The blast radius of Wave 1 against server-side
-> farmer data is, literally, nothing. On-device Dexie data (the founder's own handset) is separate
-> and A8 still guards it.
+> 🔴 **THE PARAGRAPH THAT STOOD HERE WAS FALSE. Struck 2026-08-25, not edited away.**
+>
+> It read: *"P7 is the headline. Production holds **zero farmer logs** … The blast radius of Wave 1
+> against server-side farmer data is, literally, nothing."*
+>
+> **Production holds 141 daily logs, 91 ai_jobs, 229,428 audit_events, 4 plots, 4 crop cycles and a
+> real farm** (`पुरुषोत्तमशेत, खार्डी`, created 2026-05-14; logs span 2026-02-13 → 2026-08-20 across
+> 96 distinct days, newest 5 days old).
+>
+> **P6 and P7 were not stale — they were wrong when taken.** `daily_logs` and `ai_jobs` both carry
+> `FORCE ROW LEVEL SECURITY` with a tenant-GUC policy, and Gate P's own **P8** measured every role as
+> `bypassrls=false`. A count under such a role with no GUC set returns `0` *whatever the table holds*.
+> Gate P measured *"I can see zero rows"* and this plan wrote down *"there are zero rows."* Proof, both
+> identities in one run: `SET ROLE agrisync_app` → **0**; as `agrisync_admin` (a member of
+> `rds_superuser`) → **141**. RLS-independent physical confirmation: `relpages` 8 and 22, `424 kB` and
+> `504 kB`.
+>
+> **This plan's own §0.4 caveat was right and Gate P overrode it: *"Treat prod data as real."* It is real.**
+>
+> Evidence: `_COFOUNDER/OS/State/Deploy/GATE_P/2026-08-25-gate-p-remeasurement.md` (`_COFOUNDER` `a90c1f1`,
+> corrected `4cc1160`), with SSM command ids.
+>
+> **Only Gate P results that returned ZERO from an RLS-protected table are suspect** — a non-zero
+> result cannot have been blinded to zero. P2, P2b, P3, P4, P5, P8, P9 are catalog / env / history
+> reads and stand unchanged.
 
 ### Gate P — original task list (HISTORICAL RECORD ONLY — ALL COMPLETE)
 
@@ -494,14 +534,19 @@ Rulebook §4 (`Data-prod`) — all of:
 - [ ] `frontend-ci` + `eslint` + `arch-tests` green **at the FINAL SHA** — **each via explicit `workflow_dispatch`** (T1.8).
       **server-auth `eaa6c60c`: all three green.** oversight `64d14255`: 2 of 3, `eslint` blocked on T1.4b.
       Must be **re-run on `release/wave-1`** after the merge — a green on the inputs is not a green on the result.
-- [ ] acceptance criteria **A1–A12 including A6b** proven + independent verifier APPROVE
-      *(A12 is the truth gate and A6b is boundary-history survival — neither is optional, and the spec
-      requires AC1–AC12. Earlier drafts said "A1–A11", which silently dropped both.)*
-      ⚠️ **A10 is vacuous on today's production and must not be recorded as `PASS`.** It reads "a sweeper
-      returns non-zero where non-zero is expected" — but Gate P measured `ssf.ai_jobs = 0` and
-      `ssf.daily_logs = 0`, so there is no expected non-zero and the check goes green having proved
-      nothing. It was written to guard the `agrisync_admin`-under-`FORCE RLS` residual (§0.2 W1b). Either
-      seed a row and re-run it, or record **`NOT_PROVEN`** and carry that residual explicitly.
+- [ ] acceptance criteria **A1–A13 including A6b** proven + independent verifier APPROVE
+      *(A12 is the truth gate, A6b is boundary-history survival, and **A13 is server-side farmer-data
+      survival** — none is optional. Earlier drafts said "A1–A11", which silently dropped A6b and A12;
+      A13 was added 2026-08-25 once Gate P's "zero rows" was falsified. The spec must be extended to
+      **AC1–AC13** to match — it stops at AC12.)*
+      ✅ **A10 is NO LONGER vacuous — re-tested 2026-08-25.** The earlier text said it was, *because
+      Gate P measured `ssf.ai_jobs = 0` and `ssf.daily_logs = 0`*. Both were false: 91 and 141. There
+      **is** an expected non-zero, so A10 is a real check and can be genuinely proven rather than
+      forced to `NOT_PROVEN`. It guards the `agrisync_admin`-under-`FORCE RLS` residual (§0.2 W1b),
+      which is itself now closed by mechanism — `agrisync_admin` is a member of `rds_superuser`.
+      🛑 **A10 must name the identity it is measured under.** Run naively as `agrisync_app` it reads 0
+      before and 0 after, compares two blindnesses, and passes green having proved nothing —
+      reproducing the exact P6/P7 error inside the criterion written to catch it.
 - [ ] 🔒 no out-of-band DB changes — **or the §8 reading accepted explicitly by the founder**
 - [ ] rollback plan (§8) + RDS snapshot floor + `e2e` — requires founder override, see §6
 - [ ] 🔒 runtime-proven before merge · 🔒 frontend built once and promoted *(⚠️ **no mechanism exists**: `ci-gate.yml:139` runs `npm run build` and publishes nothing; `deploy-s3.sh` uploads local `dist/`; no workflow invokes it. Build it or record `NOT_PROVEN`.)*
