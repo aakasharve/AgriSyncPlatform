@@ -90,6 +90,30 @@ afterEach(() => cleanup());
 describe('Task 13.3 — headcount-only logging is untouched (P9, Scenario 1)', () => {
     const LOG_ID = 'bbbbbbbb-0000-4000-8000-000000000001';
 
+    /*
+     * The तपासणी queue is bounded to the last 14 days
+     * (`REVIEW_QUEUE_MAX_AGE_DAYS`, ReviewSheet.tsx:36), so a LITERAL date in this
+     * fixture is a fuse, not a constant: the log stops rendering on the day it ages
+     * out and every assertion below then passes/fails for a reason that has nothing
+     * to do with P9. This block was written on 2026-08-11 carrying
+     * `detail: '2026-08-11'` (that day's date) and went red on 2026-08-26 — the
+     * first morning it was 15 days old — taking the P9 guard silently offline.
+     *
+     * The date was never the thing under test; "a headcount-only log that is
+     * CURRENTLY in the review queue" is. So the fixture states that directly.
+     * The bound itself keeps its own dedicated coverage in
+     * reviewApprove.test.ts:313.
+     *
+     * Built from local date parts, NOT `toISOString()` (UTC), because
+     * `parseReviewDetailDate` reads `detail` as a LOCAL `yyyy-MM-dd`
+     * (`new Date(detail + 'T00:00:00')`) — the same trap documented at
+     * reviewApprove.test.ts:279-282.
+     */
+    const todayIsoLocal = (): string => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
     /** "आज ८ मजूर होते" — a headcount and nothing else. */
     const headcountOnlyData = (): LabourData => ({
         ...EMPTY_LABOUR_DATA,
@@ -98,7 +122,7 @@ describe('Task 13.3 — headcount-only logging is untouched (P9, Scenario 1)', (
             who: 'रमेश',
             initial: 'र',
             tone: 'or',
-            detail: '2026-08-11',
+            detail: todayIsoLocal(),
             status: 'Confirmed',
             points: { count: 8 },
         }],
