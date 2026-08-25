@@ -330,7 +330,37 @@ blocker**, not a footnote.
       `gen-swap-script` as unused for this lane. No plugin edit, no anti-tamper conflict.
       *(Correction to v2: `api-binary-swap.sh` exists on three branches with three different blobs; only
       `verify-rollback-floor.sh` is server-auth-exclusive.)*
-- [ ] **T0.1b** 🔴 **INSTALL THE DEPLOY SCRIPTS ON THE BOX. Without this, T1.14 cannot run.**
+- [x] **T0.1b — DONE 2026-08-25. Both scripts installed and the floor check proven end-to-end.**
+      Installed into `/opt/agrisync/scripts/` (same directory, as `:303` requires), mode `755`, verified
+      by **sha256 match against the git blob**, not by "the command succeeded":
+      - `verify-rollback-floor.sh` → `86ca774ef7169243fc3ca10281d4e4d8461fe2af1c6e8eb0ceda237e96a847ac` (8737 B)
+      - `api-binary-swap.sh` → `76bfcfda8f28ad6b47b3d68618fcbd66d6f5604963ea9fbabd159f8779b4f248` (25429 B)
+
+      **The precondition this task told us to check FAILED, and was fixed — see "Blocker 6" below.**
+      End-to-end proof, run on the box:
+      ```
+      [rollback-floor] newest available snapshot: rds:shramsafal-prod-db-2026-08-25-00-44
+      [rollback-floor] created: 2026-08-25T00:44:50Z  (15h ago)
+      [rollback-floor] Required: not older than 6h
+      FLOOR_EXIT=43
+      ```
+      It reached the age check — meaning the `aws` CLI resolved (no exit 41) **and the
+      `describe-db-snapshots` call succeeded (no exit 42)**. Exit 43 is the correct answer: the newest
+      snapshot is automated and 15 h old. ⏱️ **This is the 6-hour fuse, now demonstrated rather than
+      predicted — T1.12's fresh snapshot must be taken within 6 h of T1.14.**
+
+      🔴 **BLOCKER 6 — found by this task's own precondition check, and closed 2026-08-25.**
+      The instance role `shramsafal-api-role` did **not** hold `rds:DescribeDBSnapshots`, so the floor
+      check exited 42 → `api-binary-swap.sh:309-311` exit 30, **after** `ec2-deploy-wrapper.sh:102` had
+      already burned the single-use GO token. `agent-deployer-permissions.json:43-51` grants that
+      permission to the **agent-deployer role**, and `verify-rollback-floor.sh:25` assumes that role is
+      what runs it — but the script runs **on the box**, as the instance profile. Fixed by a new inline
+      policy `AgriSyncRollbackFloorRead` on `shramsafal-api-role`: **`rds:DescribeDBSnapshots` only**,
+      nothing else, no destructive action, reversible by deleting the policy. The `DenyAnyDestructiveDbAction`
+      block is untouched. *(This is an IAM change; §3.1 declared "no IAM change". Founder delegated the
+      call 2026-08-25 — "resolve at your level". Recorded here rather than left implicit.)*
+
+      Original task text follows.
       Bypassing `gen-swap-script` (T0.1) also removed the only thing that *installed* a swap script —
       the generator wrote to `/opt/agrisync/scripts/api-binary-swap-<sha>.sh`
       (`gen-swap-script/SKILL.md:82`). Nothing else does.
@@ -343,7 +373,21 @@ blocker**, not a footnote.
       Also confirm on the box, or step 0b fails late: the `aws` CLI is present (else exit 41) and the
       instance profile allows `rds:DescribeDBSnapshots` (else exit 42).
 
-- [ ] **T0.1c** **Capture the three migration histories Gate P did not record.** P5 returned only
+- [x] **T0.1c — DONE 2026-08-25. All four contexts captured** (read-only, SSM, as `agrisync_admin`):
+
+      | Context | History table | Applied today |
+      |---|---|---|
+      | ShramSafal | `ssf.__ef_migrations` | **78** — last `20260703210908_RevertChildTableRlsWriteCheckToTrue` |
+      | User | `public.__ef_migrations` | **6** |
+      | Accounts | `accounts.__accounts_migrations_history` | **4** — last `20260605081204_AddOwnerAccountBootstrappedFarmId` |
+      | Analytics | `analytics.__analytics_migrations_history` | **10** — last `20260505000000_DwcV2Matviews` |
+
+      ⚠️ The User history table is `public.__ef_migrations` (snake_case), **not** the EF default
+      `public."__EFMigrationsHistory"` — that name does not exist and a query against it errors.
+      Wave 1 adds **0** User and **0** Accounts migrations, so `--expect-user 0 --expect-accounts 0`.
+      Full evidence with SSM command ids: `_COFOUNDER/OS/State/Deploy/GATE_P/2026-08-25-gate-p-remeasurement.md`.
+
+      Original task text follows. P5 returned only
       `ssf.__ef_migrations` (78, last `20260703210908`). T1.14 **requires** `--expect-before` and
       `--expect-after` and refuses a migration deploy without both (`api-binary-swap.sh:129-133`), and
       Step 12 fails the deploy if any *undeclared* context moved. Read `public.__ef_migrations`,
