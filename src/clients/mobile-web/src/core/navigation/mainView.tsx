@@ -134,7 +134,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
     const {
         status, mode, recordingSegment,
         setCurrentRoute,
-        ownerDisplayName, setMainView,
+        setMainView,
         crops, logScope, setLogScope, setMode, setStatus,
         hasActiveLogContext, isContextReady, error, errorTranscript,
         handleAudioReady, handleTextReady, handleManualSubmit,
@@ -442,7 +442,16 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                             const contextDetails = getLogContextSnapshot(log);
                                             const verification = getVerificationPresentation(log.verification?.status);
                                             const createdById = log.meta?.createdByOperatorId || '';
-                                            const loggedBy = operatorNameById.get(createdById) || ownerDisplayName;
+                                            // Truth audit T1.12b, finding 4. This used to fall back
+                                            // to `ownerDisplayName` — so a record nobody was recorded
+                                            // as making was attributed, by name, to a real person.
+                                            // `oversightSelectors.ts:20-22` states the opposite rule in
+                                            // this same release: "a person can only be counted if they
+                                            // were named." `अज्ञात` is the word the app already uses for
+                                            // this exact fact (the unattributed row in
+                                            // OversightBriefingCard), so "no identity" reads the same
+                                            // everywhere. `P4`/`P7`.
+                                            const loggedBy = operatorNameById.get(createdById) || 'अज्ञात';
                                             const primaryCropId = log.context.selection[0]?.cropId;
                                             const cropColor = crops.find(crop => crop.id === primaryCropId)?.color || 'bg-slate-400';
 

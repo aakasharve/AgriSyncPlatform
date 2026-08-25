@@ -7,10 +7,32 @@ import { formatDisplayTime } from '../../shared/utils/displayTime';
 export type FeedStatusTone = 'pending' | 'rejected' | 'approved';
 
 /**
+ * A manual or wizard log has no captured time. `log-factory-helpers.ts:288`
+ * stamps `meta.createdAtISO = \`${log.date}T12:00:00\`` so the record still
+ * sorts, and this formatter then rendered it as a confident **"12:00 PM"** on
+ * the log card — a measured clock time the app never measured. `P4`/`P8`,
+ * truth audit T1.12b finding 3.
+ *
+ * The placeholder is distinguishable, so this needs no new data: every REAL
+ * capture path writes a zoned UTC instant ending in `Z` (`LogFactory.ts:237`,
+ * `:455`; `log-partition-builders.ts:278`, `:423`), while the placeholder is
+ * zone-less AND exactly midday. A genuine noon recording is therefore still
+ * shown — it arrives as `...T12:00:00.000Z`, which keeps its zone and is not
+ * matched here.
+ *
+ * The `'--:--'` fallback was already the intended answer for "no time"; it
+ * simply never fired, because the placeholder always parsed.
+ */
+const NOON_PLACEHOLDER = /T12:00:00(\.0+)?$/;
+
+/**
  * 12-hour, AM/PM, IST — see `shared/utils/displayTime`. Kept as a named export
  * because `mainView` imports it; the formatting itself lives in one place now.
  */
-export const formatLogTime = (iso?: string): string => formatDisplayTime(iso, '--:--');
+export const formatLogTime = (iso?: string): string =>
+    iso && NOON_PLACEHOLDER.test(iso)
+        ? '--:--'
+        : formatDisplayTime(iso, '--:--');
 
 export const truncateLine = (value: string, maxLength: number = 72): string => {
     if (!value) return value;

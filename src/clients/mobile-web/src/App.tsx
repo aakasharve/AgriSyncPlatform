@@ -72,12 +72,33 @@ const AppFrame: React.FC<{
     );
 };
 
-// DEV-ONLY: ?preview=ops-admin bypasses auth entirely — mock data only
-const DEV_PREVIEW = typeof window !== 'undefined'
+// DEV-ONLY: ?preview=ops-admin bypasses auth entirely — mock data only.
+//
+// `import.meta.env.DEV` is load-bearing, not belt-and-braces. Both of these
+// were a URLSearchParams check ALONE, which is a runtime test — it ships in
+// the production bundle and stays reachable. `app.shramsafal.in?preview=labour`
+// rendered a full screen of invented workers (रोकडे / रमेश / सुनीता), invented
+// ₹ balances and invented plot percentages, to anyone, with no login. That is
+// exactly what `P4` forbids, aimed at the public internet.
+//
+// The correct pattern is documented twelve lines below and was already in this
+// release for the oversight preview: gate on DEV so Vite folds the branch to
+// dead code. Vite statically replaces `import.meta.env.DEV` with `false` in a
+// production build, so these constants become unconditionally false and the
+// previews cannot render.
+//
+// NOT done here, deliberately: `React.lazy` would also drop the modules and
+// their mock fixtures from the bundle entirely. That is the larger change the
+// oversight preview made, and this cutover is fenced against drift — the
+// screens are unreachable now, which is the farmer-facing defect. Carried to
+// Wave 2 as the completing fix.
+const DEV_PREVIEW = import.meta.env.DEV
+    && typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('preview') === 'ops-admin';
 
 // DEV-ONLY: ?preview=labour — Labour Management UI (mock data, no auth/backend)
-const LABOUR_PREVIEW = typeof window !== 'undefined'
+const LABOUR_PREVIEW = import.meta.env.DEV
+    && typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('preview') === 'labour';
 
 // DEV-ONLY: ?preview=oversight — Owner Oversight Loop, full-app preview
