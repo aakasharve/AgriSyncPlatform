@@ -79,11 +79,35 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
     ///
     /// Privilege note: <c>ssf.daily_logs</c> carries FORCE ROW LEVEL SECURITY
     /// (20260516130000). The UPDATE below is DML and is therefore subject to RLS
-    /// for any role that is not a superuser / BYPASSRLS. Migrations run on the
-    /// superuser connection here and in the integration chain. If they ever did
-    /// not, the classification UPDATE would touch zero rows and the subsequent
-    /// ADD CONSTRAINT would FAIL LOUDLY with 23514 rather than leave the table
-    /// half-classified — fail-closed by construction.
+    /// for any role that is not a superuser / BYPASSRLS.
+    ///
+    /// <b>This class previously asserted "migrations run on the superuser
+    /// connection here". That is FALSE on the production startup path, and it
+    /// was measured, not reasoned:</b> <c>Program.cs</c> migrates
+    /// <c>ssfContext</c>, which is registered against
+    /// <c>ConnectionStrings:ShramSafalDb</c> — the RUNTIME connection
+    /// (<c>agrisync_app</c>), not <c>_Migration</c>. Production confirms it from
+    /// the other end: all 77 <c>ssf</c> tables report
+    /// <c>relowner = agrisync_app</c>, so <c>agrisync_app</c> is what ran every
+    /// CREATE TABLE. And <c>agrisync_app</c> is a member only of
+    /// <c>agrisync_owner</c>, <c>agrisync_readonly</c> and <c>mis_reader</c> —
+    /// none of which carries <c>rolsuper</c> or <c>rolbypassrls</c>.
+    ///
+    /// Measured on production 2026-08-25, read-only: <c>SET ROLE agrisync_app;
+    /// SELECT count(*) FROM ssf.daily_logs</c> returns <b>0</b>, while the table
+    /// actually holds <b>141</b> rows. So the unbracketed UPDATE would have
+    /// classified nothing, every row would have kept the <c>'{}'</c> default,
+    /// and <c>ADD CONSTRAINT</c> would have raised 23514 — aborting the boot
+    /// mid-batch with the schema already partly applied. "Fail-closed" was
+    /// accurate; it just meant the API does not start.
+    ///
+    /// The UPDATE is therefore bracketed with the conditional FORCE-RLS lift
+    /// already used by <c>20260815102440_AddRawBlobSubjects</c>. The lift takes
+    /// an ACCESS EXCLUSIVE lock held to COMMIT; on this table that is 8 pages /
+    /// 424 kB, so the lock is momentary. A runner that genuinely bypasses RLS
+    /// skips the ALTER and takes no lock at all. The row-count assertion after
+    /// it turns a silent half-classification into a loud failure, rather than
+    /// relying on the CHECK to notice later.
     /// </remarks>
     public partial class AddDailyLogPlotIdsAndScope : Migration
     {
@@ -97,7 +121,46 @@ ALTER TABLE ssf.daily_logs
     ALTER COLUMN plot_id       DROP NOT NULL,
     ALTER COLUMN crop_cycle_id DROP NOT NULL;
 
-UPDATE ssf.daily_logs SET plot_ids = ARRAY[plot_id], scope = 'Plot';
+-- The classification UPDATE is DML and so is subject to FORCE ROW LEVEL
+-- SECURITY for any runner that cannot bypass RLS. On the production startup
+-- path the runner is agrisync_app, which cannot — see the class remarks. Lift
+-- FORCE for the duration, exactly as 20260815102440_AddRawBlobSubjects does,
+-- and put it straight back. A runner that can bypass skips the ALTER entirely
+-- and takes no lock. If the migration aborts, the transaction rolls the lift
+-- back with everything else, so FORCE can never be left off.
+DO $$
+DECLARE
+    can_bypass_rls boolean;
+    v_classified   bigint;
+    v_total        bigint;
+BEGIN
+    SELECT rolsuper OR rolbypassrls INTO can_bypass_rls
+      FROM pg_roles WHERE rolname = current_user;
+
+    IF NOT can_bypass_rls THEN
+        ALTER TABLE ssf.daily_logs NO FORCE ROW LEVEL SECURITY;
+    END IF;
+
+    UPDATE ssf.daily_logs SET plot_ids = ARRAY[plot_id], scope = 'Plot';
+    GET DIAGNOSTICS v_classified = ROW_COUNT;
+
+    -- Counted while the lift is still in effect, or the total would itself be
+    -- RLS-filtered and the comparison would compare two blindnesses and pass.
+    SELECT count(*) INTO v_total FROM ssf.daily_logs;
+
+    IF NOT can_bypass_rls THEN
+        ALTER TABLE ssf.daily_logs FORCE ROW LEVEL SECURITY;
+    END IF;
+
+    IF v_classified <> v_total THEN
+        RAISE EXCEPTION
+            'daily_logs classification touched % of % rows. Refusing to add ck_daily_logs_scope over a half-classified table.',
+            v_classified, v_total;
+    END IF;
+
+    RAISE NOTICE 'daily_logs classified: % of % rows (bypass_rls=%)',
+        v_classified, v_total, can_bypass_rls;
+END $$;
 
 ALTER TABLE ssf.daily_logs
     ALTER COLUMN plot_ids DROP DEFAULT,
