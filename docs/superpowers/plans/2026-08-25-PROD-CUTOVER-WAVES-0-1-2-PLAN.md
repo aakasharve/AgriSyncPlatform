@@ -134,7 +134,16 @@ Dexie: main 22 · dfes 23 · server-auth 24; `DexieDatabase.ts:249-250` declares
 **`Data-prod` · `trust_tier: high`** (Rulebook §1). Wave 1 hits five of seven triggers: DB migration,
 RLS, money (`cost_entries.direction`), attendance, prod resources.
 
-Wave 0 is also `Data-prod` ("any prod resource") but carries **zero migrations** and rolls back by
+⚠️ **CORRECTED 2026-08-25 — Wave 0 now carries ONE migration.** It previously carried zero. The
+plan's Wave 0 diagnosis was falsified (see T0.2): the Sarvam `ChatModel` swap does not touch the voice
+pipeline at all, so Wave 0 as originally specified could not achieve its own stated purpose. Wave 0 now
+also carries `20260825130000_SetTranscriberProviderToSarvam`, a one-column data migration that is the
+actual fix. **Consequence: Wave 0 now needs the RDS snapshot and the rollback-floor check it previously
+skipped** (`api-binary-swap.sh:300` gates step 0b on `TOTAL_EXPECTED > 0`). It also means Wave 0 now
+genuinely rehearses the full migration lane, which the original zero-migration Wave 0 structurally could
+not. The founder must not tick T0.5 against the old "zero migrations" description.
+
+Wave 0 is also `Data-prod` ("any prod resource"), carries **one data migration** and rolls back by
 binary swap. It is sequenced first deliberately as a lane rehearsal.
 
 ## 2. Spec ID
@@ -168,6 +177,14 @@ signing identity · AI prompt text (the Sarvam change is a *model* swap; §6 cov
 | **Frontend** | **YES** — Labour hub, oversight strip + waiting drawer, rebuilt log screen, `ai-drafts`, `FarmWideTodayPanel`, HarvestComingSoon, per-user IndexedDB, **Dexie 22→24**, + the four truth fixes in `d1c3837d` | **YES** — consent gate (**not** flag-gated, stands in front of login), understanding meter, question host, **Dexie owns v23** |
 | **Cross-cutting** | **YES** — new `web-release.yml` (T1.6); deploy scripts installed on the box (T0.1b); `_COFOUNDER` spec + corrections; Release Record row; **no** IaC, **no** IAM change, **no** new infrastructure | **YES** — 9 `VITE_*` flags baked at build time; 4 bundled legal documents |
 
+⚠️ **Wave 0's surface, added 2026-08-25 — this table listed only Waves 1 and 2, and Wave 0 is no
+longer empty.** **DB: YES** — one data-only migration, `20260825130000_SetTranscriberProviderToSarvam`,
+`UPDATE`ing one column of one row in `ssf.ai_provider_configs`. No DDL, no new table, no RLS change.
+**Backend: YES** — `Sarvam:ChatModel` config in 4 `appsettings*.json` + the `SarvamOptions.cs` default +
+`credentials.example.json`, plus the `AiResponseNormalizer` cherry-pick. **Frontend: No frontend
+changes.** **Cross-cutting: No IaC, no IAM change, no new secret** — but note Wave 0 now requires the
+RDS snapshot and the rollback-floor check, which the zero-migration version skipped.
+
 **Explicitly NOT touched (the YAGNI fence):** OTP/SMS delivery · AgriStack/UFSI · marketing site ·
 admin-web · keystore or signing identity · AI **prompt text** (the Sarvam change is a *model* swap) ·
 no feature-flag service, no canary, no runtime API-URL switch, no duplicate suites (Rulebook §4.1).
@@ -187,7 +204,18 @@ silence, or merge while any 👁️ item is open.**
 | A1 | Prod serves the new binary | `GET /version` = deployed SHA; `/health` + `/health/ready` = 200 |
 | A2 | Four migration histories moved as predicted | per-context **set difference** across the four history tables (`api-binary-swap.sh:452`, Step 12) |
 | A3 | Migration gate closed again | `ALLOW_PRODUCTION_STARTUP_MIGRATIONS` absent/false on the box post-deploy |
-| A4 | Marathi voice returns a Marathi transcript | one prod voice log → non-empty `mr` transcript, Sarvam path, **no Gemini fallback in logs**. **Re-proven after T1.14** (the API deploy), not only at T0.5 — *corrected 2026-08-25; this row read "T1.13" and contradicted T1.2's own body at `:388`. At T1.13 only the GO token has been minted, no code has shipped, and A4 is unprovable.* |
+| A4 | **Sarvam actually transcribes the Marathi, and the transcript is kept** | a prod voice log produces an `ssf.ai_jobs` row with **`transcript_provider = 'Sarvam'` (non-NULL)** and a non-empty codemix/verbatim transcript. **Gemini performing stage-2 bucketing is CORRECT and expected — it is the founder's design, not a failure.** Re-proven after T1.14, not only at T0.5. |
+
+> 🔧 **A4 rewritten 2026-08-25, twice over.** It first read "Re-proven after T1.13", contradicting T1.2's
+> own body at `:388` (at T1.13 only the GO token exists, no code has shipped, A4 is unprovable). It then
+> still read *"Sarvam path, **no Gemini fallback in logs**"* — **ambiguous on a criterion the founder
+> ticks.** Under his actual architecture Gemini SHOULD be in the pipeline doing the bucketing, so a
+> verifier could read a correctly-working system as a failure and reject it.
+>
+> The replacement is a single database field that cannot be misread. `transcript_provider` is written
+> **only** inside the two-stage path (`AiOrchestrator.cs:446`); it is NULL on all 91 existing production
+> jobs, which is itself the proof that path has never run. A non-NULL `'Sarvam'` on a new job therefore
+> proves the entire fix, needs no log access, and is machine-checkable. Mirrored into spec **AC4**.
 | A5 | Web build reaches app.shramsafal.in | edge `curl` of the hashed bundle = 200, hash matches the build |
 | A6 | Maps render on web | founder loads the boundary screen on `app.shramsafal.in` |
 | A6b | Boundary history is not destroyed | save a boundary twice on prod; `version` increments and the prior row is archived (**A6 cannot see this — see §8 S2**) |
@@ -401,7 +429,36 @@ blocker**, not a footnote.
       *(Read-only; same SSM path Gate P used. Reminder: SSM runs `sh` and rejects CRLF — send the script
       base64-encoded or it fails `exit 127` with a misleading "not found".)*
 
-- [ ] **T0.2** Branch `release/wave-0` from `main`. Apply the 4 `ChatModel` lines (`sarvam-m` → `sarvam-30b`) + `0c7cdef0` (`AiResponseNormalizer` duplicate-key tolerance; `AiResponseNormalizer.cs` verified present on **`main`**). **Do not** take the other 3 files of `0e57edc3` (§0.2 W6).
+- [x] **T0.2 — DONE 2026-08-25, and its premise was FALSIFIED in the doing. Read this before T0.5.**
+
+      🔴 **The `ChatModel` swap does NOT fix Marathi voice.** The plan built all of Wave 0 on that
+      belief. Measured: `Sarvam:ChatModel` is the Sarvam **structurer** model, consumed only by
+      `SarvamChatClient.cs:32` and `SarvamAiProvider.cs:95,175`. The founder's architecture
+      (2026-08-25) is *Sarvam transcribes, Gemini buckets* — it deliberately does not use a Sarvam
+      structurer. And it is **unreachable on production today**: `receipt_provider` and
+      `patti_provider` are both `Gemini`. So that fix is **latent, not farmer-visible**, and it does
+      not satisfy A4.
+
+      🔴 **The real defect was one database value.** `AiOrchestrator.cs:261-262` collapses the
+      pipeline when `transcriberType == structurerType`. Production held **both** as literal
+      `'Gemini'` (neither NULL), so every request bypassed Sarvam entirely before it was consulted.
+      Proof: `transcript_provider` is written only inside the two-stage path (`:446`) and is NULL on
+      **all 91** production `ai_jobs`, with **0** transcripts stored. Fixed by
+      `20260825130000_SetTranscriberProviderToSarvam`.
+
+      🟢 **Sarvam is not dead.** Probed live 2026-08-25: STT `saaras:v3` → **HTTP 200, alive**. Only
+      the Sarvam *chat* models are deprecated — and `sarvam-30b`, the value this task originally
+      specified, **is deprecated too** (HTTP 400, "use one of: sarvam-105b,
+      sarvam-105b-conversations"). Shipped `sarvam-105b-conversations`: same answer as `sarvam-105b`
+      on a real Marathi case, **12 vs 277 completion tokens**, and not a reasoning model that can
+      return `content: null` and silently fail over.
+
+      Delivered on `release/wave-0`: `8df7dae9` (cherry-pick `0c7cdef0`) · `d43c5d4e` + `b0d3a739`
+      (model config, 5 files incl. the C# default and the developer example) · `b1bbb9a3` (the
+      migration that is the actual fix). 21 tests green.
+
+      *Original task text follows.*
+- [x] ~~**T0.2**~~ Branch `release/wave-0` from `main`. Apply the 4 `ChatModel` lines (`sarvam-m` → `sarvam-30b`) + `0c7cdef0` (`AiResponseNormalizer` duplicate-key tolerance; `AiResponseNormalizer.cs` verified present on **`main`**). **Do not** take the other 3 files of `0e57edc3` (§0.2 W6).
 - [ ] **T0.3** Prompt-registry row + golden-set delta (CLAUDE.md DoD). Regression ⇒ Wave 0 reverts.
 - [ ] **T0.4** `workflow_dispatch` CI Gate (it does **not** fire on branch push — `ci-gate.yml:8-11`). Branch manifest from `BranchLibrary/_TEMPLATE.md` + `INDEX.md` row.
 - [ ] **T0.5** Founder acceptance → snapshot → GO token → deploy → prove A1, A4 → Release Record row.
@@ -645,7 +702,19 @@ Rulebook §4 (`Data-prod`) — all of:
 
 ## 8. Rollback plan
 
-**Wave 0:** binary swap back. Clean, no schema change. That is the point of Wave 0.
+**Wave 0:** ⚠️ **corrected 2026-08-25 — this previously read "Clean, no schema change. That is the
+point of Wave 0." That is no longer true.** Wave 0 now carries one data migration
+(`20260825130000_SetTranscriberProviderToSarvam`), so the binary swap alone is not the whole rollback.
+
+- **Binary**: swap back, as before.
+- **Data**: `Down()` restores `transcriber_provider` to match `structurer_provider`, narrowly (only rows
+  where transcriber=`Sarvam` and structurer=`Gemini`), so an operator who deliberately split them later
+  is not silently reverted.
+- **`RG4.5` — answered, not assumed.** The binary live on prod today (`5e65d32b`) was checked and DOES
+  contain `ParseVoiceTwoStageAsync`, the `ITranscriberProvider` registration and the collapse condition.
+  So rolling the binary back while leaving the data value forward **does not crash** — the old binary
+  runs the same two-stage path. **But that combination has never executed in production**, so it is
+  recorded as `NOT_PROVEN` rather than assumed benign. The cheap answer was not assumed.
 
 **Wave 1 — there is no clean rollback. Stated plainly:**
 
