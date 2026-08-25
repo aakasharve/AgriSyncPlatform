@@ -146,17 +146,44 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
             // swallows it. The linkage would be dead on arrival in exactly the
             // silent way ssf.correction_events was.
             //
-            // Why the schema-wide defaults do not cover it: the GRANTs in
-            // 20260515090000_BootstrapDbRoles are `ALTER DEFAULT PRIVILEGES FOR
-            // ROLE <the role that ran THAT migration>`, and those defaults apply
-            // only to tables subsequently created BY that same role. Migrations
-            // now run under the *_Migration connection (the superuser), so any
-            // table created from here on inherits nothing.
+            // ⚠️ CORRECTED 2026-08-25 (T1.6b). The rationale that stood here was
+            // built on a false premise and named three tables as broken in
+            // production that are not. Struck rather than deleted, because the
+            // explicit GRANT below is still correct and someone will otherwise
+            // wonder why it is here.
             //
-            // This is not unique to this table — ssf.field_operators,
-            // ssf.field_operator_work_rows and ssf.labour_corrections (all added
-            // 2026-08-11) currently have `relacl IS NULL` for the same reason.
-            // Those are outside this task; they are reported, not fixed here.
+            // It read: "Migrations now run under the *_Migration connection (the
+            // superuser), so any table created from here on inherits nothing" —
+            // and concluded that ssf.field_operators, ssf.field_operator_work_rows
+            // and ssf.labour_corrections "currently have `relacl IS NULL`".
+            //
+            // BOTH HALVES ARE WRONG, measured on production:
+            //
+            //  1. Migrations do NOT run as the superuser on the startup path.
+            //     Program.cs migrates ssfContext against ConnectionStrings:
+            //     ShramSafalDb — the RUNTIME connection (agrisync_app). Only
+            //     `dotnet ef` uses the design-time factory. Production confirms
+            //     it from the other end: all 77 ssf tables report
+            //     `relowner = agrisync_app`, so agrisync_app is what ran every
+            //     CREATE TABLE.
+            //
+            //  2. Nothing on production has a null ACL. Gate P measured
+            //     `count(*) FILTER (WHERE relacl IS NULL) = 0` across all 77 ssf
+            //     tables, and `0 of 77` tables that agrisync_app cannot INSERT
+            //     into. The three tables named above do not even exist on
+            //     production yet — they are created BY the pending Wave 1
+            //     migrations. The `relacl IS NULL` observation came from a local
+            //     `dotnet ef` run, where the design-time factory uses a different
+            //     role and the ALTER DEFAULT PRIVILEGES therefore do not apply.
+            //     It was a local-environment artifact read as a production fact.
+            //
+            // The GRANT below stays. Because the migration runner IS the owner,
+            // it is very likely redundant in production — but an explicit GRANT
+            // to the role that must read and write this table is cheap, correct
+            // under either ownership model, and idempotent. What was wrong was
+            // the reasoning and the claim about other tables, not the statement.
+            //
+            // Evidence: _COFOUNDER/OS/State/Deploy/GATE_P/2026-08-25-gate-p-remeasurement.md
             //
             // Idempotent and role-guarded: a database where the roles were never
             // bootstrapped (some test harnesses) skips instead of failing.
