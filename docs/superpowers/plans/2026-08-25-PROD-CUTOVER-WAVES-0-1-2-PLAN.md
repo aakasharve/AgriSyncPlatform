@@ -197,8 +197,14 @@ silence, or merge while any 👁️ item is open.**
 | A10 | Admin-scope paths still return rows | after deploy, one retention/compliance sweeper run returns non-zero where non-zero is expected (**guards §0.2 W1b**) |
 | A11 | RG1–RG5 recorded verbatim | Release Record row, three verdicts, `NOT_PROVEN` never rounded up |
 | **A12** | **Every claim the app makes to a farmer is one the data can back** | **truth audit (T1.12b) returns zero unqualified claims; each finding either fixed or shown to the farmer as approximate/unknown** |
-| **A13** | **The farmer's server-side data survives the cutover, and the backfill actually reached it** | **set difference, not counts** — capture the `ssf.daily_logs` id set (or a checksum over it) plus `plots` / `crop_cycles` / `farms` / `farm_memberships` **before T1.14**, compare after. Post-condition: every surviving log carries `plot_ids`, `scope='Plot'`, and `count(*) FILTER (WHERE plot_id IS NULL)` is still `0`. 🛑 **Measured as `agrisync_admin` (a member of `rds_superuser`) or with the tenant GUC set — the identity is part of the criterion.** Run as `agrisync_app` it reads 0 before and 0 after and passes green having proved nothing. |
+| **A13** | **The farmer's server-side data survives the cutover, and the backfill actually reached it** | **set difference, not counts** — capture the `ssf.daily_logs` id set (or a checksum over it) plus `plots` / `crop_cycles` / `farms` / `farm_memberships` **before T1.14**, compare after. Post-condition: every surviving log carries `plot_ids`, `scope='Plot'`, and `count(*) FILTER (WHERE plot_id IS NULL)` is still `0`. 🛑 **The check MUST first assert `row_security_active('ssf.daily_logs') = false` (or run under `SET row_security = off`, which errors rather than filtering silently), and record that assertion alongside the counts.** Naming a role is not enough — `agrisync_admin` is observed to read unfiltered, but the reason is NOT established (`rds_superuser` carries neither `rolsuper` nor `rolbypassrls`), so a check that trusts the role name inherits an unverified story. Run as `agrisync_app` it reads 0 before and 0 after and passes green having proved nothing. |
 
+> ⚠️ **Also corrected 2026-08-25: `ssf.farm_boundaries` holds 1 row, not 0.** An earlier note in this
+> plan's evidence trail called it empty on the strength of `relpages=0`; that statistic is only
+> refreshed by VACUUM/ANALYZE and the table has never been analyzed (`reltuples = -1`). The founder has
+> a real boundary at `version 1` from 2026-05-14, and there is no separate archive table — history is
+> in-table by version. **§8 S2 therefore has a real row to damage, and A6b is not optional.**
+>
 > **Why A13 exists, added 2026-08-25.** Nothing in A1–A12 covered it: `A8` is on-device Dexie, `A2` is
 > migration-history bookkeeping rather than row data, `A6b` is boundaries only, `A10` is admin
 > *visibility* rather than survival. The gap was not an oversight — the plan believed production held
