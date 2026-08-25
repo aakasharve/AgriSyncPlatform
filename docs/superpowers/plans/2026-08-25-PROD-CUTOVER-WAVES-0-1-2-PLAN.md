@@ -204,7 +204,28 @@ silence, or merge while any 👁️ item is open.**
 | A1 | Prod serves the new binary | `GET /version` = deployed SHA; `/health` + `/health/ready` = 200 |
 | A2 | Four migration histories moved as predicted | per-context **set difference** across the four history tables (`api-binary-swap.sh:452`, Step 12) |
 | A3 | Migration gate closed again | `ALLOW_PRODUCTION_STARTUP_MIGRATIONS` absent/false on the box post-deploy |
-| A4 | **Sarvam actually transcribes the Marathi, and the transcript is kept** | a prod voice log produces an `ssf.ai_jobs` row with **`transcript_provider = 'Sarvam'` (non-NULL)** and a non-empty codemix/verbatim transcript. **Gemini performing stage-2 bucketing is CORRECT and expected — it is the founder's design, not a failure.** Re-proven after T1.14, not only at T0.5. |
+| ~~A4~~ | 🛑 **MOVED TO WAVE 0 — NOT PROVABLE IN WAVE 1. See the note below the table.** ~~Sarvam actually transcribes the Marathi, and the transcript is kept~~ | a prod voice log produces an `ssf.ai_jobs` row with **`transcript_provider = 'Sarvam'` (non-NULL)** and a non-empty codemix/verbatim transcript. **Gemini performing stage-2 bucketing is CORRECT and expected — it is the founder's design, not a failure.** Re-proven after T1.14, not only at T0.5. |
+
+> 🛑 **A4 IS NOT A WAVE 1 CRITERION. Struck from Wave 1's DoD 2026-08-25 (CTO finding F2).**
+>
+> A4 requires a production voice log to write `transcript_provider = 'Sarvam'`. The **only** change that
+> enables that path is `20260825130000_SetTranscriberProviderToSarvam`, and it lives on
+> **`release/wave-0` alone** — verified: `git ls-tree release/wave-1 … | grep SetTranscriberProviderToSarvam`
+> returns **0**, `release/wave-0` returns **1**.
+>
+> The founder deferred all AI work on 2026-08-25 (*"we can deliberately fix the AI part later … just make
+> sure the deployment work happens"*), so Wave 0 is parked. **Wave 1 therefore cannot satisfy A4, and
+> handing the founder a criterion he cannot tick is exactly the dishonesty A12 exists to prevent.**
+> A4 travels with Wave 0 and is proven in Wave 0's Release Record, whenever that ships.
+>
+> **Wave 1's acceptance set is therefore A1–A3, A5–A13 (twelve criteria), not A1–A13.**
+>
+> ⚠️ **This also pins `--migrations 16`.** Wave 0 carries exactly one pending ssf migration. If Wave 0
+> ever lands on `main` and is merged in, Wave 1's count becomes **17** and passing 16 exits **29 at Step
+> 12 — after the schema has applied and the GO token has burned.** While Wave 0 stays parked, the number
+> is **16**. Independently re-derived: 17 files pending at file level, minus
+> `20260424124500_MakeGeminiPrimaryAiProviderConfig`, which `dotnet ef migrations list` proves EF cannot
+> see (it carries no `[Migration]` attribute), = **16 EF-visible**.
 
 > 🔧 **A4 rewritten 2026-08-25, twice over.** It first read "Re-proven after T1.13", contradicting T1.2's
 > own body at `:388` (at T1.13 only the GO token exists, no code has shipped, A4 is unprovable). It then
@@ -679,7 +700,8 @@ Rulebook §4 (`Data-prod`) — all of:
 - [ ] `frontend-ci` + `eslint` + `arch-tests` green **at the FINAL SHA** — **each via explicit `workflow_dispatch`** (T1.8).
       **server-auth `eaa6c60c`: all three green.** oversight `64d14255`: 2 of 3, `eslint` blocked on T1.4b.
       Must be **re-run on `release/wave-1`** after the merge — a green on the inputs is not a green on the result.
-- [ ] acceptance criteria **A1–A13 including A6b** proven + independent verifier APPROVE
+- [ ] acceptance criteria **A1–A3 and A5–A13, including A6b** proven + independent verifier APPROVE
+      🛑 **A4 is EXCLUDED from Wave 1** — the migration that enables it is on `release/wave-0` only, which is parked. It is Wave 0's criterion. See the note under the acceptance table.
       *(A12 is the truth gate, A6b is boundary-history survival, and **A13 is server-side farmer-data
       survival** — none is optional. Earlier drafts said "A1–A11", which silently dropped A6b and A12;
       A13 was added 2026-08-25 once Gate P's "zero rows" was falsified. The spec must be extended to
