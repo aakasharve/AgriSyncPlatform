@@ -198,7 +198,8 @@ function AuthProbe(): React.ReactElement {
 
 async function renderAuthenticatedAs(userId: string): Promise<void> {
     mockRefreshSession.mockResolvedValueOnce({
-        userId, accessToken: 'tok', expiresAtUtc: '2099-01-01T00:00:00Z',
+        kind: 'refreshed',
+        session: { userId, accessToken: 'tok', expiresAtUtc: '2099-01-01T00:00:00Z' },
     });
     render(React.createElement(AuthProvider, null, React.createElement(AuthProbe)));
     await waitFor(() => {

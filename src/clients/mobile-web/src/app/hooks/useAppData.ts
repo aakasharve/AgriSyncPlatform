@@ -71,11 +71,32 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
     // --- LOCAL STATE (Mirrors DataSource) ---
     // Start with empty crops - will be populated based on demo mode
     const [crops, setCrops] = useState<CropProfile[]>([]);
-    // Separate state for user's real crops (persisted)
-    const [realCrops, setRealCrops] = useState<CropProfile[]>([]);
+    // Separate state for user's real crops (persisted). Written by the load
+    // effect, read by nothing today — underscored so the lint gate passes without
+    // dropping state whose removal would change a render cycle.
+    const [_realCrops, setRealCrops] = useState<CropProfile[]>([]);
+    // The profile a farmer sees BEFORE his first sync pull lands.
+    //
+    // It used to be a stranger's: name "Shetkari Raja", village "Nashik", and
+    // three invented colleagues — "Suresh (Manager)" and "Agronomist" — carrying
+    // phone numbers that belong to somebody. None of it was behind a demo guard
+    // (the real demo seed IS gated, in `purveshDemoEnrichment.ts`), so every new
+    // farmer opened the app to another man's identity and had to work out that
+    // the app did not know who he was.
+    //
+    // `P4`/`P5` — an empty field that says "—" is honest; a filled one that is
+    // wrong is not. IdentitySection already renders `profile.name || '—'` and has
+    // an empty-operators branch, so blank needs no new UI.
+    //
+    // The single `owner` operator STAYS, and so does `activeOperatorId: 'owner'`:
+    // that id is a load-bearing identity check (`isOwner` in `LogFactory` and
+    // `log-partition-builders` partitions logs on it), and "Owner" is a role, not
+    // a claimed person. The sync pull replaces this list with real operators.
+    //
+    // evidence: docs/LAUNCH-READINESS-AND-AGRISTACK-2026-08-23.md — Decision 2 item 3
     const [farmerProfile, setFarmerProfile] = useState<FarmerProfile>({
-        name: 'Shetkari Raja',
-        village: 'Nashik',
+        name: '',
+        village: '',
         phone: '',
         language: 'mr',
         verificationStatus: VerificationStatus.Unverified,
@@ -87,24 +108,6 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
                 capabilities: Object.values(OperatorCapability) as OperatorCapability[],
                 isVerifier: true,
                 isActive: true
-            },
-            {
-                id: 'manager1',
-                name: 'Suresh (Manager)',
-                role: 'SECONDARY_OWNER',
-                capabilities: [OperatorCapability.VIEW_ALL, OperatorCapability.LOG_DATA, OperatorCapability.APPROVE_LOGS],
-                isVerifier: true,
-                isActive: true,
-                phone: '9876543210'
-            },
-            {
-                id: 'verifier1',
-                name: 'Agronomist',
-                role: 'WORKER',
-                capabilities: [OperatorCapability.VIEW_ALL, OperatorCapability.APPROVE_LOGS],
-                isVerifier: true,
-                isActive: true,
-                phone: '9876543211'
             }
         ],
         activeOperatorId: 'owner',
@@ -125,10 +128,20 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
             },
             updatedAt: new Date().toISOString()
         },
+        // 20.0N 73.8E is Nashik, and `source: 'manual'` claimed the FARMER had
+        // set it. He had not. It is not a cosmetic default either: weather
+        // resolution goes farm centre → profile location → device GPS
+        // (`useWeatherMonitor.ts`), so this stamp sat AHEAD of his real GPS and a
+        // farmer in Sangli was shown Nashik's forecast — with no way to tell.
+        //
+        // 0/0/'unknown' is the sentinel the sync reconciler already uses for
+        // "we don't know yet" (`profileAndCropsReconciler.ts`), and both the
+        // profile and device paths in useWeatherMonitor explicitly reject it, so
+        // the fallback chain now runs on to the farmer's actual location.
         location: {
-            lat: 20.0,
-            lon: 73.8,
-            source: 'manual',
+            lat: 0,
+            lon: 0,
+            source: 'unknown',
             updatedAt: new Date().toISOString()
         },
         infrastructure: {
@@ -264,7 +277,7 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
         await dataSource.crops.save(newCrops);
     };
 
-    const handleAddPerson = (person: any) => {
+    const handleAddPerson = (person: Person) => {
         setFarmerProfile(prev => ({
             ...prev,
             operators: [...(prev.operators || []), {

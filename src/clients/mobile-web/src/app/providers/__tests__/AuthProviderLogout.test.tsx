@@ -13,7 +13,7 @@
  * - Backend failure still clears local state and goes anonymous (fail-closed).
  *
  * Task 6.2:
- * - refresh 401 (refreshSession resolves null) → clearAuthSession, authStatus anonymous.
+ * - refresh 401 (refreshSession resolves { kind: 'rejected' }) → clearAuthSession, authStatus anonymous.
  * - NOTE: the assertion that AgriSyncClient.refreshSession() calls
  *   clearNativeRefreshSession on failure lives in AuthResourceCookieRefresh.test.ts
  *   (loads the REAL AgriSyncClient). This file mocks refreshSession wholesale and
@@ -108,7 +108,7 @@ function LogoutProbe(): React.ReactElement {
  */
 async function renderAuthenticated() {
     const fakeSession = { userId: 'u-1', accessToken: 'tok', expiresAtUtc: '2099-01-01T00:00:00Z' };
-    mockRefreshSession.mockResolvedValueOnce(fakeSession);
+    mockRefreshSession.mockResolvedValueOnce({ kind: 'refreshed', session: fakeSession });
 
     render(
         <AuthProvider>
@@ -268,9 +268,9 @@ describe('AuthProvider — Task 6.2 refresh fail-closed', () => {
         cleanup();
     });
 
-    it('refresh 401 (resolves null) → authStatus anonymous', async () => {
-        // First call from boot: returns null (simulating 401 / expired cookie)
-        mockRefreshSession.mockResolvedValueOnce(null);
+    it("refresh 401 (outcome 'rejected') → authStatus anonymous", async () => {
+        // First call from boot: the server judged the credential and refused it.
+        mockRefreshSession.mockResolvedValueOnce({ kind: 'rejected' });
 
         render(
             <AuthProvider>
@@ -283,8 +283,8 @@ describe('AuthProvider — Task 6.2 refresh fail-closed', () => {
         });
     });
 
-    it('refresh failure → clearAuthSession called', async () => {
-        mockRefreshSession.mockResolvedValueOnce(null);
+    it('a server rejection → clearAuthSession called', async () => {
+        mockRefreshSession.mockResolvedValueOnce({ kind: 'rejected' });
 
         render(
             <AuthProvider>
@@ -299,7 +299,11 @@ describe('AuthProvider — Task 6.2 refresh fail-closed', () => {
         expect(mockClearAuthSession).toHaveBeenCalled();
     });
 
-    it('refresh rejection → authStatus anonymous', async () => {
+    // A THROWN refresh is not a rejection. Nothing judged the credential, so
+    // with no warm session we land on anonymous WITHOUT clearing anything — the
+    // Keystore token survives for the next launch with signal. See
+    // AuthProvider.test.tsx §'an unreachable server must not end the session'.
+    it('refresh throwing → authStatus anonymous', async () => {
         mockRefreshSession.mockRejectedValueOnce(new Error('network'));
 
         render(

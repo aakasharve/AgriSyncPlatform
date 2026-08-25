@@ -12,6 +12,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { agriSyncClient, type AuthResponseDto } from '../../infrastructure/api/AgriSyncClient';
+import type { RefreshOutcome } from '../../infrastructure/api/transport';
 import {
     AUTH_SESSION_CHANGED_EVENT,
     clearAuthSession,
@@ -100,27 +101,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAuthStatus(current !== null ? 'authenticated' : 'anonymous');
     }, []);
 
-    const refresh = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const refreshed = await agriSyncClient.refreshSession();
-            if (refreshed) {
-                setSession(refreshed);
-                setAuthError(null);
-                setAuthStatus('authenticated');
-            } else {
-                clearAuthSession();
-                setSession(null);
-                setAuthStatus('anonymous');
-            }
-        } catch {
+    // Apply a refresh outcome to provider state.
+    //
+    // 'refreshed'   the server issued a session. Authenticated, no question.
+    //
+    // 'rejected'    the server judged the credential and refused it.
+    //               refreshSession() has already cleared storage and the
+    //               Keystore; mirror that into React state. Anonymous.
+    //
+    // 'unreachable' NOTHING judged the credential — we could not reach a
+    //               server. This is the case that used to log farmers out for
+    //               good, and the whole point of the fix is that we now do the
+    //               opposite of clearing: whatever warm session is in storage
+    //               stays, and the farmer keeps his app and his local records.
+    //               An unverified access token grants nothing on its own — the
+    //               first real request that meets a live server and gets a 401
+    //               routes back through refreshSession() and clears properly.
+    //               With no warm session there is nothing to show, so we land
+    //               on 'anonymous' — but we still clear NOTHING, so the durable
+    //               Keystore token is there for the next launch with signal.
+    const applyRefreshOutcome = useCallback((outcome: RefreshOutcome) => {
+        if (outcome.kind === 'refreshed') {
+            setSession(outcome.session);
+            setAuthError(null);
+            setAuthStatus('authenticated');
+            return;
+        }
+
+        if (outcome.kind === 'rejected') {
             clearAuthSession();
             setSession(null);
             setAuthStatus('anonymous');
+            return;
+        }
+
+        const warm = getAuthSession();
+        setSession(warm);
+        setAuthStatus(warm !== null ? 'authenticated' : 'anonymous');
+    }, []);
+
+    const refresh = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            applyRefreshOutcome(await agriSyncClient.refreshSession());
+        } catch {
+            // refreshSession() does not throw by contract; if some future edit
+            // makes it, treat the outcome as unknown rather than as proof the
+            // credential is dead — the same reasoning as 'unreachable'.
+            applyRefreshOutcome({ kind: 'unreachable' });
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [applyRefreshOutcome]);
 
     // Boot-validation effect: runs once on mount.
     // Always attempts one cookie refresh unless a join deep link is active.
@@ -134,22 +166,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Even if we have a valid-looking access token in storage, we still
         // attempt a refresh to validate the server-side session. This prevents
-        // a stale access token from being treated as truth.
-        void agriSyncClient.refreshSession().then(refreshed => {
-            if (refreshed) {
-                setSession(refreshed);
-                setAuthStatus('authenticated');
-            } else {
-                clearAuthSession();
-                setSession(null);
-                setAuthStatus('anonymous');
-            }
-        }).catch(() => {
-            clearAuthSession();
-            setSession(null);
-            setAuthStatus('anonymous');
-        });
-    }, []);
+        // a stale access token from being treated as truth — but a failure to
+        // ASK is not an answer, so see applyRefreshOutcome for what each of the
+        // three outcomes means.
+        void agriSyncClient.refreshSession()
+            .then(applyRefreshOutcome)
+            .catch(() => applyRefreshOutcome({ kind: 'unreachable' }));
+    }, [applyRefreshOutcome]);
 
     useEffect(() => {
         const onStorage = (event: StorageEvent) => {

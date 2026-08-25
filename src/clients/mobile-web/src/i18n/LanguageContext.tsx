@@ -26,11 +26,24 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     // Sub-plan 04 Task 3 — language preference now lives in Dexie's uiPrefs
-    // (via useUiPref). Initial render returns the 'en' fallback; the
-    // persisted value swaps in once Dexie load resolves, matching the
-    // previous useEffect-on-mount behaviour byte-for-byte.
-    const [storedLanguage, setStoredLanguage] = useUiPref<Language>('agrilog_language', 'en');
-    const language: Language = storedLanguage === 'en' || storedLanguage === 'mr' ? storedLanguage : 'en';
+    // (via useUiPref). Initial render returns the fallback; the persisted value
+    // swaps in once Dexie load resolves.
+    //
+    // The fallback is MARATHI. It used to be English, which meant a Marathi
+    // voice-first app for Marathi smallholders opened in English on every first
+    // launch and every fresh install — the one moment a farmer decides whether
+    // this app is for him. `LanguageSyncFromServer` right below already states
+    // the rule ("Marathi should load first — not whatever localStorage
+    // remembers"); the fallback simply contradicted it, and the server
+    // preference it relies on arrives too late to cover the first paint.
+    //
+    // A farmer who chooses English still keeps English: the stored uiPref wins
+    // as soon as Dexie resolves, and the server sync only maps an explicit 'en'
+    // back to English.
+    //
+    // evidence: docs/LAUNCH-READINESS-AND-AGRISTACK-2026-08-23.md — Decision 2 item 4
+    const [storedLanguage, setStoredLanguage] = useUiPref<Language>('agrilog_language', 'mr');
+    const language: Language = storedLanguage === 'en' || storedLanguage === 'mr' ? storedLanguage : 'mr';
 
     const setLanguage = (lang: Language) => {
         setStoredLanguage(lang);

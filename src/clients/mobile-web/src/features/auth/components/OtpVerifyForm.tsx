@@ -26,7 +26,6 @@ interface OtpVerifyFormProps {
 const OtpVerifyForm: React.FC<OtpVerifyFormProps> = ({ phone, otpMeta, onVerified, onBack }) => {
     const [otp, setOtp] = useState('');
     const [displayName, setDisplayName] = useState('');
-    const [isNewUser, setIsNewUser] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [secondsLeft, setSecondsLeft] = useState(otpMeta.resendAfterSeconds ?? 30);
@@ -51,10 +50,28 @@ const OtpVerifyForm: React.FC<OtpVerifyFormProps> = ({ phone, otpMeta, onVerifie
         setError(null);
         try {
             const deviceId = getOrCreateDeviceId();
+            // Send the name whenever the farmer typed one.
+            //
+            // This used to be gated on `isNewUser`, which is only ever set FROM
+            // the response of this very call — so on the one request where it
+            // mattered it was always false, the name was never sent, and
+            // `VerifyOtpHandler` fell through to its `$"User {phone[^4..]}"`
+            // fallback. Every farmer in the pilot would have been called
+            // "User 4567" by an app whose whole point is that it knows him.
+            // `setIsNewUser(true)` then fired into a page that `onVerified()`
+            // unmounts, so the name field could never render either.
+            //
+            // The backend ignores DisplayName for an existing user (it only
+            // reads it on the create branch), so sending it unconditionally is
+            // safe — and it is the only enumeration-safe option: start-otp
+            // deliberately does not tell the client whether a phone is already
+            // registered, and it should not start.
+            //
+            // evidence: docs/LAUNCH-READINESS-AND-AGRISTACK-2026-08-23.md — Decision 2 item 4
             const res = await verifyOtp(
                 phone,
                 otp,
-                isNewUser && displayName ? displayName : undefined,
+                displayName.trim() ? displayName.trim() : undefined,
                 { rememberDevice, deviceId, platform: 'web' },
             );
             // spec: secure-remembered-device-sessions-2026-06-24 — Task 4.2
@@ -66,9 +83,9 @@ const OtpVerifyForm: React.FC<OtpVerifyFormProps> = ({ phone, otpMeta, onVerifie
                 accessToken: res.accessToken,
                 expiresAtUtc: res.expiresAtUtc,
             });
-            if (res.createdNewUser) {
-                setIsNewUser(true);
-            }
+            // `res.createdNewUser` is no longer read here: the name field it
+            // used to reveal is now always visible, and this page unmounts on
+            // onVerified() anyway, so nothing could ever have seen it.
             onVerified();
         } catch (err) {
             const otpErr = err as OtpError;
@@ -99,23 +116,35 @@ const OtpVerifyForm: React.FC<OtpVerifyFormProps> = ({ phone, otpMeta, onVerifie
                 </p>
             </div>
 
-            {isNewUser && (
-                <div className="space-y-1">
-                    <label htmlFor="otp-name" className="block text-xs font-bold uppercase tracking-wide text-stone-500">
-                        नाव · Display name
-                    </label>
-                    <input
-                        id="otp-name"
-                        type="text"
-                        value={displayName}
-                        onChange={e => setDisplayName(e.target.value)}
-                        placeholder="Your name (optional)"
-                        autoComplete="name"
-                        className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200/60"
-                        disabled={isLoading}
-                    />
-                </div>
-            )}
+            {/* Always shown. It was behind `isNewUser`, a flag that cannot be
+                true before the request it gates — so the field was unreachable
+                and every new farmer was named "User 4567". We cannot ask the
+                server whether this phone is new without leaking who is
+                registered, so we ask everyone; the backend uses it only when it
+                creates the account. */}
+            <div className="space-y-1">
+                <label
+                    htmlFor="otp-name"
+                    className="block text-xs font-bold uppercase tracking-wide text-stone-500"
+                    style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
+                >
+                    तुमचं नाव · Your name
+                </label>
+                <input
+                    id="otp-name"
+                    type="text"
+                    value={displayName}
+                    onChange={e => setDisplayName(e.target.value)}
+                    placeholder="उदा. पुरुषोत्तम आरवे"
+                    autoComplete="name"
+                    style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
+                    className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200/60"
+                    disabled={isLoading}
+                />
+                <p className="text-[10px] text-stone-400" style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}>
+                    पहिल्यांदा येत असाल तरच लागेल · Only needed the first time
+                </p>
+            </div>
 
             <div className="space-y-1">
                 <label htmlFor="otp-code" className="block text-xs font-bold uppercase tracking-wide text-stone-500">

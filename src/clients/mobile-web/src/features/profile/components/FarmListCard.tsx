@@ -3,13 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * One farm as a soft rounded card in the Profile's "Your Farms" list.
- * A farm = one 7/12 holding. Presentational only — receives its farm +
- * a tenure hint and reports taps upward. Matches the approved mockup.
+ * A farm is ONE holding; the code shown on it is the join code the farm
+ * issues, NOT the 7/12 land record (see farmLabels.farmCodeLabel).
+ * Presentational only — receives its farm + a tenure hint and reports taps
+ * upward. Matches the approved mockup.
  */
 import React from 'react';
-import { Sprout, FileText, ChevronRight } from 'lucide-react';
+import { Sprout, Hash, ChevronRight } from 'lucide-react';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
-import { tenureLabel, sevenTwelveLabel, type Tenure } from './farmLabels';
+import { tenureLabel, farmCodeLabel, type Tenure } from './farmLabels';
 
 export interface FarmListCardProps {
     farm: MyFarmDto;
@@ -20,7 +22,7 @@ export interface FarmListCardProps {
 
 const FarmListCard: React.FC<FarmListCardProps> = ({ farm, tenure = 'owned', onOpen, language }) => {
     const t = tenureLabel(tenure);
-    const seven = sevenTwelveLabel(farm.farmCode);
+    const code = farmCodeLabel(farm.farmCode, language);
     const isOwned = tenure === 'owned';
     return (
         <button
@@ -33,15 +35,15 @@ const FarmListCard: React.FC<FarmListCardProps> = ({ farm, tenure = 'owned', onO
             </span>
             <span className="min-w-0 flex-1">
                 <span className="block truncate text-[15.5px] font-bold text-slate-800">{farm.name}</span>
-                {/* Tenure chip + 7/12 code wrap onto a meta line so the farm
+                {/* Tenure chip + farm code wrap onto a meta line so the farm
                     name keeps the whole first row on a narrow phone. */}
                 <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className={`rounded-lg px-2 py-0.5 text-[9.5px] font-extrabold uppercase tracking-tight ${isOwned ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-700'}`}>
                         {language === 'mr' ? t.mr : t.en}
                     </span>
-                    {seven && (
+                    {code && (
                         <span className="flex items-center gap-1 text-[10.5px] text-slate-400">
-                            <FileText size={12} /> {seven}
+                            <Hash size={12} /> {code}
                         </span>
                     )}
                 </span>
