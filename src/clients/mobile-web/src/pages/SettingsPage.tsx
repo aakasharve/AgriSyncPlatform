@@ -123,7 +123,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                         <p className="text-xs text-stone-400 font-medium mt-0.5">{t('settings.harvestDescription')}</p>
                     </div>
                 </div>
-                <HarvestComingSoon />
+                <HarvestComingSoon language={language} />
             </div>
 
             {/* Engineer-only tools — hidden from farmers in production builds. */}

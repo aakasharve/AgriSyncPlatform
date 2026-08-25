@@ -212,6 +212,20 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   // only `MyFarmDto` (farmId/name/role/farmCode/subscription — no plot
   // count), so a caller that omits `oversightData` (every test but the
   // "real data" one) gets an honest 0, never a fabricated count (spec §P-F).
+  //
+  // TRUTH FIX (truth audit, question 3) — `?? 0` is only honest while nobody
+  // RENDERS the 0 as a fact, and it was rendered: "० प्लॉट" under the farm
+  // name, from data no one had read yet. And once read, on an account with 2+
+  // farms the number sums EVERY farm's plots under ONE farm's name —
+  // `app/helpers/appContentOversightInputs.ts` states that mis-scoping itself
+  // ("NOT scoped to `currentFarmId` for an account with more than one farm").
+  // `CanonicalStrip` already suppressed the completion SENTENCE for that
+  // reason; the number beside it was not.
+  //
+  // The fallback stays exactly as it was — the fix is that
+  // `FarmIdentityElement` now decides whether the plot line may render at all,
+  // on `dataResolved && farmCount === 1` (both derived below, both real).
+  // Doctrine P4.
   const plotCount = oversightData?.plotCount ?? 0;
 
   // `failedSendCount` mirrors exactly what the deleted `SyncIndicator` chip
@@ -408,6 +422,12 @@ const AppHeader: React.FC<AppHeaderProps> = ({
               farmName={farmName}
               plotCount={plotCount}
               farmCount={farmCount}
+              /* Truth audit question 3 — the SAME flag the strip below uses
+                 for its completion claim now also gates the plot line, so the
+                 sentence and the number can never disagree about what this
+                 app is allowed to say. See the prop's doc in
+                 `CanonicalStrip.tsx`. */
+              dataResolved={dataResolved}
               onOpenFarmSwitcher={() => setIsFarmSwitcherOpen(true)}
             />
           )}

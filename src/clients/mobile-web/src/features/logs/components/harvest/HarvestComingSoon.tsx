@@ -30,12 +30,11 @@
  *
  * COPY — FIX ROUND 1 CORRECTION
  * ------------------------------
- * English placeholder only — the founder authors the final Marathi (Global
- * Constraint). No date is promised: `saveToastMessages.ts:21-34` names a
- * promise no code path can keep as the same class of defect this whole
+ * No date is promised in either language: `saveToastMessages.ts:21-34` names
+ * a promise no code path can keep as the same class of defect this whole
  * effort removes.
  *
- * The FIRST version of this copy also said "anything you already noted down
+ * The FIRST version of this copy said "anything you already noted down
  * here is still on your phone; it has not been deleted." Independent review
  * (fix round 1) caught that this is FALSE for the one thing the task exists
  * to fix. Tracing what actually persisted, by field:
@@ -57,20 +56,73 @@
  * read-only history view to make a stronger claim true — a history view is
  * product scope for the founder to decide, not a containment task's call.
  *
+ * COPY — FIX ROUND 2: IT IS NOW READABLE BY THE FARMER IT WAS WRITTEN FOR
+ * -----------------------------------------------------------------------
+ * The header above used to end "English placeholder only — the founder
+ * authors the final Marathi", and both strings were hardcoded English
+ * literals in the JSX below. Commit `d1c3837d` made Marathi the app default
+ * (`i18n/LanguageContext.tsx`), which turned that placeholder into a defect
+ * of exactly the kind this file exists to remove: the middle sentence — a
+ * harvest sale recorded here would not be saved — is the only thing standing
+ * between a Marathi-first smallholder and a lost sale record, and he could
+ * not read it. An honest warning that does not land is not honest (`P5`).
+ *
+ * Both strings now resolve through `i18n/harvestAvailabilityTranslations.ts`,
+ * the same shape `shared/components/ApprovalUnavailableNotice.tsx` uses for
+ * the same problem. The ENGLISH IS UNCHANGED, character for character — it
+ * moved file, it was not re-worded, so fix round 1's reviewed copy is intact
+ * and this diff carries one change, not two. Every clause of the Marathi is
+ * cited to an already-shipped source line in that module's header; the
+ * load-bearing one (`शेतनोंदीत जाणार नाही`) is the app's own existing phrase
+ * from `syncTranslations.ts:239`, pinned against it in the test.
+ *
+ * FONTS: set explicitly per string, chosen from the text itself, for the
+ * reason `ApprovalUnavailableNotice` records — `OfflineEmptyState` declares
+ * no `font-family` of its own, so its `h3`/`p` inherit whatever the cascade
+ * hands them, and Devanagari must never be left to a generic fallback. That
+ * is also why `OfflineEmptyState`'s `title`/`message` now accept a
+ * `ReactNode`: the font has to be attached to the string, not to the box.
+ *
+ * `fontStyleFor` below is a second copy of `ApprovalUnavailableNotice`'s
+ * three-line helper rather than a shared import. Deliberate, per the Rule of
+ * Three: two call sites is where a premature abstraction costs more than the
+ * duplication. The third one extracts it.
+ *
  * @module features/logs/components/harvest/HarvestComingSoon
  */
 import React from 'react';
 import { Clock } from 'lucide-react';
+
+import type { Language } from '../../../../i18n/language';
+import { resolveHarvestAvailabilityString } from '../../../../i18n/harvestAvailabilityTranslations';
 import OfflineEmptyState from '../../../../shared/components/ui/OfflineEmptyState';
 
-const HarvestComingSoon: React.FC = () => (
-    <div data-testid="harvest-coming-soon">
-        <OfflineEmptyState
-            icon={<Clock size={40} className="text-slate-300" />}
-            title="Harvest tracking is coming soon"
-            message="This part of the app isn't built yet — a harvest sale recorded here would not be saved to your farm records. Nothing on your phone has been deleted."
-        />
-    </div>
-);
+const DEVANAGARI_PATTERN = /[\u0900-\u097F]/;
+const MARATHI_BODY_FONT = { fontFamily: "'Noto Sans Devanagari', sans-serif" } as const;
+const ENGLISH_FONT = { fontFamily: "'DM Sans', sans-serif" } as const;
+
+function fontStyleFor(text: string): React.CSSProperties {
+    return DEVANAGARI_PATTERN.test(text) ? MARATHI_BODY_FONT : ENGLISH_FONT;
+}
+
+export interface HarvestComingSoonProps {
+    /** Drives both strings via `resolveHarvestAvailabilityString`. */
+    language: Language;
+}
+
+const HarvestComingSoon: React.FC<HarvestComingSoonProps> = ({ language }) => {
+    const title = resolveHarvestAvailabilityString(language, 'harvestUnavailableTitle');
+    const message = resolveHarvestAvailabilityString(language, 'harvestUnavailableBody');
+
+    return (
+        <div data-testid="harvest-coming-soon">
+            <OfflineEmptyState
+                icon={<Clock size={40} className="text-slate-300" />}
+                title={<span style={fontStyleFor(title)}>{title}</span>}
+                message={<span style={fontStyleFor(message)}>{message}</span>}
+            />
+        </div>
+    );
+};
 
 export default HarvestComingSoon;

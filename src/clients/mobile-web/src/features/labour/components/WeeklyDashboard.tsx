@@ -21,6 +21,9 @@
  *     (mirrors `BalanceCard`'s existing pattern), so it naturally stays
  *     invisible today and starts showing itself the day Stage 4 ships real
  *     advances — no flag needed there.
+ *   - Week heading — the server sends a machine date (`2026-08-24`) where a
+ *     readable week range belongs, printed over "या आठवड्यात". Suppressed
+ *     unless the label really is a range; see `isReadableWeekRange` below.
  *   - हजेरी वही button — see `LabourHub.tsx`'s `SHOW_LEDGER_TILE` doc
  *     comment (Stage 5 attendance ledger not built; always empty for a real
  *     farm). Hidden here too (`SHOW_LEDGER_BUTTON`) so this screen doesn't
@@ -37,15 +40,60 @@ const SHOW_ADVANCE_STAT = false;
 // with LabourHub's SHOW_LEDGER_TILE; both gate the same structurally-empty screen.
 const SHOW_LEDGER_BUTTON = false;
 
+/**
+ * TRUTH FIX (truth audit, question 2) — the week heading now renders only when
+ * the label is genuinely a readable week RANGE.
+ *
+ * WHAT IT CLAIMED: the pill sits directly above the "या आठवड्यात" ("this week")
+ * group label, so whatever it prints reads as the name of the week the tiles
+ * below it summarise.
+ *
+ * WHY THE DATA CANNOT BACK IT: the server sends a machine date —
+ * `GetLabourDataHandler` returns a bare `2026-08-24` as `weekLabel`. That is
+ * two untrue things at once. A Marathi-reading farmer cannot read an ISO
+ * timestamp, so the heading conveys nothing; and one day is not a week, so it
+ * names a span it does not describe. `labourMock.ts` carries the shape that IS
+ * a week — "७–१३ जुलै" — which is what these two conditions test for.
+ *
+ * Doctrine P4 (no fabricated numbers, and no label the data cannot state): the
+ * honest render for an unreadable week name is no week name. Nothing else on
+ * the screen depends on it — every tile below still says exactly what it
+ * measures.
+ *
+ * The handler is backend and outside this layer (Rulebook §6, stay-in-layer),
+ * so the suppression lives here. It is not a flag: the day the server sends a
+ * real range, this renders it again with no further change.
+ */
+// A machine timestamp — the exact value shipping today, and any label that
+// merely leads with one (e.g. an ISO pair) is no more readable.
+const MACHINE_DATE_PREFIX = /^\d{4}-\d{2}-\d{2}/;
+// A week is a SPAN, so its label needs a range dash. Deliberately NOT the
+// ASCII hyphen: that is the character machine dates are built from, and
+// accepting it would let `2026-08-24` back through.
+const RANGE_DASH = /[–—]/;
+
+function isReadableWeekRange(label: string): boolean {
+    const trimmed = label.trim();
+    if (trimmed.length === 0) return false;
+    if (MACHINE_DATE_PREFIX.test(trimmed)) return false;
+    return RANGE_DASH.test(trimmed);
+}
+
 interface Props { data: LabourData; onReview: () => void; onLedger: () => void; onToast: (m: string) => void }
 
 const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger }) => {
     const d = data.dashboard;
     return (
         <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2">
-            <div className="flex items-center justify-center rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
-                <span className="text-[14px] font-extrabold text-slate-800">{d.weekLabel}</span>
-            </div>
+            {/* Renders only for a real week range — see `isReadableWeekRange`. */}
+            {isReadableWeekRange(d.weekLabel) && (
+                <div
+                    data-testid="weekly-dashboard-week-label"
+                    className="flex items-center justify-center rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_1px_3px_rgba(20,40,30,0.05)]"
+                >
+                    <span className="text-[14px] font-extrabold text-slate-800">{d.weekLabel}</span>
+                </div>
+            )}
 
             {d.insight.trim().length > 0 ? (
                 <div className="flex items-center gap-3 rounded-[18px] border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-3">

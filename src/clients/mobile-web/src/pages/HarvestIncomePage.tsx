@@ -11,6 +11,7 @@ import {
 import { OtherIncomeEntry } from '../features/logs/harvest.types';
 import { getOtherIncomeEntries } from '../services/harvestService';
 import HarvestComingSoon from '../features/logs/components/harvest/HarvestComingSoon';
+import { useLanguage } from '../i18n/LanguageContext';
 import OtherIncomeSheet from '../features/logs/components/harvest/OtherIncomeSheet';
 
 interface HarvestIncomePageProps {
@@ -36,6 +37,13 @@ interface HarvestIncomePageProps {
  * "Income" as fixed-and-shipping, separate from "Harvest".
  */
 const HarvestIncomePage: React.FC<HarvestIncomePageProps> = ({ crops }) => {
+    // The harvest notice is the one thing on this page a farmer must be
+    // able to READ — it is what tells him a sale recorded here is not
+    // saved. The app defaults to Marathi (`i18n/LanguageContext.tsx`), so
+    // the notice has to be handed the same preference every other surface
+    // reads. The rest of this page is still English-only copy; that is a
+    // separate, wider gap and is not silently claimed as fixed here.
+    const { language } = useLanguage();
     const [showOtherIncomeSheet, setShowOtherIncomeSheet] = useState(false);
     const [reloadOtherIncomeCounter, setReloadOtherIncomeCounter] = useState(0);
     const [otherIncome, setOtherIncome] = useState<OtherIncomeEntry[]>([]);
@@ -59,7 +67,7 @@ const HarvestIncomePage: React.FC<HarvestIncomePageProps> = ({ crops }) => {
                     <div className="px-5 pt-5">
                         <h3 className="font-bold text-slate-400 uppercase tracking-widest text-xs">Harvest</h3>
                     </div>
-                    <HarvestComingSoon />
+                    <HarvestComingSoon language={language} />
                 </div>
 
                 {/* OTHER INCOME SECTION — unaffected by Task 6; keeps working */}

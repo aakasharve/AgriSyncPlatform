@@ -39,6 +39,16 @@
  * REPRO-A3-money-integrity.test.ts, LogCommandService.captureMoneyEvents.test.ts),
  * `fake-indexeddb/auto` is imported first so that chain has a real (fake)
  * IndexedDB to talk to, rather than hand-mocking every module in it.
+ *
+ * LANGUAGE. The page hands the farmer's language preference to
+ * `HarvestComingSoon`, whose copy exists in both `mr` and `en`
+ * (`i18n/harvestAvailabilityTranslations.ts`). `useLanguage` throws outside
+ * `<LanguageProvider>` and `render` mounts none, so the same stand-in
+ * `ReviewInboxSheet.noApproval.test.tsx` uses is installed below. It defaults
+ * to `'mr'` — NOT `'en'` — because that is what the app itself defaults to
+ * since `d1c3837d`, and a suite that quietly tested English would have gone
+ * on passing through the exact defect this notice's Marathi was written to
+ * fix: a warning the reader cannot read.
  */
 import 'fake-indexeddb/auto';
 import '@testing-library/jest-dom/vitest';
@@ -47,8 +57,23 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { CropProfile } from '../../types';
 import type { OtherIncomeEntry } from '../../features/logs/harvest.types';
+import { t as translate } from '../../i18n/translations';
+import type { Language } from '../../i18n/language';
+import { harvestAvailabilityTranslations } from '../../i18n/harvestAvailabilityTranslations';
 
 const mockGetOtherIncomeEntries = vi.fn<() => OtherIncomeEntry[]>(() => []);
+
+// The app's own default (`i18n/LanguageContext.tsx`), so the default render
+// below is the one a pilot farmer actually gets.
+const langRef = { current: 'mr' as Language };
+
+vi.mock('../../i18n/LanguageContext', () => ({
+    useLanguage: () => ({
+        language: langRef.current,
+        setLanguage: (next: Language) => { langRef.current = next; },
+        t: (key: string) => translate(key, langRef.current),
+    }),
+}));
 
 // `services/harvestService.ts` imports `financeCommandService.ts`, which
 // calls `backgroundSyncWorker.triggerNow()` after a real mutation — a path
@@ -103,15 +128,30 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     localStorage.clear();
+    langRef.current = 'mr';
     vi.clearAllMocks();
 });
 
 describe('HarvestIncomePage — route "income" (Task 6, spec D4)', () => {
-    it('shows the honest harvest coming-soon message', () => {
-        render(<HarvestIncomePage context={null} crops={CROPS} onBack={() => undefined} />);
-        expect(screen.getByTestId('harvest-coming-soon')).toBeInTheDocument();
-        expect(screen.getByText(/harvest tracking is coming soon/i)).toBeInTheDocument();
-    });
+    it.each<Language>(['mr', 'en'])(
+        'shows the honest harvest coming-soon message, readable in %s',
+        (language) => {
+            langRef.current = language;
+            render(<HarvestIncomePage context={null} crops={CROPS} onBack={() => undefined} />);
+            const notice = screen.getByTestId('harvest-coming-soon');
+            expect(notice).toBeInTheDocument();
+            // The page must hand DOWN the preference, not pick one. Asserting
+            // the literal shipped copy for the requested language is the only
+            // form of this that fails when the wiring is dropped — a testid
+            // check alone passed all the way through the English-only defect.
+            expect(notice.textContent).toContain(
+                harvestAvailabilityTranslations[language].harvestUnavailableTitle,
+            );
+            expect(notice.textContent).toContain(
+                harvestAvailabilityTranslations[language].harvestUnavailableBody,
+            );
+        },
+    );
 
     it('no longer offers "Log New Harvest" or a sale-entry save control', () => {
         render(<HarvestIncomePage context={null} crops={CROPS} onBack={() => undefined} />);

@@ -52,6 +52,11 @@ function baseFarmChipProps(overrides: Partial<FarmIdentityElementProps> = {}): F
         farmName: 'Arve Farm',
         plotCount: 4,
         farmCount: 1,
+        // Truth audit question 3 — the default is the ONE case in which the
+        // plot count is a statable fact (data read, exactly one farm), so the
+        // pre-existing tests below keep exercising what they were written for.
+        // The two cases that make it unstatable each have their own test.
+        dataResolved: true,
         onOpenFarmSwitcher: vi.fn(),
         ...overrides,
     };
@@ -594,6 +599,25 @@ describe('FarmIdentityElement — row 1 farm-identity element (Task 12)', () => 
             expect(el.getAttribute('title')).toBe('Bhosale Vasti');
         });
 
+        // TRUTH FIX (truth audit, question 3), half 2 of 2 — UNREAD IS NOT ZERO.
+        //
+        // WHAT IT CLAIMED: "० प्लॉट" under the farm name — that this farm has
+        // no plots.
+        // WHY THE DATA CANNOT BACK IT: `AppHeader.tsx` computes
+        // `oversightData?.plotCount ?? 0`, so before the first load resolves
+        // the 0 is "not read yet", not "none" — the same distinction
+        // `dataResolved` already draws for the strip's completion claim.
+        // Doctrine P4 — no fabricated numbers.
+        it('states no plot count before the data behind it has been read', () => {
+            render(<FarmIdentityElement {...baseFarmChipProps({ farmCount: 1, plotCount: 0, dataResolved: false })} />);
+
+            const el = screen.getByTestId('canonical-strip-farm-chip');
+            // The farm's own identity is not in doubt and still renders.
+            expect(el).toHaveTextContent('Arve Farm');
+            expect(el.textContent).not.toContain(oversightTranslations.mr.plotsUnit);
+            expect(el.textContent).not.toContain('0');
+        });
+
         it('clicking the label does nothing — onOpenFarmSwitcher is never called', () => {
             const onOpenFarmSwitcher = vi.fn();
             render(<FarmIdentityElement {...baseFarmChipProps({ farmCount: 1, onOpenFarmSwitcher })} />);
@@ -645,12 +669,46 @@ describe('FarmIdentityElement — row 1 farm-identity element (Task 12)', () => 
             expect(screen.queryByText('5')).not.toBeInTheDocument();
         });
 
-        it('carries the real farm name and plot count as visible text too', () => {
+        // TRIPWIRE, not a deletion. This assertion used to require the plot
+        // count to be PRESENT on the multi-farm chip. It is now required to be
+        // ABSENT, so re-adding it fails here rather than shipping a number
+        // scoped to the wrong subject.
+        //
+        // WHAT IT CLAIMED: "7 प्लॉट" printed under ONE farm's name reads as
+        // that farm's plot count.
+        // WHY THE DATA CANNOT BACK IT: `appContentOversightInputs.ts` sums
+        // `crop.plots.length` over `dataSource.crops.getAll()` — every crop of
+        // the SIGNED-IN USER — and says so itself: this data "is NOT scoped to
+        // `currentFarmId` for an account with more than one farm". With 2+
+        // farms the number counts every farm while the name picks one.
+        // `CanonicalStrip` already suppressed the completion SENTENCE for this
+        // exact reason (CHANGE 3); the number 100px away was not.
+        // Doctrine P4 — no fabricated numbers. Truth audit, question 3.
+        it('never states a plot count when more than one farm is summed into it', () => {
             render(<FarmIdentityElement {...baseFarmChipProps({ farmCount: 2, farmName: 'Bhosale Vasti', plotCount: 7 })} />);
 
             const el = screen.getByTestId('canonical-strip-farm-chip');
+            // The farm name and the switcher itself are untouched — only the
+            // claim the app cannot scope is gone.
             expect(el).toHaveTextContent('Bhosale Vasti');
-            expect(el).toHaveTextContent('7');
+            expect(screen.getByTestId('canonical-strip-farm-count-badge')).toHaveTextContent('2');
+
+            expect(el.textContent).not.toContain('7');
+            expect(el.textContent).not.toContain(oversightTranslations.mr.plotsUnit);
+            // A screen reader is told the same untrue thing, so the accessible
+            // name must drop it too — not merely the visible text.
+            expect(el.getAttribute('aria-label')).not.toContain('7');
+            expect(el.getAttribute('aria-label')).toContain('Bhosale Vasti');
+        });
+
+        // `dataResolved` alone must not buy the claim back: resolved data on a
+        // 3-farm account is still summed across all three.
+        it('resolved data does not re-enable the plot count on a multi-farm account', () => {
+            render(<FarmIdentityElement {...baseFarmChipProps({ farmCount: 3, plotCount: 12, dataResolved: true })} />);
+
+            const el = screen.getByTestId('canonical-strip-farm-chip');
+            expect(el.textContent).not.toContain('12');
+            expect(el.textContent).not.toContain(oversightTranslations.mr.plotsUnit);
         });
 
         it('english_language_resolves_yourFarms_from_translations_not_a_literal', () => {

@@ -264,9 +264,44 @@ describe('WaitingDrawer', () => {
         expect(screen.queryByTestId(/^waiting-drawer-decision-/)).not.toBeInTheDocument();
     });
 
-    it('the_since_last_looked_tail_renders_only_when_sinceDays_is_not_null', () => {
+    // TRIPWIRE, not a deletion. This assertion used to require the "since you
+    // last looked — N days" tail to be PRESENT and to carry the number. It now
+    // requires it to be ABSENT, so re-adding the line fails here rather than
+    // shipping a day count the app cannot back.
+    //
+    // WHAT IT CLAIMED: "तुम्ही शेवटचं पाहिल्यानंतर — N दिवस" — that the rows
+    // below it are everything that arrived since the owner last looked.
+    //
+    // WHY THE DATA CANNOT BACK IT: `oversightSelectors.ts` decides "unseen"
+    // from each record's CREATION time (`effectiveArrivalISO()` is
+    // `meta.createdAtISO` — `DailyLog` has no server-received timestamp), not
+    // from when it reached this phone. A record written offline on Tuesday and
+    // synced on Friday is therefore classified already-seen and never listed,
+    // while the tail still stated a confident N over that incomplete set. The
+    // selector marks EVERY model `boundaryApproximate: true` for exactly this
+    // reason, and nothing reads the flag.
+    //
+    // Doctrine P4 — no fabricated numbers. Truth audit, question 1.
+    it('never states how many days since the owner last looked — the boundary is approximate', () => {
+        // The wording comes from the translations table, never a literal here,
+        // so a tail re-added under a different testid still trips this.
+        const tailPrefixMr = oversightTranslations.mr.sinceLastLookedTail.split('{days}')[0].trim();
+        const tailPrefixEn = oversightTranslations.en.sinceLastLookedTail.split('{days}')[0].trim();
+
         const { rerender } = render(<WaitingDrawer {...baseProps({ model: baseModel({ sinceDays: 3 }) })} />);
-        expect(screen.getByTestId('waiting-drawer-since-tail')).toHaveTextContent('3');
+        expect(screen.queryByTestId('waiting-drawer-since-tail')).not.toBeInTheDocument();
+        expect(screen.getByTestId('waiting-drawer-briefing-card').textContent).not.toContain(tailPrefixMr);
+
+        // Not merely suppressed when the count is unknown: a resolved
+        // checkpoint, and a model that claims the boundary is exact, must not
+        // resurrect it either — the boundary is approximate by construction.
+        rerender(
+            <WaitingDrawer
+                {...baseProps({ language: 'en', model: baseModel({ sinceDays: 12, boundaryApproximate: false }) })}
+            />,
+        );
+        expect(screen.queryByTestId('waiting-drawer-since-tail')).not.toBeInTheDocument();
+        expect(screen.getByTestId('waiting-drawer-briefing-card').textContent).not.toContain(tailPrefixEn);
 
         rerender(<WaitingDrawer {...baseProps({ model: baseModel({ sinceDays: null }) })} />);
         expect(screen.queryByTestId('waiting-drawer-since-tail')).not.toBeInTheDocument();

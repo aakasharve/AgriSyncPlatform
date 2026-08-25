@@ -92,6 +92,17 @@
  * wording names the outcome and never the cause precisely so it can carry
  * both. Full reasoning, including why filtering by farm would be worse than
  * suppressing, is on the `farmCount` prop below.
+ *
+ * TRUTH FIX — CHANGE 3 SUPPRESSED THE SENTENCE AND LEFT THE NUMBER
+ * -------------------------------------------------------------------
+ * CHANGE 3 stopped the rest state making a farm-scoped claim it could not
+ * make, and its own reasoning named the reason: the chip's plot count "is the
+ * sum of EVERY farm's plots, printed under ONE farm's name." That number went
+ * on rendering 100px away, unsuppressed, making the same mis-scoped claim in
+ * fewer words — and printing a confident "० प्लॉट" from data that had not been
+ * read yet. `FarmIdentityElement` now renders the plot line only when
+ * `dataResolved && farmCount === 1`. Full reasoning on its `dataResolved`
+ * prop. Truth audit, question 3. Doctrine P4.
  */
 import React from 'react';
 import { LandPlot, ChevronDown, AlertTriangle, CheckCircle2, Loader2, HelpCircle } from 'lucide-react';
@@ -159,6 +170,43 @@ export interface FarmIdentityElementProps {
      * `farmContext.farms.length` from the caller (`AppHeader.tsx`).
      */
     farmCount: number;
+    /**
+     * Whether the data behind `plotCount` has actually been READ yet —
+     * `useAppData.dataLoaded && useSyncQueueStatus.hasLoaded`, the SAME flag
+     * `CanonicalStrip` below already takes for its rest state, derived once in
+     * `AppHeader.tsx` and never a literal.
+     *
+     * TRUTH FIX (truth audit, question 3) — WHY A FARM LABEL NEEDS THIS.
+     *
+     * WHAT THE PLOT LINE CLAIMED: "N प्लॉट", printed directly under ONE farm's
+     * name, reads as that farm's plot count.
+     *
+     * WHY THE DATA CANNOT BACK IT — twice over:
+     *
+     *   1. WRONG SUBJECT. `plotCount` is `appContentOversightInputs.ts`'s
+     *      `crops.reduce((sum, crop) => sum + crop.plots.length, 0)` over
+     *      `dataSource.crops.getAll()` — every crop belonging to the SIGNED-IN
+     *      USER, not to `currentFarmId`. That module states it in its own
+     *      words: this data "is NOT scoped to `currentFarmId` for an account
+     *      with more than one farm". So on a 2+ farm account the number sums
+     *      every farm while the name beside it picks one.
+     *
+     *   2. UNREAD IS NOT ZERO. `AppHeader.tsx`'s `oversightData?.plotCount
+     *      ?? 0` yields `0` before the first load completes, and "० प्लॉट" is
+     *      a confident statement that the farm has no plots at all — the same
+     *      "strengthen the claim by silence" `dataResolved` exists to stop on
+     *      the strip below.
+     *
+     * NOT A FILTER, for a harder reason than CHANGE 3's: `CropProfile` carries
+     * no `farmId` at all, so there is nothing to filter on. Inventing a
+     * per-farm plot count is precisely what doctrine P4 forbids. Suppress the
+     * claim, touch no data.
+     *
+     * REQUIRED, never optional, for the same reason `CanonicalStripProps`'
+     * `dataResolved` is: an optional flag invites `?? true` at a call site,
+     * and `true` is exactly the value that re-enables the claim.
+     */
+    dataResolved: boolean;
     /** Opens the existing `FarmSwitcherSheet` unchanged (spec §2.1). Only
      * called when `farmCount >= 2` — the label presentation has no handler
      * to call it with. */
@@ -194,11 +242,20 @@ export const FarmIdentityElement: React.FC<FarmIdentityElementProps> = ({
     farmName,
     plotCount,
     farmCount,
+    dataResolved,
     onOpenFarmSwitcher,
 }) => {
     const plotsUnitText = resolveOversightString(language, 'plotsUnit');
     const plotLine = `${plotCount} ${plotsUnitText}`;
     const isMulti = farmCount >= 2;
+
+    // TRUTH FIX (truth audit, question 3) — the one condition under which this
+    // element may state a plot count at all. Read `dataResolved`'s prop doc
+    // above for what each half rules out: `farmCount === 1` the wrong subject,
+    // `dataResolved` the confident zero from unread data. `farmCount === 0`
+    // (an account with no farm yet) is correctly excluded by the same test —
+    // there is no farm for the count to be about.
+    const mayStatePlotCount = dataResolved && farmCount === 1;
 
     const farmMark = (
         <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] bg-emerald-600 text-white">
@@ -236,7 +293,7 @@ export const FarmIdentityElement: React.FC<FarmIdentityElementProps> = ({
                 {farmMark}
                 <span className="min-w-0">
                     {nameLine('text-stone-800')}
-                    {plotLineNode('text-stone-400')}
+                    {mayStatePlotCount && plotLineNode('text-stone-400')}
                 </span>
             </span>
         );
@@ -247,14 +304,25 @@ export const FarmIdentityElement: React.FC<FarmIdentityElementProps> = ({
             type="button"
             onClick={onOpenFarmSwitcher}
             data-testid="canonical-strip-farm-chip"
-            aria-label={`${resolveOversightString(language, 'yourFarms')}: ${farmName} — ${plotLine}`}
+            aria-label={
+                mayStatePlotCount
+                    ? `${resolveOversightString(language, 'yourFarms')}: ${farmName} — ${plotLine}`
+                    : `${resolveOversightString(language, 'yourFarms')}: ${farmName}`
+            }
             title={farmName}
             className="flex max-w-[178px] shrink-0 items-center gap-1.5 rounded-full bg-emerald-50 py-0.5 pl-1 pr-1.5"
         >
             {farmMark}
             <span className="min-w-0">
                 {nameLine('text-emerald-900')}
-                {plotLineNode('text-emerald-700/85')}
+                {/* The SAME condition as the label branch, deliberately not a
+                    second rule. It can never be true here today — this branch
+                    only runs at `farmCount >= 2`, which is exactly the case
+                    whose plot count sums other farms. Written as the shared
+                    condition rather than deleted so that the day `plotCount`
+                    becomes farm-scoped, one guard governs both presentations
+                    instead of one of them silently staying dark. */}
+                {mayStatePlotCount && plotLineNode('text-emerald-700/85')}
             </span>
             <span
                 data-testid="canonical-strip-farm-count-badge"

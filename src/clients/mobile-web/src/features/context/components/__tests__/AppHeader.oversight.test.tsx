@@ -460,10 +460,24 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
             renderHeader();
         });
 
-        // Task 12: real visible text again — assert the honest-zero
-        // fallback directly.
-        expect(screen.getByTestId('canonical-strip-farm-chip')).toHaveTextContent('0');
-        expect(screen.getByTestId('canonical-strip-farm-chip')).not.toHaveTextContent('4');
+        // TRIPWIRE, not a deletion. This assertion used to require the chip to
+        // render the fallback "0" and called it "the honest-zero fallback". A
+        // zero that is RENDERED is not honest — read by a farmer it says his
+        // farm has no plots, when in fact nothing has been read yet.
+        //
+        // WHAT IT CLAIMED: "० प्लॉट" under the farm name.
+        // WHY THE DATA CANNOT BACK IT: `AppHeader.tsx` computes
+        // `oversightData?.plotCount ?? 0`, and this very test is the case
+        // where `oversightData` was never supplied — the 0 is "not read",
+        // not "none". Doctrine P4. Truth audit, question 3.
+        //
+        // Both numbers are pinned absent: `0` (the fabricated fallback) and
+        // `4` (a stale echo of the fixture in the test above).
+        const chip = screen.getByTestId('canonical-strip-farm-chip');
+        expect(chip).toHaveTextContent('Arve Farm');
+        expect(chip).not.toHaveTextContent('0');
+        expect(chip).not.toHaveTextContent('4');
+        expect(chip.textContent).not.toContain(oversightTranslations.mr.plotsUnit);
         expect(screen.queryByTestId('canonical-strip-waiting-count')).not.toBeInTheDocument();
 
         // Finding F7(a) — the honest fallback for "no data was supplied at
@@ -809,6 +823,67 @@ describe('AppHeader — the farm element is contextual on the real farm list (Ta
         });
         expect(screen.getByText(oversightTranslations.mr.restState)).toBeInTheDocument();
         expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
+    });
+
+    // TRUTH FIX (truth audit, question 3) — the same rule, for the NUMBER.
+    //
+    // CHANGE 3 gated the completion SENTENCE on the real farm list and left
+    // the plot count beside it ungated, so the strip suppressed a mis-scoped
+    // claim in words while still printing it in digits 100px away.
+    //
+    // WHAT IT CLAIMED: "N प्लॉट" under ONE farm's name reads as that farm's
+    // plot count.
+    // WHY THE DATA CANNOT BACK IT: `appContentOversightInputs.ts` sums
+    // `crop.plots.length` over `dataSource.crops.getAll()` — every crop of the
+    // signed-in USER — and states in its own header that this "is NOT scoped
+    // to `currentFarmId` for an account with more than one farm".
+    // Doctrine P4. Proven end-to-end off real `farmContext.farms` arrays, the
+    // same way the sentence's own test is, so this tests the rule and not a
+    // prop forced onto `FarmIdentityElement`.
+    it('the_real_farm_list_decides_whether_the_plot_count_may_render', async () => {
+        const resolvedFourPlots = {
+            logs: [],
+            operatorNameById: {},
+            plotCount: 4,
+            unverifiedCount: 0,
+            yesterdayNotClosed: false,
+            approvalHolderName: null,
+            dataLoaded: true,
+        };
+
+        await act(async () => {
+            renderHeader({ farmContext: multiFarmContext, oversightData: resolvedFourPlots });
+        });
+        const multi = screen.getByTestId('canonical-strip-farm-chip');
+        expect(multi).toHaveTextContent('Arve Farm');
+        expect(multi.textContent).not.toContain('4');
+        expect(multi.textContent).not.toContain(oversightTranslations.mr.plotsUnit);
+
+        cleanup();
+
+        // Control: one farm, everything else byte-identical -> the count is
+        // scopeable and renders. Without this the assertion above would pass
+        // against a chip that had lost its plot line entirely.
+        await act(async () => {
+            renderHeader({ farmContext: singleFarmContext, oversightData: resolvedFourPlots });
+        });
+        expect(screen.getByTestId('canonical-strip-farm-chip')).toHaveTextContent('4');
+    });
+
+    // The second half of the same rule: a single farm is not enough on its own
+    // — `oversightData?.plotCount ?? 0` is `0` before anything has been read,
+    // and "० प्लॉट" is a confident claim that the farm has no plots.
+    it('a_single_farm_still_states_no_plot_count_until_the_data_is_read', async () => {
+        // No `oversightData` at all — the unresolved case by definition, and
+        // exactly what production renders on first paint.
+        await act(async () => {
+            renderHeader({ farmContext: singleFarmContext });
+        });
+
+        const el = screen.getByTestId('canonical-strip-farm-chip');
+        expect(el).toHaveTextContent('Arve Farm');
+        expect(el.textContent).not.toContain(oversightTranslations.mr.plotsUnit);
+        expect(el.textContent).not.toContain('0');
     });
 });
 
