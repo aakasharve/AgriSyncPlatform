@@ -446,13 +446,28 @@ blocker**, not a footnote.
         `BackendFarmGeographyClient.ts:32`, but it runs after the web step is already live.)* **No
         criterion in A1–A13 names the API base URL.**
 
-        🔧 **"The env block is the only guard" was ALSO wrong, and is corrected.**
-        `src/clients/mobile-web/vite.config.ts:11-32` already defines `assertNoForbiddenEnv()`, invoked
-        unconditionally at `:32`, which **throws and fails the build**. A build-time enforcement point for
-        client-visible env policy already exists and already runs on every build, including
-        `ci-gate.yml`'s `npm run build`. It asserts only the *negative* (four provider keys must be
-        absent, `:13-18`) and carries no *positive* assertion that a required var is present — so it does
-        not catch B5 today. But the claim that no guard is possible was an assumption, not a measurement.
+        ℹ️ **"The env block is the only guard" is TRUE as written — noted here only so the next reader
+        does not over-read it.** *(An earlier version of this note claimed the sentence was wrong. It is
+        not, and that claim is withdrawn.)* `src/clients/mobile-web/vite.config.ts:11-29` defines
+        `assertNoForbiddenEnv()`, invoked unconditionally at `:31`, which throws and fails the build — so
+        a build-time **enforcement point** exists. But it asserts only the *negative* (four provider keys
+        must be **absent**, `:13-16`) and carries no positive assertion, so **no guard on the API URL
+        exists today** and the plan's sentence stands.
+
+        🛑 **Do NOT satisfy this by adding a positive assertion to `assertNoForbiddenEnv`.** It reads
+        `process.env[name]` (`:19`), and **Vite loads `.env` files into `import.meta.env`, not
+        `process.env`** — which is what `loadEnv()` exists for. A positive check there would find
+        `VITE_AGRISYNC_API_URL` **undefined on every legitimate laptop build that sources it from
+        `.env.production`**, and throw. It would break the one web build path that currently works, on a
+        step that is one-way (§8 S3). Doing it properly means restructuring to
+        `defineConfig(({ mode }) => …)` with `loadEnv` — a different change, in an undeclared surface.
+
+        ✅ **The in-fence option, if wanted: a post-build grep inside `web-release.yml`** (already declared
+        in the Change Surface at `:169`) asserting the built bundle contains `api.shramsafal.in`. Same
+        idiom `eslint.yml` already uses to grep `dist/` for Gemini URLs. It proves what **shipped**, not
+        what was **set** — strictly stronger. Fold the result into **A5**'s proof rather than minting a new
+        criterion. **Optional and blocking nothing** — T1.6's env block is the required fix; if skipped,
+        say so in the Release Record.
       **Do NOT** put the Maps key in a tracked `.env.production` — secret in git, CLAUDE.md hard rule.
       Credentials/permissions are precedented: `android-release.yml:94-116` already does `aws s3 cp` into
       `shramsafal-app-prod` plus a CloudFront invalidation on the same distribution using the existing
