@@ -474,12 +474,108 @@ internal sealed class AiResponseNormalizer
 
         try
         {
-            return JsonNode.Parse(rawJson)?.AsObject() ?? new JsonObject();
+            var parsed = JsonNode.Parse(rawJson)?.AsObject() ?? new JsonObject();
+
+            // JsonNode.Parse defers building each JsonObject's backing dictionary
+            // until first access (indexer/enumeration) — it does NOT eagerly
+            // validate for duplicate property names at parse time. That means a
+            // duplicate key nested somewhere the normalizer never happens to
+            // touch would otherwise serialize/escape untouched, while a
+            // duplicate key the normalizer DOES touch would throw ArgumentException
+            // far away from this method (or even outside it, in caller code) — too
+            // late for us to safely intervene. So force full materialization of the
+            // whole tree right here, inside this try block, so any duplicate-key
+            // ArgumentException — at any depth — surfaces here and is handled below.
+            EnsureFullyMaterialized(parsed);
+            return parsed;
         }
         catch (JsonException)
         {
             return new JsonObject();
         }
+        catch (ArgumentException)
+        {
+            // LLMs (e.g. the Sarvam sarvam-30b model, observed live: repeated
+            // "plannedTasks" key) routinely emit JSON objects with duplicate
+            // property names. JsonNode/JsonObject throws ArgumentException in
+            // that case ("An item with the same key has already been added"),
+            // not JsonException, so it isn't caught above and would otherwise
+            // escape as a hard provider failure. Re-parse tolerantly via
+            // JsonDocument (which permits duplicate keys) and rebuild an
+            // equivalent JsonObject, applying last-one-wins for duplicated
+            // keys, recursively — a duplicate can be nested inside a child
+            // object or inside an object within an array — instead of
+            // silently discarding the farmer's parsed log as an empty object.
+            try
+            {
+                using var document = JsonDocument.Parse(rawJson);
+                return BuildJsonObjectFromElement(document.RootElement);
+            }
+            catch (Exception)
+            {
+                return new JsonObject();
+            }
+        }
+    }
+
+    private static void EnsureFullyMaterialized(JsonNode? node)
+    {
+        switch (node)
+        {
+            case JsonObject jsonObject:
+                // Enumerating a JsonObject forces it to build its backing
+                // dictionary, which is where a duplicate-key ArgumentException
+                // actually gets thrown.
+                foreach (var property in jsonObject)
+                {
+                    EnsureFullyMaterialized(property.Value);
+                }
+
+                break;
+            case JsonArray jsonArray:
+                foreach (var item in jsonArray)
+                {
+                    EnsureFullyMaterialized(item);
+                }
+
+                break;
+        }
+    }
+
+    private static JsonObject BuildJsonObjectFromElement(JsonElement element)
+    {
+        var result = new JsonObject();
+        foreach (var property in element.EnumerateObject())
+        {
+            // JsonObject's indexer overwrites any existing value for the same
+            // key, so iterating properties in document order and assigning
+            // via the indexer naturally implements last-one-wins.
+            result[property.Name] = ConvertElementToNode(property.Value);
+        }
+
+        return result;
+    }
+
+    private static JsonArray BuildJsonArrayFromElement(JsonElement element)
+    {
+        var result = new JsonArray();
+        foreach (var item in element.EnumerateArray())
+        {
+            result.Add(ConvertElementToNode(item));
+        }
+
+        return result;
+    }
+
+    private static JsonNode? ConvertElementToNode(JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            JsonValueKind.Object => BuildJsonObjectFromElement(element),
+            JsonValueKind.Array => BuildJsonArrayFromElement(element),
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            _ => JsonValue.Create(element.Clone())
+        };
     }
 
     private static void EnsureString(JsonObject root, string propertyName, string fallbackValue)
