@@ -22,7 +22,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, cleanup } from '@testing-library/react';
 
-import { LocalOversightAcknowledgementStore } from '../LocalOversightAcknowledgementStore';
+import { LocalOversightAcknowledgementStore } from '../../../infrastructure/storage/LocalOversightAcknowledgementStore';
 import { useOversightAcknowledgement } from '../useOversightAcknowledgement';
 import { DemoModeStore } from '../../../infrastructure/storage/DemoModeStore';
 import type { OversightAcknowledgementPort } from '../OversightAcknowledgementPort';

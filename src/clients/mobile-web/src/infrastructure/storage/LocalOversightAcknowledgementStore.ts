@@ -59,7 +59,7 @@
 
 import { storageNamespace } from '../../infrastructure/storage/StorageNamespace';
 import { DemoModeStore } from '../../infrastructure/storage/DemoModeStore';
-import type { OversightAcknowledgementPort } from './OversightAcknowledgementPort';
+import type { OversightAcknowledgementPort } from '../../features/oversight/OversightAcknowledgementPort';
 
 const KEY_PREFIX = 'oversight_ack_checkpoint_v1';
 

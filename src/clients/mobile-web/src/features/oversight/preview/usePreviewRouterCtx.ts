@@ -51,6 +51,7 @@
 import { useCallback, useState } from 'react';
 
 import { useLogContext } from '../../../app/context/LogContext';
+import type { ManualSubmitOutcome } from '../../../app/hooks/useLogCommands.types';
 import { useAppNavigation } from '../../../app/hooks/useAppNavigation';
 import { useAppRouterDerivations } from '../../../core/navigation/hooks/useAppRouterDerivations';
 import type { AppRouterContext } from '../../../core/navigation/routeContext';
@@ -127,8 +128,15 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
     }, [notify]);
 
     // ── Commands / trust — never a Dexie write, never a fake success. ──
-    const handleManualSubmit = useCallback(async () => {
+    // Returns `'not_saved'` — the literal truth. `release/wave-1` widened this
+    // contract from `Promise<void>` to `Promise<ManualSubmitOutcome>` while this
+    // preview was on its own branch, so the merge surfaced the drift. The union
+    // offers 'saved' | 'saved_with_warning' | 'not_saved' | 'already_saving';
+    // this stub writes nothing, so anything but 'not_saved' would be the fake
+    // success the comment above promises never to mint (doctrine P4).
+    const handleManualSubmit = useCallback(async (): Promise<ManualSubmitOutcome> => {
         notify('Saving is disabled in this preview (no backend, no Dexie writes).');
+        return 'not_saved';
     }, [notify]);
     const handleUpdateNote = useCallback(() => {
         notify('Editing notes is disabled in this preview.');

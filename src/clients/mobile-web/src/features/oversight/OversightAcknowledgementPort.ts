@@ -10,7 +10,7 @@
  * touches `verification.status` and is never an approval. This is the only
  * contract `useOversightAcknowledgement` depends on to read or advance that
  * checkpoint — concrete persistence lives behind an adapter (see
- * `LocalOversightAcknowledgementStore.ts`) so the hook, and anything that
+ * `infrastructure/storage/LocalOversightAcknowledgementStore.ts`) so the hook, and anything that
  * feeds `buildOversightModel` in `oversightSelectors.ts`, never import
  * storage directly.
  */

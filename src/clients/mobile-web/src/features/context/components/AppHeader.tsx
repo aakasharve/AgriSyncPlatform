@@ -49,7 +49,7 @@ import {
 } from '../../oversight/oversightNavigationEvents';
 import { useOpenSurfaceRequest } from '../../oversight/useOpenSurfaceRequest';
 import { useOversightAcknowledgement } from '../../oversight/useOversightAcknowledgement';
-import { LocalOversightAcknowledgementStore } from '../../oversight/LocalOversightAcknowledgementStore';
+import { LocalOversightAcknowledgementStore } from '../../../infrastructure/storage/LocalOversightAcknowledgementStore';
 import { systemClock } from '../../../core/domain/services/Clock';
 
 interface AppHeaderProps {
