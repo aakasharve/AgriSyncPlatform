@@ -187,7 +187,7 @@ silence, or merge while any 👁️ item is open.**
 | A1 | Prod serves the new binary | `GET /version` = deployed SHA; `/health` + `/health/ready` = 200 |
 | A2 | Four migration histories moved as predicted | per-context **set difference** across the four history tables (`api-binary-swap.sh:452`, Step 12) |
 | A3 | Migration gate closed again | `ALLOW_PRODUCTION_STARTUP_MIGRATIONS` absent/false on the box post-deploy |
-| A4 | Marathi voice returns a Marathi transcript | one prod voice log → non-empty `mr` transcript, Sarvam path, **no Gemini fallback in logs**. **Re-proven after T1.13, not only at T0.5** |
+| A4 | Marathi voice returns a Marathi transcript | one prod voice log → non-empty `mr` transcript, Sarvam path, **no Gemini fallback in logs**. **Re-proven after T1.14** (the API deploy), not only at T0.5 — *corrected 2026-08-25; this row read "T1.13" and contradicted T1.2's own body at `:388`. At T1.13 only the GO token has been minted, no code has shipped, and A4 is unprovable.* |
 | A5 | Web build reaches app.shramsafal.in | edge `curl` of the hashed bundle = 200, hash matches the build |
 | A6 | Maps render on web | founder loads the boundary screen on `app.shramsafal.in` |
 | A6b | Boundary history is not destroyed | save a boundary twice on prod; `version` increments and the prior row is archived (**A6 cannot see this — see §8 S2**) |
@@ -425,11 +425,34 @@ blocker**, not a footnote.
         ```
         **Setting only the Maps key ships a broken app.** `.env.local` (the laptop file, gitignored,
         absent in CI) carries **both**; `.env.production` carries only `VITE_AGRISYNC_API_URL`.
-        `transport.ts:30-41` `resolveApiBaseUrl()` returns `''` when the URL is unset, so every API call
-        goes **same-origin** — the web app would call `app.shramsafal.in` instead of `api.shramsafal.in`.
-        No login, no sync. `android-release.yml:48-54` documents this exact trap in its own comment.
-        ⚠️ **A5, A6 and A7 would all still pass.** Nothing in A1–A12 detects a dead API base URL on web —
-        so the acceptance criteria cannot save you here; the env block is the only guard.
+        🔧 **Symptom corrected 2026-08-25 — the earlier description would send an operator to the wrong
+        place, on the most important surface.** There are **nine** API-base resolvers, and they do not
+        behave alike. Measured:
+        - **One** — `infrastructure/api/transport.ts:41` `resolveApiBaseUrl()` — returns `''`, so those
+          calls go **same-origin** to `app.shramsafal.in`.
+        - **Eight** return **`http://localhost:5048`**: `features/auth/data/otpClient.ts:44`,
+          `features/compliance/data/complianceClient.ts:33`, `features/onboarding/qr/inviteApi.ts:27`,
+          `features/reports/data/serviceProofClient.ts:12`, `features/tests/data/testsClient.ts:34`,
+          `features/work/data/jobCardsClient.ts:55`,
+          `infrastructure/farmGeography/BackendFarmGeographyClient.ts:32`,
+          `infrastructure/weather/BackendWeatherClient.ts:20`.
+
+        🔴 **Login is in the localhost group** (`otpClient.ts:44`). So a broken build does **not** present
+        as same-origin calls to `app.shramsafal.in` — it presents as **mixed-content blocks against the
+        operator's own machine**. Debugging the documented symptom would waste the outage.
+        Either way: no login, no sync. `android-release.yml:48-54` documents the trap in its own comment.
+
+        ⚠️ **A5, A6 and A7 would still pass** — none of them exercises login. *(A6b would fail loudly, via
+        `BackendFarmGeographyClient.ts:32`, but it runs after the web step is already live.)* **No
+        criterion in A1–A13 names the API base URL.**
+
+        🔧 **"The env block is the only guard" was ALSO wrong, and is corrected.**
+        `src/clients/mobile-web/vite.config.ts:11-32` already defines `assertNoForbiddenEnv()`, invoked
+        unconditionally at `:32`, which **throws and fails the build**. A build-time enforcement point for
+        client-visible env policy already exists and already runs on every build, including
+        `ci-gate.yml`'s `npm run build`. It asserts only the *negative* (four provider keys must be
+        absent, `:13-18`) and carries no *positive* assertion that a required var is present — so it does
+        not catch B5 today. But the claim that no guard is possible was an assumption, not a measurement.
       **Do NOT** put the Maps key in a tracked `.env.production` — secret in git, CLAUDE.md hard rule.
       Credentials/permissions are precedented: `android-release.yml:94-116` already does `aws s3 cp` into
       `shramsafal-app-prod` plus a CloudFront invalidation on the same distribution using the existing
