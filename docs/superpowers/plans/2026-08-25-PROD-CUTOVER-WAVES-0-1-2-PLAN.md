@@ -2,8 +2,12 @@
 
 **Date:** 2026-08-25 · **Author:** Claude (cofounder mode)
 **Supervised:** senior-architect Pre-Flight Brief → `path-truth: FAIL`, 6 corrections applied
-**Cross-verified:** cross-verifier against repo → **20 drift items**, all applied below (v2)
-**Status:** DRAFT — blocked on Gate P + four founder rulings
+**Cross-verified twice:** v1→v2 (20 drift items) and v4→v5 (8 blockers). All applied.
+**Status:** **READY FOR EXECUTION** (v5). Gate P measured ✅ · T1.1 ruled ✅ · spec committed ✅
+**Re-verified 2026-08-25 (v4 → v5):** cross-verifier returned **BLOCK, 8 blockers**; all applied below.
+Three were prod-consequential and are named here so they are not re-introduced: a web bundle with an
+empty API base URL that no acceptance criterion could see (B5); no task installing the deploy script on
+the box (B6); and an instruction that would have **deleted today's two commits** (B3).
 
 > **v1 was wrong in two structurally fatal ways** and is superseded: the spec it told itself to
 > promote does not exist, and Wave 1 silently reverted Wave 0's fix. Both are fixed here. This
@@ -20,29 +24,51 @@ not re-derive them; do not trust any statement about this work that is not in th
 
 | | What | Evidence |
 |---|---|---|
-| ✅ | **T0.0** spec written | `_COFOUNDER/specs/_active/2026-08-25-prod-cutover-waves.md` (uncommitted) |
+| ✅ | **T0.0** spec written **and committed** | `_COFOUNDER/specs/_active/2026-08-25-prod-cutover-waves.md` — `_COFOUNDER` commit `b8dc0f1` |
 | ✅ | **T0.1** plugin G4 answered | bypass `gen-swap-script`; invoke `ops/aws/agent-deploy-lane/api-binary-swap.sh` directly with `--sha`/`--migrations`/`--expect-*`. Repointing `template_path` **fails anti-tamper 13/20** — see T0.1 |
-| ✅ | **T1.8** three Rulebook gates dispatched on both Wave 1 branches | server-auth `eaa6c60c` **3/3 green**; oversight `64d14255` 2/3 → **T1.4b** |
+| ⚠️ | **T1.8** gates dispatched — **evidence is now 2 commits STALE** | server-auth `eaa6c60c` 3/3 green; oversight `64d14255` 2/3 → **T1.4b**. HEAD is `d1c3837d`. **This does NOT count as T1.8 done — re-dispatch on the final SHA.** |
 
 | ✅ | **Gate P** measured on prod (read-only, via SSM) | GRANT sweep **deleted**; W1b risk **closed**; §8 S5 lock **moot**. See Gate P |
 | ✅ | **T1.1** founder ruled **"include them"**; all 5 changes read in full | see T1.1 — all are truth fixes, frontend-only |
 
-### ⚠️ Nothing is blocked on the founder until T1.11 (acceptance). Start immediately.
+### Founder gates — three land BEFORE T1.11, not only after
+
+Start immediately, but do not plan for an uninterrupted run to T1.11:
+- **T1.7** — `VITE_UNDERSTANDING_METER` is build-time; flipping it later costs a web **and** APK rebuild.
+  The plan itself calls it "a release decision, not a toggle." That decision is the founder's, at T1.7.
+- **T1.9** — if the classifier returns `destructive` (expected), `rehearsal_method: clone` follows, and a
+  clone is a restore-to-new-instance. `agent-deployer-permissions.json:53-63` denies `rds:RestoreDB*`.
+  Founder-only, and it lands before T1.11.
+- **T1.11** — acceptance itself.
 
 ### Do next, in this order
 
-1. **Commit the two authored artefacts** — the spec to `_COFOUNDER/` (its own commit), this plan to the
-   main repo. Then `git switch -c release/wave-1` **in a separate worktree**, never in the main checkout.
-2. **T0.2 → Wave 0 → T0.6 merge to `main`.** Wave 0 is 4 config lines + `0c7cdef0`; it rehearses the whole
-   lane where rollback is a pure binary swap.
-3. **T1.2 — merge `main` into `release/wave-1`.** If you skip this, Wave 1 silently reverts Wave 0's Sarvam
-   fix and no acceptance criterion will catch it. This is the single easiest way to break this release.
-4. T1.3 (Dexie guard) → T1.4 (+ T1.4b) → T1.5 → T1.6 → T1.7 → T1.8 re-dispatch → T1.9 classify → T1.10 RG
-   → T1.12b truth audit → **T1.11 founder acceptance on localhost** → T1.12–T1.17.
+> 🛑 **`release/wave-1` ALREADY EXISTS at `d1c3837d` and is the current branch of the main checkout.**
+> **Do NOT re-cut it. Do NOT `git switch -c release/wave-1`.** Doing so discards `0f5d5eab` (this plan)
+> and `d1c3837d` (the four truth fixes). The spec and plan are already committed —
+> `_COFOUNDER` `b8dc0f1`, main repo `0f5d5eab`. **Verify with `git log --oneline main..HEAD` before
+> anything else; you must see those two commits.**
+
+1. **T0.1b — install the deploy scripts on the box.** *(New; bypassing `gen-swap-script` removed the only
+   installer.)* `ops/aws/agent-deploy-lane/api-binary-swap.sh` **and** its sibling `verify-rollback-floor.sh`
+   must both be on `i-024b3537191712c76` in the **same directory** — the script resolves the floor check as
+   `"$(dirname "$0")/verify-rollback-floor.sh"` (`:303`). Neither has ever been on `main`. Without this
+   step T1.14 cannot run at all.
+2. **T0.2 → Wave 0 → T0.6 merge to `main`.** Wave 0 is the `ChatModel` lines + `0c7cdef0` (**a cherry-pick
+   from `feat/dfes-companion` — that commit is on no other branch**). Note Wave 0 rehearses the *lane*, not
+   the *migration path*: with `--migrations 0`, step 0b is skipped and Step 12 compares nothing.
+3. **T1.2 — merge `main` into `release/wave-1`** *(a no-op until T0.6 lands; that is expected)*. Skip it and
+   Wave 1 silently reverts Wave 0's Sarvam fix, with no acceptance criterion able to catch it.
+4. T1.3 (Dexie guard) → **T1.4 (3 conflicts — see the warning in T1.4)** → T1.4b → T1.5 → T1.6 → T1.7 →
+   T1.9 classify → T1.10 RG → T1.12b truth audit → **T1.11 founder acceptance on localhost** →
+   **T1.8 re-dispatch LAST** → T1.12–T1.17.
+   ⚠️ **T1.8 moved to the end deliberately.** T1.12b and T1.11 both produce code changes by definition; a
+   gate run before them proves nothing about the SHA that ships. **Every tree-rewriting task invalidates
+   the gates — re-dispatch after the last one, and A9's "green at the deployed SHA" means the deployed SHA.**
 
 ### Standing rules for whoever executes this
 
-- **Never `git checkout` in the main worktree** — it holds uncommitted founder work. Use `git cat-file -p <ref>:<path>` to read other branches; use a separate worktree to build.
+- **Never `git checkout`/`switch` in the main worktree without checking `git status` first.** As of `d1c3837d` the tree is clean, but this checkout is `release/wave-1` itself — switching away mid-merge is how work gets stranded. Read other branches with `git cat-file -p <ref>:<path>`.
 - **`_COFOUNDER/` is a separate nested git repo.** Its commits are always their own, never mixed with `src/**`.
 - **`CI Gate`, `eslint`, `frontend-ci`, `arch-tests` do not fire on a feature-branch push.** Every one needs an explicit `gh workflow run <wf> --ref <branch>`. A green on the *inputs* is not a green on the *merge result* — re-dispatch on `release/wave-1`.
 - **A gate that cannot see the failure cannot prove it.** CI runs Postgres as superuser, so every grant/ownership assertion is structurally green there and proves nothing about prod. Record `NOT_PROVEN`, never `PASS`.
@@ -133,6 +159,27 @@ correctly show no change for them — do not misread that as a failed apply.
 **Does NOT touch:** OTP/SMS delivery · AgriStack/UFSI · marketing site · admin-web · the keystore or
 signing identity · AI prompt text (the Sarvam change is a *model* swap; §6 covers its golden-set duty).
 
+### 3.1 Change Surface (mandatory — CLAUDE.md DoD; every row answered, silence forbidden)
+
+| Surface | Wave 1 | Wave 2 (dfes) |
+|---|---|---|
+| **DB** | **YES** — 16 `ssf` + 1 `analytics` migrations. 4 create tables (`field_operators`, `field_operator_work_rows`, `labour_corrections`, `raw_blob_subjects`); 3 tighten RLS; 1 irreversibly strips transcripts (`StripTranscriptFromCorrectionEvents`, `Down()` cannot restore); 1 alters `daily_logs` (nullable `plot_id`/`crop_cycle_id`, `plot_ids[]`, `scope`, CHECK). **No** User/Accounts migrations. Also **modifies two already-applied** migrations (`BootstrapDbRoles`, `AnalyticsRewrite`) — CI role-race fixes that **never execute in prod**, so A2's set difference correctly shows no change for them. |  **YES** — 5 `ssf` migrations + 1 `IHostedService` (`BackfillOwnerAttestations`) that runs on **every boot** and is seen by no gate |
+| **Backend** | **YES** — 8 new labour endpoints; `create_daily_log` wire shape (`scope`, `plotIds`, `labour[]`); `cost_entries` gains direction/qty/unit/unitPrice/paymentMode/vendorName; WVFD week boundary UTC→IST | **YES** — `day-understanding`, `question-events`, `verify_log_v2` wired (was a hard-coded UNIMPLEMENTED failure) |
+| **Frontend** | **YES** — Labour hub, oversight strip + waiting drawer, rebuilt log screen, `ai-drafts`, `FarmWideTodayPanel`, HarvestComingSoon, per-user IndexedDB, **Dexie 22→24**, + the four truth fixes in `d1c3837d` | **YES** — consent gate (**not** flag-gated, stands in front of login), understanding meter, question host, **Dexie owns v23** |
+| **Cross-cutting** | **YES** — new `web-release.yml` (T1.6); deploy scripts installed on the box (T0.1b); `_COFOUNDER` spec + corrections; Release Record row; **no** IaC, **no** IAM change, **no** new infrastructure | **YES** — 9 `VITE_*` flags baked at build time; 4 bundled legal documents |
+
+**Explicitly NOT touched (the YAGNI fence):** OTP/SMS delivery · AgriStack/UFSI · marketing site ·
+admin-web · keystore or signing identity · AI **prompt text** (the Sarvam change is a *model* swap) ·
+no feature-flag service, no canary, no runtime API-URL switch, no duplicate suites (Rulebook §4.1).
+
+### 3.2 🛑 Founder Acceptance Gate
+
+**Code-complete ≠ approved.** Per CLAUDE.md DoD and Rulebook §5, the founder must verify via the
+pointers in **T1.11** and tick, **before any deployment step** — and T1.11 runs on **localhost against
+restored prod-shaped data, before the API deploy**, because after the web step the Dexie door is shut
+(§8 S3) and after T1.14 the migrations are applied. **An agent may never tick this, infer it from
+silence, or merge while any 👁️ item is open.**
+
 ## 4. Acceptance criteria
 
 | ID | Criterion | Proof |
@@ -202,14 +249,19 @@ restricted `agent-deployer` role), so the lane's `Deny` list does not apply to i
 > farmer data is, literally, nothing. On-device Dexie data (the founder's own handset) is separate
 > and A8 still guards it.
 
-### Gate P — original task list (retained for the record)
+### Gate P — original task list (HISTORICAL RECORD ONLY — ALL COMPLETE)
 
-- [ ] **P1** `bash aws/hibernate/wake.sh`; confirm `/health` 200 and `GET /version`.
-- [ ] **P2** `SELECT relname, relowner::regrole, relacl FROM pg_class WHERE relnamespace='ssf'::regnamespace AND relkind='r';`
-- [ ] **P3** 🔴 **Is `ConnectionStrings__ShramSafalDb_Migration` set on the box?** (`grep -c ShramSafalDb_Migration` the API env file.) Highest-consequence unknown — §0.2 W1b.
-- [ ] **P4** Is `ConnectionStrings__ShramSafalDb_ReadOnly` set? (`appsettings.Production.json:6,8` are the literal `OVERRIDE_VIA_ENVIRONMENT_VARIABLE`.)
-- [ ] **P5** `SELECT * FROM ssf.__ef_migrations ORDER BY 1;` + the other three history tables. Decides whether the two phase targets (`Program.cs:968-969`) are already applied — see M3.
-- [ ] **P6** `SELECT count(*) FROM ssf.ai_jobs;` and `SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user;` — sizes the `AddRawBlobSubjects` lock risk the migration itself calls UNMEASURED (`:232-233`).
+> 🛑 **These are NOT open tasks.** Every one was executed on 2026-08-25; results are in the table
+> above. They are de-checkboxed deliberately: `P1` is `bash aws/hibernate/wake.sh`, which **mutates
+> production** and is a founder gate. A fresh session working unticked boxes must not find it here.
+
+
+  - ~~P1~~ (done): `bash aws/hibernate/wake.sh`; confirm `/health` 200 and `GET /version`.
+  - ~~P2~~ (done): `SELECT relname, relowner::regrole, relacl FROM pg_class WHERE relnamespace='ssf'::regnamespace AND relkind='r';`
+  - ~~P3~~ (done): 🔴 **Is `ConnectionStrings__ShramSafalDb_Migration` set on the box?** (`grep -c ShramSafalDb_Migration` the API env file.) Highest-consequence unknown — §0.2 W1b.
+  - ~~P4~~ (done): Is `ConnectionStrings__ShramSafalDb_ReadOnly` set? (`appsettings.Production.json:6,8` are the literal `OVERRIDE_VIA_ENVIRONMENT_VARIABLE`.)
+  - ~~P5~~ (done): `SELECT * FROM ssf.__ef_migrations ORDER BY 1;` + the other three history tables. Decides whether the two phase targets (`Program.cs:968-969`) are already applied — see M3.
+  - ~~P6~~ (done): `SELECT count(*) FROM ssf.ai_jobs;` and `SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user;` — sizes the `AddRawBlobSubjects` lock risk the migration itself calls UNMEASURED (`:232-233`).
 
 **Decision rule.** If P2 shows `relowner = agrisync_app` → **the GRANT sweep is deleted** (YAGNI, §0.5)
 and T1.6 becomes T1.6b, a comment correction only. If P3 shows `_Migration` unset → that is a **release
@@ -238,6 +290,27 @@ blocker**, not a footnote.
       `gen-swap-script` as unused for this lane. No plugin edit, no anti-tamper conflict.
       *(Correction to v2: `api-binary-swap.sh` exists on three branches with three different blobs; only
       `verify-rollback-floor.sh` is server-auth-exclusive.)*
+- [ ] **T0.1b** 🔴 **INSTALL THE DEPLOY SCRIPTS ON THE BOX. Without this, T1.14 cannot run.**
+      Bypassing `gen-swap-script` (T0.1) also removed the only thing that *installed* a swap script —
+      the generator wrote to `/opt/agrisync/scripts/api-binary-swap-<sha>.sh`
+      (`gen-swap-script/SKILL.md:82`). Nothing else does.
+      Copy **both** `ops/aws/agent-deploy-lane/api-binary-swap.sh` **and**
+      `ops/aws/agent-deploy-lane/verify-rollback-floor.sh` onto `i-024b3537191712c76`, **into the same
+      directory** — the swap script resolves its floor check as
+      `FLOOR_CHECK="$(dirname "$0")/verify-rollback-floor.sh"` (`api-binary-swap.sh:303`). Both are mode
+      `100755` in the index; preserve the executable bit. Neither has ever existed on `main`, and the
+      branch that first carried them (`chore/ssf-migration-runbook`) was never merged or deployed.
+      Also confirm on the box, or step 0b fails late: the `aws` CLI is present (else exit 41) and the
+      instance profile allows `rds:DescribeDBSnapshots` (else exit 42).
+
+- [ ] **T0.1c** **Capture the three migration histories Gate P did not record.** P5 returned only
+      `ssf.__ef_migrations` (78, last `20260703210908`). T1.14 **requires** `--expect-before` and
+      `--expect-after` and refuses a migration deploy without both (`api-binary-swap.sh:129-133`), and
+      Step 12 fails the deploy if any *undeclared* context moved. Read `public.__ef_migrations`,
+      `accounts.__accounts_migrations_history`, `analytics.__analytics_migrations_history` before T1.14.
+      *(Read-only; same SSM path Gate P used. Reminder: SSM runs `sh` and rejects CRLF — send the script
+      base64-encoded or it fails `exit 127` with a misleading "not found".)*
+
 - [ ] **T0.2** Branch `release/wave-0` from `main`. Apply the 4 `ChatModel` lines (`sarvam-m` → `sarvam-30b`) + `0c7cdef0` (`AiResponseNormalizer` duplicate-key tolerance; `AiResponseNormalizer.cs` verified present on **`main`**). **Do not** take the other 3 files of `0e57edc3` (§0.2 W6).
 - [ ] **T0.3** Prompt-registry row + golden-set delta (CLAUDE.md DoD). Regression ⇒ Wave 0 reverts.
 - [ ] **T0.4** `workflow_dispatch` CI Gate (it does **not** fire on branch push — `ci-gate.yml:8-11`). Branch manifest from `BranchLibrary/_TEMPLATE.md` + `INDEX.md` row.
@@ -264,9 +337,34 @@ blocker**, not a footnote.
       `spec: 2026-08-25-prod-cutover-waves` and covered by a **fresh** `eslint` + `frontend-ci` +
       `CI Gate` dispatch, because no CI run has ever seen them. **T1.12b must not re-litigate them** —
       they are already fixed; audit what remains.
-- [ ] **T1.2** Cut `release/wave-1` from `eaa6c60c`, then **merge `main` into it** so Wave 0's fix is carried forward. 🔴 **All three branches still carry `sarvam-m`** — without this merge, T1.13 silently reverts Wave 0 and no criterion catches it. This is why A4 is re-proven after T1.13.
+- [ ] **T1.2** 🛑 **`release/wave-1` EXISTS at `d1c3837d`. DO NOT CUT IT AGAIN.** It was created from
+      `eaa6c60c` on 2026-08-25 and already carries `0f5d5eab` (plan) + `d1c3837d` (the four truth fixes).
+      Re-cutting deletes both.
+      **The task is: `git merge main` into `release/wave-1`, AFTER T0.6 lands Wave 0 on `main`.**
+      A merge run before T0.6 is a **no-op** — that is expected, not a failure; it only becomes meaningful
+      once Wave 0 is on `main`. Post-T0.6 it touches `appsettings*.json` + `AiResponseNormalizer.cs`, none
+      of which `release/wave-1` modifies, so **no conflicts are expected**.
+      🔴 **All four branches still carry `sarvam-m`** — skip this merge and T1.14 silently reverts Wave 0.
+      **This is why A4 is re-proven after T1.14** (the API deploy), *not* after T1.13 (the GO token, at
+      which point no code has shipped and A4 is unprovable).
 - [ ] **T1.3** Run the **Dexie cross-branch guard before merging** — `workflow_dispatch` `eslint.yml` (`:79-92`, `npm run check:dexie-version`). It was written for exactly this collision (`:28-37`) and **has never run on this merge**.
-- [ ] **T1.4** Merge `feat/owner-oversight-loop` **@ `64d14255`** (brings **49** commits). Resolve the 2 conflicts by **regenerating** the snapshot (`vitest -u`) — never hand-edit. Decide: two `ProfilePage.snapshot.test.tsx` + `.snap` pairs exist at `features/profile/__tests__/` and `pages/__tests__/`; delete one or record why both.
+- [ ] **T1.4** Merge `feat/owner-oversight-loop` **@ `64d14255`** (brings **49** commits).
+      🔴 **THREE conflicts, not two. The third is the dangerous one.** Re-measured after `d1c3837d`:
+
+      | file | kind | how to resolve |
+      |---|---|---|
+      | `src/clients/mobile-web/src/app/hooks/useAppData.ts` | **content** | **hand-resolve. `vitest -u` cannot touch this.** |
+      | `…/features/profile/__tests__/__snapshots__/ProfilePage.snapshot.test.tsx.snap` | generated | regenerate (`vitest -u`) |
+      | `…/pages/__tests__/__snapshots__/ProfilePage.snapshot.test.tsx.snap` | generated | regenerate (`vitest -u`) |
+
+      🛑 **`useAppData.ts` is the file `d1c3837d` rewrote to delete the fabricated identity** ("Shetkari
+      Raja" / "Nashik" / three invented colleagues with real-looking phone numbers). **Resolving toward
+      oversight's side reinstates the fabrication this release exists to remove.** Take `HEAD`'s identity
+      block; merge oversight's changes around it.
+      **Proof, not judgement:** `src/clients/mobile-web/src/app/hooks/__tests__/useAppData.noFabricatedIdentity.test.ts`
+      exists precisely to catch this. **Run it immediately after resolving.** If it fails, the merge is wrong.
+      Then decide: two `ProfilePage.snapshot.test.tsx` + `.snap` pairs exist at `features/profile/__tests__/`
+      and `pages/__tests__/`; delete one or record why both exist.
 - [ ] **T1.5** Cherry-pick labour's 3 test-only commits. Reconcile the overlap between `7fe51ab4` and oversight's credential removal — name the canonical one.
 - [ ] **T1.6** **Maps key + "built once and promoted" — ONE workflow fixes both DoD items.**
       Measured: `deploy-s3.sh:130-133` only publishes a pre-built `dist/`, so a `VITE_*` var cannot be
@@ -275,13 +373,29 @@ blocker**, not a footnote.
       (`package.json:10` → `vite build --mode production`) picks the key up from an **untracked `.env.local`
       on one laptop** (present, 1 line; `.env.production` has 0), while the APK gets it properly from
       `android-release.yml:61` `secrets.VITE_GOOGLE_MAPS_API_KEY`.
-      **Do:** add `.github/workflows/web-release.yml` — `npm ci` → `npm run build:prod` with
-      `VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}` (the secret already exists) →
-      upload the `dist/` as a build artifact → publish via `bash scripts/deploy-s3.sh`. Mirror
-      `android-release.yml`'s env block so web and APK are built from the **same** inputs.
-      **Do NOT** add the key to a tracked `.env.production` — that is a secret in git (CLAUDE.md hard rule).
-      This is also the only thing that can satisfy the DoD's 🔒 *"frontend built once and promoted"*, which
-      currently has **no mechanism in the repo**.
+      **Do:** add `.github/workflows/web-release.yml`:
+      - **Trigger: `workflow_dispatch` ONLY.** 🛑 Never `on: push`. The web step is **one-way** (§8 S3) —
+        an automatic trigger would publish it before the T1.11 founder gate and before the API deploy.
+      - `npm ci` → **`npm run build`** (mirror `android-release.yml:63` exactly — **not** `build:prod`, or
+        "built from the same inputs" is false) → publish with `bash scripts/deploy-s3.sh`.
+      - 🔴 **The env block MUST set BOTH vars, mirroring `android-release.yml:47-61`:**
+        ```yaml
+        VITE_AGRISYNC_API_URL: "https://api.shramsafal.in"   # public URL, not a secret
+        VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+        ```
+        **Setting only the Maps key ships a broken app.** `.env.local` (the laptop file, gitignored,
+        absent in CI) carries **both**; `.env.production` carries only `VITE_AGRISYNC_API_URL`.
+        `transport.ts:30-41` `resolveApiBaseUrl()` returns `''` when the URL is unset, so every API call
+        goes **same-origin** — the web app would call `app.shramsafal.in` instead of `api.shramsafal.in`.
+        No login, no sync. `android-release.yml:48-54` documents this exact trap in its own comment.
+        ⚠️ **A5, A6 and A7 would all still pass.** Nothing in A1–A12 detects a dead API base URL on web —
+        so the acceptance criteria cannot save you here; the env block is the only guard.
+      **Do NOT** put the Maps key in a tracked `.env.production` — secret in git, CLAUDE.md hard rule.
+      Credentials/permissions are precedented: `android-release.yml:94-116` already does `aws s3 cp` into
+      `shramsafal-app-prod` plus a CloudFront invalidation on the same distribution using the existing
+      `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` secrets. `deploy-s3.sh` needs bash, `aws`, `curl`;
+      `DIST`/`BUCKET`/`DISTRIBUTION_ID`/`PUBLIC_URL` all default correctly.
+      This is also the only thing that can satisfy the DoD's 🔒 *"frontend built once and promoted"*.
 - [ ] **T1.6b** Correct the false GRANT rationale in `AddRawBlobSubjects.cs:149-159` (§0.3) — it ships wrong otherwise. Sweep itself only if Gate P mandates it.
 - [ ] **T1.7** **Two flags, two very different rollback costs. Located:**
       - `Ai:DomainKnowledgeLayer:Enabled` — read at `ParseVoiceInputHandler.cs:72` via
@@ -333,7 +447,24 @@ blocker**, not a footnote.
 - [ ] **T1.11** 🛑 **Founder Acceptance — on localhost against restored prod-shaped data, BEFORE the API deploy.** After the APK it is too late: the Dexie door is shut and migrations are applied.
 - [ ] **T1.12** 🛑 Founder takes the RDS snapshot (local-script route; the workflow has never run and is actor-gated).
 - [ ] **T1.13** 🛑 Founder mints + publishes the G3 GO token for the exact SHA.
-- [ ] **T1.14** Deploy API via the hardened script. Prove A1, A2, A3, A4, A9, A10.
+- [ ] **T1.14** Deploy the API via the hardened script (installed at T0.1b). Prove A1, A2, A3, A4, A9, A10.
+      🔴 **Declare EVERY context, or the deploy fails after the schema has already applied.**
+      `api-binary-swap.sh:96-98` defaults `--expect-user`/`--expect-accounts`/`--expect-analytics` to `0`,
+      and Step 12 (`:450-470`) fails the deploy if any *undeclared* context moved. **Wave 1 moves Analytics
+      by 1** (`20260817150453_WvfdWeekBoundaryToIst`). Running `--migrations 16` alone therefore exits **29
+      after the migrations are live**, with the **single-use GO token already burned** by the wrapper
+      (`ec2-deploy-wrapper.sh` steps D/E run *before* the inner command) — meaning a founder round-trip
+      mid-deploy, on a schema that has already changed. Shape:
+      ```
+      api-binary-swap.sh --sha <SHA> --migrations 16 --expect-analytics 1 \
+        --expect-user <n> --expect-accounts <n> \
+        --expect-before 20260703210908_RevertChildTableRlsWriteCheckToTrue \
+        --expect-after  20260815102440_AddRawBlobSubjects
+      ```
+      Fill `<n>` from **T0.1c**, not from memory.
+      ⏱️ **The snapshot has a 6-hour fuse.** `verify-rollback-floor.sh --max-age-hours 6` (default, passed
+      at `:310`). T1.12 (snapshot) → T1.13 (token) → T1.14 spans two founder actions; a snapshot older
+      than 6 h exits 30 **with the token already burned**. Sequence these three close together.
 - [ ] **T1.15** Deploy web. Prove A5, A6, A6b. **⚠️ Not reversible** — §8 S3.
 - [ ] **T1.16** Build APK at the SHA. Prove A7, A8 on the founder's handset.
 - [ ] **T1.17** 🛑 Founder merges to `main`. Release Record row with all §4.2 fields.
@@ -360,10 +491,17 @@ blocker**, not a footnote.
 
 Rulebook §4 (`Data-prod`) — all of:
 
-- [~] `frontend-ci` + `eslint` + `arch-tests` green — **each via explicit `workflow_dispatch`** (T1.8).
+- [ ] `frontend-ci` + `eslint` + `arch-tests` green **at the FINAL SHA** — **each via explicit `workflow_dispatch`** (T1.8).
       **server-auth `eaa6c60c`: all three green.** oversight `64d14255`: 2 of 3, `eslint` blocked on T1.4b.
       Must be **re-run on `release/wave-1`** after the merge — a green on the inputs is not a green on the result.
-- [ ] acceptance criteria A1–A11 proven + independent verifier APPROVE
+- [ ] acceptance criteria **A1–A12 including A6b** proven + independent verifier APPROVE
+      *(A12 is the truth gate and A6b is boundary-history survival — neither is optional, and the spec
+      requires AC1–AC12. Earlier drafts said "A1–A11", which silently dropped both.)*
+      ⚠️ **A10 is vacuous on today's production and must not be recorded as `PASS`.** It reads "a sweeper
+      returns non-zero where non-zero is expected" — but Gate P measured `ssf.ai_jobs = 0` and
+      `ssf.daily_logs = 0`, so there is no expected non-zero and the check goes green having proved
+      nothing. It was written to guard the `agrisync_admin`-under-`FORCE RLS` residual (§0.2 W1b). Either
+      seed a row and re-run it, or record **`NOT_PROVEN`** and carry that residual explicitly.
 - [ ] 🔒 no out-of-band DB changes — **or the §8 reading accepted explicitly by the founder**
 - [ ] rollback plan (§8) + RDS snapshot floor + `e2e` — requires founder override, see §6
 - [ ] 🔒 runtime-proven before merge · 🔒 frontend built once and promoted *(⚠️ **no mechanism exists**: `ci-gate.yml:139` runs `npm run build` and publishes nothing; `deploy-s3.sh` uploads local `dist/`; no workflow invokes it. Build it or record `NOT_PROVEN`.)*
