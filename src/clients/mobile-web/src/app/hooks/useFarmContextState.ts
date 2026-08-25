@@ -33,6 +33,63 @@ export interface FarmContextState {
     handleJoinViaQr: () => void;
 }
 
+/**
+ * spec: owner-oversight-loop (Task 12) — `FirstFarmWizard` is a single,
+ * full-screen overlay instance owned by `AppContent.tsx` (mounted once,
+ * controlled by `showFirstFarmWizard`). The NEW "तुमच्या शेती · Your farms"
+ * row in `SetupHubMenu.tsx` needs to open that SAME instance — never a
+ * second `FirstFarmWizard` mount — but it renders deep inside `AppRouter`,
+ * several component boundaries away from `AppContent`'s local state, with
+ * no existing context bridge between them (`AppRouterContext` is derived
+ * from `AppFeatureContexts`, a wholly separate state tree that does not
+ * carry `setShowFirstFarmWizard`).
+ *
+ * Threading a new field through `AppRouterContext` -> `AppRouter.tsx` ->
+ * `simpleRoutes.tsx` -> `ProfilePage` -> `SetupHubMenu` would touch five
+ * files this task's brief never named, for one boolean. A `window` custom
+ * event is the smaller, reversible surface: `AppContent.tsx` (mounted once,
+ * for the app's whole lifetime) listens once; any component anywhere can
+ * dispatch it without needing a prop path to exist. Symmetrical with the
+ * `open_farm_boundary` sessionStorage handoff `ProfilePage.tsx` already
+ * uses for the same kind of cross-boundary trigger.
+ */
+export const OPEN_CREATE_FARM_WIZARD_EVENT = 'agrisync:open-create-farm-wizard';
+
+/** Dispatches the event above. Safe to call from anywhere, including SSR
+ * (no-ops without `window`). */
+export function requestCreateFarmWizard(): void {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new Event(OPEN_CREATE_FARM_WIZARD_EVENT));
+}
+
+/**
+ * The join-via-QR prompt flow, extracted to a standalone, stateless
+ * function (Task 12) so `SetupHubMenu.tsx`'s new farm-switcher row can call
+ * the EXACT same logic `AppHeader`'s farm switcher already uses — not a
+ * second, independently-typed copy that could drift. Pure: reads only
+ * `window.prompt`/`window.location`, no closure over this hook's state.
+ */
+export function promptAndJoinFarmViaQr(): void {
+    // Deep-link: JoinFarmLandingPage expects `?join=<token>&farm=<code>`.
+    // Without a scanner, prompt the user to paste the link.
+    const link = window.prompt(
+        'तुमच्या मालकाने शेअर केलेली QR लिंक पेस्ट करा\nPaste the QR link shared by the farmer:',
+    );
+    if (!link) return;
+    try {
+        const url = new URL(link.trim());
+        const token = url.searchParams.get('t') ?? url.searchParams.get('join');
+        const farm = url.searchParams.get('f') ?? url.searchParams.get('farm');
+        if (token && farm) {
+            window.location.assign(
+                `/?join=${encodeURIComponent(token)}&farm=${encodeURIComponent(farm)}`,
+            );
+            return;
+        }
+    } catch { /* fall through to alert */ }
+    window.alert('Link not recognised. Ask the farmer to share it again.');
+}
+
 export function useFarmContextState(): FarmContextState {
     const { isAuthenticated, session } = useAuth();
     const [myFarms, setMyFarms] = React.useState<MyFarmDto[] | null>(null);
@@ -92,25 +149,11 @@ export function useFarmContextState(): FarmContextState {
         setRefreshCounter(x => x + 1);
     }, []);
 
+    // Task 12 — now a thin call into the standalone, exported
+    // `promptAndJoinFarmViaQr()` above, so `SetupHubMenu.tsx`'s new row can
+    // reuse the identical flow without duplicating it.
     const handleJoinViaQr = React.useCallback(() => {
-        // Deep-link: JoinFarmLandingPage expects `?join=<token>&farm=<code>`.
-        // Without a scanner, prompt the user to paste the link.
-        const link = window.prompt(
-            'तुमच्या मालकाने शेअर केलेली QR लिंक पेस्ट करा\nPaste the QR link shared by the farmer:',
-        );
-        if (!link) return;
-        try {
-            const url = new URL(link.trim());
-            const token = url.searchParams.get('t') ?? url.searchParams.get('join');
-            const farm = url.searchParams.get('f') ?? url.searchParams.get('farm');
-            if (token && farm) {
-                window.location.assign(
-                    `/?join=${encodeURIComponent(token)}&farm=${encodeURIComponent(farm)}`,
-                );
-                return;
-            }
-        } catch { /* fall through to alert */ }
-        window.alert('Link not recognised. Ask the farmer to share it again.');
+        promptAndJoinFarmViaQr();
     }, []);
 
     return {

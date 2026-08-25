@@ -1,21 +1,54 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * spec: owner-oversight-loop
+ *
+ * Reflect's inbox of entries still awaiting verification. READ-ONLY.
+ *
+ * THE APPROVE BUTTON IS GONE ON PURPOSE. It was `bg-emerald-600` "Approve",
+ * and it called `ReflectPage`'s `onVerifyLog` -> `useTrustLayer` ->
+ * `application/usecases/VerifyLog.ts`, which enqueues `verify_log_v2`. That
+ * mutation has no server handler: `PushSyncBatchHandler.cs` returns
+ * `MUTATION_TYPE_UNIMPLEMENTED`, `RejectionPolicy.ts` treats that code as
+ * PERMANENT, and the row parks in `REJECTED_USER_REVIEW`. The owner tapped
+ * Approve, the app showed him a verified state, and the server had refused.
+ *
+ * Repointing it at the working v1 `verify_log` mutation is NOT the fix:
+ * `VerifyLogHandler.cs` runs `OnLogVerifiedAutoVerifyJobCard` on every
+ * success, moving a job card `Completed -> VerifiedForPayout` — a money path
+ * that is a founder decision, not an implementation detail. `P5` therefore
+ * leaves one option: remove the control and say why.
+ *
+ * `onVerify` is removed from the props, not left unused, so re-enabling has
+ * to be a deliberate edit here rather than a callback swap at the call site.
+ * "View" survives — reading what happened is the oversight loop's actual
+ * purpose and needs no server write.
  */
 
 import React, { useState } from 'react';
-import { DailyLog, LogVerificationStatus, FarmOperator } from '../../../types';
-import { CheckCircle2, XCircle, Clock, ChevronRight, User, Calendar, DollarSign, Leaf } from 'lucide-react';
+import { DailyLog, FarmOperator } from '../../../types';
+// `XCircle` and `ChevronRight` were already unused imports before this
+// change (the chevrons below are local inline SVGs); dropped with
+// `CheckCircle2`, which the removed Approve button was the only user of.
+import { Clock, User, Calendar, DollarSign, Leaf } from 'lucide-react';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import ApprovalUnavailableNotice from '../../../shared/components/ApprovalUnavailableNotice';
 
 interface ReviewInboxProps {
     pendingLogs: DailyLog[];
     operators: FarmOperator[];
-    onVerify: (logId: string, status: LogVerificationStatus, notes?: string) => void;
     onViewLog: (log: DailyLog) => void;
 }
 
-const ReviewInbox: React.FC<ReviewInboxProps> = ({ pendingLogs, operators, onVerify, onViewLog }) => {
+const ReviewInbox: React.FC<ReviewInboxProps> = ({ pendingLogs, operators, onViewLog }) => {
     const [isExpanded, setIsExpanded] = useState(true);
+    // Optional, not `useLanguage()`: this component had NO provider
+    // dependency before this change, and acquiring a hard one would make it
+    // throw for any future caller mounted outside `LanguageProvider`
+    // (finding F5's lesson, see `useOptionalLanguage`'s own doc comment).
+    // No provider -> 'en', which is what the notice's copy already is.
+    const language = useOptionalLanguage()?.language ?? 'en';
 
     if (pendingLogs.length === 0) return null;
 
@@ -50,6 +83,10 @@ const ReviewInbox: React.FC<ReviewInboxProps> = ({ pendingLogs, operators, onVer
 
                 {/* List */}
                 {isExpanded && (
+                    <>
+                    <div className="px-4 pt-4">
+                        <ApprovalUnavailableNotice language={language} />
+                    </div>
                     <div className="divide-y divide-amber-100/50">
                         {pendingLogs.map(log => (
                             <div key={log.id} className="p-4 hover:bg-white/50 transition-colors">
@@ -84,20 +121,14 @@ const ReviewInbox: React.FC<ReviewInboxProps> = ({ pendingLogs, operators, onVer
                                         </div>
                                     </div>
 
-                                    {/* Quick Actions */}
+                                    {/* "View" is the only action left — see this
+                                        file's header for why Approve is gone. */}
                                     <div className="flex gap-2">
                                         <button
                                             onClick={(e) => { e.stopPropagation(); onViewLog(log); }}
                                             className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50"
                                         >
                                             View
-                                        </button>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); onVerify(log.id, LogVerificationStatus.APPROVED); }}
-                                            className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 shadow-sm flex items-center gap-1"
-                                        >
-                                            <CheckCircle2 size={14} />
-                                            Approve
                                         </button>
                                     </div>
                                 </div>
@@ -134,6 +165,7 @@ const ReviewInbox: React.FC<ReviewInboxProps> = ({ pendingLogs, operators, onVer
                             </div>
                         ))}
                     </div>
+                    </>
                 )}
             </div>
         </div>

@@ -4,9 +4,22 @@
 */
 
 import React from 'react';
-import { Layers, CheckCircle2, MapPin } from 'lucide-react';
+import { Layers, CheckCircle2, MapPin, Home, ChevronRight } from 'lucide-react';
 import { CropProfile } from '../../../types';
 import { getCropTheme } from '../../../shared/utils/colorTheme';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import type { Language } from '../../../i18n/language';
+import { resolveOversightString } from '../../../i18n/oversightTranslations';
+
+// Same font-selection convention every oversight component uses (root
+// CLAUDE.md Font Rules) — only used below when `hideGlobalCard` opts a
+// caller into the founder-approved Task 13 copy.
+const DEVANAGARI_PATTERN = /[ऀ-ॿ]/;
+const MARATHI_BODY_FONT = { fontFamily: "'Noto Sans Devanagari', sans-serif" } as const;
+const ENGLISH_FONT = { fontFamily: "'DM Sans', sans-serif" } as const;
+function fontStyleFor(text: string): React.CSSProperties {
+    return DEVANAGARI_PATTERN.test(text) ? MARATHI_BODY_FONT : ENGLISH_FONT;
+}
 
 interface CropSelectorProps {
     mode: 'log' | 'reflect';
@@ -17,6 +30,44 @@ interface CropSelectorProps {
     disabled?: boolean;
     compact?: boolean;
     showPlots?: boolean; // New prop to force plot display in compact mode
+    /**
+     * THE OPT-IN FOR EVERY FOUNDER-DIRECTED LOG-SCREEN CHANGE ON THIS
+     * COMPONENT. `mainView.tsx`'s log screen is the only caller that sets it.
+     *
+     * spec: owner-oversight-loop. §5.1 is explicit that `CropSelector` is not
+     * to be redesigned, so nothing here may reach a consumer that has not
+     * asked for it. When `true`:
+     *   - Task 13, change 4 — the "Entire Farm" card is suppressed from the
+     *     horizontal carousel (it no longer sits first, equal-weight with the
+     *     crops); the SAME selection (`handleGlobalToggle`/`isGlobalSelected`
+     *     below — unchanged logic, not re-implemented) instead renders as a
+     *     quiet, full-width list row BELOW the crop cards;
+     *   - Task 13, change 4 — the `mode === 'log'` section header/hint swap
+     *     from this component's original English dev copy to the founder's
+     *     own approved Marathi (`oversightTranslations.ts`'s
+     *     `plotSectionHeader` / `plotSectionHint`);
+     *   - Task 16, Problem 2 — the founder-directed VIVID selected state on
+     *     the crop cards: `strongFill` + `ring-[4px]` instead of the `-50`
+     *     tint + `ring-[3px]`, a deeper shadow, a harder dim on unselected
+     *     siblings, an opaquer count pill and a larger tick badge with a
+     *     solid white border. He approved this on the log screen and
+     *     re-approved it since; it belongs there and only there.
+     *
+     * WHAT `false`/OMITTED GUARANTEES, AND WHAT IT DOES NOT (finding F5).
+     * Every VISIBLE difference listed above is gated, so `Attendance.tsx` —
+     * the one other consumer, which never passes this prop — renders the
+     * same pixels it rendered before this branch. Pinned class-by-class in
+     * `__tests__/CropSelectorDefaultPath.test.tsx`.
+     *
+     * It is NOT byte-identical, and the earlier version of this comment
+     * claiming so was false. Two non-visual additions apply on BOTH paths and
+     * are deliberate: `data-testid` hooks (`crop-card-*`, `crop-tick-*`,
+     * `crop-selector-entire-farm-row*`, `plot-tray-button`) and
+     * `aria-pressed` on the crop cards — the latter an accessibility fix for
+     * a control that has always been a toggle, and the reason the default
+     * path can now be tested by rendered output at all.
+     */
+    hideGlobalCard?: boolean;
 }
 
 // --- NEW COMPONENT: CropSymbol (Photo/Emoji Replacement) ---
@@ -127,8 +178,23 @@ const CropSelector: React.FC<CropSelectorProps> = ({
     onSelectionChange,
     disabled,
     compact = false,
-    showPlots = false
+    showPlots = false,
+    hideGlobalCard = false
 }) => {
+    // Finding F5 — `useLanguage()` THROWS outside `LanguageProvider`
+    // (`i18n/LanguageContext.tsx`). Calling it unconditionally here gave a
+    // component that previously had NO provider dependency a hard one, for
+    // every consumer, in service of copy only the `hideGlobalCard` path
+    // renders. `useOptionalLanguage` asks without throwing.
+    //
+    // The `'en'` fallback is the app's OWN default, not a new guess:
+    // `LanguageProvider` itself starts at `useUiPref<Language>(
+    // 'agrilog_language', 'en')`. It is also unreachable on the default
+    // path — every `resolveOversightString(language, ...)` call below sits
+    // inside a `hideGlobalCard` branch, so a consumer outside a provider
+    // renders no language-driven string at all.
+    const languageContext = useOptionalLanguage();
+    const language: Language = languageContext?.language ?? 'en';
 
     const handleGlobalToggle = () => {
         if (disabled) return;
@@ -212,10 +278,8 @@ const CropSelector: React.FC<CropSelectorProps> = ({
 
     const isGlobalSelected = selectedCrops.includes('FARM_GLOBAL');
 
-    const cardPadding = compact ? 'p-2' : 'p-4';
     const fontSize = compact ? 'text-xs' : 'text-lg';
     const minHeight = compact ? 'auto' : (mode === 'log' ? '140px' : 'auto');
-    const gap = compact ? 'gap-2' : 'gap-3 sm:gap-4';
 
     return (
         <div className="w-full space-y-4">
@@ -226,12 +290,16 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                     <label className="text-xl font-bold text-slate-800 flex items-center">
                         {mode === 'log' ? (
                             <div className="flex flex-col">
-                                <span className="flex items-center">
+                                <span className="flex items-center" style={hideGlobalCard ? fontStyleFor(resolveOversightString(language, 'plotSectionHeader')) : undefined}>
                                     <MapPin className="mr-2 text-emerald-600 animate-bounce" size={24} />
-                                    Select the plots you worked on today
+                                    {hideGlobalCard
+                                        ? resolveOversightString(language, 'plotSectionHeader')
+                                        : 'Select the plots you worked on today'}
                                 </span>
-                                <span className="text-xs font-normal text-slate-500 mt-1 pl-8">
-                                    You can select multiple crops or multiple plots where same work was executed
+                                <span className="text-xs font-normal text-slate-500 mt-1 pl-8" style={hideGlobalCard ? fontStyleFor(resolveOversightString(language, 'plotSectionHint')) : undefined}>
+                                    {hideGlobalCard
+                                        ? resolveOversightString(language, 'plotSectionHint')
+                                        : 'You can select multiple crops or multiple plots where same work was executed'}
                                 </span>
                             </div>
                         ) : (
@@ -254,8 +322,13 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                 flex overflow-x-auto pb-8 pt-4 px-4 snap-x snap-mandatory scrollbar-hide -mx-4 sm:mx-0
                 ${compact ? 'gap-4' : 'gap-6'}
             `}>
-                {/* 1. Global / Farm Card */}
-                {!compact && (
+                {/* 1. Global / Farm Card — spec: owner-oversight-loop (Task
+                    13, change 4): "must be visually secondary". Suppressed
+                    here when `hideGlobalCard` is set; the SAME selection
+                    (`handleGlobalToggle`/`isGlobalSelected`, unchanged)
+                    renders instead as a quiet list row below the carousel —
+                    see that block, after the crop cards. */}
+                {!compact && !hideGlobalCard && (
                     <button
                         onClick={handleGlobalToggle}
                         disabled={disabled}
@@ -309,17 +382,57 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                     const isFocusMode = selectedCrops.length > 0;
                     const isDimmed = isFocusMode && !isSelected;
 
+                    // ---- FINDING F5: the vivid treatment is OPT-IN ----
+                    // The founder directed the vivid selected state (Task 16,
+                    // Problem 2: "the user must be able to know what he
+                    // selected") and approved it ON THE LOG SCREEN. It shipped
+                    // ungated, so `Attendance.tsx` — a screen he never looked
+                    // at — inherited it too. Spec §5.1 ("CropSelector is not to
+                    // be redesigned") makes that a scope defect, not a taste
+                    // one. Each pair below is: [opted-in] / [exactly what main
+                    // rendered before this branch].
+                    const selectedCardClass = hideGlobalCard
+                        ? `${theme.strongFill} ring-[4px] ${theme.border} shadow-[0_20px_50px_-12px_rgba(0,0,0,0.35)] ${theme.slideShadow} scale-110 z-20`
+                        : `${theme.slideBgSelected} ring-[3px] ${theme.border} shadow-[0_20px_50px_-12px_rgba(0,0,0,0.3)] ${theme.slideShadow} scale-110 z-20`;
+                    const dimmedClass = hideGlobalCard
+                        ? 'opacity-40 grayscale scale-90'
+                        : 'opacity-50 grayscale-[0.8] scale-95';
+                    // The photo ring. Opted-in matches the outer ring's
+                    // strength (both at the theme's full `-500` intensity /
+                    // `strongFill`); the default keeps main's pale `-100`
+                    // border over the `-50` tint. The `border` width token
+                    // moved out of the static class list into BOTH default
+                    // branches — same tokens, same computed style, and it
+                    // keeps `border`/`border-2` from ever co-existing on one
+                    // element (where the winner would depend on stylesheet
+                    // order, not on this file).
+                    const photoRingClass = hideGlobalCard
+                        ? (isSelected ? `border-2 ${theme.border} ${theme.strongFill}` : 'border border-slate-100 bg-slate-50')
+                        : (isSelected ? `border ${theme.slideBorder} ${theme.slideBgSelected}` : 'border border-slate-100 bg-slate-50');
+                    const countPillClass = hideGlobalCard
+                        ? `${theme.iconText} bg-white/90 px-2.5 py-1 rounded-full shadow-sm`
+                        : `${theme.iconText} bg-white/60 px-2 py-0.5 rounded-full`;
+                    // Tick badge: larger, with a solid white border (was a
+                    // near-invisible border-white/20) so it reads as a crisp
+                    // filled disc rather than a soft blob.
+                    const tickBadgeClass = hideGlobalCard
+                        ? `absolute -bottom-6 left-1/2 -translate-x-1/2 z-30 ${theme.indicator} text-white rounded-full p-2.5 shadow-2xl border-2 border-white ring-2 ring-white/70 animate-in zoom-in spin-in-12 duration-300`
+                        : `absolute -bottom-5 left-1/2 -translate-x-1/2 z-30 ${theme.indicator} text-white rounded-full p-2 shadow-xl border border-white/20 ring-2 ring-white/50 animate-in zoom-in spin-in-12 duration-300`;
+                    const tickIconSize = hideGlobalCard ? 28 : 24;
+
                     return (
                         <button
                             key={crop.id}
+                            data-testid={`crop-card-${crop.id}`}
+                            aria-pressed={isSelected}
                             onClick={() => handleCropToggle(crop)}
                             disabled={disabled}
                             className={`
                                 relative flex-shrink-0 flex flex-col items-center pt-4 pb-6 px-2 rounded-[2.5rem] transition-all duration-500 group snap-center overflow-visible
                                 ${compact ? 'w-28' : 'w-36'}
                                 ${isSelected
-                                    ? `${theme.slideBgSelected} ring-[3px] ${theme.border} shadow-[0_20px_50px_-12px_rgba(0,0,0,0.3)] ${theme.slideShadow} scale-110 z-20`
-                                    : `bg-white ring-1 ring-slate-100 shadow-sm hover:shadow-md hover:scale-105 hover:z-10 ${isDimmed ? 'opacity-50 grayscale-[0.8] scale-95' : 'opacity-100'}`}
+                                    ? selectedCardClass
+                                    : `bg-white ring-1 ring-slate-100 shadow-sm hover:shadow-md hover:scale-105 hover:z-10 ${isDimmed ? dimmedClass : 'opacity-100'}`}
                             `}
                             style={{ minHeight: minHeight }}
                         >
@@ -328,15 +441,19 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                                 <div className={`absolute inset-0 ${theme.bg} blur-xl -z-10 rounded-[2.5rem]`} />
                             )}
 
-                            {/* Image Container */}
+                            {/* Image Container — see `photoRingClass` above
+                                for what the opted-in path changes and why the
+                                default path keeps main's markup. */}
                             <div className={`
                                 relative z-10 mb-3 rounded-full p-1 transition-all duration-500
                                 ${isSelected ? `bg-white p-1.5 shadow-inner` : 'bg-transparent'}
                                 ${compact ? 'w-16 h-16' : 'w-20 h-20'}
                             `}>
-                                <div className={`
-                                    relative w-full h-full rounded-full flex items-center justify-center overflow-hidden border transition-colors duration-500
-                                    ${isSelected ? `${theme.slideBorder} ${theme.slideBgSelected}` : 'border-slate-100 bg-slate-50'}
+                                <div
+                                    data-testid={`crop-photo-ring-${crop.id}`}
+                                    className={`
+                                    relative w-full h-full rounded-full flex items-center justify-center overflow-hidden transition-colors duration-500
+                                    ${photoRingClass}
                                  `}>
                                     <CropSymbol name={crop.iconName} size={compact ? 'md' : 'xl'} />
                                 </div>
@@ -349,9 +466,11 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                                 </span>
 
                                 {!compact && (
-                                    <span className={`
+                                    <span
+                                        data-testid={`crop-count-pill-${crop.id}`}
+                                        className={`
                                         text-[11px] font-black uppercase tracking-widest transition-colors duration-300
-                                        ${isSelected ? `${theme.iconText} bg-white/60 px-2 py-0.5 rounded-full` : 'text-slate-400'}
+                                        ${isSelected ? countPillClass : 'text-slate-400'}
                                     `}>
                                         {mode === 'reflect' && selectedPlotCount === 0
                                             ? (hasMultiplePlots ? `${crop.plots.length} PLOTS` : '1 PLOT')
@@ -360,22 +479,82 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                                 )}
                             </div>
 
-                            {/* Hanging Checkmark Badge - Glass Morphed Dark Green Tick */}
+                            {/* Hanging Checkmark Badge — see `tickBadgeClass`
+                                above. */}
                             {isSelected && (
-                                <div className={`
-                                    absolute -bottom-5 left-1/2 -translate-x-1/2 z-30
-                                    ${theme.indicator} text-white
-                                    rounded-full p-2 shadow-xl 
-                                    border border-white/20 ring-2 ring-white/50
-                                    animate-in zoom-in spin-in-12 duration-300
-                                `}>
-                                    <CheckCircle2 size={24} className="text-white drop-shadow-md" strokeWidth={4} />
+                                <div data-testid={`crop-tick-${crop.id}`} className={tickBadgeClass}>
+                                    <CheckCircle2 size={tickIconSize} className="text-white drop-shadow-md" strokeWidth={4} />
                                 </div>
                             )}
                         </button>
                     );
                 })}
             </div>
+
+            {/* spec: owner-oversight-loop (Task 13, change 4; Task 14,
+                change 3) — the demoted "Entire Farm" row. Same
+                handler/selection state as the suppressed card above
+                (`handleGlobalToggle`/`isGlobalSelected`) — this is a
+                restyle of the SAME selection, not a second implementation.
+                Task 14: the founder could not tell whether this row was
+                selected — the only prior signal was a grey tick swapping
+                for a grey chevron, same white card, same stone-200 border
+                throughout. Selected is now unmistakably emerald (spec
+                §P-G: emerald = selected); UNSELECTED stays full-colour and
+                legible — position (demoted below the crop carousel) and
+                plainness (no photo, a plain house icon) carry the
+                secondary status, never a washed-out grey that reads as
+                broken to this audience. */}
+            {!compact && hideGlobalCard && (
+                <button
+                    type="button"
+                    onClick={handleGlobalToggle}
+                    disabled={disabled}
+                    data-testid="crop-selector-entire-farm-row"
+                    aria-pressed={isGlobalSelected}
+                    className={`flex w-full items-center gap-3 rounded-2xl border-2 px-4 py-3 text-left transition-colors disabled:opacity-60 ${
+                        isGlobalSelected
+                            ? 'border-emerald-500 bg-emerald-50'
+                            : 'border-stone-200 bg-white hover:bg-stone-50'
+                    }`}
+                >
+                    <span
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                            isGlobalSelected ? 'bg-emerald-600 text-white' : 'bg-stone-100 text-stone-600'
+                        }`}
+                    >
+                        <Home size={18} strokeWidth={2.25} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                        <span
+                            className={`block truncate text-sm font-bold ${
+                                isGlobalSelected ? 'text-emerald-900' : 'text-stone-800'
+                            }`}
+                            style={fontStyleFor(resolveOversightString(language, 'entireFarmLabel'))}
+                        >
+                            {resolveOversightString(language, 'entireFarmLabel')}
+                        </span>
+                        <span
+                            className={`block truncate text-xs ${
+                                isGlobalSelected ? 'text-emerald-700/80' : 'text-stone-500'
+                            }`}
+                            style={fontStyleFor(resolveOversightString(language, 'entireFarmHint'))}
+                        >
+                            {resolveOversightString(language, 'entireFarmHint')}
+                        </span>
+                    </span>
+                    {isGlobalSelected ? (
+                        <span
+                            data-testid="crop-selector-entire-farm-row-selected-tick"
+                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600"
+                        >
+                            <CheckCircle2 size={16} className="text-white" strokeWidth={3} />
+                        </span>
+                    ) : (
+                        <ChevronRight size={16} className="shrink-0 text-stone-400" />
+                    )}
+                </button>
+            )}
 
             {/* --- INTEGRATED PLOT SELECTION TRAY (CLEAN BANNER STYLE) --- */}
             {/* Show if strict requirements met OR if showPlots prop is true */}

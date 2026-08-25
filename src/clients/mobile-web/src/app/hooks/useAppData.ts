@@ -26,6 +26,15 @@ export interface UseAppDataResult {
     history: DailyLog[];
     setHistory: React.Dispatch<React.SetStateAction<DailyLog[]>>;
 
+    /**
+     * Whether a hydration pass has actually COMPLETED — i.e. whether an
+     * empty `history`/`crops` is a measured empty or an unfilled initial
+     * value. spec: owner-oversight-loop, finding F7(a). See the state
+     * declaration inside the hook for the full reasoning; read it only if
+     * you turn the ABSENCE of records into a positive claim.
+     */
+    dataLoaded: boolean;
+
     // Deprecated, kept for compatibility
     mockHistory: DailyLog[];
     realHistory: DailyLog[];
@@ -167,6 +176,25 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
     // --- UI STATE ---
     const [showTaskCreationSheet, setShowTaskCreationSheet] = useState(false);
 
+    /**
+     * Whether the load effect below has actually FINISHED a hydration pass —
+     * i.e. whether an empty `history`/`crops` is a measured empty or just an
+     * unfilled initial value.
+     *
+     * spec: owner-oversight-loop, finding F7(a). Everything this hook returns
+     * starts empty and fills in asynchronously. A surface that turns "no
+     * records" into a positive claim — the oversight strip's rest state, a
+     * green tick reading "आज पर्यन्त सर्व कामे पूर्ण आहेत" ("all work is
+     * complete as of today") — would otherwise make that claim during the
+     * first-load window, from data nobody has read yet. Consumers that only
+     * RENDER the data (every existing one) are unaffected and need not read
+     * this; consumers that make a claim FROM ITS ABSENCE must.
+     *
+     * Set only after a hydration pass completes. `loadData`'s `catch` leaves
+     * it false on purpose: a failed load has proven nothing.
+     */
+    const [dataLoaded, setDataLoaded] = useState(false);
+
     // --- LOAD DATA EFFECT ---
     useEffect(() => {
         let mounted = true;
@@ -194,6 +222,9 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
             setPlannedTasks(Array.isArray(plannedTasksMeta?.value) ? plannedTasksMeta.value as PlannedTask[] : []);
             setHarvestSessions([]);
             setProcurementExpenses([]);
+            // Last line of the pass, after every `await` above resolved —
+            // see `dataLoaded`'s own doc comment (finding F7(a)).
+            setDataLoaded(true);
         };
 
         const loadData = async () => {
@@ -217,6 +248,8 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
                     if (mounted && loadedProfile && loadedProfile.name) {
                         setFarmerProfile(loadedProfile);
                     }
+                    // Demo branch's own completion point (finding F7(a)).
+                    if (mounted) setDataLoaded(true);
                 } else {
                     if (isAuthenticated) {
                         await backgroundSyncWorker.triggerNow();
@@ -328,6 +361,11 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
         setHistory, // Unified setter
         setMockHistory: setHistory,
         setRealHistory: setHistory,
+
+        // spec: owner-oversight-loop, finding F7(a) — see this flag's own
+        // declaration above. Read it before turning "no records" into a
+        // positive claim; ignore it if you only render the records.
+        dataLoaded,
 
         ledgerDefaults, setLedgerDefaults,
         userResources, setUserResources,

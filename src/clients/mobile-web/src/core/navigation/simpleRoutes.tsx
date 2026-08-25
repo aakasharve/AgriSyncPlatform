@@ -40,6 +40,9 @@ import {
     PiiReviewQueuePage,
     AiDraftsPage
 } from './lazyComponents';
+// Finding F3 — SchedulerPage's "Close Day" destination. See that module's
+// header for why this hop is a window event and not a prop path.
+import { requestOpenWaitingDrawer } from '../../features/oversight/oversightNavigationEvents';
 
 export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'profile') return null;
@@ -170,11 +173,16 @@ export const renderScheduleRoute = (ctx: AppRouterContext): React.ReactNode => {
                 userResources={ctx.userResources}
                 onAddResource={(resource) => ctx.setUserResources(prev => [...prev, resource])}
                 onOpenTaskCreator={() => ctx.setShowTaskCreationSheet(true)}
-                onCloseDay={() => {
-                    ctx.setCurrentRoute('main');
-                    ctx.setMainView('log');
-                    ctx.setShowCloseDaySummary(true);
-                }}
+                // FINDING F3 — this button used to route to the log screen
+                // and set `showCloseDaySummary`, a flag whose only readers
+                // commit `0e4ad118` deleted: it navigated and then did
+                // nothing. Spec §4.2 moved the whole Daily Closure card into
+                // the waiting drawer, so that is where "Close Day" goes now.
+                // It stays ON this page (an overlay, not a route change —
+                // `OversightOverlay.tsx`), so the scheduler underneath is
+                // never unmounted and there is nothing to navigate back
+                // from.
+                onCloseDay={() => requestOpenWaitingDrawer()}
             />
         </div>
     );

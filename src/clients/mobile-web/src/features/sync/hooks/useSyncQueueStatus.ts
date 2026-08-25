@@ -52,6 +52,31 @@ export interface SyncQueueStatus {
      isOnline: boolean;
      // Last sync
      lastSyncAt: string | null;
+     /**
+      * Whether a Dexie read has actually COMPLETED — i.e. whether every zero
+      * above is a measured zero or merely an unfilled initial value.
+      *
+      * Finding F7(a). This hook starts at `EMPTY_STATUS` and only fills in
+      * after its first poll (`useEffect` below runs `refresh()` on mount, and
+      * `refresh` is `async`). During that window every count reads 0, and the
+      * oversight strip turns those zeros into `waitingCount === 0`, which
+      * `CanonicalStrip` renders as the REST state: a green tick and
+      * "आज पर्यन्त सर्व कामे पूर्ण आहेत" ("all work is complete as of today").
+      * That is the F-2 defect this file's own comments describe, one layer
+      * up: the strongest possible claim made from the weakest possible
+      * evidence — the absence of rows nobody has read yet.
+      *
+      * REQUIRED, not optional, and deliberately so: the same reasoning
+      * `SyncEvidenceSnapshot.unqueueableCount` is required for (see F-2's
+      * note above). An optional flag lets a consumer write `?? true` and
+      * strengthen the claim by silence, which is exactly the failure being
+      * fixed. A required member makes `tsc` name every construction site.
+      *
+      * Stays `false` when `refresh()` THROWS, too. A device whose Dexie read
+      * failed has not proven anything is complete; "we do not know yet" is
+      * the honest state, and it is strictly better than a green tick.
+      */
+     hasLoaded: boolean;
 }
 
 const EMPTY_STATUS: SyncQueueStatus = {
@@ -64,6 +89,8 @@ const EMPTY_STATUS: SyncQueueStatus = {
      pendingAiJobs: 0,
      isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
      lastSyncAt: null,
+     // Nothing has been read yet — see `hasLoaded`'s own doc comment.
+     hasLoaded: false,
 };
 
 /**
@@ -165,6 +192,11 @@ export function useSyncQueueStatus(): SyncQueueStatus {
                     pendingAiJobs,
                     isOnline: navigator.onLine,
                     lastSyncAt,
+                    // Set ONLY here — after every read above resolved. The
+                    // `catch` below deliberately leaves it as it was, so a
+                    // failed read never licenses a "nothing outstanding"
+                    // claim (finding F7(a)).
+                    hasLoaded: true,
                });
           } catch (e) {
                console.warn('[useSyncQueueStatus] Failed to read queue status', e);

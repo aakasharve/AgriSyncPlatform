@@ -22,6 +22,7 @@ import { setAiTestModeEnabled, clearAiTestMode } from './infrastructure/storage/
 import AppShell from './app/components/AppShell';
 import LoginPage from './pages/LoginPage';
 import JoinFarmLandingPage from './pages/JoinFarmLandingPage';
+import { IS_OVERSIGHT_PREVIEW_ENABLED } from './app/featureFlags';
 
 const hasJoinDeepLink = (): boolean => {
     if (typeof window === 'undefined') return false;
@@ -79,6 +80,21 @@ const DEV_PREVIEW = typeof window !== 'undefined'
 const LABOUR_PREVIEW = typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('preview') === 'labour';
 
+// DEV-ONLY: ?preview=oversight — Owner Oversight Loop, full-app preview
+// (spec: owner-oversight-loop). Unlike the two bypasses above, this one is
+// ALSO gated on `IS_OVERSIGHT_PREVIEW_ENABLED` (`app/featureFlags.ts`, wraps
+// `import.meta.env.DEV`) and loaded via `React.lazy`, so Vite/Rollup folds
+// the whole branch to dead code and drops `OversightAppPreview` (and its
+// seed fixtures) from a production bundle entirely — a query-param check
+// alone would still ship the module. `OversightPreviewLazy` is `null`
+// whenever the flag is off, which in a production build is unconditionally.
+const OversightPreviewLazy = IS_OVERSIGHT_PREVIEW_ENABLED
+    ? React.lazy(() => import('./features/oversight/OversightAppPreview'))
+    : null;
+const OVERSIGHT_PREVIEW = IS_OVERSIGHT_PREVIEW_ENABLED
+    && typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('preview') === 'oversight';
+
 const App: React.FC = () => {
     const [crops, setCrops] = useState<CropProfile[]>([]);
     const [showSplash, setShowSplash] = useState(true);
@@ -123,6 +139,13 @@ const App: React.FC = () => {
     // Dev preview bypass: rendered before any auth providers mount.
     if (DEV_PREVIEW) return <AdminOpsPreview />;
     if (LABOUR_PREVIEW) return <LabourPreview />;
+    if (OVERSIGHT_PREVIEW && OversightPreviewLazy) {
+        return (
+            <React.Suspense fallback={null}>
+                <OversightPreviewLazy />
+            </React.Suspense>
+        );
+    }
 
     return (
         <BrowserRouter>

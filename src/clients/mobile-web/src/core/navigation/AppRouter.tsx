@@ -19,10 +19,18 @@ import { AppRouterContext } from './routeContext';
 import { SIMPLE_ROUTE_RENDERERS } from './simpleRoutes';
 import { renderReflectView, renderCompareView, renderLogView } from './mainView';
 import { renderGlobalSheets } from './globalSheets';
+import MainViewTransition from './MainViewTransition';
 import { useUiPref } from '../../shared/hooks/useUiPref';
 import { useAppRouterDerivations } from './hooks/useAppRouterDerivations';
 import { useNudgeRouteEffect } from './hooks/useNudgeRouteEffect';
 import { useLabourLogArrivalScroll } from './hooks/useLabourLogArrivalScroll';
+// spec: owner-oversight-loop (§P-I) — the SAME predicate `AppContent.tsx`
+// hands the tap path as `disabled`. Never re-write the expression here.
+import { isRecordingPathBusy } from '../../shared/utils/recordingPathBusy';
+// Finding F2 — the waiting drawer's `approval` row's destination arrives
+// here as a window event; see that module's header for why.
+import { OPEN_REVIEW_INBOX_EVENT } from '../../features/oversight/oversightNavigationEvents';
+import { useOpenSurfaceRequest } from '../../features/oversight/useOpenSurfaceRequest';
 
 // Sub-plan 04 Task 8 — Routes-as-data decomposition.
 // AppRouter is a thin orchestrator that wires hooks, builds an
@@ -85,12 +93,18 @@ const AppRouter: React.FC = () => {
     const handleVerifyLog = trust.handleVerifyLog;
     const history = isDemoMode ? mockHistory : realHistory;
 
-    // DFES Phase 0: Review Inbox / QuickLog / Reflect-focus / close-day modals.
+    // DFES Phase 0: Review Inbox / QuickLog / Reflect-focus modals.
+    //
+    // FINDING F3 — `showCloseDaySummary` / `showCloseYesterdaySummary` used
+    // to live here too. Commit `0e4ad118` deleted their only readers from
+    // `mainView.tsx` (spec §4.2 moved the Daily Closure card and the
+    // yesterday-not-closed block into the waiting drawer), leaving two
+    // booleans that three live code paths still WROTE and nothing rendered.
+    // They are gone rather than re-read: the drawer is the destination now,
+    // and a flag no component reads is a promise the UI cannot keep.
     const [showReviewInbox, setShowReviewInbox] = React.useState(false);
     const [showQuickLog, setShowQuickLog] = React.useState(false);
     const [reflectFocusRequest, setReflectFocusRequest] = React.useState<{ logId: string; date: string; plotId?: string } | null>(null);
-    const [showCloseDaySummary, setShowCloseDaySummary] = React.useState(false);
-    const [showCloseYesterdaySummary, setShowCloseYesterdaySummary] = React.useState(false);
 
     // Convert a DailyLog to an editable AgriLogResponse (manual ledger edit flow).
     const handleEditLog = (log: DailyLog) => {
@@ -144,11 +158,16 @@ const AppRouter: React.FC = () => {
     useNudgeRouteEffect({
         setCurrentRoute,
         setMainView,
-        setShowCloseDaySummary,
-        setShowCloseYesterdaySummary,
-        setShowReviewInbox,
-        todayUnverifiedCount: derivations.todayDayState.unverifiedCount,
     });
+
+    // FINDING F2 — the waiting drawer's `approval` row opens THIS router's
+    // `ReviewInboxSheet` (mounted in `globalSheets.tsx`). The row lives in
+    // `AppHeader`, which renders as a sibling of `<AppFeatureProviders>` in
+    // `AppContent.tsx` and has no prop path to `setShowReviewInbox` — so the
+    // hop arrives as a window event. See
+    // `features/oversight/oversightNavigationEvents.ts` for why, and for the
+    // effect-ordering check.
+    useOpenSurfaceRequest(OPEN_REVIEW_INBOX_EVENT, () => setShowReviewInbox(true));
 
     // spec: 2026-07-13-labour-attendance-approval-design (Task 3.6) —
     // arriving at the log page with logIntent === 'labour' auto-scrolls the
@@ -205,8 +224,6 @@ const AppRouter: React.FC = () => {
         showReviewInbox, setShowReviewInbox,
         showQuickLog, setShowQuickLog,
         reflectFocusRequest, setReflectFocusRequest,
-        showCloseDaySummary, setShowCloseDaySummary,
-        showCloseYesterdaySummary, setShowCloseYesterdaySummary,
         ownerDisplayName: derivations.ownerDisplayName,
         operatorNameById: derivations.operatorNameById,
         todayDateKey: derivations.todayDateKey,
@@ -227,9 +244,22 @@ const AppRouter: React.FC = () => {
                     <React.Fragment key={idx}>{render(ctx)}</React.Fragment>
                 ))}
 
-                {renderReflectView(ctx)}
-                {renderCompareView(ctx)}
-                {renderLogView(ctx)}
+                {/* Task 14, change 5 — the slide transition + swipe every
+                    other route already has, extended to Log/Reflect/Compare.
+                    `disabled` (spec §P-I): `renderLogView` returns null the
+                    moment `mainView !== 'log'`, so an unguarded swipe unmounts
+                    the live recorder. `status` here is the SAME `voice.status`
+                    `AppContent.tsx` reads for the tap path's `disabled`, put
+                    through the SAME predicate. */}
+                <MainViewTransition
+                    view={mainView}
+                    onChangeView={setMainView}
+                    disabled={isRecordingPathBusy(status)}
+                >
+                    {renderReflectView(ctx)}
+                    {renderCompareView(ctx)}
+                    {renderLogView(ctx)}
+                </MainViewTransition>
 
                 {renderGlobalSheets(ctx)}
             </div>

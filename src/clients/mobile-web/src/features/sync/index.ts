@@ -1,7 +1,12 @@
-export { useSyncQueueStatus } from './hooks/useSyncQueueStatus';
+export { useSyncQueueStatus, useUnqueueableLogCount } from './hooks/useSyncQueueStatus';
 export { default as SyncStatusDrawer } from './components/SyncStatusDrawer';
 export { default as OfflineBanner } from './components/OfflineBanner';
 
+// `useUnqueueableLogCount` lives in the SAME module as `useSyncQueueStatus`
+// and is exported here for the same consumer (`AppHeader`), so it adds no
+// module to this barrel's graph — it is one more binding off a module the
+// barrel already pulls in. The note below is about `status/`, not this.
+//
 // Labour Phase 2 / T1 — the sync-honesty state model is deliberately NOT
 // re-exported here. This barrel also exports `SyncStatusDrawer`, which drags
 // `lucide-react` and a module-scope `backgroundSyncWorker` singleton into the

@@ -1,22 +1,52 @@
 /**
  * ReviewInboxSheet Component
- * 
- * The "Batch Verification" flow for the DFES Trust Layer.
- * Allows owners/verifiers to approve logs created by other operators.
- * 
- * DFES Principle: "Verification can exist, but it shouldn't create friction"
- * - Batch approve at end of day
- * - One-tap approve or dispute
- * - Sampling for high-impact entries
+ *
+ * The owner's READ surface for entries that are still unverified. It is the
+ * destination the waiting drawer's `approval` row opens (`AppHeader`'s
+ * `handleOpenDecision` -> `requestOpenReviewInbox()`).
+ *
+ * IT NO LONGER APPROVES ANYTHING, AND THAT IS DELIBERATE
+ * ------------------------------------------------------
+ * This sheet used to carry four approve/dispute affordances: a per-card
+ * tick, a per-card dispute, a "Verify now" button inside the
+ * cost-inaccuracy strip, and an "Approve all N entries" bar. All four
+ * called `handleVerifyLog` (`app/hooks/useTrustLayer.ts`), which reaches
+ * `application/usecases/VerifyLog.ts` and enqueues `verify_log_v2` — a
+ * mutation whose server handler is not wired. `PushSyncBatchHandler.cs`
+ * answers `MUTATION_TYPE_UNIMPLEMENTED`, `RejectionPolicy.ts` calls that
+ * code PERMANENT, and the row parks in `REJECTED_USER_REVIEW`. So every tap
+ * on this screen produced a rejection, forever, while the app showed the
+ * owner a tick.
+ *
+ * The repair is NOT to point these buttons at the working v1 mutation:
+ * `VerifyLogHandler.cs` runs `OnLogVerifiedAutoVerifyJobCard` on every
+ * success and moves a job card `Completed -> VerifiedForPayout`, i.e. it
+ * turns on a payout path for pilot farmers. That is a founder decision, not
+ * an implementation detail. (`VerificationStateMachine.cs` has no
+ * Draft -> Verified transition either, so a single-hop approve would fail
+ * for every Draft log regardless of the mutation used.)
+ *
+ * So the props are GONE from the interface, not merely unused — a future
+ * re-wire has to be a deliberate act that changes this file, rather than a
+ * one-line callback swap at a call site. `ApprovalUnavailableNotice` says
+ * so, in words, where the controls used to be (`P5`).
+ *
+ * WHAT SURVIVES: the list, the per-entry expansion (transcript + activity
+ * summary), the counts, and the verification metrics. Seeing what happened
+ * on the farm is the whole point of the oversight loop and none of it
+ * depends on a server write.
+ *
+ * spec: owner-oversight-loop
  */
 
 import React, { useState, useMemo } from 'react';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { DailyLog, LogVerificationStatus, FarmOperator } from '../../../types';
 import { TrustBadge } from '../../../shared/components/ui/TrustBadge';
-import { Check, X, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, ChevronDown, ChevronUp, Check } from 'lucide-react';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { computeVerificationMetrics } from '../../../shared/utils/dayState';
+import ApprovalUnavailableNotice from '../../../shared/components/ApprovalUnavailableNotice';
 
 interface ReviewInboxSheetProps {
     isOpen: boolean;
@@ -24,9 +54,6 @@ interface ReviewInboxSheetProps {
     logs: DailyLog[];
     operators: FarmOperator[];
     currentOperatorId: string;
-    onApproveLog: (logId: string) => void;
-    onApproveAll: (logIds: string[]) => void;
-    onDisputeLog: (logId: string, note: string) => void;
 }
 
 // Helper to get unverified logs needing review
@@ -79,12 +106,8 @@ const getLogTotalCost = (log: DailyLog): number => {
 const LogReviewCard: React.FC<{
     log: DailyLog;
     operator?: FarmOperator;
-    onApprove: () => void;
-    onDispute: (note: string) => void;
-}> = ({ log, operator, onApprove, onDispute }) => {
+}> = ({ log, operator }) => {
     const [isExpanded, setIsExpanded] = useState(false);
-    const [showDisputeInput, setShowDisputeInput] = useState(false);
-    const [disputeNote, setDisputeNote] = useState('');
     const { t } = useLanguage();
 
     const activityCount = (log.cropActivities?.length || 0) +
@@ -121,22 +144,11 @@ const LogReviewCard: React.FC<{
                     </p>
                 </div>
 
-                {/* Quick Actions */}
+                {/* Expand / collapse is the ONLY affordance on this card now.
+                    The approve tick and the dispute bubble that used to sit
+                    here both queued `verify_log_v2`, which no server handler
+                    accepts — see this file's header. */}
                 <div className="flex items-center gap-2">
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onApprove(); }}
-                        className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-100 transition-colors"
-                        title={t('dfes.confirmed')}
-                    >
-                        <Check size={20} strokeWidth={2.5} />
-                    </button>
-                    <button
-                        onClick={(e) => { e.stopPropagation(); setShowDisputeInput(true); }}
-                        className="w-10 h-10 rounded-full bg-slate-50 text-slate-500 flex items-center justify-center hover:bg-slate-100 transition-colors"
-                        title={t('dfes.somethingNeedsFixing')}
-                    >
-                        <MessageSquare size={18} />
-                    </button>
                     <span className="text-slate-400">
                         {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                     </span>
@@ -187,43 +199,6 @@ const LogReviewCard: React.FC<{
                     </div>
                 </div>
             )}
-
-            {/* Dispute Input */}
-            {showDisputeInput && (
-                <div className="px-4 pb-4 border-t border-red-100 bg-red-50">
-                    <p className="text-xs text-red-600 font-medium mt-3 mb-2">
-                        {t('dfes.ownerHasQuestion')}
-                    </p>
-                    <textarea
-                        value={disputeNote}
-                        onChange={(e) => setDisputeNote(e.target.value)}
-                        placeholder="Describe the issue..."
-                        className="w-full p-2 text-sm border border-red-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-300"
-                        rows={2}
-                    />
-                    <div className="flex gap-2 mt-2">
-                        <button
-                            onClick={() => {
-                                onDispute(disputeNote);
-                                setShowDisputeInput(false);
-                                setDisputeNote('');
-                            }}
-                            className="flex-1 py-2 bg-red-600 text-white rounded-lg font-medium text-sm hover:bg-red-700"
-                        >
-                            {t('common.yes')}
-                        </button>
-                        <button
-                            onClick={() => {
-                                setShowDisputeInput(false);
-                                setDisputeNote('');
-                            }}
-                            className="px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg text-sm"
-                        >
-                            {t('common.cancel')}
-                        </button>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };
@@ -233,12 +208,9 @@ export const ReviewInboxSheet: React.FC<ReviewInboxSheetProps> = ({
     onClose,
     logs,
     operators,
-    currentOperatorId,
-    onApproveLog,
-    onApproveAll,
-    onDisputeLog
+    currentOperatorId
 }) => {
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const logsToReview = useMemo(
         () => getLogsNeedingReview(logs, currentOperatorId),
         [logs, currentOperatorId]
@@ -255,11 +227,6 @@ export const ReviewInboxSheet: React.FC<ReviewInboxSheetProps> = ({
 
     const getOperator = (operatorId?: string) =>
         operators.find(op => op.id === operatorId);
-
-    const handleApproveAll = () => {
-        const allLogIds = logsToReview.map(log => log.id);
-        onApproveAll(allLogIds);
-    };
 
     if (!isOpen) return null;
 
@@ -314,36 +281,19 @@ export const ReviewInboxSheet: React.FC<ReviewInboxSheetProps> = ({
                         </div>
                     </div>
 
+                    {/* Still TRUE and still worth saying: these entries are
+                        unverified, so any cost computed from them is provisional.
+                        What is gone is the "Verify now" button that used to sit
+                        inside this strip — it queued `verify_log_v2`, which the
+                        server refuses. The notice below explains the absence. */}
                     {logsToReview.length > 0 && (
                         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
                             Cost may be inaccurate - {logsToReview.length} entries unverified.
-                            {logsToReview.length > 1 && (
-                                <button
-                                    onClick={handleApproveAll}
-                                    className="ml-2 px-2.5 py-1 rounded-md bg-amber-600 text-white text-[11px] font-bold"
-                                >
-                                    Verify now
-                                </button>
-                            )}
                         </div>
                     )}
 
-                    {/* Approve All Button */}
-                    {logsToReview.length > 1 && (
-                        <button
-                            onClick={handleApproveAll}
-                            className="
-                                w-full mt-4 py-3 rounded-xl
-                                bg-gradient-to-r from-emerald-500 to-teal-500
-                                text-white font-bold text-sm
-                                flex items-center justify-center gap-2
-                                hover:from-emerald-600 hover:to-teal-600 transition-all
-                                shadow-lg shadow-emerald-200
-                            "
-                        >
-                            <Check size={18} strokeWidth={2.5} />
-                            {t('dfes.confirmed')} {t('common.all')} {logsToReview.length} {t('dfes.entries')}
-                        </button>
+                    {logsToReview.length > 0 && (
+                        <ApprovalUnavailableNotice language={language} className="mt-3" />
                     )}
                 </div>
 
@@ -374,8 +324,6 @@ export const ReviewInboxSheet: React.FC<ReviewInboxSheetProps> = ({
                                             key={log.id}
                                             log={log}
                                             operator={getOperator(log.meta?.createdByOperatorId)}
-                                            onApprove={() => onApproveLog(log.id)}
-                                            onDispute={(note) => onDisputeLog(log.id, note)}
                                         />
                                     ))}
                                 </div>

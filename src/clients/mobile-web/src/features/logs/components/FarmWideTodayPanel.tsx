@@ -25,13 +25,34 @@
  * sits on the capture path.
  *
  * ── THE COPY IS BORROWED, NOT INVENTED ───────────────────────────────────────
- * `Entire Farm` is the app's OWN shipped label for this scope
- * (`CropSelector.tsx:283`, `LogFactory.FARM_GLOBAL_NAME`,
- * `appContentContextDisplay.tsx:52`); `संपूर्ण शेत` exists only in code
- * comments and has never reached a farmer. The summary line is
- * `dfes.todaySummary`, already approved in both languages. The bucket labels
- * are the same five `mainView` prints on the success card. No agent invented
- * farmer-facing Marathi here.
+ * spec: owner-oversight-loop (Task 14, change 4) — the founder has now
+ * approved `संपूर्ण शेत` (his own reference-image table,
+ * `oversightTranslations.entireFarmLabel`) as the ONE label for this scope,
+ * superseding the note this paragraph used to carry ("`Entire Farm` ...
+ * `संपूर्ण शेत` exists only in code comments and has never reached a
+ * farmer" — no longer true; it is now founder-approved, real copy). The
+ * eyebrow below reads it via `resolveOversightString`, same as every other
+ * founder-approved string in this feature.
+ *
+ * NOT changed, and why (Task 14, change 4's own instruction: "never change
+ * a persisted value to fix a label"):
+ *   - `LogFactory.FARM_GLOBAL_NAME` / `LogContext.tsx`'s two
+ *     `cropName: 'Entire Farm'` literals write the PERSISTED
+ *     `DailyLog.context.selection[].cropName` field — every log already in
+ *     Dexie/the backend carries the English string. Renaming the constant
+ *     would split one scope across two spellings in the SAME store.
+ *   - `CropSelector.tsx`'s own (non-`hideGlobalCard`) carousel card is
+ *     shared with `Attendance.tsx`, a different feature outside this
+ *     task's scope, and its English label is a named regression guard in
+ *     `CropSelector.test.tsx` ("Attendance.tsx regression guard") — Task
+ *     13 deliberately kept that default path byte-identical.
+ *   - `appContentContextDisplay.tsx`'s `'Logging for Entire Farm'` is dead
+ *     code (`getContextDisplay` is defined but never called from the
+ *     render tree) with no language plumbing of its own; splicing in one
+ *     Marathi word would produce an un-approved, invented hybrid sentence.
+ * The summary line is `dfes.todaySummary`, already approved in both
+ * languages. The bucket labels are the same five `mainView` prints on the
+ * success card. No agent invented farmer-facing Marathi here.
  *
  * ── AND IT SPLITS NOTHING ────────────────────────────────────────────────────
  * `statedSpend` is shown WHOLE, at the scope the farmer asserted. Showing a
@@ -43,6 +64,7 @@ import React from 'react';
 import { Droplets, Users, Package, Tractor, Sprout, Warehouse } from 'lucide-react';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { tf } from '../../../i18n/translations';
+import { resolveOversightString } from '../../../i18n/oversightTranslations';
 import { formatCurrencyINR } from '../../../shared/utils/dayState';
 import type { FarmWideDaySummary } from '../../../app/helpers/appContentDailyCounts';
 
@@ -90,7 +112,7 @@ export const FarmWideTodayPanel: React.FC<FarmWideTodayPanelProps> = ({ summary 
                         — and diverged from the thing it is imitating. A new file
                         gets the fix rather than inheriting the debt. */}
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">
-                        Entire Farm
+                        {resolveOversightString(language, 'entireFarmLabel')}
                     </p>
                     <p className="text-[13px] font-bold leading-snug text-stone-800">
                         {tf('dfes.todaySummary', language, {
