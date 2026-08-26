@@ -54,7 +54,9 @@ expect_says() {
     local name="$1" phrase="$2"; shift 2
     local out
     out="$("$@" 2>&1)"
-    if printf '%s' "$out" | grep -qF "$phrase"; then
+    # `--` matters: without it grep reads a phrase that begins with "--" as an
+    # option and reports no match, making the assertion silently vacuous.
+    if printf '%s' "$out" | grep -qF -- "$phrase"; then
         printf '  PASS  %-52s says "%s"\n' "$name" "${phrase:0:34}"
         PASS=$((PASS + 1))
     else
@@ -67,6 +69,34 @@ iso_hours_ago() {
     local h="$1"
     if date -u -d "-${h} hours" +%Y-%m-%dT%H:%M:%S.000Z 2>/dev/null; then return; fi
     date -u -v-"${h}"H +%Y-%m-%dT%H:%M:%S.000Z
+}
+
+
+# Build a stub `aws` that answers describe-db-snapshots and describe-db-instances
+# DIFFERENTLY, so the PITR probe can be exercised independently of the snapshot
+# query. Without this the single-payload stub feeds snapshot rows to the PITR
+# parser and every PITR assertion would be testing the wrong thing.
+#   $1=rds  $2=<subcommand>
+make_stub_dispatch() {
+    local snap_payload="$1" inst_payload="$2"
+    local p="$TMP/stub_aws_disp_$RANDOM"
+    {
+        echo '#!/usr/bin/env bash'
+        echo 'case "$2" in'
+        printf '  describe-db-snapshots) cat <<%s\n%s\n%s\n;;\n' "'SNAPEOF'" "$snap_payload" "SNAPEOF"
+        printf '  describe-db-instances) cat <<%s\n%s\n%s\n;;\n' "'INSTEOF'" "$inst_payload" "INSTEOF"
+        echo '  *) exit 9 ;;'
+        echo 'esac'
+        echo 'exit 0'
+    } > "$p"
+    chmod +x "$p"
+    printf '%s' "$p"
+}
+
+iso_min_ago() {
+    local m="$1"
+    if date -u -d "-${m} minutes" +%Y-%m-%dT%H:%M:%S.000Z 2>/dev/null; then return; fi
+    date -u -v-"${m}"M +%Y-%m-%dT%H:%M:%S.000Z
 }
 
 echo "verify-rollback-floor.sh"
@@ -136,6 +166,92 @@ expect_says "and reports that newest one by name" "snap-recent" \
 STUB_JUNK="$(make_stub "snap-weird	not-a-timestamp" 0)"
 expect_exit "unparseable timestamp fails closed, not open" 43 \
     env AWS_CLI="$STUB_JUNK" bash "$SUT" --instance shramsafal-prod-db
+
+# ===========================================================================
+# PITR visibility -- the ruling under test
+# ===========================================================================
+# Reviewed 2026-08-26: PITR is REPORTED but must never satisfy the gate. These
+# fixtures ARE that ruling. If someone later "helpfully" accepts
+# LatestRestorableTime as a floor, the FIRES cases below go red immediately.
+#
+# Contract for every hook/gate change: one fixture proving the gate FIRES on
+# bad input, one proving it PASSES on good input.
+
+echo
+echo "  -- PITR is evidence, never permission --"
+
+PITR_FRESH="$(iso_min_ago 6)"          # ~6 minutes behind now, as measured on prod
+INST_FRESH_PITR="$PITR_FRESH	7"
+
+# --- GATE FIRES: fresh PITR + NO snapshot ----------------------------------
+# This is the exact production situation on 2026-08-26. A 6-minute recovery
+# point exists and the gate must STILL refuse.
+STUB_PITR_NOSNAP="$(make_stub_dispatch "" "$INST_FRESH_PITR")"
+expect_exit "FIRES: 6-min PITR + no snapshot still blocks" 43 \
+    env AWS_CLI="$STUB_PITR_NOSNAP" bash "$SUT" --instance shramsafal-prod-db
+expect_says "  and reports the PITR point it refused to accept" \
+    "LatestRestorableTime" \
+    env AWS_CLI="$STUB_PITR_NOSNAP" bash "$SUT" --instance shramsafal-prod-db
+expect_says "  and says PITR is evidence, not permission" \
+    "EVIDENCE, not as permission" \
+    env AWS_CLI="$STUB_PITR_NOSNAP" bash "$SUT" --instance shramsafal-prod-db
+expect_says "  and still demands the human snapshot" \
+    "CANNOT create this for you" \
+    env AWS_CLI="$STUB_PITR_NOSNAP" bash "$SUT" --instance shramsafal-prod-db
+
+# --- GATE FIRES: fresh PITR + stale snapshot -------------------------------
+STALE30="$(iso_hours_ago 30)"
+STUB_PITR_STALE="$(make_stub_dispatch "snap-old	$STALE30" "$INST_FRESH_PITR")"
+expect_exit "FIRES: 6-min PITR does not rescue a 30h snapshot" 43 \
+    env AWS_CLI="$STUB_PITR_STALE" bash "$SUT" --instance shramsafal-prod-db
+expect_says "  and says so in those words" \
+    "does NOT make a stale snapshot acceptable" \
+    env AWS_CLI="$STUB_PITR_STALE" bash "$SUT" --instance shramsafal-prod-db
+
+# --- GATE PASSES: fresh snapshot, PITR reported alongside ------------------
+FRESH1="$(iso_hours_ago 1)"
+STUB_PITR_OK="$(make_stub_dispatch "snap-fresh	$FRESH1" "$INST_FRESH_PITR")"
+expect_exit "PASSES: fresh snapshot confirms the floor" 0 \
+    env AWS_CLI="$STUB_PITR_OK" bash "$SUT" --instance shramsafal-prod-db
+expect_says "  and reports PITR as supplementary evidence" \
+    "BackupRetentionPeriod" \
+    env AWS_CLI="$STUB_PITR_OK" bash "$SUT" --instance shramsafal-prod-db
+expect_says "  and refuses to call a floor a rehearsed restore" \
+    "A confirmed floor is not a" \
+    env AWS_CLI="$STUB_PITR_OK" bash "$SUT" --instance shramsafal-prod-db
+expect_says "  and points at the restore runbook" \
+    "prod-restore.md" \
+    env AWS_CLI="$STUB_PITR_OK" bash "$SUT" --instance shramsafal-prod-db
+
+# --- the probe must never change an outcome --------------------------------
+# A broken or absent PITR answer must not block a deploy that has a valid
+# snapshot, and must not permit one that does not.
+STUB_PITR_JUNK="$(make_stub_dispatch "snap-fresh	$FRESH1" "not-a-timestamp	junk")"
+expect_exit "PASSES: unusable PITR answer does not block a good floor" 0 \
+    env AWS_CLI="$STUB_PITR_JUNK" bash "$SUT" --instance shramsafal-prod-db
+expect_says "  and says PITR was not established rather than guessing" \
+    "PITR: not established" \
+    env AWS_CLI="$STUB_PITR_JUNK" bash "$SUT" --instance shramsafal-prod-db
+
+STUB_PITR_JUNK_NOSNAP="$(make_stub_dispatch "" "not-a-timestamp	junk")"
+expect_exit "FIRES: unusable PITR answer does not open the gate" 43 \
+    env AWS_CLI="$STUB_PITR_JUNK_NOSNAP" bash "$SUT" --instance shramsafal-prod-db
+
+# Only a snapshot may produce this banner. A future edit that made PITR
+# authoritative would have to delete this assertion to go green.
+expect_says "only a snapshot yields ROLLBACK FLOOR CONFIRMED" \
+    "ROLLBACK FLOOR CONFIRMED" \
+    env AWS_CLI="$STUB_PITR_OK" bash "$SUT" --instance shramsafal-prod-db
+
+# --- help must not truncate itself -----------------------------------------
+# `sed -n '1,58p'` cut the header mid-sentence and silently re-cut it every
+# time the header grew. Marker-delimited now.
+expect_says "--help prints the whole header, not 58 lines of it" \
+    "including against a hibernated instance." \
+    bash "$SUT" --help
+expect_says "--help explains why PITR is not accepted" \
+    "NOT ACCEPTED AS THE FLOOR" \
+    bash "$SUT" --help
 
 echo
 echo "  passed: $PASS   failed: $FAIL"

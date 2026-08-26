@@ -39,6 +39,65 @@
 # not reversible by any means the application owns.
 #
 # ---------------------------------------------------------------------------
+# PITR IS SEEN HERE, AND DELIBERATELY NOT ACCEPTED AS THE FLOOR
+# ---------------------------------------------------------------------------
+# Reviewed 2026-08-26. Point-in-time recovery IS live on shramsafal-prod-db and
+# this script used to be blind to it: it read only describe-db-snapshots, so it
+# could report "no usable rollback floor" while a continuous ~6-minute recovery
+# point existed. Measured that day:
+#
+#     LatestRestorableTime  = 2026-08-26T01:53:17Z   (~6 min behind real time)
+#     BackupRetentionPeriod = 7 days
+#
+# The obvious move is to accept a fresh LatestRestorableTime as a floor and let
+# the deploy through. That was considered and REJECTED. The gate still requires
+# a discrete snapshot. PITR is now probed and REPORTED -- as evidence, and as a
+# secondary route named in the failure text -- but it cannot satisfy the check.
+#
+# Three reasons, specific to THIS release:
+#
+#  1. PITR is a property of the living instance, not an independent artefact.
+#     `modify-db-instance --backup-retention-period 0`, or the instance being
+#     deleted or damaged, destroys the whole recovery window at once. A manual
+#     snapshot is a separate stored object that survives all of those. The
+#     migration this gate exists for permanently deletes farmer transcript
+#     text, so the floor has to be an OBJECT, not a service that happens to be
+#     healthy at the moment we look at it.
+#
+#  2. On THIS account the continuous backup is demonstrably not continuous.
+#     aws/hibernate/nap-lambda/index.py:90 stops the RDS instance every night
+#     (EventBridge `agrisync-nap-sleep`, cron(30 19 * * ? *), ENABLED), and the
+#     instance's PreferredBackupWindow is 20:13-20:43 UTC -- INSIDE the stopped
+#     period. The visible symptom is that automated snapshots land every ~2
+#     days at ~00:44 UTC instead of daily at 20:13: RDS keeps missing its own
+#     backup window. Log shipping does not run while an instance is stopped, so
+#     the recovery timeline very likely has a ~4.5h hole every night. That is
+#     recorded as UNPROVEN-but-likely in prod-restore.md, with the probe that
+#     settles it. Either way, continuity is the exact property PITR depends on,
+#     and it is the one already being interrupted here.
+#
+#  3. LatestRestorableTime answers a different question than this gate asks.
+#     It says "log shipping is alive right now". The gate asks "will a
+#     restorable pre-migration point still exist when I need it". Freshness of
+#     the ceiling is not existence of the floor.
+#
+# This is also already the written standard rather than a new opinion: the
+# release-safety-gates skill, RG4.3, accepts "Backup / PITR confirmed current"
+# in general but requires, "for an irreversible migration: an encrypted,
+# access-restricted pre-migration snapshot ... exists before it runs".
+#
+# And the honest point underneath all three: RG4 is failing because a restore
+# has never been REHEARSED and, until 2026-08-26, no runbook existed. Teaching
+# this script to look at a second signal would turn the gate green without any
+# restore having become more likely to work. That is decorating a safety check,
+# which plan T0.1 forbids by name. RG4 stays NOT_PROVEN until the rehearsal in
+# _COFOUNDER/runbooks/prod-restore.md has actually been run once.
+#
+# If that rehearsal ever proves PITR restores cleanly on this instance AND the
+# nightly stop is retired, revisit this decision in a spec -- not by editing a
+# threshold here.
+#
+# ---------------------------------------------------------------------------
 # USAGE
 # ---------------------------------------------------------------------------
 #   verify-rollback-floor.sh --instance shramsafal-prod-db [--max-age-hours 6]
@@ -57,6 +116,7 @@
 #
 # This script performs NO mutation of any kind. It is safe to run at any time,
 # including against a hibernated instance.
+# END-OF-HELP
 set -euo pipefail
 
 LOG="[rollback-floor]"
@@ -74,7 +134,7 @@ while [ $# -gt 0 ]; do
         --instance)       need_val "$@"; INSTANCE="$2"; shift 2 ;;
         --max-age-hours)  need_val "$@"; MAX_AGE_HOURS="$2"; shift 2 ;;
         --region)         need_val "$@"; REGION="$2"; shift 2 ;;
-        -h|--help)        sed -n '1,58p' "$0"; exit 0 ;;
+        -h|--help)        sed -n '1,/^# END-OF-HELP$/p' "$0"; exit 0 ;;
         *) echo "$LOG FATAL: unknown argument '$1'" >&2; exit 40 ;;
     esac
 done
@@ -92,7 +152,77 @@ AWS_CLI="${AWS_CLI:-aws}"
 command -v "$AWS_CLI" >/dev/null 2>&1 \
     || { echo "$LOG FATAL: '$AWS_CLI' not found on PATH" >&2; exit 41; }
 
+# ---------------------------------------------------------------------------
+# PITR probe -- EVIDENCE ONLY. Read the header before changing anything here.
+# ---------------------------------------------------------------------------
+# This never influences the exit code. It exists so the operator is told the
+# truth about what recovery options exist, in both the pass and the fail text,
+# instead of the script reporting "no rollback floor" while a continuous
+# recovery point sits unmentioned.
+#
+# Every failure path returns 0 with the variables left empty: a PITR probe that
+# cannot answer must not be able to block a deploy that has a valid snapshot,
+# and must not be able to permit one that does not. rds:DescribeDBInstances is
+# already granted to the deploy role (agent-deployer-permissions.json:42-51),
+# so this adds no new permission.
+PITR_LATEST=""
+PITR_RETENTION=""
+PITR_AGE_MIN=""
+
+probe_pitr() {
+    local raw latest retention epoch
+    raw="$("$AWS_CLI" rds describe-db-instances \
+            --region "$REGION" \
+            --db-instance-identifier "$INSTANCE" \
+            --query 'DBInstances[0].[LatestRestorableTime,BackupRetentionPeriod]' \
+            --output text 2>/dev/null)" || return 0
+
+    latest="$(printf '%s' "$raw"    | awk 'NR==1{print $1}')"
+    retention="$(printf '%s' "$raw" | awk 'NR==1{print $2}')"
+
+    # Anything that is not plainly an ISO-8601 instant is discarded rather than
+    # guessed at. A stubbed or unexpected CLI response must read as "no PITR
+    # information", never as a recovery point.
+    case "$latest" in
+        [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*) : ;;
+        *) return 0 ;;
+    esac
+
+    epoch=""
+    if date -u -d "$latest" +%s >/dev/null 2>&1; then
+        epoch="$(date -u -d "$latest" +%s)"
+    elif date -u -j -f "%Y-%m-%dT%H:%M:%S" "${latest%%[.+]*}" +%s >/dev/null 2>&1; then
+        epoch="$(date -u -j -f "%Y-%m-%dT%H:%M:%S" "${latest%%[.+]*}" +%s)"
+    fi
+    [ -n "$epoch" ] || return 0
+
+    PITR_LATEST="$latest"
+    PITR_RETENTION="$retention"
+    PITR_AGE_MIN=$(( ( $(date -u +%s) - epoch ) / 60 ))
+    return 0
+}
+
+# Prints on stdout; callers on a failure path redirect to stderr.
+print_pitr_note() {
+    if [ -z "$PITR_LATEST" ]; then
+        echo "$LOG   PITR: not established (describe-db-instances gave no usable"
+        echo "$LOG         LatestRestorableTime). This is NOT a reason to stop --"
+        echo "$LOG         PITR is not the floor. See header."
+        return 0
+    fi
+    cat <<PITREOF
+$LOG   PITR (evidence only -- does NOT satisfy this gate, see header):
+$LOG     LatestRestorableTime  : $PITR_LATEST (${PITR_AGE_MIN}m behind now)
+$LOG     BackupRetentionPeriod : ${PITR_RETENTION} days
+$LOG     Nightly stop: aws/hibernate/nap-lambda stops this instance 19:30-00:00
+$LOG     UTC and the backup window (20:13-20:43 UTC) sits inside it, so treat a
+$LOG     target time in that range as NOT restorable until proven otherwise.
+$LOG     Procedure: _COFOUNDER/runbooks/prod-restore.md (PITR = Route A)
+PITREOF
+}
+
 echo "$LOG instance=$INSTANCE region=$REGION max_age_hours=$MAX_AGE_HOURS"
+probe_pitr
 
 # Only 'available' snapshots can be restored from. A snapshot still in
 # 'creating' is NOT a rollback floor, and treating it as one is the exact
@@ -144,6 +274,16 @@ $LOG
 $LOG   Wait for Status=available, then re-run this check.
 $LOG
 EOF
+    print_pitr_note >&2
+    cat >&2 <<'EOF2'
+[rollback-floor]
+[rollback-floor]   PITR is reported above as EVIDENCE, not as permission. It does not
+[rollback-floor]   satisfy this gate and this script will not pass because of it. The
+[rollback-floor]   reasoning is in this file's header; the short version is that PITR is
+[rollback-floor]   a property of the running instance, this instance is stopped nightly,
+[rollback-floor]   and the migration in question deletes farmer text permanently.
+[rollback-floor]
+EOF2
     exit 43
 fi
 
@@ -186,6 +326,9 @@ $LOG   Take a fresh one (human credentials required), wait for
 $LOG   Status=available, then re-run this check.
 $LOG
 EOF
+    print_pitr_note >&2
+    echo "$LOG   A fresh PITR point does NOT make a stale snapshot acceptable." >&2
+    echo "$LOG" >&2
     exit 43
 fi
 
@@ -205,5 +348,13 @@ $LOG       --db-instance-identifier ${INSTANCE}-restored
 $LOG
 $LOG   Then repoint ConnectionStrings and restart. Note that rds:RestoreDB* is
 $LOG   ALSO denied to the deploy role, so a human runs this too.
+$LOG
+$LOG   Full procedure, including the two SILENT failure modes (wrong subnet
+$LOG   group, wrong security group) that leave a restored instance unreachable:
+$LOG     _COFOUNDER/runbooks/prod-restore.md  (snapshot = Route B)
+$LOG   That runbook has NEVER been rehearsed. A confirmed floor is not a
+$LOG   confirmed restore.
+$LOG
 EOF
+print_pitr_note
 exit 0
