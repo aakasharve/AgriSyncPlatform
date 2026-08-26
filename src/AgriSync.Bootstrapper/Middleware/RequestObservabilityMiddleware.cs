@@ -78,9 +78,17 @@ public sealed class RequestObservabilityMiddleware(
 
         if (!isError && !isCritical4xx && !isSlow && !hasRejectedWork) return;
 
-        var eventType = (isError || isCritical4xx || hasRejectedWork)
+        // A refused work item inside a 2xx is NOT an api.error. It gets its own
+        // type so the existing api.error consumers keep their meaning — see the
+        // comment on AnalyticsEventType.SyncMutationRejected for what breaks
+        // otherwise (a false founder page from mis.alert_r9_api_error_spike).
+        // A genuine 5xx still wins: if the request also failed, that is the
+        // more urgent fact and it is reported as such.
+        var eventType = (isError || isCritical4xx)
             ? AnalyticsEventType.ApiError
-            : AnalyticsEventType.ApiSlow;
+            : hasRejectedWork
+                ? AnalyticsEventType.SyncMutationRejected
+                : AnalyticsEventType.ApiSlow;
 
         var farmId = TryExtractFarmId(ctx.User);
         var traceId = Activity.Current?.TraceId.ToString()

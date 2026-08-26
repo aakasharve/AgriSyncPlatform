@@ -64,16 +64,23 @@
 #     text, so the floor has to be an OBJECT, not a service that happens to be
 #     healthy at the moment we look at it.
 #
-#  2. On THIS account the continuous backup is demonstrably not continuous.
-#     aws/hibernate/nap-lambda/index.py:90 stops the RDS instance every night
-#     (EventBridge `agrisync-nap-sleep`, cron(30 19 * * ? *), ENABLED), and the
-#     instance's PreferredBackupWindow is 20:13-20:43 UTC -- INSIDE the stopped
-#     period. The visible symptom is that automated snapshots land every ~2
-#     days at ~00:44 UTC instead of daily at 20:13: RDS keeps missing its own
-#     backup window. Log shipping does not run while an instance is stopped, so
-#     the recovery timeline very likely has a ~4.5h hole every night. That is
-#     recorded as UNPROVEN-but-likely in prod-restore.md, with the probe that
-#     settles it. Either way, continuity is the exact property PITR depends on,
+#  2. [SUPERSEDED 2026-08-26 -- kept because the conclusion did not change.]
+#     This reason USED to read: the nap Lambda stops RDS every night
+#     (`agrisync-nap-sleep`, cron(30 19 * * ? *), ENABLED) and the backup window
+#     20:13-20:43 UTC sits INSIDE the stopped period, so automated snapshots
+#     landed every ~2 days at ~00:44 UTC instead of daily. That was true and
+#     measured. It is no longer true:
+#
+#         agrisync-nap-sleep / -wake   ENABLED -> DISABLED   (founder, 2026-08-26)
+#         PreferredBackupWindow        20:13-20:43 -> 00:30-01:00 UTC
+#
+#     So continuity SHOULD now hold. Treat that as a prediction, not a fact,
+#     until a snapshot is observed on two consecutive days -- prod-restore.md
+#     carries the check. This reason no longer supports the ruling; reasons 1
+#     and 3 do, on their own, and they are sufficient. Left in place rather than
+#     deleted so nobody re-derives the obsolete argument from the snapshot list
+#     and reaches a different conclusion. Continuity is the property PITR
+#     depends on,
 #     and it is the one already being interrupted here.
 #
 #  3. LatestRestorableTime answers a different question than this gate asks.
@@ -214,9 +221,10 @@ print_pitr_note() {
 $LOG   PITR (evidence only -- does NOT satisfy this gate, see header):
 $LOG     LatestRestorableTime  : $PITR_LATEST (${PITR_AGE_MIN}m behind now)
 $LOG     BackupRetentionPeriod : ${PITR_RETENTION} days
-$LOG     Nightly stop: aws/hibernate/nap-lambda stops this instance 19:30-00:00
-$LOG     UTC and the backup window (20:13-20:43 UTC) sits inside it, so treat a
-$LOG     target time in that range as NOT restorable until proven otherwise.
+$LOG     Nightly stop: DISABLED 2026-08-26 (agrisync-nap-sleep/-wake). Backup
+$LOG     window moved 20:13-20:43 -> 00:30-01:00 UTC. Continuity SHOULD now be
+$LOG     unbroken -- unverified until snapshots are seen on 2 consecutive days.
+$LOG     Targets before 2026-08-26 still fall in the old nightly gap.
 $LOG     Procedure: _COFOUNDER/runbooks/prod-restore.md (PITR = Route A)
 PITREOF
 }
