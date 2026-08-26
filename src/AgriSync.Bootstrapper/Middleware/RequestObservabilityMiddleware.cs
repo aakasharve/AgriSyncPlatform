@@ -13,14 +13,33 @@ namespace AgriSync.Bootstrapper.Middleware;
 ///   5xx responses  → always (server bug the farmer can't work around)
 ///   4xx on critical write endpoints → always (farmer's core action blocked)
 ///   >2000ms on any POST/PUT/PATCH → api.slow (farmer on Jio gave up)
+///   2xx that refused work inside it → api.error (RG5, see below)
 ///
 /// What is NOT emitted (to avoid noise):
-///   2xx/3xx success responses
+///   2xx/3xx success responses that actually succeeded
 ///   4xx on read/reference-data endpoints
 ///   GET requests slower than 2s (expected for large pulls)
 ///
-/// The emit itself is fire-and-forget wrapped in try/catch — observability
-/// must NEVER break a request that would otherwise succeed.
+/// <para>
+/// <b>RG5 (Rulebook §4.1 — Observability), added 2026-08-26.</b> Every rule above
+/// except the fourth is driven by the response status code, which left one class
+/// of failure structurally invisible to this middleware: a batch endpoint that
+/// answers <c>200</c> while rejecting some of the work inside it.
+/// <c>POST /sync/push</c> is precisely that — a farmer's mutation could be
+/// refused and nothing anywhere emitted a thing. The endpoint now stamps
+/// <see cref="RequestObservabilityKeys.RejectedWorkItemCount"/> and this
+/// middleware treats it as an error condition. The status code is unchanged
+/// (<c>P11</c> old-client compatibility).
+/// </para>
+///
+/// <para>
+/// The emit itself is fire-and-forget wrapped in try/catch — observability must
+/// NEVER break a request that would otherwise succeed. It is not swallowed: a
+/// failed emit is logged at <c>Warning</c>, which is the production Serilog
+/// minimum level, so it lands in the API log on the box. (It was
+/// <c>LogDebug</c> until 2026-08-26, i.e. below the production threshold and
+/// therefore invisible — an observability failure that was itself unobservable.)
+/// </para>
 /// </summary>
 public sealed class RequestObservabilityMiddleware(
     RequestDelegate next,
@@ -53,9 +72,13 @@ public sealed class RequestObservabilityMiddleware(
                                 path.Contains(f, StringComparison.OrdinalIgnoreCase));
         var isSlow = isWrite && ms > 2000 && status < 400;
 
-        if (!isError && !isCritical4xx && !isSlow) return;
+        // RG5 — the status code says success, the endpoint says otherwise.
+        var rejectedWorkItems = TryExtractRejectedWorkItems(ctx);
+        var hasRejectedWork = rejectedWorkItems > 0;
 
-        var eventType = (isError || isCritical4xx)
+        if (!isError && !isCritical4xx && !isSlow && !hasRejectedWork) return;
+
+        var eventType = (isError || isCritical4xx || hasRejectedWork)
             ? AnalyticsEventType.ApiError
             : AnalyticsEventType.ApiSlow;
 
@@ -68,7 +91,15 @@ public sealed class RequestObservabilityMiddleware(
             endpoint = $"{method} {path}",
             statusCode = status,
             latencyMs = ms,
-            traceId
+            traceId,
+            // Null on every pre-existing emit path, so existing consumers of
+            // analytics.events are unaffected. Non-null means: the response
+            // carried this many refused work items despite its status code.
+            // Codes and counts only — never farmer content.
+            rejectedWorkItems = hasRejectedWork ? rejectedWorkItems : (int?)null,
+            rejectedWorkReason = hasRejectedWork
+                ? ctx.Items[RequestObservabilityKeys.RejectedWorkReason] as string
+                : null
         });
 
         // Fire-and-forget in a new scope — IAnalyticsWriter is scoped
@@ -93,8 +124,21 @@ public sealed class RequestObservabilityMiddleware(
             }
             catch (Exception ex)
             {
-                // Swallow — observability must never crash the app
-                logger.LogDebug(ex, "RequestObservabilityMiddleware swallowed emit failure.");
+                // Do not rethrow — observability must never crash the app — but
+                // do not hide it either. Warning is the production Serilog
+                // minimum level, so this lands in /var/log/agrisync/api-*.log
+                // on the box. That is the named landing place for a failed
+                // emit; LogDebug (the previous level) was below the production
+                // threshold and therefore went nowhere.
+                logger.LogWarning(
+                    ex,
+                    "RequestObservabilityEmitFailed: eventType={EventType} endpoint={Endpoint} "
+                    + "statusCode={StatusCode} exceptionType={ExceptionType}. "
+                    + "This analytics row is lost; the metric/log signals at the emit site are not.",
+                    eventType,
+                    $"{method} {path}",
+                    status,
+                    ex.GetType().Name);
             }
         });
     }
@@ -105,5 +149,20 @@ public sealed class RequestObservabilityMiddleware(
         var raw = user.FindFirstValue("farm_id")
                ?? user.FindFirstValue("farmId");
         return raw is not null && Guid.TryParse(raw, out var id) ? id : null;
+    }
+
+    /// <summary>
+    /// RG5 — reads the count of work items an otherwise-successful response
+    /// refused, stamped by the endpoint via
+    /// <see cref="RequestObservabilityKeys.RejectedWorkItemCount"/>. Returns 0
+    /// when absent, which is every request that did not opt in.
+    /// </summary>
+    private static int TryExtractRejectedWorkItems(HttpContext ctx)
+    {
+        return ctx.Items.TryGetValue(RequestObservabilityKeys.RejectedWorkItemCount, out var raw)
+            && raw is int count
+            && count > 0
+                ? count
+                : 0;
     }
 }

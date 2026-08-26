@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AgriSync.BuildingBlocks.Abstractions;
@@ -7,6 +8,7 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Abstractions.Sync;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Contracts.Sync;
@@ -130,7 +132,14 @@ public sealed class PushSyncBatchHandler(
     // Production default: NoOpFailPushesProbe (always returns null).
     // When ALLOW_E2E_SEED=true the Bootstrapper re-registers an adapter over
     // E2eFailPushesToggle so the Playwright harness can arm forced failures.
-    IE2eFailPushesProbe failPushesProbe)
+    IE2eFailPushesProbe failPushesProbe,
+    // RG5 (Rulebook §4.1 — Observability): before this parameter existed, all
+    // 71 MutationExecutionOutcome.Failure sites in this file emitted NOTHING.
+    // A rejected mutation is farmer work the server refused, and /sync/push
+    // answers HTTP 200 either way, so a rejection was invisible to the server
+    // logs, to RequestObservabilityMiddleware (status-code driven) and to every
+    // CloudWatch alarm on the account. See LogMutationRejected below.
+    ILogger<PushSyncBatchHandler> logger)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -141,6 +150,36 @@ public sealed class PushSyncBatchHandler(
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
         TimeSpan.FromMilliseconds(100));
     private const string MutationTypeUnimplementedCode = "MUTATION_TYPE_UNIMPLEMENTED";
+
+    /// <summary>
+    /// Wire status string for a mutation the server refused to apply. Kept as a
+    /// constant so the rejection observability in <c>HandleAsync</c> and the
+    /// <c>CreateFailedResult</c> factory below can never drift apart.
+    /// </summary>
+    public const string RejectedStatus = "failed";
+
+    /// <summary>
+    /// Literal token that opens every rejection log line. Stable on purpose: a
+    /// CloudWatch Logs metric filter matching this exact string is the cheapest
+    /// route from these lines to an alarm, and renaming it silently breaks that
+    /// alarm. See <see cref="SyncPushMetrics"/> for the metric-native route.
+    /// </summary>
+    internal const string RejectionLogToken = "SyncMutationRejected";
+
+    /// <summary>
+    /// Value logged for an identifier the server genuinely does not have. Never
+    /// substitute a plausible-looking id here — doctrine P4 (no fabricated
+    /// numbers) applies to operator-facing telemetry exactly as it does to
+    /// farmer-facing screens.
+    /// </summary>
+    private const string UnknownIdentifier = "unknown";
+
+    /// <summary>
+    /// Single metric bucket for any mutation type the client invented. Keeps
+    /// the counter's <c>mutation_type</c> tag bounded by the catalog rather
+    /// than by whatever a client chooses to send.
+    /// </summary>
+    internal const string UnregisteredMutationType = "unregistered";
 
     public async Task<Result<SyncPushResponseDto>> HandleAsync(PushSyncBatchCommand command, CancellationToken ct = default)
     {
@@ -163,16 +202,138 @@ public sealed class PushSyncBatchHandler(
 
         foreach (var mutation in mutations)
         {
-            results.Add(await ProcessMutationAsync(
+            var result = await ProcessMutationAsync(
                 normalizedDeviceId,
                 mutation,
                 command.AuthenticatedUserId,
                 actorRole,
                 command.AppVersion,
-                ct));
+                ct);
+            results.Add(result);
+
+            // RG5 chokepoint. Every rejection in this handler — all 71
+            // MutationExecutionOutcome.Failure sites, the two blank-field
+            // guards in ProcessMutationAsync, the DbUpdateException path and
+            // the store-failure path — becomes a SyncMutationResultDto here
+            // and nowhere else. Logging at this single seam is why the fix is
+            // ~30 lines instead of 71 edits, and why it cannot be bypassed by
+            // a future failure site. The invariant that this loop is the only
+            // place a result enters the response is locked by
+            // PushSyncBatchRejectionObservabilityTests.
+            if (string.Equals(result.Status, RejectedStatus, StringComparison.Ordinal))
+            {
+                LogMutationRejected(
+                    result,
+                    mutation,
+                    normalizedDeviceId,
+                    command.AuthenticatedUserId,
+                    actorRole,
+                    command.AppVersion);
+            }
         }
 
         return Result.Success(new SyncPushResponseDto(clock.UtcNow, results));
+    }
+
+    /// <summary>
+    /// Emits the one operator-visible signal that a farmer's mutation was
+    /// refused: a structured <c>Warning</c> (production Serilog minimum level
+    /// is <c>Warning</c>, so this survives on the box) plus a counter on the
+    /// already-wired Prometheus/OTLP meter.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Redaction.</b> Identifiers and codes only, per the founder's
+    /// standing redacted-only rule. <c>ErrorMessage</c> is deliberately NOT
+    /// logged: several rejection sites interpolate caller-supplied values into
+    /// it, and <c>Result.Error.Description</c> can carry domain text derived
+    /// from the payload. <c>ErrorCode</c> is a closed, developer-authored
+    /// vocabulary and is safe. No transcripts, no names, no phone numbers, no
+    /// payload bodies — only <c>farmId</c> is read out of the payload, and only
+    /// when it parses as a GUID.</para>
+    /// <para><b>Where a failed emit lands.</b> The emit is wrapped because it
+    /// runs inside the per-mutation loop: an exception here would abort the
+    /// whole batch, which is worse than the defect being fixed. It is NOT
+    /// swallowed — the catch records an <c>ActivityEvent</c> on the current
+    /// span and increments
+    /// <c>agrisync.shramsafal.sync.observability_emit_failed</c>. If the
+    /// logger, the meter AND the tracer are all broken simultaneously the
+    /// rejection is unobservable; that residue is named here rather than left
+    /// implied.</para>
+    /// </remarks>
+    private void LogMutationRejected(
+        SyncMutationResultDto result,
+        PushSyncMutationCommand mutation,
+        string deviceId,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion)
+    {
+        var errorCode = string.IsNullOrWhiteSpace(result.ErrorCode)
+            ? UnknownIdentifier
+            : result.ErrorCode;
+
+        // Metric tags must stay low-cardinality. mutationType is CLIENT-supplied
+        // and is echoed back verbatim on the MUTATION_TYPE_UNKNOWN path, so
+        // tagging it raw would let a buggy or hostile client mint unbounded time
+        // series (and unbounded CloudWatch cost). Anything outside the catalog
+        // collapses into one bucket here; the raw value still reaches the log
+        // line below, which is where per-incident detail belongs.
+        var mutationTypeTag = SyncMutationCatalog.IsKnown(result.MutationType)
+            ? result.MutationType
+            : UnregisteredMutationType;
+
+        try
+        {
+            SyncPushMetrics.RecordMutationRejected(mutationTypeTag, errorCode);
+
+            logger.LogWarning(
+                RejectionLogToken + ": mutationType={MutationType} errorCode={ErrorCode} "
+                + "actorUserId={ActorUserId} actorRole={ActorRole} farmId={FarmId} "
+                + "deviceId={DeviceId} clientRequestId={ClientRequestId} appVersion={AppVersion}",
+                result.MutationType,
+                errorCode,
+                actorUserId,
+                actorRole,
+                TryExtractFarmId(mutation.Payload)?.ToString() ?? UnknownIdentifier,
+                deviceId,
+                result.ClientRequestId,
+                string.IsNullOrWhiteSpace(appVersion) ? UnknownIdentifier : appVersion);
+        }
+        catch (Exception ex)
+        {
+            // Named landing place — see the remarks above. Only the exception
+            // TYPE is recorded; exception messages can carry payload text.
+            SyncPushMetrics.RecordObservabilityEmitFailed(ex.GetType().Name);
+            Activity.Current?.AddEvent(new ActivityEvent(
+                "sync.rejection_emit_failed",
+                tags: new ActivityTagsCollection
+                {
+                    { "exception.type", ex.GetType().Name },
+                    { "mutation_type", result.MutationType },
+                    { "error_code", errorCode }
+                }));
+        }
+    }
+
+    /// <summary>
+    /// Best-effort <c>farmId</c> lift out of a mutation payload for the
+    /// rejection log. Returns <c>null</c> when the payload has no parseable
+    /// <c>farmId</c> — the caller then logs "unknown" rather than inventing an
+    /// id. Only this one field is ever read; nothing else in the payload is
+    /// touched, so no farmer content can reach the log.
+    /// </summary>
+    private static Guid? TryExtractFarmId(JsonElement payload)
+    {
+        if (payload.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return payload.TryGetProperty("farmId", out var farmIdElement)
+            && farmIdElement.ValueKind == JsonValueKind.String
+            && farmIdElement.TryGetGuid(out var farmId)
+            ? farmId
+            : null;
     }
 
     private async Task<SyncMutationResultDto> ProcessMutationAsync(
@@ -1635,7 +1796,7 @@ public sealed class PushSyncBatchHandler(
         return new SyncMutationResultDto(
             clientRequestId,
             mutationType,
-            "failed",
+            RejectedStatus,
             null,
             errorCode,
             errorMessage);
