@@ -1,3 +1,4 @@
+using AgriSync.BuildingBlocks.Analytics;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -290,14 +291,22 @@ public sealed class PushSyncBatchHandler(
                 RejectionLogToken + ": mutationType={MutationType} errorCode={ErrorCode} "
                 + "actorUserId={ActorUserId} actorRole={ActorRole} farmId={FarmId} "
                 + "deviceId={DeviceId} clientRequestId={ClientRequestId} appVersion={AppVersion}",
-                result.MutationType,
+                // Every value below that the CLIENT controls goes through
+                // LogSafe.Text — CWE-117, flagged by CodeQL on PR #56. A
+                // newline in any of these would let a client forge a log line,
+                // and these lines are the evidence a human reads when farmer
+                // work starts being refused. errorCode is a closed
+                // developer-authored vocabulary, actorUserId and farmId are
+                // Guids, and actorRole is server-derived — none is attacker
+                // controlled, so none is wrapped.
+                LogSafe.Text(result.MutationType),
                 errorCode,
                 actorUserId,
                 actorRole,
                 TryExtractFarmId(mutation.Payload)?.ToString() ?? UnknownIdentifier,
-                deviceId,
-                result.ClientRequestId,
-                string.IsNullOrWhiteSpace(appVersion) ? UnknownIdentifier : appVersion);
+                LogSafe.Text(deviceId),
+                LogSafe.Text(result.ClientRequestId),
+                LogSafe.Text(appVersion));
         }
         catch (Exception ex)
         {

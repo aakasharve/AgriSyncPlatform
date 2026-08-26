@@ -1,3 +1,4 @@
+using AgriSync.BuildingBlocks.Analytics;
 using System.Diagnostics.Metrics;
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Abstractions;
@@ -82,7 +83,20 @@ public sealed class PushSyncBatchRejectionObservabilityTests
         var properties = logger.Entries.Single(e => e.Level == LogLevel.Warning).Properties;
 
         properties.Should().ContainKey("MutationType");
-        properties["MutationType"].Should().Be("   ", "the raw offending value, unmodified");
+        // CHANGED with the CWE-117 fix on PR #56. This used to require the raw
+        // value "   " unmodified, on the reasoning that an operator should see
+        // exactly what the client sent. That is right in spirit and was wrong
+        // here: MutationType is client-supplied, so it now passes through
+        // LogSafe.Text, and a whitespace-only value collapses to "unknown".
+        //
+        // The new rendering is also the more honest one — three spaces in a log
+        // line read as a field nobody filled in, while "unknown" says a value
+        // arrived and carried nothing usable. The raw value is not lost to the
+        // operator either: it is still on the wire in the response the client
+        // receives. What is gone is a client's ability to put a newline here and
+        // forge a log line, which is the whole point of the guard.
+        properties["MutationType"].Should().Be(LogSafe.Unknown,
+            "client-supplied values are sanitised before they reach a log sink");
         properties.Should().ContainKey("ErrorCode");
         properties["ErrorCode"].Should().Be("ShramSafal.InvalidCommand");
         properties.Should().ContainKey("ActorUserId");

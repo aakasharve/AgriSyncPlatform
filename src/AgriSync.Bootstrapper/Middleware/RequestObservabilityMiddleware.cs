@@ -144,7 +144,11 @@ public sealed class RequestObservabilityMiddleware(
                     + "statusCode={StatusCode} exceptionType={ExceptionType}. "
                     + "This analytics row is lost; the metric/log signals at the emit site are not.",
                     eventType,
-                    $"{method} {path}",
+                    // The path comes off the request line, so it is
+                    // attacker-controlled — CWE-117, CodeQL on PR #56. The
+                    // method is matched by the router and eventType is one of
+                    // our own constants; neither needs wrapping.
+                    LogSafe.Text($"{method} {path}"),
                     status,
                     ex.GetType().Name);
             }
