@@ -44,7 +44,12 @@ public sealed class PushSyncBatchRejectionObservabilityTests
 
         // Pre-condition: this really is a rejection on the wire.
         response.IsSuccess.Should().BeTrue("the batch call itself succeeds — rejections live inside the 200");
-        response.Value.Results.Should().ContainSingle()
+        // Asserted, not suppressed with `!`. CI builds Release /warnaserror, so
+        // CS8602 is an error there; and a null Value would mean the handler
+        // returned success with no payload, which is exactly the kind of
+        // swallowed failure this test exists to catch.
+        response.Value.Should().NotBeNull("a successful batch must carry a payload");
+        response.Value!.Results.Should().ContainSingle()
             .Which.Status.Should().Be(PushSyncBatchHandler.RejectedStatus);
 
         var warnings = logger.Entries
@@ -104,7 +109,8 @@ public sealed class PushSyncBatchRejectionObservabilityTests
 
         // The wire response still carries the human-readable reason for the
         // client — only the SERVER LOG is redacted.
-        response.Value.Results[0].ErrorMessage.Should().NotBeNullOrWhiteSpace();
+        response.Value.Should().NotBeNull("a successful batch must carry a payload");
+        response.Value!.Results[0].ErrorMessage.Should().NotBeNullOrWhiteSpace();
 
         var warning = logger.Entries.Single(e => e.Level == LogLevel.Warning);
 
