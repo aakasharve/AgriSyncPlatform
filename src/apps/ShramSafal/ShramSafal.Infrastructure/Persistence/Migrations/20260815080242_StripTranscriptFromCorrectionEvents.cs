@@ -129,16 +129,46 @@ $$;
             // and with the GUC unset the policy matches zero rows. The
             // backfill would then report success having redacted nothing.
             // Lift FORCE for the statement and put it straight back.
+            //
+            // FORCE is not the only thing in the way. `correction_events` is
+            // append-only: UPDATE and DELETE are REVOKED from the owner, not
+            // merely unheld. Measured on production 2026-08-26 the owner has
+            // INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE and nothing else,
+            // so the statement below raises 42501 before RLS is ever reached.
+            // This one-time redaction is the deliberate exception to
+            // append-only, so lift the revoke exactly the way FORCE is lifted
+            // — for the statement, and straight back afterwards.
+            //
+            // CI runs Postgres as a superuser, where has_table_privilege is
+            // unconditionally true and this branch never runs. That is why the
+            // gate could not see it: it took a production boot to surface, and
+            // it took production down. Do not "simplify" this away.
             migrationBuilder.Sql(@"
-ALTER TABLE ssf.correction_events NO FORCE ROW LEVEL SECURITY;
+DO $$
+DECLARE
+    update_was_revoked boolean := false;
+BEGIN
+    IF NOT has_table_privilege(current_user, 'ssf.correction_events', 'UPDATE') THEN
+        EXECUTE format('GRANT UPDATE ON ssf.correction_events TO %I', current_user);
+        update_was_revoked := true;
+    END IF;
 
-UPDATE ssf.correction_events
-   SET original_parse_raw = ssf.fn_strip_transcript_keys(original_parse_raw),
-       corrected_parse    = ssf.fn_strip_transcript_keys(corrected_parse)
- WHERE ssf.fn_strip_transcript_keys(original_parse_raw) IS DISTINCT FROM original_parse_raw
-    OR ssf.fn_strip_transcript_keys(corrected_parse)    IS DISTINCT FROM corrected_parse;
+    ALTER TABLE ssf.correction_events NO FORCE ROW LEVEL SECURITY;
 
-ALTER TABLE ssf.correction_events FORCE ROW LEVEL SECURITY;
+    UPDATE ssf.correction_events
+       SET original_parse_raw = ssf.fn_strip_transcript_keys(original_parse_raw),
+           corrected_parse    = ssf.fn_strip_transcript_keys(corrected_parse)
+     WHERE ssf.fn_strip_transcript_keys(original_parse_raw) IS DISTINCT FROM original_parse_raw
+        OR ssf.fn_strip_transcript_keys(corrected_parse)    IS DISTINCT FROM corrected_parse;
+
+    ALTER TABLE ssf.correction_events FORCE ROW LEVEL SECURITY;
+
+    -- Restore append-only. On the failure path the whole migration
+    -- transaction rolls back, which takes the GRANT with it.
+    IF update_was_revoked THEN
+        EXECUTE format('REVOKE UPDATE ON ssf.correction_events FROM %I', current_user);
+    END IF;
+END $$;
 ");
 
             // ── 3. Prove it, loudly ─────────────────────────────────────
