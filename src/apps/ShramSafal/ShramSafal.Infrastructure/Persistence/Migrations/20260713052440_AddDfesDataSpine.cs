@@ -275,10 +275,19 @@ CREATE POLICY p_user_select_question_events ON ssf.question_events
 -- Idempotent and role-guarded: a database where the roles were never
 -- bootstrapped (some test harnesses) skips instead of failing.
 --
--- A CTO-owned sweep migration in Wave 1 will fix this class repo-wide (23
--- affected tables, 11 already in production). This block is deliberate
--- belt-and-braces so DFES is correct standalone rather than depending on that
--- sweep landing first.
+-- NOTE (corrected 2026-08-26). An earlier version of this comment justified the
+-- GRANTs by claiming migrations run under the *_Migration connection, so every
+-- table created here inherits nothing and the app role gets 42501 on first
+-- write, citing AddRawBlobSubjects as evidence that field_operators et al carry
+-- relacl IS NULL. That cited text was STRUCK in AddRawBlobSubjects on
+-- 2026-08-25 -- BOTH HALVES ARE WRONG, measured on production -- and Gate P
+-- then measured acl_null=0 across all 77 ssf tables, every one owned by
+-- agrisync_app. Startup migrations run on ConnectionStrings__ShramSafalDb,
+-- which IS agrisync_app.
+--
+-- The GRANT statements stay: they are correct and idempotent under either
+-- ownership model. Only the reasoning was false, and a false premise that has
+-- already been carried forward three times does not get a fourth ride.
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'agrisync_app') THEN
@@ -289,11 +298,26 @@ BEGIN
         GRANT SELECT ON ssf.daily_richness_aggregates TO agrisync_readonly;
         GRANT SELECT ON ssf.question_events TO agrisync_readonly;
     END IF;
-END $$;
 
--- Append-only by privilege (mirrors the audit-integrity hardening recipe).
--- Net effect for question_events after the GRANT above: SELECT + INSERT only.
-REVOKE UPDATE, DELETE ON ssf.question_events FROM agrisync_app;
+    -- Append-only by privilege (mirrors the audit-integrity hardening recipe).
+    -- Net effect for question_events after the GRANT above: SELECT + INSERT only.
+    --
+    -- This sits INSIDE the role guard. It used to sit after `END $$;`, which
+    -- meant a database where the roles were never bootstrapped raised
+    -- 42704 (role agrisync_app does not exist) -- breaking precisely the
+    -- un-bootstrapped throwaway lane where privilege bugs are supposed to be
+    -- caught. The guard above is worthless if the statement it guards escapes it.
+    --
+    -- TRUNCATE is revoked too, and that is not belt-and-braces. TRUNCATE is not
+    -- a row operation, so RLS never sees it: one statement from the ordinary app
+    -- role erases the entire ledger, tenant policy and all. This exact hole was
+    -- found on ssf.audit_events and closed by founder ruling on 2026-08-15
+    -- (20260815052139_RevokeTruncateOnAuditEvents); an append-only table that
+    -- still grants TRUNCATE is append-only in name only.
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'agrisync_app') THEN
+        REVOKE UPDATE, DELETE, TRUNCATE ON ssf.question_events FROM agrisync_app;
+    END IF;
+END $$;
 ");
         }
 

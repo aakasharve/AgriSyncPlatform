@@ -146,8 +146,19 @@ BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'agrisync_app') THEN
         GRANT SELECT, INSERT ON ssf.terms_acceptance_events TO agrisync_app;
         GRANT SELECT, INSERT ON ssf.consent_grant_events    TO agrisync_app;
-        REVOKE UPDATE, DELETE ON ssf.terms_acceptance_events FROM agrisync_app;
-        REVOKE UPDATE, DELETE ON ssf.consent_grant_events    FROM agrisync_app;
+        -- TRUNCATE is revoked alongside UPDATE and DELETE, and on a legal
+        -- ledger that is the load-bearing one. TRUNCATE is not a row
+        -- operation, so RLS never evaluates it: a single statement from the
+        -- ordinary application role erases every consent record ever written,
+        -- across all tenants, with the FORCE ROW LEVEL SECURITY above offering
+        -- no resistance whatsoever. The same hole was found on ssf.audit_events
+        -- and closed by founder ruling on 2026-08-15
+        -- (20260815052139_RevokeTruncateOnAuditEvents). Re-opening it eleven
+        -- days later on the DPDP consent ledger would be worse than never
+        -- having closed it, because these two tables are the evidence that the
+        -- consent existed at all.
+        REVOKE UPDATE, DELETE, TRUNCATE ON ssf.terms_acceptance_events FROM agrisync_app;
+        REVOKE UPDATE, DELETE, TRUNCATE ON ssf.consent_grant_events    FROM agrisync_app;
     END IF;
 END;
 $$ LANGUAGE plpgsql;
