@@ -515,8 +515,8 @@ blocker**, not a footnote.
       🔴 **All four branches still carry `sarvam-m`** — skip this merge and T1.14 silently reverts Wave 0.
       **This is why A4 is re-proven after T1.14** (the API deploy), *not* after T1.13 (the GO token, at
       which point no code has shipped and A4 is unprovable).
-- [ ] **T1.3** Run the **Dexie cross-branch guard before merging** — `workflow_dispatch` `eslint.yml` (`:79-92`, `npm run check:dexie-version`). It was written for exactly this collision (`:28-37`) and **has never run on this merge**.
-- [ ] **T1.4** Merge `feat/owner-oversight-loop` **@ `64d14255`** (brings **49** commits).
+- [x] **T1.3** ✅ *(done 2026-08-26 — Dexie cross-branch guard run: v24, 52/58 refs compared, OK)* ~~ Run the **Dexie cross-branch guard before merging** — `workflow_dispatch` `eslint.yml` (`:79-92`, `npm run check:dexie-version`). It was written for exactly this collision (`:28-37`) and **has never run on this merge**.
+- [x] **T1.4** ✅ *(done 2026-08-26 — oversight merged @ 9cd659a3 — 3 conflicts, useAppData hand-resolved, 5 guard tests green)* ~~ Merge `feat/owner-oversight-loop` **@ `64d14255`** (brings **49** commits).
       🔴 **THREE conflicts, not two. The third is the dangerous one.** Re-measured after `d1c3837d`:
 
       | file | kind | how to resolve |
@@ -533,8 +533,8 @@ blocker**, not a footnote.
       exists precisely to catch this. **Run it immediately after resolving.** If it fails, the merge is wrong.
       Then decide: two `ProfilePage.snapshot.test.tsx` + `.snap` pairs exist at `features/profile/__tests__/`
       and `pages/__tests__/`; delete one or record why both exist.
-- [ ] **T1.5** Cherry-pick labour's 3 test-only commits. Reconcile the overlap between `7fe51ab4` and oversight's credential removal — name the canonical one.
-- [ ] **T1.6** **Maps key + "built once and promoted" — ONE workflow fixes both DoD items.**
+- [x] **T1.5** ✅ *(done 2026-08-26 — 2 of 3 cherry-picked @ 5f6d48f9 + 270f85ae; 7fe51ab4 dropped as superseded by oversight)* ~~ Cherry-pick labour's 3 test-only commits. Reconcile the overlap between `7fe51ab4` and oversight's credential removal — name the canonical one.
+- [x] **T1.6** ✅ *(done 2026-08-26 — web-release.yml @ c11d9b30 — dispatch-only, BOTH env vars, post-build bundle grep)* ~~ **Maps key + "built once and promoted" — ONE workflow fixes both DoD items.**
       Measured: `deploy-s3.sh:130-133` only publishes a pre-built `dist/`, so a `VITE_*` var cannot be
       injected there — Vite inlines `import.meta.env` at **build** time. `git grep -l 'build:prod\|deploy-s3' -- .github`
       returns **nothing**: no CI job builds or publishes the web bundle at all. Today `npm run build:prod`
@@ -602,8 +602,8 @@ blocker**, not a footnote.
       `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` secrets. `deploy-s3.sh` needs bash, `aws`, `curl`;
       `DIST`/`BUCKET`/`DISTRIBUTION_ID`/`PUBLIC_URL` all default correctly.
       This is also the only thing that can satisfy the DoD's 🔒 *"frontend built once and promoted"*.
-- [ ] **T1.6b** Correct the false GRANT rationale in `AddRawBlobSubjects.cs:149-159` (§0.3) — it ships wrong otherwise. Sweep itself only if Gate P mandates it.
-- [ ] **T1.7** **Two flags, two very different rollback costs. Located:**
+- [x] **T1.6b** ✅ *(done 2026-08-26 — false GRANT rationale corrected @ 3d3c3176)* ~~ Correct the false GRANT rationale in `AddRawBlobSubjects.cs:149-159` (§0.3) — it ships wrong otherwise. Sweep itself only if Gate P mandates it.
+- [x] **T1.7** ✅ *(done 2026-08-26 — both flags ruled OFF and recorded; neither needs an action to stay off)* ~~ **Two flags, two very different rollback costs. Located:**
       - `Ai:DomainKnowledgeLayer:Enabled` — read at `ParseVoiceInputHandler.cs:72` via
         `configuration.GetValue<bool>`, **default false**; also `AiEvalEndpoints.cs:76`. Set on the box as
         env `Ai__DomainKnowledgeLayer__Enabled`. **Rollback: edit the env + `systemctl restart`, seconds.**
@@ -626,7 +626,7 @@ blocker**, not a footnote.
       **oversight fails `check:storage-discipline`: 1 new localStorage violation outside the allow-list**
       → **T1.4b**. Re-dispatch both branches after any tree-rewriting task; these do not fire on push.
 
-- [ ] **T1.4b** **NEW BLOCKER (found by T1.8).** `src/clients/mobile-web/src/features/oversight/LocalOversightAcknowledgementStore.ts`
+- [x] **T1.4b** ✅ *(done 2026-08-26 — store moved to infrastructure/storage @ 3fdd5f12 — gate OK, not allow-listed)* ~~ **NEW BLOCKER (found by T1.8).** `src/clients/mobile-web/src/features/oversight/LocalOversightAcknowledgementStore.ts`
       is the *only* file differing between the two branches' localStorage sets, and it trips
       `check:storage-discipline`: *"localStorage usage outside `infrastructure/storage/` — route through
       `useUiPref`, a Dexie repository, or a purpose-named storage adapter."* It **is** a purpose-named
@@ -634,9 +634,9 @@ blocker**, not a footnote.
       `release/wave-1`, not on the frozen CI-green oversight branch** — move the file, update imports,
       re-dispatch `eslint`. *(This is also the store behind the known caveat that "seen" does not survive a
       reinstall or a second device; moving it does not fix that, and must not be described as if it did.)*
-- [ ] **T1.9** **Run `classify-migration.py` at G1** — the sole classification authority (ADR 0024; `1344da2b` record `:35-36`). With `StripTranscriptFromCorrectionEvents` in the payload expect `destructive` ⇒ `rehearsal_method: clone` ⇒ **clone dry-run required and not waivable** (`:62-63`). Add the G2 clone step and re-estimate.
-- [ ] **T1.10** RG1–RG5. **`RG2` (old-client compatibility, `P11`) needs its own task, before merge** (Rulebook §4.1 `:124`) — APK v1.0.7 from `739dfe90` is in the field while this ships a Dexie row-shape change and 16 migrations behind the sync contract. Expect `RG4 = NOT_PROVEN` (§8).
-- [ ] **T1.12b** **TRUTH AUDIT (A12).** A dedicated sub-agent sweeps every farmer-facing string and number
+- [x] **T1.9** ✅ *(done 2026-08-26 — classifier run: destructive/clone; clone infeasible (RDS private, re-verified), substitute path identified)* ~~ **Run `classify-migration.py` at G1** — the sole classification authority (ADR 0024; `1344da2b` record `:35-36`). With `StripTranscriptFromCorrectionEvents` in the payload expect `destructive` ⇒ `rehearsal_method: clone` ⇒ **clone dry-run required and not waivable** (`:62-63`). Add the G2 clone step and re-estimate.
+- [x] **T1.10** ✅ *(done 2026-08-26 — RG1-RG5 verdicts produced with evidence — 0 of 5 proved, RG4+RG5 FAIL)* ~~ RG1–RG5. **`RG2` (old-client compatibility, `P11`) needs its own task, before merge** (Rulebook §4.1 `:124`) — APK v1.0.7 from `739dfe90` is in the field while this ships a Dexie row-shape change and 16 migrations behind the sync contract. Expect `RG4 = NOT_PROVEN` (§8).
+- [x] **T1.12b** ✅ *(done 2026-08-26 — truth audit done — 4 Wave-1 fixes landed, 27 findings triaged to Wave 2)* ~~ **TRUTH AUDIT (A12).** A dedicated sub-agent sweeps every farmer-facing string and number
       shipping in Wave 1 and asks one question per claim: *can the data behind this actually support what
       the farmer will read?* Known starting points, already identified — **not an exhaustive list, the
       audit must find its own**:
