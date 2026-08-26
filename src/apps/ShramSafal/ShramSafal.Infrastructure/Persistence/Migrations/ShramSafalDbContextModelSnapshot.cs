@@ -1245,47 +1245,64 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                        .HasColumnType("uuid")
+                        .HasColumnName("Id");
 
                     b.Property<DateTimeOffset>("CapturedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("captured_at_utc");
 
                     b.Property<string>("CorrectedParse")
                         .IsRequired()
-                        .HasColumnType("jsonb");
+                        .HasColumnType("jsonb")
+                        .HasColumnName("corrected_parse");
 
                     b.Property<string>("Locale")
                         .IsRequired()
                         .HasMaxLength(10)
-                        .HasColumnType("character varying(10)");
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("locale");
 
-                    b.Property<Guid>("OriginalParseId")
-                        .HasColumnType("uuid");
+                    b.Property<Guid?>("OriginalParseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("original_parse_id");
 
                     b.Property<string>("OriginalParseRaw")
                         .IsRequired()
-                        .HasColumnType("jsonb");
+                        .HasColumnType("jsonb")
+                        .HasColumnName("original_parse_raw");
+
+                    b.Property<string>("PromptContentHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("prompt_content_hash");
 
                     b.Property<string>("PromptVersion")
                         .IsRequired()
                         .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("prompt_version");
 
                     b.Property<string>("Trigger")
                         .IsRequired()
                         .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("trigger");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CapturedAtUtc");
+                    b.HasIndex("CapturedAtUtc")
+                        .HasDatabaseName("ix_correction_events_captured_at_utc");
 
-                    b.HasIndex("PromptVersion");
+                    b.HasIndex("PromptVersion")
+                        .HasDatabaseName("ix_correction_events_prompt_version");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_correction_events_user_id");
 
                     b.ToTable("correction_events", "ssf");
                 });
@@ -1761,6 +1778,12 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("approved_by_user_id");
 
+                    b.Property<bool>("CanManageLabourRecords")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("can_manage_labour_records");
+
                     b.Property<DateTime?>("ExitedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("exited_at_utc");
@@ -1986,6 +2009,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("daily_log_id");
 
+                    b.Property<decimal>("DurationHours")
+                        .HasColumnType("numeric")
+                        .HasColumnName("duration_hours");
+
                     b.Property<string>("EngagementType")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -2004,6 +2031,25 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("male_count");
 
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("Shift")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("shift");
+
+                    b.Property<string>("Task")
+                        .HasColumnType("text")
+                        .HasColumnName("task");
+
+                    b.Property<string>("TimeBasis")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("time_basis");
+
                     b.Property<decimal?>("TotalCost")
                         .HasColumnType("numeric")
                         .HasColumnName("total_cost");
@@ -2015,6 +2061,13 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<int?>("WorkerCount")
                         .HasColumnType("integer")
                         .HasColumnName("worker_count");
+
+                    b.Property<string>("WorkerNamesJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("worker_names_json")
+                        .HasDefaultValueSql("'[]'::jsonb");
 
                     b.HasKey("Id");
 
@@ -2463,6 +2516,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(48)")
                         .HasColumnName("category_id");
 
+                    b.Property<string>("ClientAttachmentIdsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("client_attachment_ids_json");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at_utc");
@@ -2486,6 +2543,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("description");
+
+                    b.Property<string>("Direction")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("direction");
 
                     b.Property<DateOnly>("EntryDate")
                         .HasColumnType("date")
@@ -2520,13 +2582,38 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("modified_at_utc");
 
+                    b.Property<string>("PaymentMode")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("payment_mode");
+
                     b.Property<Guid?>("PlotId")
                         .HasColumnType("uuid")
                         .HasColumnName("plot_id");
 
+                    b.Property<decimal?>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("quantity");
+
                     b.Property<Guid?>("SourceAiJobId")
                         .HasColumnType("uuid")
                         .HasColumnName("source_ai_job_id");
+
+                    b.Property<string>("Unit")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("unit");
+
+                    b.Property<decimal?>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("unit_price");
+
+                    b.Property<string>("VendorName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("vendor_name");
 
                     b.HasKey("Id");
 
@@ -2705,6 +2792,154 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("price_configs", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Labour.FieldOperator", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("display_name");
+
+                    b.Property<string>("DisplayNameNormalized")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("display_name_normalized");
+
+                    b.Property<string>("FullName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("full_name");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<Guid>("OriginatingFarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("originating_farm_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OriginatingFarmId")
+                        .HasDatabaseName("ix_field_operators_originating_farm_id");
+
+                    b.ToTable("field_operators", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Labour.FieldOperatorWorkRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("DisplayNameAtAttach")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("display_name_at_attach");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<Guid>("FieldOperatorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("field_operator_id");
+
+                    b.Property<Guid>("LabourAssignmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("labour_assignment_id");
+
+                    b.Property<Guid>("RecordedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recorded_by_user_id");
+
+                    b.Property<DateOnly>("WorkDate")
+                        .HasColumnType("date")
+                        .HasColumnName("work_date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_field_operator_work_rows_farm_id");
+
+                    b.HasIndex("LabourAssignmentId");
+
+                    b.HasIndex("FieldOperatorId", "LabourAssignmentId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_field_operator_work_rows_operator_assignment");
+
+                    b.ToTable("field_operator_work_rows", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Labour.LabourCorrection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ChangedField")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("changed_field");
+
+                    b.Property<DateTime>("CorrectedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("corrected_at_utc");
+
+                    b.Property<Guid>("CorrectedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("corrected_by_user_id");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<Guid>("LabourAssignmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("labour_assignment_id");
+
+                    b.Property<string>("NewValue")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("new_value");
+
+                    b.Property<string>("OriginalValue")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("original_value");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)")
+                        .HasColumnName("reason");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_labour_corrections_farm_id");
+
+                    b.HasIndex("LabourAssignmentId", "CorrectedAtUtc")
+                        .HasDatabaseName("ix_labour_corrections_assignment_corrected_at");
+
+                    b.ToTable("labour_corrections", "ssf");
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Logs.DailyLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2714,7 +2949,7 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at_utc");
 
-                    b.Property<Guid>("CropCycleId")
+                    b.Property<Guid?>("CropCycleId")
                         .HasColumnType("uuid")
                         .HasColumnName("crop_cycle_id");
 
@@ -2746,13 +2981,24 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("operator_user_id");
 
-                    b.Property<Guid>("PlotId")
+                    b.Property<Guid?>("PlotId")
                         .HasColumnType("uuid")
                         .HasColumnName("plot_id");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("scope");
 
                     b.Property<Guid?>("SourceAiJobId")
                         .HasColumnType("uuid")
                         .HasColumnName("source_ai_job_id");
+
+                    b.PrimitiveCollection<List<Guid>>("_plotIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("plot_ids");
 
                     b.HasKey("Id");
 
@@ -3891,6 +4137,28 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("raw_blob_index", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Storage.RawBlobSubject", b =>
+                {
+                    b.Property<string>("Sha256")
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sha256");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTime>("FirstSeenUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_seen_utc");
+
+                    b.HasKey("Sha256", "UserId");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_raw_blob_subjects_user_id");
+
+                    b.ToTable("raw_blob_subjects", "ssf");
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Subscriptions.SubscriptionProjection", b =>
                 {
                     b.Property<Guid>("SubscriptionId")
@@ -4509,6 +4777,15 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Farms.LabourAssignment", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Logs.DailyLog", null)
+                        .WithMany()
+                        .HasForeignKey("DailyLogId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Finance.CostEntry", b =>
                 {
                     b.HasOne("ShramSafal.Domain.Finance.CostCategory", null)
@@ -4666,6 +4943,51 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         });
 
                     b.Navigation("Allocations");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Labour.FieldOperator", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Farms.Farm", null)
+                        .WithMany()
+                        .HasForeignKey("OriginatingFarmId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Labour.FieldOperatorWorkRow", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Farms.Farm", null)
+                        .WithMany()
+                        .HasForeignKey("FarmId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ShramSafal.Domain.Labour.FieldOperator", null)
+                        .WithMany()
+                        .HasForeignKey("FieldOperatorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ShramSafal.Domain.Farms.LabourAssignment", null)
+                        .WithMany()
+                        .HasForeignKey("LabourAssignmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Labour.LabourCorrection", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Farms.Farm", null)
+                        .WithMany()
+                        .HasForeignKey("FarmId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ShramSafal.Domain.Farms.LabourAssignment", null)
+                        .WithMany()
+                        .HasForeignKey("LabourAssignmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Logs.DailyLog", b =>
@@ -4881,6 +5203,16 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         });
 
                     b.Navigation("Tasks");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Storage.RawBlobSubject", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Storage.RawBlobIndexEntry", null)
+                        .WithMany()
+                        .HasForeignKey("Sha256")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_raw_blob_subjects_sha256");
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Tests.TestInstance", b =>

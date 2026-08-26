@@ -30,7 +30,41 @@ internal sealed class LabourAssignmentConfiguration : IEntityTypeConfiguration<L
         builder.Property(x => x.LinkedActivityId).HasColumnName("linked_activity_id");
         builder.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
 
+        // Task 4 — duration always travels with its provenance (LabourTime). 'Unspecified'
+        // is 11 chars, hence varchar(12) not the usual (20) seen elsewhere in this file.
+        builder.Property(x => x.DurationHours).HasColumnName("duration_hours").IsRequired();
+        builder.Property(x => x.TimeBasis)
+            .HasColumnName("time_basis").HasConversion<string>().HasMaxLength(12).IsRequired();
+
+        builder.Property(x => x.Shift)
+            .HasColumnName("shift").HasConversion<string>().HasMaxLength(20); // nullable enum -> stores "Full"/"Half"/"Night"
+
+        builder.Property(x => x.Task).HasColumnName("task");                          // nullable free text
+
+        // LABOUR_PHASE2 migration ③ (founder decision O-3) — the farmer's own note.
+        // No max length, exactly like `task` above: this is the farmer's words, and
+        // a length cap here would silently truncate them. NULL = no note (the domain
+        // normalises blank to null), never an empty string.
+        builder.Property(x => x.Notes).HasColumnName("notes");
+
+        // Task 2.2 — mirrors DailyLogConfiguration.EvidenceSourcesJson: ships NOT NULL
+        // with default '[]'::jsonb so the column never needs NULL handling downstream.
+        builder.Property(x => x.WorkerNamesJson)
+            .HasColumnName("worker_names_json")
+            .HasColumnType("jsonb")
+            .HasDefaultValueSql("'[]'::jsonb")
+            .IsRequired();
+
         builder.HasIndex(x => x.DailyLogId).HasDatabaseName("ix_labour_assignments_daily_log_id");
+
+        // Task 1 (spec 2026-07-13-labour-attendance-approval-design) — parent
+        // integrity on the anchor. Shadow FK (neither side has a navigation
+        // property), same idiom as CostEntryConfiguration's CategoryId FK.
+        builder.HasOne<ShramSafal.Domain.Logs.DailyLog>()
+            .WithMany()
+            .HasForeignKey(x => x.DailyLogId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.Ignore(x => x.DomainEvents);
     }
 }

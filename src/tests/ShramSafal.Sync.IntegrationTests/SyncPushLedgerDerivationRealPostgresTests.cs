@@ -55,10 +55,13 @@ namespace ShramSafal.Sync.IntegrationTests;
 /// treated as absent → Manual, no derivation).</item>
 /// </list></para>
 ///
-/// <para><b>Native :5433, opt-in, self-skipping.</b> Tagged
+/// <para><b>Native :5433, fail-loud (2026-07-19).</b> Tagged
 /// <c>[Trait("Category","RequiresPostgres")]</c>; creates its OWN scratch DB,
-/// applies the full migration chain, drops it on dispose. Skips cleanly if
-/// native Postgres :5433 is unreachable.</para>
+/// applies the full migration chain, drops it on dispose. If native Postgres
+/// is unreachable, <see cref="RequiresPostgresConnection.ResolveReachableConnectionOrThrowAsync"/>
+/// THROWS out of <see cref="InitializeAsync"/> — the [Fact]s report FAILED,
+/// never a silent skip. This suite proves a real tenant-security /
+/// money-adjacent invariant and must never pass without having run.</para>
 /// </summary>
 [Trait("Category", "RequiresPostgres")]
 public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions.ITestOutputHelper output) : IAsyncLifetime
@@ -67,7 +70,7 @@ public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions
     // this literal local-dev password; roles are cluster-global so it already
     // exists on the :5433 cluster.
     private const string AppRoleUser = "agrisync_app";
-    private const string AppRolePassword = "dev_app_change_me";
+    private static string AppRolePassword => TestRoleCredentials.AppRolePassword;
 
     // Farm A — the same-farm derivation case.
     private static readonly Guid FarmA = Guid.Parse("dddd1111-1111-1111-1111-111111111111");
@@ -117,31 +120,14 @@ public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions
     private string _scratchDbName = string.Empty;
     private string _appConn = string.Empty;
     private string _adminConn = string.Empty;
-    private bool _skip;
-    private string _skipReason = string.Empty;
     private ServiceProvider? _rootProvider;
 
     public async Task InitializeAsync()
     {
-        var baseConn = ResolveSuperuserConnectionOrNull();
-        if (baseConn is null)
-        {
-            _skip = true;
-            _skipReason = "No local ShramSafalDb connection string found in appsettings.Development.json.";
-            return;
-        }
-
-        try
-        {
-            await using var probe = new NpgsqlConnection(baseConn);
-            await probe.OpenAsync();
-        }
-        catch (Exception ex)
-        {
-            _skip = true;
-            _skipReason = $"Native Postgres :5433 unreachable ({ex.GetType().Name}); RequiresPostgres proof skipped.";
-            return;
-        }
+        // Throws (does not skip) if Postgres is unconfigured/unreachable — see
+        // RequiresPostgresConnection's doc comment for the 2026-07-19
+        // CI-truthfulness fix this enforces.
+        var baseConn = await RequiresPostgresConnection.ResolveReachableConnectionOrThrowAsync();
 
         _scratchDbName = $"ssf_fix1_proof_{Guid.NewGuid():N}";
         await using (var admin = new NpgsqlConnection(baseConn))
@@ -215,7 +201,7 @@ public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions
             await _rootProvider.DisposeAsync();
         }
 
-        if (!_skip && !string.IsNullOrEmpty(_scratchDbName) && !string.IsNullOrEmpty(_adminConn))
+        if (!string.IsNullOrEmpty(_scratchDbName) && !string.IsNullOrEmpty(_adminConn))
         {
             try
             {
@@ -243,12 +229,6 @@ public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions
     [Fact]
     public async Task SyncPush_create_daily_log_with_same_farm_source_job_populates_farm_operations_and_input_items()
     {
-        if (_skip)
-        {
-            Assert.True(true, _skipReason);
-            return;
-        }
-
         var dailyLogId = Guid.Parse("eeee1111-1111-1111-1111-111111111111");
 
         var response = await RunSyncPushCreateDailyLogAsync(
@@ -320,12 +300,6 @@ public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions
     [Fact]
     public async Task SyncPush_create_daily_log_with_cross_farm_source_job_derives_nothing_and_leaves_other_farm_untouched()
     {
-        if (_skip)
-        {
-            Assert.True(true, _skipReason);
-            return;
-        }
-
         var dailyLogId = Guid.Parse("eeee2222-2222-2222-2222-222222222222");
 
         // Farm B's owner submits a create_daily_log carrying Farm A's AiJob id.
@@ -431,32 +405,6 @@ public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers (mirror LedgerDerivationSupersessionRealPostgresTests).
     // ─────────────────────────────────────────────────────────────────────────
-
-    private static string? ResolveSuperuserConnectionOrNull()
-    {
-        var candidates = new[]
-        {
-            System.IO.Path.Combine(RepoRoot(), "src", "AgriSync.Bootstrapper", "appsettings.Development.json"),
-        };
-        foreach (var path in candidates)
-        {
-            if (!System.IO.File.Exists(path)) continue;
-            var cfg = new ConfigurationBuilder().AddJsonFile(path, optional: true).Build();
-            var conn = cfg.GetConnectionString("ShramSafalDb");
-            if (!string.IsNullOrWhiteSpace(conn)) return conn;
-        }
-        return null;
-    }
-
-    private static string RepoRoot()
-    {
-        var dir = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !System.IO.Directory.Exists(System.IO.Path.Combine(dir.FullName, "src")))
-        {
-            dir = dir.Parent;
-        }
-        return dir?.FullName ?? AppContext.BaseDirectory;
-    }
 
     private static async Task<long> ScalarLongAsync(
         NpgsqlConnection db, string sql, params (string Name, object Value)[] args)

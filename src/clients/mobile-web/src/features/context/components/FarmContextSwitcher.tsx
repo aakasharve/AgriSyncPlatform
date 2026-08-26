@@ -132,7 +132,7 @@ const FarmContextSwitcher: React.FC<FarmContextSwitcherProps> = ({
     );
 };
 
-interface FarmSwitcherSheetProps {
+export interface FarmSwitcherSheetProps {
     farms: MyFarmDto[];
     currentFarmId: string;
     onClose: () => void;
@@ -141,7 +141,15 @@ interface FarmSwitcherSheetProps {
     onJoinViaQr: () => void;
 }
 
-const FarmSwitcherSheet: React.FC<FarmSwitcherSheetProps> = ({
+/**
+ * Exported (spec: owner-oversight-loop, §2.1/task-6 brief) so `AppHeader`'s
+ * `CanonicalStrip` farm chip can open the SAME sheet — "Only the trigger's
+ * shell changes" — by lifting this open/close state up to `AppHeader`,
+ * instead of copying this markup into a second sheet. `FarmContextSwitcher`
+ * below (the pill + its own internal `isOpen` state) is untouched; this is
+ * an additive export, not a behaviour change to the default export.
+ */
+export const FarmSwitcherSheet: React.FC<FarmSwitcherSheetProps> = ({
     farms,
     currentFarmId,
     onClose,

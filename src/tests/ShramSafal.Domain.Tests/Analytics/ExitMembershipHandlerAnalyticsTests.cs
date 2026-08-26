@@ -3,6 +3,7 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.UseCases.Memberships.ExitMembership;
 using ShramSafal.Domain.Farms;
+using ShramSafal.Domain.Tests.Memberships;
 using Xunit;
 
 namespace ShramSafal.Domain.Tests.Analytics;
@@ -30,7 +31,8 @@ public sealed class ExitMembershipHandlerAnalyticsTests
         repo.SeedMembership(FarmMembership.Create(
             Guid.NewGuid(), farmIdGuid, workerUserId, AppRole.Worker, now));
 
-        var handler = new ExitMembershipHandler(repo, new FixedClock(now), analytics);
+        var handler = new ExitMembershipHandler(
+            repo, new FixedClock(now), analytics, StubCallerFarmTenantScope.Granting());
 
         var result = await handler.HandleAsync(
             new FarmId(farmIdGuid),

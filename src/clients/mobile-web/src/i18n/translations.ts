@@ -6,9 +6,23 @@
 /**
  * Language Translations
  * Marathi (mr) and English (en) translations for entire app
+ *
+ * COMPOSED, NOT MONOLITHIC. The DFES behavioural-layer copy lives in
+ * `dfesTranslations.ts` — see that file for why the split happened and what it
+ * is NOT allowed to change. Add the next large section the same way rather than
+ * growing this file back past the 800-line cap.
  */
 
-export type Language = 'en' | 'mr';
+import type { Language } from './language';
+import { dfesTranslations, type DfesTranslations } from './dfesTranslations';
+import {
+    shramSathiTranslations,
+    syncTranslations,
+    type ShramSathiTranslations,
+    type SyncTranslations,
+} from './syncTranslations';
+
+export type { Language };
 
 export interface Translations {
     // Header
@@ -80,7 +94,6 @@ export interface Translations {
         weather: string;
         maleWorkers: string;
         femaleWorkers: string;
-        hoursWorked: string;
         method: string;
         duration: string;
         type: string;
@@ -217,66 +230,17 @@ export interface Translations {
         error: string;
         add: string;
     };
-    // DFES Behavioral Layer (Anti-Ego & Habit Loop)
-    dfes: {
-        // Closure ritual
-        closeToday: string;
-        todayClosed: string;
-        closeTodayQuestion: string;
 
-        // Day summary
-        todaySummary: string;
-        weekSummary: string;
-        farmBookUpToDate: string;
+    /**
+     * The Shram Sathi voice — the claims the app may make about a farmer's
+     * records, and the sentences it says while making them. See
+     * `syncTranslations.ts`, which carries the reasoning for every string.
+     */
+    sync: SyncTranslations;
+    shramSathi: ShramSathiTranslations;
 
-        // Verification (anti-ego)
-        doesThisMatch: string;
-        allLooksCorrect: string;
-        somethingNeedsFixing: string;
-        ownerHasQuestion: string;
-        updated: string;
-        waitingForConfirmation: string;
-        confirmed: string;
-
-        // Missed day
-        addYesterday: string;
-        addPreviousDays: string;
-        welcomeBack: string;
-        daysLoggedThisWeek: string;
-
-        // No work
-        noWorkToday: string;
-
-        // Onboarding
-        shramSathi: string;
-        onboardingWelcome: string;
-        letsStart: string;
-        whichCropToday: string;
-        whatWorkToday: string;
-        firstLogCelebration: string;
-        comeBackTomorrow: string;
-
-        // Owner verification trigger
-        weeklyReviewPrompt: string;
-        reviewAndClose: string;
-        farmBookOpen: string;
-
-        // Trust
-        trustedTotal: string;
-        loggedTotal: string;
-        farmBookTrusted: string;
-
-        // New additions for Batch 4
-        activitiesLogged: string;
-        needsReview: string;
-        allVerified: string;
-        entries: string;
-        unknown: string;
-        verify: string;
-
-        // Batch 5
-        clickToClose: string;
-    };
+    // DFES Behavioral Layer (Anti-Ego & Habit Loop) — see `dfesTranslations.ts`
+    dfes: DfesTranslations;
 }
 
 export const translations: Record<Language, Translations> = {
@@ -339,7 +303,6 @@ export const translations: Record<Language, Translations> = {
             weather: 'Weather',
             maleWorkers: 'Male Workers',
             femaleWorkers: 'Female Workers',
-            hoursWorked: 'Hours Worked',
             method: 'Method',
             duration: 'Duration',
             type: 'Type',
@@ -468,66 +431,10 @@ export const translations: Record<Language, Translations> = {
             error: 'Error',
             add: 'Add',
         },
+        sync: syncTranslations.en,
+        shramSathi: shramSathiTranslations.en,
         // DFES Behavioral Layer
-        dfes: {
-            // Closure ritual
-            closeToday: 'Close today',
-            todayClosed: 'Today closed. Everything recorded.',
-            closeTodayQuestion: 'Want to close today\'s farm?',
-
-            // Day summary
-            todaySummary: 'Today: {activities} activities, Rs. {cost} cost.',
-            weekSummary: 'This week: {entries} entries, Rs. {cost} cost.',
-            farmBookUpToDate: 'Farm book is up to date.',
-
-            // Verification (anti-ego)
-            doesThisMatch: 'Does this match?',
-            allLooksCorrect: 'All looks correct',
-            somethingNeedsFixing: 'Something needs fixing',
-            ownerHasQuestion: '{owner} has a question about this entry',
-            updated: 'Updated: {field} was {oldValue}, now {newValue}',
-            waitingForConfirmation: 'Waiting for confirmation',
-            confirmed: 'Confirmed',
-
-            // Missed day
-            addYesterday: 'Add yesterday\'s work',
-            addPreviousDays: 'Add previous days',
-            welcomeBack: 'Welcome back! What\'s been happening?',
-            daysLoggedThisWeek: 'You logged {logged} of {count} days this week',
-
-            // No work
-            noWorkToday: 'No work today',
-
-            // Onboarding
-            shramSathi: 'Shram Sathi',
-            onboardingWelcome: 'Keep a daily farm record. Just 30 seconds.',
-            letsStart: 'Let\'s start',
-            whichCropToday: 'Which crop today?',
-            whatWorkToday: 'What work happened today?',
-            firstLogCelebration: 'Done! Your first farm record is saved.',
-            comeBackTomorrow: 'Come back tomorrow evening.',
-
-            // Owner verification trigger
-            weeklyReviewPrompt: 'Your farm book has new entries to review.',
-            reviewAndClose: 'Review and close',
-            farmBookOpen: 'This week\'s farm book is open.',
-
-            // Trust
-            trustedTotal: 'Trusted total',
-            loggedTotal: 'Logged total',
-            farmBookTrusted: 'Farm book {percent}% trusted',
-
-            // New additions for Batch 4
-            activitiesLogged: 'activities logged',
-            needsReview: 'needs review',
-            allVerified: 'All verified',
-            entries: 'entries',
-            unknown: 'Unknown',
-            verify: 'Verify',
-
-            // Batch 5
-            clickToClose: 'Click to close the day',
-        },
+        dfes: dfesTranslations.en,
     },
 
     mr: {
@@ -589,7 +496,6 @@ export const translations: Record<Language, Translations> = {
             weather: 'हवामान',
             maleWorkers: 'पुरुष कामगार',
             femaleWorkers: 'महिला कामगार',
-            hoursWorked: 'काम केलेले तास',
             method: 'पद्धत',
             duration: 'कालावधी',
             type: 'प्रकार',
@@ -718,66 +624,10 @@ export const translations: Record<Language, Translations> = {
             error: 'चूक',
             add: 'जोडा',
         },
+        sync: syncTranslations.mr,
+        shramSathi: shramSathiTranslations.mr,
         // DFES Behavioral Layer
-        dfes: {
-            // Closure ritual
-            closeToday: 'आज बंद करा',
-            todayClosed: 'आज बंद. सगळं नोंद झालं.',
-            closeTodayQuestion: 'आजचं शेत बंद करायचं?',
-
-            // Day summary
-            todaySummary: 'आज: {activities} कामं, Rs. {cost} खर्च.',
-            weekSummary: 'या आठवड्यात: {entries} नोंदी, Rs. {cost} खर्च.',
-            farmBookUpToDate: 'शेतनोंद अद्ययावत आहे.',
-
-            // Verification (anti-ego)
-            doesThisMatch: 'हे जुळतं का?',
-            allLooksCorrect: 'सगळं बरोबर दिसतंय',
-            somethingNeedsFixing: 'काहीतरी सुधारायला हवं',
-            ownerHasQuestion: '{owner} यांना या नोंदीबद्दल शंका आहे',
-            updated: 'सुधारणा: {field} {oldValue} होतं, {newValue} आहे',
-            waitingForConfirmation: 'खात्रीची वाट पाहत आहे',
-            confirmed: 'खात्री झाली',
-
-            // Missed day
-            addYesterday: 'कालचं काम नोंदवा',
-            addPreviousDays: 'मागील दिवस नोंदवा',
-            welcomeBack: 'पुन्हा स्वागत! शेतात काय चाललं?',
-            daysLoggedThisWeek: 'या आठवड्यात {count} पैकी {logged} दिवस नोंद',
-
-            // No work
-            noWorkToday: 'आज काम नाही',
-
-            // Onboarding
-            shramSathi: 'श्रम साथी',
-            onboardingWelcome: 'शेताची रोजची नोंद ठेवा. फक्त 30 सेकंद.',
-            letsStart: 'चला सुरू करूया',
-            whichCropToday: 'आज कोणत्या पिकावर काम?',
-            whatWorkToday: 'आज काय काम झालं?',
-            firstLogCelebration: 'झालं! तुमची पहिली शेतनोंद जतन झाली.',
-            comeBackTomorrow: 'उद्या संध्याकाळी या.',
-
-            // Owner verification trigger
-            weeklyReviewPrompt: 'तुमच्या शेतनोंदीत नवीन नोंदी आहेत. तपासा.',
-            reviewAndClose: 'तपासा आणि बंद करा',
-            farmBookOpen: 'या आठवड्याची शेतनोंद उघडी आहे.',
-
-            // Trust
-            trustedTotal: 'खात्रीशीर एकूण',
-            loggedTotal: 'नोंदवलेला एकूण',
-            farmBookTrusted: 'शेतनोंद {percent}% खात्रीशीर',
-
-            // New additions for Batch 4
-            activitiesLogged: 'कामे नोंदवली',
-            needsReview: 'तपासायचे आहे',
-            allVerified: 'सर्व खात्री झाली',
-            entries: 'नोंदी',
-            unknown: 'अज्ञात',
-            verify: 'खात्री करा',
-
-            // Batch 5
-            clickToClose: 'दिवस बंद करण्यासाठी क्लिक करा',
-        },
+        dfes: dfesTranslations.mr,
     },
 };
 
@@ -786,11 +636,58 @@ export const translations: Record<Language, Translations> = {
  */
 export function t(key: string, lang: Language = 'en'): string {
     const keys = key.split('.');
-    let value: any = translations[lang];
+    // FORCED SCOPE (Labour V1 Task 8.6): this was `any`, the file's only ESLint
+    // warning, and the pre-commit gate runs `--max-warnings 0` — so removing the
+    // three dead `hoursWorked` entries above could not be committed until this
+    // was resolved. Narrowed rather than suppressed. Behaviour for a resolved
+    // string key is byte-identical (`value || key`); a key that resolves to a
+    // non-string — a namespace object, which the old code returned AS the
+    // "string" — now falls back to the key instead of leaking `[object Object]`
+    // into the UI.
+    let value: unknown = translations[lang];
 
     for (const k of keys) {
-        value = value?.[k];
+        value = typeof value === 'object' && value !== null
+            ? (value as Record<string, unknown>)[k]
+            : undefined;
     }
 
-    return value || key;
+    return typeof value === 'string' ? (value || key) : key;
+}
+
+/**
+ * `t()` plus `{placeholder}` substitution.
+ *
+ * WHY IT EXISTS. Counted sentences were being built by concatenation in the
+ * caller — `` `${t('sync.onPhone', lang)} — ${skipped} of ${handled} cannot be
+ * sent.` `` — which forced the numbers' POSITION to be English word order in
+ * every language. Marathi puts the total before `पैकी` and the subset after,
+ * the mirror of English, so a concatenated sentence is not translatable at all:
+ * it is English grammar wearing Marathi words. A template per language is the
+ * only shape that lets the two orders differ.
+ *
+ * This file already shipped ~8 `{placeholder}` strings (`dfes.todaySummary`,
+ * `dfes.daysLoggedThisWeek`, `dfes.ownerHasQuestion`, …) with NO substituter
+ * anywhere in the client, so every one of them could only ever have rendered
+ * its braces raw. This is the missing half of a convention that was already
+ * here, not a new one.
+ *
+ * AN UNKNOWN PLACEHOLDER IS LEFT STANDING, deliberately. Replacing it with an
+ * empty string would turn "3 of 5 will not reach…" into "3 of will not reach…"
+ * — a sentence that still reads like a sentence while having lost a number.
+ * A visible `{handled}` is a bug report; a silent gap is a wrong statement to a
+ * farmer (`P4`).
+ */
+export function tf(
+    key: string,
+    lang: Language = 'en',
+    vars: Record<string, string | number> = {},
+): string {
+    return t(key, lang).replace(
+        /\{(\w+)\}/g,
+        (placeholder, name: string) =>
+            Object.prototype.hasOwnProperty.call(vars, name)
+                ? String(vars[name])
+                : placeholder,
+    );
 }

@@ -52,6 +52,16 @@ public static class ModuleKey
     // sub-blocks gated by ops:read claim).
     public const string FarmerHealth = "farmer.health";
 
+    // §P0.2 — the cross-farm audit ledger (ssf.audit_events rows with a NULL
+    // farm_id). These are not farm data: they carry S3 object keys for other
+    // farmers' raw voice recordings, other users' GUIDs including erasure
+    // subjects, PII-review free text, and admin elevation reasons. There was no
+    // module key for this surface before, and no platform-admin CLAIM exists to
+    // invent one from (JwtTokenIssuer deliberately removed it — "tokens are
+    // identity, not authorization"). Authorization resolves through
+    // IEntitlementResolver -> AdminScope, and this key is what the matrix gates.
+    public const string AuditLedger = "audit.ledger";
+
     public static readonly IReadOnlySet<string> All = typeof(ModuleKey)
         .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
         .Where(f => f.IsLiteral && f.FieldType == typeof(string))

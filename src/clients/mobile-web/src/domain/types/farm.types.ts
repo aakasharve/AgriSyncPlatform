@@ -407,6 +407,8 @@ export type AppRoute =
     | 'job-detail'
     /** CEI Phase 4 §4.8 — worker profile (id passed via sessionStorage) */
     | 'worker-profile'
+    /** Labour Management — hub + मुकादम + attendance + wages + उचल + dashboard + हजेरी वही (sub-nav local). */
+    | 'labour'
     /** Canonical farm boundary drawing (weather anchor). */
     | 'farm-boundary'
     /** DATA_PRINCIPLE_SPINE Phase 06.4 — privacy/consent settings screen. */
@@ -416,7 +418,11 @@ export type AppRoute =
     /** DATA_PRINCIPLE_SPINE Phase 08.6 — DPDP §11 self-serve export screen. */
     | 'dataRights/export'
     /** DATA_PRINCIPLE_SPINE Phase 10.4 — admin PII review queue. */
-    | 'piiReview';
+    | 'piiReview'
+    /** spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — offline
+     * voice-note drafts (`pendingAiJobs.result`) waiting for the farmer to
+     * confirm or discard them. */
+    | 'ai-drafts';
 
 export interface AudioData {
     blob: Blob;

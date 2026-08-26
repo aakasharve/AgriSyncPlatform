@@ -10,6 +10,16 @@ import { AlertTriangle, User, Users, Droplets, Tractor, X } from 'lucide-react';
 import Button from '../../../../../shared/components/ui/Button';
 import IssueFormSheet from '../../IssueFormSheet';
 
+/**
+ * One sheet serves labour, irrigation AND machinery: `data` arrives as whichever
+ * event shape matches `type`, and `localData` accumulates fields from all three
+ * as the farmer switches tabs. Typing that honestly means splitting this
+ * component per type — a real refactor, not a rename — so the looseness is
+ * named once here instead of being repeated at six call sites.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type DetailData = any;
+
 const DetailSheet = ({
     type,
     data,
@@ -21,28 +31,50 @@ const DetailSheet = ({
     cropContractUnit
 }: {
     type: 'labour' | 'irrigation' | 'machinery',
-    data: any,
+    data: DetailData,
     defaults: LedgerDefaults,
-    onSave: (d: any) => void,
+    onSave: (d: DetailData) => void,
     onClose: () => void,
     profile: FarmerProfile,
     currentPlot?: Plot,
     cropContractUnit?: string
 }) => {
     // SYNCHRONOUS INITIALIZATION (Prevents empty flash)
-    const [localData, setLocalData] = useState<any>(() => {
+    const [localData, setLocalData] = useState<DetailData>(() => {
         // If editing existing data, use it
         if (data && Object.keys(data).length > 0) return { ...data };
 
         // Otherwise, generate smart defaults immediately
         if (type === 'labour') {
             const defaultShift = defaults.labour.shifts.find(s => s.name === 'Full Day') || defaults.labour.shifts[0];
+            // Labour V1 final fix (C2) — NO PRE-SEEDED NUMBERS.
+            //
+            // This used to open with maleCount/femaleCount/count/totalCost all
+            // set to 0. Those were form defaults, not farmer statements, and
+            // they did not stay in the form: `buildLabourPayloads` sends any
+            // finite/integer value INCLUDING 0, the server preserves NULL only
+            // when all three headcounts are null, and `LabourAssignment`'s
+            // TotalCost is documented as "NULL when not stated… never
+            // computed". So a contract engagement where the farmer stated a
+            // quantity but never a total was recording "₹0 was stated" instead
+            // of "we were not told" — a constant wearing the costume of a
+            // measurement, in the canonical record, with no backfill job in
+            // this system to undo it.
+            //
+            // Absence is the honest initial state and it costs nothing to
+            // display: every one of these fields reaches the DOM through
+            // `value={x || ''}`, which renders 0 and undefined identically
+            // (measured: the sheet's outerHTML is byte-identical either way at
+            // 412/628/1400). The `parseFloat(...) || 0` handlers below then put
+            // a real number here the moment the farmer types one — including a
+            // genuine 0, which is data and must survive.
+            //
+            // `type` and `shiftId` are NOT the same case: both are visibly
+            // reflected in the UI (the selected tab, the highlighted shift
+            // chip), so they are shown defaults the farmer can see and change,
+            // not silent claims about a quantity.
             return {
                 type: 'HIRED',
-                maleCount: 0,
-                femaleCount: 0,
-                count: 0,
-                totalCost: 0,
                 shiftId: defaultShift?.id
             };
         }
@@ -76,33 +108,56 @@ const DetailSheet = ({
 
     // LABOUR LOGIC
     const handleShiftSelect = (shiftId: string) => {
-        setLocalData((prev: any) => ({ ...prev, shiftId }));
+        setLocalData((prev: DetailData) => ({ ...prev, shiftId }));
     };
 
     // Auto-calculate total cost whenever counts or shift changes
     useEffect(() => {
         if (type === 'labour' && localData.type === 'HIRED' && localData.shiftId) {
             const shift = defaults.labour.shifts.find(s => s.id === localData.shiftId);
-            if (shift) {
+            // Labour V1 final fix (C2) — DERIVE FROM A STATEMENT, NEVER FROM
+            // SILENCE. This effect fires on mount (a shift is pre-selected), so
+            // without this guard it immediately wrote `totalCost: 0, count: 0`
+            // over the initializer and put the fabricated zeros straight back —
+            // removing them above would have achieved nothing. A total derived
+            // from no headcount at all is not a cheaper total, it is a number
+            // nobody said. Once EITHER split carries a number the arithmetic is
+            // exactly as before, so the "Total Paid (Auto)" box still fills in
+            // on the first keystroke.
+            const hasStatedSplit = typeof localData.maleCount === 'number'
+                || typeof localData.femaleCount === 'number';
+            if (shift && hasStatedSplit) {
                 const mCost = (localData.maleCount || 0) * (shift.defaultRateMale || 0);
                 const fCost = (localData.femaleCount || 0) * (shift.defaultRateFemale || 0);
                 const total = mCost + fCost;
 
                 // Update total cost AND total count
-                setLocalData((prev: any) => ({
+                setLocalData((prev: DetailData) => ({
                     ...prev,
                     totalCost: total,
                     count: (prev.maleCount || 0) + (prev.femaleCount || 0)
                 }));
             }
         }
+        // `type` is fixed for the lifetime of a mounted sheet, and
+        // `defaults.labour.shifts` is a fresh array identity on most parent
+        // renders — adding either would re-run an effect that calls
+        // setLocalData, i.e. trade a lint warning for a render loop. The
+        // effect intentionally keys only on the values it recomputes from.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [localData.maleCount, localData.femaleCount, localData.shiftId, localData.type]);
 
     const handleContractUnitInit = () => {
         if (!localData.contractUnit) {
             // Apply Dynamic Defaults from Plot/Crop
             const unit = cropContractUnit || 'Acre';
-            let quantity = 0;
+            // Same fabrication as the initializer above, one branch further in:
+            // when the plot carries no baseline to derive a quantity from, this
+            // used to fall through to a literal 0 and record "0 acres were
+            // contracted". A quantity that can be derived from the plot is a
+            // real starting figure the farmer sees and can overwrite; when
+            // there is none, the honest value is nothing at all.
+            let quantity: number | undefined;
             if (unit === 'Tree' && currentPlot?.baseline.totalPlants) quantity = currentPlot.baseline.totalPlants;
             else if (unit === 'Acre' && currentPlot?.baseline.totalArea) quantity = currentPlot.baseline.totalArea;
 
@@ -156,7 +211,7 @@ const DetailSheet = ({
                                     <button
                                         key={t}
                                         onClick={() => {
-                                            setLabourTab(t as any);
+                                            setLabourTab(t as 'HIRED' | 'CONTRACT' | 'SELF');
                                             if (t === 'CONTRACT') handleContractUnitInit();
                                             else setLocalData({ ...localData, type: t });
                                         }}
@@ -238,6 +293,32 @@ const DetailSheet = ({
                                                     Split ({(localData.maleCount || 0) + (localData.femaleCount || 0)}) doesn't match Total ({localData.count})
                                                 </p>
                                             )}
+                                    </div>
+
+                                    {/* 4. Stated Hours (Labour V1 Task 7.4)
+                                        The first REAL producer of duration in the app: a number the
+                                        farmer states, not one the app assumes. Optional by
+                                        construction — clearing the field, typing "0", or any stray
+                                        keystroke stores `undefined`, i.e. "not stated", which the
+                                        server records as its own assumed default. It can never
+                                        reject or block the day's log. */}
+                                    <div>
+                                        <label
+                                            className="text-xs font-bold text-slate-400 uppercase"
+                                            style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
+                                        >
+                                            कामाचे तास
+                                        </label>
+                                        <input
+                                            type="number"
+                                            className="w-full p-3 border border-slate-200 rounded-xl font-bold text-lg mt-1 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
+                                            value={localData.durationHours ?? ''}
+                                            placeholder="0"
+                                            onChange={e => {
+                                                const n = parseFloat(e.target.value);
+                                                setLocalData({ ...localData, durationHours: Number.isFinite(n) && n > 0 ? n : undefined });
+                                            }}
+                                        />
                                     </div>
 
                                     {/* Auto-Calculated Total */}

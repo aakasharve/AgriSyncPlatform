@@ -60,6 +60,10 @@ export const ModuleKeys = {
   // FarmerHealth-specific column-level policy (PII fields, sync/AI ops
   // sub-blocks gated by ops:read claim).
   FarmerHealth: 'farmer.health',
+
+  // §P0.2 — cross-farm audit ledger (NULL-farm ssf.audit_events rows).
+  // Platform+Owner only; see EntitlementMatrix.Lookup for the matrix row.
+  AuditLedger: 'audit.ledger',
 } as const;
 
 export type ModuleKey = (typeof ModuleKeys)[keyof typeof ModuleKeys];

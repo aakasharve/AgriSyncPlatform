@@ -87,12 +87,16 @@ namespace ShramSafal.Sync.IntegrationTests;
 /// pre-flag-flip fix (spec <c>ai-intelligence-plan-2026-06-25</c>); this test
 /// does not cover it.</para>
 ///
-/// <para><b>Native :5433, opt-in, self-skipping.</b> Tagged
+/// <para><b>Native :5433, fail-loud (2026-07-19).</b> Tagged
 /// <c>[Trait("Category","RequiresPostgres")]</c> so it never runs in the
 /// InMemory unit suite and stays out of the Docker-gated sweep. If native
-/// Postgres :5433 is unreachable (no dev DB running) the fixture skips cleanly
-/// rather than failing. It creates its OWN scratch database, applies the full
-/// migration chain to it, and drops it on dispose — it never touches
+/// Postgres is unreachable (no dev DB running, or CI's Postgres service is
+/// unconfigured), <see cref="RequiresPostgresConnection.ResolveReachableConnectionOrThrowAsync"/>
+/// THROWS out of <see cref="InitializeAsync"/> — the [Fact]s report FAILED,
+/// never a silent skip (this suite used to <c>Assert.True(true, ...)</c> and
+/// report a false green on every CI run; see the 2026-07-19 CI-truthfulness
+/// fix). It creates its OWN scratch database, applies the full migration
+/// chain to it, and drops it on dispose — it never touches
 /// <c>agrisync_dev</c> data.</para>
 /// </summary>
 [Trait("Category", "RequiresPostgres")]
@@ -102,7 +106,7 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
     // this literal local-dev password; roles are cluster-global so it already
     // exists on the :5433 cluster.
     private const string AppRoleUser = "agrisync_app";
-    private const string AppRolePassword = "dev_app_change_me";
+    private static string AppRolePassword => TestRoleCredentials.AppRolePassword;
 
     private static readonly Guid FarmId = Guid.Parse("aaaa1111-1111-1111-1111-111111111111");
     private static readonly Guid OwnerAccountId = Guid.Parse("aaaa2222-2222-2222-2222-222222222222");
@@ -155,33 +159,15 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
     private string _superuserConn = string.Empty;
     private string _scratchDbName = string.Empty;
     private string _appConn = string.Empty;
-    private bool _skip;
-    private string _skipReason = string.Empty;
     private ServiceProvider? _rootProvider;
 
     public async Task InitializeAsync()
     {
-        // ── Resolve the local dev superuser connection (never echoed) ──────────
-        var baseConn = ResolveSuperuserConnectionOrNull();
-        if (baseConn is null)
-        {
-            _skip = true;
-            _skipReason = "No local ShramSafalDb connection string found in appsettings.Development.json.";
-            return;
-        }
-
-        // ── Reachability probe — skip cleanly if native :5433 is down ──────────
-        try
-        {
-            await using var probe = new NpgsqlConnection(baseConn);
-            await probe.OpenAsync();
-        }
-        catch (Exception ex)
-        {
-            _skip = true;
-            _skipReason = $"Native Postgres :5433 unreachable ({ex.GetType().Name}); RequiresPostgres proof skipped.";
-            return;
-        }
+        // ── Resolve + prove the local dev superuser connection (never echoed).
+        // Throws (does not skip) if Postgres is unconfigured/unreachable — see
+        // RequiresPostgresConnection's doc comment for the 2026-07-19
+        // CI-truthfulness fix this enforces. ─────────────────────────────────
+        var baseConn = await RequiresPostgresConnection.ResolveReachableConnectionOrThrowAsync();
 
         // ── Create an isolated scratch DB (never touches agrisync_dev data) ────
         _scratchDbName = $"ssf_f2_proof_{Guid.NewGuid():N}";
@@ -259,7 +245,7 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
             await _rootProvider.DisposeAsync();
         }
 
-        if (!_skip && !string.IsNullOrEmpty(_scratchDbName) && !string.IsNullOrEmpty(_adminConn))
+        if (!string.IsNullOrEmpty(_scratchDbName) && !string.IsNullOrEmpty(_adminConn))
         {
             try
             {
@@ -289,15 +275,6 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
     [Fact]
     public async Task Confirming_twice_same_ai_job_supersedes_to_one_current_row_and_persists_both_logs_with_all_child_families()
     {
-        // Skip cleanly when native Postgres :5433 is absent (no NuGet dependency
-        // on Xunit.SkippableFact; matches the codebase's Assert.True(true, ...)
-        // fallback convention — see FfmpegAudioTranscoderTests).
-        if (_skip)
-        {
-            Assert.True(true, _skipReason);
-            return;
-        }
-
         var log1 = Guid.Parse("bbbb1111-1111-1111-1111-111111111111");
         var log2 = Guid.Parse("bbbb2222-2222-2222-2222-222222222222");
 
@@ -402,12 +379,6 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
     [Fact]
     public async Task Forced_derivation_failure_does_not_roll_back_the_log_on_real_postgres()
     {
-        if (_skip)
-        {
-            Assert.True(true, _skipReason);
-            return;
-        }
-
         var logId = Guid.Parse("cccc1111-1111-1111-1111-111111111111");
 
         // Inject a DB-level failure INSIDE the side-car: a BEFORE-INSERT trigger
@@ -534,37 +505,6 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers.
     // ─────────────────────────────────────────────────────────────────────────
-
-    private static string? ResolveSuperuserConnectionOrNull()
-    {
-        // Read the local dev connection from the Bootstrapper appsettings the
-        // same way the app does. The password is never printed by this test.
-        var candidates = new[]
-        {
-            System.IO.Path.Combine(RepoRoot(), "src", "AgriSync.Bootstrapper", "appsettings.Development.json"),
-        };
-        foreach (var path in candidates)
-        {
-            if (!System.IO.File.Exists(path)) continue;
-            var cfg = new ConfigurationBuilder().AddJsonFile(path, optional: true).Build();
-            var conn = cfg.GetConnectionString("ShramSafalDb");
-            if (!string.IsNullOrWhiteSpace(conn)) return conn;
-        }
-        return null;
-    }
-
-    private static string RepoRoot()
-    {
-        // Walk up from the test bin dir to the repo root (the folder that holds
-        // the src/ tree). AppContext.BaseDirectory is
-        // .../src/tests/ShramSafal.Sync.IntegrationTests/bin/<cfg>/net10.0/.
-        var dir = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !System.IO.Directory.Exists(System.IO.Path.Combine(dir.FullName, "src")))
-        {
-            dir = dir.Parent;
-        }
-        return dir?.FullName ?? AppContext.BaseDirectory;
-    }
 
     private static async Task<long> ScalarLongAsync(
         NpgsqlConnection db, string sql, params (string Name, object Value)[] args)

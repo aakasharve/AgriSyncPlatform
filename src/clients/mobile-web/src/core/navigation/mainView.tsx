@@ -16,24 +16,57 @@ import LiveCaption from '../../features/voice/components/LiveCaption';
 import { DEFAULT_VOICE_CONFIG } from '../../infrastructure/voice/types';
 import ManualEntry from '../../features/logs/components/ManualEntry';
 import DailyLogCard from '../../features/logs/components/DailyLogCard';
+// `ArrowLeft` left with `LabourLogBanner`, its only consumer. `Users` stays —
+// the success card's bucket chips still use it.
 import { Leaf, Droplets, Users, Package, Tractor, Sprout } from 'lucide-react';
 import { getSegmentVisual } from '../../shared/utils/uiUtils';
 import { getDateKey } from '../domain/services/DateKeyService';
 import { buildTimelineEntries } from '../../services/transcriptTimelineService';
-import WeatherWidget from '../../features/weather/components/WeatherWidget';
 import { formatCurrencyINR } from '../../shared/utils/dayState';
 import { getCropTheme } from '../../shared/utils/colorTheme';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
 import { MeterDisplay } from '../../features/logs/components/MeterDisplay';
+// Only the SUMMARY is needed here — `mainView` hands it to `ManualEntry`,
+// which owns the decision to render the panel (it is the component that knows
+// whether the farmer's context is the whole farm).
+import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
+// spec: owner-oversight-loop (Task 13, changes 3 + 5) — real components
+// (not inlined here), because both call `useLanguage()` internally and this
+// file's render functions are plain functions, not components — see
+// `mainViewComponents.tsx`'s header for why that hook rule forces the split.
+import SathiGuideCard from '../../features/oversight/components/SathiGuideCard';
+import HelpBar from '../../features/oversight/components/HelpBar';
+import {
+    LabourLogBanner,
+    NotQueuedForServerBadge,
+    SavedLocallyHeadline,
+    ShramSathiUnderstanding,
+} from './mainViewComponents';
 
 import { AppRouterContext } from './routeContext';
 import { ReflectPage, ComparePage } from './lazyComponents';
+import { DISPLAY_TIME_ZONE } from '../../shared/utils/displayTime';
 import {
     formatLogTime,
     getPrimaryWorkDone,
     getSummaryLines,
     getVerificationPresentation
 } from './helpers';
+
+/*
+ * The four components this module renders live in `./mainViewComponents`.
+ *
+ * They were moved there to keep this file under the 800-line `check:file-sizes`
+ * cap once the farm-wide panel and the two hook-bearing headlines landed. The
+ * move is VERBATIM — same DOM, same component identities — so the viewport
+ * measurements taken against this screen still hold.
+ *
+ * `NotQueuedForServerBadge` and `LabourLogBanner` are RE-EXPORTED below because
+ * two test files import them from this module, and `labour-log-banner.test.tsx`
+ * compares `el.type === LabourLogBanner`. A second copy would satisfy the
+ * import and silently fail that identity check.
+ */
+export { NotQueuedForServerBadge, LabourLogBanner } from './mainViewComponents';
 
 export const renderReflectView = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'main' || ctx.mainView !== 'reflect') return null;
@@ -100,11 +133,8 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
 
     const {
         status, mode, recordingSegment,
-        weatherData, weatherStatus, boundaryUnset, refetchWeather, setCurrentRoute,
-        ownerDisplayName, todayDayState, yesterdayDayState,
-        showCloseDaySummary, setShowCloseDaySummary,
-        showCloseYesterdaySummary, setShowCloseYesterdaySummary,
-        setShowReviewInbox, setMainView,
+        setCurrentRoute,
+        setMainView,
         crops, logScope, setLogScope, setMode, setStatus,
         hasActiveLogContext, isContextReady, error, errorTranscript,
         handleAudioReady, handleTextReady, handleManualSubmit,
@@ -117,160 +147,45 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         getLogContextSnapshot, handleEditLog,
         costSnapshot, yesterdayCost,
         setRecordingSegment,
-        lastSavedLogSummary, lastSavedLogIds, mockHistory, handleReset
+        lastSavedLogSummary, lastSavedLogIds, mockHistory, handleReset,
+        logIntent
     } = ctx;
-
-    // Single boundary handoff: flag it + route to Profile, where the drawer auto-opens.
-    const openBoundary = () => { window.sessionStorage.setItem('open_farm_boundary', '1'); setCurrentRoute('profile'); };
 
     return (
         <>
             {/* IDLE / RECORDING STATE */}
             {status !== 'confirming' && status !== 'success' && status !== 'processing' && (
                 <>
-                    {!recordingSegment && (
-                        <div className="mb-4 animate-in slide-in-from-top-4 duration-300 delay-100 space-y-3">
-                            <WeatherWidget
-                                data={weatherData}
-                                status={weatherStatus}
-                                boundaryUnset={boundaryUnset}
-                                onRetry={refetchWeather}
-                                onAddLocation={openBoundary}
-                                onOpenBoundary={openBoundary}
-                            />
+                    {/* spec: owner-oversight-loop (Task 7, design doc §4.2, §5) —
+                        the large gradient weather card, the Daily Closure
+                        card and the "Daily Log" heading + owner chip used to
+                        sit here, above the plot selector, making a farmer
+                        scroll ~380px before reaching the only question this
+                        screen exists for. The header already shows the
+                        owner (canonical strip), the closure/pending-approval
+                        facts now live in the oversight drawer. The weather
+                        chip that used to sit here (Task 7's one-line
+                        `CompactWeatherChip`) MOVED AGAIN in Task 11 — the
+                        founder's header restructure put it into `AppHeader`
+                        row 1 instead ("in the dead space on the right,
+                        before the gear"), so it is not rendered here any
+                        more (never rendered twice). */}
 
-                            <div className="flex items-center justify-between px-1">
-                                <p className="text-base font-black tracking-tight text-stone-800">Daily Log</p>
-                                <span
-                                    className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[11px] font-bold text-emerald-700"
-                                    data-testid="home-greeting"
-                                >
-                                    Owner: {ownerDisplayName}
-                                </span>
-                            </div>
-
-                            <div className="bg-white border border-stone-200 rounded-2xl p-3.5 shadow-sm space-y-2">
-                                <div className="flex items-center justify-between gap-3">
-                                    <div className="flex items-center gap-3">
-                                        <div
-                                            className="w-14 h-14 rounded-full p-1"
-                                            style={{
-                                                background: `conic-gradient(#059669 ${todayDayState.closurePercent * 3.6}deg, #e7e5e4 0deg)`
-                                            }}
-                                        >
-                                            <div className="w-full h-full rounded-full bg-white flex items-center justify-center text-[11px] font-black text-stone-700">
-                                                {todayDayState.closurePercent}%
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <p className="text-xs uppercase tracking-wide font-bold text-stone-400">Daily Closure</p>
-                                            <p className={`text-sm font-bold ${todayDayState.isClosed ? 'text-emerald-700' : 'text-amber-700'}`}>
-                                                {todayDayState.isClosed ? 'Day Closed' : 'Day Not Closed'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => setShowCloseDaySummary(prev => !prev)}
-                                        className="px-3 py-1.5 rounded-full bg-stone-900 text-white text-xs font-bold"
-                                    >
-                                        Close Day
-                                    </button>
-                                </div>
-
-                                <p className="text-sm font-semibold text-stone-700">
-                                    Tasks: Done {todayDayState.completedCount} / Planned {todayDayState.plannedCount}
-                                </p>
-                                {todayDayState.unverifiedCount > 0 && (
-                                    <p className="text-xs font-semibold text-amber-700">
-                                        Pending approvals: {todayDayState.unverifiedCount}
-                                    </p>
-                                )}
-
-                                {showCloseDaySummary && (
-                                    <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2">
-                                        <p className="text-xs font-semibold text-stone-700">
-                                            {todayDayState.isClosed
-                                                ? 'Today is fully closed.'
-                                                : `Day closure pending: ${todayDayState.pendingCount} tasks and ${todayDayState.unverifiedCount} unverified entries.`}
-                                        </p>
-                                        {todayDayState.unverifiedCount > 0 && (
-                                            <button
-                                                onClick={() => setShowReviewInbox(true)}
-                                                className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold"
-                                            >
-                                                Verify now
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
-
-                                {(!yesterdayDayState.isClosed || showCloseYesterdaySummary) && (
-                                    <div className="pt-1">
-                                        <button
-                                            onClick={() => setShowCloseYesterdaySummary(prev => !prev)}
-                                            className="w-full text-left rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800"
-                                        >
-                                            Yesterday not fully closed
-                                        </button>
-                                    </div>
-                                )}
-
-                                {showCloseYesterdaySummary && (
-                                    <div className="mt-2 rounded-xl border border-stone-200 bg-stone-50 px-3 py-3 space-y-2">
-                                        <p className="text-xs uppercase tracking-wide font-bold text-stone-400">Close Yesterday</p>
-                                        <p className="text-sm text-stone-700">
-                                            Planned {yesterdayDayState.plannedCount}, completed {yesterdayDayState.completedCount}, pending {yesterdayDayState.pendingCount}, unverified {yesterdayDayState.unverifiedCount}.
-                                        </p>
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => {
-                                                    setMainView('reflect');
-                                                    setShowCloseYesterdaySummary(false);
-                                                }}
-                                                className="px-3 py-1.5 rounded-lg bg-stone-900 text-white text-xs font-bold"
-                                            >
-                                                Review summary
-                                            </button>
-                                            {yesterdayDayState.unverifiedCount > 0 && (
-                                                <button
-                                                    onClick={() => setShowReviewInbox(true)}
-                                                    className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold"
-                                                >
-                                                    Verify now
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="rounded-2xl bg-stone-900 text-white p-3.5 space-y-2">
-                                <p className="text-[10px] uppercase tracking-wide font-bold text-stone-300">Running Cost</p>
-                                <div className="grid grid-cols-3 gap-2 text-sm">
-                                    <div>
-                                        <p className="text-stone-400 text-xs">Today</p>
-                                        <p className="font-black">Rs {formatCurrencyINR(costSnapshot.today)}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-stone-400 text-xs">Yesterday</p>
-                                        <p className="font-black">Rs {formatCurrencyINR(yesterdayCost)}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-stone-400 text-xs">Running</p>
-                                        <p className="font-black">Rs {formatCurrencyINR(costSnapshot.cropSoFar)}</p>
-                                    </div>
-                                </div>
-                                {costSnapshot.unverifiedToday > 0 && (
-                                    <button
-                                        onClick={() => setShowReviewInbox(true)}
-                                        className="w-full text-left rounded-lg border border-amber-300/50 bg-amber-200/20 px-2.5 py-2 text-xs text-amber-100 font-semibold"
-                                    >
-                                        Cost may be inaccurate - {costSnapshot.unverifiedToday} entries unverified. Verify now.
-                                    </button>
-                                )}
-                            </div>
-                        </div>
+                    {/* spec: 2026-07-13-labour-attendance-approval-design (Task 3.5) —
+                        promoted from the Task-3.4 dismissible hint to a full
+                        banner (founder ask #1). Purely presentational + a
+                        null-check on logIntent; no effect on capture/parsing/
+                        submission. Tapping it navigates straight back to
+                        Labour Management (founder ask #2) — there is no ✕
+                        dismiss any more. */}
+                    {!recordingSegment && logIntent === 'labour' && (
+                        <LabourLogBanner onBackToLabour={() => setCurrentRoute('labour')} />
                     )}
+
+                    {/* spec: owner-oversight-loop (Task 13, change 3) — the
+                        Sathi guide card, above the plot selector, per the
+                        founder's own reference image. */}
+                    {!recordingSegment && <SathiGuideCard />}
 
                     {!recordingSegment && (
                         <div id="crop-selector-container" className="mb-6 animate-in slide-in-from-top-4 duration-500">
@@ -302,7 +217,46 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                     }
                                 }}
                                 disabled={false}
+                                // spec: owner-oversight-loop (Task 13, change
+                                // 4) — "संपूर्ण शेत" demoted out of the
+                                // carousel, below as its own quiet row.
+                                hideGlobalCard
                             />
+                        </div>
+                    )}
+
+                    {/* spec: owner-oversight-loop (Task 13, change 5) — the
+                        closing help bar. */}
+                    {!recordingSegment && <HelpBar />}
+
+                    {/* spec: owner-oversight-loop (Task 7, design doc §4.2,
+                        §5) — Running Cost, MOVED below the plot selector:
+                        ambient status a farmer sees after acting, not a
+                        blocker before it. The "cost may be inaccurate — N
+                        unverified" line is REMOVED here (not moved) — that
+                        same fact already lives in the oversight drawer's
+                        decision rows, and a third copy is exactly what this
+                        reorder exists to remove (spec §4.2's own ruling). */}
+                    {!recordingSegment && (
+                        <div
+                            data-testid="running-cost-card"
+                            className="mb-6 rounded-2xl bg-stone-900 text-white p-3.5 space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500"
+                        >
+                            <p className="text-[10px] uppercase tracking-wide font-bold text-stone-300">Running Cost</p>
+                            <div className="grid grid-cols-3 gap-2 text-sm">
+                                <div>
+                                    <p className="text-stone-400 text-xs">Today</p>
+                                    <p className="font-black">Rs {formatCurrencyINR(costSnapshot.today)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-stone-400 text-xs">Yesterday</p>
+                                    <p className="font-black">Rs {formatCurrencyINR(yesterdayCost)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-stone-400 text-xs">Running</p>
+                                    <p className="font-black">Rs {formatCurrencyINR(costSnapshot.cropSoFar)}</p>
+                                </div>
+                            </div>
                         </div>
                     )}
 
@@ -410,6 +364,17 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                             }
                                             return map;
                                         })()}
+                                        /* LABOUR_PHASE2 P2.4 — the farm-wide half of the
+                                           day, carried SEPARATELY. A farm-wide context
+                                           yields no plot ids, so the map above is
+                                           legitimately `{}` and ManualEntry showed zeros
+                                           for a day the farmer HAD recorded work in. The
+                                           fix is NOT to fold farm-wide logs into that map:
+                                           `R24` measured that its consumer sums it across
+                                           the plots in context, turning a plot's 3 labour
+                                           entries into 11. No plot key here, so the two can
+                                           never be added. */
+                                        farmWideToday={getFarmWideDaySummary(history, getDateKey())}
                                         transcriptEntries={(() => {
                                             // Build timeline entries for today's logs in current context
                                             const todayStr = getDateKey();
@@ -463,7 +428,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                 <div className="flex items-center justify-between px-2 mb-4">
                                     <h3 className="text-slate-800 font-bold text-lg tracking-tight">Activity Feed</h3>
                                     <span className="text-[10px] uppercase font-bold text-slate-500 bg-white border border-slate-100 px-2 py-1 rounded-lg shadow-sm">
-                                        {new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' })}
+                                        {new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short', timeZone: DISPLAY_TIME_ZONE })}
                                     </span>
                                 </div>
 
@@ -477,7 +442,16 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                             const contextDetails = getLogContextSnapshot(log);
                                             const verification = getVerificationPresentation(log.verification?.status);
                                             const createdById = log.meta?.createdByOperatorId || '';
-                                            const loggedBy = operatorNameById.get(createdById) || ownerDisplayName;
+                                            // Truth audit T1.12b, finding 4. This used to fall back
+                                            // to `ownerDisplayName` — so a record nobody was recorded
+                                            // as making was attributed, by name, to a real person.
+                                            // `oversightSelectors.ts:20-22` states the opposite rule in
+                                            // this same release: "a person can only be counted if they
+                                            // were named." `अज्ञात` is the word the app already uses for
+                                            // this exact fact (the unattributed row in
+                                            // OversightBriefingCard), so "no identity" reads the same
+                                            // everywhere. `P4`/`P7`.
+                                            const loggedBy = operatorNameById.get(createdById) || 'अज्ञात';
                                             const primaryCropId = log.context.selection[0]?.cropId;
                                             const cropColor = crops.find(crop => crop.id === primaryCropId)?.color || 'bg-slate-400';
 
@@ -534,7 +508,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center"><Leaf size={32} className="text-emerald-600 animate-pulse" /></div>
                         </div>
                     </div>
-                    <h3 className="text-xl font-bold text-stone-800 mb-3 leading-snug">Your Shram sathi is trying to understand what work you did today...</h3>
+                    <ShramSathiUnderstanding />
                     {/* SARVAM_PRIMARY_VOICE_PIPELINE — live transcript, placed right below the
                         recorder/banner so the farmer sees their words appear as Sarvam transcribes
                         the clip (post-Stop, cost-safe: reuses the single transcribe-stream that
@@ -560,7 +534,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-600 shadow-sm border border-emerald-50">
                                 <Leaf size={40} className="drop-shadow-sm" />
                             </div>
-                        <h2 className="text-3xl font-bold text-stone-800 mb-6 tracking-tight">Saved to Ledger</h2>
+                        <SavedLocallyHeadline />
 
                         {/* Dynamic Feedback Summary */}
                         {lastSavedLogSummary && lastSavedLogSummary.length > 0 ? (
@@ -581,9 +555,19 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                                     </div>
                                                     <div className="min-w-0 flex-1">
                                                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Stored In</p>
-                                                        <p className="truncate text-base font-black text-stone-900">
+                                                        {/* Since 2b this reads `Grapes • Plot A,
+                                                            Plot B, Plot C` and `truncate` silently
+                                                            cut it at 412px — the farmer saw which
+                                                            plots the record landed on, minus the
+                                                            ones that did not fit, with no ellipsis
+                                                            to warn him. The DATA was right; the
+                                                            presentation was not. `line-clamp-2`
+                                                            shows it and still bounds a pathological
+                                                            selection. */}
+                                                        <p className="line-clamp-2 break-words text-base font-black leading-snug text-stone-900">
                                                             {item.cropName} • {item.plotName}
                                                         </p>
+                                                        <NotQueuedForServerBadge syncQueued={item.syncQueued} />
                                                     </div>
                                                 </div>
                                                 {/* Bucket Breakdown */}

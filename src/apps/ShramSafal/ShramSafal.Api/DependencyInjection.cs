@@ -331,6 +331,69 @@ public static class DependencyInjection
                 new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<ClaimJoinCommand, ClaimJoinResult>(
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<ClaimJoinCommand>>())));
 
+        // ── LABOUR_PHASE2 Phase 5 (founder decision O-4) — labour-capability
+        // grant / revoke + the roster read that lets the switch render truth.
+        //
+        // Same pipeline shape as IssueFarmInvite / RotateFarmInvite above, and
+        // for the same two reasons: the AuthorizationBehavior's EnsureIsOwner is
+        // both the owner-only gate AND what publishes the (farmId,
+        // ownerAccountId) tenant claim these routes are scoped by. There is no
+        // IValidator<> for either — shape validation lives in the handlers
+        // (empty ids -> InvalidCommand) exactly as it does for the labour
+        // handlers, and the ValidationBehavior is a pass-through with zero
+        // registered validators.
+        //
+        // NO IEntitlementPolicy. Deciding who on your own farm may correct a
+        // headcount is access control, not a paid feature; wiring the billing
+        // gate here would make labour management subscription-dependent, which
+        // the founder has ruled out twice. These handlers must NOT be added to
+        // EntitlementGateTests.GatedHandlerTypeNames.
+        services.AddScoped<ShramSafal.Application.UseCases.Memberships.SetLabourPermission.SetLabourPermissionHandler>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Memberships.SetLabourPermission.SetLabourPermissionCommand>,
+            ShramSafal.Application.UseCases.Memberships.SetLabourPermission.SetLabourPermissionAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Memberships.SetLabourPermission.SetLabourPermissionCommand,
+            ShramSafal.Application.Contracts.Dtos.LabourPermissionDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<
+                    ShramSafal.Application.UseCases.Memberships.SetLabourPermission.SetLabourPermissionHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Memberships.SetLabourPermission.SetLabourPermissionCommand,
+                    ShramSafal.Application.Contracts.Dtos.LabourPermissionDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Memberships.SetLabourPermission.SetLabourPermissionCommand,
+                            ShramSafal.Application.Contracts.Dtos.LabourPermissionDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Memberships.SetLabourPermission.SetLabourPermissionCommand,
+                    ShramSafal.Application.Contracts.Dtos.LabourPermissionDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Memberships.SetLabourPermission.SetLabourPermissionCommand>>())));
+
+        services.AddScoped<ShramSafal.Application.UseCases.Memberships.GetLabourPermissions.GetLabourPermissionsHandler>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Memberships.GetLabourPermissions.GetLabourPermissionsQuery>,
+            ShramSafal.Application.UseCases.Memberships.GetLabourPermissions.GetLabourPermissionsAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Memberships.GetLabourPermissions.GetLabourPermissionsQuery,
+            IReadOnlyList<ShramSafal.Application.Contracts.Dtos.LabourPermissionDto>>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<
+                    ShramSafal.Application.UseCases.Memberships.GetLabourPermissions.GetLabourPermissionsHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Memberships.GetLabourPermissions.GetLabourPermissionsQuery,
+                    IReadOnlyList<ShramSafal.Application.Contracts.Dtos.LabourPermissionDto>>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Memberships.GetLabourPermissions.GetLabourPermissionsQuery,
+                            IReadOnlyList<ShramSafal.Application.Contracts.Dtos.LabourPermissionDto>>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Memberships.GetLabourPermissions.GetLabourPermissionsQuery,
+                    IReadOnlyList<ShramSafal.Application.Contracts.Dtos.LabourPermissionDto>>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Memberships.GetLabourPermissions.GetLabourPermissionsQuery>>())));
+
         // T-IGH-03-PIPELINE-ROLLOUT (AddCostEntry): caller-shape
         // validation (incl. labour-payout routing rule) +
         // farm-existence + farm-membership authorization. The endpoint
@@ -685,6 +748,74 @@ public static class DependencyInjection
         services.AddScoped<GetJobCardsForWorkerHandler>();
         services.AddScoped<GetWorkerProfileHandler>();
         services.AddScoped<OnLogVerifiedAutoVerifyJobCard>();
+
+        // Task 1.3 (spec: 2026-07-13-labour-attendance-approval-design) —
+        // GetLabourDataHandler is a plain self-authorizing read (the caller-
+        // farm-scope gate lives in the endpoint via ICallerFarmTenantScope,
+        // and the handler itself re-checks membership as defense-in-depth).
+        // No IAuthorizationCheck<>/IValidator<> exist for GetLabourDataQuery
+        // (none needed), so it's registered directly against IHandler<,>
+        // rather than wrapped in HandlerPipeline.Build.
+        services.AddScoped<
+            AgriSync.BuildingBlocks.Application.IHandler<
+                ShramSafal.Application.UseCases.Labour.GetLabourData.GetLabourDataQuery,
+                ShramSafal.Application.Contracts.Dtos.LabourDataDto>,
+            ShramSafal.Application.UseCases.Labour.GetLabourData.GetLabourDataHandler>();
+
+        // Task 11 (spec: 2026-07-13-labour-attendance-approval-design) — Field
+        // Operator identity commands. Same registration shape as
+        // GetLabourDataHandler directly above: no IAuthorizationCheck<>/
+        // IValidator<> exist for these commands (none needed — the farm-scope
+        // gate lives in the endpoint via ICallerFarmTenantScope, mirrored by a
+        // defense-in-depth membership check inside Create/Rename, and by the
+        // explicit both-sides authorization inside Attach), so each is
+        // registered directly against IHandler<,> rather than wrapped in
+        // HandlerPipeline.Build.
+        services.AddScoped<
+            AgriSync.BuildingBlocks.Application.IHandler<
+                ShramSafal.Application.UseCases.Labour.CreateFieldOperator.CreateFieldOperatorCommand,
+                ShramSafal.Application.Contracts.Dtos.FieldOperatorDto>,
+            ShramSafal.Application.UseCases.Labour.CreateFieldOperator.CreateFieldOperatorHandler>();
+        services.AddScoped<
+            AgriSync.BuildingBlocks.Application.IHandler<
+                ShramSafal.Application.UseCases.Labour.AttachFieldOperator.AttachFieldOperatorCommand,
+                ShramSafal.Application.UseCases.Labour.AttachFieldOperator.AttachFieldOperatorResult>,
+            ShramSafal.Application.UseCases.Labour.AttachFieldOperator.AttachFieldOperatorHandler>();
+        services.AddScoped<
+            AgriSync.BuildingBlocks.Application.IHandler<
+                ShramSafal.Application.UseCases.Labour.RenameFieldOperator.RenameFieldOperatorCommand,
+                ShramSafal.Application.Contracts.Dtos.FieldOperatorDto>,
+            ShramSafal.Application.UseCases.Labour.RenameFieldOperator.RenameFieldOperatorHandler>();
+
+        // Task 12 (spec: 2026-07-13-labour-attendance-approval-design) — the
+        // field-operator LIST read. Same registration shape as the three
+        // handlers directly above: no IAuthorizationCheck<>/IValidator<>
+        // exist for this query (the farm-scope gate lives in the endpoint
+        // via ICallerFarmTenantScope, mirrored by a defense-in-depth
+        // membership check inside the handler), so it is registered
+        // directly against IHandler<,> rather than wrapped in
+        // HandlerPipeline.Build.
+        services.AddScoped<
+            AgriSync.BuildingBlocks.Application.IHandler<
+                ShramSafal.Application.UseCases.Labour.GetFieldOperators.GetFieldOperatorsQuery,
+                IReadOnlyList<ShramSafal.Application.Contracts.Dtos.FieldOperatorSummaryDto>>,
+            ShramSafal.Application.UseCases.Labour.GetFieldOperators.GetFieldOperatorsHandler>();
+
+        // Task 12b (spec: 2026-07-13-labour-attendance-approval-design) — GATE B
+        // labour review & correction. Same registration shape as the four
+        // handlers above (no IAuthorizationCheck<>/IValidator<> exist for it):
+        // the farm-scope gate lives in the endpoint via ICallerFarmTenantScope,
+        // and the owner/Mukadam ROLE gate lives inside the handler so it holds
+        // on any future non-HTTP entry point. It resolves ISyncMutationStore —
+        // registered scoped in ShramSafal.Infrastructure's DependencyInjection
+        // against the SAME scoped ShramSafalDbContext this handler's repository
+        // uses, which is what lets the dedupe row and the correction land in one
+        // unit of work (Task 12b.6).
+        services.AddScoped<
+            AgriSync.BuildingBlocks.Application.IHandler<
+                ShramSafal.Application.UseCases.Labour.CorrectLabour.CorrectLabourCommand,
+                ShramSafal.Application.UseCases.Labour.CorrectLabour.CorrectLabourResult>,
+            ShramSafal.Application.UseCases.Labour.CorrectLabour.CorrectLabourHandler>();
 
         // T-IGH-03-PIPELINE-ROLLOUT (CompleteJobCard): caller-shape
         // validation + job-card-existence + farm-membership authorization.

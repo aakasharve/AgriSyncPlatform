@@ -30,7 +30,10 @@ type GlobalToastDetail = { message: string; type: 'success' | 'error' };
 
 export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: AgriLogAppConfig) => {
     // --- 0. UI GLOBAL STATE (Hoisted) ---
-    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    // `'partial'` — see ActionToast. A partly-skipped save is neither a success
+    // nor a failure, and rendering it as either teaches the farmer something
+    // untrue about a record that is sitting safely on their phone.
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'partial' } | null>(null);
     const [lastSavedLogSummary, setLastSavedLogSummary] = useState<LastSavedLogSummaryItem[]>([]);
     const [lastSavedLogIds, setLastSavedLogIds] = useState<string[]>([]);
     const [mode, setMode] = useState<InputMode>('voice');
@@ -111,7 +114,11 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
         setMode,
         setMainView: navigation.setMainView,
         setStatus: voice.setStatus,
-        weatherProvider
+        weatherProvider,
+        // spec: 2026-07-13-labour-attendance-approval-design (Task 3.5)
+        logIntent: navigation.logIntent,
+        setCurrentRoute: navigation.setCurrentRoute,
+        setLastLabourLogIds: navigation.setLastLabourLogIds
     });
     useEffect(() => {
         const handleGlobalToast = (event: Event) => {

@@ -211,6 +211,14 @@ export function useManualEntryHydration(params: HydrationParams): void {
                         femaleCount: aiLabour.femaleCount,
                         activity: aiLabour.activity || `Field Work ${index + 1}`,
                         linkedActivityId: labourEntryId,
+                        // Labour V1 Task 7.5 — this literal rebuilds the labour event
+                        // field by field rather than spreading it, so anything not
+                        // named here is dropped on the VOICE path only (it would still
+                        // work in manual testing and fail in production). Both of these
+                        // must survive: the stated hours, and the stable engagement id
+                        // if one was already minted upstream.
+                        durationHours: aiLabour.durationHours,
+                        labourAssignmentId: aiLabour.labourAssignmentId,
                         sourceText: aiLabour.sourceText,
                         systemInterpretation: aiLabour.systemInterpretation
                     };

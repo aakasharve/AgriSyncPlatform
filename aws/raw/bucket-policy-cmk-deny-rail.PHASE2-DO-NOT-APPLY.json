@@ -1,0 +1,91 @@
+{
+  "_comment": [
+    "🛑🛑 DO NOT APPLY THIS FILE YET. 🛑🛑",
+    "S3 bucket policy ADDITION — agrisync-raw-ap-south-1. PHASE 2 of the",
+    "raw-bucket encryption rail. Authored per §11's 'Only then add the deny",
+    "rail' step — authored because §11 asks for it, NOT presented as safe to",
+    "apply. This is explicitly out of this lane's scope to sequence or land;",
+    "it is captured here so the shape exists and the ordering hazard is",
+    "impossible to miss.",
+    "",
+    "spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN §11 (S11-infra-author)",
+    "",
+    "MANDATORY ORDER, PER §11 ('Raw bucket — and the order within this task is",
+    "mandatory'): 1. Unswallow the failure first (log with the CONFIGURED",
+    "bucket name, not the hardcoded RawBlobStoreOptions.BucketName default that",
+    "can lie about what's actually being written to; add a metric + alarm).",
+    "2. THEN bind an explicit RawBlobStore section in production config and",
+    "change its .Bind() to ValidateOnStart, so a missing section is a boot",
+    "failure, not a silent fallback to the hardcoded default. 3. ONLY THEN add",
+    "this deny rail. All three of those are src/ changes (Program.cs,",
+    "RawBlobStoreOptions.cs, appsettings.Production.json, S3RawBlobStore.cs) —",
+    "out of this lane's allowlist (aws/, .github/, .husky/ only) and explicitly",
+    "flagged as another agent's work in this lane's task brief.",
+    "",
+    "WHY THE ORDER IS MANDATORY, STATED PLAINLY: if this policy is applied",
+    "while RawBlobStoreOptions.KmsKeyId is still unbound/null in production,",
+    "S3RawBlobStore.PutAsync (src/apps/ShramSafal/ShramSafal.Infrastructure/",
+    "Storage/S3RawBlobStore.cs) falls back to plain AES256 SSE (see its",
+    "'nullable KmsKeyId ... falls back to AES256' comment) — and this policy",
+    "would then deny EVERY PutObject for lacking the required KMS key header.",
+    "Verified live 2026-08-15 (read-only): no KMS alias containing 'raw'",
+    "exists in this account yet (aws kms list-aliases), so as of today the key",
+    "genuinely is unbound — applying this file today would fail 100% of raw-",
+    "blob writes immediately.",
+    "",
+    "AND — per this plan section's own read-path warning — the write path that",
+    "calls PutAsync swallows the resulting exception. The caller would not see",
+    "an error; the farmer's app would show success (HTTP 200) while the voice",
+    "clip or receipt evidence silently never reached durable storage. This is",
+    "the exact failure class the whole architecture migration exists to end.",
+    "Do not apply this file until the unswallow + bind steps above are",
+    "confirmed live in production, independently of this bucket-policy change.",
+    "",
+    "ONCE THE CMK EXISTS AND RawBlobStoreOptions IS BOUND to it in prod:",
+    "  1. Replace <RAW_BLOB_CMK_ARN> below with the real key ARN (not an alias —",
+    "     the s3:x-amz-server-side-encryption-aws-kms-key-id condition value",
+    "     AWS returns on PutObject is the full key ARN, not the alias).",
+    "  2. Merge this Statement array into bucket-policy.json's Statement array",
+    "     (do not apply as a second separate put-bucket-policy call — that",
+    "     replaces the whole policy document and would silently drop the",
+    "     Phase 1 TLS/encryption-header statements).",
+    "  3. Re-encrypt the 41 existing objects in place (§11: 'Re-encrypt the 41",
+    "     existing objects in place afterwards') — a separate, explicit",
+    "     re-encryption pass; this policy does not retroactively re-encrypt",
+    "     anything already written under AES256.",
+    "  4. Apply via aws/raw/apply-config.sh as ONE transaction with the rest of",
+    "     bucket-policy.json, per the 'ONE desired-state transaction per",
+    "     bucket' rule — not as a fourth ad-hoc put-bucket-policy call.",
+    "",
+    "D9 note: this statement changes WHICH KEY encrypts new writes. It does",
+    "not add, remove, or shorten any expiration/transition/deletion action —",
+    "no D9 conflict. Retention is governed entirely by lifecycle-policy.json",
+    "(which contains none of those actions on this bucket), not by this file."
+  ],
+  "AdditionalStatementsForPhase2": [
+    {
+      "Sid": "DenyPutWithoutDedicatedCmk",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::agrisync-raw-ap-south-1/*",
+      "Condition": {
+        "StringNotEquals": {
+          "s3:x-amz-server-side-encryption-aws-kms-key-id": "<RAW_BLOB_CMK_ARN>"
+        }
+      }
+    },
+    {
+      "Sid": "DenyNonKmsEncryption",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::agrisync-raw-ap-south-1/*",
+      "Condition": {
+        "StringNotEquals": {
+          "s3:x-amz-server-side-encryption": "aws:kms"
+        }
+      }
+    }
+  ]
+}

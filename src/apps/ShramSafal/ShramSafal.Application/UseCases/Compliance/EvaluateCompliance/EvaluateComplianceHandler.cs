@@ -69,13 +69,58 @@ public sealed class EvaluateComplianceHandler(
             TestInstances: testInstances,
             Plots: plots);
 
+        // LABOUR_PHASE2 P2.3 — say out loud what this pass cannot represent.
+        //
+        // ssf.compliance_signals.plot_id is NOT NULL and is part of
+        // ix_compliance_signals_open_unique, so a disputed log whose scope is
+        // MultiPlot or Farm (plot_id IS NULL by design — the farmer named no
+        // single plot) cannot get an UnresolvedDisputeAgeHigh signal at this
+        // schema. The rule book therefore skips it. A skip nobody can see is
+        // indistinguishable from a bug, so the skip is counted and reported
+        // here rather than being an accidental silence. Inventing a plot, or
+        // fanning one dispute across every plot, are the two fabrications
+        // founder decision O-1 closed; neither is on the table.
+        var unrepresentableDisputes =
+            ComplianceRuleBook.UnresolvedDisputesWithNoRepresentableSignal(input);
+        if (unrepresentableDisputes.Count > 0)
+        {
+            logger.LogWarning(
+                "EvaluateCompliance: farm {FarmId} has {UnrepresentableDisputeCount} unresolved disputed log(s) with no plot (scope MultiPlot or Farm). No UnresolvedDisputeAgeHigh signal can be opened for them because ssf.compliance_signals.plot_id is NOT NULL and part of the open-signal unique index. They are not ignored — they are unrepresentable at this schema. Daily log ids: {UnrepresentableDisputeLogIds}.",
+                farmId,
+                unrepresentableDisputes.Count,
+                string.Join(",", unrepresentableDisputes.Select(d => d.Id)));
+        }
+
         // --- Run pure domain evaluator (all rules except ProtocolBreakInStage) ---
         var freshResults = ComplianceEvaluator.Evaluate(input);
 
         // --- Get currently-open signals for the farm ---
+        //
+        // `ix_compliance_signals_open_unique` (partial UNIQUE on
+        // farm_id, plot_id, rule_code, crop_cycle_id WHERE resolved_at_utc IS NULL
+        // AND acknowledged_at_utc IS NULL) is the correctness guard behind this map:
+        // at most ONE open signal may exist per key. Postgres unique indexes treat
+        // NULLs as DISTINCT, though, so rows whose crop_cycle_id is NULL (e.g.
+        // RepeatedSkipsPerActivity, which reports at farm level with PlotId
+        // Guid.Empty / CropCycleId null) are NOT covered by it. Build the map
+        // defensively so a pre-existing NULL-cycle duplicate degrades into "refresh
+        // the first one and warn" rather than an ArgumentException that aborts the
+        // whole farm's evaluation. The within-pass collapse below is what stops new
+        // duplicates being written in the first place.
         var openSignals = await signalRepository.GetOpenForFarmAsync(farmId, ct);
-        var openByKey = openSignals.ToDictionary(
-            s => new SignalKey(s.FarmId, s.PlotId, s.RuleCode, s.CropCycleId));
+        var openByKey = new Dictionary<SignalKey, ComplianceSignal>();
+        foreach (var openSignal in openSignals)
+        {
+            var openKey = new SignalKey(
+                openSignal.FarmId, openSignal.PlotId, openSignal.RuleCode, openSignal.CropCycleId);
+
+            if (!openByKey.TryAdd(openKey, openSignal))
+            {
+                logger.LogWarning(
+                    "EvaluateCompliance: farm {FarmId} already has an open signal for rule {RuleCode} on plot {PlotId} (crop cycle {CropCycleId}); signal {SignalId} is a duplicate and will be left untouched by this pass.",
+                    farmId, openSignal.RuleCode, openSignal.PlotId, openSignal.CropCycleId, openSignal.Id);
+            }
+        }
 
         int opened = 0, refreshed = 0, autoResolved = 0;
 
@@ -100,7 +145,26 @@ public sealed class EvaluateComplianceHandler(
                 continue;
 
             var key = new SignalKey(evidence.FarmId, evidence.PlotId, rule.RuleCode, evidence.CropCycleId);
-            freshKeys.Add(key);
+
+            // One rule can legitimately yield SEVERAL evidence rows that collapse onto
+            // ONE signal key. UnresolvedDisputeAgeHigh emits one evidence per disputed
+            // daily log, so two logs disputed on the same plot + crop cycle produce the
+            // identical (farm, plot, rule, cycle) tuple; SkippedTestOverdue and
+            // ResidueRiskReported do the same for multiple test instances on one plot.
+            // `ix_compliance_signals_open_unique` permits exactly one OPEN row per key,
+            // so the FIRST evidence for a key materialises (or refreshes) the signal and
+            // every later evidence for that same key folds into it. Without this the
+            // handler queued two INSERTs for one key in a single SaveChanges and
+            // Postgres rejected the batch with 23505.
+            //
+            // HashSet.Add returns false when the key is already present, which is
+            // exactly the "already handled during this pass" test; freshKeys is
+            // populated here and consumed by the auto-resolve loop below, so a folded
+            // duplicate still counts as "seen this pass" and cannot be auto-resolved.
+            if (!freshKeys.Add(key))
+            {
+                continue;
+            }
 
             if (openByKey.TryGetValue(key, out var existing))
             {
@@ -126,6 +190,11 @@ public sealed class EvaluateComplianceHandler(
                     firstSeenAtUtc: now);
 
                 signalRepository.Add(signal);
+                // Keep the "at most one OPEN signal per key" invariant — the same
+                // invariant ix_compliance_signals_open_unique enforces in the database
+                // — true for the remainder of this pass, so nothing downstream can
+                // queue a second INSERT for a key we have just materialised.
+                openByKey[key] = signal;
                 opened++;
                 EmitAudit(repository, signal, "compliance.opened", now, auditProvenance);
             }

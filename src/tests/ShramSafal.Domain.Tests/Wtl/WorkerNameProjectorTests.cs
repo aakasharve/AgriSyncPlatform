@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Wtl;
 using ShramSafal.Domain.Events;
+using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Wtl;
 using ShramSafal.Infrastructure.Wtl;
 using Xunit;
@@ -29,14 +30,24 @@ public sealed class WorkerNameProjectorTests
 {
     private static readonly FarmId FarmA = new(Guid.Parse("11111111-1111-4111-8111-111111111111"));
 
-    private static DailyLogCreatedEvent MakeEvent(Guid? logId = null) => new(
-        eventId: Guid.NewGuid(),
-        occurredOnUtc: DateTime.UtcNow,
-        dailyLogId: logId ?? Guid.NewGuid(),
-        farmId: FarmA,
-        plotId: Guid.NewGuid(),
-        cropCycleId: Guid.NewGuid(),
-        logDate: DateOnly.FromDateTime(DateTime.UtcNow));
+    private static DailyLogCreatedEvent MakeEvent(Guid? logId = null)
+    {
+        // LABOUR_PHASE2 P2.1 — the event now carries the farmer's spatial
+        // assertion. This projector reads only DailyLogId, so the scope is
+        // irrelevant to what is under test here; a plot-scoped event keeps the
+        // fixture identical in meaning to what it was before.
+        var plotId = Guid.NewGuid();
+        return new DailyLogCreatedEvent(
+            eventId: Guid.NewGuid(),
+            occurredOnUtc: DateTime.UtcNow,
+            dailyLogId: logId ?? Guid.NewGuid(),
+            farmId: FarmA,
+            scope: DailyLogScope.Plot,
+            plotIds: [plotId],
+            plotId: plotId,
+            cropCycleId: Guid.NewGuid(),
+            logDate: DateOnly.FromDateTime(DateTime.UtcNow));
+    }
 
     private static (WorkerNameProjector projector, FakeWorkerRepo repo, FakeAnalyticsWriter analytics) Build(
         string? transcript)
@@ -122,25 +133,35 @@ public sealed class WorkerNameProjectorTests
     }
 
     [Fact]
-    public async Task Reuses_existing_worker_for_known_normalized_name()
+    public async Task Anti_merge_2026_07_19_creates_a_new_worker_even_when_a_same_named_worker_already_exists()
     {
+        // 2026-07-19 founder Decision 5 sub-question 2 (spec
+        // 2026-07-13-labour-attendance-approval-design): the projector must
+        // NEVER merge across distinct DailyLogCreatedEvent invocations by
+        // name alone — two different real people sharing a common name
+        // (e.g. रमेश) on the same farm must not collapse into one Worker
+        // record. This replaces the old "Reuses_existing_worker_..." test,
+        // which asserted the exact behaviour that WAS the bug.
         var (projector, repo, _) = Build(transcript: "आज रमेश आला");
-        // Pre-seed: Ramesh already known on the farm with a previous assignment.
         var existing = new Worker(FarmA, WorkerName.From("रमेश"), DateTimeOffset.UtcNow.AddDays(-3));
-        existing.RegisterAssignment(); // existing count = 1
+        existing.RegisterAssignment(); // existing count = 1 — an unrelated, previously-seen रमेश.
         repo.PreSeedExisting(existing);
 
         await projector.HandleAsync(MakeEvent(), CancellationToken.None);
 
-        repo.AddedWorkers.Should().BeEmpty(); // No NEW worker added.
+        // A brand-new Worker row is created for THIS occurrence — never
+        // reused, even though a same-named Worker already exists on the
+        // farm. The pre-seeded worker is left completely untouched.
+        repo.AddedWorkers.Should().HaveCount(1);
+        repo.AddedWorkers.Single().Should().NotBeSameAs(existing);
         repo.AddedAssignments.Should().HaveCount(1);
-        existing.AssignmentCount.Should().Be(2);
+        existing.AssignmentCount.Should().Be(1, "the pre-existing worker must not be touched by an unrelated occurrence of the same name");
     }
 
     [Fact]
     public async Task Emits_one_worker_named_event_per_new_assignment()
     {
-        var (projector, _, analytics) = Build(transcript: "आज रमेश आणि सुनील आले");
+        var (projector, repo, analytics) = Build(transcript: "आज रमेश आणि सुनील आले");
         var ev = MakeEvent();
 
         await projector.HandleAsync(ev, CancellationToken.None);
@@ -155,6 +176,24 @@ public sealed class WorkerNameProjectorTests
             e.SchemaVersion.Should().Be("v1");
             e.PropsJson.Should().Contain(ev.DailyLogId.ToString());
         });
+
+        // 2026-07-19 RULING (founder Decision 5 sub-question 1): analytics.events
+        // is append-only (DO INSTEAD NOTHING on UPDATE/DELETE) — a raw name written
+        // there can never be scrubbed. The event must carry the Worker's own Guid id
+        // (a non-identifying reference), never the raw or normalized name text.
+        analytics.Emitted.Should().AllSatisfy(e =>
+        {
+            e.PropsJson.Should().NotContain("रमेश", "the raw name must never reach the un-scrubbable analytics table");
+            e.PropsJson.Should().NotContain("सुनील", "the raw name must never reach the un-scrubbable analytics table");
+            e.PropsJson.Should().NotContain("workerName", "the old raw-name field must be gone, not just empty");
+            e.PropsJson.Should().NotContain("normalizedName", "the old raw-name field must be gone, not just empty");
+            e.PropsJson.Should().Contain("workerId", "a non-identifying worker reference must replace the raw name");
+        });
+        foreach (var worker in repo.AddedWorkers)
+        {
+            analytics.Emitted.Should().ContainSingle(e => e.PropsJson.Contains(worker.Id.ToString()),
+                "each emitted event's workerId must resolve back to one of the workers this invocation created");
+        }
     }
 
     [Fact]
@@ -180,24 +219,19 @@ public sealed class WorkerNameProjectorTests
 
     private sealed class FakeWorkerRepo : IWorkerRepository
     {
-        private readonly Dictionary<(FarmId, string), Worker> _byNormalized = new();
+        // Test-only bookkeeping of "workers that already exist in the farm's
+        // population" — NOT part of IWorkerRepository. The interface
+        // deliberately has no find-by-name lookup (2026-07-19 anti-merge
+        // fix), so this exists purely so a test can assert a pre-seeded
+        // worker is left untouched, never so the projector can consult it.
+        public List<Worker> PreSeeded { get; } = [];
         public List<Worker> AddedWorkers { get; } = [];
         public List<WorkerAssignment> AddedAssignments { get; } = [];
         public int SaveCount { get; private set; }
 
-        public void PreSeedExisting(Worker worker)
-        {
-            _byNormalized[(worker.FarmId, worker.Name.Normalized)] = worker;
-        }
+        public void PreSeedExisting(Worker worker) => PreSeeded.Add(worker);
 
-        public Task<Worker?> FindByNormalizedNameAsync(FarmId farmId, string normalized, CancellationToken ct = default)
-            => Task.FromResult(_byNormalized.TryGetValue((farmId, normalized), out var w) ? w : null);
-
-        public void Add(Worker worker)
-        {
-            AddedWorkers.Add(worker);
-            _byNormalized[(worker.FarmId, worker.Name.Normalized)] = worker;
-        }
+        public void Add(Worker worker) => AddedWorkers.Add(worker);
 
         public void AddAssignment(WorkerAssignment assignment) => AddedAssignments.Add(assignment);
 

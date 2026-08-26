@@ -1,10 +1,47 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
+import { OPEN_FAILURE_STATUSES, partitionOpenFailures, type StuckMutationView } from '../status/stuckMutations';
+import { getUnqueueableLogCount, subscribeToUnqueueableLogs } from '../status/unqueueableLogs';
 
 export interface SyncQueueStatus {
-     // Mutation queue
+     /**
+      * Everything captured but not yet acknowledged, INCLUDING failures the
+      * worker is still retrying on its own. A row below the auto-retry cap is
+      * in progress, not stuck — see `failedCount`.
+      */
      pendingCount: number;
+     /**
+      * Rows that need the farmer, NOT just `status === 'FAILED'`.
+      *
+      * Labour Phase 2 / T1 (architect defect D6): this counted transient
+      * FAILED rows only, so `REJECTED_USER_REVIEW` — the DURABLE rejection
+      * that is deliberately never auto-retried (`MutationQueue.ts:229-231`) —
+      * was invisible in the badge. The most permanent failure state in the
+      * app was the one the farmer could not see.
+      *
+      * Labour Phase 2 / T3 (ruling R12): it then counted transient failures
+      * too, so a single sub-cap `FAILED` row put a RED badge beside the AMBER
+      * `फोनवर सेव्ह ✓` label. Both halves were true and neither agreed. This is
+      * now exactly `stuckMutations.length` — the set that makes the chip say
+      * `NEEDS_FIX`, and the set the drawer must list.
+      */
      failedCount: number;
+     /**
+      * The rows behind `failedCount`. Same array, so the number the drawer
+      * prints and the list it renders cannot drift apart (finding R3: "1
+      * Failed" above an empty list).
+      */
+     stuckMutations: StuckMutationView[];
+     /**
+      * Mutations the server has ACKNOWLEDGED (`APPLIED`) on this device.
+      *
+      * The ONLY positive evidence in this shape. Labour Phase 2 final review,
+      * F-2: the drawer used to declare "All synced" from `pendingCount === 0 &&
+      * failedCount === 0` — the absence of bad news — which is exactly what
+      * `syncHonestyState.ts:21-37` was rewritten to forbid for the chip. A
+      * device that has never pushed anything successfully has an empty queue
+      * too, and so does a device whose records were dropped before reaching one.
+      */
      syncedCount: number;
      // Upload queue
      pendingUploads: number;
@@ -15,18 +52,97 @@ export interface SyncQueueStatus {
      isOnline: boolean;
      // Last sync
      lastSyncAt: string | null;
+     /**
+      * Whether a Dexie read has actually COMPLETED — i.e. whether every zero
+      * above is a measured zero or merely an unfilled initial value.
+      *
+      * Finding F7(a). This hook starts at `EMPTY_STATUS` and only fills in
+      * after its first poll (`useEffect` below runs `refresh()` on mount, and
+      * `refresh` is `async`). During that window every count reads 0, and the
+      * oversight strip turns those zeros into `waitingCount === 0`, which
+      * `CanonicalStrip` renders as the REST state: a green tick and
+      * "आज पर्यन्त सर्व कामे पूर्ण आहेत" ("all work is complete as of today").
+      * That is the F-2 defect this file's own comments describe, one layer
+      * up: the strongest possible claim made from the weakest possible
+      * evidence — the absence of rows nobody has read yet.
+      *
+      * REQUIRED, not optional, and deliberately so: the same reasoning
+      * `SyncEvidenceSnapshot.unqueueableCount` is required for (see F-2's
+      * note above). An optional flag lets a consumer write `?? true` and
+      * strengthen the claim by silence, which is exactly the failure being
+      * fixed. A required member makes `tsc` name every construction site.
+      *
+      * Stays `false` when `refresh()` THROWS, too. A device whose Dexie read
+      * failed has not proven anything is complete; "we do not know yet" is
+      * the honest state, and it is strictly better than a green tick.
+      */
+     hasLoaded: boolean;
 }
 
 const EMPTY_STATUS: SyncQueueStatus = {
      pendingCount: 0,
      failedCount: 0,
+     stuckMutations: [],
      syncedCount: 0,
      pendingUploads: 0,
      failedUploads: 0,
      pendingAiJobs: 0,
      isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
      lastSyncAt: null,
+     // Nothing has been read yet — see `hasLoaded`'s own doc comment.
+     hasLoaded: false,
 };
+
+/**
+ * Labour Phase 2 — final whole-branch review, finding F-2.
+ *
+ * HOW MANY OF THIS SESSION'S RECORDS REACHED NO SYNC QUEUE AT ALL.
+ *
+ * THE DEFECT, IN ONE TAP. A save whose log `resolveSyncTarget` refuses
+ * (`logSyncMutationService.ts:509-511`) writes NO row anywhere — no mutation, no
+ * outbox, nothing. The header chip already weakens from `शेतनोंदीत जमा ✓` to
+ * `मी लिहून घेतलं ✓` because `noteUnqueueableLogs` tells it so. The farmer then
+ * taps that chip, which opens `SyncStatusDrawer` — and the drawer decided "All
+ * synced" from `totalPending === 0 && totalFailed === 0`, i.e. from the ABSENCE
+ * of rows, about the record just created. Two surfaces one tap apart, and the
+ * second made the stronger claim from the weaker evidence. That is verbatim what
+ * `syncHonestyState.ts:21-37` was rewritten to forbid.
+ *
+ * WHY THIS IS A SECOND HOOK AND NOT A FIELD ON `SyncQueueStatus`. Two reasons,
+ * one principled and one mechanical.
+ *
+ *   PRINCIPLED — `SyncQueueStatus` is a snapshot of DEXIE. This number is not in
+ *   Dexie and cannot be: the record leaves no row, which IS the defect. Folding
+ *   it into that object would put a fact with a different provenance and a
+ *   different lifetime (session-scoped, see `unqueueableLogs.ts`) behind a shape
+ *   whose every other member is a table count. `SyncStatusService` keeps the same
+ *   two inputs separate for the same reason, and subscribes rather than polls.
+ *
+ *   MECHANICAL — adding a REQUIRED member to `SyncQueueStatus` fails
+ *   `tsc --noEmit` on `SyncStatusDrawer.test.tsx:32`, whose fixture is a literal
+ *   of that type. Making it OPTIONAL instead would let a consumer read
+ *   `?? 0` and strengthen the claim by silence, which is the exact failure mode
+ *   finding F4 made `SyncEvidenceSnapshot.unqueueableCount` required to prevent.
+ *   A separate hook returning a plain `number` keeps the contract un-omittable
+ *   without weakening either type.
+ *
+ * SUBSCRIBED, NOT POLLED. `subscribeToUnqueueableLogs` fires the moment the save
+ * path records a drop, so this cannot sit up to three seconds behind the chip
+ * reading the same registry.
+ */
+export function useUnqueueableLogCount(): number {
+     const [count, setCount] = useState<number>(() => getUnqueueableLogCount());
+
+     useEffect(() => {
+          // Re-read on mount as well as subscribing: a drop recorded between the
+          // initial `useState` evaluation and this effect would otherwise be
+          // missed until the next one, and "missed" here means a green tick.
+          setCount(getUnqueueableLogCount());
+          return subscribeToUnqueueableLogs(setCount);
+     }, []);
+
+     return count;
+}
 
 /**
  * useSyncQueueStatus — Reactive hook for sync queue visibility.
@@ -44,8 +160,16 @@ export function useSyncQueueStatus(): SyncQueueStatus {
                // Mutation queue counts
                const pending = await db.mutationQueue.where('status').equals('PENDING').count();
                const sending = await db.mutationQueue.where('status').equals('SENDING').count();
-               const failed = await db.mutationQueue.where('status').equals('FAILED').count();
                const applied = await db.mutationQueue.where('status').equals('APPLIED').count();
+
+               // ONE read of every row that could need the farmer, split by
+               // whether it actually does. The count below is this array's
+               // length, so the drawer can list precisely what it counts.
+               const openFailures = await db.mutationQueue
+                    .where('status')
+                    .anyOf(...OPEN_FAILURE_STATUSES)
+                    .toArray();
+               const { stuck, stillRetrying } = partitionOpenFailures(openFailures);
 
                // Upload queue counts
                const pendingUploads = await db.uploadQueue.where('status').anyOf('pending', 'uploading', 'retry_wait').count();
@@ -59,14 +183,20 @@ export function useSyncQueueStatus(): SyncQueueStatus {
                const lastSyncAt = cursor?.lastSyncAt ?? null;
 
                setStatus({
-                    pendingCount: pending + sending,
-                    failedCount: failed,
+                    pendingCount: pending + sending + stillRetrying,
+                    failedCount: stuck.length,
+                    stuckMutations: stuck,
                     syncedCount: applied,
                     pendingUploads,
                     failedUploads,
                     pendingAiJobs,
                     isOnline: navigator.onLine,
                     lastSyncAt,
+                    // Set ONLY here — after every read above resolved. The
+                    // `catch` below deliberately leaves it as it was, so a
+                    // failed read never licenses a "nothing outstanding"
+                    // claim (finding F7(a)).
+                    hasLoaded: true,
                });
           } catch (e) {
                console.warn('[useSyncQueueStatus] Failed to read queue status', e);

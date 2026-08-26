@@ -14,11 +14,21 @@
     </PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
     <!--
-      Pin transitive System.Security.Cryptography.Xml to the patched 10.0.6 to
-      close NU1903 (GHSA-37gx-xxp4-5rgx, GHSA-w3x6-4m5h-cxqf). EF/Npgsql pulls
-      the vulnerable 9.0.0 otherwise. Mirrors ShramSafal.Infrastructure.
+      Pin transitive System.Security.Cryptography.Xml. EF/Npgsql pulls the
+      vulnerable 9.0.0 otherwise. Mirrors ShramSafal + User Infrastructure.
+
+      2026-08-23: bumped 10.0.6 -> 10.0.11. The 10.0.6 pin was ITSELF the fix
+      for GHSA-37gx-xxp4-5rgx / GHSA-w3x6-4m5h-cxqf, and 10.0.6 has since
+      acquired GHSA-cvvh-rhrc-wg4q. A pinned "patched" version is a claim with
+      an expiry date, so re-check it rather than trusting the word patched.
+
+      Reachability, measured before bumping: the vulnerable surface
+      (SignedXml / EncryptedXml / XmlDsig) is referenced in NO production file
+      in this repo. The bump was taken anyway because it is a stable patch-level
+      move and this assembly ships to production - not because exploitation was
+      demonstrated.
     -->
-    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.6" />
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.11" />
   </ItemGroup>
 
   <ItemGroup>

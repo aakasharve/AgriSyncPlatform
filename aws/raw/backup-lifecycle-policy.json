@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "S3 lifecycle policy — agrisync-raw-backup-ap-south-2.",
+    "spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN (raw-bucket-backup-recovery)",
+    "",
+    "SAME reasoning as aws/raw/lifecycle-policy.json on the primary bucket, and",
+    "it applies with EQUAL force here: this bucket exists specifically to hold",
+    "the copy nothing can touch. The ONE rule is AbortIncompleteMultipartUpload",
+    "— it cannot delete or move a completed object. No Expiration, no",
+    "Transitions, no NoncurrentVersionExpiration, no ExpiredObjectDeleteMarker,",
+    "ever, on this bucket. D9 (voice retained FOREVER) governs this copy as",
+    "much as the primary.",
+    "",
+    "Once Object Lock is enabled at bucket creation (create-backup-bucket.sh),",
+    "Object Lock's own retention period is the durability control — this",
+    "lifecycle file's job is only to clean up abandoned multipart uploads,",
+    "never to age out data.",
+    "",
+    "APPLY (founder only): aws s3api put-bucket-lifecycle-configuration --bucket agrisync-raw-backup-ap-south-2 --lifecycle-configuration file://backup-lifecycle-policy.json --region ap-south-2"
+  ],
+  "Rules": [
+    {
+      "ID": "abort-incomplete-multipart-bucket-wide",
+      "Status": "Enabled",
+      "Filter": {"Prefix": ""},
+      "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 7}
+    }
+  ]
+}

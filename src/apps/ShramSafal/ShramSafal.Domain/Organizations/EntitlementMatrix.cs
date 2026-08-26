@@ -18,6 +18,19 @@ public static class EntitlementMatrix
     private static (bool R, bool E, bool W) Lookup(
         OrganizationType type, OrganizationRole role, string moduleKey)
     {
+        // §P0.2 — the cross-farm audit ledger, gated BEFORE the two blanket
+        // Platform branches below. Read is Platform+Owner and nothing else:
+        // the Platform ANALYST branch grants read on every key it is asked
+        // about, and this is the one surface where that blanket is wrong —
+        // NULL-farm audit rows are a cross-tenant privacy-incident ledger.
+        // Export and write are false for every pair: the ledger is
+        // append-only at the role level (HardenAuditIntegrity revoked
+        // UPDATE/DELETE) and bulk export of it is not a product surface.
+        if (moduleKey == ModuleKey.AuditLedger)
+        {
+            return (type == OrganizationType.Platform && role == OrganizationRole.Owner, false, false);
+        }
+
         if (type == OrganizationType.Platform && role == OrganizationRole.Owner)
             return (true, true, IsWriteModule(moduleKey));
 

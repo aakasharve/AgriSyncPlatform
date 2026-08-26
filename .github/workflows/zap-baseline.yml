@@ -4,10 +4,66 @@ name: zap-baseline
 # the staging API.
 #
 # Status: PREP_READY. The target URL `https://staging.api.agrisync.app`
-# does not yet exist (no staging env provisioned). The first scheduled
-# run will fail until Kiro/AWS deploy automation publishes a staging
-# host. That is acceptable noise once a week; the workflow exists so
-# the staging owner has an obvious place to point it.
+# does not yet exist (no staging env provisioned).
+#
+# === TASK 3b (silent-failure-ops) — FIX APPLIED 2026-08-15, ROUND 1 ===
+# This file used to end its scan step with `|| true`, and its own header
+# comment claimed "the first run will fail until staging exists — that's
+# acceptable weekly noise." That claim was false: `|| true` makes EVERY
+# outcome exit 0 — an unreachable host, a crashed scan, and a scan that
+# finds FAIL-severity security holes were all indistinguishable green
+# checkmarks.
+#
+# ROUND 1 REVIEW CAUGHT TWO THINGS IN THE FIRST FIX, BOTH CORRECTED HERE:
+#
+# 3b-1 — the FIRST fix removed `|| true` at the scan step, then reintroduced
+#   the identical defect four lines away: the reachability pre-check used
+#   `curl --fail`, which returns non-zero on DNS-resolution failure, refused
+#   connections, timeouts, AND 4xx/5xx responses alike — routing all four
+#   into one quiet "staging not provisioned" branch. The day staging ships
+#   and starts returning 502, that branch would still fire, still print a
+#   now-FALSE statement, and still report green. FIXED by matching the
+#   SPECIFIC, LITERAL signal the way the audit's AccessDenied split does:
+#   curl exit code 6 ("Couldn't resolve host") is the ONE known, expected,
+#   pre-staging condition. Every OTHER non-zero curl exit — 7 (connection
+#   refused), 22 (HTTP >=400, since --fail is still used), 28 (timeout), 35
+#   (TLS), 52 (empty reply), anything else — means the host EXISTS and is
+#   broken, and now fails the job for real, loudly, via `exit 1` in that
+#   same step (which also means the scan step below is skipped by GitHub's
+#   own default step-skip-on-failure behaviour — no extra `if:` needed for
+#   that case).
+#
+# 3b-2 — the FIRST fix (and its report) asserted "GitHub's own
+#   scheduled-workflow-failure email goes to repo watchers" as settled fact.
+#   That was not verified and the repo's own history contradicts it:
+#   GitHub sends that notification to whoever last modified the cron syntax
+#   in this file, and `git blame` on that line shows the automation
+#   identity (`agrisync-bot`), not the founder. CORRECTED: that claim is
+#   removed. Instead — verified read-only against live IAM before writing
+#   this, not assumed — this job now assumes the SAME `agrisync-prod-audit`
+#   OIDC role the weekly hygiene audit already uses (its trust policy is
+#   scoped by branch, not by workflow file — `aws iam get-role` shows the
+#   StringLike condition on token.actions.githubusercontent.com:sub lists
+#   BOTH `repo:aakasharve/AgriSyncPlatform:ref:refs/heads/main` AND
+#   `...ref:refs/heads/akash_edits`, so any workflow running on either of
+#   those two branches can assume it; this one's cron trigger only ever
+#   fires from `main`, which is covered either way); its
+#   permission policy already grants `sns:Publish` on
+#   `arn:aws:sns:ap-south-1:951921970996:shramsafal-prod-audit-alerts` with
+#   no further resource restriction) and publishes to that SAME topic on any
+#   job failure. No new IAM grant was created or requested for this — it was
+#   confirmed to already exist and already be usable from this repo before
+#   this workflow change was written. The subject line is prefixed
+#   distinctly from the hygiene audit's own alerts so subscribers can tell
+#   the two apart.
+#
+# The ONE known/named/expected condition remains "staging does not exist
+# yet" — detected by the reachability pre-check BEFORE the scan ever runs
+# (not by interpreting ZAP's own exit code after the fact, which would
+# conflate "couldn't connect" with "found nothing"). That case alone stays
+# quiet — a visible `::notice::`, no SNS publish, no job failure. Every
+# other outcome (host broken, scan crashed, scan found FAIL-severity
+# issues) fails the job AND publishes to SNS.
 #
 # Trigger model: weekly cron + workflow_dispatch. Findings from the
 # first real scan get triaged in T-IGH-05-ZAP-FINDINGS.
@@ -22,22 +78,133 @@ on:
         required: false
         default: 'https://staging.api.agrisync.app'
 
+permissions:
+  id-token: write   # required for OIDC (SNS notify on failure)
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  AUDIT_TOPIC_ARN: arn:aws:sns:ap-south-1:951921970996:shramsafal-prod-audit-alerts
+  AUDIT_ROLE_ARN: arn:aws:iam::951921970996:role/agrisync-prod-audit
+
 jobs:
   zap:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      # Configured unconditionally (not gated on failure) because a LATER
+      # step needs these credentials, and GitHub Actions steps run in
+      # order — a failure-conditioned step cannot retroactively acquire
+      # credentials it didn't have. Assuming a role via OIDC is a read-like
+      # STS call, not a data-mutating action; this mirrors
+      # aws/audit/prod-hygiene-audit.yml's own unconditional setup.
+      - name: Configure AWS credentials (OIDC, for SNS notify on failure only)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AUDIT_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: zap-baseline
+
+      - name: Check target reachability (ONLY dns-does-not-resolve is quiet)
+        id: reachability
+        run: |
+          TARGET="${{ github.event.inputs.target_url || 'https://staging.api.agrisync.app' }}"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+
+          CURL_EXIT=0
+          curl --silent --show-error --fail --max-time 15 --output /dev/null "$TARGET" || CURL_EXIT=$?
+
+          if [[ "$CURL_EXIT" -eq 0 ]]; then
+            echo "reachable=true" >> "$GITHUB_OUTPUT"
+            echo "Target is reachable: $TARGET"
+          elif [[ "$CURL_EXIT" -eq 6 ]]; then
+            # curl exit 6 == "Couldn't resolve host" -- the ONE known,
+            # expected, pre-staging condition. Nothing else maps to this.
+            echo "reachable=false" >> "$GITHUB_OUTPUT"
+            echo "Target does not resolve (curl exit 6): $TARGET -- staging not yet provisioned (expected)."
+          else
+            # Any other curl failure means the host EXISTS (DNS resolved)
+            # and something about it is broken -- refused connection,
+            # timeout, TLS failure, or an HTTP >=400 response (curl --fail
+            # turns those into a non-zero exit too). This is staging
+            # existing and being broken, not staging being absent. Loud.
+            echo "reachable=false" >> "$GITHUB_OUTPUT"
+            echo "Target RESOLVES but the request failed (curl exit $CURL_EXIT): $TARGET" >&2
+            echo "This is NOT the known/expected 'staging does not exist yet' condition -- the host" >&2
+            echo "exists and is broken. Failing loudly rather than silently matching the quiet branch." >&2
+            exit 1
+          fi
+
       - name: ZAP baseline scan
+        # No `|| true` here. A scan that crashes or finds FAIL-severity
+        # issues must fail this job — that is the entire point of this fix.
+        # Also naturally skipped (GitHub's default step-skip-on-failure) if
+        # the reachability step above exited 1 for the "resolves but
+        # broken" case — no extra `if:` condition needed for that path.
+        if: steps.reachability.outputs.reachable == 'true'
         run: |
           docker run --rm -v "$(pwd):/zap/wrk" -t ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py \
-            -t "${{ github.event.inputs.target_url || 'https://staging.api.agrisync.app' }}" \
+            -t "${{ steps.reachability.outputs.target }}" \
             -m 1 \
-            -r zap-report.html || true
+            -r zap-report.html
 
       - uses: actions/upload-artifact@v4
+        # === ADDENDUM (post-round-1 review note) — FIX APPLIED ===
+        # This used to be `if: steps.reachability.outputs.reachable == 'true'`
+        # alone. GitHub implicitly ANDs an unstated `success()` onto every
+        # step condition, so the upload was skipped whenever the ZAP step
+        # itself failed — precisely the FAIL-severity case a human most needs
+        # the report for. `always()` removes that implicit success() gate;
+        # `reachable == 'true'` still correctly excludes the "resolves but
+        # broken" reachability-failure path, where ZAP never ran and there is
+        # genuinely nothing to upload (that path's output is explicitly
+        # written as 'false' before its `exit 1`, so it evaluates correctly
+        # here even though the step that set it failed).
+        if: always() && steps.reachability.outputs.reachable == 'true'
         with:
           name: zap-report
           path: zap-report.html
           retention-days: 30
+          # zap-baseline.py writes the report as part of a normal scan
+          # completion (including a FAIL-severity result) before it exits
+          # with a severity-reflecting code — so the report exists in the
+          # FAIL case this fix targets. It would NOT exist if the scan
+          # crashed before writing anything (e.g. docker itself failed to
+          # start) — `warn`, not `error`, so that rarer case surfaces as a
+          # warning in this step's own log rather than a second, confusing
+          # failure stacked on top of the real one; the "Notify on failure"
+          # step below still fires either way.
+          if-no-files-found: warn
+
+      - name: Staging not yet provisioned (expected — quiet by design, not a scan result)
+        # Only reached when the reachability step succeeded AND classified
+        # the target as unreachable, i.e. the DNS-does-not-resolve case
+        # specifically (see that step: every other cause exits 1 and skips
+        # this, per GitHub's default behaviour).
+        if: steps.reachability.outputs.reachable == 'false'
+        run: |
+          echo "::notice::Target ${{ steps.reachability.outputs.target }} does not resolve (DNS) — staging"
+          echo "::notice::has not been provisioned yet. This is the one documented, expected pre-staging"
+          echo "::notice::condition (see this file's header). The scan was SKIPPED, not run and ignored —"
+          echo "::notice::this is NOT a clean-scan result. A host that resolves but answers with an error,"
+          echo "::notice::a refused connection, or a timeout is a DIFFERENT case and fails this job instead."
+
+      - name: Notify on failure (SNS — same topic + role the weekly hygiene audit already uses)
+        if: failure()
+        run: |
+          DATE=$(date -u +%F)
+          SUBJECT="[AgriSync ZAP Scan] FAILED - $DATE"
+          MESSAGE="zap-baseline.yml job failed for target ${{ steps.reachability.outputs.target || 'unknown' }}.
+          Cause is one of two shapes: (1) the target RESOLVED but refused/timed out/errored -- see the
+          'Check target reachability' step; no scan ran, so there is NO zap-report artifact this run.
+          (2) the target was reachable and the ZAP scan ran -- see the 'ZAP baseline scan' step; the
+          zap-report artifact IS uploaded whenever the scan completes (including a FAIL-severity
+          result), and is only absent if the scan crashed before writing anything.
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "Publishing: $SUBJECT"
+          aws sns publish --region "${AWS_REGION}" \
+            --topic-arn "${AUDIT_TOPIC_ARN}" \
+            --subject "$SUBJECT" \
+            --message "$MESSAGE"

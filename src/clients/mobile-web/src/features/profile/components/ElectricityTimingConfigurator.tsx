@@ -8,6 +8,7 @@ import {
 } from '../../../types';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import { systemClock } from '../../../core/domain/services/Clock';
+import { formatDisplayTimeFromHHmm } from '../../../shared/utils/displayTime';
 
 type PhaseKey = 'singlePhase' | 'threePhase';
 type WeekKey = 'A' | 'B';
@@ -42,15 +43,12 @@ const parseMinutes = (time: string): number | null => {
     return (h * 60) + m;
 };
 
-const format12h = (time: string): string => {
-    const mins = parseMinutes(time);
-    if (mins === null) return time;
-    const h24 = Math.floor(mins / 60);
-    const mm = mins % 60;
-    const suffix = h24 >= 12 ? 'PM' : 'AM';
-    const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
-    return `${h12}:${mm.toString().padStart(2, '0')} ${suffix}`;
-};
+/**
+ * The third of three private 12-hour implementations this codebase had. The
+ * STORED value stays `HH:mm` — only its rendering routes through the shared
+ * formatter now.
+ */
+const format12h = (time: string): string => formatDisplayTimeFromHHmm(time);
 
 const formatHours = (minutes: number): string => {
     const hours = minutes / 60;

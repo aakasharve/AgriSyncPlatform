@@ -14,16 +14,7 @@
  */
 
 import Dexie, { type Table } from 'dexie';
-import type { DailyLog } from '../../types';
 import type { AuditEvent } from './AuditLogRepository';
-import type { JobCard } from '../../domain/work/JobCard';
-import type { WorkerProfileData } from '../../domain/work/ReliabilityScore';
-import type {
-    DexieTestProtocol,
-    DexieTestResult,
-    DexieTestInstance,
-    DexieTestRecommendation,
-} from './DexieDatabase.testTypes';
 import type { CorrectionEvent } from '../../domain/ai/contracts/CorrectionEvent';
 import { applyV1 } from './dexie/versions/v1';
 import { applyV2 } from './dexie/versions/v2';
@@ -47,577 +38,67 @@ import { applyV19 } from './dexie/versions/v19';
 import { applyV20 } from './dexie/versions/v20';
 import { applyV21 } from './dexie/versions/v21';
 import { applyV22 } from './dexie/versions/v22';
-
-// =============================================================================
-// OUTBOX (Pending sync events)
-// =============================================================================
-
-export type OutboxAction =
-    | 'CREATE_LOG'
-    | 'UPDATE_LOG'
-    | 'DELETE_LOG'
-    | 'CONFIRM_LOG'
-    | 'VERIFY_LOG'
-    | 'DISPUTE_LOG'
-    | 'CORRECT_LOG';
-
-export type OutboxStatus = 'PENDING' | 'SENDING' | 'SENT' | 'FAILED';
-
-export interface OutboxEvent {
-    /** Auto-incremented by Dexie */
-    id?: number;
-    /** Idempotency key: `{logId}_{action}_{capturedAtMs}` */
-    idempotencyKey: string;
-    action: OutboxAction;
-    resourceId: string;
-    payload: unknown;
-    status: OutboxStatus;
-    createdAt: string;
-    retryCount: number;
-    lastAttemptAt?: string;
-    error?: string;
-}
-
-// =============================================================================
-// MUTATION QUEUE (Backend sync-ready queue)
-// =============================================================================
-
-/**
- * Sub-plan 04 Task 5 / T-IGH-04-CONFLICT-STATUS-DURABILITY:
- * - PENDING            queued, eligible for next worker cycle.
- * - SENDING            in flight to server.
- * - APPLIED            server accepted (or duplicate).
- * - FAILED             transient failure (network blip, unknown error).
- *                      Eligible for auto-retry via markFailedAsPending.
- * - REJECTED_USER_REVIEW
- *                      DURABLE rejection — server gave an error code that
- *                      RejectionPolicy classifies as "permanent" (CLIENT_TOO_OLD,
- *                      MUTATION_TYPE_UNKNOWN, MUTATION_TYPE_UNIMPLEMENTED, etc.).
- *                      markFailedAsPending must SKIP these; the user must
- *                      explicitly retry or discard via OfflineConflictPage.
- * - REJECTED_DROPPED   user explicitly discarded a REJECTED_USER_REVIEW row.
- *                      Soft-delete — kept for audit + Sub-plan 05 E2E
- *                      assertion. Never returned by getPending(); never
- *                      included in conflict UI list().
- */
-export type MutationQueueStatus =
-    | 'PENDING'
-    | 'SENDING'
-    | 'APPLIED'
-    | 'FAILED'
-    | 'REJECTED_USER_REVIEW'
-    | 'REJECTED_DROPPED';
-
-export interface MutationQueueItem {
-    id?: number;
-    deviceId: string;
-    clientRequestId: string;
-    clientCommandId: string;
-    mutationType: string;
-    payload: unknown;
-    status: MutationQueueStatus;
-    createdAt: string;
-    updatedAt: string;
-    retryCount: number;
-    lastError?: string;
-}
-
-// =============================================================================
-// ATTACHMENTS (Metadata + local linkage)
-// =============================================================================
-
-export type LocalAttachmentStatus = 'pending' | 'uploading' | 'uploaded' | 'failed';
-
-export interface AttachmentRecord {
-    /** Local attachment id (and server id when provided via attachmentId) */
-    id: string;
-    farmId: string;
-    linkedEntityId?: string;
-    linkedEntityType?: string;
-    /** Device-local file reference used by upload worker */
-    localPath: string;
-    originalFileName: string;
-    mimeType: string;
-    sizeBytes: number;
-    status: LocalAttachmentStatus;
-    remoteAttachmentId?: string;
-    uploadedAtUtc?: string;
-    finalizedAtUtc?: string;
-    createdAt: string;
-    updatedAt: string;
-    retryCount: number;
-    lastError?: string;
-}
-
-// =============================================================================
-// ATTACHMENT UPLOAD QUEUE
-// =============================================================================
-
-export type UploadQueueStatus = 'pending' | 'uploading' | 'retry_wait' | 'failed' | 'completed';
-
-export interface UploadQueueItem {
-    autoId?: number;
-    attachmentId: string;
-    status: UploadQueueStatus;
-    retryCount: number;
-    lastAttemptAt?: string;
-    nextAttemptAt?: string;
-    lastError?: string;
-    createdAt: string;
-    updatedAt: string;
-}
-
-// =============================================================================
-// PENDING AI JOBS (Offline queue for voice/receipt/patti AI requests)
-// =============================================================================
-
-export type PendingAiOperationType = 'voice_parse' | 'receipt_extract' | 'patti_extract';
-export type PendingAiJobStatus = 'pending' | 'processing' | 'failed' | 'failed_permanent' | 'completed';
-
-export interface PendingAiAttemptSignature {
-    signature: string;
-    errorClass: string;
-    firstSeenAtMs: number;
-    lastSeenAtMs: number;
-    count: number;
-}
-
-export interface PendingAiJobContext {
-    farmId?: string;
-    userId?: string;
-    operation?: 'voice' | 'receipt' | 'patti' | 'text';
-    plotId?: string;
-    cropCycleId?: string;
-    cropName?: string;
-    parseContext?: object;
-    textTranscript?: string;
-    idempotencyKey?: string;
-    requestPayloadHash?: string;
-    inputSpeechDurationMs?: number;
-    inputRawDurationMs?: number;
-    segmentMetadataJson?: string;
-    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix (Option B):
-    // the ISO-8601 UTC instant when MediaRecorder captured the audio.
-    // Persisted on the offline-queue row so that when the background
-    // worker drains the queue (possibly hours later after connectivity
-    // returns), the original recording instant is what's posted as
-    // `recorded_at` — not the queue-drain wall clock.
-    recordedAtUtc?: string;
-}
-
-export interface PendingAiJobRecord {
-    id?: number;
-    operationType: PendingAiOperationType;
-    inputBlob?: Blob;
-    inputMimeType?: string;
-    context: PendingAiJobContext;
-    status: PendingAiJobStatus;
-    createdAt: string;
-    updatedAt: string;
-    retryCount: number;
-    lastError?: string;
-    nextRetryAfterMs?: number;
-    attemptSignatures?: PendingAiAttemptSignature[];
-}
-
-// =============================================================================
-// VOICE CLIPS (30-day processing journal, no indefinite retention)
-// =============================================================================
-
-export type VoiceClipRetentionPolicy = 'processing_30d';
-export type VoiceClipStatus = 'recorded' | 'queued' | 'parsing' | 'parsed' | 'failed';
-
-export interface VoiceClipCacheRecord {
-    id: string;
-    farmId: string;
-    plotId?: string;
-    cropCycleId?: string;
-    pendingAiJobId?: number;
-    recordedAtUtc: string;
-    durationMs?: number;
-    mimeType: string;
-    sizeBytes: number;
-    /**
-     * Pre-v18 plaintext blob. Optional during the upgrade window — rows
-     * written before v18 carry this; rows written after v18 carry the
-     * sealed triple (`ciphertext` + `iv` + `wrappedDekId`) instead.
-     * Backward-compat lives here only so the v18 upgrade callback can
-     * detect legacy rows and flag them for re-seal.
-     *
-     * spec: data-principle-spine-2026-05-05/05.3
-     */
-    localBlob?: Blob;
-    /**
-     * AES-GCM ciphertext (includes the 16-byte auth tag). Written by
-     * `sealVoiceClip` in `infrastructure/security/voiceEnvelope.ts`.
-     *
-     * spec: data-principle-spine-2026-05-05/05.3
-     */
-    ciphertext?: Uint8Array;
-    /**
-     * 96-bit random IV used for the AES-GCM seal. Reuse with the same
-     * DEK is catastrophic; `sealVoiceClip` generates a fresh IV per call.
-     *
-     * spec: data-principle-spine-2026-05-05/05.3
-     */
-    iv?: Uint8Array;
-    /**
-     * Opaque DEK identifier issued by the backend. Used on read to
-     * resolve back to plaintext key bytes via the resolve endpoint
-     * (see `tenantDekClient.resolveDek`).
-     *
-     * spec: data-principle-spine-2026-05-05/05.3
-     */
-    wrappedDekId?: string;
-    /**
-     * Migration marker — v18 upgrade tags legacy plaintext rows with
-     * this flag so the read/write path knows to re-seal them on next
-     * access. See `infrastructure/storage/dexie/versions/v18.ts`.
-     *
-     * spec: data-principle-spine-2026-05-05/05.3
-     */
-    needsResealOnNextAccess?: boolean;
-    /**
-     * HS256 `kid` claim from the consent token that was active when
-     * this clip was sealed. Lets the audit / export path pin clips
-     * to a specific consent state + signing key generation. Optional
-     * (undefined on pre-v19 rows + on rows sealed before a consent
-     * token is available).
-     *
-     * spec: data-principle-spine-2026-05-05/06.5
-     */
-    consentTokenKid?: string;
-    /** Cross-ref into retained S3 tier after archiveToRetainedTierIfConsented. Local 30d sweep still deletes the row; S3 holds the canonical copy. spec: voice-diary-e2e-2026-05-17 (D.17) */
-    s3RetainedKey?: string;
-    status: VoiceClipStatus;
-    retentionPolicy: VoiceClipRetentionPolicy;
-    expiresAtUtc: string;
-    createdAt: string;
-    updatedAt: string;
-    lastError?: string;
-}
-
-// =============================================================================
-// SYNC CURSORS
-// =============================================================================
-
-export interface SyncCursor {
-    tableName: string;
-    lastSyncAt: string;
-    serverCursor?: string;
-    version: number;
-}
-
-// =============================================================================
-// APP META (Key-Value store)
-// =============================================================================
-
-export interface AppMetaEntry {
-    key: string;
-    value: unknown;
-    updatedAt: string;
-}
-
-// =============================================================================
-// REFERENCE DATA CACHE
-// =============================================================================
-
-export type ReferenceDataKey =
-    | 'scheduleTemplates'
-    | 'cropTypes'
-    | 'activityCategories'
-    | 'costCategories';
-
-export interface ReferenceDataRecord {
-    key: ReferenceDataKey;
-    data: unknown;
-    versionHash: string;
-    updatedAt: string;
-}
-
-// =============================================================================
-// SYNC CACHE TABLES
-// =============================================================================
-
-export interface DayLedgerCacheRecord {
-    id: string;
-    farmId: string;
-    dateKey: string;
-    payload: unknown;
-    updatedAt: string;
-}
-
-export interface PlannedActivityOverrideMarkers {
-    /** Arbitrary override marker map — keys are marker names, values are booleans or strings */
-    [key: string]: boolean | string | null | undefined;
-}
-
-export interface PlannedTaskCacheRecord {
-    id: string;
-    cropCycleId: string;
-    plannedDate: string;
-    payload: unknown;
-    updatedAt: string;
-    /** CEI Phase 1 — template activity that sourced this planned activity */
-    sourceTemplateActivityId?: string | null;
-    /** CEI Phase 1 — override markers applied to this activity */
-    overrideMarkers?: PlannedActivityOverrideMarkers | null;
-}
-
-export interface FarmCacheRecord {
-    id: string;
-    ownerAccountId?: string;
-    payload: unknown;
-    syncStatus?: string;
-    serverUpdatedAt?: string;
-    updatedAt: string;
-    modifiedAtUtc?: string;
-}
-
-export interface PlotCacheRecord {
-    id: string;
-    farmId: string;
-    ownerAccountId?: string;
-    payload: unknown;
-    syncStatus?: string;
-    serverUpdatedAt?: string;
-    updatedAt: string;
-    modifiedAtUtc?: string;
-}
-
-export interface FarmBoundaryCacheRecord {
-    id: string;
-    farmId: string;
-    ownerAccountId: string;
-    payload: unknown;
-    syncStatus: string;
-    serverUpdatedAt: string;
-    updatedAt: string;
-}
-
-export interface PlotAreaCacheRecord {
-    id: string;
-    plotId: string;
-    farmId: string;
-    ownerAccountId: string;
-    payload: unknown;
-    syncStatus: string;
-    serverUpdatedAt: string;
-    updatedAt: string;
-}
-
-export interface CropCycleCacheRecord {
-    id: string;
-    farmId: string;
-    plotId: string;
-    payload: unknown;
-    updatedAt: string;
-}
-
-export interface CostEntryCacheRecord {
-    id: string;
-    farmId: string;
-    payload: unknown;
-    updatedAt: string;
-}
-
-export interface FinanceCorrectionCacheRecord {
-    id: string;
-    costEntryId: string;
-    payload: unknown;
-    updatedAt: string;
-}
-
-// =============================================================================
-// SCHEDULE TEMPLATE — shape inside referenceData.data array
-// =============================================================================
-
-/** Shape of each item stored inside referenceData['scheduleTemplates'].data */
-export interface ScheduleTemplateCacheItem {
-    id: string;
-    name?: string;
-    /** CEI Phase 1 — set by server; backfilled to 1 for legacy rows */
-    version?: number;
-    /** CEI Phase 1 — 'Public' | 'Tenant'; backfilled to 'Public' for legacy rows */
-    tenantScope?: string;
-    /** CEI Phase 1 — null for system templates */
-    createdByUserId?: string | null;
-    previousVersionId?: string | null;
-    derivedFromTemplateId?: string | null;
-    publishedAtUtc?: string | null;
-    [key: string]: unknown;
-}
-
-// =============================================================================
-// ATTENTION CARDS (CEI Phase 1)
-// =============================================================================
-
-export interface AttentionCardCacheRecord {
-    cardId: string;
-    farmId: string;
-    rank: string;
-    computedAtUtc: string;
-    // mirror of AttentionCardDto fields
-    farmName: string;
-    plotId: string;
-    plotName: string;
-    cropCycleId?: string | null;
-    stageName?: string | null;
-    titleEn: string;
-    titleMr: string;
-    descriptionEn: string;
-    descriptionMr: string;
-    suggestedAction: string;
-    suggestedActionLabelEn: string;
-    suggestedActionLabelMr: string;
-    overdueTaskCount?: number | null;
-    latestHealthScore?: string | null;
-    unresolvedDisputeCount?: number | null;
-}
-
-// =============================================================================
-// VERSIONED LOG RECORD
-// =============================================================================
-
-export interface DexieLogRecord {
-    /** Log ID (primary key) */
-    id: string;
-    /** Schema version at time of write */
-    schemaVersion: number;
-    /** The actual log data */
-    log: DailyLog;
-    /** Date string for index (YYYY-MM-DD) */
-    date: string;
-    /** Verification status for index */
-    verificationStatus?: string;
-    /** Creator operator ID for index */
-    createdByOperatorId?: string;
-    /** Soft-deleted flag for index */
-    isDeleted: 0 | 1;
-    /** Server-reported modification timestamp; used to skip stale-pull overwrites */
-    serverModifiedAtUtc?: string;
-}
-
-// =============================================================================
-// CEI PHASE 3 — COMPLIANCE SIGNALS (§4.6)
-// =============================================================================
-
-export interface DexieComplianceSignal {
-    id: string;
-    farmId: string;
-    plotId: string;
-    cropCycleId?: string | null;
-    ruleCode: string;
-    severity: string; // 'Info' | 'Watch' | 'NeedsAttention' | 'Critical'
-    suggestedAction: string;
-    titleEn: string;
-    titleMr: string;
-    descriptionEn: string;
-    descriptionMr: string;
-    payloadJson: string;
-    firstSeenAtUtc: string;
-    lastSeenAtUtc: string;
-    acknowledgedAtUtc?: string | null;
-    resolvedAtUtc?: string | null;
-    resolutionNote?: string | null;
-    isOpen: boolean;
-}
-
-// =============================================================================
-// CEI PHASE 2 — TEST STACK (§4.5)
-// =============================================================================
-
-// Record types extracted to ./DexieDatabase.testTypes (Sub-plan 04 §DoD ≤800
-// lines). Re-exported so existing `from '.../DexieDatabase'` imports keep working.
-export type {
+import { applyV23 } from './dexie/versions/v23';
+import { applyV24 } from './dexie/versions/v24';
+import { LEGACY_DATABASE_NAME } from './userDatabaseName';
+import { getActiveDatabaseName, clearResolvedDatabaseName } from './activeDatabaseName';
+import { recoverLegacyOwnershipClaim, settleOwnershipClaims } from './databaseOwnership';
+// Record/interface/type declarations extracted to ./DexieDatabase.types (mobile-web
+// 800-line file-size cap). Pure type move — no behavior change. Re-exported below so
+// existing `import { X } from '.../DexieDatabase'` call sites keep working unchanged.
+import type {
+    OutboxEvent,
+    MutationQueueItem,
+    AttachmentRecord,
+    UploadQueueItem,
+    PendingAiJobRecord,
+    VoiceClipCacheRecord,
+    SyncCursor,
+    AppMetaEntry,
+    ReferenceDataKey,
+    ReferenceDataRecord,
+    DayLedgerCacheRecord,
+    PlannedTaskCacheRecord,
+    FarmCacheRecord,
+    PlotCacheRecord,
+    FarmBoundaryCacheRecord,
+    PlotAreaCacheRecord,
+    CropCycleCacheRecord,
+    CostEntryCacheRecord,
+    FinanceCorrectionCacheRecord,
+    AttentionCardCacheRecord,
+    DexieLogRecord,
+    DexieComplianceSignal,
     DexieTestProtocol,
-    DexieTestResult,
     DexieTestInstance,
     DexieTestRecommendation,
-};
+    DexieJobCard,
+    DexieWorkerProfile,
+    CropRow,
+    ProfileRow,
+    UiPrefRow,
+    AnalyticsOutboxRow,
+} from './DexieDatabase.types';
 
-// =============================================================================
-// CEI PHASE 4 — JOB CARDS (§4.8)
-// =============================================================================
-
-export interface DexieJobCard extends JobCard {
-    /** Redundant field for Dexie compound-index compatibility */
-    modifiedAtUtc: string;
-}
-
-export interface DexieWorkerProfile {
-    /** PK */
-    workerUserId: string;
-    /** Farm this cache was fetched for (part of the profile endpoint path) */
-    scopedFarmId: string;
-    data: WorkerProfileData;
-    cachedAtUtc: string;
-}
-
-// =============================================================================
-// SUB-PLAN 04 TASK 2 — FRONTEND STORAGE UNIFICATION
-// =============================================================================
-
-/**
- * Crop blob row. The full CropProfile is stored as `data`; `id` is the crop's
- * stable id (e.g. `crop_grapes`). `updatedAtMs` lets us detect stale rows
- * during the legacy-localStorage migration without changing the CropProfile
- * schema itself.
- */
-export interface CropRow {
-    id: string;
-    data: unknown;
-    updatedAtMs: number;
-}
-
-/**
- * Farmer profile blob row. Singleton: id is always `'self'`. Storing the full
- * FarmerProfile as `data` keeps the existing FarmerProfile shape untouched
- * while moving the storage substrate from localStorage to Dexie.
- */
-export interface ProfileRow {
-    id: 'self';
-    data: unknown;
-    updatedAtMs: number;
-}
-
-/**
- * UI preferences key-value store (sidebar collapsed, theme, etc). Replaces
- * the per-key localStorage scatter for non-essential UX prefs that don't need
- * to be in localStorage's sync namespace.
- */
-export interface UiPrefRow {
-    key: string;
-    value: unknown;
-}
-
-// =============================================================================
-// ANALYTICS OUTBOX (DWC v2 §2.6 — closure-loop telemetry)
-// =============================================================================
-
-/**
- * One queued analytics event awaiting POST to `/analytics/ingest`.
- * Drained by `AnalyticsEventBus` per `ADR-2026-05-02_telemetry-batching.md`:
- * 50-row batches, 5-attempt cap, all-or-nothing batch policy.
- */
-export interface AnalyticsOutboxRow {
-    /** Auto-incremented by Dexie. */
-    id?: number;
-    /** Serialized {eventType, props} — round-tripped through JSON.parse on drain. */
-    payloadJson: string;
-    /** Epoch ms; secondary index used for FIFO drain ordering. */
-    createdAtUtc: number;
-    /** Monotonic per-row send attempts; row drops at MAX_ATTEMPTS (5). */
-    attempts: number;
-}
+export type * from './DexieDatabase.types';
 
 // =============================================================================
 // SCHEMA VERSION CONSTANTS
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 22; // ai-intelligence-plan-2026-06-25 (W1.P2) — per-field FieldProvenance carry-through; no new index (provenance is a nested JSON field).
-/** CEI Phase 1 schema version (now active — applied by Task 5.1.1). */
+export const DATABASE_VERSION = 24; // §P0.4 — strip the raw transcript out of stored correction events; no index change. 23 is RESERVED for feat/dfes-companion — see versions/v24.ts.
+/**
+ * CEI Phase 1 schema version (now active — applied by Task 5.1.1).
+ *
+ * §P0.7 review N2 — `tests/storage/migrationService.test.ts` used to 'reserve'
+ * this number with a pair of compile-time assertions. It was deleted: the
+ * directory is in neither `tsconfig.include` (`["src"]`) nor the vitest
+ * include, so nothing loaded the file and no assertion in it could ever fail —
+ * one of them had been wrong since v7 and never said so. This declaration is
+ * the reservation. `dexie/__tests__/dexieVersionIntegrity.test.ts` owns the
+ * assertions, in a file that runs.
+ */
 export const CEI_PHASE1_SCHEMA_VERSION = 7;
 /** CEI Phase 2 schema version — adds test stack (protocols/instances/recs). */
 export const CEI_PHASE2_SCHEMA_VERSION = 8;
@@ -647,6 +128,17 @@ export const DATA_PRINCIPLE_SPINE_CONSENT_TOKEN_KID_SCHEMA_VERSION = 19;
 export const DATA_PRINCIPLE_SPINE_PII_REDACTION_EVENT_SCHEMA_VERSION = 20;
 /** voice-diary-e2e-2026-05-17 (D.17) — voiceClips row gains `s3RetainedKey` index for cross-reference into the retained S3 tier. */
 export const VOICE_DIARY_RETAINED_KEY_SCHEMA_VERSION = 21;
+/**
+ * §P0.4 — correction events stop carrying verbatim speech; v24 strips it from
+ * rows already on the handset.
+ *
+ * 24, not 23: `feat/dfes-companion` owns 23 and ships first. Dexie only runs an
+ * upgrade for versions ABOVE the one on the device, so re-using 23 would have
+ * meant the strip never executed on any handset that took DFES first — a
+ * privacy fix that looks shipped and is not. Full reasoning in
+ * `dexie/versions/v24.ts`.
+ */
+export const CORRECTION_EVENT_TRANSCRIPT_STRIPPED_SCHEMA_VERSION = 24;
 
 // =============================================================================
 // DATABASE CLASS
@@ -702,8 +194,16 @@ export class AgriLogDatabase extends Dexie {
     /** DWC v2 §2.6 — analytics outbox; drained by `AnalyticsEventBus`. */
     analyticsOutbox!: Table<AnalyticsOutboxRow, number>;
 
-    constructor() {
-        super('AgriLogDB');
+    /**
+     * @param databaseName Which IndexedDB database to open. Defaults to the one
+     * every install already has; `userDatabaseName.ts` decides the rest. The
+     * SCHEMA is identical either way — a per-farmer database is these same v24
+     * stores under another name, which is why this needed no version bump.
+     * It also means every upgrade callback runs ONCE PER FARMER DATABASE on a
+     * shared device, so each one must be idempotent per database.
+     */
+    constructor(databaseName: string = LEGACY_DATABASE_NAME) {
+        super(databaseName);
 
         // Schema versions are declared in dexie/versions/v{N}.ts. Each applyVN
         // call performs `this.version(N).stores({...})` (and any `.upgrade()`
@@ -730,33 +230,62 @@ export class AgriLogDatabase extends Dexie {
         applyV20(this);
         applyV21(this);
         applyV22(this);
+        // §P0.7 review C1 — THIS BRANCH MUST DECLARE v23 EVEN THOUGH IT DID NOT
+        // WRITE IT, and the file is `feat/dfes-companion`'s, byte-identical.
+        //
+        // Dexie's schema is the UNION of the versions the running build
+        // DECLARES, and `deleteRemovedTables` drops any object store the union
+        // does not contain. A gap is not inert: with v23 missing from this
+        // chain, opening a handset that took DFES first upgraded it to 24 and
+        // SILENTLY DELETED `pendingInterpretations` and every row in it —
+        // measured, verno 24, `InvalidTableError`, no error raised, upgrade
+        // reported success.
+        //
+        // Carrying the declaration is what keeps that store alive; it is not
+        // optional and it is not tidy-up-able. On a device that has never seen
+        // DFES it creates one empty store this branch never touches, which
+        // costs nothing. Kept BYTE-IDENTICAL to the other branch so the merge is
+        // a no-op and any divergence there surfaces as a real conflict.
+        applyV23(this);
+        applyV24(this);
     }
 }
 
 // =============================================================================
-// SINGLETON
+// SINGLETON — one open handle, on the database the active farmer owns
 // =============================================================================
 
 let dbInstance: AgriLogDatabase | null = null;
 
 /**
  * Get the singleton database instance.
- * Creates it on first call.
+ * Creates it on first call, and re-opens on the new database after a switch of
+ * farmer — closing the handle it is leaving, never emptying it.
  */
 export function getDatabase(): AgriLogDatabase {
-    if (!dbInstance) {
-        dbInstance = new AgriLogDatabase();
+    const databaseName = getActiveDatabaseName();
+    if (!dbInstance || dbInstance.name !== databaseName) {
+        dbInstance?.close();
+        dbInstance = new AgriLogDatabase(databaseName);
     }
     return dbInstance;
 }
 
 /**
- * Reset the database instance (for testing).
+ * Drop everything held in memory and re-derive routing from durable state.
+ *
+ * P0.1: durable state now includes the ownership claim INSIDE `AgriLogDB`, so
+ * this reads it back and repairs the localStorage mirror before anybody is
+ * routed anywhere — the step that makes a cleared `localStorage` survivable.
+ * The in-flight claim settles BEFORE the handle closes, because closing a Dexie
+ * handle aborts its transactions and would discard the claim just written.
+ *
  * @internal
  */
 export async function resetDatabase(): Promise<void> {
-    if (dbInstance) {
-        dbInstance.close();
-        dbInstance = null;
-    }
+    await settleOwnershipClaims();
+    dbInstance?.close();
+    dbInstance = null;
+    clearResolvedDatabaseName();
+    await recoverLegacyOwnershipClaim();
 }

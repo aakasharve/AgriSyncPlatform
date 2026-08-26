@@ -3,6 +3,7 @@ import { CloudRain, Wind, ThermometerSun, AlertTriangle, CheckCircle, Clock, Ban
 import { WeatherEvent, WeatherReaction, FarmerReactionType } from '../../../types';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import { systemClock } from '../../../core/domain/services/Clock';
+import { formatDisplayTime } from '../../../shared/utils/displayTime';
 
 interface Props {
     event: WeatherEvent;
@@ -56,7 +57,7 @@ const WeatherReactionPrompt: React.FC<Props> = ({ event, onReact, onDismiss }) =
                     {getIcon()}
                     <div>
                         <h3 className="font-bold text-slate-800 text-lg">{getTitle()}</h3>
-                        <p className="text-sm text-slate-500">{new Date(event.tsStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Severity: {event.severity}</p>
+                        <p className="text-sm text-slate-500">{formatDisplayTime(event.tsStart)} • Severity: {event.severity}</p>
                     </div>
                 </div>
 

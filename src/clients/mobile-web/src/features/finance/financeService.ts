@@ -18,6 +18,7 @@ import {
     MoneyAdjustment,
     MoneyCategory,
     MoneyEvent,
+    MoneyEventDirection,
     PriceBookItem,
 } from './finance.types';
 
@@ -48,6 +49,20 @@ type ServerCostEntry = {
     isCorrected?: boolean;
     isFlagged?: boolean;
     flagReason?: string;
+    /**
+     * Which way the money moved, as the server holds it. ABSENT OR NULL means
+     * nobody ever stated one — every row written before the column existed,
+     * and those rows include sales, because income used to travel down this
+     * same expense wire. Never resolved to `'Expense'` below.
+     */
+    direction?: 'Expense' | 'Income' | null;
+    qty?: number | null;
+    unit?: string | null;
+    unitPrice?: number | null;
+    paymentMode?: 'Cash' | 'UPI' | 'Bank' | 'Credit' | null;
+    vendorName?: string | null;
+    /** `null`/absent = no statement; `[]` = "none linked". */
+    clientAttachmentIds?: string[] | null;
 };
 
 type ServerFinanceCorrection = {
@@ -136,6 +151,38 @@ function mapCategory(category?: string): MoneyCategory {
     return 'Other';
 }
 
+/**
+ * Read the stored direction back, TOTALLY and explicitly.
+ *
+ * This one function is where the defect used to live. It read `'Expense'` for
+ * every row, unconditionally, so a farmer's ₹50,000 grape sale — pushed as an
+ * `add_cost_entry` because that was the only money mutation there was — came
+ * back on a reinstalled phone as ₹50,000 he had SPENT, and his profit rendered
+ * as a loss.
+ *
+ * Absent, null or empty now returns `'Unknown'`, not `'Expense'`. That is the
+ * honest reading and it is deliberately the LESS convenient one: an Unknown row
+ * falls out of both totals, so a farmer whose history predates the column will
+ * see totals that no longer silently absorb it. An unrecognised value is also
+ * `'Unknown'` — a string this client cannot read is not evidence of a
+ * direction, and picking one from it would be the same guess in a new coat.
+ */
+function readDirection(direction: ServerCostEntry['direction']): MoneyEventDirection {
+    switch (direction) {
+        case 'Expense':
+            return 'Expense';
+        case 'Income':
+            return 'Income';
+        default:
+            return 'Unknown';
+    }
+}
+
+/** `null` and `undefined` both mean "not stated"; `0` and `''` do not. */
+function stated<T>(value: T | null | undefined): T | undefined {
+    return value ?? undefined;
+}
+
 function mapCostEntryToMoneyEvent(entry: ServerCostEntry): MoneyEvent {
     const id = entry.id || `me_${idGenerator.generate()}`;
     const amount = Number(entry.amount || 0);
@@ -147,11 +194,19 @@ function mapCostEntryToMoneyEvent(entry: ServerCostEntry): MoneyEvent {
         plotId: entry.plotId,
         cropId: entry.cropCycleId,
         dateTime: entry.entryDate ? `${toDateKey(entry.entryDate)}T00:00:00Z` : createdAt,
-        type: 'Expense',
+        type: readDirection(entry.direction),
         // DATA_PRINCIPLE_SPINE 02.5 — prefer `categoryId` (new wire) and
         // fall back to legacy `category` for Dexie rows captured pre-migration.
         category: mapCategory(entry.categoryId ?? entry.category),
         amount,
+        // The line detail, rebuilt from the wire rather than lost with the
+        // phone. `undefined` where the server states nothing — never a zero, an
+        // empty string or a computed value.
+        qty: stated(entry.qty),
+        unit: stated(entry.unit),
+        unitPrice: stated(entry.unitPrice),
+        paymentMode: stated(entry.paymentMode),
+        vendorName: stated(entry.vendorName),
         sourceType: 'Manual',
         sourceId: id,
         createdByUserId: entry.createdByUserId || 'unknown',
@@ -160,6 +215,11 @@ function mapCostEntryToMoneyEvent(entry: ServerCostEntry): MoneyEvent {
         reviewReasons: entry.isFlagged && entry.flagReason ? [entry.flagReason] : [],
         priceSource: 'Unknown',
         notes: entry.description,
+        // Tri-state preserved: undefined = the server made no statement,
+        // [] = it said "none linked". The photo list on screen still reads the
+        // `attachments` table by linkedEntityId — this is the capture-time
+        // claim, and the two can legitimately differ.
+        attachments: stated(entry.clientAttachmentIds),
         createdAt,
     };
 }

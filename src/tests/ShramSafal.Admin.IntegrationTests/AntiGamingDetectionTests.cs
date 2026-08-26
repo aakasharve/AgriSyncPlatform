@@ -370,9 +370,9 @@ public sealed class AntiGamingDetectionTests : IAsyncLifetime
         // gaming fixtures are synthetic test rows, so stamp `pre_spine` per
         // the migration's backfill honesty rule.
         cmd.CommandText = """
-            INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, operator_user_id, log_date, created_at_utc,
+            INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, plot_ids, scope, operator_user_id, log_date, created_at_utc,
                                          source, model_version, prompt_version)
-            VALUES (@id, @fid, @plot, @cycle, @op, @date, @created,
+            VALUES (@id, @fid, @plot, @cycle, ARRAY[@plot], 'Plot', @op, @date, @created,
                     'pre_spine', 'unknown', 'unknown');
             """;
         AddParam(cmd, "id", logId);

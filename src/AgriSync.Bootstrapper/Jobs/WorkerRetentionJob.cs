@@ -47,30 +47,19 @@ public sealed class WorkerRetentionJob(
         await using var scope = scopeFactory.CreateAsyncScope();
         // DATA_PRINCIPLE_SPINE 04.7 carry-over (was 03.5b) — the retention
         // reader joins ssf.farm_memberships across every farm in the
-        // system; a single-farm tenant claim would mask all but one. The
-        // admin factory writes an AuditEvent("admin_cross_tenant","open")
-        // row with farm_id=NULL BEFORE returning, so each nightly pass
-        // leaves a forensic breadcrumb naming this job as the opener.
+        // system; a single-farm tenant claim would mask all but one.
         //
-        // The returned context is disposed immediately — WorkerRetentionReader
-        // is a scoped service that resolves the SCOPED ShramSafalDbContext
-        // (interceptor-attached), and AffiliationRepository binds to the
-        // scoped AccountsDbContext (no interceptor). The SSF scoped
-        // context still needs TenantContext elevation to skip the fail-
-        // closed GUC-injection prelude. Holding both calls keeps the audit
-        // trail honest while preserving the reader/repo wiring.
-        var adminFactory = scope.ServiceProvider
-            .GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>();
-        await using (await adminFactory.CreateAsync(
-            reason: nameof(WorkerRetentionJob),
-            actorUserId: SystemActor.Worker,
-            ct: ct))
-        {
-            // Audit row committed; primary context disposed.
-        }
-        scope.ServiceProvider
-            .GetRequiredService<TenantContext>()
-            .ElevateToAdminCrossTenant();
+        // RLS FIX (2026-08-10) — the pass used to open a privileged context
+        // here, DISCARD it, and then read through the SCOPED (RLS-bound)
+        // ShramSafalDbContext under ElevateToAdminCrossTenant. Elevation sets no
+        // GUC, so the cross-farm read returned zero rows every night. The
+        // enumeration now lives inside WorkerRetentionReader, ON the privileged
+        // context (which writes its own AuditEvent("admin_cross_tenant","open")
+        // breadcrumb naming the reader) — so the redundant opening here is gone
+        // and the elevation with it. The downstream writes are all
+        // accounts.growth_events via AffiliationRepository (AccountsDbContext,
+        // no interceptor, no RLS policy), so nothing else in this pass needs a
+        // tenant identity.
         var affiliationRepo = scope.ServiceProvider.GetRequiredService<IAffiliationRepository>();
         var retentionReader = scope.ServiceProvider.GetRequiredService<IWorkerRetentionReader>();
         var clock = scope.ServiceProvider.GetRequiredService<IClock>();

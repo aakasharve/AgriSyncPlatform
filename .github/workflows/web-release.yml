@@ -1,0 +1,147 @@
+# spec: 2026-08-25-prod-cutover-waves — T1.6
+#
+# Publishes the mobile-web bundle to app.shramsafal.in.
+#
+# WHY THIS EXISTS
+# ---------------
+# Before this workflow, NO CI job built or published the web bundle. `git grep
+# -l 'build:prod\|deploy-s3' -- .github` returned nothing. The only way the app
+# reached production was `npm run build:prod` on one laptop, picking the Google
+# Maps key up from an UNTRACKED `.env.local`. That is the "built once and
+# promoted" requirement failing in the most literal way: the artifact farmers
+# run could not be reproduced by anyone else.
+#
+# 🛑 WORKFLOW_DISPATCH ONLY. NEVER `on: push`.
+# The web step is ONE-WAY (plan §8 S3): a device that loads a Dexie-24 bundle
+# cannot open its database on a bundle declaring 22, and no VersionError
+# recovery path exists in `infrastructure/storage/`. An automatic trigger would
+# publish ahead of the founder acceptance gate (T1.11) and ahead of the API
+# deploy (T1.14), which is precisely the ordering the plan forbids.
+#
+# 🔴 THE ENV BLOCK IS THE POINT — BOTH VARS, NOT ONE.
+# `.env.production` and `.env.local` are BOTH gitignored (`.gitignore:56`), so
+# neither reaches CI. `resolveApiBaseUrl()` (`infrastructure/api/transport.ts:41`)
+# returns `''` when `VITE_AGRISYNC_API_URL` is unset — and eight further API
+# clients fall back to `http://localhost:5048`, LOGIN AMONG THEM
+# (`features/auth/data/otpClient.ts:44`). So a bundle built without this block
+# has no working login and no sync, and presents as mixed-content failures
+# against the operator's own machine. Setting only the Maps key ships that.
+#
+# Values mirror `android-release.yml:47-61` EXACTLY, and the build command is
+# `npm run build` — the same script the APK job runs — so "the APK and the web
+# bundle were built from the same inputs" is a true statement rather than a
+# hopeful one.
+name: web-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type PUBLISH to confirm — this step is one-way (Dexie forward-only)'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and publish mobile-web
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify confirmation
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRM" != "PUBLISH" ]; then
+            echo "::error::Refusing to publish. Type PUBLISH to confirm. The web step cannot be rolled back — a device on Dexie 24 cannot open its database on a 22 bundle." >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Mirrors android-release.yml — the lockfile omits Linux-only @emnapi
+      # optional deps, so `npm ci` fails here where `npm install` does not.
+      - name: Install sync-contract deps (tolerant)
+        working-directory: sync-contract
+        run: npm install --no-audit --no-fund
+
+      - name: Install mobile-web deps
+        working-directory: src/clients/mobile-web
+        run: npm ci
+
+      - name: Build web assets
+        working-directory: src/clients/mobile-web
+        env:
+          # Backend API base URL — baked into the bundle at build time. Without
+          # it resolveApiBaseUrl() returns '' and eight other clients fall back
+          # to http://localhost:5048, login included: no login, no sync.
+          # .env.production carries this locally but is gitignored / absent in
+          # CI, so CI must set it explicitly. Public URL, not a secret.
+          VITE_AGRISYNC_API_URL: "https://api.shramsafal.in"
+          # Google Maps JS key — baked in so the farm-boundary map + GPS render.
+          # Public client key (protected by HTTP-referrer restrictions, not
+          # secrecy); stored as a repo secret because .env.local is gitignored /
+          # absent in CI. Same secret android-release.yml:61 uses.
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+        run: npm run build
+
+      # Proves what SHIPPED, not what was SET. An env var can be present and
+      # still not reach the bundle (wrong mode, wrong working directory, a
+      # rename). This greps the built artifact for the actual origin, which is
+      # the only evidence that survives every one of those mistakes.
+      #
+      # Same idiom eslint.yml already uses to grep dist/ for leaked Gemini
+      # URLs. Its result folds into acceptance criterion A5 — it is what makes
+      # A5 able to see a dead API base URL, which the plan correctly recorded
+      # that no criterion could.
+      - name: Verify the built bundle carries the prod API origin
+        working-directory: src/clients/mobile-web
+        run: |
+          set -euo pipefail
+          if [ ! -d dist ]; then
+            echo "::error::dist/ missing — the build did not produce an artifact." >&2
+            exit 1
+          fi
+          if ! grep -rqF 'https://api.shramsafal.in' dist/; then
+            echo "::error::The built bundle does NOT contain https://api.shramsafal.in. resolveApiBaseUrl() would return '' (or clients would fall back to http://localhost:5048) and the published app would have no login and no sync. Refusing to publish." >&2
+            exit 1
+          fi
+          echo "bundle carries the prod API origin"
+          if grep -rqF 'localhost:5048' dist/; then
+            echo "::warning::The bundle also contains a localhost:5048 fallback string. Expected — it is the literal in the client fallbacks — but check it is not the resolved base URL."
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      # deploy-s3.sh defaults are already correct for prod:
+      #   DIST=<mobile-web>/dist · BUCKET=shramsafal-app-prod
+      #   DISTRIBUTION_ID=EFLL3RCLOOO60 · PUBLIC_URL=https://app.shramsafal.in
+      # It self-verifies from the edge after uploading, and preserves the
+      # Cache-Control policy (index.html/sw.js no-cache, hashed assets
+      # immutable) that a plain `aws s3 sync` strips.
+      - name: Publish to S3 + invalidate CloudFront
+        working-directory: src/clients/mobile-web
+        run: bash scripts/deploy-s3.sh
+
+      - name: Record the published bundle entry point
+        working-directory: src/clients/mobile-web
+        run: |
+          set -euo pipefail
+          echo "Published entry point(s):"
+          grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' dist/index.html | sort -u
+          echo "Record this in DEPLOYMENT_TRACKER.md alongside the backend SHA."

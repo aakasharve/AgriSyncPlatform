@@ -33,11 +33,16 @@ import {
     JobCardsPage,
     JobCardDetailPage,
     WorkerProfilePage,
+    LabourFeaturePage,
     ConsentScreen,
     ErasureRequestScreen,
     ExportRequestScreen,
-    PiiReviewQueuePage
+    PiiReviewQueuePage,
+    AiDraftsPage
 } from './lazyComponents';
+// Finding F3 — SchedulerPage's "Close Day" destination. See that module's
+// header for why this hop is a window event and not a prop path.
+import { requestOpenWaitingDrawer } from '../../features/oversight/oversightNavigationEvents';
 
 export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'profile') return null;
@@ -57,12 +62,42 @@ export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
                     ctx.setCurrentRoute('schedule');
                 }}
                 onOpenFinanceManager={() => ctx.setCurrentRoute('finance-manager')}
+                onOpenLabour={() => ctx.setCurrentRoute('labour')}
                 onOpenReferrals={() => ctx.setCurrentRoute('referrals')}
                 onOpenConsent={() => ctx.setCurrentRoute('consent')}
                 onOpenExport={() => ctx.setCurrentRoute('dataRights/export')}
                 onOpenErasure={() => ctx.setCurrentRoute('dataRights/erasure')}
                 onOpenQrDemo={() => ctx.setCurrentRoute('qr-demo')}
+                onOpenAiDrafts={() => ctx.setCurrentRoute('ai-drafts')}
                 onExit={() => ctx.setCurrentRoute('main')}
+            />
+        </div>
+    );
+};
+
+export const renderLabourRoute = (ctx: AppRouterContext): React.ReactNode => {
+    if (ctx.currentRoute !== 'labour') return null;
+    return (
+        <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+            <LabourFeaturePage
+                onExit={() => ctx.setCurrentRoute('profile')}
+                onGoToLog={() => {
+                    // spec: 2026-07-13-labour-attendance-approval-design (Task 3.4) —
+                    // tag the intent BEFORE navigating so mainView can show a
+                    // "why am I here" hint on arrival.
+                    ctx.setLogIntent('labour');
+                    ctx.setCurrentRoute('main');
+                }}
+                // spec: 2026-07-13-labour-attendance-approval-design (Task 3.5) —
+                // history + ledgerDefaults let the hub render a labour-only
+                // "just logged" summary via the SAME generateDayWorkSummary
+                // the reflect page uses; lastLabourLogIds says WHICH log(s)
+                // to show. All three are optional on LabourFeaturePage so
+                // the bare `?preview=labour` mount (no router, no ctx) stays
+                // crash-free.
+                history={ctx.history}
+                ledgerDefaults={ctx.ledgerDefaults}
+                lastLabourLogIds={ctx.lastLabourLogIds}
             />
         </div>
     );
@@ -138,11 +173,16 @@ export const renderScheduleRoute = (ctx: AppRouterContext): React.ReactNode => {
                 userResources={ctx.userResources}
                 onAddResource={(resource) => ctx.setUserResources(prev => [...prev, resource])}
                 onOpenTaskCreator={() => ctx.setShowTaskCreationSheet(true)}
-                onCloseDay={() => {
-                    ctx.setCurrentRoute('main');
-                    ctx.setMainView('log');
-                    ctx.setShowCloseDaySummary(true);
-                }}
+                // FINDING F3 — this button used to route to the log screen
+                // and set `showCloseDaySummary`, a flag whose only readers
+                // commit `0e4ad118` deleted: it navigated and then did
+                // nothing. Spec §4.2 moved the whole Daily Closure card into
+                // the waiting drawer, so that is where "Close Day" goes now.
+                // It stays ON this page (an overlay, not a route change —
+                // `OversightOverlay.tsx`), so the scheduler underneath is
+                // never unmounted and there is nothing to navigate back
+                // from.
+                onCloseDay={() => requestOpenWaitingDrawer()}
             />
         </div>
     );
@@ -382,6 +422,18 @@ export const renderPiiReviewRoute = (ctx: AppRouterContext): React.ReactNode => 
     );
 };
 
+// spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — offline
+// voice-note drafts (pendingAiJobs.result) waiting for the farmer to confirm
+// or discard them into a log.
+export const renderAiDraftsRoute = (ctx: AppRouterContext): React.ReactNode => {
+    if (ctx.currentRoute !== 'ai-drafts') return null;
+    return (
+        <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+            <AiDraftsPage onBack={() => ctx.setCurrentRoute('profile')} />
+        </div>
+    );
+};
+
 // CEI Phase 4 §4.8 — Worker profile
 export const renderWorkerProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'worker-profile') return null;
@@ -436,8 +488,10 @@ export const SIMPLE_ROUTE_RENDERERS: Array<(ctx: AppRouterContext) => React.Reac
     renderJobsRoute,
     renderJobDetailRoute,
     renderWorkerProfileRoute,
+    renderLabourRoute,
     renderConsentRoute,
     renderErasureRequestRoute,
     renderExportRequestRoute,
-    renderPiiReviewRoute
+    renderPiiReviewRoute,
+    renderAiDraftsRoute
 ];

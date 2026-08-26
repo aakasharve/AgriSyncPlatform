@@ -1,0 +1,21 @@
+{
+  "_comment": [
+    "IAM trust policy — agrisync-raw-replication-role.",
+    "spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN (raw-bucket-backup-recovery)",
+    "AUTHORED, NOT APPLIED. Standard S3-CRR trust shape: only the S3 service",
+    "itself may assume this role, to perform replication on the bucket's",
+    "behalf. No human or application principal is trusted here.",
+    "",
+    "APPLY (founder only):",
+    "  aws iam create-role --role-name agrisync-raw-replication-role \\",
+    "    --assume-role-policy-document file://replication-role-trust-policy.json"
+  ],
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {"Service": "s3.amazonaws.com"},
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}

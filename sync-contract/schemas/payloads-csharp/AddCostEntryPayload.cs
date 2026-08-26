@@ -26,5 +26,14 @@ public sealed record AddCostEntryPayload(
     Guid? PlotId = null,
     Guid? CropCycleId = null,
     Guid? CreatedByUserId = null,
-    LocationItem? Location = null
+    LocationItem? Location = null,
+    /// <summary>Allowed values: "Expense", "Income".</summary>
+    string? Direction = null,
+    decimal? Qty = null,
+    string? Unit = null,
+    decimal? UnitPrice = null,
+    /// <summary>Allowed values: "Cash", "UPI", "Bank", "Credit".</summary>
+    string? PaymentMode = null,
+    string? VendorName = null,
+    IReadOnlyList<string>? Attachments = null
 );

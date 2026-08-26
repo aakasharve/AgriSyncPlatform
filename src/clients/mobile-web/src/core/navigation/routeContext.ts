@@ -53,6 +53,14 @@ export interface AppRouterContext {
     setCurrentRoute: Navigation['setCurrentRoute'];
     mainView: Navigation['mainView'];
     setMainView: Navigation['setMainView'];
+    // spec: 2026-07-13-labour-attendance-approval-design (Task 3.4) — "why am
+    // I here" hint carried from the labour feature into the log page.
+    logIntent: Navigation['logIntent'];
+    setLogIntent: Navigation['setLogIntent'];
+    // spec: 2026-07-13-labour-attendance-approval-design (Task 3.5) — ids of
+    // the log(s) saved while logIntent === 'labour'; threaded to the labour
+    // route so it can render a "just logged" labour-only summary.
+    lastLabourLogIds: Navigation['lastLabourLogIds'];
 
     // log/context
     logScope: LogContext['logScope'];
@@ -131,10 +139,12 @@ export interface AppRouterContext {
     setShowQuickLog: React.Dispatch<React.SetStateAction<boolean>>;
     reflectFocusRequest: { logId: string; date: string; plotId?: string } | null;
     setReflectFocusRequest: React.Dispatch<React.SetStateAction<{ logId: string; date: string; plotId?: string } | null>>;
-    showCloseDaySummary: boolean;
-    setShowCloseDaySummary: React.Dispatch<React.SetStateAction<boolean>>;
-    showCloseYesterdaySummary: boolean;
-    setShowCloseYesterdaySummary: React.Dispatch<React.SetStateAction<boolean>>;
+    // FINDING F3 — `showCloseDaySummary` / `showCloseYesterdaySummary` were
+    // removed from this contract. Their only readers went with the Daily
+    // Closure card in commit `0e4ad118` (spec §4.2 moved it into the waiting
+    // drawer), so the fields survived as a type that let three call sites
+    // keep writing to nothing. Keeping them typed here is what made the dead
+    // path compile.
 
     // derived presentation
     ownerDisplayName: string;

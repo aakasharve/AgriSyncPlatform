@@ -7,6 +7,7 @@ using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Schedules;
@@ -104,4 +105,47 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
     // DATA_PRINCIPLE_SPINE sub-phase 02.3 — warm-tier transcript persistence;
     // not exercised by JobCard pipeline tests so a virtual no-op is sufficient.
     public virtual Task AddTranscriptAsync(ShramSafal.Domain.AI.Transcript transcript, CancellationToken ct = default) => Task.CompletedTask;
+
+    // --- Task 11 (spec: 2026-07-13-labour-attendance-approval-design) — Field
+    // Operator identity commands. These five all have DEFAULT bodies on
+    // IShramSafalRepository (A10), so this abstract class is not REQUIRED to
+    // re-declare them to compile. It does so anyway, `virtual`, matching every
+    // other member in this file — a C# class that relies on an interface's own
+    // default-interface-method body (rather than declaring its own virtual
+    // member) cannot have that member overridden by a further-derived class;
+    // dispatch through an IShramSafalRepository-typed reference would keep
+    // resolving to the interface default no matter what a FakeRepo subclass
+    // declares. Skipping this would make every FakeRepo override below
+    // silently no-op instead of failing to compile — worse than a compile
+    // error, so it is called out explicitly here.
+    public virtual Task AddFieldOperatorAsync(FieldOperator o, CancellationToken ct = default) => Task.CompletedTask;
+    public virtual Task<FieldOperator?> GetFieldOperatorByIdAsync(Guid id, CancellationToken ct = default) => Task.FromResult<FieldOperator?>(null);
+    public virtual Task<LabourAssignment?> GetLabourAssignmentByIdAsync(Guid id, CancellationToken ct = default) => Task.FromResult<LabourAssignment?>(null);
+    public virtual Task<IReadOnlyList<FieldOperator>> GetFieldOperatorsForFarmAsync(FarmId farmId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<FieldOperator>>([]);
+    public virtual Task<bool> TryAddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default) => Task.FromResult(true);
+
+    // Task 12b — restated here for the SAME reason as the Task 11 block above:
+    // an interface DEFAULT implementation is not a virtual class member, so a
+    // FakeRepo subclass could not override it and every override would silently
+    // no-op instead of failing to compile.
+    public virtual Task AddLabourCorrectionAsync(LabourCorrection c, CancellationToken ct = default) => Task.CompletedTask;
+    public virtual Task<IReadOnlyList<FieldOperatorWorkRow>> GetFieldOperatorWorkRowsForAssignmentAsync(Guid labourAssignmentId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<FieldOperatorWorkRow>>([]);
+    public virtual Task RemoveFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default) => Task.CompletedTask;
+    public virtual Task AddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default) => Task.CompletedTask;
+
+    // LABOUR_PHASE2 Phase 5 (migration ②) — restated `virtual` for the SAME
+    // reason as the two blocks above, and it matters more here than anywhere
+    // else in this file: GetLabourManagementGrantAsync is the input to an
+    // AUTHORIZATION decision. Left as the interface default, a FakeRepo that
+    // "grants" the capability would be silently ignored, every allow-case test
+    // would fail, and — far worse — every DENY-case test would still pass while
+    // proving nothing about the grant path.
+    public virtual Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, CancellationToken ct = default) => Task.FromResult(false);
+    public virtual Task<FarmMembership?> GetTrackedFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default) => Task.FromResult<FarmMembership?>(null);
+
+    // Task 1.2's roster read, restated `virtual` for the third time for the same
+    // reason. Same default (empty) as the interface body, so nothing that relied
+    // on it changes — it simply becomes overridable, which the Phase 5
+    // labour-permission roster read needs.
+    public virtual Task<List<FarmMembership>> GetFarmMembershipsAsync(FarmId farmId, CancellationToken ct = default) => Task.FromResult(new List<FarmMembership>());
 }

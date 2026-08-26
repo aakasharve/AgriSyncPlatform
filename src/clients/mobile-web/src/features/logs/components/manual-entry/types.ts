@@ -10,6 +10,7 @@ import {
     LogTimelineEntry, PlannedTask, DailyLog, DisturbanceEvent
 } from '../../../../types';
 import type { LogProvenance } from '../../../../domain/ai/LogProvenance';
+import type { FarmWideDaySummary } from '../../../../app/helpers/appContentDailyCounts';
 
 export const SAFE_DEFAULTS: LedgerDefaults = {
     irrigation: {
@@ -60,7 +61,28 @@ export interface ManualEntryProps {
     initialData?: AgriLogResponse | null;
     provenance?: LogProvenance | null;
     onDataConsumed?: () => void;
+    /**
+     * spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — OPTIONAL
+     * override for the submitted `date` field. Every existing caller omits
+     * this, so the default stays exactly `getDateKey()` (today), unchanged
+     * for the live voice/manual path where "today" is correct. It exists
+     * for the offline AI-drafts reviewing surface: a note recorded at dusk
+     * and drained (or reviewed) the next morning must be dated to when the
+     * farmer actually recorded it, not to whichever day he happens to open
+     * the review screen — see `AiDraftsPage.tsx`.
+     */
+    recordedDateKey?: string;
     todayCountsMap?: Record<string, TodayCounts>;
+    /**
+     * LABOUR_PHASE2 P2.4 — what the farmer recorded for the WHOLE FARM today.
+     *
+     * SEPARATE from `todayCountsMap` on purpose. That map is per-plot and its
+     * consumer SUMS it across the plots in context, so folding a farm-wide
+     * record into it multiplies one record by the plot count — `R24` measured
+     * a plot's 3 labour entries becoming 11. This prop has no plot key, so the
+     * two can never be added together.
+     */
+    farmWideToday?: FarmWideDaySummary;
     transcriptEntries?: LogTimelineEntry[];  // Today's past logs for timeline display
     todayLogs?: DailyLog[];                  // Full log objects for loading into editor
     onLogSelect?: (logId: string) => void;   // Callback when user selects a log to edit

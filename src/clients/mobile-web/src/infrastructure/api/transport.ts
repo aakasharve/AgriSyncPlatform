@@ -72,6 +72,59 @@ export function toAuthSession(dto: AuthResponseDto): AuthSession {
     };
 }
 
+/**
+ * A refresh attempt has THREE outcomes, not two.
+ *
+ * The original signature was `Promise<AuthSession | null>`, and `null` was
+ * made to carry two facts that require opposite responses:
+ *
+ *   - the server judged the credential and refused it  → destroy it
+ *   - we never reached a server that could judge it    → keep it
+ *
+ * Collapsing those meant one dropped packet at app launch wiped the Android
+ * Keystore refresh token — the only durable credential on the phone — and the
+ * farmer was locked out for the life of the APK. This type is the fix: the
+ * caller can no longer fail to distinguish the two, because the compiler will
+ * not let it.
+ *
+ * It is the same TRANSPORT-vs-REJECTION axis the sync layer already draws in
+ * `RejectionPolicy.categorizePushFailure`, which is the classifier this reuses.
+ *
+ * spec: secure-remembered-device-sessions-2026-06-24 (Task 6.2, amended)
+ */
+export type RefreshOutcome =
+    /** The server issued a new session. Stored; the caller is authenticated. */
+    | { kind: 'refreshed'; session: AuthSession }
+    /**
+     * The server read the request and refused it (401/403, or no stored
+     * credential to send at all). Fail-closed: all local and Keystore auth
+     * state has already been cleared by the time this is returned.
+     */
+    | { kind: 'rejected' }
+    /**
+     * Nothing judged the credential — no response at all, a 5xx/408/429, or a
+     * 200 that was not a session (captive portal). Every credential is left
+     * EXACTLY as it was, so the next attempt on a working connection succeeds.
+     */
+    | { kind: 'unreachable' };
+
+/**
+ * Does this response body actually contain a session?
+ *
+ * A captive portal (hotel, railway, village wifi) intercepts the POST and
+ * answers 200 with its own HTML. Axios resolves, and the old code happily
+ * built an `AuthSession` whose accessToken was `undefined` and wrote it to
+ * storage — replacing a good token with a broken one. A 200 that is not a
+ * session means we did not reach our server, which is `unreachable`.
+ */
+export function isAuthResponse(data: unknown): data is AuthResponseDto {
+    if (typeof data !== 'object' || data === null) {
+        return false;
+    }
+    const token = (data as { accessToken?: unknown }).accessToken;
+    return typeof token === 'string' && token.length > 0;
+}
+
 export function shouldSkipAuthRetry(url?: string): boolean {
     if (!url) {
         return false;

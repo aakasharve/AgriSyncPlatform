@@ -8,6 +8,7 @@ import { recordAiFailureSignature } from './AiDoomLoopDetector';
 // archive immediately after a successful AI parse. The function is a
 // no-op when the user has not granted FullHistoryJournal.
 import { archiveToRetainedTierIfConsented } from '../voice/VoiceClipRetention';
+import { reclaimAbandonedAiJobs } from './abandonedStateRecovery';
 
 const MAX_RETRIES = 5;
 const BATCH_LIMIT = 10;
@@ -42,10 +43,39 @@ function emitPermanentFailureToast(): void {
 }
 
 export class AiJobWorker {
+    /**
+     * P0.7 — re-entrancy guard, added WITH the reclaim below and load-bearing
+     * for it. `run()` is called from more than one place and was free to
+     * overlap with itself. Once a cycle reclaims `processing` rows, an
+     * overlapping call would flip a job the first call is genuinely working on
+     * back to `pending` and parse it a second time. The guard is what makes
+     * "this worker holds nothing right now" true at the top of the cycle.
+     */
+    private static cycleInProgress = false;
+
     static async run(): Promise<void> {
         if (!navigator.onLine || !getAuthSession()) {
             return;
         }
+
+        if (AiJobWorker.cycleInProgress) {
+            return;
+        }
+
+        AiJobWorker.cycleInProgress = true;
+        try {
+            await AiJobWorker.runCycle();
+        } finally {
+            AiJobWorker.cycleInProgress = false;
+        }
+    }
+
+    private static async runCycle(): Promise<void> {
+        // P0.7 — reclaim jobs a killed session left in `processing`, before this
+        // cycle takes anything in hand. Only `pendingAiJobs` — never the upload
+        // tables, whose worker runs on an independent timer and may genuinely
+        // hold a row right now.
+        await reclaimAbandonedAiJobs();
 
         const db = getDatabase();
         const pendingJobs = await db.pendingAiJobs
@@ -82,26 +112,66 @@ export class AiJobWorker {
         await this.updateVoiceClipStatus(job, 'parsing');
 
         try {
-            await this.executeJob(job);
+            // KEEP THE ANSWER. `executeJob` used to await the parse and assign
+            // it to nothing: the audio uploaded, the server read it, this row
+            // was marked `completed`, and the farmer's spoken note produced
+            // nothing he could ever see. Marking a job done while throwing away
+            // the only thing it produced is the sharpest form of the dishonesty
+            // this codebase is removing — a green tick over an empty hand.
+            const payload = await this.executeJob(job);
 
             await db.pendingAiJobs.update(job.id, {
                 status: 'completed',
                 updatedAt: systemClock.nowISO(),
                 lastError: undefined,
                 nextRetryAfterMs: undefined,
+                result: {
+                    operationType: job.operationType,
+                    receivedAtUtc: systemClock.nowISO(),
+                    payload,
+                },
             });
             await this.updateVoiceClipStatus(job, 'parsed');
 
             // spec: voice-diary-e2e-2026-05-17 (D.16) — opportunistic
             // retained-tier archive. The function reads FullHistoryJournal
             // consent and exits early when not granted, so this hook is
-            // safe to call unconditionally on every successful voice
-            // parse. Errors are swallowed inside the function (logged
-            // only) — a failed archive must not affect the AI job
-            // completion path.
+            // safe to call unconditionally on every successful voice parse.
+            //
+            // THE RESULT IS NO LONGER DISCARDED (founder ruling D9).
+            //
+            // This call site used to be `await archiveToRetainedTierIfConsented(clipId);`
+            // — value dropped on the floor — under a comment saying errors were
+            // "swallowed inside the function (logged only)", while that function's
+            // own comment said observability was "owned by the caller (AiJobWorker
+            // hook)". Both halves pointed at the other and neither reported
+            // anything. A consenting farmer's clip could fail to reach the
+            // permanent tier, the job would still tick green, and thirty days
+            // later the clip left the Voice Diary with nothing anywhere
+            // recording why.
+            //
+            // The failure now lands in `emitClientError` from inside the archive
+            // function (the only place that knows WHY it failed). What is added
+            // here is the other half the brief asks for: the JOB RECORD stops
+            // over-claiming. `status` stays `completed` because the parse
+            // genuinely succeeded and re-running this job to retry an archive
+            // would re-run a paid AI call and re-upload the audio — strictly
+            // worse than the defect. `retainedArchive` is what makes "parsed and
+            // archived" distinguishable from "parsed, archive failed".
             const clipId = job.context.idempotencyKey;
             if (clipId && job.operationType === 'voice_parse' && job.context.operation !== 'text') {
-                await archiveToRetainedTierIfConsented(clipId);
+                // `job.context.farmId` is passed so a `clip_row_missing` report is not
+                // content-free: without it that branch has no row to read a farm from,
+                // and the surface these render on is farm-scoped (review I1 note).
+                const outcome = await archiveToRetainedTierIfConsented(clipId, job.context.farmId);
+                await db.pendingAiJobs.update(job.id, {
+                    retainedArchive: {
+                        status: outcome.status,
+                        ...(outcome.status === 'archived' ? {} : { reason: outcome.reason }),
+                        ...('attempts' in outcome ? { attempts: outcome.attempts } : {}),
+                        at: systemClock.nowISO(),
+                    },
+                });
             }
         } catch (error) {
             const nextRetryCount = job.retryCount + 1;
@@ -161,7 +231,7 @@ export class AiJobWorker {
         });
     }
 
-    private static async executeJob(job: PendingAiJobWithId): Promise<void> {
+    private static async executeJob(job: PendingAiJobWithId): Promise<unknown> {
         const { context } = job;
 
         const farmId = context.farmId?.trim();
@@ -178,7 +248,7 @@ export class AiJobWorker {
                     throw new Error('Missing text transcript for queued text voice parse.');
                 }
 
-                await agriSyncClient.parseTextLog(
+                return await agriSyncClient.parseTextLog(
                     transcript,
                     parseContext,
                     farmId,
@@ -207,7 +277,7 @@ export class AiJobWorker {
                 throw new Error('Missing audio blob for queued voice parse job.');
             }
 
-            await agriSyncClient.parseVoiceLog(
+            return await agriSyncClient.parseVoiceLog(
                 job.inputBlob,
                 job.inputMimeType ?? 'audio/webm',
                 parseContext,
@@ -237,7 +307,7 @@ export class AiJobWorker {
         }
 
         if (job.operationType === 'receipt_extract') {
-            await agriSyncClient.extractReceipt(
+            return await agriSyncClient.extractReceipt(
                 job.inputBlob,
                 job.inputMimeType ?? 'image/jpeg',
                 farmId,
@@ -252,7 +322,7 @@ export class AiJobWorker {
                 throw new Error('Missing cropName for queued patti extract job.');
             }
 
-            await agriSyncClient.extractPatti(
+            return await agriSyncClient.extractPatti(
                 job.inputBlob,
                 job.inputMimeType ?? 'image/jpeg',
                 cropName,

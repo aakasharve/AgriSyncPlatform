@@ -89,10 +89,29 @@ export const syncMachine = setup({
     initial: 'idle',
     context: { rejectedMutations: [], lastSyncAtMs: null },
     states: {
+        /*
+         * §P0.7 review B002 — `CONFLICT_RESOLVED` IS ACCEPTED WHEREVER
+         * `MUTATION_REJECTED` IS, AND FOR THE SAME REASON.
+         *
+         * It used to be handled only in `conflict`. That was survivable while the
+         * only emitter was `ConflictResolutionService`, which the farmer reaches
+         * from the conflict page — so the machine was already in `conflict` by
+         * construction. It stopped being survivable once the worker began
+         * announcing a row the instant the server ACCEPTS it: `executeCycle`
+         * sends `TRIGGER` first, so every acceptance during a cycle arrives while
+         * the machine is in `syncing`, where the event was silently dropped and
+         * the badge stayed lit over a row that had already synced.
+         *
+         * Neither of the two below takes a target. In `syncing` a cleared
+         * conflict must not yank the machine to `idle` mid-cycle — `SYNC_DONE`
+         * decides that, and its guard reads the list this action just shortened,
+         * so the settle is correct without a second opinion here.
+         */
         idle: {
             on: {
                 TRIGGER: 'syncing',
                 MUTATION_REJECTED: { target: 'conflict', actions: 'appendRejection' },
+                CONFLICT_RESOLVED: { actions: 'removeResolution' },
                 GO_OFFLINE: 'offline',
             },
         },
@@ -103,6 +122,7 @@ export const syncMachine = setup({
                     { target: 'conflict', actions: 'appendBatchRejections' },
                 ],
                 MUTATION_REJECTED: { target: 'conflict', actions: 'appendRejection' },
+                CONFLICT_RESOLVED: { actions: 'removeResolution' },
                 GO_OFFLINE: 'offline',
             },
         },

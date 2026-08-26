@@ -10,11 +10,12 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Sprout, Zap, Tractor, FlaskConical, ArrowLeft, Globe, Shield, Download, Trash2, CreditCard } from 'lucide-react';
+import { User, Sprout, Zap, Tractor, FlaskConical, ArrowLeft, Globe, Shield, Download, Trash2, CreditCard, Mic } from 'lucide-react';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useFarmContext } from '../../core/session/FarmContext';
+import { requestCreateFarmWizard, promptAndJoinFarmViaQr } from '../../app/hooks/useFarmContextState';
 import { useWorkerProfile } from '../work/hooks/useWorkerProfile';
 import { AddMemberWizard } from '../people/components/AddMemberWizard';
 import FarmInviteQrSheet from '../onboarding/qr/FarmInviteQrSheet';
@@ -63,11 +64,15 @@ interface ProfilePageProps {
     onDeletePerson?: (id: string) => void;
     onOpenScheduleLibrary?: (cropId?: string) => void;
     onOpenFinanceManager?: () => void;
+    onOpenLabour?: () => void;
     onOpenReferrals?: () => void;
     onOpenConsent?: () => void;
     onOpenExport?: () => void;
     onOpenErasure?: () => void;
     onOpenQrDemo?: () => void;
+    /** spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — offline
+     * voice-note drafts waiting for the farmer's review. */
+    onOpenAiDrafts?: () => void;
     /** Leave the Profile screen (back to the main app / daily log). */
     onExit?: () => void;
     /**
@@ -82,8 +87,8 @@ interface ProfilePageProps {
 const ProfilePage: React.FC<ProfilePageProps> = ({
     profile, crops, onUpdateProfile, onUpdateCrops,
     onAddPerson, onDeletePerson,
-    onOpenScheduleLibrary, onOpenFinanceManager, onOpenReferrals,
-    onOpenConsent, onOpenExport, onOpenErasure,
+    onOpenScheduleLibrary, onOpenFinanceManager, onOpenLabour, onOpenReferrals,
+    onOpenConsent, onOpenExport, onOpenErasure, onOpenAiDrafts,
     onExit,
     initialTab,
 }) => {
@@ -151,6 +156,21 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
             farmAdmin.setMyFarm({ farmId: picked.farmId, name: picked.name, role: picked.role, subscription: picked.subscription ?? null });
         }
         setActiveTab('identity');
+    }, [switchFarm, farmAdmin]);
+
+    // spec: owner-oversight-loop (Task 12) — the "तुमच्या शेती · Your farms"
+    // row's own switch handler: switches farm context only, same as
+    // AppHeader's own farm-switcher trigger (no drill-into-Identity, unlike
+    // `handleOpenFarm` above, which is a DIFFERENT affordance — "open this
+    // farm's page" — that already exists in `FarmsSection`). Mirrors
+    // `handleOpenFarm`'s own `farmAdmin.setMyFarm` sync so the profile
+    // summary's farm name stays correct after switching from this row too.
+    const handleSwitchFarmFromMenu = React.useCallback((farmId: string) => {
+        switchFarm(farmId);
+        const picked = farmAdmin.myMemberships.find(m => m.farmId === farmId);
+        if (picked) {
+            farmAdmin.setMyFarm({ farmId: picked.farmId, name: picked.name, role: picked.role, subscription: picked.subscription ?? null });
+        }
     }, [switchFarm, farmAdmin]);
 
     // Guided-setup progress: a section counts as "done" once its core data
@@ -292,7 +312,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     return '';
                 };
                 const SETUP_HELP: Partial<Record<ProfileTab, { what: string; do: string; why: string }>> = {
-                    identity: { what: 'तुमची ओळख — तुम्ही कोण आणि कुठले शेतकरी.', do: 'तुमचं पूर्ण नाव आणि गाव भरा. पुढे Farmer ID जोडलं की ७/१२ आपोआप येईल.', why: 'पडताळलेली ओळख असली की तुमच्या नोंदींवर विश्वास वाढतो.' },
+                    identity: { what: 'तुमची ओळख — तुम्ही कोण आणि कुठले शेतकरी.', do: 'तुमचं पूर्ण नाव आणि गाव भरा.', why: 'पडताळलेली ओळख असली की तुमच्या नोंदींवर विश्वास वाढतो.' },
                     structure: { what: 'तुम्ही काय पिकवता आणि कुठे — पिके व जमिनीचे तुकडे (प्लॉट).', do: 'पीक निवडा, किती प्लॉट सांगा, प्रत्येकाची सीमा नकाशावर काढा.', why: 'प्रत्येक प्लॉटची रोजची नोंद, हवामान व खर्च वेगळे कळतात.' },
                     utils: { what: 'तुमच्या शेतातील पाण्याचे स्रोत आणि वीज जोडणी.', do: 'विहीर किंवा बोअर, मोटर किती HP, आणि वीज जोडणी भरा.', why: 'पाणी व वीज खर्चाचं नियोजन नीट करता येतं.' },
                     machines: { what: 'तुमची स्वतःची किंवा भाड्याची शेती-यंत्रे.', do: 'प्रत्येक यंत्र जोडा — ट्रॅक्टर, पंप, फवारणी यंत्र वगैरे.', why: 'यंत्रांचा वापर आणि खर्च नोंदवता येतो.' },
@@ -322,6 +342,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     export: { label: 'डेटा डाउनलोड · Export my data', icon: <Download size={20} />, subtitle: 'सर्व डेटाची प्रत · A copy of your data' },
                     erase: { label: 'डेटा पुसा · Erase my data', icon: <Trash2 size={20} />, subtitle: 'कायमचा पुसा · Permanent' },
                     billing: { label: 'बिलिंग · Billing', icon: <CreditCard size={20} />, subtitle: 'तुमचा प्लॅन · Your plan' },
+                    // English-only placeholder copy (Global Constraint: never compose new
+                    // Marathi) — every other row here already had an existing Marathi
+                    // string to reuse verbatim; this one does not.
+                    'ai-drafts': { label: 'AI Drafts', icon: <Mic size={20} />, subtitle: 'Review voice notes' },
                 };
                 const settingsItems = buildSettingsExtraIds(isOwner).map(id => ({ id, ...settingsMeta[id] }));
 
@@ -329,6 +353,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     if (id === 'consent') { onOpenConsent?.(); return; }
                     if (id === 'export') { onOpenExport?.(); return; }
                     if (id === 'erase') { onOpenErasure?.(); return; }
+                    if (id === 'ai-drafts') { onOpenAiDrafts?.(); return; }
                     setActiveExtra(id); // 'language' | 'billing' — folded sub-screens
                 };
 
@@ -387,12 +412,17 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             farms={farmAdmin.myMemberships}
                             familyName={profile.name ? `${profile.name.split(' ')[0]} कुटुंब` : undefined}
                             onOpenFarm={handleOpenFarm}
+                            currentFarmId={profileFarmId ?? undefined}
+                            onSwitchFarm={handleSwitchFarmFromMenu}
+                            onCreateFarm={requestCreateFarmWizard}
+                            onJoinViaQr={promptAndJoinFarmViaQr}
                             language={language}
                             setupProgress={setupProgress}
                             items={menuItems}
                             onSelect={setActiveTab}
                             onExit={onExit}
                             onOpenFinance={onOpenFinanceManager}
+                            onOpenLabour={onOpenLabour}
                             onOpenReferrals={onOpenReferrals}
                             settingsItems={settingsItems}
                             onSelectExtra={handleSelectExtra}

@@ -35,6 +35,7 @@ export type {
     LogScope,
     CropActivityEvent,
     IrrigationEvent,
+    AttributedOperator,
     LabourEvent,
     InputMethod,
     InputReason,

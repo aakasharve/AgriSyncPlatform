@@ -6,6 +6,8 @@ import { getDatabase } from '../storage/DexieDatabase';
 import { SessionStore } from '../storage/SessionStore';
 import { getAuthSession } from '../storage/AuthTokenStore';
 import { getLastCachedMeContext } from '../../core/session/MeContextService';
+import { AgriLogResponseSchema } from '../../domain/ai/contracts/AgriLogResponseSchema';
+import type { AgriLogResponse } from '../../types';
 
 // voice-safetrim-harden-2026-06-10 — a .trim() on a non-string (response/input
 // field that's unexpectedly a number/object) was throwing "x.trim is not a
@@ -67,6 +69,44 @@ export function normalizeDriftedParsedLog(raw: unknown): unknown {
         if (key in out) out[key] = withIds(out[key]);
     }
     return out;
+}
+
+// PURE MOVE — extracted verbatim from `BackendAiClient.parseInput` (the live
+// online-parse path). Behavior is unchanged: `.safeParse` first, and on drift
+// fall back to `normalizeDriftedParsedLog` (never discard a usable parse).
+//
+// THIS IS THE ONE READING of a raw `parsedLog` payload into the strict
+// `AgriLogResponse` shape the rest of the app consumes. `PendingAiJobRecord.result`
+// (DexieDatabase.ts) stores the API payload verbatim precisely so both the live
+// path and the offline-drafts reviewing surface (`PendingAiResultsReader.ts`)
+// normalize through this SAME function — never a second parser that could drift
+// from this one.
+export function normalizeParsedLog(rawParsedLog: unknown): AgriLogResponse {
+    // DATA_PRINCIPLE_SPINE 02.6 — strict Zod validation at the wire boundary.
+    // The shallow `isAgriLogResponse` typeof check accepted any object with the
+    // eight expected array keys, letting hallucinated fields and off-canon enum
+    // values (e.g. `categoryId: "made_up"`) corrupt the trust ledger silently.
+    // The schema enforces `.strict()` top-level keys, canonical `categoryId`
+    // codes, typed enums, and YYYY-MM-DD / ISO-8601 shaped fields.
+    const parseResult = AgriLogResponseSchema.safeParse(rawParsedLog);
+    // We cast back to the structural `AgriLogResponse` from log.types.ts
+    // because that interface (with its concrete event-event union shapes) is
+    // what the rest of the app consumes. The schema and the TS interface are
+    // kept in lockstep by the AgriLogResponseSchema header invariant.
+    if (parseResult.success) {
+        return parseResult.data as unknown as AgriLogResponse;
+    }
+
+    // ROBUSTNESS_2026-06-10 (Option A): the server parsed the log fine, but its
+    // legacy-prompt shape fails the strict schema (missing event ids, scalar
+    // confidence, extra _meta keys). Don't discard a usable parse — log the
+    // drift for telemetry and normalize the raw payload so it renders on the
+    // confirm screen (the human review is the integrity gate).
+    console.warn(
+        '[voice-parse] AgriLogResponse schema drift — using normalized raw parse instead of discarding.',
+        parseResult.error?.issues,
+    );
+    return normalizeDriftedParsedLog(rawParsedLog) as unknown as AgriLogResponse;
 }
 
 export async function resolveFarmIdFromCache(): Promise<string | undefined> {

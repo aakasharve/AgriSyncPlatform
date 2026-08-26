@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Globalization;
 using System.Text.Json;
+using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.UseCases.Sync.PullSyncChanges;
@@ -48,7 +49,32 @@ public static class SyncEndpoints
                 AppVersion: string.IsNullOrWhiteSpace(appVersion) ? null : appVersion);
 
             var result = await handler.HandleAsync(command, ct);
-            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+            if (!result.IsSuccess)
+            {
+                return ToErrorResult(result.Error);
+            }
+
+            // RG5 (Rulebook §4.1 — Observability). This endpoint answers 200
+            // even when it refused some of the farmer's mutations, and that
+            // wire contract is deliberately NOT being changed here: APK v1.0.7
+            // in the field reads 200 as "batch handled, inspect per-mutation
+            // status", and P11 old-client compatibility is already NOT_PROVEN
+            // for this cutover. Changing the status code would be a real
+            // regression, so the rejection is surfaced out-of-band instead:
+            // the count is stamped for RequestObservabilityMiddleware, which
+            // writes an api.error row into analytics.events — the same rail it
+            // already uses for 5xx and critical 4xx. The per-mutation detail
+            // (which mutation, which error code) is logged by
+            // PushSyncBatchHandler; this stamp is the request-level signal.
+            var rejectedCount = result.Value.Results.Count(
+                r => string.Equals(r.Status, PushSyncBatchHandler.RejectedStatus, StringComparison.Ordinal));
+            if (rejectedCount > 0)
+            {
+                httpContext.Items[RequestObservabilityKeys.RejectedWorkItemCount] = rejectedCount;
+                httpContext.Items[RequestObservabilityKeys.RejectedWorkReason] = "sync.mutation_rejected";
+            }
+
+            return Results.Ok(result.Value);
         })
         .WithName("PushSyncBatch");
 

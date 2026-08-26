@@ -7,6 +7,7 @@ using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Schedules;
@@ -112,6 +113,40 @@ internal sealed class InMemoryShramSafalRepository : IShramSafalRepository
 
     public Task AddLabourAssignmentAsync(LabourAssignment a, CancellationToken ct = default)
     { CapturedLabour.Add(a); return Task.CompletedTask; }
+
+    // ── Task 11 (spec: 2026-07-13-labour-attendance-approval-design) —
+    // Field Operator identity commands. Port has three homes (interface, EF
+    // impl, this in-memory double); this sealed class needs no `virtual` —
+    // nothing subclasses it.
+    public List<FieldOperator> CapturedFieldOperators { get; } = [];
+    public List<FieldOperatorWorkRow> CapturedFieldOperatorWorkRows { get; } = [];
+
+    public Task AddFieldOperatorAsync(FieldOperator o, CancellationToken ct = default)
+    { CapturedFieldOperators.Add(o); return Task.CompletedTask; }
+
+    public Task<FieldOperator?> GetFieldOperatorByIdAsync(Guid id, CancellationToken ct = default)
+        => Task.FromResult(CapturedFieldOperators.FirstOrDefault(o => o.Id == id));
+
+    public Task<LabourAssignment?> GetLabourAssignmentByIdAsync(Guid id, CancellationToken ct = default)
+        => Task.FromResult(CapturedLabour.FirstOrDefault(a => a.Id == id));
+
+    public Task<IReadOnlyList<FieldOperator>> GetFieldOperatorsForFarmAsync(FarmId farmId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<FieldOperator>>(
+            CapturedFieldOperators.Where(o => o.OriginatingFarmId == farmId).ToList());
+
+    /// <summary>In-memory "ON CONFLICT DO NOTHING" — mirrors the unique index on (FieldOperatorId, LabourAssignmentId).</summary>
+    public Task<bool> TryAddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default)
+    {
+        var alreadyExists = CapturedFieldOperatorWorkRows.Any(
+            x => x.FieldOperatorId == r.FieldOperatorId && x.LabourAssignmentId == r.LabourAssignmentId);
+        if (alreadyExists)
+        {
+            return Task.FromResult(false);
+        }
+
+        CapturedFieldOperatorWorkRows.Add(r);
+        return Task.FromResult(true);
+    }
 
     public Task AddMachineryUsageAsync(MachineryUsage m, CancellationToken ct = default)
     { CapturedMachinery.Add(m); return Task.CompletedTask; }

@@ -44,11 +44,11 @@ public sealed class S3RetainedBlobStore : IRetainedBlobStore
         _db = db;
     }
 
-    public async Task DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct)
+    public async Task<RetainedVoiceDeletionOutcome> DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct)
     {
         if (userId == Guid.Empty)
         {
-            return;
+            return RetainedVoiceDeletionOutcome.NothingToDelete;
         }
 
         // 1. Enumerate every retained clip metadata row for the user.
@@ -64,17 +64,28 @@ public sealed class S3RetainedBlobStore : IRetainedBlobStore
 
         if (rows.Count == 0)
         {
-            return;
+            return RetainedVoiceDeletionOutcome.NothingToDelete;
         }
 
         if (string.IsNullOrWhiteSpace(_opt.BucketName))
         {
-            // No bucket configured (dev). Drop the metadata rows so the
-            // erasure manifest still completes; the S3 objects simply
-            // don't exist.
+            // No bucket configured. Drop the metadata rows so the erasure
+            // manifest still completes rather than blocking the farmer's
+            // erasure on a config state they cannot influence.
+            //
+            // This comment used to end "the S3 objects simply don't exist."
+            // That is FALSE whenever this branch is reached with rows present,
+            // and it was the origin of a false claim that reached the erasure
+            // audit record — see the note under the RemoveRange below.
             _db.VoiceClipsRetained.RemoveRange(rows);
             await _db.SaveChangesAsync(ct).ConfigureAwait(false);
-            return;
+
+            // Rows existed but nothing in S3 was touched. PersistAsync refuses
+            // to write a row while BucketName is blank, so these rows were
+            // written when a bucket WAS configured — the objects are still
+            // there. Reporting success here is what made the erasure record
+            // claim the voice tier was purged when it was not.
+            return RetainedVoiceDeletionOutcome.SkippedNoBucketConfigured;
         }
 
         foreach (var clip in rows)
@@ -94,6 +105,7 @@ public sealed class S3RetainedBlobStore : IRetainedBlobStore
 
         _db.VoiceClipsRetained.RemoveRange(rows);
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return RetainedVoiceDeletionOutcome.Deleted;
     }
 
     public async Task<Guid> PersistAsync(

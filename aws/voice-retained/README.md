@@ -147,6 +147,28 @@ Safer alternatives:
 1. **Detach the IAM policy** from the backend role. The bucket and clips stay; new persists fail; reads continue against any local clips. Re-attach to recover.
 2. **Toggle `RetainedBlobStore__BucketName=` to an empty string** in the env override + redeploy backend. Forces graceful degradation; clips remain in S3 untouched.
 
+   > ⚠️ **This orphans retained clips if a DPDP erasure runs while it is set — prefer option 1.**
+   >
+   > With the bucket name blank, `S3RetainedBlobStore.DeleteRetainedVoiceForUserAsync` takes its
+   > short-circuit: it **deletes the `ssf.voice_clips_retained` metadata rows** and makes **no S3
+   > call at all**. The clips do "remain in S3 untouched" — but the only rows that recorded where
+   > they are, and whose they are, are gone. The farmer's audio is then unattributable and
+   > unfindable by subject.
+   >
+   > This is not theoretical: `PersistAsync` refuses to write a metadata row while the bucket name
+   > is blank, so any row present was written when a bucket **was** configured, which means the
+   > object exists.
+   >
+   > Since 2026-08-16 the erasure record no longer hides this — the request is stamped
+   > `CompletedWithResidue` (status 4) with `retainedVoiceOutcome = "SkippedNoBucketConfigured"`
+   > rather than falsely reporting a purge. **The record is honest; the orphaning still happens.**
+   > Recovery is possible but manual: clip keys are deterministic
+   > (`retained/{userId}/{clipId}.bin`), so a prefix-list on `retained/{userId}/` finds the objects
+   > after the rows are gone.
+   >
+   > **Option 1 (detach the IAM policy) has none of this**: deletes fail loudly, the metadata rows
+   > survive, and the erasure record still reports residue honestly.
+
 If the bucket truly must be removed:
 
 ```bash

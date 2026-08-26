@@ -34,8 +34,24 @@ public sealed class AdminTestFixture : IAsyncLifetime
 {
     private const string TestDbName = "agrisync_admin_test";
 
-    private const string DefaultRootConnectionString =
-        "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=akash123";
+    /// <summary>
+    /// There is deliberately NO default connection string here any more.
+    ///
+    /// What stood here was a literal carrying the founder's Postgres superuser
+    /// password — the credential exposed on the public repo and rotated dead on
+    /// 2026-08-08. It was the last tracked copy on this branch. A dead secret is
+    /// still a secret in git history, and a default that silently half-works is
+    /// how it survived three cleanups.
+    ///
+    /// CI is unaffected: `ci-gate.yml` and `dotnet-ci.yml` both set
+    /// ADMIN_TESTS_ADMIN_ROOT_CONN explicitly to their disposable container
+    /// password, so this path was only ever taken by a local run.
+    ///
+    /// Locally, set ADMIN_TESTS_ADMIN_ROOT_CONN to your own maintenance-DB
+    /// connection. Failing loudly with that instruction beats a 28P01
+    /// authentication error that reads like a missing secret and is not one.
+    /// </summary>
+    private const string RootConnectionEnvVar = "ADMIN_TESTS_ADMIN_ROOT_CONN";
 
     private readonly string _rootConnString;
     private readonly string _testConnString;
@@ -46,8 +62,13 @@ public sealed class AdminTestFixture : IAsyncLifetime
 
     public AdminTestFixture()
     {
-        _rootConnString = Environment.GetEnvironmentVariable("ADMIN_TESTS_ADMIN_ROOT_CONN")
-                         ?? DefaultRootConnectionString;
+        _rootConnString = Environment.GetEnvironmentVariable(RootConnectionEnvVar)
+                         ?? throw new InvalidOperationException(
+                             $"{RootConnectionEnvVar} is not set. These tests need a Postgres "
+                             + "maintenance connection, and this fixture no longer ships a default "
+                             + "because the one it carried was a real credential. Set it to your "
+                             + "own maintenance DB, e.g. "
+                             + "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=<yours>");
 
         var builder = new NpgsqlConnectionStringBuilder(_rootConnString) { Database = TestDbName };
         _testConnString = builder.ConnectionString;

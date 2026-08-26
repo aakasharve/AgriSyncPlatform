@@ -50,6 +50,63 @@ public sealed class PullSyncChangesHandler(
         var dailyLogs = (await repository.GetDailyLogsChangedSinceAsync(farmIds, sinceUtc, ct))
             .Where(l => farmIdSet.Contains((Guid)l.FarmId))
             .ToList();
+        // ── LABOUR_PHASE2 Phase 3 — labour read-back ─────────────────────────
+        // Labour was written and never read back: a farmer recorded 8 workers on
+        // Phone A, and Phone B on a clean install saw the log with no labour at
+        // all. These two reads are that fix, and they are NOT wrapped in a
+        // degrade-and-continue block like JobCards / ComplianceSignals below.
+        //
+        // That is deliberate (doctrine P1). Labour is Phase-1 canonical data —
+        // what the farmer confirmed — and the same rule that keeps it out of
+        // CreateDailyLogHandler's best-effort side-car keeps it out of a
+        // best-effort branch here. A degraded read would have to answer with
+        // either `[]` ("this log has no labour" — a false statement about the
+        // farmer's own record) or `null` on some logs and not others. Failing the
+        // pull, exactly as the daily-log read above already does, is the honest
+        // outcome: the device retries and nothing is misreported meanwhile.
+        //
+        // The labour rows are children of `dailyLogs`, which is ALREADY farm-scoped
+        // twice over (SQL predicate + farmIdSet filter), so scoping is inherited
+        // rather than re-derived. `labourByLogId` re-asserts it anyway: only
+        // engagements whose parent is in this response can reach the wire.
+        var dailyLogFarmById = dailyLogs.ToDictionary(l => l.Id, l => (Guid)l.FarmId);
+        var labourAssignments =
+            (await repository.GetLabourAssignmentsForDailyLogsAsync(dailyLogFarmById.Keys.ToList(), ct))
+            .Where(a => dailyLogFarmById.ContainsKey(a.DailyLogId))
+            .ToList();
+
+        // E4 — "the database is not the whole defence". `field_operator_work_rows`
+        // carries its own `farm_id`, Postgres FK checks bypass RLS, and
+        // `p_user_select_field_operator_work_rows` is PERMISSIVE and OR-ed with the
+        // tenant policy. So an attribution row pointing at this engagement is only
+        // trusted when its farm IS the parent log's farm. A mismatch is dropped, and
+        // dropping it cannot change any reported quantity: WorkerCount lives on the
+        // engagement and is copied, never counted from these rows (P7).
+        var assignmentFarmById = labourAssignments.ToDictionary(
+            a => a.Id, a => dailyLogFarmById[a.DailyLogId]);
+        var attributionsByAssignment =
+            (await repository.GetFieldOperatorWorkRowsForAssignmentsAsync(assignmentFarmById.Keys.ToList(), ct))
+            .Where(r => assignmentFarmById.TryGetValue(r.LabourAssignmentId, out var parentFarmId)
+                        && (Guid)r.FarmId == parentFarmId)
+            .GroupBy(r => r.LabourAssignmentId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<Domain.Labour.FieldOperatorWorkRow>)g.ToList());
+
+        var labourByLogId = labourAssignments
+            .GroupBy(a => a.DailyLogId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<LabourEngagementDto>)g
+                    .Select(a => a.ToDto(
+                        attributionsByAssignment.TryGetValue(a.Id, out var rows) ? rows : []))
+                    .ToList());
+
+        // NOTE — the cursor is NOT advanced from labour, on purpose.
+        // ssf.labour_assignments has no modified_at_utc; the parent log's
+        // ModifiedAtUtc is the only real clock, and inventing one here would be a
+        // fabricated timestamp (P4). See ComputeNextCursor.
+
         var attachments = (await repository.GetAttachmentsChangedSinceAsync(farmIds, sinceUtc, ct))
             .Where(a => farmIdSet.Contains((Guid)a.FarmId))
             .ToList();
@@ -70,9 +127,32 @@ public sealed class PullSyncChangesHandler(
         var plannedActivities = (await repository.GetPlannedActivitiesChangedSinceAsync(farmIds, sinceUtc, ct))
             .Where(a => cropCycleIds.Contains(a.CropCycleId))
             .ToList();
-        var auditEvents = (await repository.GetAuditEventsChangedSinceAsync(farmIds, sinceUtc, ct))
-            .Where(a => !a.FarmId.HasValue || farmIdSet.Contains(a.FarmId.Value))
-            .ToList();
+        // §P0.2 — the sync pull no longer carries the audit ledger at all.
+        //
+        // Not a trim: every audit row this path could ever have returned was a
+        // NULL-farm cross-tenant row. TenantConnectionInterceptor returns in
+        // user-scoped mode BEFORE setting agrisync.farm_id, so the tenant
+        // policy's equality disjunct was always NULL and only the
+        // `farm_id IS NULL` branch could match. There is no
+        // p_user_select_audit_events. So farmers have never received their own
+        // farm's audit rows here, and the farmIdSet.Contains(...) branch that
+        // used to sit on this line was dead code guarding rows that never
+        // arrived. What DID arrive was the cross-tenant set: S3 object keys for
+        // other farmers' raw voice recordings, erasure subjects' GUIDs,
+        // PII-review staff notes, admin elevation reasons.
+        //
+        // The empty list still flows into ComputeNextCursor and
+        // CollectOperatorIds below — deliberately, so the two effects are
+        // visible rather than deleted: the cursor stops advancing off audit
+        // timestamps (it can only move EARLIER, never later, so no row can be
+        // skipped) and the operator directory stops hydrating strangers'
+        // display names out of leaked ActorUserIds.
+        //
+        // The `auditEvents` field STAYS on the wire as an empty array. APKs in
+        // farmers' hands have it non-optional in their bundled schema; removing
+        // it risks a parse failure that breaks sync entirely. Deleting the field
+        // is a later change gated on client rollout.
+        IReadOnlyList<Domain.Audit.AuditEvent> auditEvents = [];
         var templatesResult = await getScheduleTemplatesHandler.HandleAsync(ct);
         if (!templatesResult.IsSuccess)
         {
@@ -325,7 +405,12 @@ public sealed class PullSyncChangesHandler(
             farms.Select(f => f.ToDto()).ToList(),
             plots.Select(p => p.ToDto()).ToList(),
             cropCycles.Select(c => c.ToDto()).ToList(),
-            dailyLogs.Select(l => l.ToDto()).ToList(),
+            // Every log in this response gets a labour STATEMENT — `[]` when it has
+            // none. `null` (the DTO's "this caller made no statement") belongs only
+            // to callers that never looked; the pull looked.
+            dailyLogs
+                .Select(l => l.ToDto(labourByLogId.TryGetValue(l.Id, out var labour) ? labour : []))
+                .ToList(),
             attachments.Select(a => a.ToDto()).ToList(),
             costEntries.Select(c => c.ToDto()).ToList(),
             financeCorrections.Select(c => c.ToDto()).ToList(),

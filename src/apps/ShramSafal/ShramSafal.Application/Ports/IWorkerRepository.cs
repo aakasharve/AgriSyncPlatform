@@ -13,16 +13,23 @@ namespace ShramSafal.Application.Ports;
 /// projector is the only writer; admin Mode A drilldown is the primary
 /// reader. There is no farmer-facing API.
 /// </para>
+/// <para>
+/// <b>Deliberately no "find by normalized name" method (2026-07-19).</b>
+/// A <c>FindByNormalizedNameAsync(farmId, normalized)</c> method used to
+/// live here so <c>WorkerNameProjector</c> could find-or-create across
+/// every log a farm has ever produced — which is exactly what let two
+/// different real people sharing a common name collapse into one
+/// <see cref="Worker"/> row (founder Decision 5 sub-question 2, spec
+/// 2026-07-13-labour-attendance-approval-design). It was removed, not
+/// just unused, so a future caller cannot casually wire cross-log name
+/// merging back in without going through ADR 0026 (Worker Identity
+/// Ladder) sign-off first. If a real identity-matching need arises,
+/// add it back deliberately, backed by a verified signal (e.g. a
+/// phone number), not name text alone.
+/// </para>
 /// </remarks>
 public interface IWorkerRepository
 {
-    /// <summary>
-    /// Returns the existing <see cref="Worker"/> for the given farm whose
-    /// <see cref="WorkerName.Normalized"/> matches the supplied name, or
-    /// <c>null</c> if no such worker has been recorded yet.
-    /// </summary>
-    Task<Worker?> FindByNormalizedNameAsync(FarmId farmId, string normalized, CancellationToken ct = default);
-
     /// <summary>
     /// Tracks a brand-new <see cref="Worker"/> with the change tracker.
     /// Persisted via <see cref="SaveChangesAsync"/>.

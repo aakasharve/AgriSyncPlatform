@@ -109,6 +109,47 @@ internal sealed class CostEntryConfiguration : IEntityTypeConfiguration<CostEntr
         });
         builder.Navigation(x => x.Location).IsRequired(false);
 
+        // Money direction. NULLABLE ON PURPOSE and with NO default: every row
+        // written before this column existed genuinely carries no statement
+        // about which way the money moved, and a `DEFAULT 'Expense'` would
+        // manufacture one for all of them — turning a farmer's past sale into a
+        // past expense with a straight face. NULL is the honest value and the
+        // read path is required to keep saying "not stated".
+        builder.Property(x => x.Direction)
+            .HasColumnName("direction")
+            .HasConversion<string>()
+            .HasMaxLength(16);
+
+        // Line detail. All nullable, all without defaults, for the same reason:
+        // absent is a fact about the record, not a slot to fill.
+        builder.Property(x => x.Quantity)
+            .HasColumnName("quantity")
+            .HasPrecision(18, 3);
+
+        builder.Property(x => x.Unit)
+            .HasColumnName("unit")
+            .HasMaxLength(32);
+
+        builder.Property(x => x.UnitPrice)
+            .HasColumnName("unit_price")
+            .HasPrecision(18, 2);
+
+        builder.Property(x => x.PaymentMode)
+            .HasColumnName("payment_mode")
+            .HasMaxLength(16);
+
+        builder.Property(x => x.VendorName)
+            .HasColumnName("vendor_name")
+            .HasMaxLength(200);
+
+        // Mirrors LabourAssignmentConfiguration.WorkerNamesJson (jsonb), but
+        // NULLABLE rather than NOT NULL DEFAULT '[]': there, every row has a
+        // worker list even if empty; here, "the producer said nothing" and "the
+        // producer said none" are different facts and both occur.
+        builder.Property(x => x.ClientAttachmentIdsJson)
+            .HasColumnName("client_attachment_ids_json")
+            .HasColumnType("jsonb");
+
         builder.Property(x => x.IsCorrected)
             .HasColumnName("is_corrected")
             .HasDefaultValue(false);

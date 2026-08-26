@@ -287,7 +287,7 @@ public sealed class RetentionSweepWorkerVoiceClipsRetainedTest : IAsyncLifetime
         var b = new NpgsqlConnectionStringBuilder(superuserConn)
         {
             Username = "agrisync_app",
-            Password = "dev_app_change_me",
+            Password = TestRoleCredentials.AppRolePassword,
         };
         return b.ConnectionString;
     }
@@ -355,7 +355,7 @@ internal sealed class RecordingRetainedBlobStore : IRetainedBlobStore
         _config = config;
     }
 
-    public async Task DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct)
+    public async Task<RetainedVoiceDeletionOutcome> DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct)
     {
         DeleteCalls.Add(userId);
 
@@ -372,6 +372,7 @@ internal sealed class RecordingRetainedBlobStore : IRetainedBlobStore
         cmd.CommandText = "DELETE FROM ssf.voice_clips_retained WHERE user_id = @uid";
         cmd.Parameters.AddWithValue("uid", userId);
         await cmd.ExecuteNonQueryAsync(ct);
+        return RetainedVoiceDeletionOutcome.Deleted;
     }
 
     public Task<Guid> PersistAsync(VoiceClipRetained metadata, byte[] cipherBytes, CancellationToken ct)

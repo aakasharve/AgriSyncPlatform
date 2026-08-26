@@ -77,6 +77,29 @@ public sealed class AdminAuthGateTests
             "src/apps/ShramSafal/ShramSafal.Api/Endpoints/AiEndpoints.cs");
     }
 
+    /// <summary>
+    /// §P0.2 — GET /shramsafal/audit reveals another actor's NULL-farm rows only
+    /// to a platform admin, and that decision must be resolved through
+    /// IEntitlementResolver, never a claim. No platform-admin claim exists
+    /// (JwtTokenIssuer removed it deliberately) and one must not be reintroduced
+    /// here.
+    /// </summary>
+    [Fact]
+    public void AuditEndpoints_Resolves_PlatformAdmin_Through_The_Resolver_Not_A_Claim()
+    {
+        AssertUsesResolverAndNoLegacyIsAdmin(
+            "src/apps/ShramSafal/ShramSafal.Api/Endpoints/AuditEndpoints.cs");
+
+        var content = File.ReadAllText(
+            FindRepoFile("src/apps/ShramSafal/ShramSafal.Api/Endpoints/AuditEndpoints.cs"));
+
+        content.Should().Contain("ModuleKey.AuditLedger",
+            "the audit ledger gate must key on the module entitlement, so revoking the "
+            + "EntitlementMatrix row closes the surface without editing the endpoint");
+        content.Should().NotContain("IsInRole",
+            "authorization here is AdminScope, not a role claim");
+    }
+
     private static void AssertUsesResolverAndNoLegacyIsAdmin(string relativePath)
     {
         var file = FindRepoFile(relativePath);

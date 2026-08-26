@@ -22,6 +22,7 @@ import {
     LedgerDefaults,
     FarmOperator
 } from '../../types';
+import { sumLabourHeadcount } from '../../domain/logs/labourHeadcount';
 
 const calculateMachineryCost = (fuelCost: number, rentalCost: number): number => fuelCost + rentalCost;
 const calculateTotalDayCost = (labourCost: number, inputsCost: number, machineryCost: number): number =>
@@ -130,9 +131,9 @@ export const generateDayWorkSummary = (
             labour: {
                 maleCount: 0,
                 femaleCount: 0,
+                headcount: 0,
                 maleRate: 0,
                 femaleRate: 0,
-                hoursWorked: 0,
                 totalCost: 0,
                 isEmpty: true,
                 events: []
@@ -177,9 +178,9 @@ const generateLabourSummary = (
         return {
             maleCount: 0,
             femaleCount: 0,
+            headcount: 0,
             maleRate: settings.labour.defaultWage,
             femaleRate: settings.labour.defaultWage,
-            hoursWorked: 0,
             totalCost: 0,
             isEmpty: true,
             events: []
@@ -190,16 +191,11 @@ const generateLabourSummary = (
     let totalMale = 0;
     let totalFemale = 0;
     let totalCost = 0;
-    let maxHours = 0;
 
     log.labour.forEach(event => {
         totalMale += event.maleCount || 0;
         totalFemale += event.femaleCount || 0;
         totalCost += event.totalCost || 0;
-
-        // Estimate hours from shift or default
-        const hours = settings.labour.defaultHours || 8;
-        if (hours > maxHours) maxHours = hours;
     });
 
     // Get rates from settings (use first shift as default, or fallback)
@@ -210,9 +206,13 @@ const generateLabourSummary = (
     return {
         maleCount: totalMale,
         femaleCount: totalFemale,
+        // Decision 3a (2026-07-19): the REAL headcount — `count` when a bare
+        // total was stated ("चार माणसांनी काम केलं"), not just maleCount +
+        // femaleCount (which is 0 for a count-only entry — the "0 people,
+        // real cost" bug).
+        headcount: sumLabourHeadcount(log.labour),
         maleRate,
         femaleRate,
-        hoursWorked: maxHours,
         totalCost,
         isEmpty: false,
         events: log.labour
@@ -248,6 +248,7 @@ const generateIrrigationSummary = (log: DailyLog): IrrigationSummary => {
     const successfulCount = countSuccessfulIrrigationEvents(log.irrigation, log.fullTranscript);
 
     return {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         method: primaryEvent.method as any || 'Drip',
         durationHours: totalDuration,
         source: primaryEvent.source || 'Unknown',

@@ -30,6 +30,7 @@ using ShramSafal.Application.Ports.External;
 using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Farms;
+using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Tests;
 using ShramSafal.Infrastructure.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
@@ -561,6 +562,170 @@ public sealed class SyncEndpointsTests
         Assert.Equal(TestUserId, costEntry.GetProperty("createdByUserId").GetGuid());
         Assert.Equal(TestUserId, latestVerification.GetProperty("verifiedByUserId").GetGuid());
     }
+
+    /// <summary>
+    /// LABOUR PHASE 2 A2a — <b>what a device actually receives on /sync/pull.</b>
+    /// <para>
+    /// This is the assertion at the WIRE: it pushes all three spatial assertions
+    /// over the real <c>/sync/push</c> endpoint, pulls them back over the real
+    /// <c>/sync/pull</c> endpoint, and reads the raw response JSON. Nothing here
+    /// constructs a <c>JsonSerializerOptions</c> — the serializer under test is
+    /// the one ASP.NET Core actually uses for a response body, which is the only
+    /// one that decides what reaches a phone.
+    /// </para>
+    /// <para>
+    /// The defect it pins: before A2a the pulled log carried no <c>scope</c> and
+    /// no <c>plotIds</c>, so a device could only rebuild a log's context from the
+    /// single <c>plotId</c> — NULL for both non-plot scopes — and the first pull
+    /// after a MultiPlot log was acknowledged silently rewrote <c>{A,B,C}</c> into
+    /// a farm-wide log on the device that made the assertion.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Pull_CarriesTheFarmersSpatialAssertion_ForEveryScope()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        var plotA = Guid.NewGuid();
+        var plotB = Guid.NewGuid();
+        var plotC = Guid.NewGuid();
+        var cropCycleId = Guid.NewGuid();
+        var plotLogId = Guid.NewGuid();
+        var multiPlotLogId = Guid.NewGuid();
+        var farmLogId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-scope", "req-farm-scope-readback", farmId, "Scope Read-Back Farm");
+
+        var setupResponse = await harness.Client.PostAsJsonAsync("/sync/push", new
+        {
+            deviceId = "device-scope",
+            mutations = new object[]
+            {
+                new
+                {
+                    clientRequestId = "req-plot-a-scope",
+                    mutationType = "create_plot",
+                    payload = new { plotId = plotA, farmId, name = "Scope Plot A", areaInAcres = 1m }
+                },
+                new
+                {
+                    clientRequestId = "req-plot-b-scope",
+                    mutationType = "create_plot",
+                    payload = new { plotId = plotB, farmId, name = "Scope Plot B", areaInAcres = 1m }
+                },
+                new
+                {
+                    clientRequestId = "req-plot-c-scope",
+                    mutationType = "create_plot",
+                    payload = new { plotId = plotC, farmId, name = "Scope Plot C", areaInAcres = 1m }
+                },
+                new
+                {
+                    clientRequestId = "req-cycle-scope",
+                    mutationType = "create_crop_cycle",
+                    payload = new
+                    {
+                        cropCycleId,
+                        farmId,
+                        plotId = plotA,
+                        cropName = "Grapes",
+                        stage = "Growth",
+                        startDate = "2026-08-01"
+                    }
+                },
+                // The shape every shipped client sends today: no `scope` key at all.
+                new
+                {
+                    clientRequestId = "req-log-plot-scope",
+                    mutationType = "create_daily_log",
+                    payload = new { dailyLogId = plotLogId, farmId, plotId = plotA, cropCycleId, logDate = "2026-08-12" }
+                },
+                // ONE shared engagement over THREE plots (founder decision O-2).
+                new
+                {
+                    clientRequestId = "req-log-multiplot-scope",
+                    mutationType = "create_daily_log",
+                    payload = new
+                    {
+                        dailyLogId = multiPlotLogId,
+                        farmId,
+                        scope = "MultiPlot",
+                        plotIds = new[] { plotA, plotB, plotC },
+                        logDate = "2026-08-12"
+                    }
+                },
+                // संपूर्ण शेत — the farmer named no plot at all.
+                new
+                {
+                    clientRequestId = "req-log-farm-scope",
+                    mutationType = "create_daily_log",
+                    payload = new { dailyLogId = farmLogId, farmId, scope = "Farm", logDate = "2026-08-12" }
+                }
+            }
+        });
+
+        setupResponse.EnsureSuccessStatusCode();
+        using var setupDoc = JsonDocument.Parse(await setupResponse.Content.ReadAsStringAsync());
+        var setupFailures = setupDoc.RootElement
+            .GetProperty("results")
+            .EnumerateArray()
+            .Where(x => x.GetProperty("status").GetString() == "failed")
+            .Select(x => $"{x.GetProperty("clientRequestId").GetString()}: {x.GetProperty("errorCode").GetString()}")
+            .ToList();
+        Assert.Empty(setupFailures);
+
+        var pull = await harness.Client.GetAsync($"/sync/pull?since={Uri.EscapeDataString(DateTime.UnixEpoch.ToString("O"))}");
+        pull.EnsureSuccessStatusCode();
+
+        var pullBody = await pull.Content.ReadAsStringAsync();
+        using var pullDoc = JsonDocument.Parse(pullBody);
+        var logs = pullDoc.RootElement.GetProperty("dailyLogs").EnumerateArray().ToList();
+
+        var plotLog = logs.Single(x => x.GetProperty("id").GetGuid() == plotLogId);
+        var multiPlotLog = logs.Single(x => x.GetProperty("id").GetGuid() == multiPlotLogId);
+        var farmLog = logs.Single(x => x.GetProperty("id").GetGuid() == farmLogId);
+
+        // Plot — the regression that matters most. Unchanged in every respect.
+        Assert.Equal("Plot", plotLog.GetProperty("scope").GetString());
+        Assert.Equal(new[] { plotA }, PlotIdsOf(plotLog));
+        Assert.Equal(plotA, plotLog.GetProperty("plotId").GetGuid());
+        Assert.Equal(cropCycleId, plotLog.GetProperty("cropCycleId").GetGuid());
+
+        // MultiPlot — ALL THREE plots, in the order the farmer selected them.
+        // Carrying only the first is exactly the loss that turns {A,B,C} into a
+        // farm-wide log on the originating device.
+        Assert.Equal("MultiPlot", multiPlotLog.GetProperty("scope").GetString());
+        Assert.Equal(new[] { plotA, plotB, plotC }, PlotIdsOf(multiPlotLog));
+        Assert.Equal(JsonValueKind.Null, multiPlotLog.GetProperty("plotId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, multiPlotLog.GetProperty("cropCycleId").ValueKind);
+
+        // Farm — the empty set IS the record (founder decision O-1).
+        Assert.Equal("Farm", farmLog.GetProperty("scope").GetString());
+        Assert.Empty(PlotIdsOf(farmLog));
+        Assert.Equal(JsonValueKind.Null, farmLog.GetProperty("plotId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, farmLog.GetProperty("cropCycleId").ValueKind);
+
+        // The scope is a NAME on the wire, never an ordinal. Asserted
+        // structurally, so a number that happens not to match a literal still
+        // fails: renumbering the enum must never re-map a durable record.
+        foreach (var log in new[] { plotLog, multiPlotLog, farmLog })
+        {
+            Assert.Equal(JsonValueKind.String, log.GetProperty("scope").ValueKind);
+            Assert.Equal(JsonValueKind.Array, log.GetProperty("plotIds").ValueKind);
+        }
+
+        // Doctrine P4 — no pulled log fabricates a plot or a cycle. Scoped to the
+        // dailyLogs array deliberately: `log.PlotId ?? Guid.Empty` is the obvious
+        // compile fix for the nullability widening and it is exactly what would
+        // put a fabricated plot into canonical client state. Other components of
+        // the pull envelope have their own (unrelated) empty-GUID conventions and
+        // are not this test's subject.
+        var dailyLogsJson = pullDoc.RootElement.GetProperty("dailyLogs").GetRawText();
+        Assert.DoesNotContain("00000000-0000-0000-0000-000000000000", dailyLogsJson);
+    }
+
+    private static Guid[] PlotIdsOf(JsonElement dailyLog) =>
+        dailyLog.GetProperty("plotIds").EnumerateArray().Select(x => x.GetGuid()).ToArray();
 
     [Fact]
     public async Task CreateAttachment_CanLinkToDailyLogAndCostEntry()
@@ -1142,6 +1307,213 @@ public sealed class SyncEndpointsTests
         Assert.Empty(await harness.GetIrrigationEntriesForDailyLogAsync(dailyLogId));
         Assert.Empty(await harness.GetLabourAssignmentsForDailyLogAsync(dailyLogId));
         Assert.Empty(await harness.GetMachineryUsagesForDailyLogAsync(dailyLogId));
+    }
+
+    // Labour V1 Task 5 (spec: 2026-07-13-labour-attendance-approval-design) —
+    // allow-list regression trio for PushSyncBatchHandler.HandleCreateDailyLogAsync's
+    // PayloadHasOnly gate (:595). PayloadHasOnly is a strict allow-list, not a
+    // tolerant deserializer: ONE unrecognised top-level key fails the ENTIRE
+    // mutation with ShramSafal.SyncInvalidPayload before any mapping code runs.
+    // Task 5 widened the list by exactly one key ("labour"); this trio is the
+    // proof, not just of the widening but that it was NOT a general loosening:
+    //   1. a payload WITHOUT labour is still accepted (existing offline logs
+    //      that never send labour must keep working);
+    //   2. a payload WITH labour is now accepted (the new key opens);
+    //   3. a payload with an UNRELATED unknown field is still REJECTED
+    //      (proves the check is still a real allow-list, not weakened wholesale).
+
+    [Fact]
+    public async Task CreateDailyLog_WithoutLabour_IsAccepted()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        var plotId = Guid.NewGuid();
+        var cropCycleId = Guid.NewGuid();
+        var dailyLogId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-allowlist-a", "req-farm-allowlist-a", farmId, "Allow-list Farm A");
+
+        var response = await harness.Client.PostAsJsonAsync("/sync/push", new
+        {
+            deviceId = "device-allowlist-a",
+            mutations = new object[]
+            {
+                new
+                {
+                    clientRequestId = "req-plot-allowlist-a",
+                    mutationType = "create_plot",
+                    payload = new { plotId, farmId, name = "Allow-list Plot A", areaInAcres = 1m }
+                },
+                new
+                {
+                    clientRequestId = "req-cycle-allowlist-a",
+                    mutationType = "create_crop_cycle",
+                    payload = new { cropCycleId, farmId, plotId, cropName = "Grapes", stage = "Growth", startDate = "2026-02-21" }
+                },
+                new
+                {
+                    // No `labour` key at all — the pre-Task-5 wire shape.
+                    clientRequestId = "req-log-allowlist-a",
+                    mutationType = "create_daily_log",
+                    payload = new { dailyLogId, farmId, plotId, cropCycleId, logDate = "2026-02-22" }
+                }
+            }
+        });
+
+        response.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var logResult = doc.RootElement.GetProperty("results").EnumerateArray()
+            .Single(x => x.GetProperty("clientRequestId").GetString() == "req-log-allowlist-a");
+        Assert.Equal("applied", logResult.GetProperty("status").GetString());
+        Assert.True(await harness.DailyLogExistsAsync(dailyLogId));
+    }
+
+    [Fact]
+    public async Task CreateDailyLog_WithLabour_IsAccepted()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        var plotId = Guid.NewGuid();
+        var cropCycleId = Guid.NewGuid();
+        var dailyLogId = Guid.NewGuid();
+        var labourAssignmentId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-allowlist-b", "req-farm-allowlist-b", farmId, "Allow-list Farm B");
+
+        var response = await harness.Client.PostAsJsonAsync("/sync/push", new
+        {
+            deviceId = "device-allowlist-b",
+            mutations = new object[]
+            {
+                new
+                {
+                    clientRequestId = "req-plot-allowlist-b",
+                    mutationType = "create_plot",
+                    payload = new { plotId, farmId, name = "Allow-list Plot B", areaInAcres = 1m }
+                },
+                new
+                {
+                    clientRequestId = "req-cycle-allowlist-b",
+                    mutationType = "create_crop_cycle",
+                    payload = new { cropCycleId, farmId, plotId, cropName = "Grapes", stage = "Growth", startDate = "2026-02-21" }
+                },
+                new
+                {
+                    // Carries the new `labour` array — this is the key Task 5 added
+                    // to the allow-list.
+                    clientRequestId = "req-log-allowlist-b",
+                    mutationType = "create_daily_log",
+                    payload = new
+                    {
+                        dailyLogId,
+                        farmId,
+                        plotId,
+                        cropCycleId,
+                        logDate = "2026-02-22",
+                        labour = new object[]
+                        {
+                            new
+                            {
+                                labourAssignmentId,
+                                engagementType = "hired_daily",
+                                maleCount = 2,
+                                femaleCount = 3,
+                                wagePerPerson = 350m,
+                                task = "harvesting",
+                                durationHours = 6m
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        response.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var logResult = doc.RootElement.GetProperty("results").EnumerateArray()
+            .Single(x => x.GetProperty("clientRequestId").GetString() == "req-log-allowlist-b");
+        Assert.Equal("applied", logResult.GetProperty("status").GetString());
+        Assert.True(await harness.DailyLogExistsAsync(dailyLogId));
+
+        // Task 6 (spec 2026-07-13-labour-attendance-approval-design) turned this
+        // from transport into PERSISTENCE. Task 5's assertion here was
+        // `Assert.Empty(...)` with the comment "nothing persists it yet (Task 6)";
+        // Task 6 is that task, so the assertion inverts — this is the end-to-end
+        // proof over the REAL /sync/push wire that the structured payload reaches
+        // the canonical table, complementing the handler-level Phase-1 proofs in
+        // LabourPhaseOneDurabilityRealPostgresTests.
+        var persisted = Assert.Single(await harness.GetLabourAssignmentsForDailyLogAsync(dailyLogId));
+        Assert.Equal(labourAssignmentId, persisted.Id);
+        Assert.Equal(LabourEngagementType.Hired, persisted.EngagementType);
+        Assert.Equal(2, persisted.MaleCount);
+        Assert.Equal(3, persisted.FemaleCount);
+        // Canonical headcount resolved on the WRITE path from the gender split.
+        Assert.Equal(5, persisted.WorkerCount);
+        Assert.Equal(350m, persisted.WagePerPerson);
+        Assert.Equal("harvesting", persisted.Task);
+        // A STATED duration stays Explicit — it is never re-labelled as the
+        // server's assumption.
+        Assert.Equal(6m, persisted.DurationHours);
+        Assert.Equal(LabourTimeBasis.Explicit, persisted.TimeBasis);
+        // NO-MULTIPLY: no total was stated, so none is fabricated from rate x count.
+        Assert.Null(persisted.TotalCost);
+    }
+
+    [Fact]
+    public async Task CreateDailyLog_WithUnknownField_IsRejected()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        var plotId = Guid.NewGuid();
+        var cropCycleId = Guid.NewGuid();
+        var dailyLogId = Guid.NewGuid();
+
+        await PushCreateFarmAsync(harness.Client, "device-allowlist-c", "req-farm-allowlist-c", farmId, "Allow-list Farm C");
+
+        var response = await harness.Client.PostAsJsonAsync("/sync/push", new
+        {
+            deviceId = "device-allowlist-c",
+            mutations = new object[]
+            {
+                new
+                {
+                    clientRequestId = "req-plot-allowlist-c",
+                    mutationType = "create_plot",
+                    payload = new { plotId, farmId, name = "Allow-list Plot C", areaInAcres = 1m }
+                },
+                new
+                {
+                    clientRequestId = "req-cycle-allowlist-c",
+                    mutationType = "create_crop_cycle",
+                    payload = new { cropCycleId, farmId, plotId, cropName = "Grapes", stage = "Growth", startDate = "2026-02-21" }
+                },
+                new
+                {
+                    // `notARealField` is not on PayloadHasOnly's list — proves the
+                    // check still rejects truly unknown fields rather than having
+                    // been loosened wholesale to admit `labour`.
+                    clientRequestId = "req-log-allowlist-c",
+                    mutationType = "create_daily_log",
+                    payload = new
+                    {
+                        dailyLogId,
+                        farmId,
+                        plotId,
+                        cropCycleId,
+                        logDate = "2026-02-22",
+                        notARealField = "nope"
+                    }
+                }
+            }
+        });
+
+        response.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var logResult = doc.RootElement.GetProperty("results").EnumerateArray()
+            .Single(x => x.GetProperty("clientRequestId").GetString() == "req-log-allowlist-c");
+        Assert.Equal("failed", logResult.GetProperty("status").GetString());
+        Assert.Equal("ShramSafal.SyncInvalidPayload", logResult.GetProperty("errorCode").GetString());
+        Assert.False(await harness.DailyLogExistsAsync(dailyLogId));
     }
 
     [Fact]
@@ -2104,6 +2476,41 @@ public sealed class SyncEndpointsTests
                 new FarmId(farmId),
                 new UserId(userId),
                 role,
+                DateTime.UtcNow));
+            await db.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// LABOUR_PHASE2 Phase 3 — writes an attribution row DIRECTLY, bypassing
+        /// <c>AttachFieldOperatorHandler</c>.
+        /// </summary>
+        /// <remarks>
+        /// The handler refuses to attach an operator across farms, so a row whose
+        /// <c>farm_id</c> disagrees with its engagement's parent log is
+        /// unreachable through the API — which is exactly why the pull's E4
+        /// cross-check needs a seam like this to be tested at all. Postgres FK
+        /// checks bypass RLS and <c>p_user_select_field_operator_work_rows</c> is
+        /// PERMISSIVE and OR-ed, so such a row IS readable by a multi-farm login;
+        /// this seeds that shape deliberately. Not a production path.
+        /// </remarks>
+        public async Task SeedFieldOperatorWorkRowAsync(
+            Guid fieldOperatorId,
+            Guid labourAssignmentId,
+            Guid farmId,
+            DateOnly workDate,
+            string displayNameAtAttach,
+            Guid recordedByUserId)
+        {
+            await using var scope = app.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+            db.FieldOperatorWorkRows.Add(FieldOperatorWorkRow.Create(
+                Guid.NewGuid(),
+                fieldOperatorId,
+                labourAssignmentId,
+                new FarmId(farmId),
+                workDate,
+                displayNameAtAttach,
+                new UserId(recordedByUserId),
                 DateTime.UtcNow));
             await db.SaveChangesAsync();
         }

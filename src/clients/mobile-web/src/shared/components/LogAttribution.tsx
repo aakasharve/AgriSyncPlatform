@@ -11,6 +11,7 @@
 import React from 'react';
 import { User, CheckCircle, AlertCircle, Clock, Shield } from 'lucide-react';
 import { LogVerificationStatus, FarmOperator, LogVerification, LogMeta } from '../../types';
+import { formatDisplayTime } from '../utils/displayTime';
 
 interface LogAttributionProps {
     meta?: LogMeta;
@@ -93,10 +94,7 @@ export const LogAttribution: React.FC<LogAttributionProps> = ({
                 <span className="font-medium">{loggedBy}</span>
                 {meta?.createdAtISO && (
                     <span className="text-stone-400 text-[10px]">
-                        {new Date(meta.createdAtISO).toLocaleTimeString('en-IN', {
-                            hour: '2-digit',
-                            minute: '2-digit'
-                        })}
+                        {formatDisplayTime(meta.createdAtISO)}
                     </span>
                 )}
             </div>

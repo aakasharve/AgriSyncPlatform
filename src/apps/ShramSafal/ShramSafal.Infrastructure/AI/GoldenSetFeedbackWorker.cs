@@ -200,9 +200,23 @@ internal sealed class GoldenSetFeedbackWorker(
             // parse, or the parse row was already erased) the row is
             // skipped; the candidate set carries only audio-bound
             // corrections.
+            // §P0.4 — OriginalParseId is nullable now. A null means the client
+            // genuinely did not know the originating AiJob; previously it sent
+            // a fresh random UUID instead, which reached this join, matched
+            // nothing, and was skipped below — the same outcome, but the
+            // column lied about it. Skip explicitly rather than issuing a
+            // query that cannot match.
+            if (correction.OriginalParseId is null)
+            {
+                logger.LogDebug(
+                    "GoldenSetFeedbackWorker skipping correction {CorrectionId} — no originating AiJob recorded.",
+                    correction.Id);
+                continue;
+            }
+
             var source = await db.AiJobs
                 .AsNoTracking()
-                .FirstOrDefaultAsync(j => j.Id == correction.OriginalParseId, ct)
+                .FirstOrDefaultAsync(j => j.Id == correction.OriginalParseId.Value, ct)
                 .ConfigureAwait(false);
 
             if (source is null || string.IsNullOrWhiteSpace(source.InputContentHash))

@@ -69,10 +69,155 @@ prevents the confused-deputy problem if the role ARN ever leaks.
 |---|---|
 | `agent-deployer-permissions.json` | Inline policy attached to `agrisync-agent-deployer`. Source of truth for the "allowed/denied" table above |
 | `agent-deployer-trust-policy.json` | Who may assume the role (currently `arn:aws:iam::951921970996:user/first_admin` with `ExternalId`) |
-| `agrisync-analytics-migration-deploy.ssm-document.json` | The ONE SSM document the agent role can SendCommand. Parameterized for SHA + allow/forbid migration filenames; runs on EC2 |
+| `agrisync-analytics-migration-deploy.ssm-document.json` | The ONE SSM document the agent role can SendCommand. Parameterized for SHA + allow/forbid migration filenames; runs on EC2. **`AnalyticsDbContext` only** — it is not the ShramSafal path, see below |
+| `api-binary-swap.sh` | The on-box binary swap, and the **only** committed way to apply `ShramSafal` (`ssf`) migrations to production. Parameterized for SHA + expected migration count and history rows. Invoked by `ec2-deploy-wrapper.sh` at G4 |
 | `guardrails.sh` | Pure-bash predicate functions extracted for testability — sourced by `agent-cutover.sh` |
 | `guardrails.test.sh` | 26 unit tests for the predicates. Runs without AWS, without git side-effects |
 | `agent-cutover.sh` | The end-to-end script the agent (or operator dry-running this lane) actually runs. Eight guardrails in order, then assume-role + SendCommand + evidence write |
+
+## Applying ShramSafal (`ssf`) migrations in production
+
+**Mistaking one deploy path for the other has already cost a release cycle.**
+
+`Program.cs:939-984` makes **six** `ApplyStartupMigrationsIfAllowedAsync` calls across
+**four** contexts, every one of them behind the *single* env var
+`ALLOW_PRODUCTION_STARTUP_MIGRATIONS`:
+
+| Context | History table | Boot order |
+|---|---|---|
+| `UserDbContext` | `public.__ef_migrations` | 1 |
+| `AccountsDbContext` | `accounts.__accounts_migrations_history` | 2 |
+| `ShramSafalDbContext` **(Phase A)** | `ssf.__ef_migrations` | 3 |
+| `AnalyticsDbContext` **(Phase 1)** | `analytics.__analytics_migrations_history` | 4 |
+| `ShramSafalDbContext` **(Phase B)** | `ssf.__ef_migrations` | 5 |
+| `AnalyticsDbContext` **(Phase 2)** | `analytics.__analytics_migrations_history` | 6 |
+
+### ⚠️ The gate is not a ShramSafal switch
+
+Opening it to apply one `ssf` migration **also applies every pending User, Accounts and
+Analytics migration in the same boot** — including Analytics work that the SSM document
+above would have screened through its own allow/forbid lists. The SSM lane is a
+*different mechanism for the same database*; it is not a wall around it.
+
+`api-binary-swap.sh` therefore snapshots **all four** history tables before and after,
+diffs the full set, and **fails the deploy if a context you did not declare has moved.**
+Expectations default to **zero** for every context except the ones you name.
+
+Because ShramSafal applies in **two phases with Analytics interleaved**, a boot that dies
+mid-sequence can leave `ssf` **partially** migrated. The script reports the exact set that
+applied, per context — a count alone cannot detect this.
+
+### The restart *is* the apply
+
+`Program.cs` refuses to boot in Production when migrations are pending unless
+`ALLOW_PRODUCTION_STARTUP_MIGRATIONS=true`. There is no separate "apply" command
+for `ssf`. The swap script stages the gate, restarts the service — which applies
+the migrations — verifies, then closes the gate.
+
+The close runs from an **`EXIT` trap**, so *every* path out of the script closes the
+gate, not just the successful one. A failure between opening the gate and finishing
+would otherwise leave production applying migrations on every future restart. If the
+gate was **already open** before the deploy, it is closed rather than restored, and the
+script says so.
+
+**Consequence for any plan:** a `ssf` migration **cannot** be proven applied
+*before* the API restarts. A plan demanding "migration first, as its own step,
+proven before the binary moves" is describing a mechanism that has never existed
+here. Schema and binary ship atomically or not at all.
+
+**Proven:** deploy `23222cdc` (2026-07-04) applied 17 `ssf` migrations this way —
+count 61 → 78, gate reset to false, snapshot floor
+`shramsafal-prod-db-pre-23222cdc-20260704004123`. Full record in
+`_COFOUNDER/OS/State/Deploy/HISTORY/1344da2b.md`.
+
+### Running it
+
+```bash
+# No migrations in this deploy — the gate is forced false and stays false, so a
+# phantom pending migration crashes boot loudly instead of applying itself.
+# ANY movement in ANY of the four contexts fails this deploy.
+bash api-binary-swap.sh --sha 2fd6eb99 --migrations 0
+
+# A ShramSafal migration deploy. Both head expectations are REQUIRED — the script
+# refuses a migration deploy nobody can verify. User/Accounts/Analytics default to
+# zero, so an unnoticed migration in any of them stops the deploy.
+bash api-binary-swap.sh --sha 23222cdc --migrations 17 \
+  --expect-before 20260609144905_NullifHardenTenantGucRlsPolicies \
+  --expect-after  20260703210908_RevertChildTableRlsWriteCheckToTrue
+
+# A deploy that deliberately carries a User migration too. Declare it, or it fails.
+bash api-binary-swap.sh --sha <sha> --migrations 3 --expect-user 1 \
+  --expect-before <ssf head now> --expect-after <newest ssf id in range>
+```
+
+Derive the counts from the migration files in range — **check all four**, not just `ssf`:
+
+```bash
+git diff --name-only origin/main..<sha> -- '*/Persistence/Migrations/*.cs' \
+                                           '*/Bootstrapper/Migrations/*.cs'
+```
+
+`--expect-before` is the last row currently in `ssf.__ef_migrations` on prod;
+`--expect-after` is the newest `ssf` migration id in the range. The per-context counts
+are how many *new* migration files each context contributes.
+
+**What the script proves, and what it does not.** `/version`'s `buildSha` is echoed from
+the `BUILD_SHA` env var the script itself just wrote, so the poll alone proves only that
+*some* process read the new env. The script therefore also compares the live
+`AgriSync.Bootstrapper.dll` **sha256** against the staged artifact. That is the check that
+proves the new code is running.
+
+### Why this file is committed
+
+Every previous deploy hand-templated a fresh `api-binary-swap-<sha>.sh` into a
+gitignored scratch directory, each copy edited from the last. Two variants drifted
+apart, and **only the non-migration one survives on disk** — the one that applied
+17 migrations to production is gone, along with its gate-reset step. Re-deriving
+it from a header comment referencing a script that no longer exists either is not
+a deploy procedure. This file is both variants behind one flag.
+
+### Rollback
+
+- **Binary:** the backup directory the script creates *before* the swap and prints
+  on every failure path after it.
+- **Schema:** the RDS snapshot. **EF `Down()` throws by design** — there is no
+  migration rollback, and two labour-lane migrations deliberately refuse it rather
+  than fabricate a plot or delete a farmer's own words.
+- **Practical:** revert the binary, leave the schema forward. Nothing requires those
+  columns to be absent.
+
+### The schema floor is now verified, not assumed *(2026-08-23)*
+
+Naming the RDS snapshot as the rollback floor and never checking it was there made
+the most important dependency in this lane an invisible one. `api-binary-swap.sh`
+**step 0b** now runs `verify-rollback-floor.sh` before anything is mutated and
+**exits 30** when there is no recent restorable snapshot.
+
+It **verifies and never creates** — deliberately. `agent-deployer` is explicitly
+denied `rds:CreateDBSnapshot`, `rds:CopyDBSnapshot` and `rds:RestoreDB*`
+(`Sid: DenyAnyDestructiveDbAction`), and explicit Deny beats Allow, so this is not
+closable by granting the role more — `iam:*` is denied to it too. Taking the
+snapshot stays a human step. The role holds `rds:DescribeDBSnapshots`, which is all
+verification needs.
+
+Skipped only when no migrations are expected in **any** context, so routine binary
+swaps never teach an operator to reach for a skip flag.
+
+**Why it is not optional for the server-authoritative release.** 16 of its 17
+pending migrations are additive in `Up()` and carry a real `Down()`. One is not:
+`20260815080242_StripTranscriptFromCorrectionEvents` (§P0.4) rewrites stored farmer
+JSON to remove transcript text, and its own `Down()` says *"The transcripts are gone
+and stay gone — there is no copy to restore them from, which is the property §P0.4
+buys."* Intended, and exactly why the snapshot is the only route back.
+
+The check also refuses a **stale** snapshot (default: older than 6h), because
+restoring one silently discards every farmer log written since it was taken — worse
+than not rolling back at all. `verify-rollback-floor.test.sh` covers all of this:
+18 cases against a stubbed CLI, no AWS account needed.
+
+> ⚠️ Guardrail 3 below still pins `origin/akash_edits`, a branch superseded by
+> `main`. It gates the **analytics** lane only. Left as-is deliberately — that lane
+> is live and out of scope here — but it will reject a valid SHA when next used.
 
 ## How the script's eight guardrails compose
 

@@ -8,6 +8,7 @@ using ShramSafal.Domain.Compliance;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Organizations;
 using ShramSafal.Domain.Planning;
@@ -133,6 +134,20 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<ApplicationInputItem> ApplicationInputItems => Set<ApplicationInputItem>();
     public DbSet<IrrigationEntry> IrrigationEntries => Set<IrrigationEntry>();
     public DbSet<LabourAssignment> LabourAssignments => Set<LabourAssignment>();
+
+    // spec: 2026-07-13-labour-attendance-approval-design (Labour V1, Task 9) —
+    // durable human work subject. Deliberately NOT linked to UserId in V1.
+    public DbSet<FieldOperator> FieldOperators => Set<FieldOperator>();
+
+    // spec: 2026-07-13-labour-attendance-approval-design (Labour V1, Task 10) —
+    // attribution overlay: WHO worked a given LabourAssignment. Never the work
+    // itself, and never a source of headcount (Constraint 3).
+    public DbSet<FieldOperatorWorkRow> FieldOperatorWorkRows => Set<FieldOperatorWorkRow>();
+
+    // spec: 2026-07-13-labour-attendance-approval-design (Labour V1, Task 12b) —
+    // APPEND-ONLY correction history. LabourAssignment answers "what is true
+    // now"; this answers "what did it say before, who changed it, when".
+    public DbSet<LabourCorrection> LabourCorrections => Set<LabourCorrection>();
     public DbSet<MachineryUsage> MachineryUsages => Set<MachineryUsage>();
     public DbSet<ObservationEvent> ObservationEvents => Set<ObservationEvent>();
     public DbSet<DisturbanceEvent> DisturbanceEvents => Set<DisturbanceEvent>();
@@ -161,6 +176,17 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     /// (S3). Mapped to <c>ssf.raw_blob_index</c>.
     /// </summary>
     public DbSet<RawBlobIndexEntry> RawBlobIndices => Set<RawBlobIndexEntry>();
+
+    /// <summary>
+    /// FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN §P0.9: which data subject a
+    /// content-addressed raw blob belongs to. Mapped to
+    /// <c>ssf.raw_blob_subjects</c>. Deliberately a join table, not a column on
+    /// <see cref="RawBlobIndices"/> — the store is content-addressed and
+    /// ref-counted, so subject↔blob is many-to-many by construction. Written at
+    /// blob-creation time so the linkage does not die with
+    /// <c>ssf.ai_jobs</c> during a DPDP erasure.
+    /// </summary>
+    public DbSet<RawBlobSubject> RawBlobSubjects => Set<RawBlobSubject>();
 
     /// <summary>
     /// DATA_PRINCIPLE_SPINE_2026-05-05 Phase 02 sub-phase 02.3: warm-tier

@@ -7,7 +7,9 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.ReferenceData.GetDeviationReasonCodes;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Logs;
+using ShramSafal.Domain.Schedules;
 
 namespace ShramSafal.Application.UseCases.Logs.AddLogTask;
 
@@ -75,10 +77,41 @@ public sealed class AddLogTaskHandler(
             PaidFeature.WriteDailyLog, ct);
         if (gate is not null) return gate;
 
-        var cropCycle = await repository.GetCropCycleByIdAsync(log.CropCycleId, ct);
-        if (cropCycle is null)
+        // LABOUR_PHASE2 P2.3 (reader audit) — a cycle-less log NO LONGER refuses
+        // the task; it records the task with NO compliance verdict.
+        //
+        // P2.1 made this path fail closed with CropCycleNotFound, deliberately,
+        // as the only fabrication-free option inside its surface. That is now
+        // wrong for two reasons, both of which only bite once a client can
+        // create a MultiPlot/Farm log (Phase 2b):
+        //
+        //   1. `AddLogTaskHandler` is the ONLY production path that adds a
+        //      LogTask to a DailyLog (verified: the sole other `.AddTask(`
+        //      call sites are the two seeders). Failing closed therefore means
+        //      a farm-wide log can never carry a single task — the farmer says
+        //      "आज संपूर्ण शेतात फवारणी केली" and the record of the फवारणी is
+        //      REJECTED. `P9`: no optional field may ever reject a record, and
+        //      a schedule-compliance stamp is the definition of optional.
+        //   2. `CropCycleNotFound` is not true. Nothing was looked up and not
+        //      found; the log HAS no cycle, by design, because the farmer named
+        //      no plot. Returning a not-found error for a thing that was never
+        //      supposed to exist sends the next reader hunting for a missing row.
+        //
+        // So: the cycle lookup and its error stay EXACTLY as they were for a
+        // log that names a cycle, and a cycle-less log skips both. The task is
+        // still created; `LogTask.Compliance` simply stays null, which is the
+        // meaning that property already documents ("the evaluator was never
+        // run"). We do NOT stamp ComplianceResult.Unscheduled() instead —
+        // "Unscheduled" asserts that a plot-crop-cycle was checked and had no
+        // active subscription, and no such check happened (`P8`).
+        CropCycle? cropCycle = null;
+        if (log.CropCycleId is { } logCropCycleId)
         {
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.CropCycleNotFound);
+            cropCycle = await repository.GetCropCycleByIdAsync(logCropCycleId, ct);
+            if (cropCycle is null)
+            {
+                return Result.Failure<DailyLogDto>(ShramSafalErrors.CropCycleNotFound);
+            }
         }
 
         // Validate deviation reason if non-Completed
@@ -105,14 +138,22 @@ public sealed class AddLogTaskHandler(
             command.DeviationNote);
 
         // Phase 3 MIS: stamp compliance on the task inside the same tx (I-17).
-        var compliance = await complianceService.EvaluateAsync(
-            new ScheduleComplianceQuery(
-                log.CropCycleId,
-                command.ActivityType,
-                cropCycle.Stage,
-                log.LogDate),
-            ct);
-        task.StampCompliance(compliance);
+        // LABOUR_PHASE2 P2.3 — only when the parent log names a crop cycle.
+        // There is no schedule for "the whole farm", so for a plot-less log
+        // there is no verdict to give and `Compliance` stays null. Absence
+        // recorded as absence, never a manufactured outcome.
+        ComplianceResult? compliance = null;
+        if (cropCycle is not null && log.CropCycleId is { } complianceCycleId)
+        {
+            compliance = await complianceService.EvaluateAsync(
+                new ScheduleComplianceQuery(
+                    complianceCycleId,
+                    command.ActivityType,
+                    cropCycle.Stage,
+                    log.LogDate),
+                ct);
+            task.StampCompliance(compliance);
+        }
 
         // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
         // (sentinel provenance) to AuditEventFactory.Create with the real
@@ -132,8 +173,14 @@ public sealed class AddLogTaskHandler(
                     task.ActivityType,
                     task.Notes,
                     task.OccurredAtUtc,
-                    complianceOutcome = compliance.Outcome.ToString(),
-                    complianceDeltaDays = compliance.DeltaDays
+                    complianceOutcome = compliance?.Outcome.ToString(),
+                    complianceDeltaDays = compliance?.DeltaDays,
+                    // Explicit, not inferred from two nulls: an auditor five
+                    // years from now must be able to tell "no schedule matched"
+                    // from "there was no schedule to match against".
+                    complianceNotEvaluatedReason = compliance is null
+                        ? $"parent daily log scope '{log.Scope}' has no crop cycle"
+                        : null
                 },
                 farmId: log.FarmId,
                 clientCommandId: command.ClientCommandId,

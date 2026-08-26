@@ -45,6 +45,7 @@ export type {
     // Events
     CropActivityEvent,
     IrrigationEvent,
+    AttributedOperator,
     LabourEvent,
     InputMethod,
     InputReason,

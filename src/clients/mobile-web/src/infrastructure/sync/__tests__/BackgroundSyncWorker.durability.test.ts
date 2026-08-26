@@ -213,8 +213,16 @@ describe('BackgroundSyncWorker — T-IGH-04-CONFLICT-STATUS-DURABILITY (worker i
             .first();
         expect(row?.status).toBe('FAILED');
 
+        // §P0.7 box 2c — the row now carries a backoff deadline, and the two
+        // cycles in this test are microseconds apart rather than the 15 s the
+        // real worker leaves between them. Advance the clock past the ceiling so
+        // cycle 2 is genuinely due. The assertion below is unchanged.
+        const failedRow = row;
+        vi.spyOn(Date, 'now').mockReturnValue((failedRow?.nextRetryAfterMs ?? Date.now()) + 1);
+
         // Cycle 2: markFailedAsPending flips to PENDING; default mock applies it.
         await backgroundSyncWorker.triggerNow();
+        vi.mocked(Date.now).mockRestore();
 
         row = await getDatabase().mutationQueue
             .where('[deviceId+clientRequestId]')

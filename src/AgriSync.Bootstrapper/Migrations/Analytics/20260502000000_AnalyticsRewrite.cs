@@ -132,11 +132,19 @@ namespace AgriSync.Bootstrapper.Migrations.Analytics
 -- ============================================================
 CREATE SCHEMA IF NOT EXISTS mis;
 
+-- Roles are CLUSTER-wide, so concurrent migration runs against different
+-- databases in one cluster contend for this name. IF NOT EXISTS ... THEN
+-- CREATE ROLE is check-then-act: both sessions see it absent, both CREATE,
+-- and the loser gets 23505 on pg_authid_rolname_index. CI hit this on
+-- 2026-08-23 -- twice, because the first fix corrected the identical pattern
+-- in ShramSafal's BootstrapDbRoles and this second copy then surfaced under
+-- different test names. Catching the violation is what the guard was reaching
+-- for; the pre-check could never deliver it.
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'mis_reader') THEN
-        CREATE ROLE mis_reader NOLOGIN;
-    END IF;
+    CREATE ROLE mis_reader NOLOGIN;
+EXCEPTION WHEN duplicate_object OR unique_violation THEN
+    NULL;  -- another session created it between our check and our CREATE
 END
 $$;
 

@@ -4,7 +4,9 @@
  * Proves:
  * - Axios instances are created with withCredentials: true.
  * - refreshSession() sends no refresh token in the body; sends rememberDevice + X-Device-Id.
- * - A 401 on refresh clears the auth session (fail closed).
+ * - A 401 on refresh clears the auth session (fail closed). Note that
+ *   fail-closed now applies to a JUDGED rejection only — a transport failure
+ *   preserves the credential, proved in RefreshTransportFailure.test.ts.
  * - refreshSession() uses the HttpOnly cookie path (no refreshToken body field).
  */
 
@@ -172,7 +174,7 @@ describe('AgriSyncClient — cookie-based refresh (spec: secure-remembered-devic
         const client = new AgriSyncClient();
         const result = await client.refreshSession();
 
-        expect(result).toBeNull();
+        expect(result).toEqual({ kind: 'rejected' });
         // clearAuthSession must be called fail-closed
         expect(clearAuthSession).toHaveBeenCalled();
         // clearNativeRefreshSession must ALSO be called so that on Android/native

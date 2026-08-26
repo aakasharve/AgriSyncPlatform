@@ -55,6 +55,21 @@ public static class AnalyticsEventType
     public const string ApiSlow = "api.slow";
     public const string ClientError = "client.error";
 
+    // sync.mutation_rejected = the response carried a 2xx but refused one or
+    // more work items inside the batch (RG5).
+    //
+    // DELIBERATELY NOT `api.error`. Overloading that string looked harmless and
+    // was not: `mis.alert_r9_api_error_spike` breaches at >30 `api.error` rows
+    // in an hour (20260502000000_AnalyticsRewrite.cs:70,:425-436) and
+    // AlertDispatcherJob.cs:35,:133 emails the founder when it does. One farmer
+    // whose offline device re-syncs 31 refused mutations would have paged him
+    // about an API failure while the API was entirely healthy — and inflated
+    // `mis.api_health_24h` at the same time.
+    //
+    // A refused mutation is a PRODUCT failure, not an API failure. It deserves
+    // its own name and its own alarm; see ops/aws/alarms/.
+    public const string SyncMutationRejected = "sync.mutation_rejected";
+
     // Admin scope resolution (W0-A §4.4b). Emitted by IEntitlementResolver
     // + OrgFarmScopeProjector. Powers mis.admin_scope_health (Metabase card 15).
     public const string AdminScopeResolved = "admin.scope.resolved";

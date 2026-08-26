@@ -9,9 +9,10 @@
  * Built for a semi-literate farmer: one clear list, big rows, plain words.
  */
 import React, { useState } from 'react';
-import { ChevronRight, ArrowLeft, CheckCircle2, Check, MapPin, LogOut, BarChart3, Medal } from 'lucide-react';
+import { ChevronRight, ArrowLeft, CheckCircle2, Check, MapPin, LogOut, BarChart3, Medal, Users, Sprout } from 'lucide-react';
 import type { ProfileTab } from '../ProfilePage';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
+import { FarmSwitcherSheet } from '../../context/components/FarmContextSwitcher';
 import FarmsSection from './FarmsSection';
 
 export interface SetupHelp {
@@ -45,12 +46,34 @@ interface SetupHubMenuProps {
     familyName?: string;
     onOpenFarm?: (farmId: string) => void;
     onAddFarm?: () => void;
+    /**
+     * spec: owner-oversight-loop (Task 12) — the "तुमच्या शेती · Your farms"
+     * row's farm-switcher data. `तुमच्या शेती` is copied verbatim from
+     * `FarmContextSwitcher.tsx` (already load-bearing there), never
+     * reinvented. All four fields are required together; omit any one to
+     * hide the row entirely rather than render a control that cannot act
+     * (this is ALSO how a single-farm — or zero-farm — account creates or
+     * joins a farm, so it is not gated on `farms.length`).
+     */
+    currentFarmId?: string;
+    /** Switches the app's active farm — the exact handler `AppHeader`'s own
+     * farm-switcher trigger already calls (spec §2.1: "Only the trigger's
+     * shell changes" — this is a second trigger for the SAME sheet). */
+    onSwitchFarm?: (farmId: string) => void;
+    /** Opens the SAME `FirstFarmWizard` instance `AppContent.tsx` owns —
+     * see `requestCreateFarmWizard()` (`app/hooks/useFarmContextState.ts`)
+     * for why this is an event dispatch, not a threaded prop. */
+    onCreateFarm?: () => void;
+    /** The same `promptAndJoinFarmViaQr()` flow AppHeader's farm switcher
+     * already uses — reused, not reinvented. */
+    onJoinViaQr?: () => void;
     language?: 'mr' | 'en';
     setupProgress?: SetupProgressData;
     items: HubMenuItem[];
     onSelect: (id: ProfileTab) => void;
     onExit?: () => void;
     onOpenFinance?: () => void;
+    onOpenLabour?: () => void;
     onOpenReferrals?: () => void;
     settingsItems?: { id: string; label: string; icon: React.ReactNode; subtitle?: string }[];
     onSelectExtra?: (id: string) => void;
@@ -156,8 +179,19 @@ const RowCard: React.FC<RowCardProps> = ({ icon, label, subtitle, tone = 'muted'
 };
 
 export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
-    farmerName, verified, farmName, farms, familyName, onOpenFarm, onAddFarm, language, setupProgress, items, onSelect, onExit, onOpenFinance, onOpenReferrals, settingsItems, onSelectExtra, logout,
+    farmerName, verified, farmName, farms, familyName, onOpenFarm, onAddFarm,
+    currentFarmId, onSwitchFarm, onCreateFarm, onJoinViaQr,
+    language, setupProgress, items, onSelect, onExit, onOpenFinance, onOpenLabour, onOpenReferrals, settingsItems, onSelectExtra, logout,
 }) => {
+    const [showFarmSwitcher, setShowFarmSwitcher] = useState(false);
+
+    // spec: owner-oversight-loop (Task 12) — all four wired together, or
+    // the row does not render at all (never a dead control).
+    const farmSwitcherReady = !!(farms && onSwitchFarm && onCreateFarm && onJoinViaQr);
+    const farmSwitcherSubtitle = farms && farms.length > 0
+        ? `${(farms.find(f => f.farmId === currentFarmId) ?? farms[0]).name} · ${farms.length} शेती`
+        : undefined;
+
     return (
         <div>
             {/* header — solid band so nothing shows through behind the back button */}
@@ -226,6 +260,20 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
             {/* more */}
             <GroupLabel>अधिक · More</GroupLabel>
             <div className="space-y-2.5">
+                {/* spec: owner-oversight-loop (Task 12) — appears for ALL
+                    accounts, including single-farm: it is also how you
+                    create or join a farm (`FarmSwitcherSheet`'s own footer
+                    CTAs, unchanged). */}
+                {farmSwitcherReady && (
+                    <RowCard
+                        icon={<Sprout size={20} />}
+                        label="तुमच्या शेती · Your farms"
+                        subtitle={farmSwitcherSubtitle}
+                        tone="emerald"
+                        onClick={() => setShowFarmSwitcher(true)}
+                    />
+                )}
+                {onOpenLabour && <RowCard icon={<Users size={20} />} label="कामगार व्यवस्थापन · Labour" subtitle="हजेरी · मजुरी · उचल" tone="emerald" onClick={onOpenLabour} />}
                 <RowCard icon={<BarChart3 size={20} />} label="पैसे व हिशोब · Finance" onClick={onOpenFinance} />
                 {onOpenReferrals && <RowCard icon={<Medal size={20} />} label="रेफरल्स · Referrals" onClick={onOpenReferrals} />}
             </div>
@@ -247,6 +295,29 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                 <RowCard icon={<LogOut size={20} />} label="बाहेर पडा · Log out" tone="danger" onClick={logout} />
             </div>
             <div className="h-4" />
+
+            {/* Farm switcher — reuses the EXISTING `FarmSwitcherSheet`
+                unchanged (spec §2.1: "Only the trigger's shell changes"),
+                the same sheet `AppHeader`'s own farm chip opens. */}
+            {showFarmSwitcher && farmSwitcherReady && farms && onSwitchFarm && onCreateFarm && onJoinViaQr && (
+                <FarmSwitcherSheet
+                    farms={farms}
+                    currentFarmId={currentFarmId ?? farms[0]?.farmId ?? ''}
+                    onClose={() => setShowFarmSwitcher(false)}
+                    onSwitch={(farmId) => {
+                        onSwitchFarm(farmId);
+                        setShowFarmSwitcher(false);
+                    }}
+                    onCreateFarm={() => {
+                        setShowFarmSwitcher(false);
+                        onCreateFarm();
+                    }}
+                    onJoinViaQr={() => {
+                        setShowFarmSwitcher(false);
+                        onJoinViaQr();
+                    }}
+                />
+            )}
         </div>
     );
 };

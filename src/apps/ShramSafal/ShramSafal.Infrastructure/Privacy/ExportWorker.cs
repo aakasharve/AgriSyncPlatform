@@ -13,17 +13,46 @@
 //        /cross_border_transfers.json
 //        /dpa_registry.json
 //        /README.md (LEGAL_REVIEW_PENDING-tagged)
-//   2. Uploads to s3://agrisync-exports/{userId}/{requestId}.zip via
-//      IRawBlobStore (reused — its key is content-addressed, but we
-//      can side-load via a path-keyed prefix; for Phase 08 we use the
-//      ZIP's SHA-256 as the content-addressed key + record the path
-//      in ssf.export_artifacts).
-//   3. Generates a 24h-TTL presigned URL (Phase 08: shape-only — the
-//      InMemoryRawBlobStore + the S3 adapter both expose a presigned
-//      URL; the real S3 presign lands when Bootstrapper wires the
-//      S3 adapter for the export bucket).
-//   4. Stamps ExportRequest.MarkCompleted + records ssf.export_artifacts
-//      row + emits AuditEvent entityType=DataExport action=Generated.
+//   2. Uploads via IRawBlobStore (content-addressed: the ZIP's SHA-256
+//      is the object key) + records the path in ssf.export_artifacts.
+//   3. Emits AuditEvent entityType=DataExport action=Generated.
+//   4. Hands the data principal a download link — OR says it cannot.
+//
+// ── §P0.9: THE LINK THAT WAS NEVER A LINK ────────────────────────────
+//
+// Step 3 used to read: "Generates a 24h-TTL presigned URL (Phase 08:
+// shape-only — the InMemoryRawBlobStore + the S3 adapter both expose a
+// presigned URL; the real S3 presign lands when Bootstrapper wires the
+// S3 adapter for the export bucket)."
+//
+// Every clause of that was false. Neither IRawBlobStore nor either of
+// its implementations exposes a presigner — the interface has exactly
+// three members (PutAsync / GetAsync / DereferenceAsync). Nothing was
+// generated: the URL was a string concatenation carrying no signature
+// and no credential. And it pointed at `agrisync-exports`, a bucket that
+// does not exist; the bundle actually lands in the raw blob store's
+// bucket under `raw/{sha256}`.
+//
+// So a 404 with no authority was persisted as the download link for a
+// complete DPDP personal-data export — the most sensitive artefact this
+// system produces — and the request was stamped Completed. The domain
+// validated the string was non-empty, which guards the shape of a value
+// whose whole job is to carry authority.
+//
+// Doctrine P5: truthful-missing beats fake-working. Until something can
+// actually mint a signed URL, this worker now says so. What it does NOT
+// do is change what the export contains — the ZIP is assembled exactly
+// as before, uploaded exactly as before, and indexed in
+// ssf.export_artifacts exactly as before, so an operator can still
+// fulfil the request from a real artefact. Only the false claim that the
+// farmer has a working download link is withdrawn. Removing a dead link
+// is honesty; removing content would be a privacy-rights change and is
+// not in this worker's gift.
+//
+// WIRING A REAL PRESIGNER is the way to make this Completed again: give
+// the blob store a presign capability, hand the result to
+// ExportRequest.MarkCompleted, and the domain guard will accept it
+// because it will carry X-Amz-Signature. Nothing else here needs to move.
 
 using System.IO.Compression;
 using System.Text;
@@ -46,7 +75,17 @@ public sealed class ExportWorker(
     ILogger<ExportWorker> logger) : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(60);
-    private static readonly TimeSpan PresignTtl = TimeSpan.FromHours(24);
+
+    /// <summary>
+    /// The reason recorded on the request, in the audit ledger, and in the log
+    /// when the bundle is built but no signed download link can be issued.
+    /// Plain enough that a support conversation can repeat it verbatim.
+    /// </summary>
+    public const string NoSignerReason =
+        "Your data export was assembled and stored, but we could not issue a download link for it: "
+        + "no signed-link service is configured on this deployment. We have not given you a link that "
+        + "would not work. Your data is unchanged and nothing has been deleted — contact support with "
+        + "this request id and the export will be handed over.";
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -197,40 +236,89 @@ public sealed class ExportWorker(
         ms.Position = 0;
 
         // ── Upload to S3 via the raw blob store ──────────────────────
-        // We content-address by ZIP SHA-256 (matches IRawBlobStore's
-        // existing contract). The export_artifacts row keys the
-        // user-facing presigned URL to the S3 path that S3RawBlobStore
-        // returned for the put.
+        // Content-addressed by ZIP SHA-256 (IRawBlobStore's contract).
+        // Unchanged: the bundle is still assembled and still stored.
         var rawBlobStore = sp.GetRequiredService<IRawBlobStore>();
         var blobRef = await rawBlobStore.PutAsync(ms, "application/zip", ct).ConfigureAwait(false);
 
-        // The blobRef.Sha256 IS the S3 key in the content-addressed
-        // store. We construct a synthetic per-user/per-request path for
-        // the audit + index entries — the actual fetch goes via the
-        // sha256 lookup. (When the dedicated export bucket lands we
-        // replace this with a key prefix include the userId + requestId
-        // for forensic browsability.)
+        // ── §P0.9 — index + subject linkage for the export ZIP ───────
+        //
+        // This is the second (and only other) IRawBlobStore.PutAsync site, and
+        // the object it writes is the most sensitive artefact this system
+        // produces: the farmer's ENTIRE exported dataset.
+        //
+        // It looks already-attributable, because ssf.export_artifacts carries a
+        // user_id and ErasureWorker never deletes that table. But the row does
+        // not outlive the object. RetentionSweepWorker:93-130 deletes
+        // export_artifacts unconditionally at 7 days, while the paired S3
+        // delete (S3RawBlobStore.DereferenceAsync — a hard DeleteObjectAsync) is
+        // best-effort in a try/catch AND impossible in production, which holds
+        // no s3:DeleteObject permission on either media bucket. So after day 7
+        // the ZIP remains in the bucket with no export_artifacts row — the exact
+        // §P0.9 failure mode, on a worse object, reached by a timer rather than
+        // by an erasure request.
+        //
+        // The linkage row needs an index row for its FK, so this upserts both,
+        // the same way the orchestrator does. Constructed directly on `admin`
+        // rather than resolved from `sp` so the writes go through THIS worker's
+        // admin-elevated context rather than a second one. Note there is no
+        // ambient transaction on this path — ShramSafalAdminDbContextFactory
+        // builds its options chain with no interceptor and this worker never
+        // begins one, so each statement autocommits.
+        //
+        // Best-effort: a linkage failure must not fail a DPDP export the farmer
+        // asked for.
+        //
+        // ⚠️ THIS FAILURE CURRENTLY HAS NO ALERTING DESTINATION. Do not read the
+        // LogError below as "someone gets paged". Verified: production Serilog
+        // (appsettings.Production.json:64-95) writes to Console and a rolling
+        // file at /var/log/agrisync/api-.log with retainedFileCountLimit 7.
+        // There is no CloudWatch Logs sink, no metric filter anywhere under
+        // aws/ or .github/, and no log shipper — the single `awslogs` reference
+        // belongs to an undeployed OTel collector that ships traces and metrics,
+        // not logs. So this line lands in a file on the EC2 box and is deleted
+        // after seven days.
+        //
+        // The missing piece is already named in the programme plan §12 as an
+        // open item: the `raw_blob_write_failures` metric and alarm on the
+        // existing CloudWatch → SNS path. Until that ships, a silent linkage
+        // failure here is invisible — on the most sensitive artefact the system
+        // produces. Error level is the right level; it is just not yet a
+        // destination. (AiOrchestrator.cs:1505-1510 swallows the same way; that
+        // is symmetry with an existing unalerted swallow, not evidence of a
+        // landing place.)
+        try
+        {
+            await new Persistence.Repositories.ShramSafalRepository(admin)
+                .UpsertRawBlobIndexAsync(blobRef, userId, ct)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "[export] §P0.9 subject linkage failed for export ZIP sha={Sha256} user={UserId} — the export still ships, but this blob is unattributable once its export_artifacts row is swept at 7 days.",
+                blobRef.Sha256,
+                userId);
+        }
+
+        // blobRef.Sha256 IS the object key in the content-addressed store
+        // (`raw/{sha256}`). The synthetic prefix below is retained verbatim
+        // because RetentionSweepWorker.ExtractSha256 parses this exact shape
+        // to age the object out — changing it would strand every artefact.
         var s3Key = $"exports/{userId:N}/{requestId:N}.zip#sha256={blobRef.Sha256}";
-        var expiresAtUtc = nowUtc.Add(PresignTtl);
 
-        // Presigned URL: Phase 08 ships the contract shape (the URL).
-        // S3RawBlobStore exposes its own presigner when running against
-        // real S3; for InMemoryRawBlobStore the URL is a stub. Either
-        // way the ExportRequest row records the URL so the UI has a
-        // consistent download surface.
-        var presignedUrl = $"https://agrisync-exports.s3.amazonaws.com/{s3Key}?expires={expiresAtUtc:O}";
-
-        // Stamp the export_artifacts index row via raw SQL so we don't
-        // need an EF aggregate for this lightweight table.
+        // Nothing in this process can mint a signed URL: IRawBlobStore has no
+        // presign member, and neither implementation has one either. Recording
+        // an expiry for a link that was never issued would be a second false
+        // claim on top of the first, so the column stays NULL.
         const string insertArtifactSql = @"
 INSERT INTO ssf.export_artifacts(id, user_id, s3_key, created_at_utc, presigned_url_expires_at_utc)
 VALUES ({0}, {1}, {2}, {3}, {4});";
         await admin.Database.ExecuteSqlRawAsync(
             insertArtifactSql,
-            new object[] { Guid.NewGuid(), userId, s3Key, nowUtc, expiresAtUtc },
+            new object[] { Guid.NewGuid(), userId, s3Key, nowUtc, DBNull.Value },
             ct).ConfigureAwait(false);
-
-        request.MarkCompleted(presignedUrl, expiresAtUtc, nowUtc);
 
         admin.AuditEvents.Add(AuditEventFactory.Create(
             entityType: "DataExport",
@@ -243,8 +331,12 @@ VALUES ({0}, {1}, {2}, {3}, {4});";
                 requestId = request.Id,
                 userId,
                 s3Key,
-                expiresAtUtc,
                 zipSize = ms.Length,
+                // State the delivery outcome in the ledger rather than letting
+                // "Generated" imply the farmer received anything.
+                bundleStored = true,
+                downloadLinkIssued = false,
+                deliveryBlockedReason = NoSignerReason,
             },
             farmId: null,
             clientCommandId: null,
@@ -253,11 +345,19 @@ VALUES ({0}, {1}, {2}, {3}, {4});";
             ipHash: "sha256:system",
             sourceAiJobId: null));
 
+        // The bundle exists; the farmer cannot reach it. From the data
+        // principal's side the export did not complete, and that is what the
+        // row now says. `MarkFailed` is reached from InProgress, so the FSM is
+        // unchanged.
+        request.MarkFailed(NoSignerReason, nowUtc);
+
         await admin.SaveChangesAsync(ct).ConfigureAwait(false);
 
-        logger.LogInformation(
-            "ExportWorker completed request {RequestId} for user {UserId}: {Bytes} bytes.",
-            request.Id, userId, ms.Length);
+        logger.LogWarning(
+            "ExportWorker assembled request {RequestId} for user {UserId} ({Bytes} bytes, key {S3Key}) "
+            + "but issued NO download link: no signer is wired. Request marked Failed rather than "
+            + "recording an unsigned URL as a working link.",
+            request.Id, userId, ms.Length, s3Key);
     }
 
     private async Task MarkFailedSafelyAsync(
@@ -305,9 +405,15 @@ VALUES ({0}, {1}, {2}, {3}, {4});";
         await s.WriteAsync(bytes.AsMemory(), ct).ConfigureAwait(false);
     }
 
+    // LEGAL_REVIEW_PENDING: README intentionally carries the marker
+    // until counsel finalizes copy. Mirrors the OQ-7 i18n convention.
+    //
+    // (Comments moved above the signature from between `=>` and the expression:
+    // `dotnet format` cannot lay that shape out and reports WHITESPACE errors it
+    // will not auto-fix, which blocks the pre-commit hook for anyone who stages
+    // this file. Pre-existing since before this task; whitespace only, no
+    // semantic or output change to the exported README.)
     private static string BuildReadmeMarkdown(Guid userId, Guid requestId, DateTime generatedAtUtc) =>
-        // LEGAL_REVIEW_PENDING: README intentionally carries the marker
-        // until counsel finalizes copy. Mirrors the OQ-7 i18n convention.
         $"""
         <!-- LEGAL_REVIEW_PENDING: counsel must finalize this README before counsel-clearance gate -->
         # AgriSync — Your Data Export

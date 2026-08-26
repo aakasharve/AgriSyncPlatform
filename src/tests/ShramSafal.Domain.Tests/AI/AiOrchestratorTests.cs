@@ -412,9 +412,18 @@ internal sealed class RecordingShramSafalRepository : ShramSafal.Application.Por
 {
     public List<RawBlobRef> RawBlobUpserts { get; } = new();
 
-    public Task UpsertRawBlobIndexAsync(RawBlobRef blobRef, CancellationToken ct = default)
+    /// <summary>
+    /// §P0.9 — records the subject passed alongside each blob so the
+    /// producer tests can assert the linkage carries the RIGHT user, not
+    /// merely that some upsert happened. Parallel to
+    /// <see cref="RawBlobUpserts"/>, same index.
+    /// </summary>
+    public List<Guid?> RawBlobSubjects { get; } = new();
+
+    public Task UpsertRawBlobIndexAsync(RawBlobRef blobRef, Guid? subjectUserId, CancellationToken ct = default)
     {
         RawBlobUpserts.Add(blobRef);
+        RawBlobSubjects.Add(subjectUserId);
         return Task.CompletedTask;
     }
 

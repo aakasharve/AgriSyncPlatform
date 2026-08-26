@@ -174,11 +174,42 @@ public static class FarmEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             AgriSync.BuildingBlocks.Application.IHandler<UpdateFarmBoundaryCommand, ShramSafal.Application.Contracts.Dtos.FarmDto> handler,
+            ShramSafal.Application.Ports.ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN §P0.3 — establish
+            // the membership-validated single-farm tenant scope BEFORE the
+            // command runs. 69262b9f wired EstablishForCallerAsync into the
+            // three farm READ routes above and missed this write; since
+            // FORCE-RLS landed on ssf.farms the PUT has died at
+            // TenantConnectionInterceptor's fail-closed throw on the FIRST
+            // DbCommand of the authorization stage
+            // (UpdateFarmBoundaryAuthorizer → GetFarmByIdAsync) — a 500 with
+            // nothing written, for every farmer, on both live client call
+            // sites (BackendFarmGeographyClient.ts, inviteApi.ts).
+            //
+            // 🛑 This must NOT be "fixed" by adding /shramsafal/farms to
+            // TenantTransactionMiddleware.SkipPathPrefixes. Admin elevation
+            // makes the interceptor a no-op that sets NO GUC at all, so once
+            // ssf.farm_boundaries carries a policy the prior-boundary read
+            // filters to nothing: the handler's `?? 0` silently resets the
+            // version to 1 and `?.Archive` silently no-ops, losing boundary
+            // history with no error. Only ICallerFarmTenantScope sets both
+            // agrisync.farm_id and agrisync.owner_account_id.
+            //
+            // Authorization overlap: this scope forbids non-MEMBERS and is
+            // NOT the ownership gate — UpdateFarmBoundaryAuthorizer still
+            // requires owner and runs after it. A non-member farmId returns
+            // Forbidden → ToErrorResult maps "...Forbidden" to Results.Forbid().
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, actorUserId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
