@@ -22,6 +22,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import CanonicalStrip, { FarmIdentityElement } from '../CanonicalStrip';
 import type { CanonicalStripProps, FarmIdentityElementProps } from '../CanonicalStrip';
 import { oversightTranslations } from '../../../../i18n/oversightTranslations';
+import { dataFreshnessTranslations } from '../../../../i18n/dataFreshnessTranslations';
 
 afterEach(() => {
     cleanup();
@@ -41,6 +42,12 @@ function baseStripProps(overrides: Partial<CanonicalStripProps> = {}): Canonical
         // against, so those keep exercising the states they were written
         // for. The `>= 2` case has its own describe block below.
         farmCount: 1,
+        // Founder decision 2026-08-26 — the freshness chip. The DEFAULT is
+        // a device that has never completed a pull, because that is the
+        // honest default for a test that supplies no sync state: it renders
+        // the unknown form, which claims nothing. The known form has its own
+        // describe block below.
+        lastSyncAt: null,
         onToggleWaiting: vi.fn(),
         ...overrides,
     };
@@ -716,5 +723,138 @@ describe('FarmIdentityElement — row 1 farm-identity element (Task 12)', () => 
             const el = screen.getByTestId('canonical-strip-farm-chip');
             expect(el.getAttribute('aria-label')).toContain(oversightTranslations.en.yourFarms);
         });
+    });
+});
+
+describe('CanonicalStrip — the freshness chip (founder decision 2026-08-26)', () => {
+    // His words: "one small chip inside the oversight bar, last timing of the
+    // sync — not to mention sync as a word — but in layman language it must
+    // show the app is up to date till, let's say, 12am Tuesday. Please make
+    // sure you are connected to the internet or something like that."
+    //
+    // A FIXED CLOCK. The chip's day label is relative (आज / काल), so without
+    // pinning "now" these assertions would pass or fail depending on the day
+    // the suite runs — and the failure would look like a copy bug.
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-08-26T06:30:00Z')); // 12:00 IST, 26 Aug
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('renders the known form from a real lastSyncAt — never a literal time', () => {
+        // 05:30Z = 11:00 IST the same IST day, so the chip should read
+        // "आज सकाळी 11:00". The instant is the ONLY source of those digits:
+        // nothing in `CanonicalStrip` may synthesise a time.
+        render(<CanonicalStrip {...baseStripProps({ lastSyncAt: '2026-08-26T05:30:00Z' })} />);
+
+        const chip = screen.getByTestId('canonical-strip-freshness-chip');
+        expect(chip).toHaveTextContent('11:00');
+        expect(chip).toHaveTextContent(dataFreshnessTranslations.mr.dayToday);
+        // The sentence comes from the table, not from this component.
+        const clause = dataFreshnessTranslations.mr.showingWorkUpTo.split('{when}')[1].split('.')[0].trim();
+        expect(chip).toHaveTextContent(clause);
+        // And it is NOT the unknown form.
+        expect(chip.textContent).not.toContain('कधीपर्यन्तची');
+    });
+
+    it('English renders the same fact through the same table', () => {
+        render(
+            <CanonicalStrip
+                {...baseStripProps({ language: 'en', lastSyncAt: '2026-08-25T18:25:00Z' })}
+            />,
+        );
+        // 18:25Z on 25 Aug = 23:55 IST on 25 Aug — yesterday, by the calendar.
+        const chip = screen.getByTestId('canonical-strip-freshness-chip');
+        expect(chip).toHaveTextContent('Showing work up to Yesterday 11:55 PM');
+    });
+
+    it('says so when there is no last-sync instant — never falls back to now', () => {
+        // THE LOAD-BEARING ONE. `lastSyncAt` is null both before the first
+        // Dexie read and on a device that has never completed a pull. A
+        // fabricated freshness claim here would be worse than the staleness
+        // the chip was added to expose (doctrine P4).
+        render(<CanonicalStrip {...baseStripProps({ lastSyncAt: null })} />);
+
+        const chip = screen.getByTestId('canonical-strip-freshness-chip');
+        expect(chip).toHaveTextContent(dataFreshnessTranslations.mr.showingWorkUpToUnknown);
+        // Nothing from the device clock leaked in: no time, no date, no digits
+        // at all.
+        expect(chip.textContent).not.toMatch(/[0-9]/);
+        expect(chip.textContent).not.toContain(dataFreshnessTranslations.mr.dayToday);
+    });
+
+    it('an unparseable cursor lands on the same honest unknown, not on today', () => {
+        // `DateKeyService.getDateKey()` falls back to the CURRENT TIME on an
+        // invalid date, so a corrupt cursor is a live route to printing
+        // today's date as the app's freshness. `formatUpToWhen` refuses first.
+        render(<CanonicalStrip {...baseStripProps({ lastSyncAt: 'not-a-date' })} />);
+
+        const chip = screen.getByTestId('canonical-strip-freshness-chip');
+        expect(chip).toHaveTextContent(dataFreshnessTranslations.mr.showingWorkUpToUnknown);
+        expect(chip.textContent).not.toMatch(/[0-9]/);
+    });
+
+    it('never contains the word "sync", in either language or either state', () => {
+        // The founder's explicit constraint. Asserted at the RENDERED level,
+        // not only in the translations table, because the component composes
+        // strings and a composition is where an English word sneaks back in.
+        for (const language of ['mr', 'en'] as const) {
+            for (const cursor of [null, '2026-08-26T05:30:00Z']) {
+                cleanup();
+                render(<CanonicalStrip {...baseStripProps({ language, lastSyncAt: cursor })} />);
+                const text = screen.getByTestId('canonical-strip-freshness-chip').textContent ?? '';
+                expect(text.toLowerCase(), `${language}/${cursor}`).not.toContain('sync');
+                expect(text, `${language}/${cursor}`).not.toContain('सिंक');
+            }
+        }
+    });
+
+    it('renders in all four strip states, including the reassuring one', () => {
+        // The chip is not a state of the strip — it is the timestamp the other
+        // four states must be read against, and it is LEAST dispensable in the
+        // state that looks most reassuring (`restState`'s green tick over a
+        // device that has not pulled in days).
+        const states = [
+            { label: 'waiting', props: { waitingCount: 6 } },
+            { label: 'rest', props: { waitingCount: 0, dataResolved: true, farmCount: 1 } },
+            { label: 'checking', props: { waitingCount: 0, dataResolved: false } },
+            { label: 'unknown/multi-farm', props: { waitingCount: 0, dataResolved: true, farmCount: 2 } },
+        ];
+        for (const state of states) {
+            cleanup();
+            render(<CanonicalStrip {...baseStripProps({ ...state.props, lastSyncAt: '2026-08-26T05:30:00Z' })} />);
+            expect(
+                screen.getByTestId('canonical-strip-freshness-chip'),
+                state.label,
+            ).toHaveTextContent('11:00');
+        }
+    });
+
+    it('adds no second tap target, and is carried in the accessible name', () => {
+        render(<CanonicalStrip {...baseStripProps({ lastSyncAt: '2026-08-26T05:30:00Z' })} />);
+
+        const chip = screen.getByTestId('canonical-strip-freshness-chip');
+        // The founder asked for one line, not a new control. A `<button>` here
+        // would nest an interactive element inside the strip's own button.
+        expect(chip.tagName).toBe('SPAN');
+        expect(chip.closest('button')).toBe(screen.getByTestId('canonical-strip-waiting-button'));
+
+        // An `aria-label` REPLACES a control's inner text, so without this the
+        // screen-reader owner would be the one person never told how recent
+        // the picture is.
+        const label = screen.getByTestId('canonical-strip-waiting-button').getAttribute('aria-label') ?? '';
+        expect(label).toContain('11:00');
+        expect(label.toLowerCase()).not.toContain('sync');
+    });
+
+    it('uses the locked Devanagari body font for the Marathi sentence', () => {
+        // Root CLAUDE.md font rules: Marathi body text is Noto Sans
+        // Devanagari. Never system-ui, never a generic fallback.
+        render(<CanonicalStrip {...baseStripProps({ lastSyncAt: '2026-08-26T05:30:00Z' })} />);
+        const chip = screen.getByTestId('canonical-strip-freshness-chip');
+        expect(chip.getAttribute('style')).toContain('Noto Sans Devanagari');
     });
 });

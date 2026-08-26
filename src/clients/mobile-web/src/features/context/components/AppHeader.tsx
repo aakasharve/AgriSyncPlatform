@@ -621,6 +621,14 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             // `CanonicalStrip`'s `farmCount` prop doc for the full argument
             // and for why suppressing beats filtering here.
             farmCount={farmCount}
+            // FOUNDER DECISION 2026-08-26 — the freshness chip's one fact,
+            // read straight off the hook this component already calls. NOT a
+            // new timestamp and NOT a new fetch: `SyncStatusDrawer` (mounted
+            // by this same component, below) already renders this exact
+            // value as "Last synced:". No `??` and no fallback — `null` is a
+            // real answer here and `CanonicalStrip` renders it as one; see
+            // its `lastSyncAt` prop doc.
+            lastSyncAt={queueStatus.lastSyncAt}
             onToggleWaiting={() => setIsWaitingDrawerOpen(true)}
           />
         </div>

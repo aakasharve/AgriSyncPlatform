@@ -331,6 +331,39 @@
  * a still-declared key with no consumer reads as an unfinished wiring job
  * rather than a decision. The record of WHY they went is this paragraph and
  * the commit that removed them — not a corpse in the type.
+ *
+ * ONE NEW (d) KEY: `approximately` — founder message, 2026-08-26
+ * ----------------------------------------------------------------
+ * Commit `aacdd16c` DELETED the `sinceLastLookedTail` line from
+ * `OversightBriefingCard.tsx` because the day count behind it is measured
+ * from each record's CREATION time, not from when it reached the owner's
+ * phone (`oversightSelectors.ts`'s `effectiveArrivalISO()` is
+ * `meta.createdAtISO`). The founder has OVERRULED that deletion: he wants
+ * the line back, softened, in his own words — *"we can't be always true for
+ * this too"*.
+ *
+ * `approximately` is the one word that softens it. `mr: 'अंदाजे'` is HIS,
+ * supplied in the coordinator message that made this decision — same (d)
+ * provenance rule and same medium as the 2026-08-23/24 graduations above,
+ * transcribed character-for-character. `en: 'about'` is an ordinary English
+ * translation of it (translating INTO English is not the Hard Rule's
+ * concern).
+ *
+ * IT IS A MODIFIER, NOT A SECOND SENTENCE. `sinceLastLookedTail` is
+ * untouched — same key, same founder-approved words, same `{days}` token.
+ * The consumer substitutes `अंदाजे 3` into the token rather than composing a
+ * new string, so the approximation word lands immediately before the number
+ * ("तुम्ही शेवटचं पाहिल्यानंतर — अंदाजे 3 दिवस") and not one word of his copy
+ * is rewritten. That is also why there is no second tail key: the spec's §6
+ * Hard Rule forbids inventing a parallel sentence when an approved one
+ * already exists.
+ *
+ * WHEN IT IS OMITTED. `OversightModel.boundaryApproximate` decides — the
+ * flag `oversightSelectors.ts:316` has always set and nothing has ever
+ * read. `true` (the only value the selector produces today) renders the word;
+ * `false` renders the founder's exact tail unmodified, for the day a real
+ * server-received timestamp makes the boundary exact. Giving that flag its
+ * first consumer is the whole point of this change.
  */
 import type { Language } from './language';
 
@@ -478,6 +511,15 @@ export interface OversightTranslations {
      */
     sinceLastLookedTail: string;
     /**
+     * Founder message 2026-08-26, category (d). The word that goes
+     * IMMEDIATELY BEFORE the number in `sinceLastLookedTail` when
+     * `OversightModel.boundaryApproximate` is `true` — which is every model
+     * the selector builds today. Substituted INTO that key's `{days}` token,
+     * never composed into a sentence of its own; see this file's header,
+     * "ONE NEW (d) KEY".
+     */
+    approximately: string;
+    /**
      * Task 5 / Ruling 8. Band 1's `dayNotClosed` decision row (spec §3's
      * table: "yesterdayDayState not closed"). No template — the row carries
      * no count in the spec's own wording.
@@ -582,6 +624,9 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         bandDecisionsHeader: 'Needs your decision',
         bandSinceLastLookedHeader: 'Since you last looked',
         sinceLastLookedTail: 'since you last looked — {days} days',
+        // Founder message 2026-08-26. Ordinary English translation of his
+        // 'अंदाजे'; reads as one word before the count ("about 3 days").
+        approximately: 'about',
         dayNotClosedLine: "Yesterday's day was not closed",
 
         navToday: "Today's Tasks",
@@ -647,6 +692,11 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         bandDecisionsHeader: 'तुम्ही ठरवायचं आहे',
         bandSinceLastLookedHeader: 'तुम्ही शेवटचं पाहिल्यानंतर',
         sinceLastLookedTail: 'तुम्ही शेवटचं पाहिल्यानंतर — {days} दिवस',
+        // FOUNDER-SUPPLIED 2026-08-26, category (d) — his own word, from the
+        // coordinator message that overruled `aacdd16c`'s deletion of the
+        // tail above. Transcribed character-for-character. See this file's
+        // header, "ONE NEW (d) KEY".
+        approximately: 'अंदाजे',
         dayNotClosedLine: 'काल दिवस पूर्ण झाला नाही',
 
         // Task 13, category (d) — verbatim from the founder's own reference

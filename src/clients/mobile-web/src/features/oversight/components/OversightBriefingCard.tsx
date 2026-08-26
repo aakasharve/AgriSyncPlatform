@@ -46,6 +46,7 @@ import type { Language } from '../../../i18n/language';
 import { resolveOversightString } from '../../../i18n/oversightTranslations';
 import { getUserColor } from '../../context/components/AppHeader';
 import type { OversightModel, OversightPerson } from '../oversightSelectors';
+import { formatOversightTemplate } from '../formatOversightTemplate';
 
 const DEVANAGARI_PATTERN = /[ऀ-ॿ]/;
 const MARATHI_BODY_FONT = { fontFamily: "'Noto Sans Devanagari', sans-serif" } as const;
@@ -143,34 +144,47 @@ const OversightBriefingCard: React.FC<OversightBriefingCardProps> = ({ language,
     const entriesText = resolveOversightString(language, 'entries');
     const plotsUnitText = resolveOversightString(language, 'plotsUnit');
 
-    // TRUTH FIX (truth audit, question 1) — the
-    // "तुम्ही शेवटचं पाहिल्यानंतर — N दिवस" tail that used to render
-    // here is DELETED.
+    // FOUNDER DECISION 2026-08-26 — THE TAIL IS BACK, AND IT NO LONGER
+    // CLAIMS PRECISION.
     //
-    // WHAT IT CLAIMED: that everything the owner has not yet looked at, over
-    // the last N days, is listed below it.
+    // Commit `aacdd16c` deleted this line outright. The founder overruled
+    // that: he wants the day count visible, softened, in his own words —
+    // *"we can't be always true for this too"*.
     //
-    // WHY THE DATA CANNOT BACK IT: the "unseen" boundary is measured from
-    // each record's CREATION time, not from when the record reached this
-    // phone — `oversightSelectors.ts`'s `effectiveArrivalISO()` is
-    // `meta.createdAtISO`, because `DailyLog` carries no server-received
-    // timestamp at all. So a sathi's record written offline on Tuesday and
-    // synced on Friday is classified already-seen and never shown, while
-    // this line still stated a confident N over the incomplete set beneath
-    // it. The selector already admits this in its own output: it sets
-    // `boundaryApproximate: true` unconditionally — and nothing has ever
-    // read that flag.
+    // WHAT THE OLD LINE CLAIMED: a confident N — that everything arriving in
+    // the last N days is listed below it.
     //
-    // Doctrine P4 (no fabricated numbers): a number the app cannot stand
-    // behind is not repaired by rendering it small. Removing the line costs
-    // the farmer nothing — every tally, person row and decision row below is
-    // untouched — and it invents no new Marathi, which the spec's §6 Hard
-    // Rule forbids outright.
+    // WHY THE DATA CANNOT BACK A CONFIDENT N: the "unseen" boundary is
+    // measured from each record's CREATION time, not from when the record
+    // reached this phone — `oversightSelectors.ts`'s `effectiveArrivalISO()`
+    // is `meta.createdAtISO`, because `DailyLog` carries no server-received
+    // timestamp at all. A sathi's record written offline on Tuesday and
+    // synced on Friday is therefore classified already-seen and never shown.
     //
-    // `model.sinceDays` and `model.boundaryApproximate` both STAY on the
-    // model deliberately. `boundaryApproximate` is the honest signal, and
-    // rendering it (one founder-supplied word) is how a tail could come back
-    // later; deleting the flag would delete the truth along with the claim.
+    // THE SELECTOR HAS ALWAYS SAID SO, AND NOTHING LISTENED. It sets
+    // `boundaryApproximate: true` on every model it builds
+    // (`oversightSelectors.ts:316`), for exactly this reason, and until this
+    // change no component read the flag. This is its first consumer — the
+    // flag drives the wording rather than a literal, so the day a real
+    // server-received timestamp makes the boundary exact, `false` renders
+    // the founder's tail unmodified with no edit here.
+    //
+    // HOW THE SOFTENING IS DONE: `approximately` ('अंदाजे' / 'about') is
+    // substituted INTO `sinceLastLookedTail`'s own `{days}` token, so the
+    // word lands immediately before the number and not one word of the
+    // founder's approved sentence is rewritten. No second tail string is
+    // invented — the spec's §6 Hard Rule forbids exactly that.
+    //
+    // `model.sinceDays === null` (no checkpoint yet) still renders NOTHING.
+    // "0 days since you last looked" would be a fabricated number, and an
+    // approximation word does not make a fabricated number honest (P4).
+    const sinceTailText = model.sinceDays === null
+        ? null
+        : formatOversightTemplate(resolveOversightString(language, 'sinceLastLookedTail'), {
+            days: model.boundaryApproximate
+                ? `${resolveOversightString(language, 'approximately')} ${model.sinceDays}`
+                : `${model.sinceDays}`,
+        });
 
     return (
         <div
@@ -186,6 +200,7 @@ const OversightBriefingCard: React.FC<OversightBriefingCardProps> = ({ language,
                 </div>
                 <div className="mt-1 text-[11.5px] leading-relaxed text-stone-400" style={fontStyleFor(subText)}>
                     {subText}
+                    {sinceTailText && <span data-testid="waiting-drawer-since-tail"> · {sinceTailText}</span>}
                 </div>
 
                 <div className="mt-3 flex" data-testid="waiting-drawer-tallies">

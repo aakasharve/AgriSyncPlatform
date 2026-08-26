@@ -34,6 +34,7 @@ import { ChevronRight, Users, Wallet, ArrowUpRight, Scale, ClipboardList, Inbox,
 import type { LabourData } from '../labourMock';
 import { inr } from '../labourMock';
 import { StatTile, GroupLabel, EmptyState } from './LabourUiKit';
+import { isReadableWeekRange } from '../weekLabel';
 
 const SHOW_ADVANCE_STAT = false;
 // TEMPORARILY true (2026-08-10) — the SECOND doorway to हजेरी वही. Must flip back
@@ -64,20 +65,9 @@ const SHOW_LEDGER_BUTTON = false;
  * so the suppression lives here. It is not a flag: the day the server sends a
  * real range, this renders it again with no further change.
  */
-// A machine timestamp — the exact value shipping today, and any label that
-// merely leads with one (e.g. an ISO pair) is no more readable.
-const MACHINE_DATE_PREFIX = /^\d{4}-\d{2}-\d{2}/;
-// A week is a SPAN, so its label needs a range dash. Deliberately NOT the
-// ASCII hyphen: that is the character machine dates are built from, and
-// accepting it would let `2026-08-24` back through.
-const RANGE_DASH = /[–—]/;
-
-function isReadableWeekRange(label: string): boolean {
-    const trimmed = label.trim();
-    if (trimmed.length === 0) return false;
-    if (MACHINE_DATE_PREFIX.test(trimmed)) return false;
-    return RANGE_DASH.test(trimmed);
-}
+// The guard — and the machine-date pattern it keys on — moved to
+// `features/labour/weekLabel.ts` so HajeriLedger shares it rather than carrying
+// a second copy that can drift. See that file.
 
 interface Props { data: LabourData; onReview: () => void; onLedger: () => void; onToast: (m: string) => void }
 

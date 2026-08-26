@@ -10,6 +10,7 @@ import React from 'react';
 import { Check, BookText } from 'lucide-react';
 import type { LabourData, PresenceStatus } from '../labourMock';
 import { Avatar, EmptyState } from './LabourUiKit';
+import { isReadableWeekRange } from '../weekLabel';
 
 const cellClass = (s: PresenceStatus) => s === 'present' ? 'bg-emerald-50 text-emerald-700' : s === 'half' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-300';
 const cellGlyph = (s: PresenceStatus): React.ReactNode => s === 'present' ? <Check size={13} strokeWidth={3.2} /> : s === 'half' ? '½' : '–';
@@ -38,8 +39,15 @@ const HajeriLedger: React.FC<{ data: LabourData; onToast: (m: string) => void }>
 
     return (
         <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2">
+            {/* The week label renders ONLY when it is a real range. The server
+                sends a bare ISO date (`GetLabourDataHandler.cs:261`), so this
+                heading read `2026-08-24 · हजेरी वही` — a machine date sold as a
+                week. Same guard WeeklyDashboard uses; shared, not copied, so the
+                fix cannot land on one screen and miss the other again. `P5`. */}
             <div className="flex items-center justify-center rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
-                <span className="text-[13px] font-extrabold text-slate-800">{L.weekLabel} · हजेरी वही</span>
+                <span className="text-[13px] font-extrabold text-slate-800">
+                    {isReadableWeekRange(L.weekLabel) ? `${L.weekLabel} · हजेरी वही` : 'हजेरी वही'}
+                </span>
             </div>
 
             <div className="flex justify-center gap-4 p-1">

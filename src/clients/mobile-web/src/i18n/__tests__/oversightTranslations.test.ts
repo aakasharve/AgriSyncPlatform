@@ -139,6 +139,9 @@ const GROUP_B_REWORDED_KEYS: (keyof OversightTranslations)[] = [
 // "these are his words, not ours" tests below can address them directly.
 const FOUNDER_APPROVED_KEYS: (keyof OversightTranslations)[] = [
     'waitingLabel',
+    // Founder message 2026-08-26 — 'अंदाजे', his word, overruling
+    // `aacdd16c`'s deletion of the day-count tail.
+    'approximately',
     'restState',
     'waitingSubtitle',
     'navToday',
@@ -242,6 +245,10 @@ const EXPECTED_MR: Record<keyof OversightTranslations, string> = {
     bandDecisionsHeader: 'तुम्ही ठरवायचं आहे',
     bandSinceLastLookedHeader: 'तुम्ही शेवटचं पाहिल्यानंतर',
     sinceLastLookedTail: 'तुम्ही शेवटचं पाहिल्यानंतर — {days} दिवस',
+    // (d) founder-supplied 2026-08-26 — the one word that softens the tail
+    // above when `boundaryApproximate` is true. His own, transcribed
+    // character-for-character.
+    approximately: 'अंदाजे',
     dayNotClosedLine: 'काल दिवस पूर्ण झाला नाही',
 
     // (d) founder-approved, Task 13/17 reference table. F7(b): unpinned
@@ -471,13 +478,19 @@ describe('oversightTranslations — every_mr_value_is_byte_pinned (finding F7b)'
         expect(Object.keys(EXPECTED_MR).sort()).toEqual(Object.keys(oversightTranslations.mr).sort());
     });
 
-    it('the_eighteen_founder_authored_strings_are_pinned_and_never_flagged_pending', () => {
-        // Finding F7(b) named these explicitly: `waitingLabel`, `restState`
-        // and the sixteen category-(d) keys the founder typed himself. They
-        // had no byte-pinning at all before this change, so a reword would
-        // have shipped silently. Asserted as a group, by name, so deleting
-        // one from the oracle is visible in a diff.
-        expect(FOUNDER_APPROVED_KEYS).toHaveLength(18);
+    it('the_founder_authored_strings_are_pinned_and_never_flagged_pending', () => {
+        // Finding F7(b) named eighteen explicitly: `waitingLabel`,
+        // `restState` and the sixteen category-(d) keys the founder typed
+        // himself. They had no byte-pinning at all before that change, so a
+        // reword would have shipped silently. Asserted as a group, by name,
+        // so deleting one from the oracle is visible in a diff.
+        //
+        // NINETEEN as of 2026-08-26: `approximately` ('अंदाजे') joins them —
+        // his word, from the coordinator message that overruled `aacdd16c`'s
+        // deletion of the day-count tail. The COUNT is asserted, not just
+        // the loop, so a key added to his list without a matching oracle
+        // entry fails here rather than passing vacuously.
+        expect(FOUNDER_APPROVED_KEYS).toHaveLength(19);
         for (const key of FOUNDER_APPROVED_KEYS) {
             expect(oversightTranslations.mr[key], `mr.${key} drifted from the founder's own words`).toBe(EXPECTED_MR[key]);
             expect(oversightTranslations.mr[key].length, `mr.${key} must not be empty`).toBeGreaterThan(0);

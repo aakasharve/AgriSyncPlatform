@@ -103,11 +103,27 @@
  * read yet. `FarmIdentityElement` now renders the plot line only when
  * `dataResolved && farmCount === 1`. Full reasoning on its `dataResolved`
  * prop. Truth audit, question 3. Doctrine P4.
+ *
+ * FOUNDER DECISION 2026-08-26 — ONE CHIP: HOW RECENT THIS PICTURE IS
+ * ---------------------------------------------------------------------
+ * All four states above answer "what is outstanding". None answered "as of
+ * when" — so `restState`'s green tick read as current even on a device that
+ * had not pulled in days. The strip now carries one stone chip stating that
+ * the app is showing work UP TO a given time, plus the connectivity hint the
+ * founder asked for, in all four states. The word "sync" appears in neither
+ * language (his constraint); the fact is `syncCursors.lastSyncAt`, which
+ * `SyncStatusDrawer.tsx:387` already renders as "Last synced:" — no new
+ * timestamp and no new fetch. Full reasoning on the `lastSyncAt` prop; the
+ * copy and its Marathi provenance live in `i18n/dataFreshnessTranslations.ts`;
+ * the `null`/unparseable refusal lives in `features/oversight/formatUpToWhen.ts`.
  */
 import React from 'react';
 import { LandPlot, ChevronDown, AlertTriangle, CheckCircle2, Loader2, HelpCircle } from 'lucide-react';
 import type { Language } from '../../../i18n/language';
 import { oversightTranslations, resolveOversightString, PENDING_FOUNDER_STRINGS } from '../../../i18n/oversightTranslations';
+import { resolveDataFreshnessString } from '../../../i18n/dataFreshnessTranslations';
+import { formatOversightTemplate } from '../formatOversightTemplate';
+import { formatUpToWhen } from '../formatUpToWhen';
 
 // Devanagari block. Used only to pick which of the two locked fonts a
 // resolved string needs (root CLAUDE.md Font Rules) — never to decide
@@ -407,6 +423,40 @@ export interface CanonicalStripProps {
      * value that re-enables the claim.
      */
     farmCount: number;
+    /**
+     * `syncCursors.lastSyncAt` — the instant this device last completed a
+     * pull, exactly as `features/sync/hooks/useSyncQueueStatus.ts:54,183`
+     * reports it, threaded through `AppHeader.tsx` from the hook it already
+     * calls. NOT a new timestamp and NOT a new read: the same fact
+     * `SyncStatusDrawer.tsx:387` already renders as "Last synced:", surfaced
+     * where the owner actually stands.
+     *
+     * FOUNDER DECISION 2026-08-26, his own words: *"one small chip inside
+     * the oversight bar, last timing of the sync — not to mention sync as a
+     * word — but in layman language it must show the app is up to date till,
+     * let's say, 12am Tuesday."*
+     *
+     * WHY THE STRIP NEEDED IT. Every other state on this bar is a claim
+     * about WHAT is outstanding; none is a claim about WHEN the answer was
+     * last refreshed. A farmer reading `restState` ("all work is complete as
+     * of today") has no way to know he is reading a three-day-old picture,
+     * and `oversightSelectors.ts` cannot tell him — it classifies "unseen"
+     * from each record's CREATION time, so a sathi's record made offline and
+     * synced later is judged already-seen and never listed. This line does
+     * not fix that classification; it states the one fact that lets the
+     * owner discount the screen honestly.
+     *
+     * `null` IS A REAL ANSWER AND IS RENDERED AS ONE. It means either "no
+     * pull has ever completed" or "the first Dexie read has not landed"
+     * (`EMPTY_STATUS.lastSyncAt`), and the chip says so out loud rather than
+     * falling back to the device clock or to "now" — a fabricated freshness
+     * claim here would be worse than the defect it was asked to expose
+     * (doctrine `P4`). REQUIRED, never optional, for the same reason
+     * `dataResolved` and `farmCount` are: an optional prop invites a call
+     * site to omit it, and omission is indistinguishable from a real `null`
+     * only until someone writes `?? new Date().toISOString()`.
+     */
+    lastSyncAt: string | null;
     /** Opens the waiting drawer (spec §3). */
     onToggleWaiting: () => void;
 }
@@ -442,6 +492,7 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
     waitingCount,
     dataResolved,
     farmCount,
+    lastSyncAt,
     onToggleWaiting,
 }) => {
     // CHANGE 2 — THE ONE PIECE OF STATE IN THIS FILE, AND IT IS A CLOCK.
@@ -529,12 +580,41 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
     // resolved for it.
     const subtitleText = isWaiting ? resolveOversightString(language, 'waitingSubtitle') : null;
 
+    // FOUNDER DECISION 2026-08-26 — THE FRESHNESS CHIP. See `lastSyncAt`'s
+    // prop doc for the founder's own wording and why this bar needed it.
+    //
+    // ALWAYS RENDERED, in all four states above. It is not a state of the
+    // strip — it is the timestamp the other four states should be read
+    // against, and it is least dispensable in exactly the state that looks
+    // most reassuring (`restState`'s green tick).
+    //
+    // TWO FORMS, NEVER A THIRD. `formatUpToWhen` returns `null` for a `null`
+    // cursor AND for an unparseable one, and both land on
+    // `showingWorkUpToUnknown`; there is no path in this component that
+    // renders a time it was not given. The word "sync" appears in neither
+    // form in either language — `dataFreshnessTranslations.ts` holds that
+    // constraint and its test asserts it over the whole table.
+    const upToWhenText = formatUpToWhen(lastSyncAt, language);
+    const freshnessText = upToWhenText === null
+        ? resolveDataFreshnessString(language, 'showingWorkUpToUnknown')
+        : formatOversightTemplate(
+            resolveDataFreshnessString(language, 'showingWorkUpTo'),
+            { when: upToWhenText },
+        );
+
     return (
         <button
             type="button"
             onClick={onToggleWaiting}
             data-testid="canonical-strip-waiting-button"
-            aria-label={primaryLabelText}
+            // The chip's sentence is APPENDED, not left to the DOM: an
+            // `aria-label` replaces a control's inner text wholesale, so a
+            // screen-reader owner would otherwise be the one person on the
+            // strip never told how recent the picture is. Same reasoning as
+            // the multi-farm plot count removed from `FarmIdentityElement`'s
+            // label — that one was untrue and had to go, this one is true and
+            // has to be there.
+            aria-label={`${primaryLabelText} — ${freshnessText}`}
             className={`relative flex w-full items-center gap-2.5 rounded-2xl border px-3 py-2.5 text-left transition-colors ${
                 isWaiting
                     ? 'border-amber-200 bg-amber-50'
@@ -646,6 +726,25 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
                         {englishCaption}
                     </span>
                 )}
+                {/* The chip itself. STONE in every state, deliberately: it
+                    reports a time, it is not an alert, and amber here would
+                    say "this needs you" (§P-G) about something the farmer
+                    can only respond to by checking his connection.
+                    NOT a control — a `<span>` inside the strip's existing
+                    button, so it adds no second tap target to a bar the
+                    founder asked to keep simple, and taps fall through to
+                    the drawer this button already opens.
+                    WRAPS, never truncates, for the same reason
+                    `waitingSubtitle` above does: a clipped freshness
+                    sentence ending in "…" would hide the connectivity hint,
+                    which is the only actionable half of the line. */}
+                <span
+                    data-testid="canonical-strip-freshness-chip"
+                    className="mt-1 inline-block rounded-md bg-stone-100 px-1.5 py-[1.5px] text-[9.5px] font-semibold leading-[1.5] text-stone-500"
+                    style={fontStyleFor(freshnessText)}
+                >
+                    {freshnessText}
+                </span>
             </span>
 
             {isWaiting && (
