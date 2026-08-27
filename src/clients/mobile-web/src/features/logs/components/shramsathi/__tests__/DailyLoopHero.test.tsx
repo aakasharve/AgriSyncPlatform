@@ -8,22 +8,10 @@
 // carried qualifier (Fix 1: a subset of TODAY's N, never a divergent count —
 // naming a single carried task, or "(यातील {k} काल पासून)" for several). No
 // async Dexie-backed LanguageProvider needed.
-import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { cleanup, render, screen, fireEvent, act } from '@testing-library/react';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { cleanup, render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { t as translate } from '../../../../../i18n/translations';
-// Ruling A2 (founder review of `?preview=oversight`, 2026-08-26) — the settled
-// line is now gated on what the oversight strip is saying, published by
-// `AppHeader`. This suite renders the hero ALONE, with no header in the tree,
-// so the signal is whatever these tests publish. The default is deliberately
-// left at `null` ("the strip is making no claim") — see
-// `the_settled_line_is_never_spoken_from_silence` below, which is the unit-level
-// half of the guard; the wiring itself is proven end-to-end against the real
-// header in `features/oversight/__tests__/oversightWaitingSignal.test.tsx`.
-import {
-    publishOversightWaitingSignal,
-    resetOversightWaitingSignal,
-} from '../../../../oversight/oversightWaitingSignal';
 import DailyLoopHero from '../DailyLoopHero';
 
 vi.mock('../../../../../i18n/LanguageContext', () => ({
@@ -34,23 +22,14 @@ vi.mock('../../../../../i18n/LanguageContext', () => ({
     }),
 }));
 
-beforeEach(() => {
-    resetOversightWaitingSignal();
-});
-
 afterEach(() => {
     cleanup();
-    resetOversightWaitingSignal();
 });
 
-/** Publishes what the oversight strip is saying, then renders — the same
- * order production has it in (the header commits, the hero reads). */
-function renderWithStripSaying(signal: number | null, element: React.ReactElement) {
-    act(() => {
-        publishOversightWaitingSignal(signal);
-    });
-    return render(element);
-}
+/** The settled sentence the founder had removed on 2026-08-27. Read from the
+ * table, never retyped: the key still exists in `dfesTranslations.ts` (approved
+ * copy is not deleted), so a re-wiring of it must fail these tests. */
+const SETTLED_LINE = translate('dfes.dailyLoopDaySettled', 'mr');
 
 describe('DailyLoopHero (Daily Clarity Loop v1 morning trigger)', () => {
     it('shows "आज N कामं बाकी" when work is left (N > 0)', () => {
@@ -85,56 +64,51 @@ describe('DailyLoopHero (Daily Clarity Loop v1 morning trigger)', () => {
         expect(screen.getByTestId('daily-loop-hero-line')).toHaveTextContent('आज काहीच सांगितलं नाही');
     });
 
-    // Ruling A2 added the second precondition: the strip must ALSO be saying
-    // nothing is waiting. `0` here is that state (its rest tick).
-    it('never claims "you told me nothing" once the day HAS been recorded (N === 0, closure > 0)', () => {
-        renderWithStripSaying(
-            0,
+    // ---- Founder ruling 2026-08-27: the settled day belongs to the strip ----
+
+    it('the_settled_day_renders_no_card_at_all (N === 0, closure > 0)', () => {
+        // The founder read this component's "आज सगळं सांगून झालं — काही बाकी
+        // नाही" directly beneath the oversight strip's own all-clear and ruled:
+        // "there are two line only keep which is on the oversight bar."
+        // Deleted at source, NOT gated — so there is no input under which this
+        // component speaks it, and no signal left to publish.
+        render(
             <DailyLoopHero pendingCount={0} carriedCount={0} closurePercent={100} onFocusRecorder={() => {}} />,
         );
-        const line = screen.getByTestId('daily-loop-hero-line');
-        // The exact contradiction Wave 2.4 exists to kill: a full ring beside
-        // "आज काहीच सांगितलं नाही" ("you told me nothing today").
-        expect(line).not.toHaveTextContent('आज काहीच सांगितलं नाही');
-        expect(line).toHaveTextContent('आज सगळं सांगून झालं — काही बाकी नाही.');
-        expect(screen.getByTestId('daily-loop-hero-ring')).toHaveTextContent('100%');
-    });
-
-    // ---- Ruling A2: "काही बाकी नाही" is a claim, and a claim needs evidence --
-
-    it('the_settled_line_is_never_spoken_over_a_positive_waiting_count', () => {
-        renderWithStripSaying(
-            4,
-            <DailyLoopHero pendingCount={0} carriedCount={0} closurePercent={100} onFocusRecorder={() => {}} />,
-        );
-        expect(screen.queryByText('आज सगळं सांगून झालं — काही बाकी नाही.')).toBeNull();
         expect(screen.queryByTestId('daily-loop-hero')).toBeNull();
+        expect(screen.queryByText(SETTLED_LINE)).toBeNull();
+        expect(document.body.textContent).not.toContain(SETTLED_LINE);
     });
 
-    it('the_settled_line_is_never_spoken_from_silence (no strip on screen = no claim)', () => {
-        // `null` is the module default and means "the strip is making no count
-        // claim". Reading it as zero is the exact unknown-reported-as-none
-        // failure this gate exists to prevent, so the hero says nothing.
-        renderWithStripSaying(
-            null,
-            <DailyLoopHero pendingCount={0} carriedCount={0} closurePercent={100} onFocusRecorder={() => {}} />,
-        );
-        expect(screen.queryByText('आज सगळं सांगून झालं — काही बाकी नाही.')).toBeNull();
-        expect(screen.queryByTestId('daily-loop-hero')).toBeNull();
+    it('the_settled_sentence_reaches_no_screen_at_any_closure_percent', () => {
+        // The old branch was `closurePercent > 0`, so a sweep across that
+        // boundary is what catches a partial revert. `0` is the empty-day
+        // invite (asserted above); every value above it must render nothing.
+        for (const closurePercent of [1, 25, 70, 99, 100]) {
+            render(
+                <DailyLoopHero pendingCount={0} carriedCount={0} closurePercent={closurePercent} onFocusRecorder={() => {}} />,
+            );
+            expect(screen.queryByTestId('daily-loop-hero'), String(closurePercent)).toBeNull();
+            expect(document.body.textContent).not.toContain(SETTLED_LINE);
+            cleanup();
+        }
     });
 
-    it('a positive waiting count leaves the OTHER two states untouched', () => {
-        // Gating these would be hiding true lines to fake agreement. "N tasks
-        // left" and "nothing told yet" both sit happily beside a waiting strip.
-        renderWithStripSaying(
-            4,
+    it('the two states that do NOT restate the strip are untouched', () => {
+        // The ruling removed one sentence, not the card. "N tasks left" and
+        // "nothing told yet" are not all-clears — they do not restate the
+        // strip, and deleting them would be losing true lines with no home.
+        render(
             <DailyLoopHero pendingCount={5} carriedCount={0} closurePercent={40} onFocusRecorder={() => {}} />,
         );
         expect(screen.getByTestId('daily-loop-hero-line')).toHaveTextContent('आज 5 कामं बाकी');
+        // The day-closure ring survives HERE — it is the one surface that still
+        // carries `closurePercent`, and it could not move to the strip (a
+        // proportion of today's planned work is not a count of waiting rows).
+        expect(screen.getByTestId('daily-loop-hero-ring')).toHaveTextContent('40%');
         cleanup();
 
-        renderWithStripSaying(
-            4,
+        render(
             <DailyLoopHero pendingCount={0} carriedCount={0} closurePercent={0} onFocusRecorder={() => {}} />,
         );
         expect(screen.getByTestId('daily-loop-hero-line')).toHaveTextContent('आज काहीच सांगितलं नाही');

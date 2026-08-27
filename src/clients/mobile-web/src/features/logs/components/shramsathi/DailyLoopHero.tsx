@@ -5,38 +5,50 @@
  * Daily Clarity Loop v1 — the morning TRIGGER (spec: dfes-companion-2026-07-11).
  *
  * One calm line at the very top of the home idle view, answering "काय राहिलं".
- * Wave 2.4 splits the N === 0 case in two, because "nothing LEFT" and "nothing
- * TOLD" are different days and the old single line claimed the second for both:
+ * Wave 2.4 split the N === 0 case in two, because "nothing LEFT" and "nothing
+ * TOLD" are different days and the old single line claimed the second for both.
+ * The founder's 2026-08-27 ruling then removed the first of those two:
  *   N > 0                          → आज {N} कामं बाकी (today N tasks left)
  *   N === 0, closurePercent === 0  → आज काहीच सांगितलं नाही… (nothing told yet;
  *                                    give a reason, or just say "no work today")
- *   N === 0, closurePercent  > 0   → आज सगळं सांगून झालं — काही बाकी नाही.
- *                                    (today is told, nothing left) — ONLY when
- *                                    the oversight strip is also claiming
- *                                    nothing is waiting; see ruling A2 below.
+ *   N === 0, closurePercent  > 0   → NOTHING. This card does not render at all.
+ *                                    See below.
  *
- * WHAT THIS HEADER USED TO CLAIM, AND WHY IT WAS FALSE (founder review of
- * `?preview=oversight`, 2026-08-26 — ruling A2)
+ * WHY THE SETTLED LINE IS GONE (founder review of `?preview=oversight&waiting=none`,
+ * 2026-08-27 — superseding ruling A2 of 2026-08-26)
  * ---------------------------------------------------------------------------
- * It said: "The ring beside it reads from the SAME fact, so the two can never
- * contradict." That was true of the RING and of nothing else. The founder read
- * the oversight strip reporting FOUR rows waiting for him and, directly
- * beneath it, this component's "आज सगळं सांगून झालं — काही बाकी नाही"
- * ("today everything is told — nothing left"). Both numbers were true and
- * neither was fabricated — the strip counts logs awaiting HIS APPROVAL, this
- * line counts TODAY'S UNLOGGED TASKS — but a farmer does not parse that
- * distinction. He reads "4 pending" above "all done". Doctrine P4 is about
- * what reaches the farmer, and what reached him was false.
+ * On 2026-08-26 the founder read the oversight strip reporting FOUR rows
+ * waiting for him and, directly beneath it, this component's "आज सगळं सांगून
+ * झालं — काही बाकी नाही" ("today everything is told — nothing left"). Both
+ * numbers were true about different subjects — the strip counts rows awaiting
+ * HIS DECISION, this line counted TODAY'S UNLOGGED TASKS — but a farmer does
+ * not parse that distinction; he read "4 pending" above "all done". Ruling A2
+ * kept the line and gated it on the strip's own published count.
  *
- * The settled line is NOT deleted (founder ruling A2: "the line stays"). It is
- * now gated on the strip's OWN published count as well as on N, via
- * `useOversightWaitingSignal` — read `features/oversight/oversightWaitingSignal.ts`
- * for why that is a forwarded number rather than a second computation, and for
- * why `null` there means "the strip is making no claim" and must never be read
- * as zero. So the header's claim is finally true of both neighbours: the ring
- * cannot contradict this line because it shares `todayDayState`, and the strip
- * cannot contradict it because this line will not render unless the strip has
- * said, positively, that nothing is waiting.
+ * On 2026-08-27 he looked again, at the state where the gate PASSES — strip in
+ * its rest state, this line spoken beneath it — and ruled on the duplication
+ * itself: *"there are two line only keep which is on the oversight bar."* Two
+ * true, agreeing sentences saying the same thing one above the other is still
+ * one sentence too many, and he has now seen both and picked the strip's.
+ *
+ * So the line is DELETED at its source rather than withheld at render time.
+ * That is a stronger fix than the gate it replaces — there is no longer a
+ * second all-clear surface that could disagree with the strip under any input
+ * — and it is why `features/oversight/oversightWaitingSignal.ts` and its
+ * `AppHeader` publisher went with it: this component was that signal's only
+ * consumer, and a cross-subtree store with nothing to gate is scaffolding, not
+ * a guard. What replaces it is `features/oversight/__tests__/
+ * oneAllClearSurface.test.tsx`, which mounts the real header above the real
+ * hero and proves the screen holds exactly one all-clear claim.
+ *
+ * WHAT DID **NOT** MOVE TO THE STRIP. The founder also asked for the ring on
+ * the oversight bar, and it went — as a shell. The NUMBER in it did not:
+ * `closurePercent` is a proportion of today's planned work, and the strip's
+ * subject is a count of rows awaiting the owner. They have no shared
+ * denominator, so they cannot honestly share one control (doctrine `P4`), and
+ * the ring below still carries the closure percent for the two states this
+ * card does still render. On a settled day the strip is now the only surface,
+ * and that day's closure percent has no home — reported, not silently dropped.
  *
  * It REUSES a count the app already computes (todayDayState.pendingCount) —
  * nothing new is calculated here. The carried signal is derived from the SAME
@@ -50,12 +62,6 @@
  */
 import React from 'react';
 import { useLanguage } from '../../../../i18n/LanguageContext';
-// Ruling A2 — the oversight strip's own count, forwarded by `AppHeader`. Not a
-// prop: `mainView.renderLogView` is a plain function, not a component
-// (`routeContext.ts` keeps it hook-free), so it cannot subscribe on this
-// component's behalf, and the fact lives in a sibling subtree with no prop
-// path down. See that module's header.
-import { useOversightWaitingSignal } from '../../../oversight/oversightWaitingSignal';
 
 interface DailyLoopHeroProps {
     /** Tasks left today (todayDayState.pendingCount) — already folds in carry-forward. */
@@ -99,7 +105,6 @@ const DailyLoopHero: React.FC<DailyLoopHeroProps> = ({
     onFocusRecorder,
 }) => {
     const { t } = useLanguage();
-    const oversightWaiting = useOversightWaitingSignal();
     const hasWork = pendingCount > 0;
     const showCarried = hasWork && carriedCount > 0;
 
@@ -124,42 +129,36 @@ const DailyLoopHero: React.FC<DailyLoopHeroProps> = ({
     //                           line must not claim they told us nothing.
     const nothingRecordedYet = !hasWork && closurePercent === 0;
 
-    // RULING A2 — "nothing left" is a claim about the WHOLE screen, so it needs
-    // both neighbours' agreement, not just the ring's.
+    // FOUNDER RULING 2026-08-27 — THE SETTLED DAY HAS NO LINE HERE ANY MORE.
     //
-    // `oversightWaiting` is what the oversight strip is currently saying:
-    //   0     it is in its rest state — it has positively claimed nothing is
-    //         waiting. The only value on which this line may be spoken.
-    //   > 0   it is showing that many waiting rows. Saying "काही बाकी नाही"
-    //         underneath it is the exact defect the founder found.
-    //   null  it is checking, cannot confirm, or is not on screen. UNKNOWN IS
-    //         NOT NONE (`oversightSelectors.ts`'s own rule) — a claim needs
-    //         evidence, and there is none here, so the line stays unsaid.
-    // No `?? 0` anywhere near it: that would turn every "we do not know" back
-    // into the reassurance this fix exists to withdraw.
-    const mayClaimSettled = oversightWaiting === 0;
-
-    // The settled line is this card's ENTIRE content in the N === 0,
-    // day-recorded case — the ring beside it only qualifies the sentence. With
-    // the sentence withheld the card would be a percentage floating in an
-    // otherwise empty box directly under a strip saying four things are
-    // waiting, which reads as its own vague reassurance. So the card stands
-    // down and leaves the screen to the surface that DOES have something to
-    // say. Nothing is lost that is not still one tap away in the strip's own
-    // drawer, and no other state of this hero is affected: N > 0 still renders
-    // its count, and the "nothing told yet" invite still renders its invite —
-    // neither of those contradicts a positive waiting count (work outstanding
-    // and records outstanding are both true at once), so neither is gated.
-    if (!hasWork && !nothingRecordedYet && !mayClaimSettled) {
+    // "आज सगळं सांगून झालं — काही बाकी नाही" was this card's ENTIRE content in
+    // the N === 0, day-recorded case; the ring beside it only qualified the
+    // sentence. The founder read that sentence directly beneath the oversight
+    // strip's own all-clear and ruled: keep the strip's, drop this one (see
+    // the file header). Unconditional, not gated — under NO input does this
+    // component speak an all-clear now, which is why the ruling could retire
+    // `oversightWaitingSignal` rather than tighten it.
+    //
+    // Withholding only the SENTENCE was considered and rejected for the same
+    // reason it was rejected on 2026-08-26: the card would become a bare
+    // percentage floating in an empty box, which reads as its own vague
+    // reassurance. The whole card stands down.
+    //
+    // The other two states are untouched, and deliberately so. "आज N कामं
+    // बाकी" and "आज काहीच सांगितलं नाही" are not all-clears and do not restate
+    // the strip — work outstanding and records outstanding are both true at
+    // once — so gating or deleting them would be hiding true lines to
+    // manufacture agreement.
+    if (!hasWork && !nothingRecordedYet) {
         return null;
     }
 
     return (
         // The spacing/entrance wrapper lives HERE, not at the call site
-        // (`mainView.tsx`), because ruling A2 gave this component a state in
-        // which it renders nothing at all. Left outside, `mb-4` would survive
-        // that `return null` as a 16px ghost gap under the oversight strip —
-        // a visible artefact of a card that deliberately said nothing.
+        // (`mainView.tsx`), because this component has a state in which it
+        // renders nothing at all (the settled day, above). Left outside, `mb-4`
+        // would survive that `return null` as a 16px ghost gap under the
+        // oversight strip — a visible artefact of a card that is not there.
         <div className="mb-4 animate-in slide-in-from-top-4 duration-300 delay-100">
         <button
             type="button"
@@ -194,11 +193,17 @@ const DailyLoopHero: React.FC<DailyLoopHeroProps> = ({
                     className="text-lg font-black leading-snug text-stone-900"
                     style={{ fontFamily: MARATHI_BODY }}
                 >
+                    {/* Two branches, not three: the settled sentence
+                        (`dfes.dailyLoopDaySettled`) is no longer rendered by
+                        anything — founder ruling 2026-08-27, file header. The
+                        key stays in `dfesTranslations.ts` because his Marathi
+                        is approved copy and `oneAllClearSurface.test.tsx`
+                        reads it FROM the table to assert it reaches no
+                        screen; retyping it in the test would let a copy edit
+                        silently pass. */}
                     {hasWork
                         ? withCount(t('dfes.dailyLoopTasksLeft'), pendingCount)
-                        : nothingRecordedYet
-                            ? t('dfes.dailyLoopDayFree')
-                            : t('dfes.dailyLoopDaySettled')}
+                        : t('dfes.dailyLoopDayFree')}
                 </p>
                 {showCarried && (
                     <p

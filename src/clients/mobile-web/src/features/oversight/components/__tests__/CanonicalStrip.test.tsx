@@ -557,12 +557,21 @@ describe('CanonicalStrip — a multi-farm account gets no completion claim (chan
         expect(icon.querySelectorAll('svg')).toHaveLength(1);
     });
 
-    it('exactly_one_glyph_renders_in_every_state', () => {
+    it('exactly_one_mark_renders_in_the_ring_in_every_state', () => {
         // The four states are mutually exclusive by construction, not by
         // the order of the ternaries that pick the label. This walks every
-        // combination that can reach the icon slot and asserts one glyph in
-        // each — the general form of the overlap the test above catches for
-        // one case.
+        // combination that can reach the ring and asserts ONE mark in each —
+        // the general form of the overlap the test above catches for one
+        // case.
+        //
+        // FOUNDER RULING 2026-08-27 — the slot is now a 44px RING (`h-11`,
+        // was the 28px `h-7` glyph chip), and in the WAITING state its mark
+        // is `waitingCount` itself rather than an icon: the ring the founder
+        // asked for carries the strip's own fact, which is why the
+        // right-hand count pill is gone. So the invariant is no longer "one
+        // svg" but "one mark, glyph XOR number, never both and never
+        // neither" — a state machine with overlapping branches would show a
+        // number stacked on a tick, and that is what this catches.
         const cases: Partial<CanonicalStripProps>[] = [
             { waitingCount: 6, dataResolved: true, farmCount: 1 },
             { waitingCount: 6, dataResolved: false, farmCount: 4 },
@@ -572,10 +581,17 @@ describe('CanonicalStrip — a multi-farm account gets no completion claim (chan
             { waitingCount: 0, dataResolved: true, farmCount: 4 },
         ];
         for (const props of cases) {
+            const label = JSON.stringify(props);
             const { container } = render(<CanonicalStrip {...baseStripProps(props)} />);
-            const slot = container.querySelector('[data-testid^="canonical-strip-waiting-"][class*="h-7"]');
-            expect(slot, JSON.stringify(props)).not.toBeNull();
-            expect(slot!.querySelectorAll('svg'), JSON.stringify(props)).toHaveLength(1);
+            const ring = container.querySelector('[data-testid^="canonical-strip-waiting-"][class*="h-11"]');
+            expect(ring, label).not.toBeNull();
+
+            const glyphs = ring!.querySelectorAll('svg').length;
+            const numbers = ring!.querySelectorAll('[data-testid="canonical-strip-waiting-count"]').length;
+            expect(glyphs + numbers, label).toBe(1);
+            // ...and which of the two it is follows the count, never the
+            // render order.
+            expect(numbers, label).toBe((props.waitingCount ?? 0) > 0 ? 1 : 0);
             cleanup();
         }
     });
