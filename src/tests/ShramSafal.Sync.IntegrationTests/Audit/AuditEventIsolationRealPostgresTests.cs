@@ -1076,6 +1076,42 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // and on the single-session scratch database the bypass branch that does
         // run is harmless.
         "20260815102440_AddRawBlobSubjects",
+
+        // ── The four DFES migrations, REVIEWED 2026-08-27 before being added ──
+        //
+        // The guard above says: add only after checking each Down() is safe to run
+        // mid-proof. That check was done by measurement, not by reading intent:
+        //
+        //   grep audit_events   → 0, 0, 0, 1
+        //   grep GRANT…TRUNCATE → 0, 0, 0, 0
+        //
+        // The single audit_events hit is a COMMENT in AddConsentGateLedgers citing
+        // 20260815052139 as precedent for revoking TRUNCATE on its own ledgers. It
+        // is prose, not an operation. None of the four names ssf.audit_events in
+        // any statement, and none grants TRUNCATE to anybody.
+        //
+        // So the thing this proof asserts — the app role cannot truncate the audit
+        // ledger but can still append and read — is untouched by all four, in both
+        // directions. Each Down() is symmetric and confined to its own objects:
+        //
+        //   UniqueQuestionPerLog    index only; DROP INDEX. Fully reversible.
+        //   AddDailyLogDayOutcome   one nullable column; DROP COLUMN. No backfill.
+        //   AddNumericCertainty     eight nullable columns; DROP COLUMN. No backfill.
+        //   AddConsentGateLedgers   creates two tables; DROPs exactly those two.
+        //
+        // AddConsentGateLedgers destroys consent records on the way down, which is
+        // why its own docstring says to roll back by restoring a snapshot rather
+        // than by running it. That is a PRODUCTION caution and does not apply here:
+        // this scratch database is created and dropped per [Fact] and holds no real
+        // consent. It would be wrong to quote that warning as a reason to exclude it
+        // and equally wrong to omit the warning — so both are stated.
+        //
+        // The guard stays. The next unreviewed migration after these must still fail
+        // loudly rather than be silently reverted inside a security proof.
+        "20260816090000_UniqueQuestionPerLog",
+        "20260816153300_AddDailyLogDayOutcome",
+        "20260816155627_AddNumericCertainty",
+        "20260816170524_AddConsentGateLedgers",
     ];
 
     /// <summary>
