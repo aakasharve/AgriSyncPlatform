@@ -93,6 +93,36 @@ jobs:
           # secrecy); stored as a repo secret because .env.local is gitignored /
           # absent in CI. Same secret android-release.yml:61 uses.
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          # ── FOUNDER RULING 2026-08-26 (ruling C1): SAME HOME SCREEN EVERYWHERE ──
+          #
+          # MEASURED before this block existed: android-release.yml and
+          # release.yml both set the DFES companion flags to "1"; this file, the
+          # one that actually PUBLISHES the web app, set none of them. Vite bakes
+          # `import.meta.env` at BUILD time, so that shipped one commit as two
+          # different apps — an APK whose home screen opens on the daily-loop
+          # hero, and a web build where `isEnabled('VITE_DAILY_LOOP')` read `''`
+          # and the same screen had no hero at all. One farmer, one version, two
+          # truths. release.yml's own comment already spelled out this exact
+          # hazard for itself; this file was the remaining half of it.
+          #
+          # The values are copied from android-release.yml deliberately — it is
+          # the set already through the companion's Founder Acceptance Gate. Keep
+          # all three files in sync; see src/app/featureFlags.ts.
+          VITE_UNDERSTANDING_METER: "1"
+          VITE_STAGE_QUESTIONS: "1"
+          VITE_DISCIPLINE_SYSTEM: "1"
+          # Phase 4 voice-first continuity — founder ruling 2026-08-16, ON for
+          # the pilot. Must match android-release.yml so browser and APK agree.
+          VITE_VOICE_CONTINUITY: "1"
+          VITE_DAILY_LOOP: "1"
+          VITE_TASK_CLOSE_CONFIRM: "1"
+          # Founder decision 2026-07-19 pauses the rich-day unlock counter. This
+          # flag defaults OFF when unset — omitting it here would silently bring
+          # the counter back in the published web build.
+          VITE_UNLOCK_COUNTER_PAUSED: "1"
+          # Dev/test-only switches — must ship OFF in the release build.
+          VITE_SIMULATE_UNLOCK: "0"
+          VITE_INTELLIGENCE_INSIGHTS: "0"
         run: npm run build
 
       # Proves what SHIPPED, not what was SET. An env var can be present and

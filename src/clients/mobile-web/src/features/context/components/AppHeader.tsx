@@ -49,6 +49,14 @@ import {
 } from '../../oversight/oversightNavigationEvents';
 import { useOpenSurfaceRequest } from '../../oversight/useOpenSurfaceRequest';
 import { useOversightAcknowledgement } from '../../oversight/useOversightAcknowledgement';
+// Founder review of `?preview=oversight`, 2026-08-26 (ruling A2) — the strip's
+// count, forwarded to the ONE other surface that was able to contradict it
+// (the home screen's `DailyLoopHero`). Read that module's header for why this
+// is a forwarded number and not a second construction of the model.
+import {
+  publishOversightWaitingSignal,
+  resolveWaitingSignal,
+} from '../../oversight/oversightWaitingSignal';
 import { LocalOversightAcknowledgementStore } from '../../../infrastructure/storage/LocalOversightAcknowledgementStore';
 import { systemClock } from '../../../core/domain/services/Clock';
 
@@ -375,6 +383,38 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   // now decides whether the `OversightNavCards` row renders at all (its own
   // row below row 1, not inside it — see `PAGE_TOGGLE_ROUTES`'s comment).
   const showNavCards = PAGE_TOGGLE_ROUTES.includes(currentRoute);
+
+  // FOUNDER REVIEW 2026-08-26, RULING A2 — THE STRIP'S COUNT LEAVES THIS FILE.
+  //
+  // The founder read "4 waiting" here and "आज सगळं सांगून झालं — काही बाकी
+  // नाही" ("today everything is told — nothing left") on the home screen
+  // directly beneath it. Two true numbers about two different subjects,
+  // composed into one false impression (doctrine P4 is about what reaches the
+  // farmer). `DailyLoopHero` had no way to see this count; now it does.
+  //
+  // FORWARDED, NOT RECOMPUTED. `oversightModel.waitingCount` on this line is
+  // the identical expression handed to `<CanonicalStrip waitingCount={...}>`
+  // below, so the hero cannot be looking at a different number — not even for
+  // one `useSyncQueueStatus` poll interval.
+  //
+  // `resolveWaitingSignal` reduces the strip's four states to "is it claiming
+  // a count?": a `0` published here means the strip is rendering its REST
+  // state (its green tick), never merely that a number nobody has read yet
+  // happens to be zero. `farmContext` gates it because the strip itself is
+  // gated on `farmContext` in the JSX below — a strip that is not on screen
+  // makes no claim, and `null` says exactly that.
+  //
+  // The UNMOUNT cleanup is a SECOND effect, deliberately: folding it into the
+  // first one would republish `null` on every value change (an effect's
+  // cleanup runs before its next run), and a consumer would see a
+  // "no claim" blip on every poll tick.
+  const waitingSignal = farmContext
+    ? resolveWaitingSignal(oversightModel.waitingCount, dataResolved, farmCount)
+    : null;
+  React.useEffect(() => {
+    publishOversightWaitingSignal(waitingSignal);
+  }, [waitingSignal]);
+  React.useEffect(() => () => publishOversightWaitingSignal(null), []);
 
   return (
     // Task 12 (`G:\VALIDATION\farm-selector-contextual.html`'s `.hdr` rule):

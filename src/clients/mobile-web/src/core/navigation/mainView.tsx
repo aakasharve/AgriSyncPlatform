@@ -249,16 +249,20 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                         owner-oversight-loop Task 7/11 deliberately removed them and
                         moved weather into AppHeader (`CompactWeatherChip`). Re-adding
                         them here would render weather twice. */}
+                    {/* Founder review 2026-08-26, ruling A2 — the hero now owns
+                        its own `mb-4`/entrance wrapper (see its render), because
+                        it has a state in which it renders NOTHING: it will not
+                        say "काही बाकी नाही" while the oversight strip above is
+                        reporting a positive waiting count. A wrapper left here
+                        would survive that as a 16px ghost gap. */}
                     {!recordingSegment && FEATURE_FLAGS.dailyLoop && (
-                        <div className="mb-4 animate-in slide-in-from-top-4 duration-300 delay-100">
-                            <DailyLoopHero
-                                pendingCount={todayDayState.pendingCount}
-                                carriedCount={carriedTasks.length}
-                                carriedTitle={carriedTasks.length === 1 ? carriedTasks[0].title : undefined}
-                                closurePercent={todayDayState.closurePercent}
-                                onFocusRecorder={focusRecorder}
-                            />
-                        </div>
+                        <DailyLoopHero
+                            pendingCount={todayDayState.pendingCount}
+                            carriedCount={carriedTasks.length}
+                            carriedTitle={carriedTasks.length === 1 ? carriedTasks[0].title : undefined}
+                            closurePercent={todayDayState.closurePercent}
+                            onFocusRecorder={focusRecorder}
+                        />
                     )}
 
                     {/* spec: owner-oversight-loop (Task 7, design doc §4.2, §5) —
