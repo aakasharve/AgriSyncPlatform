@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Ports;
@@ -9,6 +10,29 @@ using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Dfes.RecordQuestionEvent;
 
+/// <summary>
+/// Records ONE shown/answered D8 question.
+/// </summary>
+/// <remarks>
+/// <para><b>Why every log line here wraps <c>QuestionKey</c> in <see cref="LogSafe.Text"/>.</b>
+/// The command's own summary says it: apart from <c>CallerUserId</c>, every field "comes straight
+/// from the client's selected bank entry". <c>QuestionKey</c> is therefore attacker-controlled
+/// text, and a newline in it would let a client append a line to the log that looks exactly like
+/// one we wrote. CodeQL flagged all four sinks below as CWE-117 on PR #55.</para>
+///
+/// <para>That matters here specifically, because these lines are the ONLY place three real
+/// failures surface: a question that failed the both-approved gate, an answer naming a daily_log
+/// that does not exist, and an answer naming another farm's log. None of the three reaches the
+/// farmer and none of them fails the request — the log line IS the observer. Evidence a client can
+/// write into is not evidence, so the values are defused and the lines are left intact.</para>
+///
+/// <para><b>Not sanitised, because it is never logged: <c>cmd.Response</c>.</b> That is the
+/// farmer's own words, verbatim. <see cref="LogSafe"/> sanitises, it does not redact, and no
+/// sanitiser makes farmer content safe to put in an ops log. It is persisted on the row and
+/// becomes an observation; it stays out of the log sink entirely. Every other interpolated value
+/// at these four sites is a <see cref="Guid"/> or a <see cref="bool"/>, neither of which can carry
+/// a line break.</para>
+/// </remarks>
 public sealed class RecordQuestionEventHandler(
     IShramSafalRepository repository,
     IDailyRichnessDerivationService dailyRichnessDerivation,
@@ -30,7 +54,7 @@ public sealed class RecordQuestionEventHandler(
         {
             logger.LogWarning(
                 "Rejected question_event {QuestionKey} for farm {FarmId}: not both-approved (agr={Agr}, mr={Mr}).",
-                cmd.QuestionKey, cmd.FarmId, cmd.AgronomistApproved, cmd.MarathiApproved);
+                LogSafe.Text(cmd.QuestionKey), cmd.FarmId, cmd.AgronomistApproved, cmd.MarathiApproved);
             return Result.Failure<Guid>(ShramSafalErrors.InvalidCommand);
         }
 
@@ -71,7 +95,7 @@ public sealed class RecordQuestionEventHandler(
             {
                 logger.LogInformation(
                     "Idempotent replay of question_event {QuestionKey} for log {DailyLogId}; returning existing row {EventId}.",
-                    cmd.QuestionKey, logId, existing.Id);
+                    LogSafe.Text(cmd.QuestionKey), logId, existing.Id);
                 return Result.Success(existing.Id);
             }
         }
@@ -216,7 +240,7 @@ public sealed class RecordQuestionEventHandler(
             logger.LogWarning(
                 "question_event {QuestionKey} names daily_log {DailyLogId}, which does not exist; "
                 + "the answer is preserved on the event but produces no observation.",
-                cmd.QuestionKey, answeredLogId);
+                LogSafe.Text(cmd.QuestionKey), answeredLogId);
             return null;
         }
 
@@ -229,7 +253,7 @@ public sealed class RecordQuestionEventHandler(
             logger.LogWarning(
                 "question_event {QuestionKey} names daily_log {DailyLogId} belonging to farm {LogFarmId}, "
                 + "not the caller's farm {FarmId}; no observation written.",
-                cmd.QuestionKey, answeredLogId, log.FarmId.Value, cmd.FarmId);
+                LogSafe.Text(cmd.QuestionKey), answeredLogId, log.FarmId.Value, cmd.FarmId);
             return null;
         }
 

@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Ports;
@@ -43,6 +44,16 @@ namespace ShramSafal.Application.UseCases.Consent.LinkConsentGateToUser;
 /// earlier time would back-date a legal record to make the chain look tidier than it was.
 /// And the facts are the client's re-statement of what it displayed — see the honesty note
 /// on the corroboration gap at the bottom of this file.</para>
+///
+/// <para><b>Why the session id is wrapped in <c>LogSafe.Text</c> at all three log sites.</b>
+/// <c>PreRegistrationSessionId</c> arrives from the client, so a newline in it would let a caller
+/// append a line to the log that reads exactly like one we wrote. CodeQL flagged all three as
+/// CWE-117 on PR #55. These are the audit trail of a DPDP record: a forged line here is worse
+/// than a missing one, and a line the subject of the record can author is not a record. Nothing
+/// is removed — the session id is still named, which is the whole point of the lines — it is only
+/// defused. Note also what is NOT here: <c>DisplayedNoticeText</c>, the purpose codes and the data
+/// category codes are never logged, and <c>LogSafe</c> could not have made them safe if they
+/// were, because it sanitises and does not redact.</para>
 /// </summary>
 public sealed class LinkConsentGateToUserHandler(
     IShramSafalRepository repository,
@@ -109,7 +120,7 @@ public sealed class LinkConsentGateToUserHandler(
             logger.LogInformation(
                 "Consent gate link replay for session {PreRegistrationSessionId}; both ledgers already "
                 + "linked (terms {TermsEventId}, grant {GrantEventId}). Nothing written.",
-                sessionId, existingTerms.Id, existingGrant.Id);
+                LogSafe.Text(sessionId), existingTerms.Id, existingGrant.Id);
 
             return Result.Success(new ConsentGateLinkResult(existingTerms.Id, existingGrant.Id, AlreadyLinked: true));
         }
@@ -152,7 +163,7 @@ public sealed class LinkConsentGateToUserHandler(
         logger.LogInformation(
             "Consent gate acceptance linked to a user for session {PreRegistrationSessionId} "
             + "(terms {TermsEventId}, grant {GrantEventId}).",
-            sessionId, terms.Id, grant.Id);
+            LogSafe.Text(sessionId), terms.Id, grant.Id);
 
         return Result.Success(new ConsentGateLinkResult(terms.Id, grant.Id, AlreadyLinked: false));
     }
@@ -166,13 +177,20 @@ public sealed class LinkConsentGateToUserHandler(
     /// landing place is a log line naming the session — enough to find the stuck acceptance
     /// later, and enough that "consent links are failing" is a question the logs can answer.
     /// The reason is a fixed string, never the notice text or any farmer content.</para>
+    ///
+    /// <para>The session id is client-supplied (CWE-117), so it goes through
+    /// <c>LogSafe.Text</c>, which also subsumes the hand-rolled "(none supplied)" fallback this
+    /// line used to carry: absent, empty and whitespace-only all collapse to
+    /// <c>LogSafe.Unknown</c>. That is strictly more than the old ternary caught — a value made
+    /// entirely of control characters used to render as a blank that reads "nothing was sent",
+    /// and now says <c>unknown</c>, which is what a probe actually looks like.</para>
     /// </summary>
     private Result<ConsentGateLinkResult> Refuse(string reason, string? sessionId)
     {
         logger.LogWarning(
             "Refused consent gate link for session {PreRegistrationSessionId}: {Reason}. "
             + "The acceptance stays orphaned until a corrected call succeeds.",
-            string.IsNullOrWhiteSpace(sessionId) ? "(none supplied)" : sessionId.Trim(), reason);
+            LogSafe.Text(sessionId?.Trim()), reason);
 
         return Result.Failure<ConsentGateLinkResult>(ShramSafalErrors.InvalidCommand);
     }

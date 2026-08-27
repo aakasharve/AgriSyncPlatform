@@ -84,9 +84,15 @@ public sealed class ClaimJoinHandler(
         if (!string.IsNullOrWhiteSpace(farm.FarmCode)
             && !string.Equals(farm.FarmCode, command.FarmCode, StringComparison.OrdinalIgnoreCase))
         {
+            // CWE-117 sibling of the four DFES sinks CodeQL flagged on PR #55, found by
+            // the same sweep. ClaimedCode is the code the SCANNER sent, so a newline in it
+            // forges a log line — and this line is the only trace a spliced QR leaves,
+            // which makes it exactly the wrong line to let an attacker author. RealCode is
+            // NOT wrapped: it is server-generated (FirstFarmBootstrapEndpoints
+            // .GenerateFarmCode) and never client-writable.
             logger.LogWarning(
                 "Claim rejected: token for farm {FarmId} but QR carried farm code '{ClaimedCode}' ≠ '{RealCode}'.",
-                farm.Id, command.FarmCode, farm.FarmCode);
+                farm.Id, LogSafe.Text(command.FarmCode), farm.FarmCode);
             return Result.Failure<ClaimJoinResult>(Error.Validation(
                 "join.farm_code_mismatch",
                 "This QR looks tampered with. Ask the farmer to share it again."));

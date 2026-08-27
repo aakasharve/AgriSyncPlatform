@@ -139,5 +139,13 @@ public class FakeShramSafalRepository : IShramSafalRepository
 
     // ── DFES Phase 5 — question-engine telemetry ──
     public virtual Task AddQuestionEventAsync(QuestionEvent e, CancellationToken ct = default) => throw NotStubbed();
+    // wave-3.3 replay read. Same default-interface-method trap as AddObservationEventAsync
+    // above: unmapped, a subclass cannot make it return an existing row, so the idempotent-
+    // replay branch of RecordQuestionEventHandler — and the log line that branch emits — are
+    // unreachable from a test. Default matches the port's own (`null` = no prior row), so
+    // every existing subclass behaves exactly as it did before.
+    public virtual Task<QuestionEvent?> FindQuestionEventAsync(
+        Guid dailyLogId, string questionKey, CancellationToken ct = default)
+        => Task.FromResult<QuestionEvent?>(null);
     public virtual Task<IReadOnlyList<QuestionEvent>> GetRecentQuestionEventsForFarmAsync(Guid farmId, DateTime sinceUtc, CancellationToken ct = default) => throw NotStubbed();
 }
