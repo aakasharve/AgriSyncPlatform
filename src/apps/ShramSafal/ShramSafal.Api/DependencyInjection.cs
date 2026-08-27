@@ -156,6 +156,12 @@ public static class DependencyInjection
         // spec: dfes-companion-2026-07-11 (wave-4.2) — first-open Terms + DPDP gate.
         services.AddScoped<ShramSafal.Application.UseCases.Consent.RecordConsentGateAcceptance
             .RecordConsentGateAcceptanceHandler>();
+        // spec: 2026-08-25-prod-cutover-waves (B1) — attaches a pre-login acceptance to the
+        // account it produced. Ordinary scoped registration: it takes the tenant-scoped
+        // repository on purpose, because POST /shramsafal/consent-gate/link runs
+        // USER-SCOPED (not admin-elevated) so RLS can vouch for the user id on the row.
+        services.AddScoped<ShramSafal.Application.UseCases.Consent.LinkConsentGateToUser
+            .LinkConsentGateToUserHandler>();
         services.AddScoped<CreateAttachmentHandler>();
         services.AddScoped<UploadAttachmentHandler>();
         services.AddScoped<GetAttachmentMetadataHandler>();

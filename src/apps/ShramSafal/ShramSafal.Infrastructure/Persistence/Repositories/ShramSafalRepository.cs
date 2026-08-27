@@ -420,6 +420,43 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         ShramSafal.Domain.Consent.ConsentGrantEvent e, CancellationToken ct = default)
         => await db.ConsentGrantEvents.AddAsync(e, ct);
 
+    // B1 (2026-08-27) — the idempotency reads behind LinkConsentGateToUserHandler.
+    //
+    // NO-TRACKING: the caller needs the existing row's id to hand back, nothing more, and
+    // both tables are append-only by privilege so nothing here is ever mutated.
+    //
+    // Keyed on (user_id, pre_registration_session_id, event_type). The event type is part
+    // of the key on purpose: ssf.terms_acceptance_events also holds TERMS_ACCEPTED rows,
+    // and a signed-in re-acceptance writes one carrying BOTH a user id and the same
+    // session id. Omitting the type would make an in-app re-acceptance look like a
+    // completed link and suppress the linking row entirely — the exact orphaning this
+    // whole change exists to close, reintroduced through the back door.
+    //
+    // RLS already restricts these rows to the caller (the linking row has a user_id, so
+    // the self policy admits it); the explicit user_id predicate is defence in depth, and
+    // it is what makes the query correct if it is ever run under a wider scope.
+    //
+    // Oldest first: if a race ever produced two, the first one written is the link.
+    public async Task<ShramSafal.Domain.Consent.TermsAcceptanceEvent?> FindTermsAcceptanceLinkAsync(
+        Guid userId, string preRegistrationSessionId, CancellationToken ct = default)
+        => await db.TermsAcceptanceEvents
+            .AsNoTracking()
+            .Where(e => e.UserId == userId
+                && e.PreRegistrationSessionId == preRegistrationSessionId
+                && e.EventType == ShramSafal.Domain.Consent.TermsAcceptanceEvent.TermsAcceptanceLinkedEventType)
+            .OrderBy(e => e.RecordedAtUtc)
+            .FirstOrDefaultAsync(ct);
+
+    public async Task<ShramSafal.Domain.Consent.ConsentGrantEvent?> FindConsentGrantLinkAsync(
+        Guid userId, string preRegistrationSessionId, CancellationToken ct = default)
+        => await db.ConsentGrantEvents
+            .AsNoTracking()
+            .Where(e => e.UserId == userId
+                && e.PreRegistrationSessionId == preRegistrationSessionId
+                && e.EventType == ShramSafal.Domain.Consent.ConsentGrantEvent.CoreConsentLinkedEventType)
+            .OrderBy(e => e.RecordedAtUtc)
+            .FirstOrDefaultAsync(ct);
+
     public async Task<IReadOnlyList<ShramSafal.Domain.Dfes.QuestionEvent>> GetRecentQuestionEventsForFarmAsync(
         Guid farmId, DateTime sinceUtc, CancellationToken ct = default)
         => await db.QuestionEvents

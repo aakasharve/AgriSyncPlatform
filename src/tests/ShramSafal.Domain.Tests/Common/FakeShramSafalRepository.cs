@@ -109,6 +109,15 @@ public class FakeShramSafalRepository : IShramSafalRepository
         ShramSafal.Domain.Consent.TermsAcceptanceEvent e, CancellationToken ct = default) => Task.CompletedTask;
     public virtual Task AddConsentGrantEventAsync(
         ShramSafal.Domain.Consent.ConsentGrantEvent e, CancellationToken ct = default) => Task.CompletedTask;
+    // B1 (2026-08-27) — the link idempotency reads. Same default-interface-method trap:
+    // unmapped, a subclass could not make them return an existing row and the "a retry
+    // writes nothing" assertion would be untestable.
+    public virtual Task<ShramSafal.Domain.Consent.TermsAcceptanceEvent?> FindTermsAcceptanceLinkAsync(
+        Guid userId, string preRegistrationSessionId, CancellationToken ct = default)
+        => Task.FromResult<ShramSafal.Domain.Consent.TermsAcceptanceEvent?>(null);
+    public virtual Task<ShramSafal.Domain.Consent.ConsentGrantEvent?> FindConsentGrantLinkAsync(
+        Guid userId, string preRegistrationSessionId, CancellationToken ct = default)
+        => Task.FromResult<ShramSafal.Domain.Consent.ConsentGrantEvent?>(null);
     public virtual Task<IReadOnlyList<DailyLog>> GetDailyLogsForFarmDateAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default) => throw NotStubbed();
     public virtual Task<IReadOnlyList<ObservationEvent>> GetObservationEventsForDailyLogsAsync(IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default) => throw NotStubbed();
     public virtual Task<DailyRichnessAggregate?> GetDailyRichnessAggregateAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default) => throw NotStubbed();

@@ -816,6 +816,40 @@ public interface IShramSafalRepository
         ShramSafal.Domain.Consent.ConsentGrantEvent e, CancellationToken ct = default)
         => Task.CompletedTask;
 
+    // ── B1 (2026-08-27) — the idempotency reads behind LinkConsentGateToUserHandler ──
+    /// <summary>
+    /// The existing <c>TERMS_ACCEPTANCE_LINKED</c> row for this account and
+    /// pre-registration session, if one has already been written.
+    ///
+    /// <para><b>Why this read is possible at all.</b> A linking row carries
+    /// <c>user_id</c>, so the self policy's
+    /// <c>USING (user_id IS NOT NULL AND user_id = &lt;GUC&gt;)</c> admits it — unlike the
+    /// orphaned accepting row it links, which no role in this system can read. So the
+    /// caller can be told "already linked" rather than being handed a second row.</para>
+    ///
+    /// <para><b>Why it matters.</b> A client that loses the response to a successful link
+    /// must be free to call again — that retryability is what keeps a failed link from ever
+    /// needing to block a farmer (doctrine P9). Without this read, every retry would append
+    /// another pair of rows to a ledger that can never be cleaned up, because
+    /// <c>UPDATE</c>/<c>DELETE</c>/<c>TRUNCATE</c> are revoked.</para>
+    ///
+    /// <para>Default body returns null so in-tree test doubles keep compiling — the same
+    /// convention this file already uses for <see cref="FindQuestionEventAsync"/>.</para>
+    /// </summary>
+    Task<ShramSafal.Domain.Consent.TermsAcceptanceEvent?> FindTermsAcceptanceLinkAsync(
+        Guid userId, string preRegistrationSessionId, CancellationToken ct = default)
+        => Task.FromResult<ShramSafal.Domain.Consent.TermsAcceptanceEvent?>(null);
+
+    /// <summary>
+    /// The existing <c>CORE_DPDP_CONSENT_LINKED</c> row for this account and
+    /// pre-registration session, if one has already been written. Same contract and same
+    /// reason as the terms ledger above; queried separately because the two ledgers are
+    /// deliberately separate legal records and "linked" has to be true of both.
+    /// </summary>
+    Task<ShramSafal.Domain.Consent.ConsentGrantEvent?> FindConsentGrantLinkAsync(
+        Guid userId, string preRegistrationSessionId, CancellationToken ct = default)
+        => Task.FromResult<ShramSafal.Domain.Consent.ConsentGrantEvent?>(null);
+
     /// <summary>
     /// Read recent question_events for a farm (anti-repeat / cooldown feed). RLS
     /// already scopes rows to the tenant; the app layer additionally membership-checks.
