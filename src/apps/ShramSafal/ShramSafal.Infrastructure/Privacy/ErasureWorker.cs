@@ -232,6 +232,150 @@
 //     privilege; flagged "redacted" at the column level, never
 //     deleted.
 //
+// ── FOUNDER RULING 2026-08-27 — the six DFES / consent-gate / blob-linkage
+//    tables (spec: 2026-08-25-prod-cutover-waves) ────────────────────────
+//
+// His words: "it must erase his ownership, but what I don't want [erased] is
+// the on-field execution reality... that grapes are cultivated like this and
+// here is the proof. I want to keep his ownership [removed] but for grapes, a
+// crop, anything that was being practised, I must keep that."
+//
+// That is not a new posture. It is this manifest's existing DE-IDENTIFIED
+// OPERATIONAL RETENTION rule (DPDP §12) — already carried by
+// application_input_items, event_links, irrigation_entries, machinery_usages,
+// weather_events, weather_stamps, routine_patterns, observation_events and
+// disturbance_events. Applied table by table:
+//
+//   - ssf.question_events — KEEP. Scoped on farm_id / plot_id / crop /
+//     expected_stage, with NO user_id column (20260713052440_AddDfesDataSpine).
+//     What it holds is precisely what the ruling protects: WHICH question
+//     mattered for WHICH crop at WHICH stage, and what the answer was.
+//     Re-attribution is severed the way every daily_logs child's is — the
+//     parent ssf.daily_logs.operator_user_id is scrubbed to ErasedFarmer by
+//     AnonymizeDailyLogsAsync, and the only path back is the nullable
+//     daily_log_id.
+//     SAID PLAINLY, because a "no PII" claim here would be FALSE: this table
+//     HAS free text — response (the farmer's own answer), trigger_reason and
+//     weather_context. It KEEPs for the reason observation_events and
+//     disturbance_events KEEP (D-FREETEXT-PRESERVE-2026-06-29): that content is
+//     FARM-co-owned agronomic knowledge, and one member's erasure must not
+//     delete the farm's knowledge. Rare embedded third-party PII goes to the
+//     same future surgical-redaction pass (B-FT1), never a blanket scrub.
+//     Independently, a scrub is not executable here at all: the creating
+//     migration runs REVOKE UPDATE, DELETE, TRUNCATE ON ssf.question_events
+//     FROM agrisync_app — append-only by privilege, not by convention.
+//     KEEP — conscious gate-4 disposition. No scrub action.
+//
+//   - ssf.daily_richness_aggregates — KEEP. Farm-scoped derived rollup
+//     (farm_id + local_date + scores + day_classification + components_json)
+//     with NO user_id column (20260713052440_AddDfesDataSpine). Same shape and
+//     same disposition as routine_patterns above: a farm-level aggregate whose
+//     ownership is already severed by the rest of this manifest, and which a
+//     single member's erasure must not delete out from under the farm.
+//     KEEP — conscious gate-4 disposition. No scrub action.
+//
+//   - ssf.terms_acceptance_events / ssf.consent_grant_events — KEEP, and for a
+//     DIFFERENT reason from every other KEEP in this file. Do NOT read these as
+//     de-identified. Both carry a user_id column
+//     (20260816170524_AddConsentGateLedgers) and after this erasure runs they
+//     still name the erased user. That is deliberate: a consent record that
+//     cannot say WHO consented proves nothing, and these two tables are the
+//     only evidence that the processing which PRECEDED the erasure was lawful.
+//     DPDP §12(3) permits retention where it is necessary for compliance with
+//     law, and the lawfulness of prior processing is exactly such a case;
+//     deleting the proof of consent alongside the data would leave the
+//     fiduciary unable to answer the first question a regulator asks.
+//     Neither is scrubbable by the app role in any case — that migration runs
+//     REVOKE UPDATE, DELETE, TRUNCATE on both.
+//     DISCLOSED: this is a retention EXCEPTION, not an absence of personal
+//     data. It is the one place in this manifest where an erased subject stays
+//     named ON PURPOSE, and it should be read as such.
+//     KEEP — conscious gate-4 disposition. No scrub action.
+//
+//   - ssf.raw_blob_subjects — DELETE WHERE user_id = X. An ACTION, not a
+//     disposition comment; see step 5 of the delete block in ProcessOneAsync.
+//     This table is not merely adjacent to the ownership link, it IS the
+//     ownership link: (sha256, user_id, first_seen_utc) and nothing else. It is
+//     exactly what the ruling says must go, and unlike every ANONYMIZE above
+//     there is no de-identified residue worth keeping — strip user_id from a
+//     two-column linkage and the surviving row asserts nothing.
+//     DISCLOSED CONSEQUENCE, stated because it is real and because
+//     20260815102440_AddRawBlobSubjects was written to prevent precisely it:
+//     the raw bytes in ssf.raw_blob_index / S3 are NOT deleted by this worker,
+//     and production holds no s3:DeleteObject permission on either media
+//     bucket, so today they cannot be. Removing the linkage therefore leaves
+//     those bytes UNATTRIBUTABLE rather than gone. Under DPDP §12 that is the
+//     correct trade for the SUBJECT — the identifier is what makes bytes
+//     personal data — but it is not a clean purge, and calling it one would be
+//     the false compliance claim this file exists to refuse. Raw-audio
+//     retention and deletion remains deferred to counsel (§17); this DELETE
+//     does not close it.
+//     THE AUDIT ROW RECORDS THE COUNT AND NEVER THE HASHES. Writing the sha256
+//     list into ssf.audit_events beside targetUserId would rebuild, inside an
+//     append-only ledger, the exact subject-to-blob link this DELETE just
+//     removed. That is why step 5 does not collect hashes the way step 1 does
+//     for ai_jobs.
+//
+//   - ssf.labour_corrections — ANONYMIZE (AnonymizeLabourCorrectionsAsync
+//     below). The append-only record of what a labour engagement used to say,
+//     who changed it and when (20260811112633_AddLabourCorrections). In this
+//     file's 5-rule numbering:
+//       (a) corrected_by_user_id -> SystemActor.ErasedFarmer. This column is
+//           the erased farmer's ownership of the correction, and it goes.
+//       (b) reason -> NULL. Optional free text, "why, in the reviewer's words"
+//           (LabourCorrection.Reason) — the farmer's own words about a third
+//           party, same class as log_tasks.notes.
+//       (c) KEEP farm_id, labour_assignment_id, changed_field and
+//           corrected_at_utc: THAT a correction happened, to which field, on
+//           which engagement, when — without who, and without their words.
+//           That is the on-field execution reality the ruling protects.
+//     original_value / new_value are NOT nulled on any row this table can
+//     currently hold, and that is a MEASURED conclusion, not an oversight. The
+//     ruling said to null them "where they can carry a worker name". They
+//     cannot. LabourCorrection closes the correctable set to five fields, and
+//     every write site formats the value structurally: WorkerCount / MaleCount
+//     / FemaleCount go through Format(int?) (a number, or null), DurationHours
+//     is "{decimal}|{TimeBasis}" (e.g. "8|Assumed"), and Attribution is
+//     operatorId.ToString() — a FieldOperatorId GUID, never a name
+//     (CorrectLabourHandler, four call sites). Nulling the Attribution pointer
+//     would delete WHICH worker's attribution changed, which is the WORKER's
+//     co-owned work history and not the erased farmer's personal data — the
+//     exact inversion the ssf.field_operators bullet above already forbids
+//     ("creator is not the data subject").
+//     So the condition is HONOURED AS A CONDITION rather than dropped: the
+//     UPDATE nulls original_value / new_value on any row whose changed_field
+//     falls OUTSIDE that closed set. Today that is zero rows by construction.
+//     If a future correctable field ships that does carry free text, this
+//     scrub catches it BY DEFAULT instead of silently letting it through, and
+//     whoever adds it has to come here and say otherwise deliberately.
+//     ANONYMIZE, not DELETE: nothing FK-references this table, so a delete
+//     would orphan nothing — but it would destroy the farm's correction
+//     history, which is co-owned by every other reviewer on that farm. Same
+//     reasoning as farm_operations (D-T1-ERASURE).
+//     MEASURED, and the reason this one is an action while question_events and
+//     the two consent ledgers are not: 20260811112633_AddLabourCorrections
+//     issues NO REVOKE on ssf.labour_corrections, so the UPDATE is actually
+//     executable. Append-only there is carried by the CODE (no Modify, no
+//     Delete, no repository member, no route), which is exactly what a
+//     privileged erasure path is allowed to step outside of.
+//
+// ── DEFERRED, NOT FORGOTTEN ─────────────────────────────────────────────
+//
+// The KEEPs above are de-identified at the ROW level, but de-identification is
+// a property of the POPULATION, not the row: a village-level pattern derived
+// from two farms names them. Before the first benchmark, comparison or
+// cross-farm insight SHIPS, a minimum-contributor floor must be chosen against
+// real counts, and enforced at read/publish time. Founder ruling 2026-08-27:
+// the number is deliberately not chosen yet because nothing is concluded from
+// this data yet — picking one before there are farmers to pick it from would be
+// inventing a number, which P4 forbids.
+//
+// FOLDING IS ONE-WAY. A contribution already folded into a derived aggregate is
+// never recomputed to remove an erased farmer, because the recomputation would
+// leak his contribution as the difference.
+//
+// Grep marker: kanonymity-floor-before-first-benchmark.
+//
 // All DB writes use IAdminDbContextFactory<ShramSafalDbContext> per
 // Phase 04 precedent (the cross-tenant span here is by definition
 // admin-elevated — the worker iterates rows across every farm the
@@ -245,6 +389,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Privacy.Ports;
 using ShramSafal.Domain.Audit;
+using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Privacy;
 using ShramSafal.Infrastructure.Persistence;
 
@@ -413,6 +558,22 @@ public sealed class ErasureWorker(
         perTableCounts["farm_operations"] = await AnonymizeFarmOperationsAsync(admin, targetUserId, sentinel, ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["farm_operations"];
 
+        // (f) labour_corrections — founder ruling 2026-08-27 (spec:
+        //     2026-08-25-prod-cutover-waves). Scrub corrected_by_user_id and
+        //     NULL the reviewer's free-text reason; KEEP farm_id,
+        //     labour_assignment_id, changed_field and corrected_at_utc, so the
+        //     farm still knows THAT a correction happened, to which field, on
+        //     which engagement and when — without who, and without their words.
+        //
+        //     Keyed DIRECTLY on corrected_by_user_id, so unlike the daily_logs
+        //     children above it carries no ordering constraint against
+        //     AnonymizeDailyLogsAsync and is safe anywhere in this sequence.
+        //     See the manifest comment at the top of this file for why
+        //     original_value / new_value survive on every changed_field this
+        //     table can hold today — that is measured, not skipped.
+        perTableCounts["labour_corrections"] = await AnonymizeLabourCorrectionsAsync(admin, targetUserId, sentinel, ct).ConfigureAwait(false);
+        totalAnonymized += perTableCounts["labour_corrections"];
+
         // ── SARVAM_PRIMARY_VOICE_PIPELINE Task 3.4 cascade extension ─
         // Voice-spine tables follow a DELETE manifest (not ANONYMIZE)
         // because they are pure training-corpus + observability rows
@@ -479,6 +640,36 @@ public sealed class ErasureWorker(
             .ExecuteDeleteAsync(ct)
             .ConfigureAwait(false);
         totalAnonymized += perTableCounts["golden_set_candidate"];
+
+        // 5) Delete raw_blob_subjects WHERE user_id = X — founder ruling
+        //    2026-08-27 (spec: 2026-08-25-prod-cutover-waves). This table is
+        //    the (sha256 -> subject) ownership link and nothing else, so
+        //    ANONYMIZE has no meaning on it: a linkage row stripped of its
+        //    subject asserts nothing at all. It is exactly the ownership the
+        //    ruling says must go.
+        //
+        //    NO HASH COLLECTION HERE, deliberately — contrast step 1. Step 1
+        //    materialises the user's audio hashes because transcript_history
+        //    has no user_id and can only be orphan-cleaned BY hash. Here the
+        //    hashes would serve no delete, and carrying them into the audit
+        //    payload beside targetUserId would rebuild the subject-to-blob link
+        //    inside an append-only ledger — undoing this DELETE in the one
+        //    table nobody can rewrite. The audit row gets the COUNT only.
+        //
+        //    Position in the sequence is free rather than load-bearing: the FK
+        //    (fk_raw_blob_subjects_sha256) points OUT to ssf.raw_blob_index and
+        //    nothing points in, and the retained-voice purge below keys on
+        //    voice_clips_retained.user_id, not on this table — so removing the
+        //    linkage first cannot blind it. Verified, not assumed.
+        //
+        //    DISCLOSED, and repeated here because this is where it happens: the
+        //    bytes are NOT deleted. See the ssf.raw_blob_subjects bullet in the
+        //    manifest above.
+        perTableCounts["raw_blob_subjects"] = await admin.RawBlobSubjects
+            .Where(s => s.UserId == targetUserId)
+            .ExecuteDeleteAsync(ct)
+            .ConfigureAwait(false);
+        totalAnonymized += perTableCounts["raw_blob_subjects"];
 
         // (e) Retained voice S3 — via port.
         //
@@ -973,6 +1164,66 @@ UPDATE ssf.farm_operations
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Founder ruling 2026-08-27 (spec: 2026-08-25-prod-cutover-waves) —
+    /// <b>creator erasure over the labour correction ledger.</b> Scrubs
+    /// <c>corrected_by_user_id</c> to the <c>ErasedFarmer</c> sentinel and NULLs
+    /// <c>reason</c>, the reviewer's own free text.
+    /// <para>
+    /// <b>KEEPs the correction itself.</b> <c>farm_id</c>,
+    /// <c>labour_assignment_id</c>, <c>changed_field</c> and
+    /// <c>corrected_at_utc</c> survive, so the farm keeps the fact that a
+    /// correction happened, to which field, on which engagement and when. That
+    /// history is co-owned by every other reviewer on the farm; one member's
+    /// erasure must not delete it (same reasoning as
+    /// <see cref="AnonymizeFarmOperationsAsync"/>, D-T1-ERASURE).
+    /// </para>
+    /// <para>
+    /// <b>The value columns are nulled ONLY for an unrecognised
+    /// <c>changed_field</c>.</b> Today that is zero rows: every write site formats
+    /// the value structurally (a number, a <c>"8|Assumed"</c> duration, or a
+    /// <c>FieldOperatorId</c> GUID), so <c>original_value</c> /
+    /// <c>new_value</c> cannot carry a worker's NAME — and nulling the
+    /// attribution pointer would erase the WORKER's work history under the
+    /// FARMER's erasure, which this file forbids (creator is not the data
+    /// subject). The CASE keeps the guard live anyway, so a future correctable
+    /// field that does carry free text is scrubbed BY DEFAULT rather than
+    /// silently let through. Full reasoning in the manifest comment at the top
+    /// of this file.
+    /// </para>
+    /// <para>
+    /// Idempotent: the <c>&lt;&gt; sentinel</c> guard makes a second call a no-op
+    /// returning 0, matching every other anonymizer here.
+    /// </para>
+    /// </summary>
+    private static async Task<int> AnonymizeLabourCorrectionsAsync(
+        ShramSafalDbContext db, Guid userId, Guid sentinel, CancellationToken ct)
+    {
+        // Read off the DOMAIN constants rather than retyped here, so a rename in
+        // LabourCorrection breaks the build instead of silently widening the
+        // scrub to every row. These are compile-time string literals — there is
+        // no caller input anywhere in this concatenation.
+        var closedSet = string.Join(", ", new[]
+        {
+            LabourCorrection.FieldWorkerCount,
+            LabourCorrection.FieldMaleCount,
+            LabourCorrection.FieldFemaleCount,
+            LabourCorrection.FieldDurationHours,
+            LabourCorrection.FieldAttribution,
+        }.Select(f => $"'{f}'"));
+
+        var sql = $@"
+UPDATE ssf.labour_corrections
+   SET corrected_by_user_id = {{0}},
+       reason = NULL,
+       original_value = CASE WHEN changed_field IN ({closedSet}) THEN original_value ELSE NULL END,
+       new_value      = CASE WHEN changed_field IN ({closedSet}) THEN new_value      ELSE NULL END
+ WHERE corrected_by_user_id = {{1}}
+   AND corrected_by_user_id <> {{0}};";
+        return await db.Database.ExecuteSqlRawAsync(sql, new object[] { sentinel, userId }, ct)
+            .ConfigureAwait(false);
+    }
+
     // ── Per-row audit emission ───────────────────────────────────────
     // DS-017 rule (d): one AuditEvent per anonymized row. We do not
     // know the per-row Guids after a SET-based UPDATE without a RETURNING
@@ -1031,6 +1282,19 @@ UPDATE ssf.farm_operations
         "correction_events" => new[] { "user_id" },
         "finance_corrections" => new[] { "corrected_by_user_id", "reason" },
         "farm_operations" => new[] { "created_by_user_id" },
+        // Founder ruling 2026-08-27 (spec: 2026-08-25-prod-cutover-waves).
+        // original_value / new_value carry their CONDITION rather than being
+        // listed bare: they are nulled only on a row whose changed_field falls
+        // outside LabourCorrection's closed set, which is zero rows today. A
+        // bare listing would claim, on every real row, a scrub that did not
+        // happen — the exact over-claim this ledger exists to prevent.
+        "labour_corrections" => new[]
+        {
+            "corrected_by_user_id",
+            "reason",
+            "original_value:only_when_changed_field_is_unrecognised",
+            "new_value:only_when_changed_field_is_unrecognised",
+        },
         // 2026-07-19 additions (founder Decision 5) — see the ssf.workers /
         // ssf.labour_assignments manifest comments above.
         "workers" => new[] { "name_raw", "name_normalized" },
@@ -1050,6 +1314,10 @@ UPDATE ssf.farm_operations
         "ai_jobs" => new[] { "deleted" },
         "transcript_history" => new[] { "deleted" },
         "golden_set_candidate" => new[] { "deleted" },
+        // Founder ruling 2026-08-27 — the (sha256 -> subject) ownership link is
+        // DELETEd outright, so it takes the same "deleted" sentinel. The audit
+        // payload deliberately carries no sha256 list; see the manifest comment.
+        "raw_blob_subjects" => new[] { "deleted" },
         _ => Array.Empty<string>(),
     };
 
