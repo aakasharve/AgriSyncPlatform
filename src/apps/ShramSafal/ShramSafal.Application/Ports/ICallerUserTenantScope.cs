@@ -4,9 +4,17 @@ namespace ShramSafal.Application.Ports;
 /// spec: dfes-companion-2026-07-11 · spec: 2026-08-25-prod-cutover-waves — runs a
 /// block of work under a user-scoped (NOT farm-scoped) tenant claim, for tables whose
 /// RLS is keyed ENTIRELY on <c>agrisync.user_id</c> (no <c>farm_id</c> column, no
-/// farm-scoped predicate at all). <c>ssf.correction_events</c> is the consumer: policy
-/// <c>p_user_correction_events</c> (<c>20260517010000_AddDeferredAuditRls</c>) reads
-/// <c>USING/WITH CHECK (user_id = NULLIF(current_setting('agrisync.user_id', true), '')::uuid)</c>.
+/// farm-scoped predicate at all). Three tables consume it today:
+/// <list type="bullet">
+/// <item><c>ssf.correction_events</c> — policy <c>p_user_correction_events</c>
+/// (<c>20260517010000_AddDeferredAuditRls</c>) reads
+/// <c>USING/WITH CHECK (user_id = NULLIF(current_setting('agrisync.user_id', true), '')::uuid)</c>,
+/// via <c>POST /shramsafal/corrections</c>;</item>
+/// <item><c>ssf.terms_acceptance_events</c> + <c>ssf.consent_grant_events</c> — policies
+/// <c>p_self_*</c> (<c>20260816170524_AddConsentGateLedgers</c>), whose WITH CHECK admits
+/// <c>user_id IS NULL</c> (the pre-login acceptance) OR a row matching the same GUC, via
+/// <c>POST /shramsafal/consent-gate/link</c>.</item>
+/// </list>
 ///
 /// <para>
 /// <b>Why not <see cref="ICallerFarmTenantScope"/>.</b> That port validates the
@@ -20,8 +28,7 @@ namespace ShramSafal.Application.Ports;
 ///
 /// <para>
 /// <b>Why not <c>TenantContext.SetUserScoped</c> + the interceptor's automatic
-/// prepend</b> (the mechanism <c>GET /sync/pull</c> and
-/// <c>POST /shramsafal/consent-gate/link</c> use). That path is READ-safe only.
+/// prepend</b> (the mechanism <c>GET /sync/pull</c> uses). That path is READ-safe only.
 /// <see cref="AgriSync.BuildingBlocks.Persistence.TenantConnectionInterceptor"/>
 /// prepends <c>SET LOCAL agrisync.user_id = '...'; </c> onto the SAME
 /// <see cref="System.Data.Common.DbCommand.CommandText"/> as the actual command. For a
@@ -33,12 +40,17 @@ namespace ShramSafal.Application.Ports;
 /// </para>
 ///
 /// <para>
-/// <b>That is not folklore — it was re-measured on 2026-08-27</b> against real
-/// Postgres :5433 by routing <c>POST /shramsafal/corrections</c> through the
-/// middleware's user-scoped branch and running
-/// <c>CorrectionsEndpointTenancyTests.Authenticated_caller_can_record_a_correction…</c>.
-/// The request 500'd at <c>CorrectionEventRepository.AddAsync</c> with exactly that
-/// exception. The middleware route was reverted; this port is the write-safe path.
+/// <b>That is not folklore — it was measured TWICE, independently, on 2026-08-27</b>
+/// against real Postgres :5433. Once by routing <c>POST /shramsafal/corrections</c>
+/// through the middleware's user-scoped branch and running
+/// <c>CorrectionsEndpointTenancyTests.Authenticated_caller_can_record_a_correction…</c>;
+/// and once by <c>POST /shramsafal/consent-gate/link</c>, which shipped ON that branch
+/// and could not write a single row — the exception surfaced at
+/// <c>LinkConsentGateToUserHandler</c>'s <c>SaveChangesAsync</c>, through
+/// <c>TenantTransactionMiddleware</c>'s user-scoped branch. Both routes were reverted to
+/// the admin skip-list and both now come here. Neither defect was visible to any layer's
+/// own tests: a fake repository evaluates no policy, and an RLS test that sets its own
+/// GUC deliberately avoids the very interceptor that breaks the write.
 /// </para>
 ///
 /// <para>

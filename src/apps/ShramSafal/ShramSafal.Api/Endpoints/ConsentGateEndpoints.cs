@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.BuildingBlocks.Results;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Consent.LinkConsentGateToUser;
 using ShramSafal.Application.UseCases.Consent.RecordConsentGateAcceptance;
 
@@ -95,26 +96,54 @@ public static class ConsentGateEndpoints
         // takes the user id from the validated JWT subject — never from the body, which
         // would let anyone attach someone else's consent to their own account.
         //
-        // NOT elevated to admin cross-tenant, again unlike /accept. It must run
-        // USER-SCOPED so TenantConnectionInterceptor emits
-        // `SET LOCAL agrisync.user_id`, because the ledgers' RLS WITH CHECK reads
-        // `user_id IS NULL OR user_id = <GUC>` — a row naming a user, written with the GUC
-        // unset, is refused by Postgres with 42501. TenantTransactionMiddleware routes this
-        // exact path into user-scoped mode inside a transaction (same branch shape as
-        // /sync/pull) and owns the commit, so this handler does not.
+        // The rows it writes NAME a user, and the ledgers' RLS WITH CHECK reads
+        // `user_id IS NULL OR user_id = NULLIF(current_setting('agrisync.user_id', true),
+        // '')::uuid` — so agrisync.user_id has to be set on the session the INSERT runs on,
+        // or Postgres refuses the row with 42501. /accept needs no such thing: its row
+        // carries user_id NULL, which the WITH CHECK admits unconditionally.
         //
-        // That is also the strongest guarantee here: even if this endpoint were wrong about
-        // who the caller is, the database refuses a linking row written in another user's
-        // name. Proved on real Postgres in ConsentGateLedgerRlsTests PROOF 4.
+        // HOW THAT GUC IS ESTABLISHED, AND THE ROUTE NOT TAKEN. The obvious answer —
+        // TenantTransactionMiddleware's user-scoped mode, the one GET /sync/pull uses — was
+        // wired first and MEASURED. It cannot serve this route. That mode is implemented by
+        // TenantConnectionInterceptor prepending `SET LOCAL agrisync.user_id = '…'; ` onto
+        // the SAME CommandText as the caller's own statement; harmless for a SELECT, fatal
+        // for an EF INSERT batch, which then mis-parses rows-affected and dies with
+        // "DbUpdateConcurrencyException: expected to affect 1 row(s), but actually affected
+        // 0 row(s)". The endpoint could not write a single row for as long as it was wired
+        // that way, and every layer's tests stayed green because a fake repository
+        // evaluates no policy and runs no interceptor. The same failure was measured
+        // independently on POST /shramsafal/corrections and reverted there too.
+        //
+        // So this route sits on the admin skip-list beside /accept — elevation is what
+        // SILENCES the prepend, it is not an identity and grants no visibility — and the
+        // identity comes from ICallerUserTenantScope.RunForCallerAsync, which issues
+        // set_config('agrisync.user_id', …) as its OWN command inside its own transaction.
+        // It is a wrapper, not a prelude: the setting is transaction-scoped, so whoever
+        // sets it must own the block it covers, which is why the whole handler call runs
+        // inside it. That block is also where the idempotency READ runs, and it has to be —
+        // a linking row is only readable through the same policy that permits writing it,
+        // so a read outside the scope would find nothing and every retry would duplicate.
+        //
+        // That is the strongest guarantee here: even if this endpoint were wrong about who
+        // the caller is, the database refuses a linking row written in another user's name.
+        // Proved on real Postgres in ConsentGateLedgerRlsTests PROOF 4, and over this
+        // endpoint's whole real pipeline in ConsentGateLinkEndpointTenancyTests.
         group.MapPost("/consent-gate/link", async (
             ConsentGateLinkRequest request,
             ClaimsPrincipal user,
             LinkConsentGateToUserHandler handler,
+            ICallerUserTenantScope scope,
             CancellationToken ct) =>
         {
             // From the token, always. The group requires authorization, so a missing or
             // unparseable subject here is a malformed token, not an anonymous caller.
-            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            //
+            // Guid.Empty passes Guid.TryParse, so a token whose subject is the all-zeros
+            // GUID would reach here as a "successful" parse. It is not an identity: it
+            // coerces to NULL through the policy's NULLIF wrap, so the work would read
+            // nothing and its writes would be refused — but only after running. Refuse it
+            // as unauthenticated, before the scope opens.
+            if (!EndpointActorContext.TryGetUserId(user, out var userId) || userId == Guid.Empty)
             {
                 return Results.Unauthorized();
             }
@@ -132,7 +161,11 @@ public static class ConsentGateEndpoints
                 AppVersion: request.AppVersion,
                 DisplayedNoticeText: request.DisplayedNoticeText);
 
-            var result = await handler.HandleAsync(cmd, ct);
+            var result = await scope.RunForCallerAsync(
+                userId,
+                token => handler.HandleAsync(cmd, token),
+                ct);
+
             return result.IsSuccess
                 ? Results.Ok(new
                 {

@@ -8,29 +8,40 @@ using Xunit;
 namespace AgriSync.BuildingBlocks.Tests.Persistence;
 
 /// <summary>
-/// The two halves of the DPDP consent gate need OPPOSITE database postures, and the
-/// middleware is the only place that decides which one a request gets.
+/// Both halves of the DPDP consent gate take the admin skip-list, and the reason is NOT
+/// that they need the same thing from the database. They need opposite things and arrive at
+/// the same middleware posture from opposite directions, which is exactly the kind of
+/// coincidence that invites somebody to "simplify" one of them later.
 ///
-/// <para><b>accept</b> runs before login. There is no account yet, so its row lands with
-/// <c>user_id NULL</c> and it stays on the admin-elevated skip-list. <b>link</b> runs after
-/// login and writes a row that NAMES the user — and the RLS policy on both ledgers is
-/// <c>WITH CHECK (user_id IS NULL OR user_id = NULLIF(current_setting('agrisync.user_id',
-/// true), '')::uuid)</c>.</para>
+/// <para><b>accept</b> runs before login. There is no account yet, its row lands with
+/// <c>user_id NULL</c>, and the RLS <c>WITH CHECK</c> admits an ownerless row
+/// unconditionally. Elevation is all it needs, and it needs elevation because the
+/// interceptor otherwise fail-closes on a request carrying no tenant claim at all.</para>
 ///
-/// <para><b>Why this file exists.</b> An admin-elevated request emits no
-/// <c>agrisync.user_id</c> GUC at all. For a row naming a user the WITH CHECK then reduces
-/// to <c>user_id = NULL</c>, which is NULL, which is not TRUE, so the server refuses the
-/// row with <c>42501</c>. Had <c>link</c> been left on the skip-list, every linking write
-/// would have failed in production on every call — and no unit test against a fake
-/// repository could have seen it, because a fake repository does not evaluate an RLS
-/// policy. That is the failure class that took production down for twenty minutes on
-/// 2026-08-26 (<c>42501: permission denied for table correction_events</c>).</para>
+/// <para><b>link</b> runs after login and writes rows that NAME the user, so the same policy
+/// (<c>user_id IS NULL OR user_id = NULLIF(current_setting('agrisync.user_id', true),
+/// '')::uuid</c>) demands the GUC be set or it refuses the row with 42501. It is elevated
+/// here anyway — because elevation is what SILENCES
+/// <see cref="TenantConnectionInterceptor"/>'s per-command <c>SET LOCAL</c> prepend, and
+/// that prepend is what killed the endpoint. The identity it genuinely needs is established
+/// INSIDE the endpoint by <c>ICallerUserTenantScope.RunForCallerAsync</c>, which issues
+/// <c>set_config</c> as its own command inside its own transaction.</para>
 ///
-/// <para>These tests observe posture only — which terminal state
-/// <see cref="TenantContext"/> lands in, and whether a tenant transaction was opened. The
-/// database half of the same claim is proved for real against Postgres in
-/// <c>ShramSafal.Sync.IntegrationTests.Consent.ConsentGateLedgerRlsTests</c>; neither
-/// half is sufficient alone.</para>
+/// <para><b>Why this file changed on 2026-08-27.</b> It used to assert the opposite: that
+/// <c>link</c> took a user-scoped carve-out ahead of the skip-list. That posture was
+/// inferred from <c>/sync/pull</c> — and <c>/sync/pull</c> is a READ. Measured against real
+/// Postgres, the linking endpoint could not write a single row on it:
+/// <c>DbUpdateConcurrencyException: expected to affect 1 row(s), but actually affected 0
+/// row(s)</c>, because the interceptor's prepend desyncs EF's rows-affected accounting on
+/// an INSERT batch. Every layer was green and the endpoint was dead. These posture
+/// assertions were part of how: they observe which branch the middleware takes and cannot
+/// observe whether a write survives it.</para>
+///
+/// <para>So this file is now deliberately the SMALLER half of the claim. The half that
+/// matters — that the write lands, on a real interceptor against a real FORCE-RLS database
+/// — lives in <c>ShramSafal.Sync.IntegrationTests.Consent.ConsentGateLinkEndpointTenancyTests</c>,
+/// with the policy itself proved in <c>ConsentGateLedgerRlsTests</c>. Neither half is
+/// sufficient alone, and this half is the one that has already been wrong once.</para>
 /// </summary>
 public sealed class TenantTransactionMiddlewareConsentGateTests
 {
@@ -40,12 +51,19 @@ public sealed class TenantTransactionMiddlewareConsentGateTests
     private const string AcceptPath = "/shramsafal/consent-gate/accept";
 
     /// <summary>
-    /// The linking write names a user, so the request must carry that user's id into the
-    /// session as <c>agrisync.user_id</c> — and inside a transaction, because the GUC is
-    /// set with <c>is_local := true</c> and would otherwise be discarded before the INSERT.
+    /// The linking route must reach the endpoint ADMIN-ELEVATED and with NO tenant
+    /// transaction opened around it — not user-scoped, whatever the row it goes on to write
+    /// looks like. Elevation silences the interceptor's prepend (which is fatal to an EF
+    /// INSERT batch), and owning no transaction here is what lets
+    /// <c>RlsIdentityScope</c> open the one its <c>set_config(..., is_local := true)</c> is
+    /// scoped to.
+    ///
+    /// <para>Driven with a VALID authenticated subject on purpose: with none, the middleware
+    /// could not enter user-scoped mode whatever the path said, and the assertion below
+    /// would hold for a reason unrelated to routing.</para>
     /// </summary>
     [Fact]
-    public async Task Consent_gate_link_is_user_scoped_so_its_row_can_name_a_user()
+    public async Task Consent_gate_link_is_admin_elevated_because_elevation_silences_the_prepend()
     {
         var registry = new RecordingRegistry();
         var tenantContext = new TenantContext();
@@ -68,13 +86,14 @@ public sealed class TenantTransactionMiddlewareConsentGateTests
 
         Assert.True(nextCalled);
         Assert.True(
-            tenantContext.IsUserScoped,
-            "the linking row names a user, and only user-scoped mode emits agrisync.user_id");
-        Assert.Equal(Caller, tenantContext.UserId);
-        Assert.False(
             tenantContext.IsAdminCrossTenant,
-            "admin elevation emits no GUC, so the WITH CHECK would refuse the row with 42501");
-        Assert.Equal(1, registry.Calls);
+            "elevation is not an identity here — it is what stops TenantConnectionInterceptor " +
+            "prepending SET LOCAL onto the INSERT's own command text");
+        Assert.False(
+            tenantContext.IsUserScoped,
+            "user-scoped mode is a READ posture; on this WRITE it produced " +
+            "'expected to affect 1 row(s), but actually affected 0 row(s)' against real Postgres");
+        Assert.Equal(0, registry.Calls);
     }
 
     /// <summary>
@@ -110,22 +129,27 @@ public sealed class TenantTransactionMiddlewareConsentGateTests
     }
 
     /// <summary>
-    /// A carve-out leaks through prefix matching. <c>/shramsafal/consent-gate/linkage</c>
-    /// begins with the link path; <c>/shramsafal/consent-gate</c> is its parent. Neither is
-    /// the linking endpoint, and neither may be handed a user GUC by accident — an
-    /// unintended user-scoped posture on a path nobody audited is how a tenant boundary
-    /// moves without anyone deciding to move it.
+    /// NOTHING under the consent-gate prefix enters user-scoped mode. The routes here, their
+    /// near-misses (<c>/linkage</c>, <c>/links</c>, <c>/link-user</c> — a prefix match on the
+    /// old carve-out claimed all three, measured) and the bare prefix itself all take the
+    /// same elevated posture.
+    ///
+    /// <para>Pinned as a THEORY rather than folded into the case above because the failure it
+    /// guards is a re-introduction: the next person to hit a 42501 on a user-named row will
+    /// reach for the user-scoped branch, exactly as this route's author did. If that happens
+    /// this test fails and points at the measurement instead of at a preference.</para>
     ///
     /// <para>Each case is driven with a VALID authenticated subject on purpose: without one
-    /// the middleware could not enter user-scoped mode whatever the path said, and the test
-    /// would pass for a reason unrelated to path matching.</para>
+    /// the middleware could not enter user-scoped mode whatever the path said.</para>
     /// </summary>
     [Theory]
     [InlineData("/shramsafal/consent-gate")]
+    [InlineData("/shramsafal/consent-gate/link")]
+    [InlineData("/shramsafal/consent-gate/accept")]
     [InlineData("/shramsafal/consent-gate/linkage")]
     [InlineData("/shramsafal/consent-gate/link-user")]
     [InlineData("/shramsafal/consent-gate/links")]
-    public async Task A_near_miss_path_does_not_fall_into_the_user_scoped_carve_out(string path)
+    public async Task No_consent_gate_path_enters_user_scoped_mode(string path)
     {
         var registry = new RecordingRegistry();
         var tenantContext = new TenantContext();
@@ -143,7 +167,39 @@ public sealed class TenantTransactionMiddlewareConsentGateTests
 
         Assert.False(
             tenantContext.IsUserScoped,
-            $"'{path}' is not the linking endpoint; only an exact match may take the carve-out");
+            $"'{path}' must not be handed the interceptor's SET LOCAL prepend — it is a write " +
+            "surface, and the prepend desyncs EF's rows-affected accounting on an INSERT");
+        Assert.True(tenantContext.IsAdminCrossTenant, $"'{path}' belongs to the consent-gate skip entry");
+    }
+
+    /// <summary>
+    /// Removing the consent-gate carve-out must not have removed the MODE. <c>GET
+    /// /sync/pull</c> is a genuine user-scoped READ (ADR 0019) and still enters it, inside a
+    /// tenant transaction, from the validated JWT subject. Without this, a later "the
+    /// user-scoped branch is unused, delete it" would be a defensible-looking mistake.
+    /// </summary>
+    [Fact]
+    public async Task The_user_scoped_mode_still_serves_the_read_surface_it_was_built_for()
+    {
+        var registry = new RecordingRegistry();
+        var tenantContext = new TenantContext();
+
+        var middleware = new TenantTransactionMiddleware(_ => Task.CompletedTask);
+
+        var http = new DefaultHttpContext();
+        http.Request.Method = HttpMethods.Get;
+        http.Request.Path = "/sync/pull";
+        http.User = new ClaimsPrincipal(
+            new ClaimsIdentity(
+                new[] { new Claim("sub", Caller.ToString()) },
+                authenticationType: "TestAuth"));
+
+        await middleware.InvokeAsync(http, registry, tenantContext);
+
+        Assert.True(tenantContext.IsUserScoped, "GET /sync/pull is the read surface ADR 0019 built the mode for");
+        Assert.Equal(Caller, tenantContext.UserId);
+        Assert.False(tenantContext.IsAdminCrossTenant);
+        Assert.Equal(1, registry.Calls);
     }
 
     private sealed class RecordingRegistry : ITenantScopedDbContextRegistry

@@ -357,16 +357,21 @@ public sealed class ConsentGateLedgerRlsTests(Xunit.Abstractions.ITestOutputHelp
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // PROOF 8 — WHY THE MIDDLEWARE CARVE-OUT IS LOAD-BEARING, not stylistic.
+    // PROOF 8 — ELEVATION IS NOT AN IDENTITY, and the server is what says so.
     //
     // An admin-elevated request emits NO agrisync.user_id GUC. A row naming a
     // user then meets a WITH CHECK of user_id = NULLIF(NULL, '')::uuid, which
     // evaluates to NULL — and a WITH CHECK that is not TRUE refuses the row.
-    // 42501. So if the linking endpoint had stayed on the admin skip-list every
-    // link write would fail in production, on every call, while passing any test
-    // that used a fake repository. That is the same failure class as the
-    // 2026-08-26 outage (42501: permission denied for table correction_events),
-    // which cost twenty minutes of production.
+    // 42501. The linking endpoint IS on the admin skip-list: its route was tried
+    // on TenantTransactionMiddleware's user-scoped mode and could not write a row
+    // at all, because the interceptor's SET LOCAL prepend desyncs EF's
+    // rows-affected accounting on an INSERT batch. So the refusal below is exactly
+    // what POST /shramsafal/consent-gate/link would meet if the
+    // ICallerUserTenantScope wrapper inside the endpoint were ever dropped: every
+    // link write failing in production, on every call, while passing any test that
+    // used a fake repository. That is the same failure class as the 2026-08-26
+    // outage (42501: permission denied for table correction_events), which cost
+    // twenty minutes of production.
     //
     // This proof therefore does the thing that must not happen: it writes a
     // user-named row with no GUC at all, and requires the server to refuse it.
@@ -395,11 +400,17 @@ public sealed class ConsentGateLedgerRlsTests(Xunit.Abstractions.ITestOutputHelp
         var write = async () =>
             await InsertAsync(elevatedLike, table, linkedEventType, FarmerA, "sess-no-guc");
 
-        (await write.Should().ThrowAsync<PostgresException>())
-            .Which.SqlState.Should().Be(
-                "42501",
-                "the refusal must come from the RLS WITH CHECK, not from a validation " +
-                "message an application could be talked out of");
+        var refusal = (await write.Should().ThrowAsync<PostgresException>()).Which;
+
+        refusal.SqlState.Should().Be(
+            "42501",
+            "the refusal must come from the RLS WITH CHECK, not from a validation " +
+            "message an application could be talked out of");
+        refusal.MessageText.Should().Contain(
+            "row-level security policy",
+            "42501 is ALSO 'permission denied for table' — a missing GRANT would satisfy a " +
+            "bare SQLSTATE check while proving the opposite of what this proof claims, and " +
+            "that exact confusion is how the 2026-08-26 outage was misread for twenty minutes");
 
         await using (var su = new NpgsqlConnection(_superuserConn))
         {

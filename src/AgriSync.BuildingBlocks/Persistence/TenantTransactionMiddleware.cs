@@ -186,10 +186,26 @@ public sealed class TenantTransactionMiddleware
         // Narrow by design: it accepts no farm id, takes its user id only from the JWT
         // subject (null when anonymous), and can write nothing but its own two ledger rows.
         //
-        // B1 (2026-08-27): /shramsafal/consent-gate/LINK is carved OUT of this entry by the
-        // user-scoped branch in InvokeAsync, which runs first. It writes rows that NAME a
-        // user, and the ledgers' RLS WITH CHECK cannot pass one without agrisync.user_id
-        // set — which elevation never sets. Do not "simplify" the two into one posture.
+        // B1 (2026-08-27): /shramsafal/consent-gate/LINK is served by THIS entry too, and
+        // it took a measurement to get there. Its rows NAME a user, so the ledgers' RLS
+        // WITH CHECK cannot pass one unless agrisync.user_id is set — and elevation never
+        // sets it. The obvious inference was that the route needed the user-scoped mode
+        // above; it was wired that way, and the endpoint could not write a single row:
+        //
+        //   DbUpdateConcurrencyException: expected to affect 1 row(s), but actually
+        //   affected 0 row(s)   (LinkConsentGateToUserHandler → SaveChangesAsync)
+        //
+        // User-scoped mode is a READ posture. TenantConnectionInterceptor implements it by
+        // prepending `SET LOCAL agrisync.user_id = '…'; ` onto the SAME CommandText as the
+        // caller's statement, which is harmless for a SELECT and fatal for an EF INSERT
+        // batch (see reference_interceptor_setlocal_desyncs_ef_writes; the identical
+        // failure was measured independently on POST /shramsafal/corrections and reverted).
+        //
+        // So /link is elevated here like its sibling /accept — elevation being the thing
+        // that SILENCES the prepend, not an identity — and the identity it does need is
+        // established inside the endpoint by ICallerUserTenantScope.RunForCallerAsync,
+        // which issues set_config as its own command inside its own transaction. Do not
+        // move this route to the user-scoped branch: it has been tried and measured.
         "/shramsafal/consent-gate",
         // POST /sync/push — user-scoped multi-farm WRITE surface.
         // PushSyncBatchHandler takes only actorUserId and dispatches per-
@@ -305,27 +321,6 @@ public sealed class TenantTransactionMiddleware
         "/api/ai/eval-parse",
     };
 
-    /// <summary>
-    /// spec: 2026-08-25-prod-cutover-waves (B1). Named rather than inlined because it is a
-    /// carve-out FROM the "/shramsafal/consent-gate" skip entry above and the two must be
-    /// read together: /accept elevates (its row has user_id NULL), /link user-scopes (its
-    /// row names a user, and the RLS WITH CHECK requires the matching GUC to write it).
-    /// </summary>
-    private const string ConsentGateLinkPath = "/shramsafal/consent-gate/link";
-
-    /// <summary>
-    /// Exactly <see cref="ConsentGateLinkPath"/>, tolerating one trailing slash.
-    /// Never a prefix — see the call site for why.
-    /// </summary>
-    private static bool IsConsentGateLinkPath(string path)
-    {
-        var trimmed = path.Length > 1 && path.EndsWith('/')
-            ? path[..^1]
-            : path;
-
-        return string.Equals(trimmed, ConsentGateLinkPath, StringComparison.OrdinalIgnoreCase);
-    }
-
     private readonly RequestDelegate _next;
     public TenantTransactionMiddleware(RequestDelegate next) => _next = next;
 
@@ -366,43 +361,6 @@ public sealed class TenantTransactionMiddleware
             }
 
             tenantContext.SetUserScoped(scopedUserId);
-            await RunPipelineInTransactionsAsync(context, registry);
-            return;
-        }
-
-        // spec: 2026-08-25-prod-cutover-waves (B1) — POST /shramsafal/consent-gate/link is
-        // user-scoped, and it is the first WRITE to use that mode.
-        //
-        // It MUST be checked before the skip list below, which carries both
-        // "/shramsafal/consent-gate" and "/shramsafal/consent" and would otherwise
-        // admin-elevate this path. Elevation sets NO GUC, and the consent ledgers' RLS
-        // WITH CHECK reads `user_id IS NULL OR user_id = <GUC>` — so a linking row naming a
-        // user, written under elevation, is refused by Postgres with 42501. Its sibling
-        // /accept is correctly elevated because the row it writes carries user_id NULL.
-        //
-        // User-scoped is the right scope rather than a workaround: these two tables have no
-        // farm_id (consent belongs to a person, not a field) and their policy keys on
-        // agrisync.user_id, which is exactly the GUC this mode sets. It also means the
-        // database, not the endpoint, is the final arbiter of whose consent this is — a row
-        // naming anyone but the JWT subject cannot be written at all.
-        //
-        // The tx is required as well as the mode: the interceptor emits SET LOCAL, which is
-        // a no-op outside a transaction.
-        // EXACT match, not StartsWith. A prefix match here also claims
-        // /consent-gate/linkage, /links and /link-user — measured, all three entered
-        // user-scoped mode with the caller id in the GUC. Nothing routes there today,
-        // so this is a trap rather than a live bug: the next endpoint added under this
-        // prefix would silently inherit a tenant posture nobody chose for it. A
-        // carve-out that claims more than its own path is not a carve-out.
-        if (IsConsentGateLinkPath(path))
-        {
-            if (!TryGetAuthenticatedUserId(context, out var consentLinkUserId))
-            {
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                return;
-            }
-
-            tenantContext.SetUserScoped(consentLinkUserId);
             await RunPipelineInTransactionsAsync(context, registry);
             return;
         }
