@@ -10,6 +10,10 @@ using ShramSafal.Application.UseCases.AI.CoVeReverify;
 using ShramSafal.Application.UseCases.AI.CreateDocumentSession;
 using ShramSafal.Application.UseCases.Consent.GetConsent;
 using ShramSafal.Application.UseCases.Consent.UpdateConsent;
+using ShramSafal.Application.UseCases.Dfes.GetDayUnderstanding;
+using ShramSafal.Application.UseCases.Dfes.GetFarmerEngagement;
+using ShramSafal.Application.UseCases.Dfes.GetRecentQuestionEvents;
+using ShramSafal.Application.UseCases.Dfes.RecordQuestionEvent;
 using ShramSafal.Application.UseCases.VoiceDiary.GetVoiceDiaryByRange;
 using ShramSafal.Application.UseCases.VoiceDiary.PersistVoiceClipRetained;
 using ShramSafal.Application.UseCases.Privacy.IssueTenantDek;
@@ -83,6 +87,7 @@ using ShramSafal.Application.UseCases.Work.CreateJobCard;
 using ShramSafal.Application.UseCases.Work.GetJobCardsForFarm;
 using ShramSafal.Application.UseCases.Work.GetJobCardsForWorker;
 using ShramSafal.Application.UseCases.Work.GetWorkerProfile;
+using ShramSafal.Application.UseCases.Work.GetWorkerReputation;
 using ShramSafal.Application.UseCases.Work.Handlers;
 using ShramSafal.Application.UseCases.Work.SettleJobCardPayout;
 using ShramSafal.Application.UseCases.Work.StartJobCard;
@@ -128,15 +133,35 @@ public static class DependencyInjection
         // (parses AiJob.NormalizedResultJson into typed ssf rows inside
         // CreateDailyLogHandler's unit of work). spec: ai-intelligence-plan-2026-06-25
         services.AddScoped<ILedgerDerivationService, LedgerDerivationService>();
+        services.AddScoped<IDailyRichnessDerivationService, DailyRichnessDerivationService>();
         services.AddScoped<CreateDailyLogHandler>();
         services.AddScoped<AddLogTaskHandler>();
         services.AddScoped<VerifyLogHandler>();
+
+        // spec: dfes-companion-2026-07-11 (wave-1.5) — BackfillOwnerAttestationsHandler is
+        // deliberately NOT registered here. It scans every farm, so it must be composed
+        // over the admin cross-tenant context that OwnerAttestationBackfillRunner builds
+        // (Infrastructure DI). Resolved from this scope it would receive the tenant-scoped
+        // repository, and RLS would hand it zero rows while it reported success.
 
         services.AddScoped<SetPriceConfigVersionHandler>();
         services.AddScoped<AddCostEntryHandler>();
         services.AddScoped<AllocateGlobalExpenseHandler>();
         services.AddScoped<CorrectCostEntryHandler>();
         services.AddScoped<GetFinanceSummaryHandler>();
+        services.AddScoped<GetFarmerEngagementHandler>();
+        services.AddScoped<GetDayUnderstandingHandler>();
+        services.AddScoped<RecordQuestionEventHandler>();
+        services.AddScoped<GetRecentQuestionEventsHandler>();
+        // spec: dfes-companion-2026-07-11 (wave-4.2) — first-open Terms + DPDP gate.
+        services.AddScoped<ShramSafal.Application.UseCases.Consent.RecordConsentGateAcceptance
+            .RecordConsentGateAcceptanceHandler>();
+        // spec: 2026-08-25-prod-cutover-waves (B1) — attaches a pre-login acceptance to the
+        // account it produced. Ordinary scoped registration: it takes the tenant-scoped
+        // repository on purpose, because POST /shramsafal/consent-gate/link runs
+        // USER-SCOPED (not admin-elevated) so RLS can vouch for the user id on the row.
+        services.AddScoped<ShramSafal.Application.UseCases.Consent.LinkConsentGateToUser
+            .LinkConsentGateToUserHandler>();
         services.AddScoped<CreateAttachmentHandler>();
         services.AddScoped<UploadAttachmentHandler>();
         services.AddScoped<GetAttachmentMetadataHandler>();
@@ -747,6 +772,9 @@ public static class DependencyInjection
         services.AddScoped<GetJobCardsForFarmHandler>();
         services.AddScoped<GetJobCardsForWorkerHandler>();
         services.AddScoped<GetWorkerProfileHandler>();
+        // spec: dfes-companion-2026-07-11 (wave-4.4) — tiers 2 + 3, the only worker read
+        // designed to leave the farm that recorded the work.
+        services.AddScoped<GetWorkerReputationHandler>();
         services.AddScoped<OnLogVerifiedAutoVerifyJobCard>();
 
         // Task 1.3 (spec: 2026-07-13-labour-attendance-approval-design) —

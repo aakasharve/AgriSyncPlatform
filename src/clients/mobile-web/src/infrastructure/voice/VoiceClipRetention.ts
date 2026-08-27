@@ -594,3 +594,26 @@ export async function archiveToRetainedTierIfConsented(
         attempts: MAX_PERSIST_ATTEMPTS,
     };
 }
+
+
+/**
+ * How many recordings are still waiting to reach the farmer's cloud.
+ * Drives the "not yet saved" indicator: a farmer must be able to tell
+ * that something has not safely synced, rather than discovering it years
+ * later when he goes looking for it.
+ *
+ * spec: dfes-companion-2026-07-11 (farm-memory). Restored in the
+ * main -> feat/dfes-companion merge: the hunk that carried it was
+ * auto-dropped alongside the archive rewrite, leaving its own test
+ * (VoiceClipRetention.unsyncedFarmMemory.test.ts) importing a missing
+ * export. Test-only consumer on BOTH branches - no UI surface reads it yet.
+ */
+export async function countPendingRetainedArchives(): Promise<number> {
+    try {
+        return await getDatabase().voiceClips
+            .filter(clip => !clip.s3RetainedKey)
+            .count();
+    } catch {
+        return 0;
+    }
+}

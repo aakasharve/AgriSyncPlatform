@@ -4,6 +4,13 @@
 // which `ConsentScreen` wires to `updateConsent({ all false })`.
 // Confirmation copy is locale-specific and LEGAL_REVIEW_PENDING-tagged
 // per OQ-7 i18n convention.
+//
+// spec: dfes-companion-2026-07-11 (wave-4.3) — withdrawal must be no harder than
+// granting, AND must explain which services stop. It was already no harder (one tap,
+// one confirm — the same shape as granting). It did NOT explain anything: "are you
+// sure?" tells a farmer nothing about what he is about to lose, which makes the choice
+// unfree in the direction that matters. `revoke.whatStops` now names what stops and,
+// just as importantly, what does not — his farm, his work and his accounts stay.
 
 import React, { useState } from 'react';
 import { type ConsentLocale, tConsent } from '../../i18n/consentTranslations';
@@ -39,6 +46,12 @@ const RevokeAllButton: React.FC<Props> = ({ locale, onConfirm, disabled }) => {
             data-testid="consent-revoke-confirm"
         >
             <p className="text-sm text-stone-800 mb-3">{confirmCopy}</p>
+            <p
+                className="text-sm text-stone-700 mb-3 leading-relaxed"
+                data-testid="consent-revoke-what-stops"
+            >
+                {tConsent(locale, 'revoke.whatStops')}
+            </p>
             <div className="flex gap-2">
                 <button
                     type="button"

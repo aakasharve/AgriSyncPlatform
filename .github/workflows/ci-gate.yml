@@ -137,8 +137,25 @@ jobs:
         working-directory: src/clients/mobile-web
         continue-on-error: true
       - name: Build
+        # Same inputs the SHIPPING build uses, not a placeholder.
+        #
+        # vite.config.ts carries a deploy-safety guard that refuses a product
+        # build when VITE_AGRISYNC_API_URL is unset, because a bundle built
+        # without it has resolveApiBaseUrl() returning '' and eight API clients
+        # silently falling back to http://localhost:5048 — login among them. The
+        # guard is correct; this step was simply never given the value, so the
+        # build failed the moment the guard arrived with the DFES merge.
+        #
+        # Passing the real production URL (identical to web-release.yml and
+        # android-release.yml) means CI compiles the artifact that actually
+        # ships, rather than proving a differently-configured one compiles. A
+        # sentinel value would satisfy the guard and prove less than nothing.
+        #
+        # Nothing is published from here — this job builds and discards.
         run: npm run build
         working-directory: src/clients/mobile-web
+        env:
+          VITE_AGRISYNC_API_URL: "https://api.shramsafal.in"
 
   gate:
     name: gate

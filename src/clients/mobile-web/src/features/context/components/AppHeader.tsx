@@ -376,6 +376,26 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   // row below row 1, not inside it — see `PAGE_TOGGLE_ROUTES`'s comment).
   const showNavCards = PAGE_TOGGLE_ROUTES.includes(currentRoute);
 
+  // FOUNDER RULING 2026-08-27 — THE STRIP'S COUNT NO LONGER LEAVES THIS FILE,
+  // BECAUSE NOTHING OUTSIDE IT MAKES A CLAIM ABOUT IT ANY MORE.
+  //
+  // Ruling A2 (2026-08-26) published `oversightModel.waitingCount` through
+  // `oversightWaitingSignal.ts` so the home screen's `DailyLoopHero` could
+  // refuse to say "काही बाकी नाही" underneath a strip reporting four waiting
+  // rows. On 2026-08-27 the founder looked at the state where that gate PASSES
+  // and ruled the duplication itself out: the hero's settled line is deleted at
+  // source, so there is no second all-clear surface left to gate. The signal
+  // module and its two effects went with it — a cross-subtree store with no
+  // consumer is scaffolding, not a guard.
+  //
+  // The property that mattered is not weakened, it is stronger: `waitingCount`
+  // now reaches exactly one renderer, `<CanonicalStrip>` below, which draws
+  // BOTH its ring number and its sentence from that single prop on this single
+  // render. There is no longer a second reader that could drift for a
+  // `useSyncQueueStatus` poll interval, because there is no second reader.
+  // `features/oversight/__tests__/oneAllClearSurface.test.tsx` mounts this
+  // header above the real hero and holds that.
+
   return (
     // Task 12 (`G:\VALIDATION\farm-selector-contextual.html`'s `.hdr` rule):
     // "the header becomes a card" — a rounded bottom + a soft downward

@@ -221,6 +221,46 @@ const FieldProvenanceSchema = z.enum([
     'assumed',
 ]);
 
+/**
+ * wave-3.12, spec Ruling 5 (2026-08-15) — per-NUMBER certainty. Mirrors `NumericFact` /
+ * `NumericFacts` in log.types.ts.
+ *
+ * A DIFFERENT AXIS from `FieldProvenanceSchema` above and never a member of it (doctrine
+ * P8): provenance says how the system came by a value, certainty says how sure the FARMER
+ * was of it. "अंदाजे ५०० मिली" is spoken AND approximate.
+ *
+ * Declared rather than left to `.passthrough()`: this file's own design rule 2 tolerates
+ * extras only "until they become load-bearing", and a value the ledger persists into
+ * columns is load-bearing. Added ONLY to the six nested event schemas — never to the top
+ * level, which is `.strict()`.
+ *
+ * MANUAL HALF ONLY. Nothing in the AI prompt emits this yet; the voice path is
+ * `BLOCKED — Gate C` pending a founder decision (it needs a prompt change, a
+ * prompt-registry bump and a golden-set delta). The schema is therefore permissive of its
+ * absence, which is every parse today.
+ */
+const NumericCertaintySchema = z.enum(['reported', 'approximate', 'unknown']);
+
+const NumericBasisSchema = z.enum([
+    'per_pump',
+    'per_acre',
+    'whole_plot',
+    'per_litre',
+    'per_person_day',
+]);
+
+const NumericFactSchema = z.object({
+    certainty: NumericCertaintySchema,
+    // ABSENT when certainty is 'unknown'. Never 0 — an unknown is not a zero (P4).
+    quantity: z.number().optional(),
+    unit: z.string().optional(),
+    basis: NumericBasisSchema.optional(),
+    spokenText: z.string().optional(),
+}).passthrough();
+
+/** Key = the sibling numeric field qualified: 'dose', 'totalCost', 'waterVolumeLitres'. */
+const NumericFactsSchema = z.record(z.string(), NumericFactSchema);
+
 const QuestionForUserTypeSchema = z.enum([
     'LABOUR_SOURCE_CHECK',
     'CONTEXT_CHECK',
@@ -298,6 +338,26 @@ const TransparencyFields = {
     systemInterpretation: z.string().optional(),
 } as const;
 
+/**
+ * ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11).
+ *
+ * Backend `AiResponseNormalizer.NormalizeVoiceJson` stamps this on every
+ * extracted item after checking whether `sourceText` actually appears in
+ * the parse's `fullTranscript` (a real founder-caught bug: the model
+ * fabricated a phrase inside `sourceText` and extracted a whole activity
+ * from its own invention). `false` = could not verify; the item is
+ * rendered with a gentle "not certain I heard this" flag on the review
+ * screen so the farmer can confirm or remove it — never auto-deleted,
+ * never blocking save. A MISSING key (item predates this field, is a
+ * manual entry, or survived a later normalization pass) MUST be treated
+ * as verified — never coerce absence to `false`. Every nested schema
+ * below is `.passthrough()` so this would survive even unlisted, but it
+ * is declared explicitly for type-safety and documentation.
+ */
+const ProvenanceVerifiedField = {
+    provenanceVerified: z.boolean().optional(),
+} as const;
+
 const BucketIssueSchema = z.object({
     issueType: BucketIssueTypeSchema,
     reason: z.string(),
@@ -360,10 +420,12 @@ export const CropActivityEventSchema = z.object({
     // W1.P2 — per-field provenance (nested schema; .passthrough() keeps this additive)
     provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
+    ...ProvenanceVerifiedField,
 }).passthrough();
 
 export const IrrigationEventSchema = z.object({
     id: z.string(),
+    numbers: NumericFactsSchema.optional(),
     linkedActivityId: z.string().optional(),
     method: z.string(),
     source: z.string(),
@@ -380,10 +442,12 @@ export const IrrigationEventSchema = z.object({
     // W1.P2 — per-field provenance
     provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
+    ...ProvenanceVerifiedField,
 }).passthrough();
 
 export const LabourEventSchema = z.object({
     id: z.string(),
+    numbers: NumericFactsSchema.optional(),
     linkedActivityId: z.string().optional(),
     type: LabourTypeSchema,
     shiftId: z.string().optional(),
@@ -413,10 +477,12 @@ export const LabourEventSchema = z.object({
     // W1.P2 — per-field provenance
     provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
+    ...ProvenanceVerifiedField,
 }).passthrough();
 
 export const InputMixItemSchema = z.object({
     id: z.string(),
+    numbers: NumericFactsSchema.optional(),
     productName: z.string(),
     dose: z.number().optional(),
     unit: z.string(),
@@ -433,6 +499,7 @@ export const InputMixItemSchema = z.object({
 
 export const InputEventSchema = z.object({
     id: z.string(),
+    numbers: NumericFactsSchema.optional(),
     linkedActivityId: z.string().optional(),
     linkedExpenseId: z.string().optional(),
     linkedExpenseItemId: z.string().optional(),
@@ -465,10 +532,12 @@ export const InputEventSchema = z.object({
     // W1.P2 — per-field provenance
     provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
+    ...ProvenanceVerifiedField,
 }).passthrough();
 
 export const MachineryEventSchema = z.object({
     id: z.string(),
+    numbers: NumericFactsSchema.optional(),
     linkedActivityId: z.string().optional(),
     type: MachineryTypeSchema,
     ownership: MachineryOwnershipSchema,
@@ -488,6 +557,7 @@ export const MachineryEventSchema = z.object({
     // W1.P2 — per-field provenance
     provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
+    ...ProvenanceVerifiedField,
 }).passthrough();
 
 export const ExpenseItemSchema = z.object({
@@ -501,6 +571,7 @@ export const ExpenseItemSchema = z.object({
 
 export const ActivityExpenseEventSchema = z.object({
     id: z.string(),
+    numbers: NumericFactsSchema.optional(),
     reason: z.string(),
     /**
      * Legacy free-text category. Kept for back-compat with logs parsed
@@ -529,6 +600,7 @@ export const ActivityExpenseEventSchema = z.object({
     // W1.P2 — per-field provenance
     provenance: FieldProvenanceSchema.optional(),
     ...TransparencyFields,
+    ...ProvenanceVerifiedField,
 }).passthrough();
 
 // `ObservationNoteDraft = Partial<ObservationNote> & { textRaw: string }`
@@ -556,6 +628,7 @@ export const ObservationNoteDraftSchema = z.object({
     resolvedAt: z.string().optional(),
 
     ...TransparencyFields,
+    ...ProvenanceVerifiedField,
 }).passthrough();
 
 // `AgriLogResponse.plannedTasks` is a narrower draft shape than the
@@ -568,6 +641,7 @@ export const PlannedTaskDraftSchema = z.object({
     category: PlannedTaskCategorySchema,
     sourceText: z.string(),
     systemInterpretation: z.string(),
+    ...ProvenanceVerifiedField,
 }).passthrough();
 
 export const DisturbanceEventSchema = z.object({

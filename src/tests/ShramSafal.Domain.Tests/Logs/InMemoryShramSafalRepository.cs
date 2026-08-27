@@ -5,6 +5,7 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Crops;
+using ShramSafal.Domain.Dfes;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Labour;
@@ -179,6 +180,56 @@ internal sealed class InMemoryShramSafalRepository : IShramSafalRepository
 
     public Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
         => Task.FromResult(_memberships.ContainsKey((farmId, userId)));
+
+    // DFES (dfes-companion-2026-07-11) Phase 3 — seam for GetFarmerEngagementHandlerTests.
+    // IShramSafalRepository.GetDailyRichnessAggregatesForFarmAsync is default-bodied
+    // (returns empty) on the port; this override lets tests seed farm-scoped rows.
+    public List<DailyRichnessAggregate> SeededRichnessAggregates { get; } = [];
+
+    public Task<IReadOnlyList<DailyRichnessAggregate>> GetDailyRichnessAggregatesForFarmAsync(
+        Guid farmId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<DailyRichnessAggregate>>(
+            SeededRichnessAggregates
+                .Where(a => a.FarmId == farmId)
+                .OrderBy(a => a.LocalDate)
+                .ToList());
+
+    // DFES (dfes-companion-2026-07-11) Slice 3a — per-day seam for
+    // GetDayUnderstandingHandlerTests. Mirrors the farm+local_date lookup the
+    // production repo does under RLS; reads the same seeded list.
+    public Task<DailyRichnessAggregate?> GetDailyRichnessAggregateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => Task.FromResult(
+            SeededRichnessAggregates
+                .FirstOrDefault(a => a.FarmId == farmId && a.LocalDate == localDate));
+
+    // FIX (dfes-companion-2026-07-11) — the recompute write path now asks for a TRACKED
+    // aggregate. In-memory there is no change tracker: the list already hands back the
+    // live mutable object, so this delegates to the SAME backing store. That equivalence
+    // is precisely why no fake-repository test can catch the detached-write bug — the
+    // real-EF proof is in ShramSafal.Sync.IntegrationTests/Dfes.
+    public Task<DailyRichnessAggregate?> GetDailyRichnessAggregateForUpdateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => GetDailyRichnessAggregateAsync(farmId, localDate, ct);
+
+    // FIX (dfes-companion-2026-07-11) — the interface default no-ops these two
+    // members, which is exactly wrong for a test that needs a REAL round-trip
+    // (RecomputeAsync reads the day's logs, then writes the aggregate back).
+    // GetDailyLogsForFarmDateAsync reads from the same _logs store AddLog/
+    // AddDailyLogAsync populate; AddDailyRichnessAggregateAsync writes into the
+    // SAME SeededRichnessAggregates list GetDailyRichnessAggregateAsync reads
+    // from, so a write is visible to a later read exactly like the real table.
+    public Task<IReadOnlyList<DailyLog>> GetDailyLogsForFarmDateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<DailyLog>>(
+            _logs.Values.Where(l => l.FarmId.Value == farmId && l.LogDate == localDate).ToList());
+
+    public Task AddDailyRichnessAggregateAsync(
+        DailyRichnessAggregate aggregate, CancellationToken ct = default)
+    {
+        SeededRichnessAggregates.Add(aggregate);
+        return Task.CompletedTask;
+    }
 
     public Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
         => Task.FromResult<AppRole?>(

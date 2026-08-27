@@ -59,9 +59,28 @@ namespace ShramSafal.Infrastructure.Auth;
 /// LABOUR_PHASE2 Phase 5 (2026-08-13, founder decision O-4) —
 /// <see cref="EnsureCanVerify"/> no longer keeps its own private owner-tier
 /// role list. It asks <see cref="LabourManagementGate"/>, the single predicate
-/// shared with the four labour handlers, which <b>restores the Mukadam's
-/// ability to approve and verify</b> — previously the Mukadam could correct the
-/// labour on a log but not verify that same log.
+/// shared with the four labour handlers.
+/// </para>
+///
+/// <para>
+/// <b>CORRECTION, 2026-08-27.</b> This paragraph used to add that O-4
+/// "restores the Mukadam's ability to approve and verify". It did not, and
+/// saying so here was a claim about a boundary this class cannot see. Passing
+/// THIS gate has never been sufficient to approve a log: the caller then
+/// reaches <c>VerificationStateMachine</c>, whose <c>Confirmed → Verified</c>
+/// edge was owner-tier, so every Mukadam admitted here was refused one layer
+/// deeper. Founder ruling 2026-08-27 — <i>"if the owner has given that access
+/// to him then yes"</i> — settles it as a PERMISSION: that FSM edge now also
+/// opens for the explicit <c>can_manage_labour_records</c> grant, resolved in
+/// <c>VerifyLogHandler</c>. An UNGRANTED Mukadam still passes this gate and is
+/// still refused by the FSM, which is deliberate and is the behaviour
+/// <c>OwnerCanApproveAMukadamsLogRealPostgresTests</c> proofs 2/3 pin.
+/// <b>This method was NOT changed by that ruling</b> — it is recorded here so
+/// the next reader is not told a second time that this line alone decides who
+/// may approve.
+/// </para>
+///
+/// <para>
 /// <see cref="EnsureIsOwner"/> and <see cref="EnsureCanEditLog"/> are
 /// deliberately UNCHANGED: owning a farm and editing a log are not
 /// labour-record management, and widening them would be scope this decision did

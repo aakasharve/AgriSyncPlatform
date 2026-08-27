@@ -226,6 +226,11 @@ public sealed class ExportWorker(
                 new { note = "Phase 08 placeholder — full per-user parsed-output export deferred to Phase 09.", entries = Array.Empty<object>() },
                 ct).ConfigureAwait(false);
 
+            // DFES (dfes-companion-2026-07-11): ssf.daily_richness_aggregates and
+            // ssf.question_events are farm-scoped derived/telemetry rows with NO user_id
+            // column — they are not part of the user-scoped DPDP §11 export manifest
+            // (a farm-level export path, if ever built, is a separate workflow).
+
             // Voice clips deferred to Phase 07 (voice_clips_retained).
             await WriteTextEntryAsync(zip, "voice/README.txt",
                 "[LEGAL_REVIEW_PENDING] Raw voice clip export becomes available once Phase 07 voice_clips_retained ships.",

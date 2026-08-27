@@ -155,6 +155,16 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<RoutinePattern> RoutinePatterns => Set<RoutinePattern>();
     public DbSet<WeatherStamp> WeatherStamps => Set<WeatherStamp>();
     public DbSet<EventLink> EventLinks => Set<EventLink>();
+
+    /// <summary>DFES (dfes-companion-2026-07-11) — per-farm per-day richness aggregate.
+    /// Mapped to <c>ssf.daily_richness_aggregates</c>. Direct-farm_id RLS.</summary>
+    public DbSet<ShramSafal.Domain.Dfes.DailyRichnessAggregate> DailyRichnessAggregates =>
+        Set<ShramSafal.Domain.Dfes.DailyRichnessAggregate>();
+
+    /// <summary>DFES (dfes-companion-2026-07-11) — append-only D8 question telemetry.
+    /// Mapped to <c>ssf.question_events</c>; migration REVOKEs UPDATE/DELETE.</summary>
+    public DbSet<ShramSafal.Domain.Dfes.QuestionEvent> QuestionEvents =>
+        Set<ShramSafal.Domain.Dfes.QuestionEvent>();
     public DbSet<JobCard> JobCards => Set<JobCard>();
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<OrganizationMembership> OrganizationMemberships => Set<OrganizationMembership>();
@@ -231,6 +241,27 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     /// doctrine. RLS-exempt: user-keyed; handler-level guard.
     /// </summary>
     public DbSet<ConsentAuditEntry> ConsentAuditEntries => Set<ConsentAuditEntry>();
+
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-4.2) — the CONTRACTUAL half of the
+    /// first-open gate's single tap. Mapped to <c>ssf.terms_acceptance_events</c>;
+    /// the migration REVOKEs UPDATE + DELETE from <c>agrisync_app</c>, so it is
+    /// append-only by privilege exactly as <c>ssf.question_events</c> is. RLS is
+    /// ENABLEd + FORCEd with a self-only read policy; a pre-registration row
+    /// (user_id NULL) is insertable without a session and readable by nobody
+    /// through it.
+    /// </summary>
+    public DbSet<ShramSafal.Domain.Consent.TermsAcceptanceEvent> TermsAcceptanceEvents =>
+        Set<ShramSafal.Domain.Consent.TermsAcceptanceEvent>();
+
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-4.2) — the DATA-PROTECTION half of the
+    /// same tap, and a separate legal record on purpose: withdrawing consent does
+    /// not un-accept the Terms. Mapped to <c>ssf.consent_grant_events</c>, same
+    /// append-only + RLS posture. A withdrawal is a NEW row, never an edit.
+    /// </summary>
+    public DbSet<ShramSafal.Domain.Consent.ConsentGrantEvent> ConsentGrantEvents =>
+        Set<ShramSafal.Domain.Consent.ConsentGrantEvent>();
 
     /// <summary>
     /// Voice Diary ship (voice-diary-e2e-2026-05-17) — retained-tier

@@ -290,6 +290,16 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
         draftLog, setDraftLog, provenance: null,
         voiceStreamingPhase: 'idle',
         liveCaption: '',
+        // dfes-companion fields this preview harness must satisfy to be an
+        // AppRouterContext. Inert on purpose: the preview stands in for five
+        // real hooks with local useState (see this file's header), and none of
+        // these five has a preview surface. Same shape the real supplier uses
+        // for a session with no farm and no pending capture.
+        continuityLevel: null,
+        savedPendingCaptureId: null,
+        activeFarmId: null,
+        showNoWorkReason: false,
+        setShowNoWorkReason: () => {},
 
         weatherData,
         weatherStatus,

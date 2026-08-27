@@ -8,6 +8,7 @@ import {
 } from '../../types';
 import type { ObservationNoteDraft, ScoreContext } from '../../domain/types/log.types';
 import { getDateKey } from './services/DateKeyService';
+import { resolveDueDate } from './dueDateResolver';
 import { isCompletedIrrigationEvent } from './services/IrrigationCompletionService';
 // import { AgriLogResponse } from '../../domain/ai/contracts/AgriLogResponseSchema'; // REMOVED
 import { LogProvenance } from '../../domain/ai/LogProvenance';
@@ -28,7 +29,8 @@ import {
     computeReceiptTotal,
     projectLogForScoring,
     countPlots,
-    priorityToSeverity
+    priorityToSeverity,
+    hasApprovalAuthority
 } from './helpers/log-factory-helpers';
 // LABOUR_PHASE2 B1b — what ONE partition of a save becomes. Lifted out for the
 // same 800-line budget, which CI enforces; a pure move, no logic changed.
@@ -100,6 +102,8 @@ export class LogFactory {
                 || data.manualTotalCost !== undefined
                 || data.observations?.length
                 || data.plannedTasks?.length
+                // wave-3.10, founder decision 8 - see `ManualEntryData.dayOutcome`.
+                || data.dayOutcome
             ),
         );
 
@@ -196,7 +200,7 @@ export class LogFactory {
             activityExpenses,
         ].some(events => events.length > 0);
 
-        const isOwner = profile.activeOperatorId === 'owner';
+        const isOwner = hasApprovalAuthority(profile);
         const autoApproveAll = profile.trust?.reviewPolicy === 'AUTO_APPROVE_ALL';
         const verificationStatus = (isOwner || autoApproveAll)
             ? LogVerificationStatus.APPROVED
@@ -213,7 +217,10 @@ export class LogFactory {
                     selectedPlotNames: []
                 }]
             },
-            dayOutcome: data.disturbance && !hasExecution ? 'DISTURBANCE_RECORDED' : 'WORK_RECORDED',
+            // wave-3.10, founder decision 8 — a declaration the farmer MADE outranks anything
+                // derived from the shape of his data. Absent, the original rule stands untouched.
+                dayOutcome: data.dayOutcome
+                    ?? (data.disturbance && !hasExecution ? 'DISTURBANCE_RECORDED' : 'WORK_RECORDED'),
             weatherStamp: undefined,
             cropActivities: data.cropActivities || [],
             irrigation,
@@ -236,12 +243,15 @@ export class LogFactory {
             meta: {
                 createdAtISO: nowISO,
                 createdByOperatorId: profile.activeOperatorId,
-                appVersion: VersionRegistry.APP_VERSION
+                appVersion: VersionRegistry.APP_VERSION,
+                // BUGFIX_2026-07-19 — see ManualEntryData.provenance doc comment.
+                provenance: data.provenance
             },
             verification: {
                 status: verificationStatus,
                 required: !isOwner,
-                verifiedByOperatorId: isOwner ? 'owner' : undefined,
+                // WAVE-1.1: the REAL id — 'owner' resolved to no operator.
+                verifiedByOperatorId: isOwner ? profile.activeOperatorId : undefined,
                 verifiedAtISO: isOwner ? nowISO : undefined
             }
         };
@@ -258,11 +268,22 @@ export class LogFactory {
         weatherStamps?: Record<string, WeatherStamp>,
         provenance?: LogProvenance,
         clock: Clock = systemClock,
-        idGen: IdGenerator = idGenerator
+        idGen: IdGenerator = idGenerator,
+        // Daily Clarity Loop gate (spec: dfes-companion-2026-07-11). Domain is
+        // flag-agnostic — the app-layer caller (useLogCommands, reading
+        // FEATURE_FLAGS.dailyLoop) passes this in. When FALSE the spoken-task
+        // due-date resolver is inert and the mirrored task behaves exactly as
+        // pre-feature (dueHint copied, dueDate left unset). Default FALSE so any
+        // caller that omits it stays a byte-equivalent no-op.
+        resolveDue: boolean = false
     ): DailyLog[] {
         const targetPlotIds = logScope.selectedPlotIds;
         const newLogs: DailyLog[] = [];
         const nowISO = clock.nowISO();
+        // "Today" for due-date resolution is derived INSIDE each builder, from the
+        // `nowISO` passed down — one clock reading, no second one here. It used to
+        // be computed at this level because the per-plot loop body lived here;
+        // LABOUR_PHASE2 B1b moved that body into `buildVoicePartitionLog`.
 
         // Shared Costs
         const laborCostGlobal = response.labour?.reduce((s: number, x: LabourEvent) => s + (x.totalCost || 0), 0) || 0;
@@ -297,7 +318,8 @@ export class LogFactory {
                 weatherStamps,
                 provenance,
                 nowISO,
-                idGen
+                idGen,
+                resolveDue
             );
             // Stamp understanding (always, silent — display gated by flag separately)
             const globalVoiceCtx: ScoreContext = { farm: { plotCount: 1 } };
@@ -336,7 +358,8 @@ export class LogFactory {
                 weatherStamps,
                 provenance,
                 nowISO,
-                idGen
+                idGen,
+                resolveDue
             );
 
             // Stamp Understanding Meter score (always, silent — display gated by flag separately)
@@ -360,11 +383,16 @@ export class LogFactory {
         weatherStamps: Record<string, WeatherStamp> | undefined,
         provenance: LogProvenance | undefined,
         nowISO: string,
-        idGen: IdGenerator
+        idGen: IdGenerator,
+        // Daily Clarity Loop gate — see createFromVoiceResult. Off ⇒ resolver inert.
+        resolveDue: boolean
     ): DailyLog {
-        const isOwner = profile.activeOperatorId === 'owner';
+        const isOwner = hasApprovalAuthority(profile);
         const autoApprove = profile.trust?.reviewPolicy === 'AUTO_APPROVE_ALL' ||
             (profile.trust?.reviewPolicy === 'AUTO_APPROVE_OWNER' && isOwner);
+
+        // "Today" for due-date resolution — from the SAME clock as nowISO.
+        const today = getDateKey(nowISO);
 
         const mirroredTasks: PlannedTask[] = response.plannedTasks?.map((pt: AgriLogPlannedTask) => ({
             id: idGen.generate(),
@@ -373,6 +401,9 @@ export class LogFactory {
             priority: 'normal',
             createdAt: nowISO,
             dueHint: pt.dueHint,
+            // Loop-gated: resolve the hint only when the loop is on; otherwise
+            // leave dueDate unset so this path is a pre-feature no-op.
+            dueDate: resolveDue ? (resolveDueDate(pt.dueHint ?? undefined, today) ?? undefined) : undefined,
             sourceType: 'ai_extracted',
             plotId: FARM_GLOBAL_ID,
             cropId: FARM_GLOBAL_ID
@@ -391,7 +422,9 @@ export class LogFactory {
                 textCleaned: obs.textCleaned || obs.textRaw,
                 noteType: obs.noteType || 'observation',
                 severity: obs.severity || 'normal',
-                aiConfidence: obs.aiConfidence || 90,
+                // WAVE 2.1 (spec: dfes-companion-2026-07-11) — same rule on the
+                // farm-global branch: unscored stays unscored. See the per-plot branch.
+                aiConfidence: obs.aiConfidence,
                 tags: obs.tags || []
             })) || []),
             ...mirroredTasks.map(t => ({
@@ -460,7 +493,8 @@ export class LogFactory {
             verification: {
                 status: autoApprove ? LogVerificationStatus.APPROVED : LogVerificationStatus.PENDING,
                 required: !isOwner,
-                verifiedByOperatorId: isOwner ? 'owner' : undefined,
+                // WAVE-1.1: the REAL id — 'owner' resolved to no operator.
+                verifiedByOperatorId: isOwner ? profile.activeOperatorId : undefined,
                 verifiedAtISO: isOwner ? nowISO : undefined
             }
         };

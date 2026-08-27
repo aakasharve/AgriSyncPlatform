@@ -15,7 +15,11 @@ import {
 } from '../../features/scheduler/planning/ClientPlanEngine';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 
-type OperationCategory = 'IRRIGATION' | 'FERTIGATION' | 'FOLIAR_SPRAY' | 'ACTIVITY';
+// spec: dfes-companion-2026-07-11 (Task 3A) — exported minimally so
+// dfesScheduleWindow.ts can reuse the SAME 4-bucket category union and
+// execution-counting primitive computeDayState/getOverdueStageSignal already
+// use, instead of re-implementing plan-vs-done arithmetic.
+export type OperationCategory = 'IRRIGATION' | 'FERTIGATION' | 'FOLIAR_SPRAY' | 'ACTIVITY';
 
 export type DayRiskStatus = 'stable' | 'risk_rising';
 
@@ -28,6 +32,18 @@ export interface DayState {
     unverifiedCount: number;
     closurePercent: number;
     isClosed: boolean;
+    /**
+     * spec: dfes-companion-2026-07-11 (wave-2.4 follow-up) — has this day STARTED
+     * at all? False only when nothing is planned for it AND nothing has been
+     * recorded on it. Published as its own fact (rather than left for each
+     * surface to infer from `closurePercent === 0`) because EVERY surface that
+     * shows a closure number or a closure label has to answer the same question
+     * first: a day with nothing in it is not 0%-and-failing and not
+     * 100%-and-complete — it has not begun, and the honest render is no number
+     * at all. Inferring it from the score would tie each caller to the 70/30
+     * formula; this ties them to the fact.
+     */
+    hasStarted: boolean;
     riskStatus: DayRiskStatus;
     riskSignals: string[];
     lastActions: {
@@ -74,6 +90,52 @@ const VERIFIED_STATUSES = new Set<LogVerificationStatus>([
     LogVerificationStatus.VERIFIED,
     LogVerificationStatus.APPROVED
 ]);
+
+/**
+ * Statuses in which a confirmation is CONTESTED — the owner looked and said
+ * "this does not match", or a correction is mid-flight after he did. These are
+ * the one case where a `verifiedAtISO` stamp must NOT be read as standing
+ * credit (see `hasConfirmationOnRecord`): the sync path stamps the log on any
+ * verification event, dispute included, and crediting a disputed log would let
+ * the ring claim a day was confirmed when the owner explicitly said otherwise.
+ */
+const CONTESTED_STATUSES = new Set<LogVerificationStatus>([
+    LogVerificationStatus.DISPUTED,
+    LogVerificationStatus.REJECTED,
+    LogVerificationStatus.CORRECTION_PENDING
+]);
+
+/**
+ * FOUNDER RULING 21 (2026-08-16) — "AI has no role in it. AI is only being used
+ * for parsing and sorting."
+ *
+ * These are the task provenances the AI authors: `ai_extracted` is Sathi
+ * turning the farmer's speech into a task (LogFactory.ts:619, 758) and
+ * `observation_derived` is the same act one hop later — tasks lifted out of an
+ * AI-parsed observation note, carrying an `aiConfidence` (LogFactory.ts:126,
+ * 272, 414). Neither is something the FARMER undertook; both are the AI
+ * describing what it heard. The two provenances that survive are `manual` (he
+ * created the task himself) and `schedule` (the agronomic plan he adopted).
+ *
+ * NOTE the widening: the ruling names `ai_extracted`. `observation_derived` is
+ * included because it is the same act by the same author and would reopen the
+ * identical hole in a rule the founder has now made absolute. Narrowing this
+ * back to `ai_extracted` alone is a one-line change to this set.
+ */
+const AI_AUTHORED_TASK_SOURCES = new Set<PlannedTask['sourceType']>([
+    'ai_extracted',
+    'observation_derived'
+]);
+
+/**
+ * Is this task an obligation the FARMER is measured against? Only tasks he
+ * took on — himself, or by adopting a schedule — can move the number that
+ * judges his day. An unknown/missing provenance counts as his (the field is
+ * required by the type; treating legacy rows as farmer-owned preserves the
+ * pre-ruling behaviour rather than silently forgiving work).
+ */
+const isScoredObligation = (task: PlannedTask): boolean =>
+    !AI_AUTHORED_TASK_SOURCES.has(task.sourceType);
 
 const FARM_GLOBAL = 'FARM_GLOBAL';
 
@@ -143,7 +205,11 @@ const getScopePlots = (crops: CropProfile[], scope?: ScopeOptions) => {
     });
 };
 
-const getExecutionCountByCategory = (logs: DailyLog[], category: OperationCategory): number => {
+// spec: dfes-companion-2026-07-11 (Task 3A) — exported minimally (was
+// module-private) so dfesScheduleWindow.ts can reuse the exact same
+// executed-count logic getOverdueStageSignal already relies on, rather than
+// duplicating its body.
+export const getExecutionCountByCategory = (logs: DailyLog[], category: OperationCategory): number => {
     if (category === 'IRRIGATION') {
         return logs.reduce((sum, log) => sum + (log.irrigation?.length || 0), 0);
     }
@@ -277,15 +343,23 @@ const getOverdueStageSignal = (
     return null;
 };
 
+// Shared crop/plot scope predicate for tasks. Extracted so getTaskCompletion and
+// getCarriedTasks filter by IDENTICAL rules — the carried subset MUST stay a
+// strict subset of a day's pending, or the Daily Clarity Loop hero could show a
+// carried count that exceeds today's number (the exact incoherence Fix 1 kills).
+const taskInScope = (task: PlannedTask, scope?: ScopeOptions): boolean => {
+    if (scope?.selectedCropIds?.length && task.cropId && !scope.selectedCropIds.includes(task.cropId)) {
+        return false;
+    }
+    if (scope?.selectedPlotIds?.length && !scope.selectedPlotIds.includes(task.plotId)) {
+        return false;
+    }
+    return true;
+};
+
 const getTaskCompletion = (tasks: PlannedTask[], dateKey: string, scope?: ScopeOptions) => {
     const scopedTasks = tasks.filter(task => {
-        if (scope?.selectedCropIds?.length && task.cropId && !scope.selectedCropIds.includes(task.cropId)) {
-            return false;
-        }
-        if (scope?.selectedPlotIds?.length && !scope.selectedPlotIds.includes(task.plotId)) {
-            return false;
-        }
-
+        if (!taskInScope(task, scope)) return false;
         if (!task.dueDate) return false;
         return task.dueDate <= dateKey;
     }).filter(task => task.status !== 'cancelled');
@@ -296,6 +370,36 @@ const getTaskCompletion = (tasks: PlannedTask[], dateKey: string, scope?: ScopeO
         completed,
         pending: Math.max(0, scopedTasks.length - completed)
     };
+};
+
+/**
+ * The genuinely-CARRIED subset of a date's open tasks: tasks whose `dueDate` is
+ * STRICTLY BEFORE `date` and are still open (not done, not cancelled), within the
+ * same crop/plot scope. Because getTaskCompletion counts `dueDate <= date` for
+ * pending, this set is always a strict subset of that day's pending tasks — so
+ * `getCarriedTasks(...).length <= computeDayState(...).pendingCount` ALWAYS. The
+ * Daily Clarity Loop hero uses it to name the carried work as a soft qualifier of
+ * TODAY's number, never as a second standalone count that could diverge above it.
+ */
+export const getCarriedTasks = ({
+    tasks,
+    date = getDateKey(),
+    selectedCropIds,
+    selectedPlotIds
+}: {
+    tasks: PlannedTask[];
+    date?: string;
+    selectedCropIds?: string[];
+    selectedPlotIds?: string[];
+}): PlannedTask[] => {
+    const dateKey = normalizeDateKey(date);
+    const scope: ScopeOptions = { selectedCropIds, selectedPlotIds };
+    return tasks.filter(task => {
+        if (!taskInScope(task, scope)) return false;
+        if (task.status === 'done' || task.status === 'cancelled') return false;
+        if (!task.dueDate) return false;
+        return task.dueDate < dateKey;
+    });
 };
 
 const clampPercent = (value: number): number => {
@@ -310,6 +414,39 @@ export const isLogVerified = (log: DailyLog): boolean => {
 };
 
 export const isLogUnverified = (log: DailyLog): boolean => !isLogVerified(log);
+
+/**
+ * FOUNDER RULING 22 (2026-08-16) — "it must preserve or improve, nothing to
+ * take back... only the re-talk on same log treat that append."
+ *
+ * Has a confirmation been EARNED on this log — as distinct from `isLogVerified`,
+ * which asks whether one is CURRENTLY standing. The difference is a re-open:
+ * a human re-opening a log he had confirmed walks the status back to DRAFT (the
+ * same act `DailyLog.Edit` performs server-side), and until this ruling that
+ * withdrew the 30 the confirmation had already earned. It no longer does. The
+ * re-talk is an append to the same log, not a retraction of it.
+ *
+ * The evidence is `verifiedAtISO`, the stamp a confirmation leaves:
+ *   • `LogFactory` writes it ONLY for the owner's own auto-confirmed log
+ *     (`verifiedAtISO: isOwner ? nowISO : undefined`) — a mukadam's unreviewed
+ *     log has no stamp, so it earns nothing, and a day where nothing was ever
+ *     confirmed still scores 0 for this half. The ring cannot claim a day is
+ *     verified when nothing ever was.
+ *   • the sync path rebuilds it from the log's append-only `verificationEvents`
+ *     (logsReconciler.ts:153-157, 261-267), which a re-open does not erase.
+ * That path stamps on ANY verification event, dispute included, which is why a
+ * contested status is excluded rather than trusted.
+ *
+ * A log still genuinely awaiting review is untouched by this: no stamp, no
+ * credit, and the waiting is reported by `unverifiedCount` / `isClosed` / the
+ * review queue exactly as before.
+ */
+const hasConfirmationOnRecord = (log: DailyLog): boolean => {
+    if (isLogVerified(log)) return true;
+    const status = log.verification?.status;
+    if (status && CONTESTED_STATUSES.has(status)) return false;
+    return Boolean(log.verification?.verifiedAtISO);
+};
 
 export const computeDayState = ({
     logs,
@@ -366,18 +503,94 @@ export const computeDayState = ({
         doneFromSchedule += Math.min(plannedCount, executedByKey.get(key) || 0);
     });
 
+    // The PUBLISHED counts keep every task, AI-authored included. Ruling 21 is
+    // about the score, not about hiding work from the farmer: his task list,
+    // `pendingCount`, the carried-task hero and `isClosed` all still see it.
     const taskCompletion = getTaskCompletion(tasks, dateKey, scope);
     const plannedCount = plannedFromSchedule + taskCompletion.planned;
     const completedCount = doneFromSchedule + taskCompletion.completed;
     const pendingCount = Math.max(0, plannedCount - completedCount);
 
+    // The SCORED plan (ruling 21) — only obligations the farmer actually took
+    // on. Excluded from BOTH halves of the ratio, never just the denominator:
+    // credit for finishing something he was never measured on would be as
+    // invented as the penalty was.
+    const scoredTaskCompletion = getTaskCompletion(tasks.filter(isScoredObligation), dateKey, scope);
+    const scoredPlannedCount = plannedFromSchedule + scoredTaskCompletion.planned;
+    const scoredCompletedCount = doneFromSchedule + scoredTaskCompletion.completed;
+
     const verifiedCount = dayLogs.filter(log => isLogVerified(log)).length;
     const unverifiedCount = Math.max(0, dayLogs.length - verifiedCount);
 
-    const taskScore = plannedCount === 0 ? 1 : completedCount / plannedCount;
-    const verificationScore = dayLogs.length === 0 ? 1 : verifiedCount / dayLogs.length;
+    // spec: dfes-companion-2026-07-11 (wave-2.4) — an empty day stops claiming
+    // completeness.
+    //
+    // Both halves of this score used to answer "how much of X is done?" with a
+    // FREE 1 when there was no X (`plannedCount === 0 ? 1`, `dayLogs.length ===
+    // 0 ? 1`). Absence was scored as perfection, which told two lies at once:
+    //
+    //   (a) an untouched day scored 1*70 + 1*30 = 100 (and `isClosed` was
+    //       vacuously true), so a farmer who had told the app NOTHING saw a
+    //       full ring beside "आज काहीच सांगितलं नाही" — "you told me nothing
+    //       today". Two opposite claims from the same empty state.
+    //   (b) the free 1 was never a floor, only a placeholder that got REPLACED
+    //       by a real ratio the moment the first item appeared. A mukadam's
+    //       first still-unconfirmed log swapped `1` for `0/1` and the OWNER's
+    //       ring fell 100 -> 70 (and 100 -> 85 mixed). Someone recording work
+    //       made the number go backwards — exactly what founder decision 6
+    //       forbids, proved by dayState.monotonicity.test.ts (wave-1.6).
+    //
+    // The rule that fixes both: BUILD BOTH HALVES OUT OF WHAT HAS HAPPENED,
+    // NEVER OUT OF WHAT IS ABSENT. The 70/30 weighting and clampPercent are
+    // unchanged — the weighting was never the defect, the vacuous baselines were.
+    const dayHasRecord = dayLogs.length > 0;
+
+    // 70 — "the day's work is accounted for": the planned work that is done,
+    // or, when nothing was planned, the day having a record at all. Nothing
+    // planned AND nothing recorded earns 0, not a free 1 — an empty day has
+    // not been completed, it has not started.
+    //
+    // Reads the SCORED plan (ruling 21): a day whose only "plan" is what the AI
+    // extracted from the farmer's own words is, for scoring purposes, a day
+    // with nothing planned — so it falls through to "did he record anything",
+    // which is a question about him, not about the parser.
+    const taskScore = scoredPlannedCount > 0
+        ? scoredCompletedCount / scoredPlannedCount
+        : (dayHasRecord ? 1 : 0);
+
+    // 30 — "today's record is confirmed": credit is EARNED by a confirmation
+    // and is never revoked when new, not-yet-reviewed work arrives. A log
+    // waiting for the owner is work IN FLIGHT, not a failure, so it neither
+    // adds nor subtracts here. (To stay non-decreasing when a pending log
+    // lands, this term mathematically CANNOT depend on the pending count.)
+    // The waiting is reported honestly by `unverifiedCount` / `isClosed` /
+    // the review queue — the ring is a PROGRESS measure that only fills, and
+    // it is not the place to charge the owner for a mukadam having recorded
+    // something.
+    //
+    // Ruling 22 extends that same "earned, never revoked" shape to a RE-OPEN:
+    // the test is whether a confirmation ever happened on the day, not whether
+    // one is standing right now. `verifiedCount` (which is the standing count)
+    // stays exactly as it was and keeps driving `unverifiedCount`/`isClosed`,
+    // so a re-opened log truthfully returns to the review queue while the
+    // credit it already earned stays earned.
+    const verificationScore = dayLogs.some(hasConfirmationOnRecord) ? 1 : 0;
+
     const closurePercent = clampPercent((taskScore * 70) + (verificationScore * 30));
-    const isClosed = pendingCount === 0 && unverifiedCount === 0;
+
+    // A day nobody planned and nobody recorded cannot be "closed" — there is
+    // nothing to have closed. Without this precondition `pendingCount === 0 &&
+    // unverifiedCount === 0` is vacuously true on an empty day, and fixing
+    // closurePercent alone would render a 0% ring beside an emerald "Day
+    // Closed" (mainView.tsx:249) — a fresh contradiction replacing the old one.
+    //
+    // The same fact is published as `hasStarted`, because "not started" is a
+    // THIRD state that both the score and the closed/not-closed label have to
+    // account for. Callers that only ask `isClosed` would render "Day Not
+    // Closed" on a day that has not begun — a reproach for doing nothing wrong,
+    // and day 1 of the pilot for a farmer with no schedule template.
+    const dayHasSubstance = plannedCount > 0 || dayHasRecord;
+    const isClosed = dayHasSubstance && pendingCount === 0 && unverifiedCount === 0;
 
     const sprayDaysAgo = getLastActionDaysAgo(scopedLogs, dateKey, scope, 'spray');
     const irrigationDaysAgo = getLastActionDaysAgo(scopedLogs, dateKey, scope, 'irrigation');
@@ -407,6 +620,7 @@ export const computeDayState = ({
         unverifiedCount,
         closurePercent,
         isClosed,
+        hasStarted: dayHasSubstance,
         riskStatus: riskSignals.length > 0 ? 'risk_rising' : 'stable',
         riskSignals,
         lastActions: {

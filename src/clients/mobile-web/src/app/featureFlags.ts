@@ -59,4 +59,105 @@ export const FEATURE_FLAGS = {
      * Full ±8 calibration deferred (needs W1.P2 provenance + calibration fixtures).
      */
     understandingMeter: isEnabled('VITE_UNDERSTANDING_METER'),
+
+    /**
+     * DFES D8 question engine (Phase 5). Gates the combined daily-question card in
+     * the Shram Sathi meter. Default OFF — enable via VITE_STAGE_QUESTIONS=1 in a
+     * preview build. The question card lives INSIDE the meter's arrived surface, so
+     * it only shows when understandingMeter is ON too.
+     */
+    stageQuestions: isEnabled('VITE_STAGE_QUESTIONS'),
+
+    // DFES companion (spec: dfes-companion-2026-07-11). All default OFF;
+    // enabled only via VITE_* env in a preview build. Phase 3 does NOT flip
+    // understandingMeter on by default.
+    /** Phase 3 DisciplineStrip. */
+    disciplineSystem: isEnabled('VITE_DISCIPLINE_SYSTEM'),
+    /** Phase 4 voice-first continuity. */
+    voiceContinuity: isEnabled('VITE_VOICE_CONTINUITY'),
+    /**
+     * Daily Clarity Loop v1 — the morning TRIGGER. Surfaces the single calm
+     * "आज {N} कामं बाकी" hero at the top of the home idle view and folds the
+     * carried-work ("काल राहिलं") signal in beside it, replacing the buried
+     * English task line + the separate "Yesterday not fully closed" banner.
+     * Reuses todayDayState.pendingCount — computes nothing new. Default OFF
+     * (env VITE_DAILY_LOOP absent → false); when OFF the home view is a
+     * byte-equivalent no-op.
+     */
+    dailyLoop: isEnabled('VITE_DAILY_LOOP'),
+
+    /**
+     * Task 1B (spec: dfes-companion-2026-07-11) — ONE Task 1A intelligence
+     * fact rendered below the clarity line on the Saved-to-Ledger success
+     * card. SEPARATE from `dailyLoop` on purpose (Decision 3B deferred the
+     * fact/insight fallback): the founder can turn the daily-loop reward on
+     * WITHOUT the facts. Default OFF (env VITE_INTELLIGENCE_INSIGHTS
+     * absent -> false); when OFF this is a byte-equivalent no-op.
+     */
+    intelligenceInsights: isEnabled('VITE_INTELLIGENCE_INSIGHTS'),
+
+    /**
+     * Task 5 (spec: dfes-companion-2026-07-11) — "राहिलं → झालं" suggest-and-
+     * confirm task close. Gates BOTH the `findConfirmableTaskCloses` matcher
+     * call AND the `TaskCloseConfirm` card on the Saved-to-Ledger success
+     * card. OFF is a genuine no-op: the matcher is never invoked (not just
+     * hidden), so there is zero extra computation. Only the farmer's own
+     * होय tap ever closes a task — this flag never enables a silent close.
+     * Default OFF (env VITE_TASK_CLOSE_CONFIRM absent -> false).
+     */
+    taskCloseConfirm: isEnabled('VITE_TASK_CLOSE_CONFIRM'),
+
+    /**
+     * Task 7 (spec: dfes-companion-2026-07-11) — daily 7am "आजची कामे पाहा"
+     * native local notification (Capacitor `@capacitor/local-notifications`)
+     * that opens the app to today's tasks (`/?nudge=open-today`). Gates BOTH
+     * the permission request AND the schedule call — OFF means no permission
+     * prompt and no scheduled notification is ever created. Default OFF (env
+     * VITE_MORNING_NOTIFICATION absent -> false); when OFF this is a
+     * byte-equivalent no-op (native rebuild + real-device verification is a
+     * separate founder gate before this can be flipped on).
+     */
+    morningNotification: isEnabled('VITE_MORNING_NOTIFICATION'),
+
+    /**
+     * Task 8 (spec: dfes-companion-2026-07-11) — "Sathi talks back": ONE
+     * short warm Marathi line, spoken once ever per farm, when the farmer
+     * reaches the 25-rich-days unlock. Web `speechSynthesis` only, no
+     * native dependency. Default OFF (env VITE_SPOKEN_UNLOCK_REWARD absent
+     * -> false); when OFF the speak effect returns immediately (no speak,
+     * no localStorage write) — byte-equivalent no-op. `mr-IN` voice
+     * availability is device-dependent on cheap Android (the build
+     * degrades to silence, never throws/blocks) — real-device verification
+     * of an audible Marathi voice is a separate gate before flipping this on.
+     */
+    spokenUnlockReward: isEnabled('VITE_SPOKEN_UNLOCK_REWARD'),
+
+    /**
+     * Founder decision 2026-07-19 — PAUSE the rich-day unlock counter.
+     *
+     * The "x/25" progress line is the ONLY farmer-facing surface of the
+     * 25-rich-day milestone, and that milestone exists solely to unlock the
+     * spoken "Sathi talks back" reward, which is deferred to a later session.
+     * Showing a counter that cannot move (a BasicWorkDay has advancesBar=false)
+     * reads as "you made no progress" — the exact shame the dignity contract
+     * forbids. Pausing HIDES the counter line only.
+     *
+     * The Understanding Bar itself is NOT gated by this: the day's score is
+     * always shown when the server returns one. Unlock gates talk-back, never
+     * the bar. Default OFF (env VITE_UNLOCK_COUNTER_PAUSED absent -> false),
+     * so production behaviour is unchanged until the flag is set.
+     */
+    unlockCounterPaused: isEnabled('VITE_UNLOCK_COUNTER_PAUSED'),
+
+    /**
+     * DEV TEST GROUND — force the post-25-rich-days unlocked state without
+     * waiting 25 real days, so the after-unlock experience (and later the
+     * spoken reward) can be exercised locally.
+     *
+     * Simulation ONLY: it overrides the DISPLAYED arrival state; it never
+     * writes to the server, never fabricates rich days, and never changes
+     * what the engine scored. Default OFF (env VITE_SIMULATE_UNLOCK absent
+     * -> false) and it must stay OFF in production.
+     */
+    simulateUnlock: isEnabled('VITE_SIMULATE_UNLOCK'),
 } as const;

@@ -114,7 +114,11 @@ internal sealed class GeminiParsingService(IOptions<GeminiOptions> optionsAccess
             normalizedPayload.ValidationIssues.Count == 0 ? "pass" : "pass_with_warnings");
     }
 
-    private static ParsedPayload ParseAndNormalizePayload(string modelJsonText, string fallbackTranscript)
+    // internal, not private, purely so the normalisation rules below can be exercised
+    // without an HTTP round-trip to Gemini. Same precedent as GeminiJsonCleaner, which
+    // GeminiAdapterTests already calls directly. ShramSafal.Domain.Tests has
+    // InternalsVisibleTo (Properties/AssemblyInfo.cs:3).
+    internal static ParsedPayload ParseAndNormalizePayload(string modelJsonText, string fallbackTranscript)
     {
         var cleanedJson = CleanJson(modelJsonText);
 
@@ -135,7 +139,23 @@ internal sealed class GeminiParsingService(IOptions<GeminiOptions> optionsAccess
 
         var issues = new List<string>();
 
-        EnsureString(parsedObject, "summary", "Voice log parsed successfully.");
+        // WAVE 2.2 (spec: dfes-companion-2026-07-11) — BLANK, NOT "Voice log parsed
+        // successfully." This is the SECOND summary injector. Commit 355192b3 blanked the
+        // equivalent default in AiResponseNormalizer.cs:64; this one sits on the legacy
+        // parse path and defeated that fix wherever the legacy path still runs.
+        //
+        // The sentence was the server writing about itself, and it was not decorative:
+        // DfesLensExtractor.CoverWhat credits `hasSummary ? 0.5 : 0.0` on WHAT (weight
+        // 20), and on a silent day the completeness denominator is 55 — so the injected
+        // sentence was worth 10 * 10 / 55 = 1.82. The farmer was shown 2/10 for a day he
+        // said nothing about. Doctrine P4: never fabricate.
+        //
+        // BLANKED, not deleted, for the same reason as in AiResponseNormalizer: `summary`
+        // is required by AgriLogResponseSchema.ts, and an empty string satisfies its bare
+        // `z.string()`. Removing the key would silently route the payload onto a fallback
+        // path rather than throw. EnsureString assigns unconditionally once past its
+        // IsNullOrWhiteSpace guard, so a summary the FARMER actually gave still survives.
+        EnsureString(parsedObject, "summary", string.Empty);
         EnsureString(parsedObject, "fullTranscript", fallbackTranscript);
         EnsureString(parsedObject, "dayOutcome", "WORK_RECORDED");
 
@@ -511,5 +531,6 @@ internal sealed class GeminiParsingService(IOptions<GeminiOptions> optionsAccess
         return null;
     }
 
-    private sealed record ParsedPayload(JsonElement ParsedLog, IReadOnlyList<string> ValidationIssues);
+    // internal, not private — it is the return type of the internal ParseAndNormalizePayload seam.
+    internal sealed record ParsedPayload(JsonElement ParsedLog, IReadOnlyList<string> ValidationIssues);
 }

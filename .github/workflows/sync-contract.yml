@@ -43,8 +43,16 @@ jobs:
           cache: npm
           cache-dependency-path: sync-contract/package-lock.json
 
-      - name: Install sync-contract deps
-        run: npm ci
+      # Tolerant install, matching ci-gate/frontend-ci/e2e/android-release. The
+      # sync-contract lockfile is generated on developer Windows machines and CI
+      # is Linux, so it omits the Linux-only @emnapi optional native deps
+      # (lightningcss fast-path). `npm ci` validates the lock is in sync BEFORE
+      # installing — even `--omit=optional` fails — so it dies at install and the
+      # contract diff never runs, which reads as "contract verified" when nothing
+      # was checked. Regenerating the lock here does NOT fix it: it would be
+      # regenerated on Windows again and drift the same way.
+      - name: Install sync-contract deps (tolerant — lock omits Linux-only @emnapi optional deps)
+        run: npm install --no-audit --no-fund
         working-directory: sync-contract
 
       - name: Validate mutation-types.json
@@ -92,8 +100,16 @@ jobs:
             **/*.csproj
             **/packages.lock.json
 
-      - name: Install sync-contract deps
-        run: npm ci
+      # Tolerant install, matching ci-gate/frontend-ci/e2e/android-release. The
+      # sync-contract lockfile is generated on developer Windows machines and CI
+      # is Linux, so it omits the Linux-only @emnapi optional native deps
+      # (lightningcss fast-path). `npm ci` validates the lock is in sync BEFORE
+      # installing — even `--omit=optional` fails — so it dies at install and the
+      # contract diff never runs, which reads as "contract verified" when nothing
+      # was checked. Regenerating the lock here does NOT fix it: it would be
+      # regenerated on Windows again and drift the same way.
+      - name: Install sync-contract deps (tolerant — lock omits Linux-only @emnapi optional deps)
+        run: npm install --no-audit --no-fund
         working-directory: sync-contract
 
       - name: Install mobile-web deps

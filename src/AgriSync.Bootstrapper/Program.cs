@@ -412,6 +412,12 @@ try
     builder.Services.AddHostedService<AgriSync.BuildingBlocks.Persistence.Outbox.OutboxConnectionInvariantChecker>();
 
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Migrations.BackfillFarmOwnerAccounts>();
+    // spec: dfes-companion-2026-07-11 (wave-1.5) — closes the days a pilot farmer recorded
+    // before the server learned to self-attest an owner's own log. Those logs have no
+    // verification history at all, so every pull reports them Draft and no screen in the
+    // product can clear them (the review inbox lists only logs created by someone else).
+    // Idempotent by data, never fatal — see the class doc.
+    builder.Services.AddHostedService<AgriSync.Bootstrapper.Migrations.BackfillOwnerAttestations>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.MisRefreshJob>();
     // Analytics partition time-bomb fix (CTO debt #1): the initial migration
     // created only current+next month partitions and deferred ongoing
@@ -732,11 +738,21 @@ try
 catch (Exception ex)
 {
     Log.Fatal(ex, "AgriSync.Bootstrapper failed to start.");
+    // Task 0.1 (spec: dfes-companion-2026-07-11 wave-0.1) — a fatal
+    // startup exception (e.g. a migration that throws on boot, the
+    // proven production migration lane per deploy 23222cdc) must NOT
+    // exit 0. Falling off the end of this catch previously let the
+    // process report a clean shutdown to systemd while the schema was
+    // left half-applied and the API was down. Return non-zero so the
+    // OS-level exit code reflects the failure.
+    return 1;
 }
 finally
 {
     Log.CloseAndFlush();
 }
+
+return 0;
 
 static void ConfigureDevelopmentSwagger(WebApplication app)
 {

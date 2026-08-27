@@ -1,0 +1,151 @@
+using System.Runtime.CompilerServices;
+using AgriSync.SharedKernel.Contracts.Ids;
+using AgriSync.SharedKernel.Contracts.Roles;
+using ShramSafal.Application.Contracts.Dtos;
+using ShramSafal.Application.Ports;
+using ShramSafal.Domain.AI;
+using ShramSafal.Domain.Attachments;
+using ShramSafal.Domain.Audit;
+using ShramSafal.Domain.Crops;
+using ShramSafal.Domain.Dfes;
+using ShramSafal.Domain.Farms;
+using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Logs;
+using ShramSafal.Domain.Planning;
+using ShramSafal.Domain.Schedules;
+using ShramSafal.Domain.Storage;
+using ShramSafal.Domain.Work;
+
+namespace ShramSafal.Domain.Tests.Common;
+
+/// <summary>Shared strict IShramSafalRepository fake. Every member throws until a
+/// subclass overrides it — so a test that routes through an un-stubbed codepath
+/// fails LOUDLY instead of getting a silent default. Reused by Phase 2 (derivation
+/// service) and Phase 5 (handler) test doubles.</summary>
+public class FakeShramSafalRepository : IShramSafalRepository
+{
+    private static NotSupportedException NotStubbed([CallerMemberName] string? m = null)
+        => new($"FakeShramSafalRepository.{m} is not stubbed — override it in your test subclass.");
+
+    public virtual Task AddFarmAsync(Farm farm, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddFarmBoundaryAsync(FarmBoundary boundary, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddFarmMembershipAsync(FarmMembership membership, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<FarmMembership?> GetFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<bool> IsUserOwnerOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddPlotAsync(Plot plot, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<Plot?> GetPlotByIdAsync(Guid plotId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<Plot>> GetPlotsByFarmIdAsync(Guid farmId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddCropCycleAsync(CropCycle cropCycle, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<CropCycle?> GetCropCycleByIdAsync(Guid cropCycleId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<CropCycle>> GetCropCyclesByPlotIdAsync(Guid plotId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddDailyLogAsync(DailyLog log, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<DailyLog?> GetDailyLogByIdAsync(Guid dailyLogId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<DailyLog?> GetDailyLogByIdempotencyKeyAsync(string idempotencyKey, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddCostEntryAsync(CostEntry costEntry, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<CostEntry?> GetCostEntryByIdAsync(Guid costEntryId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<CostEntry>> GetCostEntriesByIdsAsync(IEnumerable<Guid> costEntryIds, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<CostEntry>> GetCostEntriesForDuplicateCheck(FarmId farmId, Guid? plotId, string category, DateTime since, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddFinanceCorrectionAsync(FinanceCorrection correction, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddDayLedgerAsync(DayLedger dayLedger, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<DayLedger?> GetDayLedgerByIdAsync(Guid dayLedgerId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<DayLedger?> GetDayLedgerBySourceCostEntryIdAsync(Guid costEntryId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<DayLedger>> GetDayLedgersForFarm(Guid farmId, DateOnly from, DateOnly to, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddAttachmentAsync(Attachment attachment, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<Attachment?> GetAttachmentByIdAsync(Guid attachmentId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<Attachment>> GetAttachmentsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddPriceConfigAsync(PriceConfig config, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddScheduleTemplateAsync(ScheduleTemplate template, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<ScheduleTemplate>> GetScheduleTemplatesAsync(CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddPlannedActivitiesAsync(IEnumerable<PlannedActivity> plannedActivities, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<PlannedActivity?> GetPlannedActivityByIdAsync(Guid id, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<PlannedActivity>> GetPlannedActivitiesByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<LogTask>> GetExecutedTasksByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<CostEntry>> GetCostEntriesAsync(DateOnly? fromDate, DateOnly? toDate, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<FinanceCorrection>> GetCorrectionsForEntriesAsync(IEnumerable<Guid> costEntryIds, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<Farm>> GetFarmsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<Plot>> GetPlotsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<CropCycle>> GetCropCyclesChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<DailyLog>> GetDailyLogsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<CostEntry>> GetCostEntriesChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<FinanceCorrection>> GetFinanceCorrectionsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<DayLedger>> GetDayLedgersChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<PriceConfig>> GetPriceConfigsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<PlannedActivity>> GetPlannedActivitiesChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<Attachment>> GetAttachmentsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<AuditEvent>> GetAuditEventsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<AuditEvent>> GetAuditEventsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<AuditEvent>> GetAuditEventsForFarmAsync(Guid farmId, DateOnly from, DateOnly to, int limit, int offset, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<Guid>> GetFarmIdsForUserAsync(Guid userId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<IReadOnlyList<SyncOperatorDto>> GetOperatorsByIdsAsync(IEnumerable<Guid> userIds, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<int> CountActivePrimaryOwnersAsync(Guid farmId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddCropScheduleTemplateAsync(CropScheduleTemplate template, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<CropScheduleTemplate?> GetCropScheduleTemplateByIdAsync(ScheduleTemplateId templateId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<CropScheduleTemplate>> GetCropScheduleTemplatesForCropAsync(string cropKey, string? regionCode, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddScheduleSubscriptionAsync(ScheduleSubscription subscription, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<ScheduleSubscription?> GetScheduleSubscriptionByIdAsync(ScheduleSubscriptionId subscriptionId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<ScheduleSubscription?> GetActiveScheduleSubscriptionAsync(Guid plotId, string cropKey, Guid cropCycleId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddScheduleMigrationEventAsync(ScheduleMigrationEvent migrationEvent, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<bool> HasActiveOwnerMembershipAsync(Guid userId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<ScheduleTemplate>> GetScheduleLineageAsync(Guid rootTemplateId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task SaveChangesAsync(CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<int> GetDisputedLogCountForPlotAsync(Guid plotId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddJobCardAsync(JobCard jobCard, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddTranscriptAsync(Transcript transcript, CancellationToken ct = default) => throw NotStubbed();
+
+    // ── DFES additive members (re-declared virtual so subclasses can override) ──
+    // wave-3.11 wiring: AddObservationEventAsync is a DEFAULT INTERFACE METHOD on the port
+    // (`=> Task.CompletedTask`). Left unmapped it would silently swallow the answer-route
+    // write and a test asserting "the observation was written" could never fail. Declared
+    // here so the mapping lands on this class and subclasses can genuinely observe it.
+    public virtual Task AddObservationEventAsync(ObservationEvent o, CancellationToken ct = default) => Task.CompletedTask;
+    // wave-4.2 — same default-interface-method trap as AddObservationEventAsync above:
+    // unmapped, the two consent ledgers would swallow their writes silently.
+    public virtual Task AddTermsAcceptanceEventAsync(
+        ShramSafal.Domain.Consent.TermsAcceptanceEvent e, CancellationToken ct = default) => Task.CompletedTask;
+    public virtual Task AddConsentGrantEventAsync(
+        ShramSafal.Domain.Consent.ConsentGrantEvent e, CancellationToken ct = default) => Task.CompletedTask;
+    // B1 (2026-08-27) — the link idempotency reads. Same default-interface-method trap:
+    // unmapped, a subclass could not make them return an existing row and the "a retry
+    // writes nothing" assertion would be untestable.
+    public virtual Task<ShramSafal.Domain.Consent.TermsAcceptanceEvent?> FindTermsAcceptanceLinkAsync(
+        Guid userId, string preRegistrationSessionId, CancellationToken ct = default)
+        => Task.FromResult<ShramSafal.Domain.Consent.TermsAcceptanceEvent?>(null);
+    public virtual Task<ShramSafal.Domain.Consent.ConsentGrantEvent?> FindConsentGrantLinkAsync(
+        Guid userId, string preRegistrationSessionId, CancellationToken ct = default)
+        => Task.FromResult<ShramSafal.Domain.Consent.ConsentGrantEvent?>(null);
+    public virtual Task<IReadOnlyList<DailyLog>> GetDailyLogsForFarmDateAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<IReadOnlyList<ObservationEvent>> GetObservationEventsForDailyLogsAsync(IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<DailyRichnessAggregate?> GetDailyRichnessAggregateAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default) => throw NotStubbed();
+    // NOTE: in-memory doubles hand back MUTABLE objects, so tracked vs no-tracking is
+    // indistinguishable here — that is exactly why the detached-write bug was invisible to
+    // this suite. The real proof lives in ShramSafal.Sync.IntegrationTests/Dfes.
+    public virtual Task<DailyRichnessAggregate?> GetDailyRichnessAggregateForUpdateAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task AddDailyRichnessAggregateAsync(DailyRichnessAggregate aggregate, CancellationToken ct = default) => throw NotStubbed();
+
+    // wave-3.5 — the day's system weather. Deliberately EMPTY rather than NotStubbed(),
+    // breaking this file's strict-fake rule for one member and for one reason:
+    // RecomputeAsync now calls it on EVERY path, so a throwing default would fail every
+    // pre-existing derivation test for a read they do not care about. Empty is also the
+    // interface's own default and is behaviour-identical to the pre-3.5 world (no system
+    // weather => WEATHER stays owed), so a double that ignores this member scores exactly
+    // as it did before. Override it to exercise the weather rule.
+    public virtual Task<IReadOnlyList<WeatherStamp>> GetWeatherStampsForDailyLogsAsync(IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<WeatherStamp>>([]);
+
+    // ── DFES Phase 5 — question-engine telemetry ──
+    public virtual Task AddQuestionEventAsync(QuestionEvent e, CancellationToken ct = default) => throw NotStubbed();
+    // wave-3.3 replay read. Same default-interface-method trap as AddObservationEventAsync
+    // above: unmapped, a subclass cannot make it return an existing row, so the idempotent-
+    // replay branch of RecordQuestionEventHandler — and the log line that branch emits — are
+    // unreachable from a test. Default matches the port's own (`null` = no prior row), so
+    // every existing subclass behaves exactly as it did before.
+    public virtual Task<QuestionEvent?> FindQuestionEventAsync(
+        Guid dailyLogId, string questionKey, CancellationToken ct = default)
+        => Task.FromResult<QuestionEvent?>(null);
+    public virtual Task<IReadOnlyList<QuestionEvent>> GetRecentQuestionEventsForFarmAsync(Guid farmId, DateTime sinceUtc, CancellationToken ct = default) => throw NotStubbed();
+}

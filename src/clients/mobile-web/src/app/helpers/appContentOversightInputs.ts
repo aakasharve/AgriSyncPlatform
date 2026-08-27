@@ -91,12 +91,28 @@ export function buildOversightHeaderInputs(
         (log) => log.verification?.required === true && isLogUnverified(log),
     ).length;
 
-    const yesterdayNotClosed = !computeDayState({
+    // MERGE RECONCILIATION (main <- feat/dfes-companion): `hasStarted` is now
+    // part of the answer, not a refinement of it.
+    //
+    // This read `!isClosed` alone, which was correct while an EMPTY day counted
+    // as closed — nothing to do, nothing outstanding. dfes-companion's wave-2.4
+    // fix stopped an empty day scoring a vacuous 100/`isClosed`, precisely so a
+    // day that never began stops being reported as a finished one. Read through
+    // `!isClosed`, that same fix turns "yesterday did not happen" into
+    // "yesterday is NOT CLOSED" and raises a decision row against a farmer who
+    // has done nothing wrong — on day 1 of the pilot, for everyone.
+    //
+    // A day is one of THREE things (see `dayState.ts`), and only the middle one
+    // is a decision: not started / not closed / closed. Both of this file's own
+    // tests assert exactly that — the empty case raises no flag, and a day with
+    // only TODAY's work raises none for yesterday.
+    const yesterday = computeDayState({
         logs: history,
         crops,
         tasks: plannedTasks,
         date: yesterdayDateKey(),
-    }).isClosed;
+    });
+    const yesterdayNotClosed = yesterday.hasStarted && !yesterday.isClosed;
 
     return { plotCount, operatorNameById, unverifiedCount, yesterdayNotClosed };
 }

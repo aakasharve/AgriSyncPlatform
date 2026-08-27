@@ -25,7 +25,12 @@ import { buildTimelineEntries } from '../../services/transcriptTimelineService';
 import { formatCurrencyINR } from '../../shared/utils/dayState';
 import { getCropTheme } from '../../shared/utils/colorTheme';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
-import { MeterDisplay } from '../../features/logs/components/MeterDisplay';
+// `MeterDisplay` is NOT imported here any more. main rendered it directly on the
+// success card; dfes-companion moved that score block INTO
+// `LedgerRecognitionPanel` (via `DayUnderstandingCard`), and
+// `mainView.dayUnderstandingOrder.test.tsx` asserts it renders EXACTLY ONCE with
+// the real panel mounted — so a second, direct render here would be the copy that
+// test exists to forbid.
 // Only the SUMMARY is needed here — `mainView` hands it to `ManualEntry`,
 // which owns the decision to render the panel (it is the component that knows
 // whether the farmer's context is the whole farm).
@@ -40,8 +45,28 @@ import {
     LabourLogBanner,
     NotQueuedForServerBadge,
     SavedLocallyHeadline,
-    ShramSathiUnderstanding,
+    // main's is the processing <h3> LINE; dfes's (imported above) is
+    // the full video-character screen. Different components, one name.
+    ShramSathiUnderstanding as ShramSathiUnderstandingLine,
 } from './mainViewComponents';
+import { getCarriedTasks } from '../../shared/utils/dayState';
+import { LedgerRecognitionPanel } from '../../features/logs/components/LedgerRecognitionPanel';
+import {
+    stashPendingQuestionAnswer, abandonPendingQuestionAnswer, readPendingQuestionAnswer,
+} from '../../features/logs/services/pendingQuestionAnswer';
+import VoiceSavedReassurance from '../../features/logs/components/shramsathi/VoiceSavedReassurance';
+import DailyLoopHero from '../../features/logs/components/shramsathi/DailyLoopHero';
+import DailyLoopClarity from '../../features/logs/components/shramsathi/DailyLoopClarity';
+import DailyLoopInsight from '../../features/logs/components/shramsathi/DailyLoopInsight';
+import DayUnderstandingCard from '../../features/logs/components/shramsathi/DayUnderstandingCard';
+import SathiSaidCard from '../../features/logs/components/shramsathi/SathiSaidCard';
+import SavedScreenBack from '../../features/logs/components/shramsathi/SavedScreenBack';
+import SurfaceSection from '../../features/logs/components/shramsathi/SurfaceSection';
+import { buildDailyInsight } from '../../features/logs/intelligence/buildDailyInsight';
+import { ShramSathiUnderstanding } from '../../features/logs/components/shramsathi/ShramSathiUnderstanding';
+import { findConfirmableTaskCloses, type TaskCloseCandidate } from '../../features/logs/services/taskAutoClose';
+import TaskCloseConfirm from '../../features/logs/components/shramsathi/TaskCloseConfirm';
+import { logger } from '../../infrastructure/observability/Logger';
 
 import { AppRouterContext } from './routeContext';
 import { ReflectPage, ComparePage } from './lazyComponents';
@@ -67,6 +92,28 @@ import {
  * import and silently fail that identity check.
  */
 export { NotQueuedForServerBadge, LabourLogBanner } from './mainViewComponents';
+
+// Task 5 (spec: dfes-companion-2026-07-11) — thin per-candidate wrapper so
+// नाही ("hide it for this render") can use real React state. `renderLogView`
+// below is a plain function invoked directly inside AppRouter's JSX (see
+// AppRouter.tsx `{renderLogView(ctx)}`), not mounted as its own component, so
+// a hook can't live directly in its body — this small component gives the
+// dismiss toggle its own fiber. Keyed by candidate.task.id at the call site
+// so switching to a different top candidate resets the dismissal.
+const TaskCloseConfirmSlot: React.FC<{
+    candidate: TaskCloseCandidate;
+    onConfirm: (candidate: TaskCloseCandidate) => void;
+}> = ({ candidate, onConfirm }) => {
+    const [dismissed, setDismissed] = React.useState(false);
+    if (dismissed) return null;
+    return (
+        <TaskCloseConfirm
+            candidate={candidate}
+            onConfirm={() => onConfirm(candidate)}
+            onDismiss={() => setDismissed(true)}
+        />
+    );
+};
 
 export const renderReflectView = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'main' || ctx.mainView !== 'reflect') return null;
@@ -135,6 +182,12 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         status, mode, recordingSegment,
         setCurrentRoute,
         setMainView,
+        // Read by dfes-companion surfaces only: `weatherData` by
+        // LedgerRecognitionPanel (Task 4A weather questions), `todayDayState` by
+        // DailyLoopHero and DailyLoopClarity. main dropped both from this list
+        // when owner-oversight-loop deleted the weather + closure cards; the
+        // fields themselves never left AppRouterContext.
+        weatherData, todayDayState,
         crops, logScope, setLogScope, setMode, setStatus,
         hasActiveLogContext, isContextReady, error, errorTranscript,
         handleAudioReady, handleTextReady, handleManualSubmit,
@@ -142,7 +195,9 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         draftLog, setDraftLog, provenance,
         // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2.
         voiceStreamingPhase, liveCaption,
+        continuityLevel, savedPendingCaptureId,
         getTodayCounts, getContextColorIndicator,
+        plannedTasks, handleUpdateTask,
         history, todayLogs, operatorNameById,
         getLogContextSnapshot, handleEditLog,
         costSnapshot, yesterdayCost,
@@ -151,11 +206,65 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         logIntent
     } = ctx;
 
+    // Focus the existing recorder by scrolling to (and briefly ringing) the
+    // crop selector. Shared by the daily-loop hero tap and the recorder's own
+    // "select a context first" nudge (DRY — same scroll+ring pattern).
+    const focusRecorder = () => {
+        const el = document.getElementById('crop-selector-container');
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('ring-4', 'ring-emerald-200', 'rounded-xl');
+            setTimeout(() => el.classList.remove('ring-4', 'ring-emerald-200', 'rounded-xl'), 1500);
+        }
+    };
+
+    // Daily Clarity Loop v1 — Fix 1 coherence. Derive the carried element from
+    // the SAME today-pending set the hero's N comes from (its overdue subset),
+    // using the same tasks + scope todayDayState uses, so carriedCount ≤ N
+    // ALWAYS — never a second, divergent count. Computed only when the loop is
+    // on so the flag-off home stays a pure no-op.
+    const carriedTasks = FEATURE_FLAGS.dailyLoop
+        ? getCarriedTasks({
+            tasks: plannedTasks ?? [],
+            date: getDateKey(),
+            selectedCropIds: logScope.selectedCropIds,
+            selectedPlotIds: logScope.selectedPlotIds,
+        })
+        : [];
+
+
     return (
         <>
             {/* IDLE / RECORDING STATE */}
             {status !== 'confirming' && status !== 'success' && status !== 'processing' && (
                 <>
+                    {/* Daily Clarity Loop v1 (spec: dfes-companion-2026-07-11) — the
+                        morning trigger: "आज {N} कामं बाकी" (or the empty-day invite)
+                        with the carried "काल राहिलं" signal folded in beside it.
+                        Flag-gated OFF by default, so production renders exactly the
+                        oversight-loop layout below and nothing else.
+
+                        The weather card, Daily Closure card and "Daily Log" heading +
+                        owner chip that used to sit around this hero are NOT restored:
+                        owner-oversight-loop Task 7/11 deliberately removed them and
+                        moved weather into AppHeader (`CompactWeatherChip`). Re-adding
+                        them here would render weather twice. */}
+                    {/* Founder review 2026-08-26, ruling A2 — the hero now owns
+                        its own `mb-4`/entrance wrapper (see its render), because
+                        it has a state in which it renders NOTHING: it will not
+                        say "काही बाकी नाही" while the oversight strip above is
+                        reporting a positive waiting count. A wrapper left here
+                        would survive that as a 16px ghost gap. */}
+                    {!recordingSegment && FEATURE_FLAGS.dailyLoop && (
+                        <DailyLoopHero
+                            pendingCount={todayDayState.pendingCount}
+                            carriedCount={carriedTasks.length}
+                            carriedTitle={carriedTasks.length === 1 ? carriedTasks[0].title : undefined}
+                            closurePercent={todayDayState.closurePercent}
+                            onFocusRecorder={focusRecorder}
+                        />
+                    )}
+
                     {/* spec: owner-oversight-loop (Task 7, design doc §4.2, §5) —
                         the large gradient weather card, the Daily Closure
                         card and the "Daily Log" heading + owner chip used to
@@ -265,7 +374,17 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                         <div className="mb-6 px-4 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-100">
                             <InputMethodToggle
                                 mode={mode}
-                                onChange={(newMode) => setMode(newMode)}
+                                onChange={(newMode) => {
+                                    // wave-3.7 — he was taken to the mic to answer Sathi
+                                    // and is switching away without speaking. Record the
+                                    // SKIP honestly; never invent an answer he did not
+                                    // give (P4). Fire-and-forget: a telemetry write must
+                                    // never delay the mode switch he asked for.
+                                    if (mode === 'voice' && newMode !== 'voice') {
+                                        void abandonPendingQuestionAnswer();
+                                    }
+                                    setMode(newMode);
+                                }}
                                 disabled={false}
                                 suggestInteraction={hasActiveLogContext}
                             />
@@ -288,6 +407,32 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                         </div>
                     )}
 
+                    {/* wave-3.7, founder decision 3 — the question stays VISIBLE while he
+                        answers it. Read straight from the stash, so it survives a reload
+                        and needs no second copy of the selection state. */}
+                    {mode === 'voice' && (() => {
+                        const pendingQuestion = readPendingQuestionAnswer();
+                        if (!pendingQuestion) return null;
+                        return (
+                            <div
+                                data-testid="shramsathi-pinned-question"
+                                className="mb-4 rounded-xl border px-4 py-3 text-sm font-medium"
+                                // The 'ask' tone from SurfaceSection — marigold means "what
+                                // Sathi still wants" everywhere else on this surface, so the
+                                // pinned question must read as the SAME thing he just tapped.
+                                // Literal hex, not a Tailwind token: no marigold scale exists
+                                // in this project's config, and a non-existent utility class
+                                // would silently render as no colour at all.
+                                style={{
+                                    fontFamily: "'Noto Sans Devanagari', sans-serif",
+                                    backgroundColor: '#FEF8EF', borderColor: '#F6E3C4', color: '#B4650F',
+                                }}
+                            >
+                                {pendingQuestion.selected.resolvedPromptMr}
+                            </div>
+                        );
+                    })()}
+
                     <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {getContextColorIndicator()}
 
@@ -303,14 +448,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                             externalError={error}
                                             transcript={errorTranscript}
                                             suggestInteraction={isContextReady}
-                                            onRequestContextSelection={() => {
-                                                const el = document.getElementById('crop-selector-container');
-                                                if (el) {
-                                                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                                    el.classList.add('ring-4', 'ring-emerald-200', 'rounded-xl');
-                                                    setTimeout(() => el.classList.remove('ring-4', 'ring-emerald-200', 'rounded-xl'), 1500);
-                                                }
-                                            }}
+                                            onRequestContextSelection={focusRecorder}
                                         />
                                     ) : (
                                         <AudioRecorder
@@ -320,14 +458,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                             externalError={error}
                                             transcript={errorTranscript}
                                             suggestInteraction={isContextReady}
-                                            onRequestContextSelection={() => {
-                                                const el = document.getElementById('crop-selector-container');
-                                                if (el) {
-                                                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                                    el.classList.add('ring-4', 'ring-emerald-200', 'rounded-xl');
-                                                    setTimeout(() => el.classList.remove('ring-4', 'ring-emerald-200', 'rounded-xl'), 1500);
-                                                }
-                                            }}
+                                            onRequestContextSelection={focusRecorder}
                                         />
                                     )}
                                     {/* SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2.
@@ -501,6 +632,13 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
 
             {/* PROCESSING / CONFIRM / SUCCESS */}
             {status === 'processing' && (
+                FEATURE_FLAGS.dailyLoop ? (
+                    /* dfes-companion loop v1 (spec: dfes-companion-2026-07-11) —
+                       founder-approved श्रम साथी video-character processing screen.
+                       Flag-gated: dailyLoop OFF renders the exact legacy spinner
+                       below (byte-equivalent no-op). */
+                    <ShramSathiUnderstanding />
+                ) : (
                 <div className="bg-white rounded-3xl shadow-xl shadow-stone-200/50 border border-stone-100 p-16 text-center">
                     <div className="flex justify-center mb-8">
                         <div className="relative">
@@ -508,7 +646,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center"><Leaf size={32} className="text-emerald-600 animate-pulse" /></div>
                         </div>
                     </div>
-                    <ShramSathiUnderstanding />
+                    <ShramSathiUnderstandingLine />
                     {/* SARVAM_PRIMARY_VOICE_PIPELINE — live transcript, placed right below the
                         recorder/banner so the farmer sees their words appear as Sarvam transcribes
                         the clip (post-Stop, cost-safe: reuses the single transcribe-stream that
@@ -522,23 +660,100 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                         <div className="text-sm text-stone-400 max-w-xs mx-auto mt-2 italic">Listening carefully to your log...</div>
                     )}
                 </div>
+                )
+            )}
+
+            {/* dfes-companion Phase 4 — voice-continuity degraded terminal surface.
+                Renders only when the ladder produced a durable-but-unstructured
+                capture (transcript-only / audio-only); reuses the SAME literal
+                "Add Another Log" button + handleReset used by the success card
+                below (no new i18n key). Flag-gated OFF by default. */}
+            {FEATURE_FLAGS.voiceContinuity
+                && status !== 'processing'
+                && savedPendingCaptureId
+                && (continuityLevel === 'transcript-only' || continuityLevel === 'audio-only') && (
+                <div className="mt-4">
+                    <VoiceSavedReassurance level={continuityLevel} />
+                    <button
+                        onClick={handleReset}
+                        className="mt-4 w-full rounded-xl bg-stone-900 py-4 text-lg font-bold text-white transition-colors hover:bg-emerald-800"
+                    >
+                        आणखी नोंद करा
+                    </button>
+                </div>
             )}
 
             {status === 'success' && (
-                <div data-testid="saved-to-ledger" className="animate-in fade-in duration-500 bg-gradient-to-br from-emerald-50 to-white rounded-3xl shadow-xl border border-emerald-100 p-8 text-center relative overflow-hidden">
-                    {/* Decorative Background Elements */}
-                    <div className="absolute top-0 left-0 w-full h-2 bg-emerald-500/20"></div>
-                    <div className="absolute -top-10 -right-10 w-40 h-40 bg-emerald-100 rounded-full blur-3xl opacity-50"></div>
+                <>
+                {/* BUG-2 2026-08-14 (founder: "there is no going back screen after
+                    this screen"). The back control lives OUTSIDE the card because
+                    the card is `overflow-hidden`, which would kill `position:
+                    sticky` inside it. Out here it sticks to the top of the
+                    scrolling <main>, so it stays reachable however far the farmer
+                    has scrolled. It also owns the hardware-back handling — see
+                    SavedScreenBack. `handleReset` is the same safe reset the
+                    bottom "आणखी नोंद करा" button uses: it clears DRAFT state only
+                    and never touches the already-saved log. */}
+                <SavedScreenBack onBack={handleReset} />
+                <div data-testid="saved-to-ledger" className="animate-in fade-in duration-500 bg-white rounded-3xl shadow-xl border border-stone-100 p-4 text-center relative overflow-hidden">
+                    {/* REDESIGN 2026-08-13 (founder). Was: a 3xl English "Saved to
+                        Ledger" headline under a leaf, on an emerald gradient, with
+                        eight equally-weighted white cards stacked beneath it. The
+                        system announced a storage outcome; the companion the farmer
+                        had just been talking to disappeared.
 
+                        Now the character SPEAKS (SathiSaidCard), and every block
+                        below sits in a SurfaceSection that names itself and carries
+                        a tone colour: green = what you did, blue = what I
+                        understood, marigold = what I still need, emerald = your
+                        consistency. The card ground is plain white so those four
+                        tints are the only colour on the surface and the eye can
+                        sort the screen at a glance. */}
                     <div className="relative z-10">
+                        <SathiSaidCard />
+
                             <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-600 shadow-sm border border-emerald-50">
                                 <Leaf size={40} className="drop-shadow-sm" />
                             </div>
                         <SavedLocallyHeadline />
 
-                        {/* Dynamic Feedback Summary */}
+                        {/* WHAT I UNDERSTOOD — the /10, its bar, and one line saying
+                            what the number measures. Self-gates on
+                            FEATURE_FLAGS.understandingMeter (renders null when OFF),
+                            so the section wrapper must gate too or an empty blue box
+                            would show in production. savedLog is derived exactly as
+                            the recognition panel below derives it (lastSavedLogIds[0]
+                            via history.find). */}
+                        {(() => {
+                            const savedLogId = lastSavedLogIds && lastSavedLogIds.length > 0
+                                ? lastSavedLogIds[0]
+                                : undefined;
+                            const savedLog = savedLogId
+                                ? history.find(l => l.id === savedLogId)
+                                : undefined;
+                            const selection = savedLog?.context?.selection?.[0];
+                            const card = (
+                                <DayUnderstandingCard
+                                    farmId={ctx.activeFarmId ?? selection?.farmId ?? null}
+                                    dayDate={savedLog?.date}
+                                    savedLogId={savedLog?.id ?? null}
+                                />
+                            );
+                            return FEATURE_FLAGS.understandingMeter ? (
+                                <div className="mt-4">
+                                    <SurfaceSection tone="grasp" labelKey="dfes.sectionGrasp" testId="section-grasp">
+                                        {card}
+                                    </SurfaceSection>
+                                </div>
+                            ) : card;
+                        })()}
+
+                        {/* WHAT YOU DID — the crop/bucket breakdown, now behind a green
+                            "आज तुम्ही काय केलं" label so it reads as the farmer's OWN
+                            record rather than another anonymous card. */}
                         {lastSavedLogSummary && lastSavedLogSummary.length > 0 ? (
-                            <div className="mb-8 space-y-3">
+                            <SurfaceSection tone="work" labelKey="dfes.sectionWork" testId="section-work">
+                            <div className="space-y-3">
                                 {lastSavedLogSummary.map((item, idx) => {
                                     const crop = item.cropId ? crops.find(entry => entry.id === item.cropId) : undefined;
                                     const theme = getCropTheme(crop?.color || 'bg-emerald-500');
@@ -554,7 +769,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                                         {crop ? <CropSymbol name={crop.iconName} size="md" /> : <Leaf size={22} className="text-emerald-600" />}
                                                     </div>
                                                     <div className="min-w-0 flex-1">
-                                                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Stored In</p>
+                                                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">कुठे</p>
                                                         {/* Since 2b this reads `Grapes • Plot A,
                                                             Plot B, Plot C` and `truncate` silently
                                                             cut it at 412px — the farmer saw which
@@ -575,11 +790,11 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                                     const savedLog = history.find(l => l.id === item.logId);
                                                     if (!savedLog) return null;
                                                     const buckets = [
-                                                        { key: 'irrigation', count: (savedLog.irrigation || []).filter(e => (e.durationHours || 0) > 0 || (e.waterVolumeLitres || 0) > 0 || e.method || e.source).length, icon: <Droplets size={13} />, label: 'Irrigation', color: 'bg-blue-100 text-blue-700' },
-                                                        { key: 'labour', count: (savedLog.labour || []).length, icon: <Users size={13} />, label: 'Labour', color: 'bg-amber-100 text-amber-700' },
-                                                        { key: 'inputs', count: (savedLog.inputs || []).length, icon: <Package size={13} />, label: 'Inputs', color: 'bg-purple-100 text-purple-700' },
-                                                        { key: 'machinery', count: (savedLog.machinery || []).length, icon: <Tractor size={13} />, label: 'Machinery', color: 'bg-stone-100 text-stone-700' },
-                                                        { key: 'crop', count: (savedLog.cropActivities || []).length, icon: <Sprout size={13} />, label: 'Crop Work', color: 'bg-emerald-100 text-emerald-700' },
+                                                        { key: 'irrigation', count: (savedLog.irrigation || []).filter(e => (e.durationHours || 0) > 0 || (e.waterVolumeLitres || 0) > 0 || e.method || e.source).length, icon: <Droplets size={13} />, label: 'पाणी', color: 'bg-blue-100 text-blue-700' },
+                                                        { key: 'labour', count: (savedLog.labour || []).length, icon: <Users size={13} />, label: 'मजूर', color: 'bg-amber-100 text-amber-700' },
+                                                        { key: 'inputs', count: (savedLog.inputs || []).length, icon: <Package size={13} />, label: 'औषध/खत', color: 'bg-purple-100 text-purple-700' },
+                                                        { key: 'machinery', count: (savedLog.machinery || []).length, icon: <Tractor size={13} />, label: 'यंत्र', color: 'bg-stone-100 text-stone-700' },
+                                                        { key: 'crop', count: (savedLog.cropActivities || []).length, icon: <Sprout size={13} />, label: 'पीक काम', color: 'bg-emerald-100 text-emerald-700' },
                                                     ].filter(b => b.count > 0);
                                                     if (buckets.length === 0) return null;
                                                     return (
@@ -598,26 +813,148 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                     );
                                 })}
                             </div>
-                        ) : (
-                            <p className="text-stone-500 mb-8">Your activity has been logged successfully.</p>
+                            </SurfaceSection>
+                        ) : null}
+
+                        {/* Daily Clarity Loop v1 REWARD line (dfes-companion-2026-07-11).
+                            Flag-gated OFF by default, so this is a byte-equivalent no-op on
+                            the success card in production. When ON, the calm "{done} पूर्ण,
+                            {left} बाकी" control-affirming line renders directly ABOVE the
+                            recognition panel — so Sathi's ONE gentle question sits just below
+                            it (reward = clarity + one question, never points). Decision 3B: NO
+                            fact/insight fallback in v1; on a no-question day this line stands
+                            alone (the question self-gates on its own flags + content gate). */}
+                        {FEATURE_FLAGS.dailyLoop && (
+                            <DailyLoopClarity
+                                done={todayDayState.completedCount}
+                                left={todayDayState.pendingCount}
+                            />
                         )}
 
-                        {/* Understanding Meter scaffold (1d-infra, flag-gated, OFF by default).
-                            WP-4 data-wiring (Task 10): pass the just-saved log's `understanding`
-                            VlogScore (looked up by lastSavedLogIds in history) + the farmer's full
-                            logs list for the arrival gate. Logic only — visual polish deferred to
-                            founder art assets (build-infra-now-defer-ui-polish-until-assets). */}
-                        {FEATURE_FLAGS.understandingMeter && (() => {
+                        {/* Task 1B (spec: dfes-companion-2026-07-11) — ONE daily
+                            intelligence fact from the farmer's own history,
+                            sitting directly BELOW the clarity line. Flag-gated
+                            OFF by default (byte-equivalent no-op). savedLog is
+                            derived the same way the recognition panel below
+                            derives it (from lastSavedLogIds[0] via history.find). */}
+                        {FEATURE_FLAGS.intelligenceInsights && (() => {
                             const savedLogId = lastSavedLogIds && lastSavedLogIds.length > 0
                                 ? lastSavedLogIds[0]
                                 : undefined;
                             const savedLog = savedLogId
                                 ? history.find(l => l.id === savedLogId)
                                 : undefined;
+                            const insight = buildDailyInsight(history, savedLog, savedLog?.date ?? '');
+                            return insight && insight.render ? <DailyLoopInsight insight={insight} /> : null;
+                        })()}
+
+                        {/* DFES recognition surface (dfes-companion-2026-07-11). The panel
+                            renders unconditionally; each child self-gates on its flag
+                            (understandingMeter for the bar, disciplineSystem for the strip),
+                            and the useFarmerEngagement fetch self-gates on those flags, so it
+                            stays inert AND network-silent in production until a flag is on. */}
+                        {(() => {
+                            const savedLogId = lastSavedLogIds && lastSavedLogIds.length > 0
+                                ? lastSavedLogIds[0]
+                                : undefined;
+                            const savedLog = savedLogId
+                                ? history.find(l => l.id === savedLogId)
+                                : undefined;
+                            // Phase 5 (dfes-companion-2026-07-11): derive the farm/plot/crop
+                            // context the D8 question engine needs from the saved log's own
+                            // context selection — SelectedCropContext carries cropName inline
+                            // (domain/types/log.types.ts), so no separate crops[] lookup for
+                            // the {crop} placeholder. `crops` IS threaded through separately
+                            // (Task 3B) for the panel's schedule-gap lookup, which needs the
+                            // plot's schedule/template — not derivable from the log alone.
+                            // `weatherData` (Task 4A) is threaded the same way — same live
+                            // object the WeatherWidget above already renders — so the panel
+                            // can wake the P1/P2 forward-looking safety/weather questions.
+                            const selection = savedLog?.context?.selection?.[0];
+                            // The panel hosts BOTH the marigold "साथीला अजून हवं आहे"
+                            // question and the emerald streak strip. It owns the single
+                            // shared useFarmerEngagement fetch, so it must stay ONE
+                            // element — splitting it into two SurfaceSections here would
+                            // duplicate that fetch. It therefore labels its own two
+                            // zones internally (see LedgerRecognitionPanel).
                             return (
-                                <MeterDisplay
-                                    score={savedLog?.understanding}
+                                <LedgerRecognitionPanel
+                                    // BUGFIX_2026-07-19: prefer the session's ACTIVE farm.
+                                    // `selection.farmId` is optional on SelectedCropContext and
+                                    // nothing ever populates it, so this was always null — which
+                                    // made useDayUnderstanding skip its fetch entirely and pinned
+                                    // the understanding bar to its pending state permanently.
+                                    farmId={ctx.activeFarmId ?? selection?.farmId ?? null}
+                                    plotId={selection?.selectedPlotIds?.[0] ?? null}
+                                    crop={selection?.cropName ?? ''}
+                                    todayLocalDate={savedLog?.date}
+                                    crops={crops}
+                                    savedLog={savedLog}
                                     allLogs={history}
+                                    weather={weatherData}
+                                    // wave-3.7, founder decision 3 — "no taps before he
+                                    // speaks". The tap writes NOTHING (question_events is
+                                    // append-only, so a row written now could never
+                                    // acquire his answer); it stashes the pending answer
+                                    // and hands him the SAME microphone entry point
+                                    // globalSheets' QuickLogSheet uses. Do not build a
+                                    // second recording surface.
+                                    onAnswerBySpeaking={(pending) => {
+                                        stashPendingQuestionAnswer(pending);
+                                        setStatus('idle');
+                                        setMode('voice');
+                                        setMainView('log');
+                                    }}
+                                />
+                            );
+                        })()}
+
+                        {/* Task 5 (spec: dfes-companion-2026-07-11) — "राहिलं → झालं"
+                            suggest-and-confirm task close. Flag-gated: OFF means
+                            findConfirmableTaskCloses is never even called (the whole
+                            block short-circuits on FEATURE_FLAGS.taskCloseConfirm), so
+                            there is zero extra computation, not just a hidden render.
+                            ON: the single top conservative candidate (same plot + due
+                            window + title containment — see taskAutoClose.ts) surfaces
+                            below the recognition panel. Only the farmer's own होय tap
+                            calls handleUpdateTask (the SAME reversible mutation
+                            ToDoTasksBlock's toggle uses) — नाही only hides the card for
+                            this render and leaves the task pending, no penalty. */}
+                        {FEATURE_FLAGS.taskCloseConfirm && (() => {
+                            const savedLogId = lastSavedLogIds && lastSavedLogIds.length > 0
+                                ? lastSavedLogIds[0]
+                                : undefined;
+                            const savedLog = savedLogId
+                                ? history.find(l => l.id === savedLogId)
+                                : undefined;
+                            const todayLocalDate = savedLog?.date ?? getDateKey();
+                            const topCandidate = findConfirmableTaskCloses(
+                                plannedTasks ?? [],
+                                savedLog,
+                                todayLocalDate,
+                            )[0];
+                            if (!topCandidate) return null;
+
+                            return (
+                                <TaskCloseConfirmSlot
+                                    key={topCandidate.task.id}
+                                    candidate={topCandidate}
+                                    onConfirm={(candidate) => {
+                                        // Reuses the SAME mutation ToDoTasksBlock's toggle
+                                        // uses — reversible by re-opening the task there.
+                                        handleUpdateTask(candidate.task.id, {
+                                            status: 'done',
+                                            completedAt: new Date().toISOString(),
+                                        });
+                                        // Traceability: a wrong close must be traceable.
+                                        logger.info('task_close.confirmed', {
+                                            component: 'TaskCloseConfirm',
+                                            action: 'task_close_confirmed',
+                                            taskId: candidate.task.id,
+                                            plotId: candidate.task.plotId,
+                                            matchedActivityTitle: candidate.matchedActivityTitle,
+                                        });
+                                    }}
                                 />
                             );
                         })()}
@@ -642,19 +979,20 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                     }}
                                     className="w-full bg-white text-emerald-700 border border-emerald-200 py-4 rounded-xl font-bold text-lg hover:bg-emerald-50 transition-colors mb-1"
                                 >
-                                    {lastSavedLogIds.length > 1 ? 'Review Saved Targets' : 'Review Details'}
+                                    {lastSavedLogIds.length > 1 ? 'सर्व नोंदी पाहा' : 'नोंद पाहा'}
                                 </button>
                             )}
 
                             <button onClick={() => setMainView('reflect')} className="w-full bg-stone-100 text-stone-700 py-4 rounded-xl font-bold text-lg hover:bg-stone-200 transition-colors">
-                                View Activity Heatmap
+                                कामाचा नकाशा
                             </button>
                             <button onClick={handleReset} className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-emerald-800 transition-colors shadow-lg shadow-emerald-900/20">
-                                Add Another Log
+                                आणखी नोंद करा
                             </button>
                         </div>
                     </div>
                 </div>
+                </>
             )}
 
 

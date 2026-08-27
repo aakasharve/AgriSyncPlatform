@@ -29,7 +29,14 @@ jobs:
           cache-dependency-path: src/clients/mobile-web/package-lock.json
 
       - name: Build mobile-web
+        # spec: dfes-companion-2026-07-11 (wave-0.3) — vite.config.ts fails a
+        # production `vite build` if VITE_AGRISYNC_API_URL is unset (nine
+        # client call sites would otherwise silently fall back to
+        # http://localhost:5048). Public prod URL, not a secret — matches
+        # android-release.yml's value.
         working-directory: src/clients/mobile-web
+        env:
+          VITE_AGRISYNC_API_URL: "https://api.shramsafal.in"
         run: |
           npm ci
           npm run build

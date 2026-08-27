@@ -1,5 +1,5 @@
 import { AddLogTaskCommand } from '../../../application/usecases/sync/AddLogTaskCommand';
-import { CreateDailyLogCommand, type LabourItemPayload } from '../../../application/usecases/sync/CreateDailyLogCommand';
+import { CreateDailyLogCommand, type LabourItemPayload, type ManualDraftPayload } from '../../../application/usecases/sync/CreateDailyLogCommand';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import { type CropCycleDto, type PlotDto } from '../../../infrastructure/api/AgriSyncClient';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
@@ -148,6 +148,84 @@ function buildTaskPayloads(log: DailyLog): LogTaskMutationPayload[] {
     });
 
     return payloads;
+}
+
+/**
+ * spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — carry the farmer's
+ * typed day to the server on a MANUAL save.
+ *
+ * The defect this closes: a manual log's payload was identity-only, so the server had
+ * nothing to persist. No typed children were ever written for it, the day scored 0/10,
+ * and a farmer who had typed out everything he did was told he had recorded nothing.
+ *
+ * THE GATE IS POSITIVE, AND IT FAILS SAFE. A draft ships only when the log ASSERTS it is
+ * manual (`provenance.source === 'manual'`). Anything else — `'ai'`, `'pre_spine'`, or no
+ * provenance at all — ships nothing.
+ *
+ * Why not "no sourceAiJobId": that was wrong and would have written a lie. The client's
+ * real discriminator is `LogProvenance.source` (`domain/ai/LogProvenance.ts:18`);
+ * `sourceAiJobId` is OPTIONAL even on AI logs (`:36`), and two live producers stamp
+ * `source: 'ai'` with no job id — the streaming parse path
+ * (`features/voice/useVoiceRecorder.ts:253-258`) and `BackendAiClient.ts:149`
+ * (`apiResult.sourceAiJobId ?? undefined`). Such a log's buckets hold AI-EXTRACTED
+ * figures. Shipping them as a manual draft would have the server persist them with
+ * `Provenance.Manual` — model "n/a", no extractor SHA — making an inferred number
+ * permanently indistinguishable from one the farmer typed. Doctrine P8 forbids exactly
+ * that, and it is irreversible: it converts a gap in the record into a false record.
+ *
+ * Why ABSENT provenance ships nothing either: absence is genuinely ambiguous here. A
+ * voice route reaches this function with no provenance at all —
+ * `useLogCommands.ts:242-250` calls `createFromVoice(..., undefined, ...)` ("Provenance
+ * might be lost here", its own comment) and then enqueues. Since shipping is the
+ * irreversible direction, an unmarked log is treated as unknown-origin and withheld.
+ * Genuinely-manual producers therefore DECLARE themselves — `ManualEntry` and the wizard
+ * (`logSubmissionService`) stamp `source: 'manual'` — rather than being inferred from a
+ * silence that a voice log can also produce.
+ *
+ * Also returns undefined for a log with no content at all. An absent draft is the
+ * pre-task-0b wire exactly, which is what keeps old servers and voice saves untouched.
+ */
+export function buildManualDraft(log: DailyLog): ManualDraftPayload | undefined {
+    if (log.meta?.provenance?.source !== 'manual') {
+        return undefined;
+    }
+
+    // Only non-empty buckets go on the wire — an empty array says nothing the server
+    // does not already assume, and the draft is size-capped at the sync boundary.
+    const draft: ManualDraftPayload = {};
+    if (log.labour?.length) draft.labour = log.labour;
+    if (log.inputs?.length) draft.inputs = log.inputs;
+    if (log.irrigation?.length) draft.irrigation = log.irrigation;
+    if (log.observations?.length) draft.observations = log.observations;
+    if (log.plannedTasks?.length) draft.plannedTasks = log.plannedTasks;
+    if (log.cropActivities?.length) draft.cropActivities = log.cropActivities;
+    if (log.machinery?.length) draft.machinery = log.machinery;
+    if (log.activityExpenses?.length) draft.activityExpenses = log.activityExpenses;
+
+    // FOUNDER DECISION 8 (2026-08-16) — the farmer's own statement about the DAY, and the
+    // optional chip explaining it. Both are COPIED, never inferred.
+    //
+    // 'WORK_RECORDED' is deliberately NOT sent: it is the LogFactory's default for any
+    // ordinary day, so putting it on the wire would turn a value the farmer never uttered
+    // into a stored declaration (P4). Only a genuine departure from "he worked" travels.
+    //
+    // These two lines sit BEFORE the length check on purpose. A declared no-work day
+    // carries no buckets at all, so without them `buildManualDraft` would return undefined
+    // and the declaration would never leave the device — the exact defect decision 8
+    // closes.
+    if (log.dayOutcome && log.dayOutcome !== 'WORK_RECORDED') draft.dayOutcome = log.dayOutcome;
+    if (log.disturbance?.reason) {
+        // P9 — the chip is optional. A declaration with no reason writes no `disturbance`
+        // key at all, and the record still commits; `DisturbanceEvent.Create` requires a
+        // non-empty reason, which is precisely why the DECLARATION does not live here.
+        draft.disturbance = {
+            scope: log.disturbance.scope,
+            cause: log.disturbance.cause,
+            reason: log.disturbance.reason,
+        };
+    }
+
+    return Object.keys(draft).length > 0 ? draft : undefined;
 }
 
 /**
@@ -661,6 +739,7 @@ export async function enqueueLogsForSync(
         }
 
         const labourPayloads = buildLabourPayloads(log);
+    const manualDraft = buildManualDraft(log);
 
         await CreateDailyLogCommand.enqueue({
             dailyLogId: log.id,
@@ -698,6 +777,16 @@ export async function enqueueLogsForSync(
             // the log's provenance (BackendAiClient stamps AiJob.Id there) so the
             // server can derive the typed ledger rows. Undefined for manual logs.
             sourceAiJobId: log.meta?.provenance?.sourceAiJobId,
+            // task-0b — the farmer's typed day, so a manual save persists typed
+            // children and can be scored. Absent for voice confirms.
+            //
+            // CONDITIONAL SPREAD, by the same rule every other optional field on
+            // this payload follows (see `plotId` below, and `buildLabourPayloads`):
+            // a value we do not have is not SENT, rather than sent as `undefined`.
+            // A bare `manualDraft: buildManualDraft(log)` put the key on every
+            // payload, including the voice ones — which is what B1a/B1c mean by
+            // "byte-identical to what it sent before", and they read Object.keys.
+            ...(manualDraft !== undefined && { manualDraft }),
             // B2.8 — carry the weather already captured at confirm-time to the server
             // (persisted into ssf.weather_stamps). Omit the client-only `id` (server generates).
             //

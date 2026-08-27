@@ -35,6 +35,14 @@ type ViewHelpers = ReturnType<typeof useAppViewHelpers>;
 export interface DayStateSnapshot {
     closurePercent: number;
     isClosed: boolean;
+    /**
+     * spec: dfes-companion-2026-07-11 (wave-2.4 follow-up) — false only when the
+     * day has nothing planned AND nothing recorded. Carried through to the view
+     * (rather than re-derived from `closurePercent === 0` at each render site)
+     * so the ring, the closure label and the yesterday banner all answer
+     * "has this day begun?" from the ONE fact computeDayState decided it with.
+     */
+    hasStarted: boolean;
     completedCount: number;
     plannedCount: number;
     pendingCount: number;
@@ -48,6 +56,21 @@ export interface CostSnapshot {
 }
 
 export interface AppRouterContext {
+    /**
+     * The session's ACTIVE farm (FarmContext.currentFarmId), threaded through
+     * so hook-free route render functions can reach it.
+     *
+     * BUGFIX_2026-07-19: the DFES understanding bar previously sourced its farm
+     * from the saved log's own `context.selection[0].farmId`, which is OPTIONAL
+     * (log.types.ts, "Phase 7 - needed for finance tracking") and is never
+     * populated by LogContext/useLogCommands. So it was ALWAYS undefined,
+     * useDayUnderstanding short-circuited on `!farmId` before issuing any
+     * request, and the bar sat on its "अजून समजतंय…" pending state forever —
+     * for every farmer, no matter what the server had scored. Verified live:
+     * zero GET /shramsafal/day-understanding calls ever reached the backend.
+     */
+    activeFarmId: string | null;
+
     // navigation
     currentRoute: Navigation['currentRoute'];
     setCurrentRoute: Navigation['setCurrentRoute'];
@@ -112,6 +135,10 @@ export interface AppRouterContext {
     voiceStreamingPhase: VoiceState['voiceStreamingPhase'];
     liveCaption: VoiceState['liveCaption'];
 
+    // dfes-companion Phase 4 — voice-continuity ladder outcome.
+    continuityLevel: VoiceState['continuityLevel'];
+    savedPendingCaptureId: VoiceState['savedPendingCaptureId'];
+
     // weather
     weatherData: WeatherState['weatherData'];
     weatherStatus: WeatherState['weatherStatus'];
@@ -137,6 +164,12 @@ export interface AppRouterContext {
     setShowReviewInbox: React.Dispatch<React.SetStateAction<boolean>>;
     showQuickLog: boolean;
     setShowQuickLog: React.Dispatch<React.SetStateAction<boolean>>;
+    /**
+     * wave-3.10, founder decision 8 (2026-08-16) — the optional reason chips shown after
+     * he taps `आज काम नाही`. Skipping them still saves the day (doctrine P9).
+     */
+    showNoWorkReason: boolean;
+    setShowNoWorkReason: React.Dispatch<React.SetStateAction<boolean>>;
     reflectFocusRequest: { logId: string; date: string; plotId?: string } | null;
     setReflectFocusRequest: React.Dispatch<React.SetStateAction<{ logId: string; date: string; plotId?: string } | null>>;
     // FINDING F3 — `showCloseDaySummary` / `showCloseYesterdaySummary` were

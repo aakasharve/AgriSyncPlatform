@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { ActivityExpenseEvent, DailyLog } from '../../../../types';
-import { AlertTriangle, Check, FlaskConical, ListPlus, MessageSquare, Mic, PenLine, Tractor, Users, Droplets, Bell, Wrench, Zap, Cloud, X } from 'lucide-react';
+import { AlertTriangle, Check, FlaskConical, HelpCircle, ListPlus, MessageSquare, Mic, PenLine, Tractor, Users, Droplets, Bell, Wrench, Zap, Cloud, X } from 'lucide-react';
 import TrustBadge from '../../../../shared/components/ui/TrustBadge';
 import ObservationHubSheet from '../ObservationHubSheet';
 import { BucketIssue } from '../../../../domain/types/log.types';
@@ -18,6 +18,10 @@ import InputDetailSheet from './sheets/InputDetailSheet';
 import ExpenseDetailSheet from './sheets/ExpenseDetailSheet';
 import DetailSheet from './sheets/DetailSheet';
 import WorkDetailSheet from './sheets/WorkDetailSheet';
+import { t as translateForced } from '../../../../i18n/translations';
+
+// Font rule (CHARTER): Marathi body text -> Noto Sans Devanagari.
+const MARATHI_BODY = "'Noto Sans Devanagari', sans-serif";
 
 const ActivityCard: React.FC<ActivityCardProps> = ({
     activity,
@@ -361,6 +365,20 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     {/* Transparency Block - moved to BOTTOM of the work section */}
                     {isWorkFilled && (activity.sourceText || activity.systemInterpretation) && (
                         <div className="mt-2 pt-3 border-t border-slate-100/50 px-1">
+                            {activity.provenanceVerified === false && (
+                                <div
+                                    data-testid="provenance-unverified-flag"
+                                    className="mb-2 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50/80 px-2.5 py-1.5"
+                                >
+                                    <HelpCircle size={13} className="mt-0.5 flex-shrink-0 text-amber-500" />
+                                    <span
+                                        className="text-[11px] font-semibold leading-snug text-amber-700"
+                                        style={{ fontFamily: MARATHI_BODY }}
+                                    >
+                                        {translateForced('voice.unverifiedSourceLabel', 'mr')}
+                                    </span>
+                                </div>
+                            )}
                             {activity.sourceText && (
                                 <div className="flex items-start gap-2 mb-2">
                                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-0.5 whitespace-nowrap">YOU SAID:</span>
@@ -397,6 +415,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     sourceText={linkedData.labour?.sourceText}
                     systemInterpretation={linkedData.labour?.systemInterpretation}
                     hasIssue={isLabourIssue}
+                    provenanceVerified={linkedData.labour?.provenanceVerified}
                 />
 
                 {/* 3. Inputs Bucket */}
@@ -414,6 +433,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     onClick={() => setActiveSheet('input')}
                     sourceText={inputs.find(i => i.sourceText)?.sourceText}
                     systemInterpretation={inputs.find(i => i.systemInterpretation)?.systemInterpretation}
+                    provenanceVerified={inputs.find(i => i.sourceText)?.provenanceVerified}
                 />
 
                 {/* 4. Irrigation Bucket */}
@@ -434,6 +454,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     sourceText={linkedData.irrigation?.sourceText}
                     systemInterpretation={linkedData.irrigation?.systemInterpretation}
                     hasIssue={isIrrigationIssue}
+                    provenanceVerified={linkedData.irrigation?.provenanceVerified}
                 />
 
                 {/* 5. Machinery Bucket */}
@@ -452,6 +473,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     sourceText={linkedData.machinery?.sourceText}
                     systemInterpretation={linkedData.machinery?.systemInterpretation}
                     hasIssue={isMachineryIssue}
+                    provenanceVerified={linkedData.machinery?.provenanceVerified}
                 />
 
                 {/* 6. Expenses Bucket */}
@@ -469,6 +491,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     onClick={() => { setEditingExpense(undefined); setActiveSheet('expense'); }}
                     sourceText={expenses.find(e => e.sourceText)?.sourceText}
                     systemInterpretation={expenses.find(e => e.systemInterpretation)?.systemInterpretation}
+                    provenanceVerified={expenses.find(e => e.sourceText)?.provenanceVerified}
                 />
 
                 <BucketItem
@@ -480,6 +503,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     onClick={() => setActiveSheet('observation')}
                     sourceText={observations.find(o => o.sourceText)?.sourceText}
                     systemInterpretation={observations.find(o => o.systemInterpretation)?.systemInterpretation}
+                    provenanceVerified={observations.find(o => o.sourceText)?.provenanceVerified}
                 />
 
                 {/* 7.5 Issues & Blockers Bucket (NEW) */}
@@ -532,6 +556,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     onClick={() => setActiveSheet('reminder')}
                     sourceText={plannedTasks.find(t => t.sourceText)?.sourceText || reminderNotes.find(n => n.sourceText)?.sourceText}
                     systemInterpretation={plannedTasks.find(t => t.systemInterpretation)?.systemInterpretation || reminderNotes.find(n => n.systemInterpretation)?.systemInterpretation}
+                    provenanceVerified={(plannedTasks.find(t => t.sourceText) ?? reminderNotes.find(n => n.sourceText))?.provenanceVerified}
                 />
             </div>
 
@@ -604,6 +629,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     sourceText={activity.sourceText}
                     systemInterpretation={activity.systemInterpretation}
                     initialIssue={activity.issue}
+                    provenanceVerified={activity.provenanceVerified}
                 />
             ) : activeSheet === 'input' ? (
                 <InputDetailSheet

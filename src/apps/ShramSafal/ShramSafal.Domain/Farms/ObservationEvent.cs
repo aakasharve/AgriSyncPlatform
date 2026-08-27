@@ -50,6 +50,42 @@ public sealed class ObservationEvent : Entity<Guid>
     public Guid? LinkedActivityId { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
 
+    // ── DFES InsightEntry facets (dfes-companion-2026-07-11) ─────────────
+    // Nullable; PRESERVED on erasure alongside TextRaw (D-FREETEXT-PRESERVE-2026-06-29).
+    // Populated by the Phase-2 derivation / Phase-5 answer path; Phase 1 only adds the shape.
+    public string? Observation { get; private set; }
+    public string? Change { get; private set; }
+    public string? Comparison { get; private set; }
+    public string? Challenge { get; private set; }
+    public string? Uncertainty { get; private set; }
+    public string? Hypothesis { get; private set; }
+    public string? Evidence { get; private set; }
+    public string? Learning { get; private set; }
+    public string? NextAction { get; private set; }
+    public string? CropStage { get; private set; }
+    public string? FarmerConfirmedSummary { get; private set; }
+    public Guid? SourceQuestionId { get; private set; }
+
+    /// <summary>DFES — attach/overwrite the structured InsightEntry facets (all nullable).</summary>
+    public void ApplyInsightEntry(
+        string? observation, string? change, string? comparison, string? challenge,
+        string? uncertainty, string? hypothesis, string? evidence, string? learning,
+        string? nextAction, string? cropStage, string? farmerConfirmedSummary, Guid? sourceQuestionId)
+    {
+        Observation = observation;
+        Change = change;
+        Comparison = comparison;
+        Challenge = challenge;
+        Uncertainty = uncertainty;
+        Hypothesis = hypothesis;
+        Evidence = evidence;
+        Learning = learning;
+        NextAction = nextAction;
+        CropStage = cropStage;
+        FarmerConfirmedSummary = farmerConfirmedSummary;
+        SourceQuestionId = sourceQuestionId;
+    }
+
     public static ObservationEvent Create(
         Guid id, Guid dailyLogId, Guid? plotId, ObservationNoteType noteType,
         ObservationSeverity severity, ObservationSource source, string textRaw,

@@ -1,3 +1,4 @@
+import type { DayOutcome } from '../../../domain/types/log.types';
 import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 
@@ -100,6 +101,48 @@ export type DailyLogScopePayload = 'Plot' | 'MultiPlot' | 'Farm';
  * `logSyncMutationService.ts` is reserved for Phase 2b and is byte-identical to
  * `labour-v1-green`. An un-produced capability is the expected end state here.
  */
+/**
+ * spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — the farmer's typed
+ * day, as entered on the manual-entry screen. Sent ONLY on a manual save; a voice
+ * confirm's facts already ride `sourceAiJobId`.
+ *
+ * Rows are `unknown` on purpose: these buckets are heterogeneous and evolve on the
+ * client, and the server (ManualDraftNormalizer) copies only fields it recognises and
+ * invents none. Bucket NAMES are the contract, and they are the same eight the canonical
+ * zod schema and CreateDailyLogHandler.EvidenceArrayKeys use.
+ */
+export interface ManualDraftPayload {
+     labour?: unknown[];
+     inputs?: unknown[];
+     irrigation?: unknown[];
+     observations?: unknown[];
+     plannedTasks?: unknown[];
+     cropActivities?: unknown[];
+     machinery?: unknown[];
+     activityExpenses?: unknown[];
+     /**
+      * FOUNDER DECISION 8 (2026-08-16) — the farmer's own statement about the DAY.
+      *
+      * NOT a bucket: a scalar the server records verbatim on `ssf.daily_logs.day_outcome`.
+      * Absent on every ordinary work day, and an absent value is never defaulted to
+      * 'WORK_RECORDED' — "he did not say" and "he said it was a rest day" must stay
+      * distinguishable (P4).
+      *
+      * It is deliberately NOT expressed as a `disturbance`: "there was no work today" is a
+      * statement about the day, not a blockage, and routing it through `disturbance_events`
+      * would set `HasDisturbance` for a plain rest day and report `blocked` instead of
+      * `rest` — the wrong fact, not a shortcut.
+      */
+     dayOutcome?: DayOutcome;
+     /**
+      * OPTIONAL reason chip, offered AFTER the declaration is already saved. Doctrine P9 —
+      * its absence never rejects the record. It rides the existing `disturbance` wire shape
+      * (`LedgerDerivationService` already writes a `DisturbanceEvent` from it), so a chip
+      * needs no new table.
+      */
+     disturbance?: { scope?: string; cause?: string; reason?: string };
+}
+
 export interface CreateDailyLogPayload {
      dailyLogId: string;
      farmId: string;
@@ -122,6 +165,9 @@ export interface CreateDailyLogPayload {
      // Labour V1 Task 5 — structured manual labour entries. Transport only:
      // nothing server-side persists this yet (Task 6 adds the write path).
      labour?: LabourItemPayload[];
+     // task-0b — present on a MANUAL save so the server has something to persist.
+     // Omitted on voice confirms; omitting it entirely is the pre-task-0b behaviour.
+     manualDraft?: ManualDraftPayload;
 }
 
 export class CreateDailyLogCommand {

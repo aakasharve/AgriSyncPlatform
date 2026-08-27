@@ -233,7 +233,27 @@ function listComparableRefs() {
         .filter(Boolean)
         // HEAD's own ref, and the symbolic origin/HEAD pointer, are not other branches.
         .filter(r => !r.endsWith(`/${head}`) && r !== `refs/heads/${head}`)
-        .filter(r => !r.endsWith('/HEAD'));
+        .filter(r => !r.endsWith('/HEAD'))
+        // Archival refs are not shipping branches, so they cannot collide with one.
+        //
+        // This check exists to catch two branches that will BOTH reach a handset
+        // declaring the same version with different contents. `preserve/*` and
+        // `archive/*` are snapshots — a stash given a permanent ref so a laptop
+        // failure cannot take it, a branch tagged before deletion. Nothing is ever
+        // built or deployed from them, so "renumber the one that ships later" has
+        // no meaning for them: neither ships.
+        //
+        // Added 2026-08-27 after `preserve/stash-2` — a 2026-08-13 stash preserved
+        // during the Wave 2 backup sweep, carrying the old dfes v23 — began failing
+        // this gate against the merged branch. The collision was real as text and
+        // impossible as an event. That is the worst kind of check output: a true
+        // statement about an outcome that cannot occur, which teaches the reader to
+        // skim the next one. A gate that cries wolf gets ignored, and this gate is
+        // too important to be ignored.
+        //
+        // Deliberately narrow: ONLY these two prefixes. Any ordinary feature branch,
+        // however dormant, still counts — dormant branches get revived and shipped.
+        .filter(r => !/(^|\/)(?:preserve|archive)\//.test(r));
 }
 
 /**

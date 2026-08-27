@@ -71,10 +71,26 @@ function questionForDimension(dimension: string): string {
 // =============================================================================
 
 /**
+ * StageContext — planned-vs-actual crop-stage context for stage-aware selection.
+ * Mirrors the Phase-1 aggregate columns ExpectedStage / FarmerConfirmedActualStage /
+ * StageVarianceDays so the D8 engine (Phase 5) can open a confirmation window and
+ * bias gap ranking toward the current stage. All fields optional — omitted = no stage signal.
+ */
+export interface StageContext {
+    crop?: string;
+    expectedStage?: string;
+    farmerConfirmedActualStage?: string;
+    stageVarianceDays?: number;
+}
+
+/**
  * rankMeterGaps — rank the top-N comprehension gaps from a VlogScore.
  *
- * @param score    VlogScore output from scoreVlog.
- * @param maxGaps  Maximum number of gaps to return (default 3).
+ * @param score         VlogScore output from scoreVlog.
+ * @param stageContext  Optional planned-vs-actual stage context (reserved for
+ *                       stage-weighted biasing; forward-compat plug point for the
+ *                       D8 question engine — Phase 5).
+ * @param maxGaps       Maximum number of gaps to return (default 3).
  * @returns        Ranked MeterGap[] sorted by leverage (weight × missingness)
  *                 descending; empty when outcome is UNKNOWN or there are no gaps.
  *
@@ -86,7 +102,12 @@ function questionForDimension(dimension: string): string {
  * 3. Sort descending by leverage; ties broken by weight desc, then name asc.
  * 4. Take the top `maxGaps` entries.
  */
-export function rankMeterGaps(score: VlogScore, maxGaps = 3): MeterGap[] {
+export function rankMeterGaps(
+    score: VlogScore,
+    stageContext?: StageContext,
+    maxGaps = 3,
+): MeterGap[] {
+    void stageContext; // reserved for stage-weighted biasing (kept pure; no behaviour change in 1a)
     // Silent day → no questions to surface (UNKNOWN = no work done, not a gap)
     if (score.outcome === 'UNKNOWN') {
         return [];

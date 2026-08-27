@@ -491,6 +491,15 @@ public sealed class LabourNotesAndCorrectionDeltaRealPostgresTests(Xunit.Abstrac
             sp.GetRequiredService<IAiJobRepository>(),
             sp.GetRequiredService<ILogger<CreateDailyLogHandler>>(),
             sp.GetRequiredService<ILedgerDerivationService>(),
+            // Deliberately inert HERE, and only here. This suite's subject is a
+            // migration (ssf.labour_assignments.notes) and a modified_at_utc delta;
+            // the daily-richness recompute writes to an unrelated table inside the
+            // best-effort side-car, whose failures the handler swallows by contract
+            // — so a real one could never make any assertion below fail, while it
+            // WOULD add derived rows to the same scratch DB the "and nothing else"
+            // migration facts inspect. The durability proof for the real recompute
+            // lives in LabourPhaseOneDurabilityRealPostgresTests, which injects it.
+            new InertDailyRichnessDerivation(),
             ctx);
 
         var result = await handler.HandleAsync(new CreateDailyLogCommand(
@@ -750,5 +759,17 @@ public sealed class LabourNotesAndCorrectionDeltaRealPostgresTests(Xunit.Abstrac
     {
         public Task EmitAsync(AnalyticsEvent e, CancellationToken ct = default) => Task.CompletedTask;
         public Task EmitManyAsync(IEnumerable<AnalyticsEvent> events, CancellationToken ct = default) => Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Records nothing and asserts nothing — see the comment at the call site for
+    /// why the richness recompute is out of scope for THIS suite. It is deliberately
+    /// NOT a spy: no fact here interrogates it, and a double no one interrogates must
+    /// not be dressed up as evidence.
+    /// </summary>
+    private sealed class InertDailyRichnessDerivation : IDailyRichnessDerivationService
+    {
+        public Task RecomputeAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default)
+            => Task.CompletedTask;
     }
 }

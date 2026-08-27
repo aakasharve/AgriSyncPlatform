@@ -5,6 +5,7 @@ using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
+using AgriSync.SharedKernel.Contracts.Roles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Contracts.Dtos;
@@ -49,6 +50,7 @@ public sealed class CreateDailyLogHandler(
     IAiJobRepository aiJobRepository,
     ILogger<CreateDailyLogHandler> logger,
     ILedgerDerivationService ledgerDerivation,
+    IDailyRichnessDerivationService dailyRichnessDerivation,
     // Fix F1 — optional so unit tests that exercise the handler against an
     // in-memory repository (no EF) can pass null. When resolved through DI the
     // scoped DbContext is injected (registered in Infrastructure DI as
@@ -233,6 +235,34 @@ public sealed class CreateDailyLogHandler(
             var existing = await repository.GetDailyLogByIdempotencyKeyAsync(command.IdempotencyKey, ct);
             if (existing is not null)
             {
+                // FIX (dfes-companion-2026-07-11, "the derivation is never
+                // invoked" bug): this branch fires on ANY resend of an
+                // already-committed log (same device+clientRequestId) — a
+                // routine, expected occurrence on the offline-first SYNC path
+                // (at-least-once delivery: the client retries until it sees a
+                // clean ack). Before this fix it returned immediately, which
+                // meant that if the ORIGINAL attempt's non-blocking side-car
+                // (PersistSideCarAsync) never reached the richness recompute —
+                // e.g. a mid-request disconnect/cancellation between the two
+                // phases, or any other structural reason — NO later resend
+                // ever gave it a second chance. The gap was invisible because
+                // nothing here ever threw: it was a silent, non-exceptional
+                // skip, not a caught failure, so PersistSideCarAsync's
+                // "rolled back to savepoint" warning never fired either.
+                //
+                // The catch-up call re-runs ONLY the richness recompute (the
+                // log row + typed ledger already exist from the original
+                // attempt, so there is nothing else to redo). Safe to repeat
+                // any number of times: DailyRichnessDerivationService.
+                // RecomputeAsync rebuilds the WHOLE day's aggregate from
+                // scratch from every persisted log on that (farm, date), so a
+                // second/third run overwrites in place — it can never double-
+                // count or corrupt the aggregate.
+                logger.LogInformation(
+                    "CreateDailyLog idempotent resend for {LogId} (farm {FarmId}, date {LogDate}); " +
+                    "re-running the richness side-car in case the original attempt's Phase 2 never ran.",
+                    existing.Id, existing.FarmId.Value, existing.LogDate);
+                await PersistRichnessRecomputeSideCarAsync(existing.FarmId.Value, existing.LogDate, ct);
                 return Result.Success(existing.ToDto());
             }
         }
@@ -364,6 +394,51 @@ public sealed class CreateDailyLogHandler(
             log.SetEvidenceSourcesJson(evidenceJson);
         }
 
+        // ── spec: dfes-companion-2026-07-11 (wave-3.10), founder decision 8 ──────
+        // The farmer's own statement about the DAY, stamped onto the log itself so
+        // PersistedDayRootBuilder (layer 5) can read it back and the scorer can finally
+        // see a typed "no work today". Copied verbatim; absent stays absent.
+        //
+        // 🛑 It is stamped HERE — before AddDailyLogAsync and the PRIMARY save — and
+        // deliberately not inside PersistSideCarAsync. The side-car is non-blocking by
+        // contract: it runs in its own savepoint and a failure there is logged and
+        // swallowed. A declaration is canonical data the farmer supplied, and canonical
+        // data never lives in a best-effort side-car; on the side-car path a rolled-back
+        // savepoint would silently discard the only record that his day was a rest day.
+        log.SetDayOutcome(command.ManualDraft?.DayOutcome);
+
+        // ── spec: dfes-companion-2026-07-11 (wave-1.3) ───────────────────────────
+        // THE SERVER HALF of the owner-confirm fix. The device stamps the owner's own
+        // log approved on save (wave-1.1), but verification is a SERVER-derived value —
+        // DailyLog.CurrentVerificationStatus folds the verification events and both
+        // status properties are builder.Ignore()d, so there is no column the device
+        // could ever write. Create emits no verification event, so every log came back
+        // Draft on the next pull and the reconciler (logsReconciler.ts: "Verification is
+        // a server-side FSM; the device never wins it") overwrote the device's answer.
+        // The farmer logged his work and his score dropped again, one sync later.
+        //
+        // The role is read from the DATABASE (farm ownership / non-terminal membership),
+        // never from command.ActorRole — that string arrives from the caller, and a
+        // client that can assert its own approval authority defeats the entire point of
+        // the verification FSM. GetUserRoleForFarmAsync is the same server-side
+        // derivation VerifyLogHandler already trusts for the explicit verify path.
+        //
+        // Non-owner roles get nothing here: TrySelfVerifyAsCreator refuses any role that
+        // does not hold BOTH FSM edges, so a Mukadam's log still lands on Draft and still
+        // needs an owner. No FSM edge was added or widened.
+        var creatorRole = await repository.GetUserRoleForFarmAsync(
+            command.FarmId, command.OperatorUserId, ct);
+        AppRole? selfAttestedAs = null;
+        if (creatorRole is { } role
+            && log.TrySelfVerifyAsCreator(idGenerator.New(), idGenerator.New(), role, clock.UtcNow))
+        {
+            selfAttestedAs = role;
+            logger.LogInformation(
+                "DailyLog {LogId} self-verified on create: operator {OperatorUserId} holds {Role} on farm {FarmId}, " +
+                "which carries both Draft->Confirmed and Confirmed->Verified.",
+                log.Id, command.OperatorUserId, role, command.FarmId);
+        }
+
         await repository.AddDailyLogAsync(log, ct);
 
         // ── Labour V1 Task 6.2 — CANONICAL LABOUR IS PHASE-1 DATA ────────────
@@ -481,6 +556,52 @@ public sealed class CreateDailyLogHandler(
                 sourceAiJobId: validatedSourceAiJobId),
             ct);
 
+        // ── spec: dfes-companion-2026-07-11 (wave-1.3) — I1 ──────────────────────
+        // THE ATTESTATION MUST LEAVE A TRACE. Above, an owner's own log acquires TWO
+        // verification events — "I recorded this" and "I vouch for it" — without any
+        // human pressing an approve button. The explicit approve path
+        // (VerifyLogHandler) writes a VerificationChanged audit row for exactly one
+        // such act; this path was writing only "Created" for two.
+        //
+        // Verification events are themselves persisted, so the state is not lost —
+        // but the AUDIT LEDGER is what answers "who claimed authority over this day,
+        // from which device, on which app version, under which role", and an audit row
+        // that was never written at the moment of the act can never be reconstructed
+        // afterwards. A pilot's worth of self-attestations with no audit row is an
+        // unrepairable gap, which is why this is written here and not deferred.
+        //
+        // Provenance arguments are IDENTICAL to the Created row above (same request,
+        // same device, same app version, same AI-job back-reference), because it is
+        // the same act. The payload carries the SERVER-DERIVED role — the actual
+        // authority the attestation rested on — separately from actorRole, which (like
+        // every other row here) records what the caller CLAIMED to be.
+        if (selfAttestedAs is { } attestedRole)
+        {
+            await repository.AddAuditEventAsync(
+                AuditEventFactory.Create(
+                    entityType: "DailyLog",
+                    entityId: log.Id,
+                    action: "VerificationChanged",
+                    actorUserId: command.OperatorUserId,
+                    actorRole: command.ActorRole ?? "unknown",
+                    payload: new
+                    {
+                        logId = log.Id,
+                        from = Domain.Logs.VerificationStatus.Draft.ToString(),
+                        to = Domain.Logs.VerificationStatus.Verified.ToString(),
+                        selfAttested = true,
+                        role = attestedRole.ToString(),
+                        reason = Domain.Logs.DailyLog.SelfAttestationReason
+                    },
+                    farmId: command.FarmId,
+                    clientCommandId: command.ClientRequestId,
+                    appVersion: stampedAppVersion,
+                    deviceId: command.AuditDeviceId,
+                    ipHash: command.AuditIpHash,
+                    sourceAiJobId: validatedSourceAiJobId),
+                ct);
+        }
+
         // ── Fix F1: TWO-PHASE persistence ────────────────────────────────────
         // PHASE 1 — commit the farmer's DailyLog + its audit row on their OWN
         // SaveChanges, so the log is durable INDEPENDENTLY of the non-blocking
@@ -555,14 +676,10 @@ public sealed class CreateDailyLogHandler(
         Domain.AI.AiJob? sourceJobForEvidence,
         CancellationToken ct)
     {
-        // Nothing to persist → skip (avoids an empty SaveChanges / transaction).
-        var hasWeather = command.WeatherStamp is not null;
-        var hasDerivation = command.SourceAiJobId is { } && sourceJobForEvidence is not null;
-        if (!hasWeather && !hasDerivation)
-        {
-            return;
-        }
-
+        // Phase 2 (dfes-companion-2026-07-11): the daily richness aggregate is
+        // recomputed for EVERY confirmed log, so the side-car always runs (even
+        // when there is no weather stamp and no voice derivation) — no more
+        // early-return gate on hasWeather/hasDerivation.
         var relational = dbContext?.Database.IsRelational() == true;
         var ambientTx = relational ? dbContext!.Database.CurrentTransaction : null;
 
@@ -624,6 +741,77 @@ public sealed class CreateDailyLogHandler(
         }
     }
 
+    // ── FIX (dfes-companion-2026-07-11): idempotent-resend richness catch-up ──
+    // Same non-blocking isolation contract as PersistSideCarAsync (savepoint on
+    // the SYNC path's ambient transaction / own transaction on the HTTP path /
+    // plain try-catch for non-relational unit tests), but scoped to ONLY the
+    // richness recompute — called from the idempotency-key early return above,
+    // where the log + typed ledger already exist and there is nothing else to
+    // redo. A failure here is logged and swallowed exactly like the primary
+    // side-car: it must never turn an idempotent "already applied" resend into
+    // a caller-visible failure, and it must never be silent — hence the
+    // explicit LogWarning on every failure branch (the whole point of this fix
+    // is that a skipped scorer must never again look like success).
+    private async Task PersistRichnessRecomputeSideCarAsync(Guid farmId, DateOnly logDate, CancellationToken ct)
+    {
+        var relational = dbContext?.Database.IsRelational() == true;
+        var ambientTx = relational ? dbContext!.Database.CurrentTransaction : null;
+
+        if (ambientTx is not null)
+        {
+            const string savepoint = "ssf_daily_log_sidecar_resend";
+            await ambientTx.CreateSavepointAsync(savepoint, ct);
+            try
+            {
+                await dailyRichnessDerivation.RecomputeAsync(farmId, logDate, ct);
+                await repository.SaveChangesAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex,
+                    "Richness recompute (idempotent-resend catch-up) rolled back to savepoint for farm {FarmId} date {LogDate} (non-blocking).",
+                    farmId, logDate);
+                await ambientTx.RollbackToSavepointAsync(savepoint, ct);
+                dbContext!.ChangeTracker.Clear();
+            }
+
+            return;
+        }
+
+        if (relational)
+        {
+            await using var sideCarTx = await dbContext!.Database.BeginTransactionAsync(ct);
+            try
+            {
+                await dailyRichnessDerivation.RecomputeAsync(farmId, logDate, ct);
+                await repository.SaveChangesAsync(ct);
+                await sideCarTx.CommitAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex,
+                    "Richness recompute (idempotent-resend catch-up) rolled back for farm {FarmId} date {LogDate} (non-blocking).",
+                    farmId, logDate);
+                await sideCarTx.RollbackAsync(ct);
+                dbContext!.ChangeTracker.Clear();
+            }
+
+            return;
+        }
+
+        try
+        {
+            await dailyRichnessDerivation.RecomputeAsync(farmId, logDate, ct);
+            await repository.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Richness recompute (idempotent-resend catch-up) skipped for farm {FarmId} date {LogDate} (non-blocking).",
+                farmId, logDate);
+        }
+    }
+
     // Stage the weather snapshot + typed-ledger derivation, then commit them.
     // Any throw propagates to PersistSideCarAsync's isolation wrapper.
     private async Task StageAndSaveSideCarAsync(
@@ -664,7 +852,33 @@ public sealed class CreateDailyLogHandler(
                 deriveLabour: command.Labour is not { Count: > 0 },
                 ct: ct);
         }
+        else if (ManualDraftNormalizer.Normalize(command.ManualDraft) is { } manualWireJson)
+        {
+            // spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — THE
+            // manual-entry defect. Reaching this branch means no AI job was derived
+            // from, so `provenance` above is Provenance.Manual and the farmer's own
+            // typed draft is the only account of the day we have. Until now it was
+            // simply dropped: no typed children were written, DfesLensExtractor saw an
+            // empty day, and a farmer who had described his whole day was told ०/१०.
+            //
+            // The two branches are mutually exclusive by construction, so a log can
+            // never be derived twice or acquire two lineages. The draft rides the SAME
+            // derivation body as voice (DeriveFromManualDraftAsync) — one writer, one
+            // set of rules — stamped manual and keyed to the log id so a re-save
+            // supersedes rather than duplicates.
+            // The log's OWN AppVersion, so the derived rows and the log they came from
+            // can never disagree about which client wrote them.
+            await ledgerDerivation.DeriveFromManualDraftAsync(
+                log, manualWireJson, log.Provenance.AppVersion, idGenerator, clock, ct);
+        }
 
+        await repository.SaveChangesAsync(ct);
+
+        // Phase 2 — recompute the daily richness aggregate from the now-persisted
+        // spine. Runs inside the same savepoint/transaction isolation as the rest
+        // of the side-car, so a recompute failure rolls back to the savepoint and
+        // never discards the already-durable DailyLog (Fix F1 contract).
+        await dailyRichnessDerivation.RecomputeAsync(log.FarmId.Value, log.LogDate, ct);
         await repository.SaveChangesAsync(ct);
     }
 

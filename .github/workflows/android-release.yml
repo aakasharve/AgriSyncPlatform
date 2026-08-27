@@ -59,6 +59,27 @@ jobs:
           # repo secret so CI builds carry it (.env.local is gitignored / absent
           # in CI). See src/clients/mobile-web/.env.production.example.
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          # DFES companion (spec: dfes-companion-2026-07-11) — read via the
+          # isEnabled('VITE_...') helper in src/app/featureFlags.ts. Vite bakes
+          # import.meta.env at BUILD time, so a web-side flag flip never reaches
+          # an already-installed APK; CI must set the release value explicitly.
+          # Founder Acceptance Gate for the companion covers these five.
+          VITE_UNDERSTANDING_METER: "1"
+          VITE_STAGE_QUESTIONS: "1"
+          VITE_DISCIPLINE_SYSTEM: "1"
+          # Phase 4 voice-first continuity. Held back pending founder decision
+          # (see wave-0.4 handoff); founder ruling 2026-08-16 turns it ON for
+          # the pilot. Must match release.yml so browser and APK agree.
+          VITE_VOICE_CONTINUITY: "1"
+          VITE_DAILY_LOOP: "1"
+          VITE_TASK_CLOSE_CONFIRM: "1"
+          # Founder decision 2026-07-19 (see featureFlags.ts) pauses the rich-day
+          # unlock counter. This flag defaults OFF when unset — omitting it here
+          # would silently bring the counter back in the shipped APK.
+          VITE_UNLOCK_COUNTER_PAUSED: "1"
+          # Dev/test-only switches — must ship OFF in the release build.
+          VITE_SIMULATE_UNLOCK: "0"
+          VITE_INTELLIGENCE_INSIGHTS: "0"
         run: npm run build
 
       - name: Cap sync android

@@ -82,6 +82,26 @@ import type {
 
 export type * from './DexieDatabase.types';
 
+/**
+ * dfes-companion-2026-07-11 (Phase 4) — durable voice captures that could not
+ * be structured at record time (transcript-only / audio-only ladder levels).
+ * Client-side ONLY (IndexedDB); never a Postgres `ssf` table.
+ */
+export interface PendingInterpretationDexieRow {
+    captureId: string;
+    farmId: string;
+    createdAtUtc: number;
+    status: 'pending' | 'interpreting' | 'resolved' | 'failed';
+    ladderLevel: 'transcript-only' | 'audio-only';
+    transcript: string | null;
+    audioBase64: string | null;
+    audioMimeType: string | null;
+    logScopeJson: string;
+    recordedAtUtc: string;
+    attempts: number;
+    lastAttemptAtUtc: number | null;
+}
+
 // =============================================================================
 // SCHEMA VERSION CONSTANTS
 // =============================================================================
@@ -193,6 +213,15 @@ export class AgriLogDatabase extends Dexie {
 
     /** DWC v2 §2.6 — analytics outbox; drained by `AnalyticsEventBus`. */
     analyticsOutbox!: Table<AnalyticsOutboxRow, number>;
+
+    /**
+     * dfes-companion-2026-07-11 (Phase 4) — durable voice captures pending AI
+     * interpretation. The STORE is created by `applyV23`, which this branch
+     * already declares (see the constructor's note on why dropping v23 deletes
+     * this store on a DFES device). This declaration only makes it visible to
+     * TypeScript — it is not a schema change and needs no version bump.
+     */
+    pendingInterpretations!: Table<PendingInterpretationDexieRow, string>;
 
     /**
      * @param databaseName Which IndexedDB database to open. Defaults to the one

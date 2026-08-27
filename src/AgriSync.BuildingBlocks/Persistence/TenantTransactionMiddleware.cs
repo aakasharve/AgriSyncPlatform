@@ -179,6 +179,34 @@ public sealed class TenantTransactionMiddleware
         // handler legitimately spans the caller's tenancies and has
         // user-scoped filtering of its own).
         "/shramsafal/farms/mine",
+        // spec: dfes-companion-2026-07-11 (wave-4.2) — POST /shramsafal/consent-gate/accept.
+        // The first-open Terms + DPDP gate runs BEFORE login, so there is no farm claim and
+        // no user claim to open a tenant transaction against; the interceptor would
+        // fail-closed on the first DbCommand. The endpoint elevates and owns its own commit.
+        // Narrow by design: it accepts no farm id, takes its user id only from the JWT
+        // subject (null when anonymous), and can write nothing but its own two ledger rows.
+        //
+        // B1 (2026-08-27): /shramsafal/consent-gate/LINK is served by THIS entry too, and
+        // it took a measurement to get there. Its rows NAME a user, so the ledgers' RLS
+        // WITH CHECK cannot pass one unless agrisync.user_id is set — and elevation never
+        // sets it. The obvious inference was that the route needed the user-scoped mode
+        // above; it was wired that way, and the endpoint could not write a single row:
+        //
+        //   DbUpdateConcurrencyException: expected to affect 1 row(s), but actually
+        //   affected 0 row(s)   (LinkConsentGateToUserHandler → SaveChangesAsync)
+        //
+        // User-scoped mode is a READ posture. TenantConnectionInterceptor implements it by
+        // prepending `SET LOCAL agrisync.user_id = '…'; ` onto the SAME CommandText as the
+        // caller's statement, which is harmless for a SELECT and fatal for an EF INSERT
+        // batch (see reference_interceptor_setlocal_desyncs_ef_writes; the identical
+        // failure was measured independently on POST /shramsafal/corrections and reverted).
+        //
+        // So /link is elevated here like its sibling /accept — elevation being the thing
+        // that SILENCES the prepend, not an identity — and the identity it does need is
+        // established inside the endpoint by ICallerUserTenantScope.RunForCallerAsync,
+        // which issues set_config as its own command inside its own transaction. Do not
+        // move this route to the user-scoped branch: it has been tried and measured.
+        "/shramsafal/consent-gate",
         // POST /sync/push — user-scoped multi-farm WRITE surface.
         // PushSyncBatchHandler takes only actorUserId and dispatches per-
         // mutation handlers that each run their own IsUserMemberOfFarmAsync

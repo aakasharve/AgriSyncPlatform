@@ -2,6 +2,8 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Domain;
 
+using ShramSafal.Domain.Common;
+
 namespace ShramSafal.Domain.Farms;
 
 /// <summary>
@@ -29,7 +31,8 @@ public sealed class LabourAssignment : Entity<Guid>
         int? maleCount, int? femaleCount, int? workerCount, decimal? wagePerPerson,
         ContractUnit? contractUnit, decimal? contractQuantity, decimal? totalCost,
         Guid? linkedActivityId, DateTime createdAtUtc, LabourTime time,
-        LabourShift? shift, string? task, string workerNamesJson, string? notes)
+        LabourShift? shift, string? task, string workerNamesJson, string? notes,
+        NumericCertainty? costCertainty, string? costSpokenText)
         : base(id)
     {
         DailyLogId = dailyLogId;
@@ -49,6 +52,8 @@ public sealed class LabourAssignment : Entity<Guid>
         Task = task;
         WorkerNamesJson = workerNamesJson;
         Notes = notes;
+        CostCertainty = costCertainty;
+        CostSpokenText = costSpokenText;
     }
 
     public Guid DailyLogId { get; private set; }
@@ -113,13 +118,30 @@ public sealed class LabourAssignment : Entity<Guid>
     /// </remarks>
     public string? Notes { get; private set; }
 
+    // ── wave-3.12, spec Ruling 5 — how sure the farmer was of the COST ──
+    /// <summary>NULL when he was never asked. Never defaulted to Reported (P4).
+    /// <c>Unknown</c> is the only honest home for a cost he cannot recall:
+    /// <c>CostEntry.Create</c> throws on <c>amount &lt;= 0</c>, so "आठवत नाही" must never
+    /// become a CostEntry row at all.
+    /// <para>Qualifies <see cref="TotalCost"/> and nothing else. It does NOT relax
+    /// NO-MULTIPLY: an <see cref="NumericCertainty.Approximate"/> cost is still stored
+    /// exactly as the farmer stated it, and a cost he never stated stays NULL no matter
+    /// what certainty rides beside it.</para></summary>
+    public NumericCertainty? CostCertainty { get; private set; }
+
+    /// <summary>His own words for the cost, kept verbatim beside it.</summary>
+    public string? CostSpokenText { get; private set; }
+
     public static LabourAssignment Create(
         Guid id, Guid dailyLogId, LabourEngagementType engagementType,
         int? maleCount, int? femaleCount, int? workerCount, decimal? wagePerPerson,
         ContractUnit? contractUnit, decimal? contractQuantity, decimal? totalCost,
         Guid? linkedActivityId, DateTime createdAtUtc, LabourTime time,
         LabourShift? shift = null, string? task = null, IReadOnlyList<string>? workerNames = null,
-        string? notes = null)
+        string? notes = null,
+        // wave-3.12 — trailing and OPTIONAL so every pre-existing call site keeps
+        // compiling and keeps writing NULL, which is exactly "not asked, not stated".
+        NumericCertainty? costCertainty = null, string? costSpokenText = null)
     {
         // Closes default(LabourTime): a readonly record struct always has an implicit
         // public parameterless constructor, so the zero value is reachable no matter how
@@ -143,7 +165,8 @@ public sealed class LabourAssignment : Entity<Guid>
                shift, task, workerNamesJson,
                // "   " is not a note (see the Notes remarks). Trim the edges and
                // keep the farmer's words; blank becomes the honest null.
-               string.IsNullOrWhiteSpace(notes) ? null : notes.Trim());
+               string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
+               costCertainty, costSpokenText);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

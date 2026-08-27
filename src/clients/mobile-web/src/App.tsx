@@ -10,7 +10,7 @@ import { CropProfile } from './types';
 import { LogProvider } from './app/context/LogContext';
 import { AppErrorBoundary } from './app/components/common/AppErrorBoundary';
 import AppContent from './AppContent';
-import { LanguageProvider } from './i18n/LanguageContext';
+import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import SplashScreen from './shared/components/ui/SplashScreen';
 import { DataSourceProvider } from './app/providers/DataSourceProvider';
 import { SelectionProvider } from './app/context/SelectionContext';
@@ -22,6 +22,13 @@ import { setAiTestModeEnabled, clearAiTestMode } from './infrastructure/storage/
 import AppShell from './app/components/AppShell';
 import LoginPage from './pages/LoginPage';
 import JoinFarmLandingPage from './pages/JoinFarmLandingPage';
+import { useMorningNotificationWiring } from './app/hooks/useMorningNotificationWiring';
+import ConsentGateScreen from './features/consent/gate/ConsentGateScreen';
+import { useConsentGate } from './features/consent/gate/useConsentGate';
+import { recordConsentGateAcceptance } from './features/consent/gate/consentGateApi';
+// spec: 2026-08-25-prod-cutover-waves (B1) — the pre-login acceptance gets its owner.
+import { rememberConsentGateAcceptanceForLinking } from './features/consent/gate/consentGateLinkReconciler';
+import { useConsentGateLinkReconciliation } from './features/consent/gate/useConsentGateLink';
 import { IS_OVERSIGHT_PREVIEW_ENABLED } from './app/featureFlags';
 
 const hasJoinDeepLink = (): boolean => {
@@ -41,8 +48,30 @@ const AppFrame: React.FC<{
     // spec: secure-remembered-device-sessions-2026-06-24
     // Use authStatus (not isAuthenticated) so we can show a neutral loading
     // shell during 'checking' and never flash LoginPage before boot validation.
-    const { isAuthenticated, authStatus } = useAuth();
+    const { isAuthenticated, authStatus, session } = useAuth();
     const [joinActive, setJoinActive] = useState<boolean>(hasJoinDeepLink);
+    const { t } = useLanguage();
+
+    // spec: dfes-companion-2026-07-11 (wave-4.1) — first-open Terms + DPDP consent gate.
+    // Read here, at the top of AppFrame, because the gate is PRE-LOGIN: it stands in
+    // front of LoginPage, not behind it.
+    const consentGate = useConsentGate();
+
+    // Task 7 (spec: dfes-companion-2026-07-11) — daily 7am "आजची कामे पाहा"
+    // native local notification. Flag-off / non-native no-op is guaranteed
+    // inside the hook — see useMorningNotificationWiring.ts.
+    useMorningNotificationWiring(isAuthenticated, t('dfes.morningNotificationTitle'));
+
+    // spec: 2026-08-25-prod-cutover-waves (B1) — the gate runs pre-login, so its two legal
+    // records land with no user attached and are readable by nobody. This attaches them to
+    // the account the farmer just made (or signed back into) by writing a linking row.
+    //
+    // It is a SILENT BACKGROUND RECONCILIATION and must stay one: nothing is awaited here,
+    // nothing renders, nothing is shown to the farmer on success or on failure, and it can
+    // neither block nor delay registration, login or logging work (doctrine P9 / P4). It
+    // fires on every authenticated app start, so a farmer who was offline when he
+    // registered is linked the next time he opens the app with signal.
+    useConsentGateLinkReconciliation(authStatus === 'authenticated' ? session?.userId : null);
 
     // The QR deep-link wins over login. Semi-literate workers must never
     // see a generic password screen when they scan a farm QR.
@@ -61,6 +90,49 @@ const AppFrame: React.FC<{
         return (
             <AppShell>
                 <SplashScreen onComplete={() => { /* boot splash; auth check resolves independently */ }} />
+            </AppShell>
+        );
+    }
+
+    // spec: dfes-companion-2026-07-11 (wave-4.1) — the gate stands in front of LoginPage.
+    //
+    // Only when the answer is KNOWN. `undecided` means the Dexie read has not settled, and
+    // "not loaded" is indistinguishable from "never accepted" — acting on it would flash a
+    // full-screen legal notice at every cold start of a farmer who accepted weeks ago.
+    // SplashScreen already owns that window (App renders it until `showSplash` clears).
+    //
+    // Not shown to an authenticated session: a farmer who is already signed in accepted at
+    // some point, and re-gating a live account on a Dexie miss would lock him out of his
+    // own farm over a cleared cache. Re-consent on a NEW notice version is a server-side
+    // decision, not a client cache one.
+    if (!isAuthenticated && consentGate.status === 'required') {
+        return (
+            <AppShell>
+                <ConsentGateScreen
+                    onAccept={async (acceptance) => {
+                        // wave-4.2 — the two legal records are written FIRST. markPassed
+                        // runs only after both ids come back; a throw leaves the gate up
+                        // and shows the failure. Letting him through on a failed write
+                        // would mean the app holds data with no record of the basis for
+                        // holding it, which is the one outcome consent exists to prevent.
+                        await recordConsentGateAcceptance(
+                            acceptance, consentGate.preRegistrationSessionId);
+
+                        // B1 — keep what was DISPLAYED so it can be restated once an
+                        // account exists. After the accepting write, never before: a
+                        // payload stored for an acceptance that never landed would later
+                        // produce a linking row asserting a consent that does not exist.
+                        //
+                        // Deliberately NOT awaited. Doctrine P9 — a wedged IndexedDB must
+                        // not be able to hold a farmer on the consent screen. Losing the
+                        // race between this write and the app being killed costs one
+                        // unlinked acceptance, which is the state we are already in.
+                        void rememberConsentGateAcceptanceForLinking(
+                            acceptance, consentGate.preRegistrationSessionId);
+
+                        consentGate.markPassed();
+                    }}
+                />
             </AppShell>
         );
     }

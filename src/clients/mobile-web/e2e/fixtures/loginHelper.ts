@@ -30,6 +30,56 @@ export interface LoginOptions {
     rememberDevice?: boolean;
 }
 
+/**
+ * The consent gate stands in FRONT of LoginPage for every unauthenticated boot
+ * (`App.tsx`: `!isAuthenticated && consentGate.status === 'required'`), and each
+ * Playwright test gets a fresh browser context, so it renders on every spec that
+ * starts logged out. Without this the login specs time out waiting for a control
+ * that is not on screen yet.
+ *
+ * DELIBERATELY NOT FLAG-GATED AWAY. It would have been cheaper to hide the gate
+ * under `VITE_E2E_HARNESS`, but the worst defect found on this branch was a
+ * consent button rendered below the fold on a real handset — a bug that made the
+ * app unopenable and that every automated check passed straight through. Gating
+ * the screen out of e2e would delete the only automated coverage of the surface
+ * that has already failed hardest. A real farmer has to pass this screen, so the
+ * test passes it too, exactly the way he does: tick 18+, then accept.
+ *
+ * Returns true when the gate was present and passed, false when it was already
+ * satisfied. Never throws on absence — if neither the gate nor the login form
+ * appears, it returns false and lets the CALLER's own wait produce the real
+ * failure message, rather than masking it with a timeout from in here.
+ */
+export async function passConsentGateIfPresent(page: Page): Promise<boolean> {
+    const acceptCta = page.getByTestId('consent-accept-cta');
+    // SplashScreen owns the first moments of a cold boot, so neither the gate nor
+    // the login form is on screen immediately. Race the two rather than sleeping.
+    const useLegacyButton = page.getByRole('button', { name: /Use password/i });
+
+    const deadline = Date.now() + 20_000;
+    while (Date.now() < deadline) {
+        if (await acceptCta.isVisible().catch(() => false)) {
+            // The CTA is disabled until the 18+ declaration is ticked
+            // (ConsentGateScreen: `disabled={!ageConfirmed || submitting}`).
+            await page.getByTestId('consent-age-checkbox').check();
+            await acceptCta.click();
+            // Acceptance writes two legal records BEFORE markPassed, so the screen
+            // stays up until they land. Waiting for it to go proves the write
+            // succeeded — clicking and moving on would pass even if it threw.
+            await expect(acceptCta).toBeHidden({ timeout: 20_000 });
+            return true;
+        }
+
+        if (await useLegacyButton.isVisible().catch(() => false)) {
+            return false; // already past the gate
+        }
+
+        await page.waitForTimeout(250);
+    }
+
+    return false;
+}
+
 export async function loginViaPassword(
     page: Page,
     phone: string,
@@ -37,6 +87,8 @@ export async function loginViaPassword(
     options: LoginOptions = {},
 ): Promise<void> {
     await page.goto('/');
+
+    await passConsentGateIfPresent(page);
 
     // Toggle from OTP (default) to password (legacy) form. The button is only
     // visible while topMode === 'otp'; clicking switches to topMode='password'.

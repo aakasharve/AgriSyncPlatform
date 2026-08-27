@@ -10,6 +10,13 @@ import { VoiceIdempotency } from '../../infrastructure/voice/VoiceIdempotency';
 import { DEFAULT_VOICE_CONFIG, VoiceSessionMetadata } from '../../infrastructure/voice/types';
 import { normalizeLegacyLogSegmentId } from '../../domain/ai/BucketId';
 import { TranscribeStreamConsumer } from '../../infrastructure/ai/TranscribeStreamConsumer';
+import { FEATURE_FLAGS } from '../../app/featureFlags';
+import { buildCanonicalVoiceInput } from './continuity/canonicalVoiceInput';
+import { buildPendingFromCanonical, type ContinuityLevel } from './continuity/voiceContinuityLadder';
+import { CoreConsentMissingError } from '../consent/separation/coreConsentGate';
+import type { PendingLadderLevel } from './continuity/pendingInterpretation';
+import { PendingInterpretationStore } from './continuity/PendingInterpretationStore';
+import { DeviceSpeechRecognizer } from '../../infrastructure/voice/DeviceSpeechRecognizer';
 
 // TASK 3 (voice-live-captions-banner-2026-06-10) — yield to the browser so a
 // just-committed React state change can paint before heavy synchronous-ish
@@ -88,6 +95,13 @@ export const useVoiceRecorder = ({
     const [voiceStreamingPhase, setVoiceStreamingPhase] = useState<'idle' | 'transcribing' | 'streaming' | 'complete' | 'error'>('idle');
     const [voiceStreamingFieldsArrived, setVoiceStreamingFieldsArrived] = useState<ReadonlySet<string>>(() => new Set());
     const [liveCaption, setLiveCaption] = useState<string>('');
+    // dfes-companion Phase 4 — voice-continuity ladder outcome + last durable capture.
+    const [continuityLevel, setContinuityLevel] = useState<ContinuityLevel | null>(null);
+    const [savedPendingCaptureId, setSavedPendingCaptureId] = useState<string | null>(null);
+    const deviceRecognizerRef = useRef<DeviceSpeechRecognizer | null>(null);
+    if (!deviceRecognizerRef.current) {
+        deviceRecognizerRef.current = new DeviceSpeechRecognizer();
+    }
     const lastVoiceSessionMetadataRef = useRef<VoiceSessionMetadata | null>(null);
     const lastVoiceIdempotencySeedRef = useRef<string | null>(null);
     const transcribeConsumerRef = useRef<TranscribeStreamConsumer | null>(null);
@@ -341,6 +355,63 @@ export const useVoiceRecorder = ({
         return { transcript };
     };
 
+    // dfes-companion Phase 4 — persist a durable capture when the online
+    // pipeline could not structure the recording. Tries device ASR to salvage
+    // a transcript (L3 transcript-only); otherwise persists audio-only (L4).
+    // No aggregate is written, so the day stays UnaccountedDay (NEUTRAL per the
+    // Phase-3 fold) and the streak is preserved until the capture is
+    // re-interpreted. Called ONLY when FEATURE_FLAGS.voiceContinuity is on and
+    // runBatchAudioPath returned false (no committed draft).
+    const persistDegradedCapture = async (
+        preprocessed: { base64: string; mimeType: string },
+        recordedAtUtc: string,
+        sarvamTranscript: string | null,
+    ): Promise<void> => {
+        let transcript = sarvamTranscript && sarvamTranscript.trim().length > 0
+            ? sarvamTranscript.trim()
+            : null;
+        let deviceAsrUsed = false;
+        if (!transcript) {
+            const device = await deviceRecognizerRef.current!.transcribe({ language: 'mr-IN' });
+            if ('transcript' in device) {
+                transcript = device.transcript;
+                deviceAsrUsed = true;
+            }
+        }
+        const canonical = buildCanonicalVoiceInput({
+            farmId: resolveFarmId(),
+            logScope,
+            recordedAtUtc,
+            audioBase64: preprocessed.base64,
+            audioMimeType: preprocessed.mimeType,
+            transcript,
+            deviceAsrUsed,
+        });
+        // Parse already failed, so the level is decided purely by whether we
+        // salvaged any words: transcript-only (L3) vs audio-only (L4).
+        const level: PendingLadderLevel = transcript ? 'transcript-only' : 'audio-only';
+        const record = buildPendingFromCanonical(canonical, level, Date.now());
+        try {
+            await PendingInterpretationStore.getInstance().persist(record);
+        } catch (err) {
+            // spec: dfes-companion-2026-07-11 (wave-4.3) — the store refuses to keep raw
+            // audio without core consent. In production this cannot be reached: the gate
+            // stands in front of login and the recorder is behind it. If it ever is, the
+            // right outcome is that WE LOSE THE CLIP, not that the farmer loses the app —
+            // so this reports and returns instead of throwing out of the save path.
+            // The clip is gone, and honestly so: without a basis we may not hold his voice.
+            if (err instanceof CoreConsentMissingError) {
+                console.warn('[useVoiceRecorder] degraded capture discarded:', err.message);
+                setStatus('idle');
+                return;
+            }
+            throw err;
+        }
+        setContinuityLevel(level);
+        setSavedPendingCaptureId(record.captureId);
+        setStatus('idle');
+    };
+
     const handleAudioReady = async (audioData: AudioData) => {
         setStatus('processing');
         setError(null);
@@ -371,7 +442,7 @@ export const useVoiceRecorder = ({
         // /ai/voice-parse → Gemini multimodal → buckets. This is invoked
         // when streaming is off OR when ANY streaming stage fails. Its
         // behavior is preserved exactly as the pre-streaming flow.
-        const runBatchAudioPath = (): Promise<void> =>
+        const runBatchAudioPath = (): Promise<boolean> =>
             processInput({
                 type: 'audio',
                 data: preprocessed.base64,
@@ -418,11 +489,22 @@ export const useVoiceRecorder = ({
                     return;
                 }
                 console.warn('[useVoiceRecorder] streaming parse stage produced no committable draft; falling back to batch audio path.');
-                // Reset streaming-side UI so the batch attempt is clean;
-                // keep liveCaption so the farmer still sees what was heard.
+                // Reset streaming-side UI so the batch attempt is clean; keep
+                // liveCaption so the farmer still sees what was heard (and so a
+                // degraded salvage can reuse the Sarvam transcript).
                 setVoiceStreamingPhase('idle');
                 setVoiceStreamingFieldsArrived(new Set());
-                await runBatchAudioPath();
+                const committed = await runBatchAudioPath();
+                if (!committed && FEATURE_FLAGS.voiceContinuity) {
+                    // Batch also failed — salvage the recording as a durable
+                    // pending capture. We DO have the Sarvam transcript here
+                    // (result.transcript), so this becomes a transcript-only L3.
+                    await persistDegradedCapture(
+                        { base64: preprocessed.base64, mimeType: preprocessed.mimeType },
+                        recordedAtUtc,
+                        result.transcript,
+                    );
+                }
                 return;
             }
             // Transcribe (Stage 1) failed, was empty, or aborted. Fall
@@ -441,7 +523,16 @@ export const useVoiceRecorder = ({
             }
         }
 
-        await runBatchAudioPath();
+        const committed = await runBatchAudioPath();
+        if (!committed && FEATURE_FLAGS.voiceContinuity) {
+            // No live-caption transcript on this path — salvage via device ASR
+            // if the platform has it (L3), else audio-only (L4). Nothing is lost.
+            await persistDegradedCapture(
+                { base64: preprocessed.base64, mimeType: preprocessed.mimeType },
+                recordedAtUtc,
+                null,
+            );
+        }
     };
 
     // voice-sarvam-live-captions-2026-06-11 — Stage 2 streaming structurer.
@@ -728,15 +819,16 @@ export const useVoiceRecorder = ({
             if (!result.success || !result.data) {
                 setStatus('idle');
                 setError(result.error || "Could not process audio");
-                return;
+                return false;
             }
 
-            await commitParsedDraft(result, input.data);
+            return await commitParsedDraft(result, input.data);
 
         } catch (err) {
             console.error(err);
             setError("Could not process log. Please try again.");
             setStatus('idle');
+            return false;
         }
     };
 
@@ -763,6 +855,8 @@ export const useVoiceRecorder = ({
             transcribeAbortRef.current.abort();
             transcribeAbortRef.current = null;
         }
+        setContinuityLevel(null);
+        setSavedPendingCaptureId(null);
         setLiveCaption('');
     };
 
@@ -791,5 +885,8 @@ export const useVoiceRecorder = ({
         voiceStreamingPhase,
         voiceStreamingFieldsArrived,
         liveCaption,
+        continuityLevel,
+        savedPendingCaptureId,
+        setSavedPendingCaptureId,
     };
 };

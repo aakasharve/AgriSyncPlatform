@@ -225,8 +225,10 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
     /// alternative", blanking <c>RetainedBlobStore__BucketName</c> and
     /// redeploying — explicitly stating "clips remain in S3 untouched". Do that
     /// after clips exist and the next erasure takes the store's no-bucket
-    /// short-circuit: it removes the <c>voice_clips_retained</c> rows, touches
-    /// no S3 object, and returns without throwing.
+    /// short-circuit: it touches no S3 object, leaves the
+    /// <c>voice_clips_retained</c> rows where they are, and returns without
+    /// throwing. Returning quietly is the hazard — to a caller that reads only
+    /// "did it throw", a skip is indistinguishable from a purge.
     /// </para>
     ///
     /// <para>
@@ -258,7 +260,7 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
         var status = Convert.ToInt32(await ScalarAsync(raw,
             "SELECT status FROM ssf.erasure_requests WHERE id = @id", ("id", requestId)));
         status.Should().Be((int)ErasureStatus.CompletedWithResidue,
-            "a skip that deleted the pointer without deleting the object is residue, not success");
+            "a skip that deleted neither the object nor the row pointing at it is residue, not success");
 
         var payload = (string?)await ScalarAsync(raw,
             """
@@ -280,12 +282,12 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
     ///
     /// <para>
     /// <see cref="NoBucketConfiguredSkip_IsRecordedAsResidue_NotAsAPurge"/> proves
-    /// the worker handles the enum correctly, but it hands the worker a fake
-    /// that returns that enum directly — so it never exercises
-    /// <c>S3RetainedBlobStore.cs:70-83</c>, which is the branch that actually
-    /// fires in production. Without this test the claim "a blank bucket name
-    /// yields SkippedNoBucketConfigured" is an assertion about code no test
-    /// runs.
+    /// the worker handles the status correctly, but it hands the worker a fake
+    /// that returns that status directly — so it never exercises the
+    /// blank-bucket short-circuit in <c>S3RetainedBlobStore</c>, which is the
+    /// branch that actually fires in production. Without this test the claim "a
+    /// blank bucket name yields SkippedNoBucketConfigured" is an assertion
+    /// about code no test runs.
     /// </para>
     ///
     /// <para>
@@ -293,9 +295,20 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
     /// the short-circuit ever regresses into calling S3, this fails loudly
     /// instead of silently passing.
     /// </para>
+    ///
+    /// <para>
+    /// <b>This test used to assert the opposite.</b> It was named
+    /// <c>..._AndDeletesTheMetadataRow</c> and required the row count to reach
+    /// zero, pinning in place the very behaviour the rest of this file argues
+    /// against — its own comment conceded the object "is still in the bucket"
+    /// while asserting we had destroyed the row locating it. Two rules decide
+    /// it: never destroy the sole index to data you still retain, and never
+    /// report a deletion you did not perform. Both point the same way, so the
+    /// assertion flipped.
+    /// </para>
     /// </summary>
     [Fact]
-    public async Task RealStore_WithBlankBucketName_ReturnsSkipped_AndDeletesTheMetadataRow()
+    public async Task RealStore_WithBlankBucketName_ReturnsSkipped_AndLeavesTheMetadataRow()
     {
         var clipId = Guid.NewGuid();
         await SeedRetainedClipAsync(clipId, _userId);
@@ -317,17 +330,31 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
 
         var outcome = await store.DeleteRetainedVoiceForUserAsync(_userId, CancellationToken.None);
 
-        outcome.Should().Be(RetainedVoiceDeletionOutcome.SkippedNoBucketConfigured,
+        outcome.Status.Should().Be(RetainedVoiceDeletionStatus.SkippedNoBucketConfigured,
             "rows existed and no S3 object was touched — that is residue, not a purge");
+        outcome.CanBeReportedAsDeleted.Should().BeFalse(
+            "nothing was deleted, so nothing may be reported as deleted");
 
-        // The row really is gone: this branch deletes the only pointer to an
-        // object that is still in the bucket, which is precisely why the
-        // outcome must not read as success.
+        // The row survives. The object is still sitting in the bucket, and this
+        // row is the only thing that locates it: destroying the row would make
+        // the farmer's audio simultaneously unreachable by them and undeleted
+        // in fact — unrecoverable on retry, and invisible. And because this
+        // runs on the DPDP §12 erasure path, recording a deletion we did not
+        // perform would put a claim in the erasure record that we cannot
+        // support.
         await using var raw = new NpgsqlConnection(_superuserConn);
         await raw.OpenAsync();
         var remaining = Convert.ToInt32(await ScalarAsync(raw,
             "SELECT count(*) FROM ssf.voice_clips_retained WHERE clip_id = @cid", ("cid", clipId)));
-        remaining.Should().Be(0);
+        remaining.Should().Be(1,
+            "with no bucket the audio cannot be deleted, so the row that locates it must stay");
+
+        // Counts must agree with the row that is still there: nothing removed
+        // on either half, one clip left behind and counted rather than implied
+        // by silence.
+        outcome.BlobsDeleted.Should().Be(0);
+        outcome.MetadataRowsRemoved.Should().Be(0);
+        outcome.ClipsLeftInPlace.Should().Be(1);
     }
 
     /// <summary>
@@ -512,16 +539,32 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
     }
 
     /// <summary>
-    /// The kill-switch shape: no exception, no S3 call, metadata rows removed.
-    /// This is what <c>S3RetainedBlobStore</c> does when
-    /// <c>RetainedBlobStore:BucketName</c> is blank — a state
-    /// <c>aws/voice-retained/README.md:148</c> offers as a supported rollback
-    /// whose stated effect is "clips remain in S3 untouched".
+    /// The kill-switch shape: no exception, no S3 call, and NOTHING removed —
+    /// neither the object nor the metadata row that points at it. This is what
+    /// <c>S3RetainedBlobStore</c> does when <c>RetainedBlobStore:BucketName</c>
+    /// is blank — a state <c>aws/voice-retained/README.md:148</c> offers as a
+    /// supported rollback whose stated effect is "clips remain in S3
+    /// untouched".
+    ///
+    /// <para>
+    /// This fake used to describe itself as removing the metadata rows,
+    /// because the adapter used to. Leaving the row is the point: the object
+    /// is still in the bucket, and the row is the only index to it.
+    /// </para>
     /// </summary>
     private sealed class SkippingRetainedBlobStore : IRetainedBlobStore
     {
+        /// <summary>
+        /// The scenario this fake models: a user holding one retained clip
+        /// that the blank bucket made untouchable. It is not tuned to any
+        /// assertion — no test reads the count — but it cannot be zero and
+        /// stay coherent, because a user with no rows takes the
+        /// <c>NothingToDelete</c> branch instead of this one.
+        /// </summary>
+        private const int ClipsLeftInPlace = 1;
+
         public Task<RetainedVoiceDeletionOutcome> DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct) =>
-            Task.FromResult(RetainedVoiceDeletionOutcome.SkippedNoBucketConfigured);
+            Task.FromResult(RetainedVoiceDeletionOutcome.SkippedNoBucket(ClipsLeftInPlace));
 
         public Task<Guid> PersistAsync(VoiceClipRetained metadata, byte[] cipherBytes, CancellationToken ct) =>
             throw new NotSupportedException();
@@ -570,11 +613,23 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
                 "S3 must not be called on the blank-bucket short-circuit path.");
     }
 
-    /// <summary>Genuinely purges — the clean-path control.</summary>
+    /// <summary>
+    /// Genuinely purges — the clean-path control.
+    ///
+    /// <para>
+    /// Holds no state, so it reports the scenario it stands for rather than a
+    /// measurement: one clip found, both halves removed. No test reads the
+    /// count. It cannot be zero and stay coherent — <c>Deleted</c> means at
+    /// least one clip was found and removed, so <c>Removed(0)</c> would assert
+    /// a purge of nothing.
+    /// </para>
+    /// </summary>
     private sealed class NoOpRetainedBlobStore : IRetainedBlobStore
     {
+        private const int ClipsPurged = 1;
+
         public Task<RetainedVoiceDeletionOutcome> DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct) =>
-            Task.FromResult(RetainedVoiceDeletionOutcome.Deleted);
+            Task.FromResult(RetainedVoiceDeletionOutcome.Removed(ClipsPurged));
 
         public Task<Guid> PersistAsync(VoiceClipRetained metadata, byte[] cipherBytes, CancellationToken ct) =>
             throw new NotSupportedException();

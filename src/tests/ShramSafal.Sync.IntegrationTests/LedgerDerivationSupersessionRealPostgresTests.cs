@@ -230,6 +230,10 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
         services.AddScoped<IIdGenerator, GuidIdGenerator>();
         services.AddScoped<IClock, SystemClock>();
         services.AddScoped<ILedgerDerivationService, LedgerDerivationService>();
+        // CreateDailyLogHandler gained the DFES richness side-car dependency
+        // (spec: dfes-companion-2026-07-11); this hand-rolled container must
+        // register it too or every test here fails at handler construction.
+        services.AddScoped<IDailyRichnessDerivationService, DailyRichnessDerivationService>();
         services.AddSingleton<IEntitlementPolicy, AllowAllEntitlementPolicy>();
         services.AddSingleton<IAnalyticsWriter, NoopAnalyticsWriter>();
 
@@ -477,6 +481,7 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
             sp.GetRequiredService<IAiJobRepository>(),
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<CreateDailyLogHandler>>(),
             sp.GetRequiredService<ILedgerDerivationService>(),
+            sp.GetRequiredService<IDailyRichnessDerivationService>(),
             ctx);
 
         var command = new CreateDailyLogCommand(

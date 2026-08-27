@@ -65,6 +65,79 @@ describe('RejectionPolicy.categorizeRejection', () => {
     });
 });
 
+// ---------------------------------------------------------------------------
+// The wire codes ShramSafal actually sends — the O-4 regression.
+// ---------------------------------------------------------------------------
+//
+// NOTE WHY THESE ARE NOT COVERED BY THE FIRST TEST IN THIS FILE. That one
+// iterates `getPermanentRejectionCodes()` and asserts each is PERMANENT, which
+// is true by construction for anything in the list — it can never fail for a
+// code that IS listed, and says nothing at all about a code that is NOT. Every
+// case below therefore hard-codes the exact `code` + `message` pair read off
+// the server, so deleting the matching entry from `PERMANENT_REJECTION_CODES`
+// turns the case red. That is the only version of this test worth having.
+//
+// Pairs verified against `ShramSafal.Domain/Common/ShramSafalErrors.cs` and the
+// literal codes in `PushSyncBatchHandler.cs` (read-only for the frontend).
+const SERVER_WIRE_REFUSALS: ReadonlyArray<readonly [string, string]> = [
+    // Role / authorisation.
+    ['ShramSafal.VerificationTransitionNotAllowedForRole', 'Transition not allowed for role.'],
+    ['ShramSafal.TestRoleNotAllowed', 'Role is not allowed to perform this action on a test.'],
+    ['ShramSafal.ComplianceSignalRoleNotAllowed', 'Role is not allowed to perform this action on a compliance signal.'],
+    ['ShramSafal.JobCardRoleNotAllowed', 'Role is not allowed to perform this action on a job card.'],
+    // Command shape.
+    ['ShramSafal.InvalidCommand', 'Request is invalid.'],
+    ['ShramSafal.InvalidVerificationReason', 'Reason is required for disputed verification.'],
+    ['ShramSafal.InvalidVerificationStatus', 'decision must be one of confirm, verify, dispute, request_correction.'],
+    ['ShramSafal.ComplianceSignalNoteRequired', 'A resolution note of at least 3 characters is required.'],
+];
+
+describe('RejectionPolicy — ShramSafal wire codes', () => {
+    it('parks a Mukadam approval refused by the verification state machine (O-4)', () => {
+        // The exact pair `VerifyLogHandler.cs:148` produces once O-4 let the
+        // Mukadam past `ShramSafalAuthorizationEnforcer`. Before O-4 this
+        // arrived as `ShramSafal.Forbidden` and parked correctly; the refusal
+        // never changed, only the code did.
+        expect(categorizeRejection({
+            errorCode: 'ShramSafal.VerificationTransitionNotAllowedForRole',
+            errorMessage: 'Transition not allowed for role.',
+        })).toBe('PERMANENT');
+    });
+
+    it.each(SERVER_WIRE_REFUSALS)('parks %s', (errorCode, errorMessage) => {
+        expect(categorizeRejection({ errorCode, errorMessage })).toBe('PERMANENT');
+    });
+
+    it('matches by NAME, not by letters that happen to appear in the prose', () => {
+        // The same refusal with the code stripped stays RETRYABLE. If this
+        // ever flips to PERMANENT, someone widened the substring scan and the
+        // list above stopped being the thing that decides.
+        expect(categorizeRejection({
+            errorMessage: 'Transition not allowed for role.',
+        })).toBe('RETRYABLE');
+        expect(categorizeRejection({
+            errorMessage: 'Role is not allowed to perform this action on a job card.',
+        })).toBe('RETRYABLE');
+    });
+
+    it('leaves order-dependent and parent-shaped refusals RETRYABLE', () => {
+        // Deliberate non-entries. A row whose verdict another queued mutation
+        // (or the parent's own arrival) can still change must NOT be parked —
+        // that would ask the farmer to resolve a conflict about to resolve
+        // itself (`P9`). `*NotFound` belongs to `MutationDependency`.
+        for (const [errorCode, errorMessage] of [
+            ['ShramSafal.JobCardInvalidState', 'Job card is not in a valid state for this action.'],
+            ['ShramSafal.TestInvalidState', 'Test instance is not in a valid state for this action.'],
+            ['ShramSafal.JobCardActivityTypeMismatch', 'No task in the daily log matches an activity type on this job card.'],
+            ['ShramSafal.PlotNotFound', 'Plot was not found.'],
+            ['ShramSafal.JobCardNotFound', 'Job card was not found.'],
+            ['ShramSafal.AiParsingFailed', 'Voice parsing failed.'],
+        ] as ReadonlyArray<readonly [string, string]>) {
+            expect(categorizeRejection({ errorCode, errorMessage })).toBe('RETRYABLE');
+        }
+    });
+});
+
 describe('RejectionPolicy.getPermanentRejectionCodes', () => {
     it('returns at least the four codes the conflict UX hint copy references', () => {
         const codes = new Set(getPermanentRejectionCodes());

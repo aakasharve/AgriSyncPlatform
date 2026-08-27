@@ -24,6 +24,7 @@ import { AppFeatureProviders } from './app/context/AppFeatureContexts';
 import { useTemplateCatalogSync } from './app/hooks/useTemplateCatalogSync';
 import { useFarmContextState, OPEN_CREATE_FARM_WIZARD_EVENT } from './app/hooks/useFarmContextState';
 import { useCapacitorKeyboard } from './app/hooks/useCapacitorKeyboard';
+import { useSavedSurfaceScrollReset } from './app/hooks/useSavedSurfaceScrollReset';
 import {
     getTodayCounts as deriveTodayCounts,
     getTodayPlotData as deriveTodayPlotData,
@@ -70,6 +71,15 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
         navigation, context, data, voice, weather, commands: _commands, trust: _trust,
         toast, setToast, handleReset: _handleReset, lastSavedLogSummary: _lastSavedLogSummary, lastSavedLogIds: _lastSavedLogIds,
     } = app;
+
+    // BUG-2 2026-08-14, cause 3 (founder: "there is no going back screen after
+    // this screen"). `<main>` below is the app's ONE scroll container, so it —
+    // not the route being swapped inside it — owns the scroll offset that
+    // survived a save and dropped the farmer ~591px into the post-save card.
+    // The ref lives here because the element does; the edge-detection and the
+    // reduced-motion rule live in the hook.
+    const pageScrollRef = React.useRef<HTMLElement>(null);
+    useSavedSurfaceScrollReset(pageScrollRef, voice.status);
 
     useEffect(() => {
         setCrops(data.crops);
@@ -162,6 +172,7 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
             <MeAlertRail />
 
             <main
+                ref={pageScrollRef}
                 className="page-content relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-none"
                 style={{
                     paddingBottom: isKeyboardOpen

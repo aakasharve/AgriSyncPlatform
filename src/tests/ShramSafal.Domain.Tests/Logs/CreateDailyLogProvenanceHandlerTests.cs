@@ -324,7 +324,8 @@ public sealed class CreateDailyLogProvenanceHandlerTests
             analytics,
             aiJobs,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<CreateDailyLogHandler>.Instance,
-            new LedgerDerivationService(repo));
+            new LedgerDerivationService(repo),
+            new Common.NullDailyRichnessDerivationService());
     }
 
     /// <summary>

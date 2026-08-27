@@ -89,6 +89,8 @@ import * as Security from './resources/SecurityResource';
 import * as Export from './resources/ExportResource';
 // spec: data-principle-spine-2026-05-05/06.4
 import * as Consent from './resources/ConsentResource';
+// spec: dfes-companion-2026-07-11
+import * as Dfes from './resources/DfesResource';
 
 // ---------------------------------------------------------------------------
 // Re-exports — keep every name the rest of the codebase imports from this
@@ -479,6 +481,18 @@ export class AgriSyncClient implements HttpTransport {
 
     exportVerificationReport(farmId: string, fromDate: string, toDate: string): Promise<Blob> {
         return Export.exportVerificationReport(this, farmId, fromDate, toDate);
+    }
+
+    // --- Dfes ---------------------------------------------------------------
+    //
+    // spec: dfes-companion-2026-07-11
+
+    getFarmerEngagement(farmId: string): Promise<import('./resources/DfesResource').FarmerEngagementDto> {
+        return Dfes.getFarmerEngagement(this, farmId);
+    }
+
+    getDayUnderstanding(farmId: string, date?: string): Promise<import('./resources/DfesResource').DayUnderstandingDto> {
+        return Dfes.getDayUnderstanding(this, farmId, date);
     }
 
     // --- Internal: auth interceptor + 401 retry ---------------------------

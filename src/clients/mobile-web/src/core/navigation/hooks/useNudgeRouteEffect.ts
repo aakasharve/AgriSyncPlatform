@@ -71,6 +71,11 @@ export function useNudgeRouteEffect({
             requestOpenWaitingDrawer();
         }
 
+        if (nudge === 'open-today') {
+            // No additional modal — arriving on main/log (set above) is the
+            // entire "open today" action.
+        }
+
         params.delete('nudge');
         const nextQuery = params.toString();
         const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}`;

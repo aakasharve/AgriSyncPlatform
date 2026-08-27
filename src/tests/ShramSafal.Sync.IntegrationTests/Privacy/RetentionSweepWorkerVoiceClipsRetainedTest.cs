@@ -360,9 +360,11 @@ internal sealed class RecordingRetainedBlobStore : IRetainedBlobStore
         DeleteCalls.Add(userId);
 
         // Mirror S3RetainedBlobStore.DeleteRetainedVoiceForUserAsync's
-        // contract: remove the metadata rows in addition to the S3
-        // objects. We hold no S3; the DB row delete is the side-effect
-        // the worker (and the integration test) care about.
+        // CONFIGURED-BUCKET contract: remove the metadata rows in addition
+        // to the S3 objects. We hold no S3; the DB row delete is the
+        // side-effect the worker (and the integration test) care about.
+        // (The blank-bucket branch removes nothing at all and is modelled
+        // elsewhere — see ErasureAuditSurvivesBlobFailureRealPostgresTests.)
         var conn = _config.GetConnectionString("ShramSafalDb_Migration")
             ?? _config.GetConnectionString("ShramSafalDb")
             ?? throw new InvalidOperationException("No ShramSafalDb connection string available.");
@@ -371,8 +373,19 @@ internal sealed class RecordingRetainedBlobStore : IRetainedBlobStore
         await using var cmd = db.CreateCommand();
         cmd.CommandText = "DELETE FROM ssf.voice_clips_retained WHERE user_id = @uid";
         cmd.Parameters.AddWithValue("uid", userId);
-        await cmd.ExecuteNonQueryAsync(ct);
-        return RetainedVoiceDeletionOutcome.Deleted;
+
+        // The count this fake reports is the count the database actually
+        // removed, taken from the DELETE's own affected-row result. Reporting
+        // a literal here would make the double agree with any caller by
+        // construction and so prove nothing about the code reading it.
+        var rowsRemoved = await cmd.ExecuteNonQueryAsync(ct);
+
+        // Zero rows removed is "there was nothing to remove", which is a
+        // different fact from a purge — Removed(0) would claim a deletion
+        // that did not occur.
+        return rowsRemoved == 0
+            ? RetainedVoiceDeletionOutcome.Nothing
+            : RetainedVoiceDeletionOutcome.Removed(rowsRemoved);
     }
 
     public Task<Guid> PersistAsync(VoiceClipRetained metadata, byte[] cipherBytes, CancellationToken ct)

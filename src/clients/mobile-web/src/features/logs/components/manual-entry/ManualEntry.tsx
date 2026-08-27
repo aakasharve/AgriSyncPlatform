@@ -17,7 +17,7 @@ import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 import { buildWorkDoneProjection } from '../../services/workDoneProjection';
 import { buildAiCorrectionEvents, persistAiCorrectionEvents, postAiCorrectionBlob } from '../../../../infrastructure/ai/CorrectionEventStore';
 
-import { ManualEntryProps, TargetSelectionGroup } from './types';
+import { ManualEntryProps, TargetSelectionGroup, ManualEntryFormOrigin } from './types';
 import { useManualEntryHydration } from './hooks/useManualEntryHydration';
 import { buildLinkedDetailMaps } from './services/loadLogIntoEditor';
 import ManualEntryHeader from './components/ManualEntryHeader';
@@ -59,6 +59,12 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
     const handleLogSelect = (logId: string) => {
         const log = todayLogs.find(l => l.id === logId);
         if (!log) return;
+
+        // task-0b — this is a fill site too: everything below comes out of a log that
+        // was already saved, so say so. (handleSaveDay also short-circuits on
+        // selectedLogId; the marker is set anyway so the origin never depends on a
+        // second, unrelated piece of state staying in sync.)
+        formOriginRef.current = 'existing-log';
 
         // Load all data from the selected log
         setSelectedLogId(logId);
@@ -129,6 +135,11 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
     const hasVoiceDataBeenApplied = React.useRef(false);
     const initialAiDataRef = React.useRef<AgriLogResponse | null>(null);
 
+    // task-0b (spec: dfes-farmer-facing-deploy-readiness-2026-08-14) — set by whichever
+    // code fills this form, read by handleSaveDay. Starts 'blank' because a freshly
+    // mounted form IS empty until something fills it.
+    const formOriginRef = React.useRef<ManualEntryFormOrigin>('blank');
+
     // --- PRE-FILL & HYDRATION ---
     useManualEntryHydration({
         initialData,
@@ -139,6 +150,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         onDataConsumed,
         hasVoiceDataBeenApplied,
         initialAiDataRef,
+        formOriginRef,
         setCropActivities,
         setIrrigationMap,
         setLabourMap,
@@ -150,6 +162,33 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         setDisturbance,
         setTranscript,
     });
+
+    // FOUNDER FIX (spec: dfes-companion-2026-07-11) — bring "what Sathi
+    // heard/understood" into view the instant a fresh voice draft lands, so
+    // the farmer sees it FIRST without manual scrolling (founder: "after
+    // voice log the user must see directly the transcript part, not he
+    // suppose to scroll down"). Scoped to a genuinely fresh voice draft
+    // only: provenance.source === 'ai' (never fires for a typed/manual
+    // entry, which has no AI provenance and no transcript) AND not editing
+    // a past log (handleLogSelect above already owns its own scroll-to-top
+    // for the edit flow — this must not fight it). Fires once per mount via
+    // the ref guard; the dependency array re-checks after hydration commits
+    // the transcript/activities so the DOM target actually exists.
+    const hasScrolledToPostVoiceRef = React.useRef(false);
+    useEffect(() => {
+        if (provenance?.source !== 'ai') return;
+        if (selectedLogId) return;
+        if (hasScrolledToPostVoiceRef.current) return;
+        if (!transcript && cropActivities.length === 0) return;
+
+        hasScrolledToPostVoiceRef.current = true;
+        const anchor = document.getElementById('post-voice-transcript-anchor');
+        if (!anchor) return;
+        const prefersReducedMotion = typeof window !== 'undefined'
+            && typeof window.matchMedia === 'function'
+            && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        anchor.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'start' });
+    }, [provenance, selectedLogId, transcript, cropActivities]);
 
     // Phase 7: Load Unclear Segments
     useEffect(() => {
@@ -287,7 +326,40 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
             date: recordedDateKey ?? getDateKey(),
             manualTotalCost,
             fullTranscript: transcript,
-            originalLogId: selectedLogId || undefined // Pass the ID if we are editing
+            originalLogId: selectedLogId || undefined, // Pass the ID if we are editing
+            // BUGFIX_2026-07-19 (spec: dfes-companion-2026-07-11) — thread the
+            // REAL AI provenance through on a NEW-log save so a voice log
+            // persists with source='ai' + sourceAiJobId (previously dropped:
+            // this screen always saved via the "manual" factory branch
+            // regardless of where the draft came from). Never attached when
+            // editing an existing log (selectedLogId set) — an edit's
+            // in-session `provenance` state can be stale from an unrelated
+            // earlier parse and must not be misattributed to a different log.
+            //
+            // task-0b (dfes-farmer-facing-deploy-readiness-2026-08-14) — a genuinely
+            // hand-typed day now SAYS SO, because the sync layer ships the typed draft
+            // only on a positive `source: 'manual'` assertion (a voice log can reach it
+            // unmarked too — useLogCommands.ts:242-250 passes undefined provenance).
+            //
+            // But the claim is only ever repeated here, never worked out here. This
+            // button sees populated buckets and no AI marker and cannot tell a day the
+            // farmer typed from one the AI filled in for him — and two routes deliver
+            // exactly that: "Edit This Log" (mainView `onEditLog` hands the saved log
+            // in as initialData with no provenance) and the same-day re-open (the
+            // hydration hook merges today's already-saved log back into the form). So
+            // the answer comes from `formOriginRef`, written by whichever code filled
+            // the form. Only a form that started and stayed EMPTY earns the claim.
+            //
+            // Anything else falls back to claiming nothing, which is the pre-task-0b
+            // wire exactly: no assertion, no draft shipped, nothing lost. The opposite
+            // error is not recoverable — the server stamps an AI-inferred figure
+            // `Provenance.Manual` (model "n/a", no extractor SHA) and doctrine P8 makes
+            // that permanent. Silence is safe; a false claim never is.
+            provenance: selectedLogId
+                ? undefined
+                : (provenance ?? (formOriginRef.current === 'blank'
+                    ? { source: 'manual' as const, timestamp: new Date().toISOString() }
+                    : undefined))
         };
 
         if (initialAiDataRef.current && provenance?.source === 'ai') {

@@ -44,19 +44,30 @@ public sealed class S3RetainedBlobStore : IRetainedBlobStore
         _db = db;
     }
 
-    public async Task<RetainedVoiceDeletionOutcome> DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct)
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (farm-memory) — whole-user purge.
+    /// The caller for this is DPDP §12 erasure and account closure, the
+    /// two places where "all of it" is genuinely what the farmer asked
+    /// for. The retention sweep does NOT call this and must not: it
+    /// reasons about individual clips, and handing a per-clip decision to
+    /// a per-user delete is how one aged recording came to destroy a
+    /// farmer's whole Voice Diary (ADR-DS-017 "Known gap").
+    /// </summary>
+    public async Task<RetainedVoiceDeletionOutcome> DeleteRetainedVoiceForUserAsync(
+        Guid userId,
+        CancellationToken ct)
     {
         if (userId == Guid.Empty)
         {
-            return RetainedVoiceDeletionOutcome.NothingToDelete;
+            return RetainedVoiceDeletionOutcome.Nothing;
         }
 
         // 1. Enumerate every retained clip metadata row for the user.
         //    We delete from S3 BEFORE removing the DB row so a crash
         //    mid-flow leaves an orphan row pointing at a missing S3
-        //    object (recoverable: re-run sweeps the row away on the
-        //    second pass), not the inverse (orphan S3 object that no
-        //    DB row can locate — leaks indefinitely).
+        //    object (recoverable: the row can be retried), not the
+        //    inverse (orphan S3 object that no DB row can locate —
+        //    leaks indefinitely).
         var rows = await _db.VoiceClipsRetained
             .Where(c => c.UserId == userId)
             .ToListAsync(ct)
@@ -64,28 +75,27 @@ public sealed class S3RetainedBlobStore : IRetainedBlobStore
 
         if (rows.Count == 0)
         {
-            return RetainedVoiceDeletionOutcome.NothingToDelete;
+            return RetainedVoiceDeletionOutcome.Nothing;
         }
 
         if (string.IsNullOrWhiteSpace(_opt.BucketName))
         {
-            // No bucket configured. Drop the metadata rows so the erasure
-            // manifest still completes rather than blocking the farmer's
-            // erasure on a config state they cannot influence.
+            // No bucket configured. This used to drop the metadata rows
+            // anyway "so the erasure manifest still completes", on the
+            // reasoning that without a bucket the objects cannot exist.
+            // That reasoning holds on a dev laptop and fails in the one
+            // case that matters: a misconfigured or blanked BucketName in
+            // an environment whose bucket is full of the farmer's audio.
+            // There, removing the row deletes the only pointer to a
+            // recording that is still sitting in S3 — the farmer loses
+            // access, we retain the copy, and the manifest says
+            // "deleted". That is founder ITEM 4's HARD RULE broken in
+            // precisely the direction it names.
             //
-            // This comment used to end "the S3 objects simply don't exist."
-            // That is FALSE whenever this branch is reached with rows present,
-            // and it was the origin of a false claim that reached the erasure
-            // audit record — see the note under the RemoveRange below.
-            _db.VoiceClipsRetained.RemoveRange(rows);
-            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
-
-            // Rows existed but nothing in S3 was touched. PersistAsync refuses
-            // to write a row while BucketName is blank, so these rows were
-            // written when a bucket WAS configured — the objects are still
-            // there. Reporting success here is what made the erasure record
-            // claim the voice tier was purged when it was not.
-            return RetainedVoiceDeletionOutcome.SkippedNoBucketConfigured;
+            // So: touch nothing, and say so. The caller decides whether
+            // to defer, alert, or fail — it can no longer be misled into
+            // reporting a purge that did not happen.
+            return RetainedVoiceDeletionOutcome.SkippedNoBucket(rows.Count);
         }
 
         foreach (var clip in rows)
@@ -105,7 +115,7 @@ public sealed class S3RetainedBlobStore : IRetainedBlobStore
 
         _db.VoiceClipsRetained.RemoveRange(rows);
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return RetainedVoiceDeletionOutcome.Deleted;
+        return RetainedVoiceDeletionOutcome.Removed(rows.Count);
     }
 
     public async Task<Guid> PersistAsync(

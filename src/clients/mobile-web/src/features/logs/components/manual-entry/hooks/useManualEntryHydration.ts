@@ -12,6 +12,7 @@ import {
 } from '../../../../../types';
 import { isCompletedIrrigationEvent } from '../../../services/irrigationCompletion';
 import { getDateKey } from '../../../../../core/domain/services/DateKeyService';
+import type { ManualEntryFormOrigin } from '../types';
 
 interface HydrationParams {
     initialData?: AgriLogResponse | null;
@@ -22,6 +23,12 @@ interface HydrationParams {
     onDataConsumed?: () => void;
     hasVoiceDataBeenApplied: React.MutableRefObject<boolean>;
     initialAiDataRef: React.MutableRefObject<AgriLogResponse | null>;
+    /**
+     * spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — written by this
+     * hook, read by the save button. This effect is the only code that knows whether
+     * the form the farmer is looking at was filled by him or filled for him.
+     */
+    formOriginRef: React.MutableRefObject<ManualEntryFormOrigin>;
     setCropActivities: React.Dispatch<React.SetStateAction<CropActivityEvent[]>>;
     setIrrigationMap: React.Dispatch<React.SetStateAction<Record<string, IrrigationEvent>>>;
     setLabourMap: React.Dispatch<React.SetStateAction<Record<string, LabourEvent>>>;
@@ -42,7 +49,7 @@ interface HydrationParams {
 export function useManualEntryHydration(params: HydrationParams): void {
     const {
         initialData, activePlot, defaults, profile, todayLogs, onDataConsumed,
-        hasVoiceDataBeenApplied, initialAiDataRef,
+        hasVoiceDataBeenApplied, initialAiDataRef, formOriginRef,
         setCropActivities, setIrrigationMap, setLabourMap, setMachineryMap, setInputMap,
         setExpenses, setObservations, setPlannedTasks, setDisturbance, setTranscript,
     } = params;
@@ -170,6 +177,23 @@ export function useManualEntryHydration(params: HydrationParams): void {
             });
         }
 
+        // task-0b (spec: dfes-farmer-facing-deploy-readiness-2026-08-14) — did the merge
+        // above actually put anything in the form? Measured HERE, before the initialData
+        // overlay writes into the same maps, so it reports only what came out of
+        // already-saved logs. Presence of a log is not enough: a log that contributed
+        // nothing leaves the form genuinely blank, and needlessly withholding a typed
+        // day would revert the very fix task-0b landed.
+        const filledFromExistingLogs =
+            Object.keys(newLabourMap).length > 0
+            || Object.keys(newIrrigationMap).length > 0
+            || Object.keys(newMachineryMap).length > 0
+            || Object.keys(newInputMap).length > 0
+            || currentExpenses.length > 0
+            || currentObservations.length > 0
+            || currentTasks.length > 0
+            || (globalActivity.workTypes?.length ?? 0) > 0
+            || currentDisturbance !== undefined;
+
         // 2. SMART DATA OVERLAY (InitialData from Voice)
         if (initialData) {
             initialAiDataRef.current = initialData;
@@ -178,22 +202,31 @@ export function useManualEntryHydration(params: HydrationParams): void {
                 const aiIrrigation = initialData.irrigation.find(isCompletedIrrigationEvent);
                 const infra = activePlot?.infrastructure;
                 const motorId = infra?.linkedMotorId || '';
-                const source = 'Well';
-                const method = infra?.irrigationMethod || defaults?.irrigation.method || 'drip';
+                // WAVE 2.1 (spec: dfes-companion-2026-07-11) — the plot's recorded
+                // irrigation hardware is a fact the FARMER entered about this plot, so it
+                // may stand in when the parse named no method. Nothing else may. The old
+                // tail — `defaults?.irrigation.method || 'drip'`, a `'Well'` source and a
+                // `defaults?.irrigation.defaultDuration ?? 2` duration — was app-authored
+                // throughout: `ledgerDefaults` is seeded in useAppData (60 hours) and
+                // never persisted, so a farmer never supplied any of it. Doctrine P4: no
+                // default fills a bucket the farmer did not fill.
+                const method = infra?.irrigationMethod || '';
 
                 if (aiIrrigation) {
                     newIrrigationMap[globalActivity.id] = {
                         id: `irr_${Date.now()}`,
                         method: aiIrrigation.method !== 'unknown' && aiIrrigation.method ? aiIrrigation.method : method,
-                        source: aiIrrigation.source !== 'unknown' && aiIrrigation.source ? aiIrrigation.source : source,
-                        durationHours: aiIrrigation.durationHours ?? defaults?.irrigation.defaultDuration ?? 2,
+                        source: aiIrrigation.source !== 'unknown' && aiIrrigation.source ? aiIrrigation.source : '',
+                        durationHours: aiIrrigation.durationHours,
                         waterVolumeLitres: aiIrrigation.waterVolumeLitres,
                         motorId: motorId,
                         linkedActivityId: globalActivity.id,
                         notes: aiIrrigation.notes,
                         issue: aiIrrigation.issue,
                         sourceText: aiIrrigation.sourceText,
-                        systemInterpretation: aiIrrigation.systemInterpretation
+                        systemInterpretation: aiIrrigation.systemInterpretation,
+                        // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11)
+                        provenanceVerified: aiIrrigation.provenanceVerified
                     };
                 }
             }
@@ -204,12 +237,14 @@ export function useManualEntryHydration(params: HydrationParams): void {
                     const labourEntryId = index === 0 ? globalActivity.id : (aiLabour.id || `ai_labour_${index}`);
                     newLabourMap[labourEntryId] = {
                         id: aiLabour.id || `lab_${Date.now()}_${index}`,
+                        // WAVE 2.1 — an unnamed engagement is not 'HIRED' and unnamed work
+                        // is not "Field Work 1". Both are left blank for the farmer to fill.
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- AI payload type is open string; narrowed downstream
-                        type: (aiLabour.type as any) || 'HIRED',
+                        type: (aiLabour.type as any),
                         count: aiLabour.count || 0,
                         maleCount: aiLabour.maleCount,
                         femaleCount: aiLabour.femaleCount,
-                        activity: aiLabour.activity || `Field Work ${index + 1}`,
+                        activity: aiLabour.activity,
                         linkedActivityId: labourEntryId,
                         // Labour V1 Task 7.5 — this literal rebuilds the labour event
                         // field by field rather than spreading it, so anything not
@@ -220,7 +255,9 @@ export function useManualEntryHydration(params: HydrationParams): void {
                         durationHours: aiLabour.durationHours,
                         labourAssignmentId: aiLabour.labourAssignmentId,
                         sourceText: aiLabour.sourceText,
-                        systemInterpretation: aiLabour.systemInterpretation
+                        systemInterpretation: aiLabour.systemInterpretation,
+                        // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11)
+                        provenanceVerified: aiLabour.provenanceVerified
                     };
                 });
             }
@@ -243,6 +280,13 @@ export function useManualEntryHydration(params: HydrationParams): void {
                     }
                     if (act.sourceText) globalActivity.sourceText = act.sourceText;
                     if (act.systemInterpretation) globalActivity.systemInterpretation = act.systemInterpretation;
+                    // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11) —
+                    // every parsed cropActivity is merged into one globalActivity
+                    // card (there is no per-item display here), so if ANY
+                    // contributing activity failed sourceText verification, the
+                    // merged card is flagged unverified. Never cleared back to
+                    // true once set by a later activity in the same parse.
+                    if (act.provenanceVerified === false) globalActivity.provenanceVerified = false;
                 });
             }
 
@@ -250,48 +294,66 @@ export function useManualEntryHydration(params: HydrationParams): void {
             if (initialData.inputs && initialData.inputs.length > 0) {
                 newInputMap[globalActivity.id] = initialData.inputs.map((inp, idx) => ({
                     id: `inp_${Date.now()}_${idx}`,
+                    // WAVE 2.1 — THE LOAD-BEARING PAIR. `|| 'pesticide'` plus the
+                    // `'Soil' : 'Spray'` tail together rewrote an untyped NPK fertiliser
+                    // into a sprayed pesticide, and the invented 'Spray' was in turn what
+                    // satisfied `hasSpray` and conjured a tractor below. Wave 3.4
+                    // classifies the day's work from exactly these two fields.
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- AI payload type is open string; narrowed downstream
-                    type: (inp.type as any) || 'pesticide',
+                    type: (inp.type as any),
                     quantity: inp.quantity || 0,
                     unit: inp.unit || 'unit',
                     linkedActivityId: globalActivity.id,
-                    method: inp.method || (inp.type === 'fertilizer' ? 'Soil' : 'Spray'),
+                    method: inp.method,
                     mix: (inp.mix && inp.mix.length > 0)
                         ? inp.mix.map((item, mixIdx) => ({
                             ...item,
                             id: item.id || `mix_${Date.now()}_${idx}_${mixIdx}`,
-                            productName: item.productName || inp.productName || 'Unknown',
+                            productName: item.productName || inp.productName || '',
                             dose: item.dose ?? inp.quantity,
                             unit: item.unit || inp.unit || 'unit',
                         }))
                         : [{
                             id: `mix_${Date.now()}_${idx}`,
-                            productName: inp.productName || 'Unknown',
+                            // WAVE 2.1 — a product the parse could not name stays unnamed.
+                            // 'Unknown' reads on screen as a real product the farmer used.
+                            productName: inp.productName || '',
                             dose: inp.quantity,
                             unit: inp.unit || 'unit',
                         }],
                     sourceText: inp.sourceText,
-                    systemInterpretation: inp.systemInterpretation
+                    systemInterpretation: inp.systemInterpretation,
+                    // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11)
+                    provenanceVerified: inp.provenanceVerified
                 }));
             }
 
             // Handle Machinery
-            const hasSpray = initialData.inputs && initialData.inputs.some(i => i.method === 'Spray' || !i.method);
+            //
+            // WAVE 2.1 (spec: dfes-companion-2026-07-11) — THE WHOLE MACHINE IS GONE.
+            // The deleted `else if (hasSpray)` branch fired when the parse returned NO
+            // machinery at all, and invented an owned tractor running two hours off
+            // nothing but an input row with no delivery method. It did not stay on the
+            // screen either: ManualEntry POSTs the hydrated draft to
+            // `/shramsafal/corrections` as CorrectedParse — the farmer's own correction
+            // of the AI, asserting a tractor he never mentioned. There is no machinery
+            // row unless the parse heard one, and its fields stay blank unless it named
+            // them.
             if (initialData.machinery && initialData.machinery.length > 0) {
                 const aiMach = initialData.machinery[0];
                 newMachineryMap[globalActivity.id] = {
                     id: `mach_${Date.now()}`,
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- AI payload types are open strings; narrowed downstream
-                    type: (aiMach.type as any) || 'tractor',
+                    type: (aiMach.type as any),
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- AI payload types are open strings; narrowed downstream
-                    ownership: (aiMach.ownership as any) || 'owned',
-                    hoursUsed: aiMach.hoursUsed || 2,
+                    ownership: (aiMach.ownership as any),
+                    hoursUsed: aiMach.hoursUsed,
                     linkedActivityId: globalActivity.id,
                     sourceText: aiMach.sourceText,
-                    systemInterpretation: aiMach.systemInterpretation
+                    systemInterpretation: aiMach.systemInterpretation,
+                    // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11)
+                    provenanceVerified: aiMach.provenanceVerified
                 };
-            } else if (hasSpray) {
-                newMachineryMap[globalActivity.id] = { id: `mach_${Date.now()}_auto`, type: 'tractor', ownership: 'owned', hoursUsed: 2, linkedActivityId: globalActivity.id };
             }
 
             if (initialData.disturbance) {
@@ -316,7 +378,11 @@ export function useManualEntryHydration(params: HydrationParams): void {
                         textCleaned: o.textCleaned || o.textRaw,
                         noteType: o.noteType || 'observation',
                         severity: o.severity || 'normal',
-                        aiConfidence: o.aiConfidence || 90,
+                        // WAVE 2.1 — an unscored observation stays unscored. 90 sits above
+                        // the `< 60` threshold ObservationEventCard uses to render its
+                        // low-confidence caveat, so the invented figure suppressed the one
+                        // signal telling the farmer the machine was unsure.
+                        aiConfidence: o.aiConfidence,
                         tags: o.tags || []
                     });
                 });
@@ -326,12 +392,24 @@ export function useManualEntryHydration(params: HydrationParams): void {
                     currentTasks.push({
                         id: `task_${crypto.randomUUID()}`,
                         title: pt.title, status: 'suggested' as PlannedTask['status'], priority: 'normal' as PlannedTask['priority'], plotId: activePlot?.id || '', createdAt: new Date().toISOString(), sourceType: 'ai_extracted' as PlannedTask['sourceType'], description: pt.dueHint || undefined,
-                        sourceText: pt.sourceText, systemInterpretation: pt.systemInterpretation
+                        sourceText: pt.sourceText, systemInterpretation: pt.systemInterpretation,
+                        // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11)
+                        provenanceVerified: pt.provenanceVerified
                     });
                 });
             }
             if (initialData.fullTranscript) setTranscript(initialData.fullTranscript);
         }
+
+        // task-0b — DECLARE THE ORIGIN. This runs on every pass that actually fills the
+        // form, so the marker always describes the state being committed just below.
+        // The two early returns above are deliberately NOT covered: neither touches the
+        // form, so the marker from the run that DID fill it stays correct (in
+        // particular the `hasVoiceDataBeenApplied` return, which fires right after a
+        // draft was applied and must not downgrade it to 'blank').
+        formOriginRef.current = initialData
+            ? 'prefilled-draft'
+            : (filledFromExistingLogs ? 'existing-log' : 'blank');
 
         // Apply Final State
         setCropActivities([globalActivity]);

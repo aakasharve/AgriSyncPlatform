@@ -17,7 +17,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { resetAndSeed } from '../fixtures/seed.api';
-import { loginViaPassword } from '../fixtures/loginHelper';
+import { loginViaPassword, passConsentGateIfPresent } from '../fixtures/loginHelper';
 
 test.describe('Login', () => {
     test('login with seeded user lands on home', async ({ page }) => {
@@ -35,6 +35,10 @@ test.describe('Login', () => {
         // Negative test — cannot use loginViaPassword (it asserts success).
         // Inline the toggle-to-password flow with a WRONG password.
         await page.goto('/');
+
+        // The consent gate renders in front of LoginPage on every logged-out boot,
+        // so this inlined flow needs the same pass-through the helper does.
+        await passConsentGateIfPresent(page);
 
         const useLegacyButton = page.getByRole('button', { name: /password.*legacy|पासवर्डने/i });
         await useLegacyButton.waitFor({ timeout: 15_000 });

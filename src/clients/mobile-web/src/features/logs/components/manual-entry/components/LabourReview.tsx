@@ -4,7 +4,14 @@
  */
 
 import React from 'react';
+import { HelpCircle } from 'lucide-react';
 import { LabourEvent } from '../../../../../types';
+import { t as translateForced } from '../../../../../i18n/translations';
+
+// Font rule (CHARTER): Marathi body text -> Noto Sans Devanagari. The
+// "not certain I heard this" flag is Marathi copy shown inline with the
+// farmer's own transcript quote, so it must set this explicitly.
+const MARATHI_BODY = "'Noto Sans Devanagari', sans-serif";
 
 interface LabourReviewProps {
     labourEntries: LabourEvent[];
@@ -36,6 +43,20 @@ const LabourReview: React.FC<LabourReviewProps> = ({ labourEntries, totalWorkerC
                                 {entry.count || ((entry.maleCount || 0) + (entry.femaleCount || 0))} workers
                             </span>
                         </div>
+                        {entry.provenanceVerified === false && (entry.sourceText || entry.systemInterpretation) && (
+                            <div
+                                data-testid="provenance-unverified-flag"
+                                className="mt-2 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50/80 px-2.5 py-1.5"
+                            >
+                                <HelpCircle size={13} className="mt-0.5 flex-shrink-0 text-amber-500" />
+                                <span
+                                    className="text-[11px] font-semibold leading-snug text-amber-700"
+                                    style={{ fontFamily: MARATHI_BODY }}
+                                >
+                                    {translateForced('voice.unverifiedSourceLabel', 'mr')}
+                                </span>
+                            </div>
+                        )}
                         {entry.sourceText && (
                             <p className="mt-2 text-xs italic text-stone-500">"{entry.sourceText}"</p>
                         )}

@@ -30,6 +30,7 @@ import {
     sumMachineryCost,
     sumExpenseCost,
 } from '../../../core/domain/helpers/log-factory-helpers';
+import { inputsOweWater } from './productWaterAffinity';
 
 // =============================================================================
 // PROVENANCE DERIVATION (W1.P2 / C-1 fix)
@@ -275,6 +276,12 @@ function scoreWHAT(log: AgriLogResponse, ctx: ScoreContext): VlogScoreDimension 
  * Rationale: The core question is "did the farmer tell us what they applied
  * and at what rate?" Product name is required; dose/unit on a mix item
  * is the "grade" signal.
+ *
+ * FOUNDER DECISION 14 (2026-08-16) DELIBERATELY DOES NOT REACH HERE. The product rule
+ * retires the WATER question, not the dose one — a dry fertiliser broadcast by hand still
+ * has a quantity, and it is a quantity the farmer can state ("एक पोती"). Spec Ruling 2 says
+ * it plainly: a dry input "may owe product, dose; must not owe water". Applying the
+ * affinity rule to DOSE would silence a question he could have answered.
  */
 function scoreDOSE(log: AgriLogResponse, ctx: ScoreContext): VlogScoreDimension {
     const inputs: InputEvent[] = log.inputs ?? [];
@@ -355,6 +362,15 @@ function scoreSCOPE(log: AgriLogResponse, ctx: ScoreContext): VlogScoreDimension
  *   - 1.0: carrierCount + carrierType (or computedWaterVolume) present on any input
  *
  * Rationale: Carrier is about "how was it delivered" — volume + machine context.
+ *
+ * FOUNDER DECISION 14 (2026-08-16) — a day whose every named product is DRY owes no
+ * water at all, and the dimension goes NOT-APPLICABLE rather than sitting at coverage 0.
+ * A farmer who broadcast a bag of DAP by hand was being charged 10 points for not stating
+ * a water volume that does not exist, and — because this is what the client ranks gaps by
+ * (`meterGaps.ts`) — Sathi would then choose "how much water did you use?" as the one
+ * question of his day. It is decided from the PRODUCT, never from `inputs[].method`:
+ * 0:52:34 still owes water with `method: 'Soil'`, DAP does not with `method: 'Spray'`, and
+ * an unrecognised product keeps asking. See `productWaterAffinity.ts`.
  */
 function scoreCARRIER(log: AgriLogResponse, ctx: ScoreContext): VlogScoreDimension {
     const inputs: InputEvent[] = log.inputs ?? [];
@@ -377,6 +393,12 @@ function scoreCARRIER(log: AgriLogResponse, ctx: ScoreContext): VlogScoreDimensi
         // Tuning (1b): on a day with no inputs AND no irrigation, the carrier
         // question is not relevant — mark it N/A so it doesn't penalise the
         // denominator for days that simply aren't delivery operations.
+        return makeDim('CARRIER', false, 0, ctx);
+    }
+
+    // Decision 14. Reached ONLY on the input branch — a pure-irrigation day returned
+    // above, so the product rule can never touch "how did you deliver the water?".
+    if (!inputsOweWater(inputs)) {
         return makeDim('CARRIER', false, 0, ctx);
     }
 

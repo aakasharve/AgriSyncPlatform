@@ -13,6 +13,26 @@
 // retained clip the user owns. Per-clip semantics would push the
 // listing concern to the worker; the port owns it instead.
 //
+// spec: dfes-companion-2026-07-11 (farm-memory) — ADR-DS-017.
+// Two things changed here and they are worth separating.
+//
+// First, the "only caller is ErasureWorker" sentence above became
+// briefly untrue: RetentionSweepWorker started calling this method with
+// a candidate set it had computed PER CLIP, so one aged recording
+// destroyed every recording its owner had. The sweep no longer deletes
+// retained voice at all (ADR-DS-017 (b) — Farm Memory ends by the
+// farmer's decision, never by a clock), which puts the sentence back in
+// force: whole-user is the right shape precisely because erasure and
+// account closure are the only two things that legitimately mean "all
+// of it".
+//
+// Second, the method used to return a bare Task, so a caller could not
+// tell "I deleted the audio" from "I dropped the pointer and left the
+// audio where it was". ErasureWorker then reported a completed purge
+// either way. It now returns RetainedVoiceDeletionOutcome so the caller
+// can say only what actually happened — founder ITEM 4's HARD RULE and
+// doctrine P4.
+//
 // Architecture rules:
 //   - Pure Application port — no Infrastructure types.
 //   - Result types live alongside in this file so the port is
@@ -26,47 +46,6 @@
 using ShramSafal.Domain.Privacy;
 
 namespace ShramSafal.Application.Privacy.Ports;
-
-/// <summary>
-/// What <see cref="IRetainedBlobStore.DeleteRetainedVoiceForUserAsync"/> actually
-/// did, so the DPDP §12 erasure record can state it instead of guessing.
-/// </summary>
-public enum RetainedVoiceDeletionOutcome
-{
-    /// <summary>
-    /// The subject had no rows in <c>ssf.voice_clips_retained</c>. There was
-    /// nothing to purge and the tier is clear for this subject.
-    /// </summary>
-    NothingToDelete = 0,
-
-    /// <summary>
-    /// Every S3 object was deleted (or already absent) and the metadata rows
-    /// were removed. The tier is genuinely purged.
-    /// </summary>
-    Deleted = 1,
-
-    /// <summary>
-    /// ⚠️ Rows existed, but no bucket is configured, so the metadata rows were
-    /// removed WITHOUT any S3 object being touched.
-    ///
-    /// <para>
-    /// <b>This is residue, not success, and the reasoning is not speculative.</b>
-    /// <c>PersistAsync</c> throws when <c>BucketName</c> is blank, so a
-    /// <c>voice_clips_retained</c> row can only have been written while a bucket
-    /// WAS configured — which means the S3 object was written too. Reaching this
-    /// outcome therefore means the farmer's audio is still in the bucket while
-    /// the rows that located it have just been deleted.
-    /// </para>
-    ///
-    /// <para>
-    /// It is reachable through a documented operational procedure, not only by
-    /// misconfiguration: <c>aws/voice-retained/README.md:148</c> offers blanking
-    /// <c>RetainedBlobStore__BucketName</c> and redeploying as a "safer
-    /// alternative" whose stated effect is "clips remain in S3 untouched".
-    /// </para>
-    /// </summary>
-    SkippedNoBucketConfigured = 2,
-}
 
 public interface IRetainedBlobStore
 {
@@ -88,14 +67,10 @@ public interface IRetainedBlobStore
     /// completes successfully (idempotent on second call).
     /// </para>
     /// </summary>
-    /// <para>
-    /// <b>Returns what it actually did.</b> A bare <c>Task</c> forced the caller
-    /// to infer "no exception ⇒ purged", and that inference is wrong for the
-    /// no-bucket short-circuit — see
-    /// <see cref="RetainedVoiceDeletionOutcome.SkippedNoBucketConfigured"/>.
-    /// The erasure audit record states this outcome verbatim rather than
-    /// collapsing it to a boolean.
-    /// </para>
+    /// <returns>
+    /// What actually happened, so the caller can report the truth rather
+    /// than its intent. See <see cref="RetainedVoiceDeletionOutcome"/>.
+    /// </returns>
     Task<RetainedVoiceDeletionOutcome> DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct);
 
     /// <summary>
@@ -144,6 +119,125 @@ public interface IRetainedBlobStore
         DateOnly from,
         DateOnly to,
         CancellationToken ct);
+}
+
+/// <summary>
+/// spec: dfes-companion-2026-07-11 (farm-memory) — what a retained-voice
+/// deletion actually did, as opposed to what it was asked to do.
+///
+/// <para>
+/// The distinction is load-bearing rather than decorative. Deleting a
+/// retained clip means removing two separate things from two separate
+/// stores: the ciphertext in the bucket and the metadata row that points
+/// at it. Before this type existed the port returned a bare
+/// <see cref="Task"/>, so every path — object deleted, nothing there to
+/// begin with, and bucket not configured so nothing was even attempted —
+/// came back identical, and the callers reported all three as a
+/// completed deletion. Founder ITEM 4 carries a HARD RULE against
+/// exactly that: never tell a farmer something is deleted while the
+/// active copy is knowingly retained. Doctrine P4 says the same thing
+/// about numbers.
+/// </para>
+/// </summary>
+public enum RetainedVoiceDeletionStatus
+{
+    /// <summary>
+    /// At least one clip was found and removed — object and row both.
+    /// The only status a caller may report to a principal as "deleted".
+    /// </summary>
+    Deleted,
+
+    /// <summary>
+    /// The user owned no retained clips. Nothing was removed because
+    /// there was nothing to remove; a repeat call after a successful
+    /// delete lands here, which is what makes the operation idempotent.
+    /// Safe to report as "no retained voice remains".
+    /// </summary>
+    NothingToDelete,
+
+    /// <summary>
+    /// Rows exist but no bucket is configured, so the audio could not be
+    /// touched. NOTHING is removed in this case — not even the metadata
+    /// row. Dropping the row while the object may still be sitting in a
+    /// bucket would destroy the only pointer to it, making the audio
+    /// simultaneously unreachable by the farmer and undeleted in fact:
+    /// the worst of both, and unrecoverable on retry. A caller seeing
+    /// this MUST NOT report a completed deletion.
+    ///
+    /// <para>
+    /// That the object is still there is not speculation.
+    /// <c>PersistAsync</c> refuses to write while <c>BucketName</c> is
+    /// blank, so a <c>voice_clips_retained</c> row can only have been
+    /// created while a bucket WAS configured — which means the object
+    /// was written too. Rows present on this branch therefore point at
+    /// audio that exists.
+    /// </para>
+    ///
+    /// <para>
+    /// And the branch is reachable by a documented procedure, not only
+    /// by a typo: <c>aws/voice-retained/README.md:148</c> offers blanking
+    /// <c>RetainedBlobStore__BucketName</c> and redeploying as a "safer
+    /// alternative", whose stated effect is "clips remain in S3
+    /// untouched". Removing the rows here would make that supported
+    /// rollback silently destroy the farmer's index to their own audio.
+    /// </para>
+    /// </summary>
+    SkippedNoBucketConfigured,
+}
+
+/// <summary>
+/// Result of a retained-voice deletion. Carries the counts alongside the
+/// status so an audit row can record magnitude, not just outcome.
+/// </summary>
+/// <param name="Status">Which of the three things happened.</param>
+/// <param name="BlobsDeleted">
+/// Objects the adapter issued a delete for and did not see refused. An
+/// object already absent counts here: a re-run finding it gone is the
+/// deletion succeeding, not failing.
+/// </param>
+/// <param name="MetadataRowsRemoved">
+/// Rows removed from <c>ssf.voice_clips_retained</c>. Equals
+/// <paramref name="BlobsDeleted"/> on the happy path; zero whenever the
+/// blob half could not be performed.
+/// </param>
+public sealed record RetainedVoiceDeletionOutcome(
+    RetainedVoiceDeletionStatus Status,
+    int BlobsDeleted,
+    int MetadataRowsRemoved)
+{
+    /// <summary>The user held no retained clips.</summary>
+    public static readonly RetainedVoiceDeletionOutcome Nothing =
+        new(RetainedVoiceDeletionStatus.NothingToDelete, 0, 0);
+
+    /// <summary>Both halves removed for <paramref name="count"/> clips.</summary>
+    public static RetainedVoiceDeletionOutcome Removed(int count) =>
+        new(RetainedVoiceDeletionStatus.Deleted, count, count);
+
+    /// <summary>
+    /// <paramref name="clipsLeftInPlace"/> clips could not be touched
+    /// because no bucket is configured. Nothing was removed.
+    /// </summary>
+    public static RetainedVoiceDeletionOutcome SkippedNoBucket(int clipsLeftInPlace) =>
+        new(RetainedVoiceDeletionStatus.SkippedNoBucketConfigured, 0, 0)
+        {
+            ClipsLeftInPlace = clipsLeftInPlace,
+        };
+
+    /// <summary>
+    /// How many clips the caller asked about that are still present and
+    /// still pointed at by a live row. Non-zero only on
+    /// <see cref="RetainedVoiceDeletionStatus.SkippedNoBucketConfigured"/>.
+    /// </summary>
+    public int ClipsLeftInPlace { get; init; }
+
+    /// <summary>
+    /// True when the caller may honestly say the retained voice is gone.
+    /// False means an active copy may survive and must not be described
+    /// as deleted (founder ITEM 4 HARD RULE).
+    /// </summary>
+    public bool CanBeReportedAsDeleted =>
+        Status is RetainedVoiceDeletionStatus.Deleted
+                or RetainedVoiceDeletionStatus.NothingToDelete;
 }
 
 /// <summary>

@@ -64,6 +64,13 @@ export interface Translations {
         orTypeHere: string;
         checkInput: string;
         micError: string;
+        /**
+         * spec: dfes-companion-2026-07-11 (wave-4.3) — shown when the OS DENIES the
+         * microphone, in place of the generic error. Refusing a device permission is not
+         * a withdrawal of consent and must never read as the end of the road: the typing
+         * route is right below and stays enabled, so the message points at it.
+         */
+        micDeniedTypeInstead: string;
         selectCropFirst: string;
         tapToSelect: string;
         autoStopping: string;
@@ -71,6 +78,23 @@ export interface Translations {
         tapToStop: string;
         selectPlotAbove: string;
         startLogging: string;
+        savedTitle: string;
+        savedTranscriptBody: string;
+        savedAudioBody: string;
+        savedReassure: string;
+        /** Label above the editable "what you said" card on the post-voice
+         * review screen (spec: dfes-companion-2026-07-11). Always read via
+         * forced 'mr' — Sathi's transcript of the farmer's own words is
+         * always shown in Marathi regardless of UI language. */
+        transcriptHeardLabel: string;
+        /** Gentle "please check this" flag next to an AI-extracted item whose
+         * sourceText the backend could NOT verify against the voice
+         * transcript (spec: dfes-companion-2026-07-11 anti-fabrication
+         * guardrail — see AiResponseNormalizer.cs provenanceVerified). This
+         * is NOT an error/accusation — the farmer keeps or removes the item
+         * via the existing edit/delete controls. Always read via forced
+         * 'mr', same as transcriptHeardLabel. */
+        unverifiedSourceLabel: string;
     };
 
     // Reflect Page
@@ -229,6 +253,32 @@ export interface Translations {
         loading: string;
         error: string;
         add: string;
+        /** "Today". DailySummaryCard already referenced `common.today`; the key
+         *  never existed, so the card rendered the literal string
+         *  "COMMON.TODAY" (uppercased) at the head of the farmer's day. */
+        today: string;
+        /** Universal "go back" affordance label. `profile.back` already carried
+         *  the same word for the setup wizard; this is its home for surfaces
+         *  outside Profile (e.g. the post-save screen's back control). */
+        back: string;
+    };
+    /**
+     * spec: dfes-companion-2026-07-11 (wave-4.1) — first-open consent gate CHROME ONLY.
+     *
+     * The notice itself deliberately does NOT live here. It lives in
+     * `features/consent/gate/consentNotice.ts` as one addressable, versioned document,
+     * because wave-4.2 stores a cryptographic hash of the exact notice displayed and a
+     * hash is only worth something if the thing hashed is the thing rendered. Scattering
+     * legal sentences across translation keys makes that impossible to guarantee.
+     *
+     * Everything below is an affordance label or an error — nothing here makes a legal
+     * statement, and nothing here is part of the hashed notice.
+     */
+    consentGate: {
+        /** Accessible name for the मराठी | English switcher. */
+        languageGroupLabel: string;
+        /** Shown when the two legal records could not be written. Never a silent pass. */
+        saveFailed: string;
     };
 
     /**
@@ -277,6 +327,7 @@ export const translations: Record<Language, Translations> = {
             orTypeHere: 'Or type here...',
             checkInput: 'Check Input',
             micError: 'Could not access microphone. Please ensure permissions are granted.',
+            micDeniedTypeInstead: 'The microphone is off. That is fine — type below and everything still works.',
             selectCropFirst: 'First Choose the crop or plot where you worked today',
             tapToSelect: 'Tap to Select',
             autoStopping: 'Auto-stopping in {seconds}s...',
@@ -284,6 +335,12 @@ export const translations: Record<Language, Translations> = {
             tapToStop: 'Tap icon to stop',
             selectPlotAbove: 'Select a plot using the pills above',
             startLogging: 'Start Logging',
+            savedTitle: 'Your voice is saved',
+            savedTranscriptBody: 'I heard your words and kept them safely. I will finish understanding them soon.',
+            savedAudioBody: 'I saved your recording safely. I will listen again and understand it soon.',
+            savedReassure: 'Your day is counted. Nothing is lost.',
+            transcriptHeardLabel: 'You said:',
+            unverifiedSourceLabel: "I'm not sure I heard this — is it right?",
         },
         reflectPage: {
             timeline: 'Timeline',
@@ -430,6 +487,14 @@ export const translations: Record<Language, Translations> = {
             loading: 'Loading...',
             error: 'Error',
             add: 'Add',
+            today: 'Today',
+            back: 'Back',
+        },
+        // First-open consent gate — chrome only (wave-4.1). The notice text is in
+        // features/consent/gate/consentNotice.ts.
+        consentGate: {
+            languageGroupLabel: 'Choose language',
+            saveFailed: 'We could not save this. Please check your connection and try again.',
         },
         sync: syncTranslations.en,
         shramSathi: shramSathiTranslations.en,
@@ -470,6 +535,7 @@ export const translations: Record<Language, Translations> = {
             orTypeHere: 'किंवा इथे टाइप करा...',
             checkInput: 'इनपुट तपासा',
             micError: 'माइक वापरता आला नाही. कृपया परवानगी द्या.',
+            micDeniedTypeInstead: 'माइक बंद आहे. हरकत नाही — खाली लिहून सगळं तसंच करता येतं.',
             selectCropFirst: 'प्रथम आज काम केलेले पीक किंवा प्लॉट निवडा',
             tapToSelect: 'निवडण्यासाठी दाबा',
             autoStopping: '{seconds} सेकंदात आपोआप थांबेल...',
@@ -477,6 +543,12 @@ export const translations: Record<Language, Translations> = {
             tapToStop: 'थांबवण्यासाठी दाबा',
             selectPlotAbove: 'वरील गोळ्या वापरून प्लॉट निवडा',
             startLogging: 'नोंद सुरू करा',
+            savedTitle: 'तुमचा आवाज जपून ठेवला आहे',
+            savedTranscriptBody: 'तुमचे शब्द मी ऐकले आणि सुरक्षित ठेवले. लवकरच ते पूर्णपणे समजून घेईन.',
+            savedAudioBody: 'तुमची नोंद मी सुरक्षित ठेवली आहे. पुन्हा ऐकून लवकरच समजून घेईन.',
+            savedReassure: 'तुमचा आजचा दिवस मोजला गेला आहे. काहीही हरवलेले नाही.',
+            transcriptHeardLabel: 'तुम्ही सांगितलं:',
+            unverifiedSourceLabel: 'हे मी नक्की ऐकलं नाही — बरोबर आहे का?',
         },
         reflectPage: {
             timeline: 'टाइमलाइन',
@@ -623,6 +695,19 @@ export const translations: Record<Language, Translations> = {
             loading: 'लोड होत आहे...',
             error: 'चूक',
             add: 'जोडा',
+            // AGENT-DRAFTED 2026-08-14 — needs founder approval. One word, and
+            // it is the same आज the founder's own dfes strings already open with
+            // ("आजची सगळी कामे…", "आजचं सगळं सांगून झालं का?").
+            today: 'आज',
+            // Same word already shipping at profile.back and rendered today by
+            // ProfilePage / SetupHubMenu / FirstFarmWizard — not a new phrasing.
+            back: 'मागे',
+        },
+        // First-open consent gate — chrome only (wave-4.1). The notice text is in
+        // features/consent/gate/consentNotice.ts.
+        consentGate: {
+            languageGroupLabel: 'भाषा निवडा',
+            saveFailed: 'हे साठवता आलं नाही. इंटरनेट तपासून पुन्हा प्रयत्न करा.',
         },
         sync: syncTranslations.mr,
         shramSathi: shramSathiTranslations.mr,

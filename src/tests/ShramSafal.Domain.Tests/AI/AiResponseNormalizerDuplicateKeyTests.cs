@@ -107,7 +107,20 @@ public sealed class AiResponseNormalizerDuplicateKeyTests
 
         var root = JsonNode.Parse(resultJson)!.AsObject();
 
-        Assert.Equal("Log processed.", root["summary"]!.GetValue<string>());
+        // The summary is BLANK, not "Log processed.".
+        //
+        // This assertion used to expect that sentence. It was superseded by
+        // spec dfes-companion-2026-07-11 (WAVE 2.2): a farmer who said nothing
+        // intelligible has no summary, and injecting one on his behalf is a
+        // fabricated claim about his day. It also scored — hasSummary counted
+        // 0.5 on WHAT — so the invented sentence handed him 2/10 for a day he
+        // never described. Doctrine P4: no fabricated content reaches a farmer.
+        //
+        // The test's real subject is unchanged and still asserted below:
+        // malformed JSON must still fall back to SAFE defaults rather than
+        // throwing. Safe now means honestly empty.
+        // AiResponseNormalizerSummaryTests already asserts BeEmpty() and passes.
+        Assert.Equal(string.Empty, root["summary"]!.GetValue<string>());
         Assert.Empty(root["cropActivities"]!.AsArray());
         Assert.Empty(root["labour"]!.AsArray());
     }

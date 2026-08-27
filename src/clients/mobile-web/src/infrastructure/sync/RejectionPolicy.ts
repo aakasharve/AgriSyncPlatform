@@ -70,6 +70,64 @@ const PERMANENT_REJECTION_CODES: readonly string[] = [
     'DUPLICATE_KEY',
     'NOT_FOUND',
     'GONE',
+
+    // -----------------------------------------------------------------------
+    // P0.6, SECOND OCCURRENCE — the wire codes ShramSafal actually sends.
+    //
+    // DO NOT DELETE THESE AS DUPLICATES OF THE UNDERSCORED ENTRIES ABOVE.
+    // They are not duplicates. `normalizeCode` keeps only the tail after the
+    // last dot and upper-cases it — it does NOT insert word separators. So
+    // `ShramSafal.InvalidCommand` normalises to `INVALIDCOMMAND`, which the
+    // underscored `INVALID_COMMAND` never matches. The underscored spellings
+    // are the abstract ErrorKind vocabulary; these are the strings that come
+    // off the wire. Both have to be named. This is the identical mistake the
+    // `SyncInvalidPayload` note above was written about, made again in the
+    // codes below, which is why they get a block and not a one-liner.
+    //
+    // WHY `VerificationTransitionNotAllowedForRole` IS HERE — the O-4 chain:
+    //   1. Founder decision O-4 (LABOUR_PHASE2 Phase 5) replaced the owner-only
+    //      check in `ShramSafalAuthorizationEnforcer` with `LabourManagementGate`
+    //      (`ShramSafalAuthorizationEnforcer.cs:151`), so a Mukadam now PASSES
+    //      the enforcer instead of being stopped there.
+    //   2. `VerifyLogHandler.cs:148` then refuses the transition deeper, in the
+    //      state machine, with the accurate code
+    //      `ShramSafal.VerificationTransitionNotAllowedForRole`.
+    //   3. Before O-4 that same refusal arrived as `ShramSafal.Forbidden`,
+    //      which IS listed above and parked correctly. The refusal did not
+    //      change; only the code did, and the client never learned the new one.
+    // So this entry is load-bearing for a path that a passing test suite would
+    // not have caught: without it a permanently-refused approval re-pushes
+    // every 15s to the retry cap and parks in `FAILED`, which
+    // `ConflictResolutionService.list()` reads for the CAP-EXHAUSTED subset
+    // only — the farmer is told late, by a chip with no hint, or not at all.
+    // The server is right to be specific. The client is what had to learn it.
+    //
+    // ADMISSION RULE FOR THIS BLOCK (apply it before adding anything):
+    // a code belongs here only when NOTHING can change the server's answer —
+    // not waiting, and not another mutation this client may still be holding.
+    // In practice that is exactly two families:
+    //   (a) ROLE / AUTHORISATION refusals — no queued mutation changes who the
+    //       caller is, so the next push gets the same answer as this one.
+    //   (b) COMMAND-SHAPE refusals — the bytes are the bytes. Re-sending them
+    //       unchanged is re-asking a question already answered.
+    // Deliberately NOT admitted: `*NotFound` (a statement about a DIFFERENT
+    // row — see `DEPENDENCY_PENDING_CODE` below), `*InvalidState`, and anything
+    // whose truth depends on the order rows land in. Those self-heal, and
+    // parking them would make the farmer resolve a conflict that was about to
+    // resolve itself (`P9`).
+
+    // (a) role / authorisation — the caller's role is not going to change
+    //     between two pushes of the same queue.
+    'VerificationTransitionNotAllowedForRole',
+    'TestRoleNotAllowed',
+    'ComplianceSignalRoleNotAllowed',
+    'JobCardRoleNotAllowed',
+
+    // (b) command shape — identical bytes, identical verdict, forever.
+    'InvalidCommand',
+    'InvalidVerificationReason',
+    'InvalidVerificationStatus',
+    'ComplianceSignalNoteRequired',
 ];
 
 const PERMANENT_SET = new Set(

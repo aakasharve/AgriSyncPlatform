@@ -1,0 +1,539 @@
+// spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-3)
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
+using System.Threading.Tasks;
+using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Persistence; // TenantContext
+using AgriSync.SharedKernel.Contracts.Ids;
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
+using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Dfes.RecordQuestionEvent;
+using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
+using ShramSafal.Domain.Dfes;
+using ShramSafal.Domain.Logs;
+using ShramSafal.Infrastructure;
+using ShramSafal.Infrastructure.Persistence;
+using Xunit;
+
+namespace ShramSafal.Sync.IntegrationTests.Dfes;
+
+/// <summary>
+/// FOUNDER RULING A (2026-08-14) — <b>answering Sathi's question must raise the day's
+/// score.</b>
+///
+/// <para><b>Why this must be an integration test.</b> The crediting rule itself is unit
+/// tested in <c>DfesLensExtractorAnsweredGapTests</c>, but that proves only that the
+/// extractor credits a gap it is HANDED. The farmer-facing promise spans four seams the
+/// unit suite cannot see at once: the question event is really persisted; the repository
+/// really finds it again for that farm and that local day (through RLS, off a UTC column
+/// with no local_date of its own); <c>RecomputeAsync</c> really loads it; and the new
+/// aggregate really lands in the row the read path serves. A fake repository can satisfy
+/// every one of those in memory while the real one returns nothing — which would leave the
+/// farmer answering, watching the number stay still, and stopping.</para>
+///
+/// <para><b>The scenario.</b> A day with one spraying task and nothing else. DOSE is OWED
+/// by the operation (dfes-3) and sits at coverage 0 — the farmer sprayed but has not said
+/// with how much. Sathi asks <c>gap.dose</c>; he answers "250 ml". The stored score must be
+/// strictly higher afterwards, and the DOSE row of the stored roster must be the reason.</para>
+///
+/// <para><b>The honesty guards.</b> Test 2 dismisses the SAME question. Silence is not an
+/// answer (doctrine P4), so the number must not move — without this, "answering raises the
+/// score" could be satisfied by a rule that rewards the mere act of dismissing a card. It
+/// also pins the COST guard: the client fires recordOutcome on every card interaction, so a
+/// dismissal must not rebuild the whole day, while the telemetry row must still land.
+/// Test 3 submits the one shape <c>TryFrom</c> cannot judge — a SKIPPED row carrying text —
+/// and proves the repository read excludes it, which is what makes the shipped
+/// "a skip yields nothing" docstring true rather than merely aspirational.</para>
+///
+/// <para><b>Native :5433, opt-in, self-skipping.</b> Follows
+/// <c>DailyRichnessAggregateTrackedWriteTests</c> verbatim — same <c>RequiresPostgres</c>
+/// trait, same scratch-database lifecycle, same admin-elevate + manual-GUC write posture
+/// that dodges the <c>TenantConnectionInterceptor</c> SET LOCAL rows-affected desync. It
+/// creates its OWN scratch database and drops it on dispose; it never touches
+/// <c>agrisync_dev</c> data. A skipped run is printed as <c>[SKIPPED]</c> and proves
+/// nothing.</para>
+/// </summary>
+[Trait("Category", "RequiresPostgres")]
+public sealed class AnswerRaisesScoreTests(Xunit.Abstractions.ITestOutputHelper output)
+    : IAsyncLifetime
+{
+    private const string AppRoleUser = IntegrationPostgres.AppRoleUser;
+    private static string AppRolePassword => IntegrationPostgres.AppRolePassword;
+
+    private static readonly Guid FarmId = Guid.Parse("dfe5a000-0000-0000-0000-000000000001");
+    private static readonly Guid OwnerUserId = Guid.Parse("dfe5a000-0000-0000-0000-000000000002");
+    private static readonly Guid OwnerAccountId = Guid.Parse("dfe5a000-0000-0000-0000-000000000003");
+    private static readonly Guid PlotId = Guid.Parse("dfe5a000-0000-0000-0000-000000000004");
+    private static readonly Guid CropCycleId = Guid.Parse("dfe5a000-0000-0000-0000-000000000005");
+
+    // One date per test so the proofs never contend on ux_daily_richness_farm_local_date.
+    private static readonly DateOnly AnsweredDate = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+    private static readonly DateOnly SilentDate = AnsweredDate.AddDays(-1);
+    private static readonly DateOnly SkippedWithTextDate = AnsweredDate.AddDays(-2);
+
+    // 09:00 UTC is 14:30 IST — the middle of the working day, so the instant sits
+    // unambiguously inside its local date under ANY sane +05:30 conversion. The test
+    // therefore does not have to borrow production's date rule to know which day it means.
+    private static DateTime MiddayUtc(DateOnly localDate)
+        => localDate.ToDateTime(new TimeOnly(9, 0), DateTimeKind.Utc);
+
+    // CompareEngine.Categorize buckets this as "spray", which is what makes the day OWE
+    // DOSE and CARRIER (dfes-3). A Marathi title such as "फवारणी" categorises as the
+    // generic "activity" and would owe neither — the gap being answered would not exist.
+    private const string SprayActivity = "Spraying";
+
+    private string _adminConn = string.Empty;
+    private string _superuserConn = string.Empty;
+    private string _appConn = string.Empty;
+    private string _scratchDbName = string.Empty;
+    private bool _skip;
+    private string _skipReason = string.Empty;
+    private ServiceProvider? _rootProvider;
+
+    public async Task InitializeAsync()
+    {
+        var baseConn = IntegrationPostgres.ResolveRootConnection();
+
+        // A genuinely ABSENT server self-skips; a server that answers and refuses us
+        // throws — a misconfigured credential must never masquerade as a clean skip.
+        var probeSkip = await IntegrationPostgres.ProbeOrSkipReasonAsync(baseConn);
+        if (probeSkip is not null)
+        {
+            _skip = true;
+            _skipReason = probeSkip;
+            return;
+        }
+
+        _adminConn = baseConn;
+        _scratchDbName = $"ssf_dfes_answer_{Guid.NewGuid():N}";
+        await using (var admin = new NpgsqlConnection(baseConn))
+        {
+            await admin.OpenAsync();
+            await using var create = admin.CreateCommand();
+            create.CommandText = $"CREATE DATABASE \"{_scratchDbName}\"";
+            await create.ExecuteNonQueryAsync();
+        }
+
+        output.WriteLine($"[PROVISIONED] scratch database '{_scratchDbName}' created on the real :5433 cluster.");
+
+        _superuserConn = new NpgsqlConnectionStringBuilder(baseConn) { Database = _scratchDbName }.ConnectionString;
+        _appConn = new NpgsqlConnectionStringBuilder(_superuserConn)
+        {
+            Username = AppRoleUser,
+            Password = AppRolePassword,
+        }.ConnectionString;
+
+        await IntegrationMigrationChain.ApplyAsync(_superuserConn);
+
+        // Seed parents as superuser (superuser bypasses RLS).
+        await using (var raw = new NpgsqlConnection(_superuserConn))
+        {
+            await raw.OpenAsync();
+            await SeedFarmAsync(raw);
+            await SeedFarmMembershipAsync(raw);
+            await SeedPlotAsync(raw);
+            await SeedCropCycleAsync(raw);
+        }
+
+        // Real Infrastructure DI, connected as agrisync_app so FORCE-RLS genuinely applies.
+        var services = new ServiceCollection();
+        services.AddLogging();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:ShramSafalDb"] = _appConn,
+                ["ConnectionStrings:ShramSafalDb_Migration"] = _superuserConn,
+                ["ConnectionStrings:UserDb"] = _appConn,
+            }!)
+            .Build();
+        services.AddSingleton<IConfiguration>(config);
+        services.AddShramSafalInfrastructure(config);
+        services.AddScoped<IIdGenerator, GuidIdGenerator>();
+        services.AddScoped<IClock, SystemClock>();
+        services.AddScoped<IDailyRichnessDerivationService, DailyRichnessDerivationService>();
+        services.AddScoped<RecordQuestionEventHandler>();
+
+        _rootProvider = services.BuildServiceProvider();
+    }
+
+    public async Task DisposeAsync()
+    {
+        if (_rootProvider is not null)
+        {
+            await _rootProvider.DisposeAsync();
+        }
+
+        if (!_skip && !string.IsNullOrEmpty(_scratchDbName) && !string.IsNullOrEmpty(_adminConn))
+        {
+            try
+            {
+                await using var admin = new NpgsqlConnection(_adminConn);
+                await admin.OpenAsync();
+                await using var terminate = admin.CreateCommand();
+                terminate.CommandText =
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = @db AND pid <> pg_backend_pid()";
+                terminate.Parameters.AddWithValue("db", _scratchDbName);
+                await terminate.ExecuteNonQueryAsync();
+                await using var drop = admin.CreateCommand();
+                drop.CommandText = $"DROP DATABASE IF EXISTS \"{_scratchDbName}\"";
+                await drop.ExecuteNonQueryAsync();
+            }
+            catch
+            {
+                // Best-effort teardown; a leaked scratch DB is harmless.
+            }
+        }
+    }
+
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.4) — <c>Assert.True(true, _skipReason)</c> here
+    /// used to report these proofs as PASSING on any runner without Postgres on :5433, having
+    /// exercised nothing. <c>Skip.If</c> (Xunit.SkippableFact) reports the run as Skipped —
+    /// visually and in exit-code terms distinct from both Passed and Failed — so a database-less
+    /// run can never be read as proof answering a gap question raises the score.
+    /// </summary>
+    private void SkipIfPostgresUnavailable()
+    {
+        if (_skip)
+        {
+            output.WriteLine($"[SKIPPED] {_skipReason} — NO DATABASE WAS EXERCISED; this run proves nothing.");
+        }
+
+        Skip.If(_skip, _skipReason);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PROOF 1 — answering a gap question raises the STORED day score.
+    // ─────────────────────────────────────────────────────────────────────────
+    [SkippableFact]
+    public async Task Answering_a_gap_question_raises_the_stored_day_score()
+    {
+        SkipIfPostgresUnavailable();
+
+        await SeedSprayingDayAsync(AnsweredDate);
+        await RecomputeAndCommitAsync(AnsweredDate);
+
+        var before = await ReadStoredDayAsync(AnsweredDate);
+        before.Score.Should().NotBeNull("the day has scorable work, so the farmer is shown a number");
+        Coverage(before.Roster, "DOSE").Should().Be(0.0,
+            "he sprayed but has not said with how much — DOSE is owed by the operation and unfilled, which is the gap Sathi asks about");
+
+        var result = await RecordQuestionEventAsync("gap.dose", response: "250 ml", AnsweredDate);
+        result.IsSuccess.Should().BeTrue("the command is both-approved and the caller owns the farm");
+
+        var after = await ReadStoredDayAsync(AnsweredDate);
+
+        after.Score.Should().BeGreaterThan(before.Score!.Value,
+            "founder ruling A — the farmer answered Sathi, so the number he is looking at must go UP before he looks away");
+        Coverage(after.Roster, "DOSE").Should().Be(1.0,
+            "the rise must come from the dimension he actually answered, not from anything else moving");
+        after.UpdatedAtUtc.Should().BeAfter(before.UpdatedAtUtc,
+            "a real answer must pass the handler's recompute guard and rebuild the day");
+
+        output.WriteLine("[EVIDENCE] === answering gap.dose raises the stored score (real Npgsql :5433) ===");
+        output.WriteLine($"[EVIDENCE] stored score  before = {before.Score}  after = {after.Score}");
+        output.WriteLine($"[EVIDENCE] DOSE coverage before = {Coverage(before.Roster, "DOSE")}  after = {Coverage(after.Roster, "DOSE")}");
+        output.WriteLine($"[EVIDENCE] aggregate rebuilt: updated_at_utc {before.UpdatedAtUtc:O} -> {after.UpdatedAtUtc:O}");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PROOF 2 — HONESTY GUARD + COST GUARD. A dismissal is silence, and silence
+    // never scores (doctrine P4). It must also not REBUILD the day: the client
+    // fires recordOutcome on every card interaction, so a recompute here would
+    // turn one INSERT into a full re-derivation plus an aggregate UPDATE on a
+    // single small prod instance. The telemetry row must still land.
+    // ─────────────────────────────────────────────────────────────────────────
+    [SkippableFact]
+    public async Task A_dismissal_is_recorded_but_neither_scores_nor_rebuilds_the_day()
+    {
+        SkipIfPostgresUnavailable();
+
+        await SeedSprayingDayAsync(SilentDate);
+        await RecomputeAndCommitAsync(SilentDate);
+
+        var before = await ReadStoredDayAsync(SilentDate);
+
+        var result = await RecordQuestionEventAsync("gap.dose", response: null, SilentDate);
+        result.IsSuccess.Should().BeTrue("the event is still recorded — telemetry is kept, it just earns nothing");
+
+        var after = await ReadStoredDayAsync(SilentDate);
+
+        after.Score.Should().Be(before.Score,
+            "the farmer told us nothing, so the number must not move — a score that rewards dismissing the card is a fabricated number (P4)");
+        Coverage(after.Roster, "DOSE").Should().Be(0.0, "DOSE is still unanswered");
+        after.UpdatedAtUtc.Should().Be(before.UpdatedAtUtc,
+            "the recompute guard must skip an event that can credit nothing — MarkUpdated is unconditional, so any rebuild would move this timestamp");
+        (await CountQuestionEventsAsync(SilentDate)).Should().Be(1,
+            "skipping the recompute must never skip the telemetry — the row is the point of the endpoint");
+
+        output.WriteLine("[EVIDENCE] === a dismissal earns nothing and rebuilds nothing (real Npgsql :5433) ===");
+        output.WriteLine($"[EVIDENCE] stored score    before = {before.Score}  after = {after.Score} (must be equal)");
+        output.WriteLine($"[EVIDENCE] updated_at_utc  before = {before.UpdatedAtUtc:O}");
+        output.WriteLine($"[EVIDENCE] updated_at_utc  after  = {after.UpdatedAtUtc:O} (must be identical — no rebuild)");
+        output.WriteLine("[EVIDENCE] question_events rows for the day = 1 (telemetry still recorded)");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PROOF 3 — "a skip yields nothing" is ENFORCED, not merely documented.
+    // AnsweredGap.TryFrom never sees the skipped flag, so a dismissal that
+    // somehow carried text would slip past it. The repository read excludes such
+    // rows, which is what makes the shipped docstring true — and it holds for
+    // EVERY recompute path, not just the question-event one.
+    // ─────────────────────────────────────────────────────────────────────────
+    [SkippableFact]
+    public async Task A_skipped_row_carrying_text_is_excluded_by_the_repository_and_credits_nothing()
+    {
+        SkipIfPostgresUnavailable();
+
+        await SeedSprayingDayAsync(SkippedWithTextDate);
+        await RecomputeAndCommitAsync(SkippedWithTextDate);
+
+        var before = await ReadStoredDayAsync(SkippedWithTextDate);
+
+        // Contradictory data the shipped client cannot produce (onDismiss sends no
+        // response): skipped, yet carrying an answer. TryFrom would happily accept the
+        // key + text, so ONLY the repository's exclusion can stop it scoring.
+        var result = await RecordQuestionEventAsync(
+            "gap.carrier", response: "drip", SkippedWithTextDate, skipped: true);
+        result.IsSuccess.Should().BeTrue();
+
+        var after = await ReadStoredDayAsync(SkippedWithTextDate);
+
+        // The handler's guard CANNOT see the skipped flag, so it lets this through and the
+        // day really is rebuilt. Asserting that keeps the proof honest: without it this
+        // test would also pass if the recompute had simply never run, which would prove
+        // nothing about the repository's exclusion.
+        after.UpdatedAtUtc.Should().BeAfter(before.UpdatedAtUtc,
+            "the recompute genuinely ran — so the exclusion below is what stopped the credit, not a skipped rebuild");
+        Coverage(after.Roster, "CARRIER").Should().Be(0.0,
+            "he SKIPPED the question — the text on a skipped row must never be credited, whatever it says");
+        after.Score.Should().Be(before.Score, "nothing was credited, so the number must not move");
+
+        output.WriteLine("[EVIDENCE] === a skipped row carrying text credits nothing (real Npgsql :5433) ===");
+        output.WriteLine($"[EVIDENCE] CARRIER coverage before = {Coverage(before.Roster, "CARRIER")}  after = {Coverage(after.Roster, "CARRIER")}");
+        output.WriteLine($"[EVIDENCE] stored score     before = {before.Score}  after = {after.Score} (must be equal)");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Exercise paths — same write posture as the sibling DFES fixture: admin-elevate
+    // so TenantConnectionInterceptor no-ops (no SET LOCAL prepend → no EF
+    // rows-affected desync), then set the GUCs manually so RLS USING/WITH CHECK pass.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>The REAL handler, exactly as the endpoint calls it.</summary>
+    private async Task<AgriSync.BuildingBlocks.Results.Result<Guid>> RecordQuestionEventAsync(
+        string questionKey, string? response, DateOnly localDate, bool? skipped = null)
+    {
+        await using var scope = _rootProvider!.CreateAsyncScope();
+        var sp = scope.ServiceProvider;
+        var ctx = sp.GetRequiredService<ShramSafalDbContext>();
+        var tenant = sp.GetRequiredService<TenantContext>();
+        var handler = sp.GetRequiredService<RecordQuestionEventHandler>();
+
+        tenant.ElevateToAdminCrossTenant();
+        await using var tx = await ctx.Database.BeginTransactionAsync();
+        await SetGucsAsync(ctx);
+
+        var result = await handler.HandleAsync(new RecordQuestionEventCommand(
+            CallerUserId: OwnerUserId, FarmId: FarmId, PlotId: PlotId, DailyLogId: null,
+            QuestionKey: questionKey, Crop: "grapes", ExpectedStage: "flowering",
+            ActualStageApplicability: null, AnchorDateType: "log_date", TriggerType: "Gap",
+            QuestionType: "gap_fill", Lens: "Execution", DepthLevel: 1, Priority: 4, Cooldown: 3,
+            AnswerModes: "voice", SafetyClass: "informational",
+            AgronomistApproved: true, MarathiApproved: true,
+            BankVersion: "dfes-bank-1", QuestionEngineVersion: "dfes-qengine-1",
+            AnswerObservationId: null, ShownAtUtc: MiddayUtc(localDate), TriggerReason: "gap DOSE",
+            WeatherContext: null, Response: response, StageConfirmed: null,
+            PhotoSubmitted: false, Skipped: skipped ?? response is null));
+
+        await tx.CommitAsync();
+        return result;
+    }
+
+    /// <summary>Establishes the day's aggregate before the question is ever asked.</summary>
+    private async Task RecomputeAndCommitAsync(DateOnly localDate)
+    {
+        await using var scope = _rootProvider!.CreateAsyncScope();
+        var sp = scope.ServiceProvider;
+        var ctx = sp.GetRequiredService<ShramSafalDbContext>();
+        var tenant = sp.GetRequiredService<TenantContext>();
+        var repo = sp.GetRequiredService<IShramSafalRepository>();
+        var derivation = sp.GetRequiredService<IDailyRichnessDerivationService>();
+
+        tenant.ElevateToAdminCrossTenant();
+        await using var tx = await ctx.Database.BeginTransactionAsync();
+        await SetGucsAsync(ctx);
+
+        await derivation.RecomputeAsync(FarmId, localDate);
+        await repo.SaveChangesAsync();
+        await tx.CommitAsync();
+    }
+
+    /// <summary>
+    /// A real day of work with an OPEN dose gap: one DailyLog carrying a Completed
+    /// spraying task and nothing else. No SourceAiJobId, so the score is built from the
+    /// farmer's own persisted rows via PersistedDayRootBuilder — the manual-entry path.
+    /// </summary>
+    private async Task SeedSprayingDayAsync(DateOnly localDate)
+    {
+        await using var scope = _rootProvider!.CreateAsyncScope();
+        var sp = scope.ServiceProvider;
+        var ctx = sp.GetRequiredService<ShramSafalDbContext>();
+        var tenant = sp.GetRequiredService<TenantContext>();
+        var repo = sp.GetRequiredService<IShramSafalRepository>();
+
+        tenant.ElevateToAdminCrossTenant();
+        await using var tx = await ctx.Database.BeginTransactionAsync();
+        await SetGucsAsync(ctx);
+
+        var log = DailyLog.Create(
+            id: Guid.NewGuid(),
+            farmId: new FarmId(FarmId),
+            plotId: PlotId,
+            cropCycleId: CropCycleId,
+            operatorUserId: new UserId(OwnerUserId),
+            logDate: localDate,
+            idempotencyKey: $"dfes-answer-{localDate:yyyyMMdd}",
+            location: null,
+            createdAtUtc: DateTime.UtcNow);
+        log.AddTask(
+            taskId: Guid.NewGuid(),
+            activityType: SprayActivity,
+            notes: null,
+            occurredAtUtc: MiddayUtc(localDate),
+            executionStatus: ExecutionStatus.Completed);
+
+        await repo.AddDailyLogAsync(log);
+        await repo.SaveChangesAsync();
+        await tx.CommitAsync();
+    }
+
+    private static async Task SetGucsAsync(ShramSafalDbContext ctx)
+    {
+        await ctx.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.user_id', {OwnerUserId.ToString()}, true)");
+        await ctx.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.farm_id', {FarmId.ToString()}, true)");
+        await ctx.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.owner_account_id', {OwnerAccountId.ToString()}, true)");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Read back from a FRESH raw connection — never the write context's identity
+    // map — and roll the stored breakdown up EXACTLY as GetDayUnderstandingHandler
+    // does, so "the stored score" here is the number the farmer is actually shown.
+    // ─────────────────────────────────────────────────────────────────────────
+    /// <param name="UpdatedAtUtc">RecomputeAsync calls MarkUpdated UNCONDITIONALLY, so this
+    /// timestamp moves whenever the day was rebuilt — even when the derivation produced an
+    /// identical result. That makes it the honest witness for "was the recompute run at
+    /// all", which an unchanged score alone cannot distinguish from "run and changed
+    /// nothing".</param>
+    private sealed record StoredDay(int? Score, IReadOnlyList<ScoredDimension> Roster, DateTime UpdatedAtUtc);
+
+    private async Task<StoredDay> ReadStoredDayAsync(DateOnly localDate)
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = """
+            SELECT components_json, updated_at_utc
+            FROM ssf.daily_richness_aggregates
+            WHERE farm_id = @farm AND local_date = @d
+            """;
+        cmd.Parameters.AddWithValue("farm", FarmId);
+        cmd.Parameters.AddWithValue("d", localDate);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        (await reader.ReadAsync()).Should().BeTrue("the aggregate row must exist for {0}", localDate);
+        var json = reader.GetFieldValue<string>(0);
+        var updatedAtUtc = reader.GetFieldValue<DateTime>(1);
+
+        var input = JsonSerializer.Deserialize<LensInput>(json);
+        input.Should().NotBeNull("components_json must deserialize into the breakdown the read path rolls up");
+        return new StoredDay(DayUnderstandingScore.From(input!), input!.Possible ?? [], updatedAtUtc);
+    }
+
+    /// <summary>Proves the telemetry row landed even when nothing was recomputed.</summary>
+    private async Task<int> CountQuestionEventsAsync(DateOnly localDate)
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = """
+            SELECT COUNT(*) FROM ssf.question_events
+            WHERE farm_id = @farm AND shown_at_utc = @shown
+            """;
+        cmd.Parameters.AddWithValue("farm", FarmId);
+        cmd.Parameters.AddWithValue("shown", MiddayUtc(localDate));
+        return (int)(long)(await cmd.ExecuteScalarAsync())!;
+    }
+
+    private static double Coverage(IReadOnlyList<ScoredDimension> roster, string name)
+    {
+        var dim = roster.SingleOrDefault(d => d.Name == name);
+        dim.Should().NotBeNull("the stored roster must carry a {0} row for a spraying day", name);
+        return dim!.Coverage;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Fixture helpers (seed as superuser — bypasses RLS).
+    // ─────────────────────────────────────────────────────────────────────────
+    private static async Task SeedFarmAsync(NpgsqlConnection db)
+    {
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO ssf.farms ("Id", name, owner_user_id, owner_account_id, created_at_utc, modified_at_utc, weather_radius_km, geo_validation_status)
+            VALUES (@id, 'DFES Answer-Raises-Score Farm', @owner, @account, NOW(), NOW(), 3.0, 'Unchecked');
+            """;
+        cmd.Parameters.AddWithValue("id", FarmId);
+        cmd.Parameters.AddWithValue("owner", OwnerUserId);
+        cmd.Parameters.AddWithValue("account", OwnerAccountId);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static async Task SeedFarmMembershipAsync(NpgsqlConnection db)
+    {
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO ssf.farm_memberships
+                ("Id", farm_id, user_id, role, granted_at_utc, modified_at_utc, owner_account_id, status)
+            VALUES (@id, @farm, @user, 'PrimaryOwner', NOW(), NOW(), @account, 3);
+            """;
+        cmd.Parameters.AddWithValue("id", Guid.NewGuid());
+        cmd.Parameters.AddWithValue("farm", FarmId);
+        cmd.Parameters.AddWithValue("user", OwnerUserId);
+        cmd.Parameters.AddWithValue("account", OwnerAccountId);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static async Task SeedPlotAsync(NpgsqlConnection db)
+    {
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO ssf.plots ("Id", farm_id, name, area_in_acres, created_at_utc, modified_at_utc)
+            VALUES (@id, @farm, 'Plot A', 1.0, NOW(), NOW());
+            """;
+        cmd.Parameters.AddWithValue("id", PlotId);
+        cmd.Parameters.AddWithValue("farm", FarmId);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static async Task SeedCropCycleAsync(NpgsqlConnection db)
+    {
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO ssf.crop_cycles ("Id", farm_id, plot_id, crop_name, stage, start_date, created_at_utc, modified_at_utc)
+            VALUES (@id, @farm, @plot, 'Grapes', 'Vegetative', @start, NOW(), NOW());
+            """;
+        cmd.Parameters.AddWithValue("id", CropCycleId);
+        cmd.Parameters.AddWithValue("farm", FarmId);
+        cmd.Parameters.AddWithValue("plot", PlotId);
+        cmd.Parameters.AddWithValue("start", new DateTime(2026, 1, 1));
+        await cmd.ExecuteNonQueryAsync();
+    }
+}

@@ -43,7 +43,18 @@
  * closing a book — which is why `closeTodayQuestion`, `reviewAndClose` and
  * `clickToClose` no longer say it. Putting it back undoes a founder decision.
  *
- * ONE RULING IS DELIBERATELY UNSETTLED, AND `closeToday` IS WHERE IT SHOWS.
+ * TWO OF THE SIX OPEN STRINGS ARE NOW RULED. FOUR REMAIN OPEN.
+ *
+ * Founder, 2026-08-27: `closeToday` and `weeklyReviewPrompt` take the कामे
+ * (work) wording, and of the नोंदी (records) wording he said "remove that".
+ * Both are applied and the rejected wordings are deleted, not parked.
+ *
+ * He ruled on TWO. The other four of the six named below are STILL OPEN and
+ * must not be inferred from this ruling — a first-person Sathi line and a piece
+ * of UI chrome can honestly fall on different sides, which is the whole reason
+ * the set was split rather than answered at once.
+ *
+ * THE ORIGINAL NOTE, kept because the reasoning still governs the other four:
  * `नोंद`/`नोंदी` is banned from Shram Sathi's own voice and stays legitimate in
  * UI chrome (`sathi-only`) — hence `weekSummary`, `daysLoggedThisWeek` and
  * `ownerHasQuestion` keep it. What has NOT been answered is which side of that
@@ -124,6 +135,157 @@ export interface DfesTranslations {
 
     // Batch 5
     clickToClose: string;
+
+    // ---------------------------------------------------------------------
+    // dfes-companion (spec: dfes-companion-2026-07-11) — keys this branch ADDS.
+    //
+    // Merged in from `translations.ts`, where they lived inline before
+    // LABOUR_PHASE2 moved the DFES block into this file. Lifted VERBATIM: not
+    // one string was rewritten, reordered or re-translated in the move. The 38
+    // keys above keep the founder-revised values from the authority document.
+    // ---------------------------------------------------------------------
+    /** SHORT label for the control that opens the closeToday panel. */
+    closeTodayAction: string;
+
+    // wave-3.10, founder decision 8 — the optional reason chips offered when he
+    // declares a no-work day. Skipping them saves the day anyway (doctrine P9).
+    noWorkReasonPrompt: string;
+
+    noWorkSkipReason: string;
+
+    noWorkReason: {
+        weather: string;
+        electricity: string;
+        water: string;
+        machinery: string;
+        labour: string;
+        other: string;
+    };
+
+    // Day Understanding Score (dfes-companion Slice 3b) — Sathi's framing of
+    // its OWN understanding of the farmer's day (X/10). NOT a grade of the farmer.
+    dayUnderstandingIntro: string;
+
+    dayUnderstandingPending: string;
+
+    /**
+     * wave-3.9, founder decision 10 (2026-08-16) — the HONEST provenance label for
+     * Sathi's question copy. It is "reviewed by Shram Safal", never "approved by an
+     * agronomist": no agronomist has seen any of the twelve reviewed bank entries.
+     *
+     * DISPLAY ONLY. The wire field `agronomistApproved` is deliberately NOT renamed —
+     * RecordQuestionEventHandler.cs:28 hard-rejects any event whose
+     * `agronomistApproved` is not true, so a rename would turn every question event
+     * into a 400. See dfesQuestionBank.SHRAM_SAFAL_REVIEWED.
+     *
+     * NOT rendered anywhere yet: no farmer-facing surface makes an approval claim
+     * today, so there was no dishonest label to correct. This exists so the FIRST
+     * surface that needs one reaches for the truthful string instead of inventing
+     * "Agronomist approved". Do NOT reuse it for LogVerificationStatus.APPROVED —
+     * that is an OWNER approving a worker's log, an unrelated claim.
+     */
+    shramSafalReviewed: string;
+
+    // Post-save surface redesign (founder, 2026-08-13). The character SPEAKS
+    // instead of the system announcing "Saved to Ledger", and each zone of the
+    // surface names itself so the screen reads as one clear reply.
+    sathiSaidLine: string;
+
+    sectionWork: string;
+
+    sectionGrasp: string;
+
+    sectionAsk: string;
+
+    sectionStreak: string;
+
+    dayUnderstandingMeaning: string;
+
+    // Semi-literate redesign (founder, 2026-08-13). A bare "७ / १०" reads as a
+    // SCHOOL MARK to a tier-3/4 farmer — "I lost 3 marks" — which is the exact
+    // opposite of the intended meaning. The band word leads; the numeral is
+    // demoted to a quiet secondary.
+    graspBandLow: string;
+
+    graspBandSome: string;
+
+    graspBandGood: string;
+
+    graspBandFull: string;
+
+    streakDaysUnit: string;
+
+    streakTomorrow: string;
+
+    graspTarget: string;
+
+    graspTargetHit: string;
+
+    askRaisesScore: string;
+
+    // A day the farmer HONESTLY declared as no-work (founder ruling 2,
+    // 2026-08-14: "Reward honesty and mark its consistency — no score needed
+    // for such days"). No number is shown at all — a 0 would punish the very
+    // honesty the product is built to earn. consistencyKept carries a {days}
+    // placeholder = his current streak, which the server already advances
+    // across a declared no-work day (StreakRules.AdvanceOnDeclaredNoWork).
+    // spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (Task 6).
+    noWorkDayAcknowledged: string;
+
+    consistencyKept: string;
+
+    // Understanding-Meter arrival/transition line (dfes-companion Slice 5b) —
+    // Sathi's progress toward "knowing" the farm (rich-days milestone).
+    // Founder-confirmable copy on a flag-gated placeholder surface.
+    // meterArrivalProgress carries {count}/{target} placeholders; the
+    // arrived line is appended (leading " — ") only once the milestone lands.
+    meterArrivalProgress: string;
+
+    meterArrivalArrived: string;
+
+    // Daily Clarity Loop v1 (dfes-companion-2026-07-11) — the morning
+    // "trigger" hero at the top of home, answering "काय राहिलं" in one calm
+    // line. Reuses todayDayState.pendingCount. Reward = clarity/control,
+    // never points, never scolding. {count} = a plain task count.
+    dailyLoopTasksLeft: string;      // N > 0: today's remaining work
+
+    dailyLoopDayFree: string;        // N === 0 AND nothing recorded: invite to record
+
+    // Wave 2.4: N === 0 but the day HAS been recorded/completed. Splitting
+    // this out is the whole point — dailyLoopDayFree ("आज काहीच सांगितलं
+    // नाही", you told me nothing today) used to render for BOTH states, so
+    // a farmer who had recorded and confirmed their day was told they had
+    // said nothing, next to a full ring. Nothing left ≠ nothing told.
+    dailyLoopDaySettled: string;
+
+    // Carried-over qualifier of the SAME N (its overdue subset, k ≤ N):
+    dailyLoopCarriedOne: string;     // exactly 1 carried → names it ("काल पासून: {title}")
+
+    dailyLoopCarriedMany: string;    // k > 1 carried → soft count ("(यातील {count} काल पासून)")
+
+    // Daily Clarity Loop v1 REWARD line (dfes-companion-2026-07-11) — the
+    // calm "you're in control" line on the "Saved to Ledger" success card,
+    // sitting directly ABOVE Sathi's one gentle question. Plain fact
+    // (done / left), never a grade, never points, never scolding.
+    // {done} = todayDayState.completedCount, {left} = .pendingCount.
+    dailyLoopClarity: string;
+
+    // Task 7 (spec: dfes-companion-2026-07-11) — daily 7am native local
+    // notification title ("see today's tasks"). Static text only, no
+    // dynamic count (pendingCount isn't persisted; a stale number in a
+    // scheduled notification would be worse than none). Flag-gated by
+    // VITE_MORNING_NOTIFICATION, default OFF.
+    morningNotificationTitle: string;
+
+    // Task 8 (spec: dfes-companion-2026-07-11) — "Sathi talks back":
+    // the one warm celebration line spoken (web speechSynthesis) once
+    // ever per farm at the 25-rich-days unlock. Sathi's SPOKEN persona
+    // is always Marathi regardless of the UI language, so the `mr`
+    // value is what's actually read aloud — the `en` value here exists
+    // only as a readable reference for non-Marathi-speaking reviewers.
+    // CONTENT GATE: final line is founder+agronomist-approved; this is
+    // a reasonable draft.
+    unlockSpokenLine: string;
 }
 
 export const dfesTranslations: Record<Language, DfesTranslations> = {
@@ -185,11 +347,110 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
 
         // Batch 5
         clickToClose: 'Click to close the day',
+
+        // --- dfes-companion additions (see the interface) --------------------
+        closeTodayAction: 'Check today',
+
+        noWorkReasonPrompt: 'Why? (optional)',
+
+        noWorkSkipReason: 'Save the day',
+
+        noWorkReason: {
+            weather: 'Rain / weather',
+            electricity: 'No electricity',
+            water: 'No water',
+            machinery: 'Machine trouble',
+            labour: 'No labour',
+            other: 'Something else',
+        },
+
+        // Day Understanding Score (dfes-companion Slice 3b)
+        dayUnderstandingIntro: 'I understood your day today',
+
+        dayUnderstandingPending: 'Still understanding…',
+
+        // wave-3.9, decision 10 — honest provenance, display only. See the
+        // interface docstring for why the wire field keeps its old name.
+        shramSafalReviewed: 'Shram Safal Reviewed',
+
+        // Post-save surface redesign (2026-08-13)
+        sathiSaidLine: 'Shram Safal is understanding the work you did today',
+
+        sectionWork: 'WHAT YOU DID TODAY',
+
+        sectionGrasp: 'HOW MUCH I UNDERSTOOD',
+
+        sectionAsk: 'SATHI STILL NEEDS',
+
+        sectionStreak: 'YOUR CONSISTENCY',
+
+        dayUnderstandingMeaning: 'Tell me more and I understand more.',
+
+        graspBandLow: 'I understood a little',
+
+        graspBandSome: 'I understood a fair amount',
+
+        graspBandGood: 'I understood a lot',
+
+        graspBandFull: 'I understood everything',
+
+        streakDaysUnit: 'days in a row',
+
+        streakTomorrow: 'Come again tomorrow — keep it going',
+
+        graspTarget: 'Aim for {target}',
+
+        graspTargetHit: 'You reached the mark',
+
+        askRaisesScore: 'Tell me this and the number goes up',
+
+        // Declared no-work day (founder ruling 2, 2026-08-14). The Marathi is
+        // the founder's own register and ships verbatim; these two English
+        // lines are a working translation of it and are NOT founder-reviewed.
+        noWorkDayAcknowledged: 'No work today — you said so, and I recorded it.',
+
+        consistencyKept: 'You have told me without fail for {days} days running.',
+
+        // Understanding-Meter arrival/transition line (dfes-companion Slice 5b)
+        meterArrivalProgress: 'Understood days: {count}/{target}',
+
+        meterArrivalArrived: ' — now I have come to know your farm',
+
+        // Daily Clarity Loop v1 (dfes-companion-2026-07-11)
+        dailyLoopTasksLeft: '{count} tasks left today',
+
+        dailyLoopDayFree: 'Nothing told today yet — just speak to record',
+
+        dailyLoopDaySettled: 'Today is told — nothing left',
+
+        dailyLoopCarriedOne: 'From yesterday: {title}',
+
+        dailyLoopCarriedMany: '({count} of these carried over)',
+
+        // Daily Clarity Loop v1 REWARD line (dfes-companion-2026-07-11)
+        dailyLoopClarity: '{done} done, {left} left',
+
+        // Task 7 (spec: dfes-companion-2026-07-11) — morning notification title
+        morningNotificationTitle: 'See today\'s tasks',
+
+        // Task 8 (spec: dfes-companion-2026-07-11) — reference translation
+        // only; the spoken utterance always uses the `mr` value below.
+        // CONTENT GATE: founder+agronomist-approved final copy pending.
+        unlockSpokenLine: 'Well done! Now I have truly come to know your farm.',
     },
 
     mr: {
         // Closure ritual
-        closeToday: 'आजच्या सर्व नोंदी माझ्यापर्यंत पोहोचल्या का याची खात्री करा',
+          // ✅ RULED BY THE FOUNDER, 2026-08-27. Settled, not open.
+          //
+          // Both branches rewrote this key from the same base. The founder chose the
+          // कामे (work) wording and said of the नोंदी (records) wording:
+          // "remove that". It is removed, not parked — keeping a rejected string in a
+          // comment invites someone to "restore" it later.
+          //
+          // The नोंदी/कामे question this file's header called DELIBERATELY
+          // UNSETTLED is now settled for these two keys. Do not reopen it by reasoning.
+        closeToday: 'आजची सगळी कामे माझ्यापर्यंत पोहोचली का याची खात्री करा',
         todayClosed: 'आजचं आटपलं. सगळी कामे आणि गोष्टी समजल्या',
         closeTodayQuestion: 'आजचं सगळं सांगून झालं का?',
 
@@ -226,7 +487,17 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
         comeBackTomorrow: 'उद्या संध्याकाळी या.',
 
         // Owner verification trigger
-        weeklyReviewPrompt: 'तुमच्या शेतनोंदीत नवीन नोंदी आहेत. तपासा.',
+        //
+        // ✅ RULED BY THE FOUNDER, 2026-08-27. Settled, not open.
+        //
+        // Both branches rewrote this key from the same base. The founder chose the
+        // कामे (work) wording and said of the नोंदी (records) wording:
+        // "remove that". It is removed, not parked — keeping a rejected string in a
+        // comment invites someone to "restore" it later.
+        //
+        // The नोंदी/कामे question this file's header called DELIBERATELY
+        // UNSETTLED is now settled for these two keys. Do not reopen it by reasoning.
+        weeklyReviewPrompt: 'तुमच्या शेतीत नवीन कामे आहेत. तपासा.',
         reviewAndClose: 'तपासा आणि खात्री करा',
         farmBookOpen: 'या आठवड्याची शेतनोंद उघडी आहे.',
 
@@ -245,5 +516,120 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
 
         // Batch 5
         clickToClose: 'दिवस पूर्ण करण्यासाठी क्लिक करा',
+
+        // --- dfes-companion additions (see the interface) --------------------
+        // AGENT-DRAFTED 2026-08-14 — needs founder approval. Lifted verbatim
+        // from the closing verb phrase of the founder's own closeToday
+        // sentence above, so the pill and the panel it opens speak the same
+        // words. No new vocabulary was invented.
+        closeTodayAction: 'खात्री करा',
+
+        noWorkReasonPrompt: 'का? (ऐच्छिक)',
+
+        noWorkSkipReason: 'दिवस नोंदवा',
+
+        noWorkReason: {
+            weather: 'पाऊस / हवामान',
+            electricity: 'वीज नव्हती',
+            water: 'पाणी नव्हतं',
+            machinery: 'यंत्र बिघडलं',
+            labour: 'माणसं नव्हती',
+            other: 'दुसरं काही',
+        },
+
+        // Day Understanding Score (dfes-companion Slice 3b) — Sathi's own
+        // understanding of the day, never a grade of the farmer.
+        dayUnderstandingIntro: 'मी तुमचा आजचा दिवस समजून घेतला',
+
+        dayUnderstandingPending: 'अजून समजतंय…',
+
+        // AGENT-DRAFTED 2026-08-16 (wave-3.9, decision 10) — NEEDS FOUNDER APPROVAL
+        // before it is rendered anywhere. Built only from words already shipping:
+        // 'श्रम सफल' is the founder's own brand wording from sathiSaidLine below,
+        // and 'तपासलेलं' is the plain Marathi for "checked/reviewed". No new brand
+        // vocabulary was invented, and nothing renders this string yet.
+        shramSafalReviewed: 'श्रम सफल ने तपासलेलं',
+
+        // Post-save surface redesign (2026-08-13). sathiSaidLine is the
+        // FOUNDER'S OWN wording, used verbatim — do not paraphrase it.
+        sathiSaidLine: 'श्रम सफल मध्ये तुम्ही आज केलेले काम समजून घेत आहे',
+
+        sectionWork: 'आज तुम्ही काय केलं',
+
+        sectionGrasp: 'मला किती समजलं',
+
+        sectionAsk: 'साथीला अजून हवं आहे',
+
+        sectionStreak: 'तुमचं सातत्य',
+
+        // Shortened for a semi-literate reader — one short clause, no fraction.
+        dayUnderstandingMeaning: 'जेवढं सांगाल, तेवढं मला समजतं.',
+
+        // The BAND is what the farmer reads; the numeral is secondary.
+        graspBandLow: 'थोडं समजलं',
+
+        graspBandSome: 'बऱ्यापैकी समजलं',
+
+        graspBandGood: 'बरंच समजलं',
+
+        graspBandFull: 'सगळं समजलं',
+
+        streakDaysUnit: 'दिवस सलग',
+
+        streakTomorrow: 'उद्या पण सांगा — दररोज बोलत रहा.',
+
+        // The number is a TARGET to chase, never a mark. {target} is the notch
+        // drawn on the bar, so the goal is visible as well as stated.
+        graspTarget: '{target} पर्यंत पोहोचायचंय',
+
+        graspTargetHit: 'तुम्ही खूण गाठली!',
+
+        askRaisesScore: 'हे सांगितलं तर आकडा वाढेल',
+
+        // A day he honestly said had no work. FOUNDER-SUPPLIED register, used
+        // verbatim — do not paraphrase. No number appears beside these lines:
+        // his honesty is acknowledged and his consistency named instead.
+        noWorkDayAcknowledged: 'आज काम नाही — तुम्ही सांगितलं, मी नोंदवलं.',
+
+        consistencyKept: 'सलग {days} दिवस तुम्ही न चुकता सांगताय.',
+
+        // Understanding-Meter arrival/transition line (dfes-companion Slice 5b) —
+        // founder-reviewed 2026-08-13, no longer a placeholder. Not a grade of
+        // the farmer — Sathi's own growing familiarity. meterArrivalArrived is
+        // CONCATENATED onto the progress line, so its leading space is load-
+        // bearing (MeterDisplay.tsx) — do not trim it.
+        meterArrivalProgress: '{count}/{target} दिवसांची कामे समजली',
+
+        meterArrivalArrived: ' — आता मी तुमचं शेत ओळखू लागलो',
+
+        // Daily Clarity Loop v1 (dfes-companion-2026-07-11) — FOUNDER-CONFIRM:
+        // calm morning trigger. Dignity, no scolding, no points. The count
+        // is a plain fact ("what's left"), not a grade of the farmer.
+        dailyLoopTasksLeft: 'आज {count} कामं बाकी',
+
+        dailyLoopDayFree: 'आज काहीच सांगितलं नाही. काम झालं नसेल तर कारण सांगा — किंवा "आज काम नाही" एवढं सांगा.',
+
+        dailyLoopDaySettled: 'आज सगळं सांगून झालं — काही बाकी नाही.',
+
+        dailyLoopCarriedOne: 'काल पासून: {title}',
+
+        dailyLoopCarriedMany: '(यातील {count} काल पासून)',
+
+        // Daily Clarity Loop v1 REWARD line (dfes-companion-2026-07-11) —
+        // FOUNDER-CONFIRM: the "you're in control" reward on the saved card.
+        // Plain fact ({done} done, {left} left), no adjectives, no score.
+        dailyLoopClarity: '{done} पूर्ण, {left} बाकी',
+
+        // Task 7 (spec: dfes-companion-2026-07-11) — morning notification title.
+        // Static Marathi copy: "see today's tasks".
+        morningNotificationTitle: 'आजची कामे पाहा',
+
+        // Task 8 (spec: dfes-companion-2026-07-11) — the line Sathi
+        // actually SPEAKS (web speechSynthesis, lang='mr-IN') once ever
+        // per farm at the 25-rich-days unlock. Warm, celebratory,
+        // dignity — never a grade of the farmer.
+        // No longer a draft: this is the founder's own FINAL wording from
+        // the 2026-08-13 reviewed string set (two review rounds closed).
+        unlockSpokenLine: 'शाब्बास !!! आता मला तुमचं शेत आणि तुमची काम करण्याची पद्धत सविस्तर समजू लागली आहे',
     },
 };

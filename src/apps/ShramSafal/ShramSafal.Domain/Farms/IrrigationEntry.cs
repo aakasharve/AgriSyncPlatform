@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Domain;
+using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Domain.Farms;
 
@@ -15,7 +16,8 @@ public sealed class IrrigationEntry : Entity<Guid>
     private IrrigationEntry(
         Guid id, Guid dailyLogId, IrrigationRole role, bool weatherAdjusted,
         string? method, string? source, decimal? durationHours, decimal? waterVolumeLitres,
-        Guid? linkedActivityId, DateTime createdAtUtc)
+        Guid? linkedActivityId, DateTime createdAtUtc,
+        NumericCertainty? waterCertainty, string? waterSpokenText)
         : base(id)
     {
         DailyLogId = dailyLogId;
@@ -27,6 +29,8 @@ public sealed class IrrigationEntry : Entity<Guid>
         WaterVolumeLitres = waterVolumeLitres;
         LinkedActivityId = linkedActivityId;
         CreatedAtUtc = createdAtUtc;
+        WaterCertainty = waterCertainty;
+        WaterSpokenText = waterSpokenText;
     }
 
     public Guid DailyLogId { get; private set; }
@@ -39,10 +43,21 @@ public sealed class IrrigationEntry : Entity<Guid>
     public Guid? LinkedActivityId { get; private set; }        // spray-carrier → its ApplicationBatch/operation
     public DateTime CreatedAtUtc { get; private set; }
 
+    // ── wave-3.12, spec Ruling 5 — how sure the farmer was of the WATER ──
+    /// <summary>NULL when he was never asked. Never defaulted to Reported (P4).</summary>
+    public NumericCertainty? WaterCertainty { get; private set; }
+
+    /// <summary>His own words for the water volume, kept verbatim beside it.</summary>
+    public string? WaterSpokenText { get; private set; }
+
     public static IrrigationEntry Create(
         Guid id, Guid dailyLogId, IrrigationRole role, bool weatherAdjusted,
         string? method, string? source, decimal? durationHours, decimal? waterVolumeLitres,
-        Guid? linkedActivityId, DateTime createdAtUtc)
+        Guid? linkedActivityId, DateTime createdAtUtc,
+        // wave-3.12 — trailing and OPTIONAL so every pre-existing call site keeps
+        // compiling and keeps writing NULL, which is exactly "not asked, not stated".
+        NumericCertainty? waterCertainty = null, string? waterSpokenText = null)
         => new(id, dailyLogId, role, weatherAdjusted, method, source,
-               durationHours, waterVolumeLitres, linkedActivityId, createdAtUtc);
+               durationHours, waterVolumeLitres, linkedActivityId, createdAtUtc,
+               waterCertainty, waterSpokenText);
 }

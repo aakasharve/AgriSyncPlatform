@@ -36,20 +36,6 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
     {
         ArgumentNullException.ThrowIfNull(log);
         ArgumentNullException.ThrowIfNull(sourceJob);
-        ArgumentNullException.ThrowIfNull(ids);
-        ArgumentNullException.ThrowIfNull(clock);
-
-        if (string.IsNullOrWhiteSpace(sourceJob.NormalizedResultJson))
-        {
-            return default;
-        }
-
-        using var doc = JsonDocument.Parse(sourceJob.NormalizedResultJson);
-        var root = doc.RootElement;
-        if (root.ValueKind != JsonValueKind.Object)
-        {
-            return default;
-        }
 
         // Reuse the SOURCE job's provenance (Source.Voice + real model/prompt
         // versions), never a fabricated parallel lineage (Global Constraint).
@@ -60,6 +46,89 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
             promptContentHash: sourceJob.Provenance.PromptContentHash,
             appVersion: sourceJob.Provenance.AppVersion,
             extractorCodeSha: sourceJob.Provenance.ExtractorCodeSha);
+
+        // Identity is scoped to the parse job: two logs confirmed from the SAME
+        // voice parse share a lineage and must supersede one another per plot.
+        //
+        // Labour V1 Task 6.3 — deriveLabour is the CALLER's single-producer decision
+        // and is carried through untouched to the shared body, where it gates the
+        // labour branch and nothing else. This wrapper neither makes that decision
+        // nor softens it.
+        return await DeriveCoreAsync(
+            log, sourceJob.NormalizedResultJson, provenance, sourceJob.Id, ids, clock,
+            deriveLabour, ct);
+    }
+
+    public Task<DerivationOutcome> DeriveFromManualDraftAsync(
+        DailyLog log, string manualWireJson, string? appVersion,
+        IIdGenerator ids, IClock clock, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(log);
+
+        // spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b). No AI
+        // touched these rows, so their lineage says so and keeps saying so: source
+        // "manual", model/prompt the canonical "n/a" placeholders, no prompt hash,
+        // no extractor SHA. Doctrine P8 — a hand-typed figure must stay
+        // distinguishable from an inferred one, forever. Deliberately NOT a
+        // fabricated AiJob row: an ai_jobs record for something no AI produced
+        // would itself be the lie.
+        var provenance = Provenance.Manual(appVersion ?? "unknown");
+
+        // The DETERMINISTIC source id. For voice the identity anchor is the parse
+        // job; for a typed day the anchor is the LOG itself — it is where the facts
+        // came from, and it is stable across re-saves, so a second derivation of
+        // the same log recomputes the same DerivedEventKey and SUPERSEDES rather
+        // than duplicating the farmer's single application.
+        // The manual path derives labour. Its only source of labour rows is the
+        // draft's own labour[], normalised by ManualDraftNormalizer, so within this
+        // call there is nothing for it to be a second producer OF. Passed explicitly
+        // rather than defaulted, because Labour V1 Task 6.3 made "who produces this
+        // row" a decision every caller must take deliberately.
+        //
+        // Note what this deliberately does NOT do: it does not consult
+        // CreateDailyLogCommand.Labour. Suppressing on that would need the decision
+        // plumbed through ILedgerDerivationService.DeriveFromManualDraftAsync, which
+        // is a contract change, not a merge resolution.
+        return DeriveCoreAsync(
+            log, manualWireJson, provenance, log.Id, ids, clock,
+            deriveLabour: true, ct);
+    }
+
+    /// <summary>
+    /// The one persistence body, shared by the voice and manual paths. Takes the wire
+    /// JSON to read, the provenance to stamp, and the deterministic source id that
+    /// anchors every <see cref="DerivedEventKey"/> — nothing else differs between the
+    /// two callers, which is precisely why there is no second writer.
+    /// </summary>
+    /// <param name="deriveLabour">
+    /// Labour V1 Task 6.3 — the SINGLE-PRODUCER guard, gating the labour branch and
+    /// ONLY the labour branch. Required (no default) so neither caller can acquire
+    /// this behaviour by omission.
+    /// </param>
+    private async Task<DerivationOutcome> DeriveCoreAsync(
+        DailyLog log, string? wireJson, Provenance provenance, Guid sourceId,
+        IIdGenerator ids, IClock clock, bool deriveLabour, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        ArgumentNullException.ThrowIfNull(clock);
+
+        if (string.IsNullOrWhiteSpace(wireJson))
+        {
+            return default;
+        }
+
+        using var doc = JsonDocument.Parse(wireJson);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return default;
+        }
+
+        // An observation with no explicit source belongs to whatever produced this
+        // derivation. Defaulting a hand-typed note to "voice" would misattribute it.
+        var observationFallback = provenance.Source == Source.Manual
+            ? ObservationSource.Manual
+            : ObservationSource.Voice;
 
         var now = clock.UtcNow;
         var operations = 0;
@@ -89,7 +158,7 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                 // plot-less log the scope is null and folds in as the empty
                 // string — see DerivedPlotScope for why that is a deliberate
                 // reading and what it costs.
-                var key = DerivedEventKey.Compute(sourceJob.Id, derivedPlotScope, span, "input");
+                var key = DerivedEventKey.Compute(sourceId, derivedPlotScope, span, "input");
 
                 var opId = ids.New();
                 var op = FarmOperation.Create(
@@ -140,18 +209,26 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                             continue; // ApplicationInputItem requires a non-blank product name.
                         }
 
+                        // wave-3.12 — how sure he was of THIS dose. The mix item's own
+                        // "numbers" wins; otherwise the parent input's map covers its mix.
+                        var doseFact = ReadNumericFactWithParent(item, input, "dose");
+
                         var child = ApplicationInputItem.Create(
                             id: ids.New(),
                             operationId: opId,
                             productName: productName!,
                             productType: productType,
                             npkGrade: ReadString(item, "npkGrade"),
+                            // P4 — "आठवत नाही" carries no number, so none is read and none is
+                            // invented. The certainty column is where the unknown lives.
                             doseAmount: ReadDecimal(item, "dose"),
                             doseUnit: ReadString(item, "unit"),
                             doseBasisQty: ReadDecimal(item, "basisQty"),
                             doseBasisUnit: ReadString(item, "basisUnit"),
                             ordinal: mixOrdinal,
-                            createdAtUtc: now);
+                            createdAtUtc: now,
+                            doseCertainty: ReadCertainty(doseFact),
+                            doseSpokenText: ReadSpokenText(doseFact));
                         await repository.AddApplicationInputItemAsync(child, ct);
                         children++;
                         mixOrdinal++;
@@ -182,7 +259,11 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                             doseBasisQty: ReadDecimal(input, "basisQty"),
                             doseBasisUnit: ReadString(input, "basisUnit"),
                             ordinal: 0,
-                            createdAtUtc: now);
+                            createdAtUtc: now,
+                            // wave-3.12 — the legacy shape states its dose on the input row,
+                            // so its certainty is read from that same row.
+                            doseCertainty: ReadCertainty(ReadNumericFact(input, "dose")),
+                            doseSpokenText: ReadSpokenText(ReadNumericFact(input, "dose")));
                         await repository.AddApplicationInputItemAsync(legacyChild, ct);
                         children++;
                     }
@@ -214,7 +295,10 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                     durationHours: duration,
                     waterVolumeLitres: ReadDecimal(item, "waterVolumeLitres"),
                     linkedActivityId: ReadGuid(item, "linkedActivityId"),
-                    createdAtUtc: now);
+                    createdAtUtc: now,
+                    // wave-3.12 — how sure he was of the WATER.
+                    waterCertainty: ReadCertainty(ReadNumericFact(item, "waterVolumeLitres")),
+                    waterSpokenText: ReadSpokenText(ReadNumericFact(item, "waterVolumeLitres")));
                 await repository.AddIrrigationEntryAsync(entry, ct);
                 children++;
 
@@ -262,7 +346,17 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                     // Descriptive only (Task 2.3) — never touch money above.
                     shift: LabourAssignmentFactory.MapLabourShift(ReadString(item, "shift")),
                     task: ReadTrimmedString(item, "activity"),
-                    workerNames: ReadStringArray(item, "whoWorked"));
+                    workerNames: ReadStringArray(item, "whoWorked"),
+                    // wave-3.12 — how sure he was of the COST. Keyed on "totalCost", the
+                    // sibling number it qualifies, so a farmer vague about the wage and
+                    // exact about the dose is recorded as exactly that.
+                    // RESTORED: the main merge took main's LabourAssignment and dropped
+                    // this pair, so "मजुरीचा खर्च अंदाजे ५०००" rode the wire, passed the
+                    // normalizer, and had nowhere to land — discarded with no error (P10).
+                    // CostEntry.Create throws on amount <= 0, so an unknown cost has
+                    // nowhere else honest to live.
+                    costCertainty: ReadCertainty(ReadNumericFact(item, "totalCost")),
+                    costSpokenText: ReadSpokenText(ReadNumericFact(item, "totalCost")));
                 await repository.AddLabourAssignmentAsync(assignment, ct);
                 children++;
             }
@@ -311,7 +405,7 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                     plotId: ReadGuid(item, "plotId"),
                     noteType: MapNoteType(ReadString(item, "noteType")),
                     severity: MapObservationSeverity(ReadString(item, "severity")),
-                    source: MapObservationSource(ReadString(item, "source")),
+                    source: MapObservationSource(ReadString(item, "source"), observationFallback),
                     textRaw: textRaw!,
                     textCleaned: ReadString(item, "textCleaned"),
                     tagsJson: ReadRawArray(item, "tags"),
@@ -467,6 +561,64 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
     }
 
     // ── tolerant scalar readers ────────────────────────────────────────────────
+    // ── wave-3.12, spec Ruling 5 — the per-number certainty map ──────────────
+    //
+    // Wire shape, beside the number it qualifies:
+    //   "numbers": { "dose": { "certainty": "approximate", "spokenText": "अंदाजे ५०० मिली" } }
+    //
+    // The KEY names the sibling numeric field ("dose", "totalCost",
+    // "waterVolumeLitres"), so certainty belongs to each NUMBER and not to the log: a
+    // farmer can be exact about the wage and vague about the dose in one sentence.
+    //
+    // Doctrine P8 — certainty is a DIFFERENT AXIS from provenance and is never folded
+    // into it. Doctrine P4 — an unreadable or absent map yields NULL, never Reported: a
+    // number nobody asked about must not come back claiming he was sure of it.
+
+    /// <summary>The <c>numbers.&lt;key&gt;</c> object, or <c>default</c> when absent.</summary>
+    private static JsonElement ReadNumericFact(JsonElement el, string key)
+        => el.ValueKind == JsonValueKind.Object
+           && el.TryGetProperty("numbers", out var numbers)
+           && numbers.ValueKind == JsonValueKind.Object
+           && numbers.TryGetProperty(key, out var fact)
+           && fact.ValueKind == JsonValueKind.Object
+            ? fact
+            : default;
+
+    private static NumericCertainty? ReadCertainty(JsonElement fact)
+        => fact.ValueKind != JsonValueKind.Object ? null : Norm(ReadString(fact, "certainty")) switch
+        {
+            "reported" => NumericCertainty.Reported,
+            "approximate" => NumericCertainty.Approximate,
+            "unknown" => NumericCertainty.Unknown,
+            // An unrecognised word is NOT quietly read as Reported — that would invent
+            // confidence the farmer never expressed.
+            _ => null,
+        };
+
+    /// <summary>His own words for the number. Trimmed, never synthesised.</summary>
+    private static string? ReadSpokenText(JsonElement fact)
+    {
+        if (fact.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var text = ReadString(fact, "spokenText");
+        return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+    }
+
+    /// <summary>
+    /// The fact for <paramref name="key"/> on <paramref name="row"/>, falling back to
+    /// <paramref name="parent"/>. The mix item's own certainty wins; a map stated once on
+    /// the parent input covers its mix, which is the shape the manual-entry screen builds
+    /// (the dose lives on the mix item, the qualifier on the row the farmer edited).
+    /// </summary>
+    private static JsonElement ReadNumericFactWithParent(JsonElement row, JsonElement parent, string key)
+    {
+        var own = ReadNumericFact(row, key);
+        return own.ValueKind == JsonValueKind.Object ? own : ReadNumericFact(parent, key);
+    }
+
     private static string? ReadString(JsonElement el, string prop)
         => el.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.String
             ? v.GetString()
@@ -589,10 +741,15 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         _ => ObservationSeverity.Normal,
     };
 
-    private static ObservationSource MapObservationSource(string? s) => Norm(s) switch
+    // An EXPLICIT source in the blob always wins. When the row states none, the
+    // fallback is whichever pipeline is running this derivation — voice for an AiJob,
+    // manual for a typed draft. Hardcoding Voice here used to be safe (only voice jobs
+    // derived) and became a misattribution the moment manual drafts did too.
+    private static ObservationSource MapObservationSource(string? s, ObservationSource fallback) => Norm(s) switch
     {
         "manual" => ObservationSource.Manual,
-        _ => ObservationSource.Voice, // derivation runs on a voice job
+        "voice" => ObservationSource.Voice,
+        _ => fallback,
     };
 
     private static DisturbanceScope MapDisturbanceScope(string? s) => Norm(s) switch

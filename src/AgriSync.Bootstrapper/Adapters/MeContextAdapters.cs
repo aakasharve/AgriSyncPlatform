@@ -58,6 +58,55 @@ public sealed class AccountsSnapshotReader(AccountsDbContext accountsDb) : IAcco
     }
 }
 
+/// <summary>
+/// spec: dfes-companion-2026-07-11 — reads the caller's farm memberships for
+/// <c>GET /user/auth/me/context</c>.
+///
+/// <para>
+/// <b>Why this reader establishes its own tenant scope.</b> The join below hits
+/// <c>ssf.farm_memberships</c> ⋈ <c>ssf.farms</c>, both of which carry
+/// user-scoped PERMISSIVE SELECT policies keyed ENTIRELY on
+/// <c>current_setting('agrisync.user_id', true)</c>
+/// (<c>p_user_select_memberships</c> / <c>p_user_select_farms</c>). But
+/// <c>/user/auth</c> is on <see cref="AgriSync.BuildingBlocks.Persistence.TenantTransactionMiddleware"/>'s
+/// skip-list (the anonymous login/OTP surface shares the prefix), so the request
+/// is admin-elevated and NO <c>agrisync.user_id</c> GUC is ever set. Under
+/// FORCE-RLS as <c>agrisync_app</c> (<c>rolbypassrls = false</c>) the join then
+/// returns ZERO rows for a farmer who demonstrably owns a farm, and
+/// <c>GetMeContextHandler</c> faithfully reports <c>no_farms_yet</c> — the
+/// endpoint lies. Verified on <c>agrisync_dfes</c>: 0 rows with no GUC, 1 row
+/// with it.
+/// </para>
+///
+/// <para>
+/// <b>Why the fix lives HERE and not in <c>User.Api</c>.</b> Establishing the scope
+/// needs the ShramSafal <c>DbContext</c>. Doing it from
+/// <c>User.Api/Endpoints/AuthEndpoints.cs</c> would compile but is a cross-context
+/// import, forbidden by root <c>CLAUDE.md</c> §Layering ("cross-context
+/// communication via SharedKernel events only"). This composition-root adapter is
+/// already the ONLY place in the backend that reads across app DbContexts (see the
+/// file header), so it is the legal place. When the User-side projection tables
+/// land, this whole file — scope prelude included — is deleted along with the
+/// cross-context read.
+/// </para>
+///
+/// <para>
+/// <b>Why an explicit transaction.</b> The GUC is set with
+/// <c>set_config(..., is_local := true)</c>, which Postgres scopes to the CURRENT
+/// transaction. The skip-list branch of the middleware returns without opening one,
+/// so on auto-commit the GUC would expire before the join ran.
+/// <see cref="RlsIdentityScope"/> owns that transaction decision — it joins an
+/// ambient transaction when there is one and opens its own when there is not —
+/// which is why this class no longer manages one itself.
+/// </para>
+///
+/// <para>
+/// <b>No RLS is weakened.</b> The scope carries the caller's OWN validated JWT
+/// subject (threaded down from <c>ClaimsPrincipal</c> via
+/// <c>GetMeContextHandler</c>), never a caller-supplied id, and every policy
+/// stays exactly as written.
+/// </para>
+/// </summary>
 public sealed class FarmMembershipSnapshotReader(
     ShramSafalDbContext ssfDb,
     AccountsDbContext accountsDb) : IFarmMembershipSnapshotReader
@@ -161,6 +210,7 @@ public sealed class FarmMembershipSnapshotReader(
                 Subscription: sub);
         }).ToList();
     }
+
 }
 
 public sealed class AffiliationSnapshotReader(AccountsDbContext accountsDb) : IAffiliationSnapshotReader

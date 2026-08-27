@@ -31,6 +31,20 @@ internal sealed class ObservationEventConfiguration : IEntityTypeConfiguration<O
         builder.Property(x => x.LinkedActivityId).HasColumnName("linked_activity_id");            // nullable
         builder.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
 
+        // ── DFES InsightEntry facets (dfes-companion-2026-07-11) — nullable, preserved ──
+        builder.Property(x => x.Observation).HasColumnName("observation").HasColumnType("text");
+        builder.Property(x => x.Change).HasColumnName("change").HasColumnType("text");
+        builder.Property(x => x.Comparison).HasColumnName("comparison").HasColumnType("text");
+        builder.Property(x => x.Challenge).HasColumnName("challenge").HasColumnType("text");
+        builder.Property(x => x.Uncertainty).HasColumnName("uncertainty").HasColumnType("text");
+        builder.Property(x => x.Hypothesis).HasColumnName("hypothesis").HasColumnType("text");
+        builder.Property(x => x.Evidence).HasColumnName("evidence").HasColumnType("text");
+        builder.Property(x => x.Learning).HasColumnName("learning").HasColumnType("text");
+        builder.Property(x => x.NextAction).HasColumnName("next_action").HasColumnType("text");
+        builder.Property(x => x.CropStage).HasColumnName("crop_stage").HasMaxLength(40);
+        builder.Property(x => x.FarmerConfirmedSummary).HasColumnName("farmer_confirmed_summary").HasColumnType("text");
+        builder.Property(x => x.SourceQuestionId).HasColumnName("source_question_id");
+
         builder.HasIndex(x => x.DailyLogId).HasDatabaseName("ix_observation_events_daily_log_id");
         builder.Ignore(x => x.DomainEvents);
     }

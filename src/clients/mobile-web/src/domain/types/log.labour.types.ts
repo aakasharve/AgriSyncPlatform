@@ -14,7 +14,7 @@
  * Layer: Domain (can only import from other domain types).
  */
 
-import type { BucketIssue, FieldProvenance } from './log.types';
+import type { BucketIssue, FieldProvenance, NumericFacts } from './log.types';
 
 // =============================================================================
 // LABOUR EVENTS
@@ -37,6 +37,11 @@ export interface AttributedOperator {
 
 export interface LabourEvent {
     id: string;
+    /**
+     * wave-3.12, spec Ruling 5 — how sure the farmer was of each number on this row,
+     * keyed by the sibling field it qualifies. A DIFFERENT axis from provenance (P8).
+     */
+    numbers?: NumericFacts;
     linkedActivityId?: string;
     type: 'HIRED' | 'CONTRACT' | 'SELF';
     shiftId?: string;
@@ -138,4 +143,8 @@ export interface LabourEvent {
 
     // W1.P2 — per-field provenance (how was this value determined?)
     provenance?: FieldProvenance;
+
+    // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11) — see
+    // CropActivityEvent.provenanceVerified for the contract. Missing = verified.
+    provenanceVerified?: boolean;
 }

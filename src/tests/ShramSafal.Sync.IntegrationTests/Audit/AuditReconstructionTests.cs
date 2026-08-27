@@ -47,8 +47,11 @@ namespace ShramSafal.Sync.IntegrationTests.Audit;
 /// DATA_PRINCIPLE_SPINE_2026-05-05 sub-phase 04.6 — proves the audit ledger is
 /// reconstructable end-to-end. Given a single <c>daily_log</c> id, the audit
 /// chain reads back as a complete <c>(actor, when, app_version, device_id,
-/// ip_hash, source_ai_job_id)</c> lineage across the log's three-event
-/// lifecycle: <c>Created</c> → <c>TaskAdded</c> → <c>VerificationChanged</c>.
+/// ip_hash, source_ai_job_id)</c> lineage across the log's lifecycle:
+/// <c>Created</c> → <c>VerificationChanged</c> (the create-time self-attestation,
+/// added by dfes-companion wave-1.3) → <c>TaskAdded</c> → <c>VerificationChanged</c>
+/// (that task re-attested by the log's own operator, wave-1.3 I3) →
+/// <c>VerificationChanged</c> (the explicit dispute).
 ///
 /// <para>
 /// The spec's prose lists <c>Created → Verified → Flagged</c> as the lifecycle,
@@ -144,6 +147,16 @@ public sealed class AuditReconstructionTests
 
         // ---- Step 3: Verify the log (owner-tier action that emits a
         // VerificationChanged audit row through VerifyLogHandler).
+        //
+        // spec: dfes-companion-2026-07-11 (wave-1.3) — the target status changed from
+        // Confirmed to Disputed. This step used to start from Draft, because
+        // CreateDailyLog emitted no verification event at all; the owner's own log now
+        // lands on Verified at creation (he recorded the day AND he is the authority
+        // that vouches for it), so Draft->Confirmed is no longer the edge in front of
+        // him. Disputed is the owner-tier edge that IS available from Verified — "this
+        // does not match what happened" — and it emits the same single
+        // VerificationChanged audit row this test is actually about. Nothing below
+        // changed: three rows, same actions, same forensic-trio assertions.
         await using (var scope = harness.CreateScope())
         {
             var verifyHandler = scope.ServiceProvider
@@ -151,8 +164,8 @@ public sealed class AuditReconstructionTests
 
             var verifyCommand = new VerifyLogCommand(
                 DailyLogId: createdLog.Id,
-                TargetStatus: VerificationStatus.Confirmed,
-                Reason: "looks good",
+                TargetStatus: VerificationStatus.Disputed,
+                Reason: "the sprayed block was not the one recorded",
                 VerifiedByUserId: TestUserId,
                 VerificationEventId: null,
                 ActorRole: "primary_owner",
@@ -176,12 +189,48 @@ public sealed class AuditReconstructionTests
                 .OrderBy(a => a.OccurredAtUtc)
                 .ToListAsync();
 
-            chain.Should().HaveCount(3,
-                "the lifecycle emits exactly three audit rows: Created, TaskAdded, VerificationChanged");
+            // spec: dfes-companion-2026-07-11 (wave-1.3) — I1. The chain gained a fourth
+            // row. An owner's own log is now ATTESTED at creation (Draft -> Confirmed ->
+            // Verified, by the person who recorded it), and an attestation that leaves no
+            // audit row can never be reconstructed afterwards — which is the one thing
+            // this suite exists to guarantee. The row is asserted by identity below rather
+            // than by position, so a later lifecycle change reads as a count change here
+            // instead of a silent re-index.
+            //
+            // ...and a fifth (wave-1.3 I3): the task addition re-opens the attested log
+            // and the owner — its own operator — immediately re-attests, so the
+            // attestation covers the task he just added rather than the empty log it was
+            // stamped on. That movement gets its own row for the same reason.
+            chain.Should().HaveCount(5,
+                "the lifecycle emits five audit rows: Created, VerificationChanged (the " +
+                "create-time self-attestation), TaskAdded, VerificationChanged (the " +
+                "re-attestation covering that task), VerificationChanged (the dispute)");
 
-            chain[0].Action.Should().Be("Created");
-            chain[1].Action.Should().Be("TaskAdded");
-            chain[2].Action.Should().Be("VerificationChanged");
+            chain.Select(a => a.Action).Should().BeEquivalentTo(
+                new[] { "Created", "VerificationChanged", "TaskAdded", "VerificationChanged", "VerificationChanged" });
+
+            chain[0].Action.Should().Be("Created", "the log's own row opens the chain");
+
+            var createdRow = chain.Single(a => a.Action == "Created");
+            var taskAddedRow = chain.Single(a => a.Action == "TaskAdded");
+            var selfAttestationRow = chain.Single(a =>
+                a.Action == "VerificationChanged" && a.Payload.Contains("\"selfAttested\":true"));
+            var reAttestationRow = chain.Single(a =>
+                a.Action == "VerificationChanged" && a.Payload.Contains("\"trigger\":\"TaskAdded\""));
+            var disputeRow = chain.Single(a =>
+                a.Action == "VerificationChanged" && a.Payload.Contains("\"status\":\"Disputed\""));
+
+            reAttestationRow.Payload.Should().Contain("\"from\":\"Verified\"").And.Contain("\"to\":\"Verified\"",
+                "the owner's own addition re-opens and re-attests in one act — the day never " +
+                "silently loses its approval, and the approval never silently outruns the content");
+            reAttestationRow.Payload.Should().Contain("\"reAttestedByCreator\":true");
+
+            selfAttestationRow.Payload.Should().Contain("\"from\":\"Draft\"").And.Contain("\"to\":\"Verified\"",
+                "the row must say which way the status moved, or it cannot be replayed");
+            selfAttestationRow.Payload.Should().Contain("\"role\":\"PrimaryOwner\"",
+                "the SERVER-DERIVED role is the authority the attestation rested on");
+            selfAttestationRow.ClientCommandId.Should().Be(createdRow.ClientCommandId,
+                "it is the same act as the Created row and must correlate to the same client command");
 
             // P6 — forensic trio must be present on every row.
             chain.Should().AllSatisfy(row =>
@@ -202,15 +251,20 @@ public sealed class AuditReconstructionTests
             });
 
             // P8 — voice-created rows back-link to the AI job that produced the
-            // parsed draft. Only the Created row was emitted on the voice path;
-            // TaskAdded and VerificationChanged hand `sourceAiJobId: null` to
+            // parsed draft. The Created row and the create-time self-attestation are
+            // the SAME act on the voice path and carry the same back-reference;
+            // TaskAdded and the later explicit dispute hand `sourceAiJobId: null` to
             // the factory per their handler code.
-            chain[0].SourceAiJobId.Should().Be(AiJobGuid,
+            createdRow.SourceAiJobId.Should().Be(AiJobGuid,
                 "voice-confirmed Create rows must back-link to the originating AiJob (P8)");
-            chain[1].SourceAiJobId.Should().BeNull(
+            selfAttestationRow.SourceAiJobId.Should().Be(AiJobGuid,
+                "the attestation is part of the same voice-created act and carries its provenance");
+            taskAddedRow.SourceAiJobId.Should().BeNull(
                 "TaskAdded does not originate from an AI parse — its handler passes null");
-            chain[2].SourceAiJobId.Should().BeNull(
-                "VerificationChanged does not originate from an AI parse — its handler passes null");
+            reAttestationRow.SourceAiJobId.Should().BeNull(
+                "the re-attestation is triggered by a manually added task, not by an AI parse");
+            disputeRow.SourceAiJobId.Should().BeNull(
+                "an explicit VerificationChanged does not originate from an AI parse — its handler passes null");
         }
     }
 

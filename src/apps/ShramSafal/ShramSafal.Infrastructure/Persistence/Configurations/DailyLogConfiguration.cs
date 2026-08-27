@@ -141,6 +141,14 @@ internal sealed class DailyLogConfiguration : IEntityTypeConfiguration<DailyLog>
             .HasDefaultValueSql("'[]'::jsonb")
             .IsRequired();
 
+        // wave-3.10, founder decision 8 (2026-08-16) — the farmer's own statement about
+        // the day. Additive and NULLABLE: every log written before this change keeps a
+        // NULL here, and PersistedDayRootBuilder omits the key when it is null, so a
+        // historical row contributes exactly nothing (P4). No default, no backfill.
+        builder.Property(x => x.DayOutcome)
+            .HasColumnName("day_outcome")
+            .HasMaxLength(32);
+
         builder.HasIndex(x => x.IdempotencyKey)
             .IsUnique()
             .HasFilter("idempotency_key IS NOT NULL");

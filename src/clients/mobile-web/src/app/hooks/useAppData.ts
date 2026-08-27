@@ -72,38 +72,38 @@ interface UseAppDataProps {
     onNewPlotDetected?: (newPlotId: string, parentCropId: string) => void;
 }
 
-export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
-    // --- DATA SOURCE INTEGRATION ---
-    const { dataSource, isDemoMode, setDemoMode } = useDataSource();
-    const { isAuthenticated } = useAuth();
-
-    // --- LOCAL STATE (Mirrors DataSource) ---
-    // Start with empty crops - will be populated based on demo mode
-    const [crops, setCrops] = useState<CropProfile[]>([]);
-    // Separate state for user's real crops (persisted). Written by the load
-    // effect, read by nothing today — underscored so the lint gate passes without
-    // dropping state whose removal would change a render cycle.
-    const [_realCrops, setRealCrops] = useState<CropProfile[]>([]);
-    // The profile a farmer sees BEFORE his first sync pull lands.
-    //
-    // It used to be a stranger's: name "Shetkari Raja", village "Nashik", and
-    // three invented colleagues — "Suresh (Manager)" and "Agronomist" — carrying
-    // phone numbers that belong to somebody. None of it was behind a demo guard
-    // (the real demo seed IS gated, in `purveshDemoEnrichment.ts`), so every new
-    // farmer opened the app to another man's identity and had to work out that
-    // the app did not know who he was.
-    //
-    // `P4`/`P5` — an empty field that says "—" is honest; a filled one that is
-    // wrong is not. IdentitySection already renders `profile.name || '—'` and has
-    // an empty-operators branch, so blank needs no new UI.
-    //
-    // The single `owner` operator STAYS, and so does `activeOperatorId: 'owner'`:
-    // that id is a load-bearing identity check (`isOwner` in `LogFactory` and
-    // `log-partition-builders` partitions logs on it), and "Owner" is a role, not
-    // a claimed person. The sync pull replaces this list with real operators.
-    //
-    // evidence: docs/LAUNCH-READINESS-AND-AGRISTACK-2026-08-23.md — Decision 2 item 3
-    const [farmerProfile, setFarmerProfile] = useState<FarmerProfile>({
+/**
+ * The profile a farmer's device actually holds on day one — BEFORE the first
+ * sync pull has ever returned an operator. Its `activeOperatorId` is the
+ * literal string `'owner'`, not a server id; the three operators here are
+ * placeholders so the UI has names to render.
+ *
+ * WAVE-1.4 (spec: dfes-companion-2026-07-11): extracted from the `useState`
+ * initialiser and EXPORTED so tests can drive the real day-one state instead
+ * of a hand-made GUID fixture. A fixture that invents a UUID here cannot see
+ * the bugs this placeholder causes — that is exactly how the approve button
+ * shipped broken. Also now a lazy initialiser, so it is built once per mount
+ * rather than on every render.
+ */
+export function createInitialFarmerProfile(): FarmerProfile {
+    return {
+        // It used to be a stranger's: name "Shetkari Raja", village "Nashik", and
+        // three invented colleagues — "Suresh (Manager)" and "Agronomist" — carrying
+        // phone numbers that belong to somebody. None of it was behind a demo guard
+        // (the real demo seed IS gated, in `purveshDemoEnrichment.ts`), so every new
+        // farmer opened the app to another man's identity and had to work out that
+        // the app did not know who he was.
+        //
+        // `P4`/`P5` — an empty field that says "—" is honest; a filled one that is
+        // wrong is not. IdentitySection already renders `profile.name || '—'` and has
+        // an empty-operators branch, so blank needs no new UI.
+        //
+        // The single `owner` operator STAYS, and so does `activeOperatorId: 'owner'`:
+        // that id is a load-bearing identity check (`isOwner` in `LogFactory` and
+        // `log-partition-builders` partitions logs on it), and "Owner" is a role, not
+        // a claimed person. The sync pull replaces this list with real operators.
+        //
+        // evidence: docs/LAUNCH-READINESS-AND-AGRISTACK-2026-08-23.md — Decision 2 item 3
         name: '',
         village: '',
         phone: '',
@@ -157,7 +157,22 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
             waterManagement: 'Decentralized',
             filtrationType: 'Screen'
         }
-    });
+    };
+}
+
+export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
+    // --- DATA SOURCE INTEGRATION ---
+    const { dataSource, isDemoMode, setDemoMode } = useDataSource();
+    const { isAuthenticated } = useAuth();
+
+    // --- LOCAL STATE (Mirrors DataSource) ---
+    // Start with empty crops - will be populated based on demo mode
+    const [crops, setCrops] = useState<CropProfile[]>([]);
+    // Separate state for user's real crops (persisted). Written by the hydrate
+    // effect; nothing reads it, so the value binding is elided rather than
+    // named — the setter call stays exactly as it was.
+    const [, setRealCrops] = useState<CropProfile[]>([]);
+    const [farmerProfile, setFarmerProfile] = useState<FarmerProfile>(createInitialFarmerProfile);
     const [history, setHistory] = useState<DailyLog[]>([]);
 
     // --- AUXILIARY STATE ---

@@ -1,3 +1,4 @@
+using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Labour;
@@ -55,13 +56,22 @@ public static class LabourAssignmentFactory
     /// meaning exactly what it meant. <see cref="LabourAssignment.Create"/> owns
     /// the blank → <c>null</c> normalisation; nothing is normalised twice.
     /// </param>
+    /// <param name="costCertainty">
+    /// wave-3.12 spec Ruling 5 — how sure the farmer was of <paramref name="totalCost"/>.
+    /// Trailing with a default, exactly like <paramref name="notes"/>, so every existing
+    /// call site compiles and keeps writing NULL — which reads as "not asked, not
+    /// stated", never as <c>Reported</c> (P4). It qualifies the total and NEVER relaxes
+    /// NO-MULTIPLY: an approximate cost is still only ever the one the farmer stated.
+    /// </param>
+    /// <param name="costSpokenText">His own words for that cost, carried verbatim.</param>
     public static LabourAssignment FromParsed(
         Guid id, Guid dailyLogId, LabourEngagementType engagementType,
         int? maleCount, int? femaleCount, int? workerCount, decimal? wagePerPerson,
         ContractUnit? contractUnit, decimal? contractQuantity, decimal? totalCost,
         Guid? linkedActivityId, DateTime createdAtUtc, LabourTime time,
         LabourShift? shift = null, string? task = null, IReadOnlyList<string>? workerNames = null,
-        string? notes = null)
+        string? notes = null,
+        NumericCertainty? costCertainty = null, string? costSpokenText = null)
         => LabourAssignment.Create(
             id: id,
             dailyLogId: dailyLogId,
@@ -83,7 +93,9 @@ public static class LabourAssignmentFactory
             shift: shift,
             task: task,
             workerNames: workerNames,
-            notes: notes);
+            notes: notes,
+            costCertainty: costCertainty,
+            costSpokenText: costSpokenText);
 
     // ── tolerant string → enum maps (safe default; never throw) ────────────────
     // Moved verbatim from LedgerDerivationService so the manual path can map wire

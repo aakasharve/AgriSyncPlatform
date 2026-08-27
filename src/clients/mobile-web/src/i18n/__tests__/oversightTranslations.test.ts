@@ -200,7 +200,7 @@ const EXPECTED_MR: Record<keyof OversightTranslations, string> = {
     // (a) reused verbatim — also cross-checked against dfesTranslations.ts
     // itself by `reused_repo_strings_match_dfesTranslations_exactly`.
     welcomeBack: 'पुन्हा स्वागत! शेतात काय चाललं?',
-    weeklyReviewPrompt: 'तुमच्या शेतनोंदीत नवीन नोंदी आहेत. तपासा.',
+    weeklyReviewPrompt: 'तुमच्या शेतीत नवीन कामे आहेत. तपासा.',
     farmBookOpen: 'या आठवड्याची शेतनोंद उघडी आहे.',
     todayClosed: 'आजचं आटपलं. सगळी कामे आणि गोष्टी समजल्या',
     needsReview: 'तपासायचे आहे',

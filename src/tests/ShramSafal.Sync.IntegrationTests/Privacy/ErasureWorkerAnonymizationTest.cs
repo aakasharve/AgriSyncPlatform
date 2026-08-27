@@ -1021,11 +1021,14 @@ internal sealed class InMemoryRetainedBlobStore : IRetainedBlobStore
             _store.Remove(key);
         }
 
-        // This fake genuinely removes what it holds, so Deleted is the honest
-        // answer when there was something to remove.
+        // This fake genuinely removes what it holds, so Removed is the honest
+        // answer when there was something to remove — and the count it reports
+        // is the number it actually removed, not a literal chosen to satisfy a
+        // caller. A double whose counts cannot disagree with its own behaviour
+        // would prove nothing about the code that reads them.
         return Task.FromResult(keys.Count == 0
-            ? RetainedVoiceDeletionOutcome.NothingToDelete
-            : RetainedVoiceDeletionOutcome.Deleted);
+            ? RetainedVoiceDeletionOutcome.Nothing
+            : RetainedVoiceDeletionOutcome.Removed(keys.Count));
     }
 
     public Task<Guid> PersistAsync(VoiceClipRetained metadata, byte[] cipherBytes, CancellationToken ct)

@@ -186,6 +186,14 @@ public sealed class LabourPhaseOneDurabilityRealPostgresTests(Xunit.Abstractions
         services.AddScoped<IIdGenerator, GuidIdGenerator>();
         services.AddScoped<IClock, SystemClock>();
         services.AddScoped<ILedgerDerivationService, LedgerDerivationService>();
+
+        // The REAL richness derivation, not a no-op. It is the LAST statement in
+        // CreateDailyLogHandler.StageAndSaveSideCarAsync, i.e. inside the very
+        // SAVEPOINT this suite exists to prove cannot take Phase 1 down with it.
+        // A no-op double would shrink the side-car under test and turn the
+        // durability proof into a proof about a smaller side-car than production
+        // actually runs.
+        services.AddScoped<IDailyRichnessDerivationService, DailyRichnessDerivationService>();
         services.AddSingleton<IEntitlementPolicy, AllowAllEntitlementPolicy>();
         services.AddSingleton<IAnalyticsWriter, NoopAnalyticsWriter>();
 
@@ -630,6 +638,7 @@ public sealed class LabourPhaseOneDurabilityRealPostgresTests(Xunit.Abstractions
             sp.GetRequiredService<IAiJobRepository>(),
             sp.GetRequiredService<ILogger<CreateDailyLogHandler>>(),
             derivationOverride ?? sp.GetRequiredService<ILedgerDerivationService>(),
+            sp.GetRequiredService<IDailyRichnessDerivationService>(),
             ctx);
 
         var command = new CreateDailyLogCommand(
@@ -669,6 +678,15 @@ public sealed class LabourPhaseOneDurabilityRealPostgresTests(Xunit.Abstractions
         public Task<DerivationOutcome> DeriveAsync(
             ShramSafal.Domain.Logs.DailyLog log, ShramSafal.Domain.AI.AiJob sourceJob,
             IIdGenerator ids, IClock clock, bool deriveLabour = true, CancellationToken ct = default)
+            => throw new InvalidOperationException("Task 6.5 — forced side-car derivation failure.");
+
+        // Added by the main->dfes merge, which widened ILedgerDerivationService with the
+        // manual-entry path. This stub exists to force a side-car failure, so BOTH derive
+        // paths must throw — a manual path that quietly succeeded here would make the test
+        // assert durability it never actually exercised.
+        public Task<DerivationOutcome> DeriveFromManualDraftAsync(
+            ShramSafal.Domain.Logs.DailyLog log, string manualWireJson, string? appVersion,
+            IIdGenerator ids, IClock clock, CancellationToken ct = default)
             => throw new InvalidOperationException("Task 6.5 — forced side-car derivation failure.");
     }
 

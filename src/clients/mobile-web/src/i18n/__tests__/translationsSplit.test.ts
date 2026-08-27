@@ -93,9 +93,55 @@ const DFES_APPROVED_COPY = {
         unknown: 'Unknown',
         verify: 'Verify',
         clickToClose: 'Click to close the day',
+
+        // --- dfes-companion additions (spec: dfes-companion-2026-07-11) -----
+        // Merged in from `translations.ts`, where these lived inline until the
+        // main -> feat/dfes-companion merge. Transcribed from the branch that
+        // wrote them; not one string was reworded here.
+        closeTodayAction: 'Check today',
+        noWorkReasonPrompt: 'Why? (optional)',
+        noWorkSkipReason: 'Save the day',
+        noWorkReason: {
+            weather: 'Rain / weather',
+            electricity: 'No electricity',
+            water: 'No water',
+            machinery: 'Machine trouble',
+            labour: 'No labour',
+            other: 'Something else',
+        },
+        dayUnderstandingIntro: 'I understood your day today',
+        dayUnderstandingPending: 'Still understanding…',
+        shramSafalReviewed: 'Shram Safal Reviewed',
+        sathiSaidLine: 'Shram Safal is understanding the work you did today',
+        sectionWork: 'WHAT YOU DID TODAY',
+        sectionGrasp: 'HOW MUCH I UNDERSTOOD',
+        sectionAsk: 'SATHI STILL NEEDS',
+        sectionStreak: 'YOUR CONSISTENCY',
+        dayUnderstandingMeaning: 'Tell me more and I understand more.',
+        graspBandLow: 'I understood a little',
+        graspBandSome: 'I understood a fair amount',
+        graspBandGood: 'I understood a lot',
+        graspBandFull: 'I understood everything',
+        streakDaysUnit: 'days in a row',
+        streakTomorrow: 'Come again tomorrow — keep it going',
+        graspTarget: 'Aim for {target}',
+        graspTargetHit: 'You reached the mark',
+        askRaisesScore: 'Tell me this and the number goes up',
+        noWorkDayAcknowledged: 'No work today — you said so, and I recorded it.',
+        consistencyKept: 'You have told me without fail for {days} days running.',
+        meterArrivalProgress: 'Understood days: {count}/{target}',
+        meterArrivalArrived: ' — now I have come to know your farm',
+        dailyLoopTasksLeft: '{count} tasks left today',
+        dailyLoopDayFree: 'Nothing told today yet — just speak to record',
+        dailyLoopDaySettled: 'Today is told — nothing left',
+        dailyLoopCarriedOne: 'From yesterday: {title}',
+        dailyLoopCarriedMany: '({count} of these carried over)',
+        dailyLoopClarity: '{done} done, {left} left',
+        morningNotificationTitle: 'See today\'s tasks',
+        unlockSpokenLine: 'Well done! Now I have truly come to know your farm.',
     },
     mr: {
-        closeToday: 'आजच्या सर्व नोंदी माझ्यापर्यंत पोहोचल्या का याची खात्री करा',
+        closeToday: 'आजची सगळी कामे माझ्यापर्यंत पोहोचली का याची खात्री करा',
         todayClosed: 'आजचं आटपलं. सगळी कामे आणि गोष्टी समजल्या',
         closeTodayQuestion: 'आजचं सगळं सांगून झालं का?',
         todaySummary: 'आजची {activities} कामे, खर्च रु. {cost}',
@@ -120,7 +166,7 @@ const DFES_APPROVED_COPY = {
         whatWorkToday: 'आज काय काम झालं?',
         firstLogCelebration: 'तुमचे पहिले काम मला समजले',
         comeBackTomorrow: 'उद्या संध्याकाळी या.',
-        weeklyReviewPrompt: 'तुमच्या शेतनोंदीत नवीन नोंदी आहेत. तपासा.',
+        weeklyReviewPrompt: 'तुमच्या शेतीत नवीन कामे आहेत. तपासा.',
         reviewAndClose: 'तपासा आणि खात्री करा',
         farmBookOpen: 'या आठवड्याची शेतनोंद उघडी आहे.',
         trustedTotal: 'खात्रीशीर एकूण',
@@ -133,6 +179,52 @@ const DFES_APPROVED_COPY = {
         unknown: 'अज्ञात',
         verify: 'खात्री करा',
         clickToClose: 'दिवस पूर्ण करण्यासाठी क्लिक करा',
+
+        // --- dfes-companion additions (spec: dfes-companion-2026-07-11) -----
+        // Merged in from `translations.ts`, where these lived inline until the
+        // main -> feat/dfes-companion merge. Transcribed from the branch that
+        // wrote them; not one string was reworded here.
+        closeTodayAction: 'खात्री करा',
+        noWorkReasonPrompt: 'का? (ऐच्छिक)',
+        noWorkSkipReason: 'दिवस नोंदवा',
+        noWorkReason: {
+            weather: 'पाऊस / हवामान',
+            electricity: 'वीज नव्हती',
+            water: 'पाणी नव्हतं',
+            machinery: 'यंत्र बिघडलं',
+            labour: 'माणसं नव्हती',
+            other: 'दुसरं काही',
+        },
+        dayUnderstandingIntro: 'मी तुमचा आजचा दिवस समजून घेतला',
+        dayUnderstandingPending: 'अजून समजतंय…',
+        shramSafalReviewed: 'श्रम सफल ने तपासलेलं',
+        sathiSaidLine: 'श्रम सफल मध्ये तुम्ही आज केलेले काम समजून घेत आहे',
+        sectionWork: 'आज तुम्ही काय केलं',
+        sectionGrasp: 'मला किती समजलं',
+        sectionAsk: 'साथीला अजून हवं आहे',
+        sectionStreak: 'तुमचं सातत्य',
+        dayUnderstandingMeaning: 'जेवढं सांगाल, तेवढं मला समजतं.',
+        graspBandLow: 'थोडं समजलं',
+        graspBandSome: 'बऱ्यापैकी समजलं',
+        graspBandGood: 'बरंच समजलं',
+        graspBandFull: 'सगळं समजलं',
+        streakDaysUnit: 'दिवस सलग',
+        streakTomorrow: 'उद्या पण सांगा — दररोज बोलत रहा.',
+        graspTarget: '{target} पर्यंत पोहोचायचंय',
+        graspTargetHit: 'तुम्ही खूण गाठली!',
+        askRaisesScore: 'हे सांगितलं तर आकडा वाढेल',
+        noWorkDayAcknowledged: 'आज काम नाही — तुम्ही सांगितलं, मी नोंदवलं.',
+        consistencyKept: 'सलग {days} दिवस तुम्ही न चुकता सांगताय.',
+        meterArrivalProgress: '{count}/{target} दिवसांची कामे समजली',
+        meterArrivalArrived: ' — आता मी तुमचं शेत ओळखू लागलो',
+        dailyLoopTasksLeft: 'आज {count} कामं बाकी',
+        dailyLoopDayFree: 'आज काहीच सांगितलं नाही. काम झालं नसेल तर कारण सांगा — किंवा "आज काम नाही" एवढं सांगा.',
+        dailyLoopDaySettled: 'आज सगळं सांगून झालं — काही बाकी नाही.',
+        dailyLoopCarriedOne: 'काल पासून: {title}',
+        dailyLoopCarriedMany: '(यातील {count} काल पासून)',
+        dailyLoopClarity: '{done} पूर्ण, {left} बाकी',
+        morningNotificationTitle: 'आजची कामे पाहा',
+        unlockSpokenLine: 'शाब्बास !!! आता मला तुमचं शेत आणि तुमची काम करण्याची पद्धत सविस्तर समजू लागली आहे',
     },
 } as const;
 
@@ -164,7 +256,7 @@ describe('translations.ts split — the copy moved, and only the copy', () => {
     it('`t()` still resolves a DFES key rather than echoing it back', () => {
         // `t()` returns the KEY when a lookup misses, so a broken composition
         // would render `dfes.closeToday` on a button instead of throwing.
-        expect(t('dfes.closeToday', 'mr')).toBe('आजच्या सर्व नोंदी माझ्यापर्यंत पोहोचल्या का याची खात्री करा');
+        expect(t('dfes.closeToday', 'mr')).toBe('आजची सगळी कामे माझ्यापर्यंत पोहोचली का याची खात्री करा');
         expect(t('dfes.closeToday', 'en')).toBe('Close today');
         expect(t('dfes.clickToClose', 'mr')).not.toBe('dfes.clickToClose');
     });
@@ -182,8 +274,18 @@ describe('translations.ts split — the copy moved, and only the copy', () => {
         // this split could have gone wrong. `shramSathi` is the name and is
         // legitimately transliterated, so it is checked by value above rather
         // than by script here.
-        const latinOnly = Object.entries(dfesTranslations.mr)
-            .filter(([, value]) => !/[ऀ-ॿ]/.test(value));
+        // Flattened one level: `noWorkReason` (dfes-companion) is a GROUP of six
+        // chip labels, not a string, so a bare regex over the top-level values
+        // tested `[object Object]` and reported the whole group as Latin. Its six
+        // members are the strings that actually need checking.
+        const entries: Array<[string, string]> = Object.entries(dfesTranslations.mr)
+            .flatMap(([key, value]) =>
+                typeof value === 'string'
+                    ? [[key, value] as [string, string]]
+                    : Object.entries(value as Record<string, string>)
+                        .map(([sub, text]) => [`${key}.${sub}`, text] as [string, string]));
+
+        const latinOnly = entries.filter(([, value]) => !/[ऀ-ॿ]/.test(value));
 
         expect(latinOnly).toEqual([]);
     });

@@ -21,6 +21,7 @@ import { renderReflectView, renderCompareView, renderLogView } from './mainView'
 import { renderGlobalSheets } from './globalSheets';
 import MainViewTransition from './MainViewTransition';
 import { useUiPref } from '../../shared/hooks/useUiPref';
+import { useFarmContext } from '../session/FarmContext';
 import { useAppRouterDerivations } from './hooks/useAppRouterDerivations';
 import { useNudgeRouteEffect } from './hooks/useNudgeRouteEffect';
 import { useLabourLogArrivalScroll } from './hooks/useLabourLogArrivalScroll';
@@ -61,6 +62,9 @@ const AppRouter: React.FC = () => {
         typeof window === 'undefined',
     );
     const { getTodayCounts, getContextColorIndicator } = useAppViewHelpers();
+    // Session's active farm — threaded into ctx so the hook-free route render
+    // functions (mainView) can reach it. See AppRouterContext.activeFarmId.
+    const { currentFarmId } = useFarmContext();
 
     const { currentRoute, setCurrentRoute, mainView, setMainView, logIntent, setLogIntent, lastLabourLogIds } = navigation;
     const { logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady } = context;
@@ -82,6 +86,7 @@ const AppRouter: React.FC = () => {
         draftLog, setDraftLog, provenance,
         // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2.
         voiceStreamingPhase, liveCaption,
+        continuityLevel, savedPendingCaptureId,
     } = voice;
 
     const weatherData = weather.weatherData;
@@ -104,6 +109,10 @@ const AppRouter: React.FC = () => {
     // and a flag no component reads is a promise the UI cannot keep.
     const [showReviewInbox, setShowReviewInbox] = React.useState(false);
     const [showQuickLog, setShowQuickLog] = React.useState(false);
+    // wave-3.10, founder decision 8 — the optional reason chips after he declares a
+    // no-work day. Lifted here alongside showQuickLog because the two hand off to
+    // each other and both live in renderGlobalSheets.
+    const [showNoWorkReason, setShowNoWorkReason] = React.useState(false);
     const [reflectFocusRequest, setReflectFocusRequest] = React.useState<{ logId: string; date: string; plotId?: string } | null>(null);
 
     // Convert a DailyLog to an editable AgriLogResponse (manual ledger edit flow).
@@ -197,6 +206,7 @@ const AppRouter: React.FC = () => {
     // modules free of hook calls (which would violate rules-of-hooks if
     // invoked conditionally).
     const ctx: AppRouterContext = {
+        activeFarmId: currentFarmId,
         currentRoute, setCurrentRoute, mainView, setMainView,
         logIntent, setLogIntent, lastLabourLogIds,
         logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady,
@@ -214,6 +224,7 @@ const AppRouter: React.FC = () => {
         error, errorTranscript,
         draftLog, setDraftLog, provenance,
         voiceStreamingPhase, liveCaption,
+        continuityLevel, savedPendingCaptureId,
         weatherData,
         weatherStatus,
         boundaryUnset,
@@ -223,6 +234,7 @@ const AppRouter: React.FC = () => {
         getTodayCounts, getContextColorIndicator,
         showReviewInbox, setShowReviewInbox,
         showQuickLog, setShowQuickLog,
+        showNoWorkReason, setShowNoWorkReason,
         reflectFocusRequest, setReflectFocusRequest,
         ownerDisplayName: derivations.ownerDisplayName,
         operatorNameById: derivations.operatorNameById,

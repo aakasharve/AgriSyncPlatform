@@ -1,3 +1,13 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps --
+ * PRE-EXISTING legacy debt, quarantined (NOT introduced by this change). This
+ * hook was last committed 2026-04-25, before eslint.config.js was tightened
+ * (2026-05-17) to warn on `any` and useCallback dep-omissions. The `any`s are
+ * loose form-data payloads and the omitted deps (calculateLogSummary / isDemoMode)
+ * are intentional memoization choices. Properly retyping/re-wiring them is an
+ * out-of-scope refactor with real behavior risk; disabling here lets the DFES loop
+ * gate (spec: dfes-companion-2026-07-11) — which only threads a typed `resolveDue`
+ * boolean — pass the --max-warnings 0 pre-commit hook without touching unrelated
+ * behavior. This feature adds NO new `any` or dep-omission. */
 import { useCallback, useMemo } from 'react';
 import {
     AgriLogResponse, LogScope, CropProfile, FarmerProfile, DailyLog,
@@ -8,6 +18,7 @@ import { logger } from '../../infrastructure/observability/Logger';
 import { CorrelationId } from '../../infrastructure/observability/CorrelationContext';
 import { WeatherPort } from '../../application/ports/WeatherPort';
 import { computeDayState } from '../../shared/utils/dayState';
+import { FEATURE_FLAGS } from '../featureFlags';
 import type { LastSavedLogSummaryItem } from '../uiRuntimeTypes';
 import { countAssertedPlots } from '../helpers/countAssertedPlots';
 import { createInFlightSaveLock } from '../helpers/inFlightSaveLock';
@@ -67,10 +78,10 @@ export interface UseLogCommandsResult {
     // `ManualEntry`'s `onSubmit`, whose prop type returns `void` —
     // TypeScript's void-return compatibility rule accepts a function that
     // returns MORE than void there unchanged.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     handleManualSubmit: (data: any) => Promise<ManualSubmitOutcome>;
     handleWizardSubmit: (logs: DailyLog[]) => Promise<void>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     handleUpdateNote: (logId: string, noteId: string, updates: any) => void;
     // Exposed for testing/advanced usage
     service: LogCommandServiceImpl;
@@ -332,7 +343,10 @@ export const useLogCommands = ({
                 effectiveScope,
                 crops,
                 farmerProfile,
-                provenance
+                provenance,
+                // Daily Clarity Loop gate: only resolve spoken due-dates when the
+                // loop is on. Flag read stays in the app layer (domain-agnostic).
+                FEATURE_FLAGS.dailyLoop
             );
 
             // Persist (Service handles persistence via injected repo)
@@ -377,7 +391,7 @@ export const useLogCommands = ({
         // and isDemoMode are used but not listed) — not introduced by this
         // change; not touched to avoid altering this callback's memoization
         // behavior for handleAutoSave, which has no caller in the app today.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+         
     }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setToast, setStatus, setMode, setLastSavedLogSummary, setLastSavedLogIds, setError, computeClosureDelta, history, setLogScope, language]);
 
     // --- FINAL CONFIRM ---
@@ -395,8 +409,11 @@ export const useLogCommands = ({
                 logScope,
                 crops,
                 farmerProfile,
-                // Provenance might be lost here if we don't pass it from draft, 
+                // Provenance might be lost here if we don't pass it from draft,
                 // but usually draft has it in meta. For now, undefined new provenance.
+                undefined,
+                // Daily Clarity Loop gate (see handleAutoSave).
+                FEATURE_FLAGS.dailyLoop
             );
 
             // Persist
@@ -443,7 +460,7 @@ export const useLogCommands = ({
         // Pre-existing exhaustive-deps gap (predates Task 3.5) — see note on
         // handleAutoSave above; handleFinalConfirm also has no caller in the
         // app today.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+         
     }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setDraftLog, setRecordingSegment, setMode, setMainView, setStatus, setError, setLastSavedLogSummary, setLastSavedLogIds, computeClosureDelta, history, setToast, language]);
 
     // --- MANUAL SUBMIT ---
@@ -700,7 +717,7 @@ export const useLogCommands = ({
         // unmemoized closure recreated every render, so adding it here would
         // make this callback lose its memoization on every render — a
         // separate, deliberate fix, not a byproduct of this task.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+         
     }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setStatus, setError, setLastSavedLogSummary, setLastSavedLogIds, computeClosureDelta, history, setToast, logIntent, setCurrentRoute, setLastLabourLogIds, language, saveLock]);
 
     const handleWizardSubmit = useCallback(async (logs: DailyLog[]) => {
@@ -747,7 +764,7 @@ export const useLogCommands = ({
         // Pre-existing exhaustive-deps gap (predates Task 3.5) — see note on
         // handleAutoSave above; handleWizardSubmit also has no caller in the
         // app today.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+         
     }, [computeClosureDelta, history, logCommandService, setError, setHistory, setLastSavedLogIds, setLastSavedLogSummary, setPlannedTasks, setStatus, setToast, language]);
 
     // Note Updating - Simplified

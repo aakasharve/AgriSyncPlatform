@@ -16,7 +16,7 @@
 //
 // Anything asserted here is measured from the repo, not remembered:
 //   - the allow-list count is asserted, so a parser that silently reads 3 of
-//     13 sites cannot report green;
+//     14 sites cannot report green;
 //   - the covered mutation names are asserted, so a mutation whose allow-list
 //     disappears is a failure, not a gap.
 import { describe, it, expect } from 'vitest';
@@ -33,12 +33,23 @@ const HANDLER_PATH = resolve(
     'src/apps/ShramSafal/ShramSafal.Application/UseCases/Sync/PushSyncBatch/PushSyncBatchHandler.cs',
 );
 
-// Measured 2026-08-15 against PushSyncBatchHandler.cs: thirteen call sites
-// (lines 470, 502, 549, 603, 917, 967, 1030, 1093, 1166, 1215, 1267, 1324,
-// 1379) plus the helper's own declaration at 1476, which is NOT a call site.
-// If a mutation gains or loses an allow-list this number must move
+// Measured 2026-08-27 against PushSyncBatchHandler.cs: FOURTEEN call sites
+// (lines 667, 699, 746, 800, 1254, 1304, 1393, 1454, 1576, 1649, 1698, 1750,
+// 1807, 1862) plus the helper's own declaration at 1959, which is NOT a call
+// site. If a mutation gains or loses an allow-list this number must move
 // deliberately, in the same commit, with the mutation named below.
-const EXPECTED_ALLOWLIST_COUNT = 13;
+//
+// 13 -> 14 on 2026-08-27, and the reason is the whole point of asserting a
+// count. This gate was authored on `main`, where `verify_log_v2` was a
+// dispatch case that answered MUTATION_TYPE_UNIMPLEMENTED and therefore
+// carried no allow-list at all. `feat/dfes-companion` WIRED that handler
+// (HandleVerifyLogV2Async), which is a fourteenth server-side key contract
+// that had never once been compared against its Zod object — the gate had
+// never run on this branch. Raising the number is correct BECAUSE a real
+// fourteenth allow-list exists and its parity now holds; lowering it, or
+// deleting the assertion, would be the exact "green check becomes
+// meaningless" failure the comment below names.
+const EXPECTED_ALLOWLIST_COUNT = 14;
 
 // The mutations that carry a server allow-list today. A mutation dispatched
 // to a handler with no `PayloadHasOnly` guard (jobcard.*, compliance.*) is
@@ -52,6 +63,10 @@ const EXPECTED_GUARDED_MUTATIONS = [
     'create_daily_log',
     'add_log_task',
     'verify_log',
+    // Wired by feat/dfes-companion. On `main` this mutation dispatches to a
+    // stub that returns MUTATION_TYPE_UNIMPLEMENTED and has no allow-list, so
+    // it is guarded HERE and not there — hence the count move above.
+    'verify_log_v2',
     'add_cost_entry',
     'allocate_global_expense',
     'correct_cost_entry',
@@ -141,7 +156,7 @@ function zodKeysFor(schemaKey: string): string[] {
 
 describe('G1 contract parity — server allow-list vs canonical Zod shape', () => {
     it(`parses exactly ${EXPECTED_ALLOWLIST_COUNT} PayloadHasOnly allow-lists`, () => {
-        // A gate that silently parses 3 of 13 and passes is how a green check
+        // A gate that silently parses 3 of 14 and passes is how a green check
         // becomes meaningless. Assert the count before asserting anything else.
         expect(
             allowlistByMethod.size,

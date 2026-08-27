@@ -89,6 +89,51 @@ const LabourItemSchema = z.object({
 // it is exactly what those clients mean.
 const ZDailyLogScope = z.enum(['Plot', 'MultiPlot', 'Farm']);
 
+// spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — the MANUAL
+// draft. Until now a manual save sent only the log's identity, so the server had
+// nothing to normalise: no typed children were ever written for it, the scorer
+// saw an empty day, and every manual-entry day was reported to the farmer as
+// 0/10. These are the eight buckets the confirm screen (ManualEntry.tsx) already
+// builds its `userDraft` from, and they are deliberately the SAME eight names as
+// `CreateDailyLogHandler.EvidenceArrayKeys` — one vocabulary, not a second list.
+//
+// Each row is `z.unknown()` on purpose. The buckets are heterogeneous and still
+// evolving on the client, and a strict per-row schema here would reject a farmer's
+// whole day over one unrecognised field. Row-level meaning is applied SERVER-side
+// by ManualDraftNormalizer, which copies only fields it recognises and never
+// invents one. The array-of-objects shape IS enforced (a scalar in a bucket is a
+// contract error, not data), and PushSyncBatchHandler independently rejects
+// unknown bucket keys and over-sized drafts at the sync boundary.
+const ZDraftBucket = z.array(z.unknown());
+
+// spec: dfes-companion-2026-07-11 (wave-3.10), founder decision 8 (2026-08-16) — the
+// farmer's own statement about the DAY, and the optional chip explaining it. These are
+// the only two NON-bucket keys the draft carries: scalars, not arrays of rows. The eight
+// bucket names above are untouched.
+//
+// The vocabulary is the SAME one the AI contract already uses (`DayOutcomeSchema`,
+// AgriLogResponseSchema.ts) — one vocabulary for what a day turned out to be, never a
+// second list that can drift out of step with the first.
+const ManualDraftSchema = z.object({
+    labour: ZDraftBucket.optional(),
+    inputs: ZDraftBucket.optional(),
+    irrigation: ZDraftBucket.optional(),
+    observations: ZDraftBucket.optional(),
+    plannedTasks: ZDraftBucket.optional(),
+    cropActivities: ZDraftBucket.optional(),
+    machinery: ZDraftBucket.optional(),
+    activityExpenses: ZDraftBucket.optional(),
+    dayOutcome: z.enum(['WORK_RECORDED', 'DISTURBANCE_RECORDED', 'NO_WORK_PLANNED', 'IRRELEVANT_INPUT']).optional(),
+    // OPTIONAL by doctrine P9: a declaration with no chip must still be accepted. Every
+    // field inside is optional too — a chip whose reason is missing simply writes no
+    // DisturbanceEvent server-side rather than failing the farmer's whole day.
+    disturbance: z.object({
+        scope: z.string().optional(),
+        cause: z.string().optional(),
+        reason: z.string().optional(),
+    }).optional(),
+});
+
 export const CreateDailyLogPayload = z.object({
     dailyLogId: ZGuid,
     farmId: ZGuid,
@@ -121,6 +166,10 @@ export const CreateDailyLogPayload = z.object({
     // this key and maps it onto CreateDailyLogCommand.Labour, but nothing
     // persists it yet (Task 6).
     labour: z.array(LabourItemSchema).optional(),
+    // The farmer's typed day. Present on a MANUAL save; omitted on a voice
+    // confirm (whose facts already ride sourceAiJobId's AiJob) and omitted by
+    // every older client — an absent draft must behave exactly as before.
+    manualDraft: ManualDraftSchema.optional(),
 });
 
 export type CreateDailyLogPayloadType = z.infer<typeof CreateDailyLogPayload>;

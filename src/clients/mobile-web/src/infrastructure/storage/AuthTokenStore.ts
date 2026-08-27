@@ -140,6 +140,21 @@ export function hasSessionPresence(): boolean {
     return readPresenceMarker() !== null;
 }
 
+/**
+ * The signed-in user's server id, WITHOUT requiring the in-memory access
+ * token. Reads the non-sensitive presence marker only — no token is exposed
+ * and none is needed.
+ *
+ * WAVE-1.4 (spec: dfes-companion-2026-07-11): `getAuthSession()` returns null
+ * between a page reload and the boot refresh, which would make the approve
+ * button's identity resolution flap. This id is used only to populate the
+ * wire's `verifierUserId`; server-side authority still comes from the JWT,
+ * so a stale marker can never grant anything.
+ */
+export function getSessionUserId(): string | null {
+    return readPresenceMarker()?.userId ?? null;
+}
+
 export function setAuthSession(session: AuthSession): void {
     // The access token lives in memory only — never in localStorage.
     inMemoryAccessToken = session.accessToken;

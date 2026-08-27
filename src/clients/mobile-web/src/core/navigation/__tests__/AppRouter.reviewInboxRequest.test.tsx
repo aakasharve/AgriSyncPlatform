@@ -88,6 +88,15 @@ vi.mock('../hooks/useAppRouterDerivations', () => ({
     }),
 }));
 
+// dfes-companion threads the session's active farm through AppRouter
+// (`AppRouterContext.activeFarmId`), so the component now calls
+// `useFarmContext()` and throws outside a FarmContextProvider. This harness
+// mounts AppRouter bare, on purpose — it is testing one event, not the
+// provider tree — so the hook is stubbed rather than the tree rebuilt.
+vi.mock('../../session/FarmContext', () => ({
+    useFarmContext: () => ({ currentFarmId: null }),
+}));
+
 vi.mock('../simpleRoutes', () => ({ SIMPLE_ROUTE_RENDERERS: [] }));
 vi.mock('../mainView', () => ({
     renderReflectView: () => null,

@@ -42,6 +42,25 @@ public interface ILedgerDerivationService
     Task<DerivationOutcome> DeriveAsync(
         DailyLog log, AiJob sourceJob, IIdGenerator ids, IClock clock,
         bool deriveLabour = true, CancellationToken ct = default);
+
+    /// <summary>
+    /// spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — the MANUAL
+    /// counterpart. Stages the same typed rows from
+    /// <paramref name="manualWireJson"/> (produced by <c>ManualDraftNormalizer</c> from
+    /// the farmer's typed draft) through the SAME persistence body, so a hand-typed day
+    /// records exactly what a spoken one does. Before this, a manual day persisted no
+    /// typed children at all and was scored 0/10.
+    ///
+    /// <para>Two things differ from the voice path, and only two. Provenance is
+    /// <c>Provenance.Manual(<paramref name="appVersion"/>)</c> — no model version, no
+    /// prompt version, no extractor SHA, because no AI touched these rows (P8). And the
+    /// <see cref="Domain.Farms.DerivedEventKey"/> is anchored to the LOG id rather than
+    /// a parse job id: deterministic and stable across re-saves, so re-derivation
+    /// supersedes the current row instead of duplicating it.</para>
+    /// </summary>
+    Task<DerivationOutcome> DeriveFromManualDraftAsync(
+        DailyLog log, string manualWireJson, string? appVersion,
+        IIdGenerator ids, IClock clock, CancellationToken ct = default);
 }
 
 /// <summary>Small tally of what a derivation staged, for the audit / log line.</summary>

@@ -72,6 +72,53 @@ public interface IShramSafalRepository
     Task<DailyLog?> GetDailyLogByIdAsync(Guid dailyLogId, CancellationToken ct = default);
     Task<DailyLog?> GetDailyLogByIdempotencyKeyAsync(string idempotencyKey, CancellationToken ct = default);
 
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.5) — every log that has NEVER been touched
+    /// by the verification FSM, oldest first, TRACKED so the caller can attest to them.
+    ///
+    /// <para><b>Why "no events at all" is the right predicate, and the whole guard.</b>
+    /// <c>DailyLog.CurrentVerificationStatus</c> folds the events and defaults to
+    /// <c>Draft</c>, so "reads Draft" is ambiguous: it covers a log nobody has ever
+    /// assessed AND a log a human deliberately re-opened (<c>Edit</c> writes a real Draft
+    /// event; <c>AddLogTaskHandler</c> walks an attested day back to Draft to re-cover new
+    /// content). Backfilling on "reads Draft" would therefore stamp approval over a
+    /// re-opening somebody performed on purpose. An EMPTY event list cannot mean that:
+    /// nothing has ever been asserted about this day by anyone, which is precisely and
+    /// only the population wave-1.3 left behind. It also makes the backfill self-limiting
+    /// — a log it has attested to has two events and can never be a candidate again, so
+    /// re-running is a no-op with no marker table to keep in sync.</para>
+    ///
+    /// <para><b>Why it takes a cursor and not just a limit (wave-1.5 review, I1).</b> Not
+    /// every candidate can be repaired: a mukadam's day, or one whose creator has left the
+    /// farm, is REFUSED and therefore stays a candidate forever — it has no verification
+    /// events and never will until a human presses approve. Ordered oldest-first, a run of
+    /// such rows holds the front of the result set on every re-read, so a caller that only
+    /// ever asks for "the first N candidates" re-reads the same refusals and can never see
+    /// what sorts behind them. With <paramref name="afterCreatedAtUtc"/> /
+    /// <paramref name="afterId"/> the caller walks FORWARD through the whole candidate set
+    /// instead, and an owner's stuck day behind 500 un-attestable ones is reached. Keyset,
+    /// not OFFSET, because the set shrinks underneath the walk as rows are repaired — an
+    /// offset would skip rows as it slid.</para>
+    ///
+    /// <para>Default no-op so the ~28 in-tree test doubles keep compiling, per the
+    /// additive-port convention above.</para>
+    /// </summary>
+    /// <param name="limit">Maximum candidates to return in this page.</param>
+    /// <param name="afterCreatedAtUtc">
+    /// Exclusive lower bound on <c>CreatedAtUtc</c> from the previous page's last row.
+    /// Null (with <paramref name="afterId"/>) starts from the oldest candidate.
+    /// </param>
+    /// <param name="afterId">
+    /// Tie-break half of the cursor: rows sharing <paramref name="afterCreatedAtUtc"/> are
+    /// included only if their id sorts after this one. Both halves are required —
+    /// <c>CreatedAtUtc</c> alone is not unique, and a bulk import can give many logs the
+    /// same timestamp.
+    /// </param>
+    /// <param name="ct">Cancellation.</param>
+    Task<IReadOnlyList<DailyLog>> GetDailyLogsWithNoVerificationHistoryAsync(
+        int limit, DateTime? afterCreatedAtUtc, Guid? afterId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<DailyLog>>(Array.Empty<DailyLog>());
+
     Task AddCostEntryAsync(CostEntry costEntry, CancellationToken ct = default);
     Task<CostEntry?> GetCostEntryByIdAsync(Guid costEntryId, CancellationToken ct = default);
     Task<List<CostEntry>> GetCostEntriesByIdsAsync(IEnumerable<Guid> costEntryIds, CancellationToken ct = default);
@@ -324,8 +371,76 @@ public interface IShramSafalRepository
     /// <summary>
     /// Returns worker metrics for ReliabilityScore computation.
     /// </summary>
-    Task<WorkerMetricsDto> GetWorkerMetricsAsync(UserId workerUserId, Guid? scopedFarmId, DateTime since30d, CancellationToken ct = default)
+    /// <remarks>
+    /// <para><paramref name="scopedFarmIds"/> is the tier-1 boundary in parameter form.
+    /// It used to be a single nullable farm id, where null meant "every farm he has ever
+    /// worked" — a portable reputation expressible by forgetting to pass an argument. It is
+    /// now an explicit, non-empty list, so the widest thing a caller can ask for is the
+    /// widest thing he was permitted.</para>
+    /// <para>Callers obtain it from <c>WorkerRecordAccess.PermittedFarmIds</c>; never pass
+    /// a raw client-supplied farm id, and never pass an empty list expecting "no filter" —
+    /// an empty list means no farms and must return nothing. See
+    /// <see cref="WorkerRecordPortability"/>.</para>
+    /// </remarks>
+    Task<WorkerMetricsDto> GetWorkerMetricsAsync(UserId workerUserId, IReadOnlyCollection<Guid> scopedFarmIds, DateTime since30d, CancellationToken ct = default)
         => Task.FromResult(new WorkerMetricsDto(0, 0, 0, 0, 0, 0, 0));
+
+    /// <summary>
+    /// The farms this user OWNS — not the farms he belongs to.
+    ///
+    /// <para>Founder ruling, 2026-08-17: an owner with two farms of his own may see his own
+    /// worker's record across both, because that is one owner's own record and not
+    /// portability at all. <see cref="WorkerRecordPortability.DecideAggregateScope"/> needs
+    /// ownership separately from membership to tell that case apart from a mukadam folding
+    /// two different owners' records together.</para>
+    ///
+    /// <para>The default is empty, which is fail-closed: an implementation that says
+    /// nothing claims no ownership, and the widening never fires.</para>
+    /// </summary>
+    Task<List<Guid>> GetOwnedFarmIdsForUserAsync(Guid userId, CancellationToken ct = default)
+        => Task.FromResult(new List<Guid>());
+
+    /// <summary>
+    /// TIER 2 — the statements farms have written about this worker
+    /// (<see cref="WorkerStatement"/>): "anything the ARVE farm owner wants to say".
+    ///
+    /// <para><b>Returns empty today, and empty means silence.</b> No table stores these and
+    /// no endpoint writes one, so there is nothing to return and nothing is invented. The
+    /// caller must render an empty result as the farm having said nothing — never as a zero
+    /// score, an unrated badge, or any phrasing implying a review was owed and withheld.
+    /// Writing one is optional, and an owner is allowed to stay silent forever.</para>
+    ///
+    /// <para>Whoever adds the table implements this against it. The read path, the tier
+    /// boundary and the attribution are already built and tested around this seam.</para>
+    /// </summary>
+    Task<IReadOnlyList<WorkerStatement>> GetWorkerStatementsAsync(UserId workerUserId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<WorkerStatement>>([]);
+
+    // --- spec: dfes-companion-2026-07-11 (wave-4.4) — founder ruling A, 2026-08-17 ----
+    /// <summary>
+    /// True when <paramref name="workerUserId"/> has himself granted
+    /// <see cref="WorkerRecordPortability.PortabilityConsentPurposeCode"/> — consent for
+    /// his identifiable record to leave the farm that recorded it.
+    ///
+    /// <para><b>The default is false, and false is the whole point.</b> Ruling A puts the
+    /// worker-consent question at portability, not at naming: his name inside his own
+    /// farm's records needs no consent, but a reputation that follows him to the next
+    /// employer needs HIS. Nothing in this codebase can grant that purpose yet, so every
+    /// implementation answers false and every cross-farm read is refused.</para>
+    ///
+    /// <para>This default impl is the fail-closed seam. When someone builds a portable
+    /// worker record they must come here and implement it against a real consent row —
+    /// they cannot ship the feature by forgetting this method, because forgetting it
+    /// denies. An owner's consent is NEVER an answer to this question, and
+    /// <c>ConsentPurpose.CrossFarmAggregation</c> is not either: that licenses
+    /// DE-IDENTIFIED data, and this boundary is only about data that still names him.</para>
+    ///
+    /// <para><b>Even a true here opens only tiers 2 and 3</b> — the farm's own operational
+    /// detail is not his to license, so no answer to this question moves it. See
+    /// <see cref="WorkerRecordTier"/>.</para>
+    /// </summary>
+    Task<bool> HasWorkerRecordPortabilityConsentAsync(UserId workerUserId, CancellationToken ct = default)
+        => Task.FromResult(false);
 
     // --- DATA_PRINCIPLE_SPINE sub-phase 02.5 (cost-category lookup) -------
     /// <summary>
@@ -898,4 +1013,215 @@ public interface IShramSafalRepository
     Task<FarmMembership?> GetTrackedFarmMembershipIncludingTerminalAsync(
         Guid farmId, Guid userId, CancellationToken ct = default)
         => GetTrackedFarmMembershipAsync(farmId, userId, ct);
+    /// <summary>
+    /// DFES (dfes-companion-2026-07-11) — all <see cref="ShramSafal.Domain.Dfes.DailyRichnessAggregate"/>
+    /// rows for a farm (the Phase-3 engagement fold reads these). Default impl returns empty so the
+    /// in-tree IShramSafalRepository test doubles keep compiling; production overrides.
+    /// </summary>
+    Task<IReadOnlyList<ShramSafal.Domain.Dfes.DailyRichnessAggregate>> GetDailyRichnessAggregatesForFarmAsync(
+        Guid farmId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Dfes.DailyRichnessAggregate>>(
+            Array.Empty<ShramSafal.Domain.Dfes.DailyRichnessAggregate>());
+
+    // ── DFES (dfes-companion-2026-07-11) daily richness derivation ─────────────
+    Task<IReadOnlyList<DailyLog>> GetDailyLogsForFarmDateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<DailyLog>>(Array.Empty<DailyLog>());
+
+    Task<IReadOnlyList<ShramSafal.Domain.Farms.ObservationEvent>> GetObservationEventsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Farms.ObservationEvent>>(
+            Array.Empty<ShramSafal.Domain.Farms.ObservationEvent>());
+
+    /// <summary>
+    /// wave-3.5, Ruling 3 (2026-08-15) — the day's system-captured
+    /// <see cref="ShramSafal.Domain.Farms.WeatherStamp"/> rows, so the scorer can stop
+    /// asking the farmer to repeat weather the app already holds.
+    ///
+    /// <para><c>ssf.weather_stamps</c> has been written on the same unit of work as the
+    /// log since 20260630040851_AddWeatherStampsTable and carries its own SELECT RLS
+    /// policy — but until this port existed <b>nothing had ever read it back</b>. That
+    /// was the whole gap: the data was there and the farmer was still being asked.</para>
+    ///
+    /// <para>Same shape as <see cref="GetObservationEventsForDailyLogsAsync"/> above: an
+    /// EXISTS-join child keyed by plain <c>DailyLogId</c>, read no-tracking because the
+    /// scorer only inspects it. Default empty so the in-tree test doubles keep compiling;
+    /// a double that does not override it simply sees no system weather, which is the
+    /// pre-3.5 behaviour exactly.</para>
+    /// </summary>
+    Task<IReadOnlyList<ShramSafal.Domain.Farms.WeatherStamp>> GetWeatherStampsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Farms.WeatherStamp>>(
+            Array.Empty<ShramSafal.Domain.Farms.WeatherStamp>());
+
+    // ── the rest of the day's PERSISTED spine (task-7, 2026-08-13) ─────────────
+    // The richness scorer used to read the AI job's NormalizedResultJson and
+    // nothing else, so every fact the farmer supplied that lives ONLY as a typed
+    // row — a labour engagement, an irrigation, a machine, a disturbance — was
+    // invisible to it on any log without a usable AI-JSON root. These reads give
+    // the scorer the same rows the farmer actually created. Default impls return
+    // empty so the in-tree test doubles keep compiling; production overrides.
+
+
+    /// <summary>DFES — the <see cref="IrrigationEntry"/> rows of the day's logs.</summary>
+    Task<IReadOnlyList<IrrigationEntry>> GetIrrigationEntriesForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<IrrigationEntry>>(Array.Empty<IrrigationEntry>());
+
+    /// <summary>DFES — the <see cref="MachineryUsage"/> rows of the day's logs.</summary>
+    Task<IReadOnlyList<MachineryUsage>> GetMachineryUsagesForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<MachineryUsage>>(Array.Empty<MachineryUsage>());
+
+    /// <summary>DFES — the <see cref="DisturbanceEvent"/> rows of the day's logs.</summary>
+    Task<IReadOnlyList<DisturbanceEvent>> GetDisturbanceEventsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<DisturbanceEvent>>(Array.Empty<DisturbanceEvent>());
+
+    /// <summary>
+    /// READ-ONLY lookup of the day's aggregate. The production implementation is
+    /// <b>NO-TRACKING</b> — the returned entity is DETACHED, so mutating it (e.g.
+    /// <c>ApplyDerivation</c>) and then calling <see cref="SaveChangesAsync"/> emits
+    /// <b>NO UPDATE AT ALL</b>: a silent, exception-free no-op.
+    /// <para><b>Do NOT use this overload when the caller intends to mutate the entity.</b>
+    /// Use <see cref="GetDailyRichnessAggregateForUpdateAsync"/> for any read-modify-write.</para>
+    /// </summary>
+    Task<ShramSafal.Domain.Dfes.DailyRichnessAggregate?> GetDailyRichnessAggregateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => Task.FromResult<ShramSafal.Domain.Dfes.DailyRichnessAggregate?>(null);
+
+    /// <summary>
+    /// FIX (dfes-companion-2026-07-11) — read the day's aggregate as a
+    /// <b>CHANGE-TRACKED</b> entity, for the read-modify-write recompute path
+    /// (<c>DailyRichnessDerivationService.RecomputeAsync</c>). Because the entity is
+    /// attached to the DbContext, a subsequent <c>ApplyDerivation</c> +
+    /// <see cref="SaveChangesAsync"/> actually emits the UPDATE.
+    /// <para>This exists SPECIFICALLY because <see cref="GetDailyRichnessAggregateAsync"/>
+    /// is no-tracking: mutating its detached result persisted NOTHING and froze the farmer's
+    /// day score at whatever the first log of the day produced. Read-only callers
+    /// (e.g. <c>GetDayUnderstandingHandler</c>) must keep using the no-tracking overload —
+    /// do not collapse these two into one tracked method.</para>
+    /// Default returns null so in-tree <c>IShramSafalRepository</c> test doubles keep
+    /// compiling; production overrides.
+    /// </summary>
+    Task<ShramSafal.Domain.Dfes.DailyRichnessAggregate?> GetDailyRichnessAggregateForUpdateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => Task.FromResult<ShramSafal.Domain.Dfes.DailyRichnessAggregate?>(null);
+
+    Task AddDailyRichnessAggregateAsync(
+        ShramSafal.Domain.Dfes.DailyRichnessAggregate aggregate, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    // ── DFES Phase 5 — question-engine telemetry (append-only ssf.question_events) ──
+    /// <summary>
+    /// Stage an append-only <see cref="ShramSafal.Domain.Dfes.QuestionEvent"/> row.
+    /// No SaveChanges — the handler owns the commit. Default no-op keeps existing
+    /// in-tree test doubles compiling (mirrors AddWeatherStampAsync, L69).
+    /// </summary>
+    Task AddQuestionEventAsync(ShramSafal.Domain.Dfes.QuestionEvent e, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    // ── wave-4.2 — the two append-only consent ledgers behind the gate's one tap ──
+    /// <summary>
+    /// Stage an append-only <see cref="ShramSafal.Domain.Consent.TermsAcceptanceEvent"/>.
+    /// No SaveChanges — the handler owns the commit, and it commits BOTH ledgers together
+    /// or neither. Default no-op keeps in-tree test doubles compiling.
+    /// </summary>
+    Task AddTermsAcceptanceEventAsync(
+        ShramSafal.Domain.Consent.TermsAcceptanceEvent e, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Stage an append-only <see cref="ShramSafal.Domain.Consent.ConsentGrantEvent"/>.
+    /// Same contract as the terms ledger above.
+    /// </summary>
+    Task AddConsentGrantEventAsync(
+        ShramSafal.Domain.Consent.ConsentGrantEvent e, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    // ── B1 (2026-08-27) — the idempotency reads behind LinkConsentGateToUserHandler ──
+    /// <summary>
+    /// The existing <c>TERMS_ACCEPTANCE_LINKED</c> row for this account and
+    /// pre-registration session, if one has already been written.
+    ///
+    /// <para><b>Why this read is possible at all.</b> A linking row carries
+    /// <c>user_id</c>, so the self policy's
+    /// <c>USING (user_id IS NOT NULL AND user_id = &lt;GUC&gt;)</c> admits it — unlike the
+    /// orphaned accepting row it links, which no role in this system can read. So the
+    /// caller can be told "already linked" rather than being handed a second row.</para>
+    ///
+    /// <para><b>Why it matters.</b> A client that loses the response to a successful link
+    /// must be free to call again — that retryability is what keeps a failed link from ever
+    /// needing to block a farmer (doctrine P9). Without this read, every retry would append
+    /// another pair of rows to a ledger that can never be cleaned up, because
+    /// <c>UPDATE</c>/<c>DELETE</c>/<c>TRUNCATE</c> are revoked.</para>
+    ///
+    /// <para>Default body returns null so in-tree test doubles keep compiling — the same
+    /// convention this file already uses for <see cref="FindQuestionEventAsync"/>.</para>
+    /// </summary>
+    Task<ShramSafal.Domain.Consent.TermsAcceptanceEvent?> FindTermsAcceptanceLinkAsync(
+        Guid userId, string preRegistrationSessionId, CancellationToken ct = default)
+        => Task.FromResult<ShramSafal.Domain.Consent.TermsAcceptanceEvent?>(null);
+
+    /// <summary>
+    /// The existing <c>CORE_DPDP_CONSENT_LINKED</c> row for this account and
+    /// pre-registration session, if one has already been written. Same contract and same
+    /// reason as the terms ledger above; queried separately because the two ledgers are
+    /// deliberately separate legal records and "linked" has to be true of both.
+    /// </summary>
+    Task<ShramSafal.Domain.Consent.ConsentGrantEvent?> FindConsentGrantLinkAsync(
+        Guid userId, string preRegistrationSessionId, CancellationToken ct = default)
+        => Task.FromResult<ShramSafal.Domain.Consent.ConsentGrantEvent?>(null);
+
+    /// <summary>
+    /// Read recent question_events for a farm (anti-repeat / cooldown feed). RLS
+    /// already scopes rows to the tenant; the app layer additionally membership-checks.
+    /// Default empty so test doubles compile.
+    /// </summary>
+    Task<IReadOnlyList<ShramSafal.Domain.Dfes.QuestionEvent>> GetRecentQuestionEventsForFarmAsync(
+        Guid farmId, DateTime sinceUtc, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Dfes.QuestionEvent>>(Array.Empty<ShramSafal.Domain.Dfes.QuestionEvent>());
+
+    /// <summary>
+    /// wave-3.3, Ruling 1 (2026-08-15) — the existing append-only row for
+    /// (<paramref name="dailyLogId"/>, <paramref name="questionKey"/>), if any.
+    ///
+    /// <para><c>ssf.question_events</c> carries <c>REVOKE UPDATE, DELETE</c>
+    /// (20260713052440_AddDfesDataSpine), so an upsert is unavailable to the app role:
+    /// the handler reads, then inserts. The partial unique index
+    /// <c>ux_question_events_log_question</c> (20260816090000_UniqueQuestionPerLog) is the
+    /// backstop for a genuine race; this read is what makes the ordinary offline retry
+    /// silent rather than a 500.</para>
+    ///
+    /// <para>Default body returns null so the in-tree <c>IShramSafalRepository</c> test
+    /// doubles keep compiling — the same convention this file already uses for
+    /// <see cref="AddWeatherStampAsync"/> and <see cref="AddQuestionEventAsync"/>. A double
+    /// that does not override this therefore behaves exactly as it did before wave-3.3.</para>
+    /// </summary>
+    Task<ShramSafal.Domain.Dfes.QuestionEvent?> FindQuestionEventAsync(
+        Guid dailyLogId, string questionKey, CancellationToken ct = default)
+        => Task.FromResult<ShramSafal.Domain.Dfes.QuestionEvent?>(null);
+
+    /// <summary>
+    /// task-3 (2026-08-14), founder ruling A — the gap dimensions the farmer actually
+    /// ANSWERED on one local day, for the daily-richness recompute to credit.
+    ///
+    /// <para>Returns only what <see cref="ShramSafal.Domain.Dfes.AnsweredGap.TryFrom"/>
+    /// accepts: a <c>gap.*</c> question whose response carries content. Non-gap questions
+    /// and empty answers yield nothing, so silence can never score (doctrine P4). Rows the
+    /// farmer explicitly SKIPPED are excluded before <c>TryFrom</c> ever sees them — it has
+    /// no access to the flag, so this read is what makes "a skip yields nothing" TRUE
+    /// rather than merely documented. Every instance MUST be built through <c>TryFrom</c>
+    /// — it is what upper-cases the dimension, and the extractor compares dimension names
+    /// with ordinal equality.</para>
+    ///
+    /// <para><c>question_events</c> has no local-date column, so the day is expressed as the
+    /// UTC window <see cref="ShramSafal.Domain.Dfes.FarmLocalDay.UtcWindow"/> defines —
+    /// the same rule the handler uses to decide which day was answered. RLS scopes rows to
+    /// the caller's tenant; the app layer additionally membership-checks. Default empty so
+    /// in-tree test doubles keep compiling; production overrides.</para>
+    /// </summary>
+    Task<IReadOnlyList<ShramSafal.Domain.Dfes.AnsweredGap>> GetAnsweredGapsAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Dfes.AnsweredGap>>(Array.Empty<ShramSafal.Domain.Dfes.AnsweredGap>());
 }

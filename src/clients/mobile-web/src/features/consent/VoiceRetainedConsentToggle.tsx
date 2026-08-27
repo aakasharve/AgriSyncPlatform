@@ -7,8 +7,15 @@
 //
 // On the first ON transition (state.acceptedAtUtc was null OR the
 // toggle was previously false), surfaces VoiceRetainedFirstGrantBanner
-// to capture the explicit attestation modal flow. OFF transitions
-// PUT directly without the modal.
+// to capture the explicit attestation modal flow.
+//
+// spec: dfes-companion-2026-07-11 (farm-memory) — ADR-DS-017 (c).
+// OFF transitions used to PUT directly, with no modal at all. Granting
+// was a considered act and revoking was one careless tap, which is the
+// wrong way round: OFF is the direction with consequences. It now goes
+// through VoiceRetainedStopFutureBanner, whose job is to state the thing
+// the farmer cannot otherwise know from a checkbox — that this stops
+// FUTURE saving and leaves everything already saved alone.
 
 import React, { useCallback, useState } from 'react';
 import { Mic, BookOpen } from 'lucide-react';
@@ -20,6 +27,7 @@ import {
 import { APP_VERSION } from '../../infrastructure/api/transport';
 import { useFullHistoryJournalConsent } from '../voiceDiary/hooks/useFullHistoryJournalConsent';
 import VoiceRetainedFirstGrantBanner from './VoiceRetainedFirstGrantBanner';
+import VoiceRetainedStopFutureBanner from './VoiceRetainedStopFutureBanner';
 
 interface Props {
     locale: VoiceDiaryLocale;
@@ -30,6 +38,7 @@ interface Props {
 const VoiceRetainedConsentToggle: React.FC<Props> = ({ locale, onOpenVoiceDiary }) => {
     const { granted, loaded, state, reload } = useFullHistoryJournalConsent();
     const [showFirstGrant, setShowFirstGrant] = useState(false);
+    const [showStopFuture, setShowStopFuture] = useState(false);
     const [saving, setSaving] = useState(false);
     const [expanded, setExpanded] = useState(false);
 
@@ -59,7 +68,13 @@ const VoiceRetainedConsentToggle: React.FC<Props> = ({ locale, onOpenVoiceDiary 
                 setShowFirstGrant(true);
                 return;
             }
-            // Toggle OFF (or subsequent ON after revoke) — no modal, just persist.
+            // Turning OFF — confirm, and say what it does and does not do.
+            // Nothing is persisted until he confirms, so a mis-tap on the
+            // checkbox changes nothing on the server.
+            if (!nextValue && granted) {
+                setShowStopFuture(true);
+                return;
+            }
             await persistConsent(nextValue);
         },
         [granted, persistConsent],
@@ -72,6 +87,15 @@ const VoiceRetainedConsentToggle: React.FC<Props> = ({ locale, onOpenVoiceDiary 
 
     const onFirstGrantDismiss = useCallback(() => {
         setShowFirstGrant(false);
+    }, []);
+
+    const onStopFutureConfirm = useCallback(async () => {
+        await persistConsent(false);
+        setShowStopFuture(false);
+    }, [persistConsent]);
+
+    const onStopFutureDismiss = useCallback(() => {
+        setShowStopFuture(false);
     }, []);
 
     return (
@@ -145,6 +169,14 @@ const VoiceRetainedConsentToggle: React.FC<Props> = ({ locale, onOpenVoiceDiary 
                     saving={saving}
                     onConfirm={onFirstGrantConfirm}
                     onDismiss={onFirstGrantDismiss}
+                />
+            )}
+            {showStopFuture && (
+                <VoiceRetainedStopFutureBanner
+                    locale={locale}
+                    saving={saving}
+                    onConfirm={onStopFutureConfirm}
+                    onDismiss={onStopFutureDismiss}
                 />
             )}
         </>

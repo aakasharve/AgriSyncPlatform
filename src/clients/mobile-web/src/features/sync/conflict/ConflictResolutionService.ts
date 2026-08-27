@@ -192,10 +192,10 @@ export class ConflictResolutionService {
             return 'सर्व्हरवर हा प्रकार अद्याप तयार नाही. नंतर पुन्हा प्रयत्न करा.';
         }
         if (upper.includes('FORBIDDEN') || upper.includes('UNAUTHORIZED')) {
-            return 'या नोंदीसाठी आपली परवानगी नाही. आकाशला सांगा.';
+            return 'या कामासाठी आपली परवानगी नाही. श्रम सफलच्या नंबरला कॉल करा.';
         }
         if (upper.includes('VALIDATION') || upper.includes('INVALID_COMMAND') || upper.includes('INVALID_PAYLOAD')) {
-            return 'नोंदीची माहिती तपासा. नंतर बदल करून पुन्हा प्रयत्न करा.';
+            return 'माहिती तपासा. नंतर बदल करून पुन्हा प्रयत्न करा.';
         }
         if (autoRetriesExhausted) {
             return 'अॅपने पुन्हा पाठवणे थांबवले आहे. तपासा आणि पुन्हा प्रयत्न करा.';

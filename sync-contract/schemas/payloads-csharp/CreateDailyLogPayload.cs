@@ -56,6 +56,34 @@ public sealed record LabourItem(
     decimal? DurationHours = null
 );
 
+public sealed record DisturbanceItem(
+    string? Scope = null,
+    string? Cause = null,
+    string? Reason = null
+);
+
+public sealed record ManualDraftItem(
+    // generator: ZodAny / ZodUnknown
+    IReadOnlyList<object>? Labour = null,
+    // generator: ZodAny / ZodUnknown
+    IReadOnlyList<object>? Inputs = null,
+    // generator: ZodAny / ZodUnknown
+    IReadOnlyList<object>? Irrigation = null,
+    // generator: ZodAny / ZodUnknown
+    IReadOnlyList<object>? Observations = null,
+    // generator: ZodAny / ZodUnknown
+    IReadOnlyList<object>? PlannedTasks = null,
+    // generator: ZodAny / ZodUnknown
+    IReadOnlyList<object>? CropActivities = null,
+    // generator: ZodAny / ZodUnknown
+    IReadOnlyList<object>? Machinery = null,
+    // generator: ZodAny / ZodUnknown
+    IReadOnlyList<object>? ActivityExpenses = null,
+    /// <summary>Allowed values: "WORK_RECORDED", "DISTURBANCE_RECORDED", "NO_WORK_PLANNED", "IRRELEVANT_INPUT".</summary>
+    string? DayOutcome = null,
+    DisturbanceItem? Disturbance = null
+);
+
 public sealed record CreateDailyLogPayload(
     Guid DailyLogId,
     Guid FarmId,
@@ -69,5 +97,6 @@ public sealed record CreateDailyLogPayload(
     LocationItem? Location = null,
     WeatherStampItem? WeatherStamp = null,
     Guid? SourceAiJobId = null,
-    IReadOnlyList<LabourItem>? Labour = null
+    IReadOnlyList<LabourItem>? Labour = null,
+    ManualDraftItem? ManualDraft = null
 );

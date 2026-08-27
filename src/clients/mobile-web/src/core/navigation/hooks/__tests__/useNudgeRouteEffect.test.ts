@@ -95,4 +95,56 @@ describe('useNudgeRouteEffect — every nudge lands somewhere real (F3)', () => 
 
         expect(window.location.search).toBe('?keep=yes');
     });
+
+    // ------------------------------------------------------------------
+    // PORTED FROM `useNudgeRouteEffect.test.tsx` IN THE
+    // main -> feat/dfes-companion MERGE, WHICH THIS FILE REPLACES.
+    //
+    // That file was `feat/dfes-companion`'s Task 7 + Task 1.7 suite for this
+    // same hook. Three of its six cases were duplicates of cases above; one
+    // ("still opens the close-day summary") asserted `setShowCloseDaySummary`
+    // and two asserted `setShowReviewInbox` / `todayUnverifiedCount` — three
+    // parameters finding F3 removed from this hook's input entirely, so they
+    // could not be ported, only re-pointed at where the behaviour went:
+    //
+    //   close-day lands somewhere real  -> close_day_nudge_opens_the_waiting_drawer (above)
+    //   a pending log reaches the owner -> oversightSelectors.ts emits the
+    //       `approval` decision when `unverifiedCount > 0`
+    //       (oversightSelectors.test.ts, WaitingDrawer.test.tsx), the drawer
+    //       row's tap becomes `requestOpenReviewInbox`
+    //       (AppHeader.oversight.test.tsx), and AppRouter opens the sheet
+    //       (AppRouter.reviewInboxRequest.test.tsx).
+    //
+    //   ⚠️ ONE DELIBERATE PRODUCT CHANGE, NOT A GAP: dfes's Task 1.7 auto-OPENED
+    //   the review inbox with no tap. It no longer does — `useNudgeRouteEffect.ts`
+    //   states why ("one surface ... rather than two overlays racing to the
+    //   front"). The count still reaches the owner unprompted, as the drawer's
+    //   approval row; opening the inbox now costs one tap. Recorded here rather
+    //   than dropped silently.
+    //
+    // The two cases below were genuinely NOT covered here, so they are ported
+    // verbatim in intent rather than assumed.
+    // ------------------------------------------------------------------
+
+    it('strips the param for a nudge with no branch of its own, not just close-day', () => {
+        // The strip runs after the branch table, so a future edit that moved
+        // it inside `if (nudge === 'close-day')` would still pass the strip
+        // test above. `open-today` is real — `sw.js` produces it — and it has
+        // no branch, which is exactly what makes it the case that catches that.
+        renderWithSearch('?nudge=open-today');
+
+        expect(window.location.search).toBe('');
+    });
+
+    it('an empty query string is a no-op and stays empty', () => {
+        // Distinct from "?other=1" above: that proves an unrelated param
+        // survives, this proves the bare URL is not rewritten at all. A hook
+        // that called `replaceState` unconditionally would pass that one.
+        const { setCurrentRoute, setMainView } = renderWithSearch('');
+
+        expect(setCurrentRoute).not.toHaveBeenCalled();
+        expect(setMainView).not.toHaveBeenCalled();
+        expect(drawerRequests).toBe(0);
+        expect(window.location.search).toBe('');
+    });
 });

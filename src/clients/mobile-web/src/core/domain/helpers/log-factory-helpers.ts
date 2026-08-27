@@ -1,7 +1,8 @@
 import {
     InputEvent, ActivityExpenseEvent,
     CropProfile, DailyLog, AgriLogResponse, PlannedTask, ObservationSeverity,
-    Plot, SelectedCropContext, LabourEvent, MachineryEvent
+    Plot, SelectedCropContext, LabourEvent, MachineryEvent,
+    FarmerProfile, OperatorCapability
 } from '../../../types';
 import { IdGenerator } from '../services/IdGenerator';
 
@@ -567,4 +568,33 @@ export function computeReceiptTotal(parts: {
 
 export function sumExpenseCost(events: ActivityExpenseEvent[]): number {
     return events.reduce((sum, event) => sum + (event.totalAmount || 0), 0);
+}
+
+
+/**
+ * Trust predicate: does the ACTIVE operator hold approval authority?
+ *
+ * WAVE-1.1 (spec: dfes-companion-2026-07-11). Was
+ * `profile.activeOperatorId === 'owner'` at four sites. Post-sync
+ * `profileAndCropsReconciler` overwrites `activeOperatorId` with a server
+ * GUID (its preserve-existing candidates are all `operator.userId`, so the
+ * literal `'owner'` can never match), so NOBODY matched and every log the
+ * owner recorded was filed PENDING — he logged work and his score dropped.
+ *
+ * Compare CAPABILITY, never identity: `capabilities` exists in BOTH states
+ * (pre-sync seeded by `useAppData`, post-sync via `capabilitiesForRole`),
+ * whereas the owner's GUID is absent on a new device — an id comparison has
+ * a day-one hole. APPROVE_LOGS rather than `role === 'PRIMARY_OWNER'`
+ * because SECONDARY_OWNER legitimately holds it (`operatorRole.ts`), and it
+ * is the same predicate `isVerifier` encodes.
+ *
+ * LIVES HERE, NOT ON `LogFactory`, because LABOUR_PHASE2 B1b split the four
+ * call sites across two files: two stayed on `LogFactory` (the farm-wide
+ * branches) and two moved to `log-partition-builders.ts`. A `private static`
+ * could not serve both, and duplicating the predicate is how the four sites
+ * drifted apart in the first place.
+ */
+export function hasApprovalAuthority(profile: FarmerProfile): boolean {
+    const actor = profile.operators?.find(op => op.id === profile.activeOperatorId);
+    return actor?.capabilities?.includes(OperatorCapability.APPROVE_LOGS) ?? false;
 }

@@ -2,16 +2,32 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * OnboardingPermissionsPage — the consent screen, shown after the Welcome and
- * before the app. Themed to match the Welcome + Login screens (light white /
- * pale-mint, green field band, stone text, emerald accents, serif heading /
- * sans body) so onboarding reads as one product. The real permission logic
- * (query + request + skip, writing shramsafal_permissions_granted) is unchanged.
+ * OnboardingPermissionsPage — the DEVICE-PERMISSIONS EXPLAINER, shown after the
+ * Welcome and before the app. Themed to match the Welcome + Login screens so
+ * onboarding reads as one product.
+ *
+ * spec: dfes-companion-2026-07-11 (wave-4.3) — IT IS NO LONGER "the consent
+ * screen", and it no longer asks for anything.
+ *
+ * An OS permission is not DPDP consent. Consent is given once, on the first-open
+ * gate (wave-4.1), against a notice that names purposes. This screen only tells
+ * the farmer which device capabilities the app will ask for LATER, at the moment
+ * he uses the feature that needs one — see
+ * features/consent/separation/devicePermissions.ts.
+ *
+ * What changed and why: this screen used to fire getUserMedia for microphone AND
+ * camera plus a geolocation prompt in one sweep behind a single "grant all
+ * permissions" button. That asks for three capabilities before he has seen one
+ * reason to grant any of them, which is how they get refused — and a refusal here
+ * is one he has no context to reconsider. It also blurred the two acts: a farmer
+ * who tapped it had granted the OS three things and consented to nothing, while
+ * the screen's own title said संमती.
  */
 import React, { useState, useEffect } from 'react';
 import { Shield, MapPin, Mic, Camera, HardDrive, Check, ChevronRight, Lock } from 'lucide-react';
 import { useUiPref } from '../shared/hooks/useUiPref';
 import DawnScene from './onboarding/DawnScene';
+import { readDevicePermission } from '../features/consent/separation/devicePermissions';
 
 interface OnboardingPermissionsPageProps {
     onComplete: () => void;
@@ -29,19 +45,20 @@ const OnboardingPermissionsPage: React.FC<OnboardingPermissionsPageProps> = ({ o
         camera: false,
     });
 
+    // READ ONLY — readDevicePermission never prompts. Rendering this screen must not be
+    // able to trigger an OS dialog as a side effect; that is the whole point of keeping
+    // the read and the request as two different functions.
     const checkPermissions = async () => {
-        try {
-            const loc = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
-            const mic = await navigator.permissions.query({ name: 'microphone' as PermissionName });
-            const cam = await navigator.permissions.query({ name: 'camera' as PermissionName });
-            setPermissions({
-                location: loc.state === 'granted',
-                microphone: mic.state === 'granted',
-                camera: cam.state === 'granted',
-            });
-        } catch (e) {
-            console.warn('Permissions query not fully supported', e);
-        }
+        const [location, microphone, camera] = await Promise.all([
+            readDevicePermission('location'),
+            readDevicePermission('microphone'),
+            readDevicePermission('camera'),
+        ]);
+        setPermissions({
+            location: location === 'granted',
+            microphone: microphone === 'granted',
+            camera: camera === 'granted',
+        });
     };
 
     useEffect(() => {
@@ -50,42 +67,10 @@ const OnboardingPermissionsPage: React.FC<OnboardingPermissionsPageProps> = ({ o
         return () => clearTimeout(t);
     }, []);
 
-    const requestAllPermissions = async () => {
-        try {
-            // Stop tracks immediately after the grant — onboarding only needs the
-            // PERMISSION, not the live device (leaving the mic open broke the later
-            // AudioRecorder getUserMedia with a false "mic not granted").
-            try {
-                const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                micStream.getTracks().forEach((track) => track.stop());
-            } catch (e) {
-                console.warn('Microphone permission denied', e);
-            }
-            try {
-                const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
-                camStream.getTracks().forEach((track) => track.stop());
-            } catch (e) {
-                console.warn('Camera permission denied', e);
-            }
-            try {
-                if ('geolocation' in navigator) {
-                    await new Promise((resolve) => {
-                        navigator.geolocation.getCurrentPosition(resolve, resolve);
-                    });
-                }
-            } catch (e) {
-                console.warn('Location permission denied', e);
-            }
-            setPermissionsGranted(true);
-            onComplete();
-        } catch (error) {
-            console.error('Error requesting permissions', error);
-            setPermissionsGranted(true);
-            onComplete();
-        }
-    };
-
-    const skipOrSave = () => {
+    // Nothing is requested here. The pref records only that the explainer was seen —
+    // it has never meant "the OS granted anything", and now it cannot be misread as
+    // meaning "the farmer consented" either.
+    const acknowledge = () => {
         setPermissionsGranted(true);
         onComplete();
     };
@@ -117,8 +102,8 @@ const OnboardingPermissionsPage: React.FC<OnboardingPermissionsPageProps> = ({ o
                         <Shield size={22} strokeWidth={2} />
                     </span>
                     <div>
-                        <h1 className="font-serif text-[21px] font-bold leading-tight text-stone-800">खालील गोष्टींची संमती द्या</h1>
-                        <p className="mt-0.5 font-sans text-[12.5px] font-medium text-stone-500">श्रम साथी नीट चालण्यासाठी</p>
+                        <h1 className="font-serif text-[21px] font-bold leading-tight text-stone-800">फोनमधल्या कोणत्या गोष्टी लागतील</h1>
+                        <p className="mt-0.5 font-sans text-[12.5px] font-medium text-stone-500">ज्या वेळी लागेल त्याच वेळी विचारू — आत्ता काहीच मागत नाही</p>
                     </div>
                 </div>
             </div>
@@ -187,17 +172,17 @@ const OnboardingPermissionsPage: React.FC<OnboardingPermissionsPageProps> = ({ o
                 <div data-cs-anim className="relative mx-auto w-full max-w-[440px] px-6 pb-6 pt-2" style={anim('cs-up', '.5s', '.5s')}>
                     <button
                         type="button"
-                        onClick={requestAllPermissions}
+                        onClick={acknowledge}
                         className="flex w-full items-center justify-center gap-2.5 rounded-full bg-gradient-to-r from-emerald-700 via-emerald-600 to-emerald-500 py-[16px] font-sans text-[16px] font-black text-white shadow-[0_16px_34px_-10px_rgba(4,120,87,0.55)] ring-1 ring-white/25 transition-transform active:scale-[0.98]"
                     >
-                        <Shield size={18} /> सर्व परवानग्या द्या
+                        <Shield size={18} /> समजलं, पुढे चला
                     </button>
                     <button
                         data-testid="onboarding-skip"
-                        onClick={skipOrSave}
+                        onClick={acknowledge}
                         className="mt-2 w-full py-2 font-sans text-[13px] font-bold text-stone-400 transition-colors hover:text-stone-600"
                     >
-                        नंतर देईन
+                        मायक्रोफोन नको असेल तरी हाताने लिहून सगळं करता येतं
                     </button>
                     <p className="mt-1 flex items-center justify-center gap-1.5 text-center font-sans text-[10.5px] font-semibold leading-normal text-stone-400">
                         <Lock size={10} /> तुमची माहिती सुरक्षित आहे — फक्त गरजेपुरतीच वापरतो.

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import WeatherWidget from '../WeatherWidget';
 
@@ -72,5 +72,34 @@ describe('WeatherWidget states', () => {
     it('shows no verified tick when the boundary is not set', () => {
         render(<WeatherWidget status="ready" data={sampleData} boundaryUnset onOpenBoundary={vi.fn()} />);
         expect(screen.queryByTestId('weather-verified')).toBeNull();
+    });
+});
+
+/**
+ * WAVE 2.3 — THE SECOND TEMPERATURE NOBODY MEASURED.
+ * spec: dfes-companion-2026-07-11 (wave-2.3)
+ *
+ * `/ 31.5°C` was an unconditional JSX literal, not a fallback: the real fallbacks
+ * return entirely different components several returns earlier, so this rendered ONLY
+ * when live weather had already succeeded. It sat beside the genuine reading in matched
+ * typography, reading as a second measured figure — a high, or a feels-like, or a
+ * forecast. Nothing anywhere computes 31.5. Doctrine P4: never fabricate.
+ */
+describe('WeatherWidget — no invented temperature (spec: dfes-companion-2026-07-11)', () => {
+    it('renders only the live reading on the collapsed card', () => {
+        const { container } = render(<WeatherWidget status="ready" data={sampleData} />);
+
+        // Not vacuous: the REAL reading is on screen.
+        expect(screen.getByText('28.0°C')).toBeInTheDocument();
+        expect(container.textContent).not.toContain('31.5');
+    });
+
+    it('renders only the live reading inside the expanded modal', () => {
+        const { container } = render(<WeatherWidget status="ready" data={sampleData} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Weather details' }));
+
+        // Not vacuous: the modal really did open.
+        expect(screen.getByText('Previous 5 days')).toBeInTheDocument();
+        expect(container.textContent).not.toContain('31.5');
     });
 });

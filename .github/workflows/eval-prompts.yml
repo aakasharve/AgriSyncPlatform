@@ -39,9 +39,17 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install eval runner deps
+      # Tolerant install, same reason and same pattern as sync-contract in
+      # ci-gate/frontend-ci/e2e/android-release: this lockfile is generated on
+      # developer Windows machines and CI is Linux, so it omits the Linux-only
+      # @emnapi optional native deps that lightningcss pulls in. `npm ci`
+      # validates the lock is in sync BEFORE installing, so it dies here and the
+      # eval never runs. Only the two locks carrying lightningcss drift this way
+      # (sync-contract and this one); src/clients/mobile-web has no @emnapi
+      # entries at all, which is why its `npm ci` below stays `npm ci`.
+      - name: Install eval runner deps (tolerant — lock omits Linux-only @emnapi optional deps)
         working-directory: src/tests/ai-eval
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Run eval-runner unit tests
         working-directory: src/tests/ai-eval

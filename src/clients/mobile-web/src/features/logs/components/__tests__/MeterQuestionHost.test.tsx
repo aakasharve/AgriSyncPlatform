@@ -1,0 +1,387 @@
+// @vitest-environment jsdom
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * MeterQuestionHost — unit tests (Phase 5, Task 5.9).
+ *
+ * Asserts the host calls useDfesQuestion at component top-level with the
+ * flag-derived `enabled` gate (stageQuestions AND a farmId), threads the
+ * selected question + engagement through to MeterDisplay, and that tapping
+ * the resulting combined card fires recordOutcome({ skipped: false }).
+ *
+ * Mocks useDfesQuestion directly (rather than the deeper dfesQuestionApi) so
+ * these tests stay focused on MeterQuestionHost's own wiring; the hook's own
+ * fetch-gating and telemetry-recording behaviour is covered by
+ * useDfesQuestion.test.tsx. featureFlags is mocked via the established
+ * vi.doMock + vi.resetModules + dynamic-import pattern (see
+ * MeterDisplay.dfes.test.tsx) since featureFlags.ts's env read form is not
+ * reachable by vi.stubEnv in this repo.
+ *
+ * spec: dfes-companion-2026-07-11
+ */
+import React from 'react';
+import { render, cleanup, fireEvent } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import type { VlogScore } from '../../../../domain/types/log.types';
+
+const useDfesQuestionMock = vi.fn();
+
+vi.mock('../../hooks/useDfesQuestion', () => ({
+    useDfesQuestion: (...args: unknown[]) => useDfesQuestionMock(...args),
+}));
+
+// MeterQuestionHost renders the real MeterDisplay, which (Slice 3b) fetches the
+// server /10 via useDayUnderstanding and reads copy via useLanguage. Mock both so
+// these wiring tests stay network-silent and provider-free; the /10 display is
+// covered by MeterDisplay.test.tsx.
+vi.mock('../../hooks/useDayUnderstanding', () => ({
+    useDayUnderstanding: () => ({ score: null, isLoading: false, error: null, refresh: vi.fn() }),
+}));
+vi.mock('../../../../i18n/LanguageContext', () => ({
+    useLanguage: () => ({ language: 'en', setLanguage: () => undefined, t: (k: string) => k }),
+}));
+
+const score: VlogScore = {
+    score: 78,
+    outcome: 'SCORED',
+    dimensions: [{ dimension: 'DOSE', applicable: true, weight: 20, coverage: 0, confidenceFactor: 1, contribution: 0 }],
+};
+
+const arrivedLogs: Array<{ understanding?: VlogScore }> = Array.from({ length: 25 }, () => ({
+    understanding: { score: 90, outcome: 'SCORED', dimensions: [] },
+}));
+
+/** Load MeterQuestionHost with FEATURE_FLAGS.stageQuestions/understandingMeter forced. */
+async function loadComponent(understandingMeter: boolean, stageQuestions: boolean) {
+    vi.resetModules();
+    vi.doMock('../../../../app/featureFlags', () => ({
+        FEATURE_FLAGS: {
+            understandingMeter,
+            stageQuestions,
+            DwcChip: false,
+            disciplineSystem: false,
+            voiceContinuity: false,
+        },
+        isFarmGeographyV2Enabled: () => false,
+        isWeatherBackendFetchEnabled: () => false,
+        isVoiceDoomLoopDetectorEnabled: () => true,
+        IS_E2E_HARNESS_ENABLED: false,
+        isE2EHarnessEnabled: () => false,
+        isEnabled: () => understandingMeter,
+    }));
+    return import('../MeterQuestionHost');
+}
+
+beforeEach(() => {
+    useDfesQuestionMock.mockReset();
+    useDfesQuestionMock.mockReturnValue({ selected: null, loading: false, recordOutcome: vi.fn() });
+});
+
+afterEach(() => {
+    cleanup();
+    vi.doUnmock('../../../../app/featureFlags');
+    vi.resetModules();
+});
+
+describe('MeterQuestionHost (Phase 5, Task 5.9)', () => {
+    it('gates the hook on stageQuestions AND a non-null farmId', async () => {
+        const { MeterQuestionHost } = await loadComponent(true, true);
+        render(
+            <MeterQuestionHost
+                farmId="farm-1"
+                plotId="plot-1"
+                score={score}
+                allLogs={arrivedLogs}
+                questionInputs={{
+                    crop: 'grapes',
+                    todayLocalDate: '2026-07-11',
+                    score,
+                    engagement: { totalRichDays: 0, unlockStatus: 'locked' },
+                }}
+            />,
+        );
+        expect(useDfesQuestionMock).toHaveBeenCalledWith(
+            'farm-1', 'plot-1',
+            expect.objectContaining({ crop: 'grapes', todayLocalDate: '2026-07-11' }),
+            true,
+            // Task 4 — the 5th positional arg is notifyDfesAnswered
+            // (dfesAnswerSignal.ts), always passed so DayUnderstandingCard can
+            // refetch after an accepted answer.
+            expect.any(Function),
+        );
+    });
+
+    it('disables the hook when stageQuestions is OFF, even with a farmId present', async () => {
+        const { MeterQuestionHost } = await loadComponent(true, false);
+        render(
+            <MeterQuestionHost
+                farmId="farm-1"
+                plotId={null}
+                allLogs={arrivedLogs}
+                questionInputs={{ crop: 'grapes', todayLocalDate: '2026-07-11', engagement: { totalRichDays: 0, unlockStatus: 'locked' } }}
+            />,
+        );
+        expect(useDfesQuestionMock).toHaveBeenCalledWith('farm-1', null, expect.anything(), false, expect.any(Function));
+    });
+
+    it('disables the hook when farmId is null, even with stageQuestions ON', async () => {
+        const { MeterQuestionHost } = await loadComponent(true, true);
+        render(
+            <MeterQuestionHost
+                farmId={null}
+                plotId={null}
+                allLogs={arrivedLogs}
+                questionInputs={{ crop: '', todayLocalDate: '2026-07-11', engagement: { totalRichDays: 0, unlockStatus: 'locked' } }}
+            />,
+        );
+        expect(useDfesQuestionMock).toHaveBeenCalledWith('', null, expect.anything(), false, expect.any(Function));
+    });
+
+    // -------------------------------------------------------------------------
+    // Task 4 (spec: dfes-farmer-facing-deploy-readiness-2026-08-14)
+    // -------------------------------------------------------------------------
+    it('wires the real notifyDfesAnswered signal in as onAnswered, so DayUnderstandingCard can refetch', async () => {
+        const { MeterQuestionHost } = await loadComponent(true, true);
+        const { notifyDfesAnswered } = await import('../../services/dfesAnswerSignal');
+        render(
+            <MeterQuestionHost
+                farmId="farm-1"
+                plotId="plot-1"
+                score={score}
+                allLogs={arrivedLogs}
+                questionInputs={{ crop: 'grapes', todayLocalDate: '2026-07-11', score, engagement: { totalRichDays: 0, unlockStatus: 'locked' } }}
+            />,
+        );
+        const onAnswered = useDfesQuestionMock.mock.calls[0][4];
+        expect(onAnswered).toBe(notifyDfesAnswered);
+    });
+
+    it('threads the selected question into MeterDisplay and fires recordOutcome({ skipped: false }) on tap', async () => {
+        const recordOutcome = vi.fn();
+        useDfesQuestionMock.mockReturnValue({
+            selected: {
+                question: {
+                    questionKey: 'gap.dose', crop: 'grapes', lens: 'INPUTS', depthLevel: 1, priority: 4,
+                    cooldownDays: 7, questionType: 'TEXT', answerModes: 'text', safetyClass: 'NONE',
+                    agronomistApproved: true, marathiApproved: true, promptMr: 'किती डोस दिला?',
+                },
+                resolvedPromptMr: 'किती डोस दिला?',
+                triggerReason: 'gap DOSE leverage 20',
+                weatherContext: null,
+                expectedStage: null,
+                actualStageApplicability: null,
+            },
+            loading: false,
+            recordOutcome,
+        });
+        const { MeterQuestionHost } = await loadComponent(true, true);
+        const { getByTestId } = render(
+            <MeterQuestionHost
+                farmId="farm-1"
+                plotId="plot-1"
+                score={score}
+                allLogs={arrivedLogs}
+                questionInputs={{ crop: 'grapes', todayLocalDate: '2026-07-11', score, engagement: { totalRichDays: 0, unlockStatus: 'locked' } }}
+            />,
+        );
+
+        const card = getByTestId('shramsathi-gap-question');
+        expect(card.textContent).toBe('किती डोस दिला?');
+
+        fireEvent.click(card);
+        expect(recordOutcome).toHaveBeenCalledTimes(1);
+        expect(recordOutcome).toHaveBeenCalledWith({ skipped: false, dailyLogId: null });
+    });
+
+    it('returns null (renders nothing) when understandingMeter is OFF, regardless of stageQuestions', async () => {
+        const { MeterQuestionHost } = await loadComponent(false, true);
+        const { container } = render(
+            <MeterQuestionHost
+                farmId="farm-1"
+                plotId="plot-1"
+                allLogs={arrivedLogs}
+                questionInputs={{ crop: 'grapes', todayLocalDate: '2026-07-11', engagement: { totalRichDays: 0, unlockStatus: 'locked' } }}
+            />,
+        );
+        expect(container.firstChild).toBeNull();
+    });
+
+    // -------------------------------------------------------------------------
+    // Tap-to-answer (Task 2A, spec: dfes-companion-2026-07-11)
+    // -------------------------------------------------------------------------
+    // Hoisted out of the `tap-to-answer` describe (wave-3.1) so the log-id block below
+    // can reuse the SAME fixture rather than keeping a second copy that could drift.
+    function selectedWithOptions() {
+        return {
+            question: {
+                questionKey: 'stage.confirm_current', crop: 'grapes', lens: 'Execution', depthLevel: 1, priority: 3,
+                cooldownDays: 7, questionType: 'stage_confirm', answerModes: 'choice,voice', safetyClass: 'informational',
+                agronomistApproved: true, marathiApproved: true, promptMr: 'तुमची grapes आता कोणत्या टप्प्यात आहे?',
+                answerOptions: [
+                    { value: 'flowering', labelMr: 'फुलोरा', stageConfirmedValue: true },
+                    { value: 'not_yet', labelMr: 'अजून नाही', stageConfirmedValue: false },
+                ],
+            },
+            resolvedPromptMr: 'तुमची grapes आता कोणत्या टप्प्यात आहे?',
+            triggerReason: 'stage window open',
+            weatherContext: null,
+            expectedStage: 'flowering',
+            actualStageApplicability: 'current_stage',
+            answerOptions: [
+                { value: 'flowering', labelMr: 'फुलोरा', stageConfirmedValue: true },
+                { value: 'not_yet', labelMr: 'अजून नाही', stageConfirmedValue: false },
+            ],
+        };
+    }
+
+    describe('tap-to-answer', () => {
+        it('tapping a tap-choice option records ONE event carrying {skipped:false, response, stageConfirmed} — not a bare {skipped:false}', async () => {
+            const recordOutcome = vi.fn();
+            useDfesQuestionMock.mockReturnValue({ selected: selectedWithOptions(), loading: false, recordOutcome });
+            const { MeterQuestionHost } = await loadComponent(true, true);
+            const { getAllByTestId } = render(
+                <MeterQuestionHost
+                    farmId="farm-1"
+                    plotId="plot-1"
+                    score={score}
+                    allLogs={arrivedLogs}
+                    questionInputs={{ crop: 'grapes', todayLocalDate: '2026-07-11', score, engagement: { totalRichDays: 0, unlockStatus: 'locked' } }}
+                />,
+            );
+
+            const options = getAllByTestId('shramsathi-answer-option');
+            expect(options).toHaveLength(2);
+            fireEvent.click(options[0]); // "फुलोरा" -> stageConfirmedValue: true
+
+            expect(recordOutcome).toHaveBeenCalledTimes(1);
+            expect(recordOutcome).toHaveBeenCalledWith({ skipped: false, response: 'flowering', stageConfirmed: true, dailyLogId: null });
+        });
+
+        it('tapping the non-confirming option maps stageConfirmedValue:false through to stageConfirmed', async () => {
+            const recordOutcome = vi.fn();
+            useDfesQuestionMock.mockReturnValue({ selected: selectedWithOptions(), loading: false, recordOutcome });
+            const { MeterQuestionHost } = await loadComponent(true, true);
+            const { getAllByTestId } = render(
+                <MeterQuestionHost
+                    farmId="farm-1"
+                    plotId="plot-1"
+                    score={score}
+                    allLogs={arrivedLogs}
+                    questionInputs={{ crop: 'grapes', todayLocalDate: '2026-07-11', score, engagement: { totalRichDays: 0, unlockStatus: 'locked' } }}
+                />,
+            );
+
+            fireEvent.click(getAllByTestId('shramsathi-answer-option')[1]); // "अजून नाही"
+            expect(recordOutcome).toHaveBeenCalledWith({ skipped: false, response: 'not_yet', stageConfirmed: false, dailyLogId: null });
+        });
+
+        it('dismissing ("नंतर") a tap-choice question records {skipped:true} — never the answer shape', async () => {
+            const recordOutcome = vi.fn();
+            useDfesQuestionMock.mockReturnValue({ selected: selectedWithOptions(), loading: false, recordOutcome });
+            const { MeterQuestionHost } = await loadComponent(true, true);
+            const { getByTestId } = render(
+                <MeterQuestionHost
+                    farmId="farm-1"
+                    plotId="plot-1"
+                    score={score}
+                    allLogs={arrivedLogs}
+                    questionInputs={{ crop: 'grapes', todayLocalDate: '2026-07-11', score, engagement: { totalRichDays: 0, unlockStatus: 'locked' } }}
+                />,
+            );
+
+            fireEvent.click(getByTestId('shramsathi-answer-dismiss'));
+            expect(recordOutcome).toHaveBeenCalledTimes(1);
+            expect(recordOutcome).toHaveBeenCalledWith({ skipped: true, dailyLogId: null });
+        });
+
+        it('the host still calls recordOutcome exactly once per tap-choice click — the recordedRef one-shot guard itself is exercised at the useDfesQuestion hook level (useDfesQuestion.test.tsx)', async () => {
+            const recordOutcome = vi.fn();
+            useDfesQuestionMock.mockReturnValue({ selected: selectedWithOptions(), loading: false, recordOutcome });
+            const { MeterQuestionHost } = await loadComponent(true, true);
+            const { getAllByTestId } = render(
+                <MeterQuestionHost
+                    farmId="farm-1"
+                    plotId="plot-1"
+                    score={score}
+                    allLogs={arrivedLogs}
+                    questionInputs={{ crop: 'grapes', todayLocalDate: '2026-07-11', score, engagement: { totalRichDays: 0, unlockStatus: 'locked' } }}
+                />,
+            );
+
+            fireEvent.click(getAllByTestId('shramsathi-answer-option')[0]);
+            expect(recordOutcome).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    /**
+     * wave-3.1 (spec: dfes-companion-2026-07-11) — every outcome records WHICH log the
+     * question was about.
+     *
+     * The `dailyLogId: null` assertions above are only meaningful if this host can carry a
+     * REAL log id at all; otherwise they would pass against a host that hardcoded null.
+     * These are the positive controls, and they cover all three outcome paths — a SKIP is
+     * still "this log was asked", so wave-3.2 must never re-ask it.
+     */
+    describe('wave-3.1 — the log id rides on every outcome', () => {
+        const withLog = {
+            crop: 'grapes', todayLocalDate: '2026-07-11', score,
+            engagement: { totalRichDays: 0, unlockStatus: 'locked' as const },
+            sourceLogId: 'log-mon',
+        };
+
+        it('carries sourceLogId on an ANSWERED tap-choice outcome', async () => {
+            const recordOutcome = vi.fn();
+            useDfesQuestionMock.mockReturnValue({ selected: selectedWithOptions(), loading: false, recordOutcome });
+            const { MeterQuestionHost } = await loadComponent(true, true);
+            const { getAllByTestId } = render(
+                <MeterQuestionHost farmId="farm-1" plotId="plot-1" score={score} allLogs={arrivedLogs}
+                    questionInputs={withLog} />,
+            );
+
+            fireEvent.click(getAllByTestId('shramsathi-answer-option')[0]);
+            expect(recordOutcome).toHaveBeenCalledWith(
+                expect.objectContaining({ dailyLogId: 'log-mon', skipped: false }));
+        });
+
+        it('carries sourceLogId on a DISMISSED outcome — a skip still burns the question for that log', async () => {
+            const recordOutcome = vi.fn();
+            useDfesQuestionMock.mockReturnValue({ selected: selectedWithOptions(), loading: false, recordOutcome });
+            const { MeterQuestionHost } = await loadComponent(true, true);
+            const { getByTestId } = render(
+                <MeterQuestionHost farmId="farm-1" plotId="plot-1" score={score} allLogs={arrivedLogs}
+                    questionInputs={withLog} />,
+            );
+
+            fireEvent.click(getByTestId('shramsathi-answer-dismiss'));
+            expect(recordOutcome).toHaveBeenCalledWith({ skipped: true, dailyLogId: 'log-mon' });
+        });
+
+        it('carries sourceLogId on the no-options ACK outcome', async () => {
+            const recordOutcome = vi.fn();
+            useDfesQuestionMock.mockReturnValue({
+                selected: {
+                    question: {
+                        questionKey: 'gap.dose', crop: 'grapes', lens: 'INPUTS', depthLevel: 1, priority: 4,
+                        cooldownDays: 7, questionType: 'TEXT', answerModes: 'text', safetyClass: 'NONE',
+                        agronomistApproved: true, marathiApproved: true, promptMr: 'किती डोस दिला?',
+                    },
+                    resolvedPromptMr: 'किती डोस दिला?',
+                    triggerReason: 'gap DOSE leverage 20',
+                    weatherContext: null, expectedStage: null, actualStageApplicability: null,
+                },
+                loading: false,
+                recordOutcome,
+            });
+            const { MeterQuestionHost } = await loadComponent(true, true);
+            const { getByTestId } = render(
+                <MeterQuestionHost farmId="farm-1" plotId="plot-1" score={score} allLogs={arrivedLogs}
+                    questionInputs={withLog} />,
+            );
+
+            fireEvent.click(getByTestId('shramsathi-gap-question'));
+            expect(recordOutcome).toHaveBeenCalledWith({ skipped: false, dailyLogId: 'log-mon' });
+        });
+    });
+});

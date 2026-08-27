@@ -181,6 +181,199 @@ public sealed class VerificationStateMachineTests
         Assert.True(allowed);
     }
 
+    // ---------------------------------------------------------------------------
+    //  spec: 2026-08-25-prod-cutover-waves — FOUNDER RULING 2026-08-27
+    //
+    //  "if the owner has given that access to him then yes."
+    //
+    //  Approving a day is PERMISSION-gated, not role-gated. These tests are the pure
+    //  half of that ruling: the FSM takes the owner's explicit
+    //  can_manage_labour_records grant as an ARGUMENT (it is a Domain type; doctrine
+    //  E2 forbids it reaching for a repository), so every role can be enumerated
+    //  against BOTH grant states with no database.
+    //
+    //  BOTH DIRECTIONS ARE LOAD-BEARING. The positive cases are the ruling. The
+    //  negative cases are what stops it becoming a hole: an ungranted foreman must
+    //  still be unable to sign off his own day, and the grant must open exactly ONE
+    //  edge. Deleting a negative here silently re-opens the trust model.
+    // ---------------------------------------------------------------------------
+
+    [Fact]
+    public void ConfirmedToVerified_WithMukadam_AndNoGrant_IsStillRejected()
+    {
+        // THE REFUSAL THAT MUST SURVIVE. LabourManagementPermission.IsCarriedByRole
+        // carries the Mukadam by role (founder decision O-4) and he therefore passes
+        // ShramSafalAuthorizationEnforcer.EnsureCanVerify — but O-4 is about EDITING
+        // labour, not approving it. Without the owner's grant the edge stays shut.
+        var allowed = VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Confirmed,
+            VerificationStatus.Verified,
+            AppRole.Mukadam,
+            hasLabourManagementGrant: false);
+
+        Assert.False(allowed);
+    }
+
+    [Fact]
+    public void ConfirmedToVerified_WithMukadam_AndOwnerGrant_IsAllowed()
+    {
+        // The ruling itself. He approves BECAUSE the owner granted him that access,
+        // not because he is a Mukadam — which is why the flag, not the role, is what
+        // changed the answer between this test and the one above it.
+        var allowed = VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Confirmed,
+            VerificationStatus.Verified,
+            AppRole.Mukadam,
+            hasLabourManagementGrant: true);
+
+        Assert.True(allowed);
+    }
+
+    [Fact]
+    public void ConfirmedToVerified_WithWorker_AndOwnerGrant_IsAllowed()
+    {
+        // The grant is keyed on (farm, user) and is the owner's to give. Nothing in
+        // the ruling makes it a Mukadam-only privilege, and inventing that limit here
+        // would be a second permission concept — exactly what O-4 removed.
+        var allowed = VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Confirmed,
+            VerificationStatus.Verified,
+            AppRole.Worker,
+            hasLabourManagementGrant: true);
+
+        Assert.True(allowed);
+    }
+
+    [Fact]
+    public void ConfirmedToDisputed_WithGrant_IsStillRejected()
+    {
+        // ONE edge. The founder ruled on approving a day; disputing one — and the
+        // correction cycle that opens — was not ruled on and stays owner-tier.
+        var allowed = VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Confirmed,
+            VerificationStatus.Disputed,
+            AppRole.Mukadam,
+            hasLabourManagementGrant: true);
+
+        Assert.False(allowed);
+    }
+
+    [Fact]
+    public void VerifiedToDisputed_WithGrant_IsStillRejected()
+    {
+        // Re-opening a day an owner already vouched for is not a delegated act.
+        var allowed = VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Verified,
+            VerificationStatus.Disputed,
+            AppRole.Mukadam,
+            hasLabourManagementGrant: true);
+
+        Assert.False(allowed);
+    }
+
+    [Fact]
+    public void DraftToConfirmed_WithFieldScout_AndGrant_IsStillRejected()
+    {
+        // A grant never creates a PATH the role could not already travel. FieldScout
+        // holds no Draft->Confirmed edge, so a granted FieldScout still cannot walk a
+        // Draft log anywhere — the grant only opens the SECOND hop.
+        var allowed = VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Draft,
+            VerificationStatus.Confirmed,
+            AppRole.FieldScout,
+            hasLabourManagementGrant: true);
+
+        Assert.False(allowed);
+    }
+
+    [Fact]
+    public void GetAvailableTransitions_ForUngrantedMukadamOnConfirmed_OffersNothing()
+    {
+        var available = VerificationStateMachine.GetAvailableTransitions(
+            VerificationStatus.Confirmed, AppRole.Mukadam, hasLabourManagementGrant: false);
+
+        Assert.Empty(available);
+    }
+
+    [Fact]
+    public void GetAvailableTransitions_ForGrantedMukadamOnConfirmed_OffersVerifiedOnly()
+    {
+        // The read surfaces (verification-transitions endpoint, labour review inbox)
+        // render from this list. It must offer exactly what the decision path would
+        // honour: Verified yes, Disputed no. A list that under-reports hides a button
+        // the server would have accepted; one that over-reports offers a button that
+        // fails.
+        var available = VerificationStateMachine.GetAvailableTransitions(
+            VerificationStatus.Confirmed, AppRole.Mukadam, hasLabourManagementGrant: true);
+
+        Assert.Equal([VerificationStatus.Verified], available);
+    }
+
+    [Fact]
+    public void GrantedMukadam_WalksDraftToVerified_InTwoEvents_NoShortcutEdge()
+    {
+        // The aggregate half. A granted member reaches Verified by the IDENTICAL
+        // two-hop walk an owner takes — Draft->Confirmed then Confirmed->Verified.
+        // One event here would mean somebody added a Draft->Verified shortcut, which
+        // (because every role holds Draft-> edges) would let ANY member self-approve.
+        var log = CreateLog();
+        var mukadam = new UserId(Guid.NewGuid());
+        var now = DateTime.UtcNow;
+
+        var emitted = log.VerifyReachingTarget(
+            VerificationStatus.Verified,
+            reason: null,
+            AppRole.Mukadam,
+            mukadam,
+            now,
+            targetEventId: Guid.NewGuid(),
+            enRouteEventId: Guid.NewGuid(),
+            hasLabourManagementGrant: true);
+
+        Assert.Equal(2, emitted.Count);
+        Assert.Equal(VerificationStatus.Confirmed, emitted[0].Status);
+        Assert.Equal(VerificationStatus.Verified, emitted[1].Status);
+        Assert.Equal(VerificationStatus.Verified, log.CurrentVerificationStatus);
+    }
+
+    [Fact]
+    public void UngrantedMukadam_CannotWalkDraftToVerified_AndLeavesNoTrace()
+    {
+        // The mutation-check in pure form: same call, grant removed, refused. And the
+        // refusal must leave NO events behind — a stranded Confirmed row would be the
+        // server half-crediting an act it just denied.
+        var log = CreateLog();
+        var mukadam = new UserId(Guid.NewGuid());
+        var now = DateTime.UtcNow;
+
+        Assert.Throws<InvalidOperationException>(() => log.VerifyReachingTarget(
+            VerificationStatus.Verified,
+            reason: null,
+            AppRole.Mukadam,
+            mukadam,
+            now,
+            targetEventId: Guid.NewGuid(),
+            enRouteEventId: Guid.NewGuid(),
+            hasLabourManagementGrant: false));
+
+        Assert.Empty(log.VerificationEvents);
+        Assert.Equal(VerificationStatus.Draft, log.CurrentVerificationStatus);
+    }
+
+    [Fact]
+    public void TheThreeArgumentOverload_MeansNoGrant_AndIsFailClosed()
+    {
+        // Callers that have not resolved the grant (the seeder, the backfill,
+        // TrySelfVerifyAsCreator) must keep the role-only answer. If this ever starts
+        // returning true for a Mukadam, an optional parameter somewhere has flipped
+        // its default and every unresolved call site silently began implying a grant.
+        Assert.False(VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Confirmed, VerificationStatus.Verified, AppRole.Mukadam));
+
+        Assert.Empty(VerificationStateMachine.GetAvailableTransitions(
+            VerificationStatus.Confirmed, AppRole.Mukadam));
+    }
+
     private static DailyLog CreateLog()
     {
         return DailyLog.Create(

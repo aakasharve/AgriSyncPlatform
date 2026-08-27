@@ -1,5 +1,7 @@
 using AgriSync.BuildingBlocks.Analytics;
 using System.Diagnostics;
+using System.Collections.Immutable;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AgriSync.BuildingBlocks.Abstractions;
@@ -146,6 +148,34 @@ public sealed class PushSyncBatchHandler(
     {
         PropertyNameCaseInsensitive = true
     };
+    // spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — the buckets a
+    // manual draft may carry. Deliberately the SAME eight names as
+    // CreateDailyLogHandler.EvidenceArrayKeys and the canonical zod schema
+    // (sync-contract/schemas/payloads/create_daily_log.zod.ts): one vocabulary for the
+    // farmer's day, never a second list that can drift out of step with the first.
+    private static readonly ImmutableHashSet<string> ManualDraftBuckets =
+    [
+        "labour", "inputs", "irrigation", "observations",
+        "plannedTasks", "cropActivities", "machinery", "activityExpenses"
+    ];
+
+    /// <summary>
+    /// wave-3.10, founder decision 8 (2026-08-16) — the two NON-bucket keys a manual draft
+    /// may carry: the farmer's own statement about the DAY (<c>dayOutcome</c>) and the
+    /// optional reason chip explaining it (<c>disturbance</c>).
+    ///
+    /// <para>They are held SEPARATE from <see cref="ManualDraftBuckets"/> on purpose. The
+    /// eight-bucket vocabulary is "arrays of rows the farmer typed", and every one of them
+    /// is array-shape-checked below. These two are scalars — a string and an object — so
+    /// folding them into that set would have quietly disabled the array check for them and
+    /// let a malformed client send <c>dayOutcome: [...]</c>. One vocabulary each, both
+    /// closed.</para>
+    /// </summary>
+    private static readonly ImmutableHashSet<string> ManualDraftScalars = ["dayOutcome", "disturbance"];
+
+    /// <summary>Upper bound on one manual draft's raw JSON, in UTF-8 bytes.</summary>
+    private const int MaxManualDraftBytes = 64 * 1024;
+
     private static readonly Regex DeviceIdPattern = new(
         "^[a-zA-Z0-9\\-_]+$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
@@ -565,11 +595,7 @@ public sealed class PushSyncBatchHandler(
             case "verify_log":
                 return await HandleVerifyLogAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "verify_log_v2":
-                // Sub-plan 03 wires the v2 verify handler. Until then, return a
-                // typed UNIMPLEMENTED so the surface area is honest.
-                return MutationExecutionOutcome.Failure(
-                    MutationTypeUnimplementedCode,
-                    "verify_log_v2 handler is not yet wired. Falls back to verify_log on the client. Tracked in Sub-plan 03.");
+                return await HandleVerifyLogV2Async(clientRequestId, payload, actorUserId, actorRole, ct);
             case "add_cost_entry":
                 return await HandleAddCostEntryAsync(clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "allocate_global_expense":
@@ -771,11 +797,22 @@ public sealed class PushSyncBatchHandler(
         // LABOUR_PHASE2 P2.2 adds "scope" and "plotIds" here, in lockstep with
         // sync-contract/schemas/payloads/create_daily_log.zod.ts and the
         // generated CreateDailyLogPayload record.
-        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "scope", "plotIds", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId", "labour"))
+        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "scope", "plotIds", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId", "labour", "manualDraft"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
                 "create_daily_log payload contains unsupported fields.");
+        }
+
+        // spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — validate the
+        // manual draft at the SAME boundary and in the same posture as its neighbours:
+        // known keys only, bounded, and loud. Deserialization alone would silently drop
+        // an unrecognised bucket, and a farmer whose day was quietly halved is exactly
+        // the failure this task exists to end — so a malformed draft is REJECTED, never
+        // trimmed. An ABSENT draft skips all of this and behaves as it always did.
+        if (ValidateManualDraft(payload) is { } draftFailure)
+        {
+            return draftFailure;
         }
 
         var request = DeserializePayload<CreateDailyLogPayload>(payload);
@@ -881,10 +918,85 @@ public sealed class PushSyncBatchHandler(
                 // — not this mapping — is the gate that must reject an
                 // incoherent scope/plot combination.
                 Scope: scope,
-                PlotIds: request.PlotIds),
+                PlotIds: request.PlotIds,
+                // task-0b — the farmer's typed day. Null on voice confirms and on every
+                // client older than this contract, which is the pre-task-0b path exactly.
+                ManualDraft: request.ManualDraft),
             ct);
 
         return ToOutcome(result);
+    }
+
+    /// <summary>
+    /// spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b). Boundary check for
+    /// the optional <c>manualDraft</c>: it must be an object whose keys are all known
+    /// buckets, each holding an array, and the whole draft must fit
+    /// <see cref="MaxManualDraftBytes"/>. Returns <c>null</c> when the draft is absent or
+    /// acceptable, or the failure outcome to return to the client.
+    /// </summary>
+    private static MutationExecutionOutcome? ValidateManualDraft(JsonElement payload)
+    {
+        if (!payload.TryGetProperty("manualDraft", out var draft)
+            || draft.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null; // absent — pre-task-0b behaviour, unchanged.
+        }
+
+        if (draft.ValueKind != JsonValueKind.Object)
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "create_daily_log manualDraft must be an object.");
+        }
+
+        // A day's typed entry is tens of rows, not thousands. 64 KiB leaves generous room
+        // for a very full day in Devanagari (3 bytes/char in UTF-8) while keeping one
+        // mutation from dominating a sync batch or handing the normaliser unbounded work.
+        // The limit is on the RAW draft so it is independent of how it later parses.
+        var draftBytes = Encoding.UTF8.GetByteCount(draft.GetRawText());
+        if (draftBytes > MaxManualDraftBytes)
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                $"create_daily_log manualDraft exceeds {MaxManualDraftBytes} bytes.");
+        }
+
+        foreach (var bucket in draft.EnumerateObject())
+        {
+            // wave-3.10 — the declaration and its optional chip are scalars, not buckets.
+            // They are PERMITTED here rather than rejected as unknown bucket names, and
+            // they are shape-checked on their own terms below: without this branch a
+            // farmer tapping "आज काम नाही" would have his entire day refused with
+            // "unsupported buckets".
+            if (ManualDraftScalars.Contains(bucket.Name))
+            {
+                var expected = bucket.Name == "disturbance" ? JsonValueKind.Object : JsonValueKind.String;
+                if (bucket.Value.ValueKind is not JsonValueKind.Null && bucket.Value.ValueKind != expected)
+                {
+                    return MutationExecutionOutcome.Failure(
+                        "ShramSafal.SyncInvalidPayload",
+                        $"create_daily_log manualDraft '{bucket.Name}' must be a {(expected == JsonValueKind.Object ? "object" : "string")}.");
+                }
+
+                continue;
+            }
+
+            if (!ManualDraftBuckets.Contains(bucket.Name))
+            {
+                return MutationExecutionOutcome.Failure(
+                    "ShramSafal.SyncInvalidPayload",
+                    "create_daily_log manualDraft contains unsupported buckets.");
+            }
+
+            if (bucket.Value.ValueKind is not (JsonValueKind.Array or JsonValueKind.Null))
+            {
+                return MutationExecutionOutcome.Failure(
+                    "ShramSafal.SyncInvalidPayload",
+                    $"create_daily_log manualDraft bucket '{bucket.Name}' must be an array.");
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -1078,6 +1190,60 @@ public sealed class PushSyncBatchHandler(
             $"SELECT set_config('agrisync.owner_account_id', {ownerAccountId.ToString()}, true)", ct);
     }
 
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.4) — the same membership-validated
+    /// single-farm scope <see cref="EstablishFarmScopeForDerivationAsync"/> builds, for a
+    /// mutation that names a LOG rather than a farm.
+    ///
+    /// <para><b>Why it is needed at all.</b> <c>/sync/push</c> is admin-elevated
+    /// (<c>TenantTransactionMiddleware</c> skip-list), so <c>TenantConnectionInterceptor</c>
+    /// no-ops and NO <c>agrisync.*</c> GUC is set. Under prod FORCE-RLS (the app connects as
+    /// <c>agrisync_app</c>, no <c>BYPASSRLS</c>) every farm-scoped read then matches
+    /// <c>farm_id = NULL</c> and returns ZERO rows — so a verify mutation that simply looked
+    /// the log up would answer <c>DailyLogNotFound</c> for a log that plainly exists, and
+    /// would do it silently. That is not a hypothetical: it is measured behaviour, and it is
+    /// why "just fall back to the v1 <c>verify_log</c> handler" is not a working route
+    /// either — v1 has the same gap on this path.</para>
+    ///
+    /// <para><b>The chicken-and-egg, and how the isolation survives it.</b> The scope needs a
+    /// farm id; the payload carries only a log id. So the log is read FIRST under the
+    /// caller's OWN user-scoped policies (<c>agrisync.user_id</c> from the JWT, farm GUC
+    /// neutralised to the all-zeros sentinel) — <c>p_user_select_daily_logs</c> surfaces only
+    /// logs belonging to farms the caller owns or actively belongs to. A forged log id from
+    /// another farm therefore resolves to NOTHING, and the real farm GUC is never set, so
+    /// there is no window in which a caller reads a farm he has no claim on.</para>
+    /// </summary>
+    private async Task<(Domain.Logs.DailyLog? Log, bool IsMember)> EstablishFarmScopeForLogAsync(
+        Guid logId, Guid actorUserId, CancellationToken ct)
+    {
+        // Non-relational (the EF InMemory sync-endpoint harness): no RLS to satisfy and no
+        // raw SQL available. Same fallback shape as EstablishFarmScopeForDerivationAsync.
+        if (!dbContext.Database.IsRelational())
+        {
+            var inMemoryLog = await repository.GetDailyLogByIdAsync(logId, ct);
+            if (inMemoryLog is null)
+            {
+                return (null, false);
+            }
+
+            return (inMemoryLog, await repository.IsUserMemberOfFarmAsync(inMemoryLog.FarmId, actorUserId, ct));
+        }
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.user_id', {actorUserId.ToString()}, true)", ct);
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.farm_id', {Guid.Empty.ToString()}, true)", ct);
+
+        var log = await repository.GetDailyLogByIdAsync(logId, ct);
+        if (log is null)
+        {
+            return (null, false);
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(log.FarmId, actorUserId, ct);
+        return (log, isMember);
+    }
+
     private async Task<MutationExecutionOutcome> HandleAddLogTaskAsync(
         string clientRequestId,
         JsonElement payload,
@@ -1183,6 +1349,85 @@ public sealed class PushSyncBatchHandler(
                 request.Reason,
                 actorUserId,
                 request.VerificationEventId,
+                actorRole,
+                clientRequestId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.4) — THE APPROVE BUTTON'S ONLY PATH.
+    ///
+    /// <para>Until this landed, <c>verify_log_v2</c> answered
+    /// <c>MUTATION_TYPE_UNIMPLEMENTED</c>, which <c>RejectionPolicy.ts</c> classifies
+    /// PERMANENT, which parks the queue row in <c>REJECTED_USER_REVIEW</c> — a state
+    /// <c>pendingMutations.ts</c> does not shield — so the next pull reverted the farmer's
+    /// approval. An owner could not approve a mukadam's log AT ALL, and the failure was
+    /// silent.</para>
+    ///
+    /// <para><b>The payload is the canonical contract</b>
+    /// (<c>sync-contract/schemas/payloads/verify_log_v2.zod.ts</c> →
+    /// <see cref="VerifyLogV2Payload"/>), and the allow-list below is exactly its fields.
+    /// It deliberately does NOT include <c>callerRole</c>: authority is read from the
+    /// operator's membership by <see cref="VerifyLogHandler"/> (and gated owner-tier by
+    /// <c>IAuthorizationEnforcer.EnsureCanVerify</c> in the pipeline), never from the wire.
+    /// A payload that carries one is refused rather than silently stripped — a client that
+    /// thinks it is sending its own authority and is told "applied" has been lied to.</para>
+    ///
+    /// <para><b><c>verifierUserId</c> is not believed either.</b> It rides the contract for
+    /// the client's own bookkeeping; the command is built with <paramref name="actorUserId"/>,
+    /// which came from the JWT. Whoever the payload names, the ledger records who acted.</para>
+    ///
+    /// <para><b>The decision vocabulary is the FSM's, not a synonym list.</b> <c>confirm</c>
+    /// and <c>verify</c> are separate decisions precisely because they are separate edges;
+    /// collapsing them is what a <c>Draft → Verified</c> shortcut would have done.</para>
+    /// </summary>
+    private async Task<MutationExecutionOutcome> HandleVerifyLogV2Async(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "logId", "verifierUserId", "decision", "reason", "decidedAt"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "verify_log_v2 payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<VerifyLogV2Payload>(payload);
+        if (request is null || request.LogId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for verify_log_v2.");
+        }
+
+        if (!TryMapVerifyDecision(request.Decision, out var status))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.InvalidVerificationStatus",
+                "decision must be one of confirm, verify, dispute, request_correction.");
+        }
+
+        var (dailyLog, isMember) = await EstablishFarmScopeForLogAsync(request.LogId, actorUserId, ct);
+        if (dailyLog is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.DailyLogNotFound", "Daily log was not found.");
+        }
+
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
+
+        var result = await verifyLogHandler.HandleAsync(
+            new VerifyLogCommand(
+                request.LogId,
+                status,
+                request.Reason,
+                actorUserId,
+                VerificationEventId: null,
                 actorRole,
                 clientRequestId),
             ct);
@@ -1739,6 +1984,36 @@ public sealed class PushSyncBatchHandler(
         }
 
         return payload.Deserialize<TPayload>(SerializerOptions);
+    }
+
+    /// <summary>
+    /// spec: dfes-companion-2026-07-11 (wave-1.4) — maps the canonical <c>verify_log_v2</c>
+    /// <c>decision</c> vocabulary onto the FSM's statuses. Deliberately NOT routed through
+    /// <see cref="TryMapVerificationStatus"/>: that method also accepts raw enum names and
+    /// the legacy v1 aliases ("approved", "rejected", "pending"), and the v2 contract is a
+    /// closed four-value enum. Accepting more than the contract says here would let a client
+    /// reach a status the schema never promised it could.
+    /// </summary>
+    private static bool TryMapVerifyDecision(string? decision, out VerificationStatus status)
+    {
+        switch (decision?.Trim().ToLowerInvariant())
+        {
+            case "confirm":
+                status = VerificationStatus.Confirmed;
+                return true;
+            case "verify":
+                status = VerificationStatus.Verified;
+                return true;
+            case "dispute":
+                status = VerificationStatus.Disputed;
+                return true;
+            case "request_correction":
+                status = VerificationStatus.CorrectionPending;
+                return true;
+            default:
+                status = VerificationStatus.Draft;
+                return false;
+        }
     }
 
     private static bool TryMapVerificationStatus(string? rawStatus, out VerificationStatus status)

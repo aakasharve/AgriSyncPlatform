@@ -179,7 +179,17 @@ public static class CompareEngine
             : HealthScore.Good;
     }
 
-    private static string Categorize(string activityName)
+    /// <summary>
+    /// Buckets a free-text activity name into the one operation category the engine
+    /// recognises: <c>spray</c>, <c>fertigation</c>, <c>irrigation</c> or the
+    /// catch-all <c>activity</c>. This is the ONLY activity-name → operation-type
+    /// vocabulary in the codebase; it is deliberately shared rather than duplicated.
+    ///
+    /// <para>Made public 2026-08-13 (<c>dfes-3</c>) so DFES scoring can ask the same
+    /// question the stage comparison already asks — "is this day an application?" —
+    /// without a second, divergent keyword list. Behaviour is unchanged.</para>
+    /// </summary>
+    public static string Categorize(string activityName)
     {
         var normalized = activityName.Trim().ToLowerInvariant();
         if (normalized.Contains("spray") ||

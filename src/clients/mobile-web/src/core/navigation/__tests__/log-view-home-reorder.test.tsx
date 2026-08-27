@@ -118,6 +118,17 @@ function makeLogViewCtx(overrides: Partial<AppRouterContext> = {}): AppRouterCon
         logIntent: null,
         setLogIntent: vi.fn(),
         lastLabourLogIds: [],
+        // `todayDayState` is a REQUIRED AppRouterContext field. It was absent
+        // here only because the blocks that read it left with the Task 7
+        // reorder; the dfes-companion daily-loop hero reads it again, and
+        // `.env.local` runs these tests with VITE_DAILY_LOOP=1, so an absent
+        // value threw before any assertion in this file could run. Empty day —
+        // the reorder assertions are about ORDER, not about counts.
+        todayDayState: {
+            closurePercent: 0, isClosed: false, hasStarted: false,
+            completedCount: 0, plannedCount: 0, pendingCount: 0, unverifiedCount: 0,
+        },
+        plannedTasks: [],
     };
 
     return { ...base, ...overrides } as unknown as AppRouterContext;

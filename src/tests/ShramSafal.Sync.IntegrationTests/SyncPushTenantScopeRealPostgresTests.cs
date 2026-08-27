@@ -311,6 +311,56 @@ public sealed class SyncPushTenantScopeRealPostgresTests(Xunit.Abstractions.ITes
         });
         AssertApplied(jobCardCompleteResult, "jobcard.complete");
 
+        // ══ 8b. FOUNDER RULING 2026-08-27 (spec: 2026-08-25-prod-cutover-waves) ══
+        //
+        //   AN OWNER'S OWN LOG IS VERIFIED ON SAVE. HE WROTE IT; IT IS HIS WORD.
+        //
+        // This step did not exist, and its absence is what broke this test. Steps 9-10
+        // below assumed the log created at step 3 was sitting in Draft. That stopped
+        // being true at DFES wave-1.3: CreateDailyLogHandler self-attests an owner's
+        // own log (Draft->Confirmed->Verified, both events at creation), and step 4's
+        // add_log_task re-attests it because the actor IS the operator. So the log
+        // arrived at step 9 already Verified, and `verify_log -> Confirmed` failed with
+        // ShramSafal.VerificationTransitionNotAllowedForRole — correctly: the FSM has
+        // no Verified->Confirmed edge, for anyone.
+        //
+        //   [EVIDENCE, before this fix] verify_log (Confirmed): status='failed'
+        //                               errorCode='ShramSafal.VerificationTransitionNotAllowedForRole'
+        //
+        // THE OLD ASSERTION IS NOT COMING BACK. Restoring "the owner's log starts
+        // Draft" would re-break the closed-day ring wave-1.3 fixed — the farmer logs
+        // his work and his score drops one sync later. It is asserted here, positively,
+        // so the invariant this test now depends on is stated rather than assumed.
+        var ownersOwnLogStatusBeforeAnyone = await ReadVerificationStatusAsync(dailyLogId);
+        output.WriteLine($"[EVIDENCE] owner's own log, straight after create+add_task: " +
+                         $"'{ownersOwnLogStatusBeforeAnyone}'");
+        ownersOwnLogStatusBeforeAnyone.Should().Be("Verified",
+            "founder ruling 2026-08-27 (2B): an owner-tier user's own log is Verified on save, not Draft");
+
+        // 8c. A WORKER appends to the owner's approved day, which RE-OPENS it.
+        //
+        // This is real wave-1.3 I3 behaviour, not scaffolding: an attestation must
+        // cover the content it attests to, so when someone OTHER than the log's own
+        // operator adds work to an approved day, AddLogTaskHandler walks the log back
+        // to Draft and it lands in the owner's inbox. (Had the owner added it himself,
+        // step 4's path applies instead and it would be re-attested, staying Verified.)
+        //
+        // It is also what puts the log back in the state steps 9-10 need, using only
+        // mutations a real device sends — no fixture surgery, and one more genuine
+        // hole covered: before I3, a mukadam could append to an approved day and it
+        // stayed approved.
+        var workerAppendResult = await RunSyncPushAsync(WorkerA, "worker", "d-A", "req-task-worker", "add_log_task", new()
+        {
+            ["dailyLogId"] = dailyLogId,
+            ["activityType"] = "Weeding",
+        });
+        AssertApplied(workerAppendResult, "add_log_task (worker appends to the owner's approved day)");
+
+        var statusAfterWorkerAppend = await ReadVerificationStatusAsync(dailyLogId);
+        output.WriteLine($"[EVIDENCE] after a NON-operator appended a task: '{statusAfterWorkerAppend}'");
+        statusAfterWorkerAppend.Should().Be("Draft",
+            "an approval must not survive work it never covered — the day re-opens into the owner's inbox");
+
         // 9-10. verify_log Draft→Confirmed→Verified — THE headline mutation.
         // The Verified transition also exercises OnLogVerifiedAutoVerifyJobCard,
         // which requires the job card to already be Completed (step 8) — auto-
@@ -863,6 +913,39 @@ public sealed class SyncPushTenantScopeRealPostgresTests(Xunit.Abstractions.ITes
         var response = await handler.HandleAsync(command);
         response.IsSuccess.Should().BeTrue($"the /sync/push batch call itself must succeed for {mutationType}");
         return Assert.Single(response.Value!.Results);
+    }
+
+    /// <summary>
+    /// spec: 2026-08-25-prod-cutover-waves — founder ruling 2026-08-27. The verification
+    /// status of a log, read as GROUND TRUTH from Postgres rather than from a handler's
+    /// return value.
+    ///
+    /// <para><b>Why it folds instead of reading a column.</b> There IS no column:
+    /// <c>DailyLogConfiguration</c> <c>Ignore</c>s both status properties and
+    /// <c>DailyLog.CurrentVerificationStatus</c> derives them by
+    /// <c>OrderBy(OccurredAtUtc).Last()</c> over <c>ssf.verification_events</c>. That is
+    /// exactly why a device can never write its own approval, and why this helper
+    /// reproduces the same fold in SQL — asking the server for its opinion of its own
+    /// state would prove nothing about what is stored.</para>
+    ///
+    /// <para>No rows means no verification event was ever emitted, which the domain
+    /// reads as <c>Draft</c>.</para>
+    /// </summary>
+    private async Task<string> ReadVerificationStatusAsync(Guid dailyLogId)
+    {
+        await using var read = new NpgsqlConnection(_superuserConn);
+        await read.OpenAsync();
+
+        var status = await ScalarAsync(read,
+            """
+            SELECT status FROM ssf.verification_events
+            WHERE daily_log_id = @id
+            ORDER BY occurred_at_utc DESC
+            LIMIT 1
+            """,
+            ("id", dailyLogId));
+
+        return Convert.ToString(status) ?? "Draft";
     }
 
     private void AssertApplied(SyncMutationResultDto result, string label)

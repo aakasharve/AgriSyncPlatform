@@ -5,10 +5,14 @@
 
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, Check, ListPlus, X, Zap } from 'lucide-react';
+import { AlertTriangle, Check, HelpCircle, ListPlus, X, Zap } from 'lucide-react';
 import Button from '../../../../../shared/components/ui/Button';
 import IssueFormSheet from '../../IssueFormSheet';
 import { BucketIssue } from '../../../../../domain/types/log.types';
+import { t as translateForced } from '../../../../../i18n/translations';
+
+// Font rule (CHARTER): Marathi body text -> Noto Sans Devanagari.
+const MARATHI_BODY = "'Noto Sans Devanagari', sans-serif";
 
 const WorkDetailSheet = ({
     workTypes,
@@ -17,15 +21,24 @@ const WorkDetailSheet = ({
     availableActivities,
     sourceText,
     systemInterpretation,
-    initialIssue
+    initialIssue,
+    provenanceVerified
 }: {
     workTypes: string[],
     onSave: (types: string[], issue?: BucketIssue) => void,
     onClose: () => void,
-    availableActivities?: any[], // WorkflowStep[] technically
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WorkflowStep[] technically; pre-existing, not touched by this change
+    availableActivities?: any[],
     sourceText?: string,
     systemInterpretation?: string,
-    initialIssue?: BucketIssue
+    initialIssue?: BucketIssue,
+    /**
+     * ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11) — `false`
+     * means the backend could not verify `sourceText` against the voice
+     * transcript. Shown as a gentle "please check this" note; the farmer can
+     * toggle work-type chips off (existing affordance) to remove it.
+     */
+    provenanceVerified?: boolean
 }) => {
     const [selected, setSelected] = useState<string[]>(workTypes || []);
     const [custom, setCustom] = useState('');
@@ -77,6 +90,20 @@ const WorkDetailSheet = ({
                     {/* NEW: Transparency Feedback inside Sheet */}
                     {(sourceText || systemInterpretation) && (
                         <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 mb-4 animate-in fade-in slide-in-from-top-2">
+                            {provenanceVerified === false && (
+                                <div
+                                    data-testid="provenance-unverified-flag"
+                                    className="mb-2 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50/80 px-2.5 py-1.5"
+                                >
+                                    <HelpCircle size={13} className="mt-0.5 flex-shrink-0 text-amber-500" />
+                                    <span
+                                        className="text-[11px] font-semibold leading-snug text-amber-700"
+                                        style={{ fontFamily: MARATHI_BODY }}
+                                    >
+                                        {translateForced('voice.unverifiedSourceLabel', 'mr')}
+                                    </span>
+                                </div>
+                            )}
                             {sourceText && (
                                 <div className="flex items-start gap-2 mb-2">
                                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-0.5 whitespace-nowrap">YOU SAID:</span>

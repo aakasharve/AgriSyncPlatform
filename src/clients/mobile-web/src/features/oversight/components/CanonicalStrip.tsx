@@ -116,14 +116,40 @@
  * timestamp and no new fetch. Full reasoning on the `lastSyncAt` prop; the
  * copy and its Marathi provenance live in `i18n/dataFreshnessTranslations.ts`;
  * the `null`/unparseable refusal lives in `features/oversight/formatUpToWhen.ts`.
+ *
+ * FOUNDER RULING 2026-08-27 — ONE LINE, AND THE RING JOINS IT
+ * --------------------------------------------------------------
+ * On `?preview=oversight&waiting=none` he read TWO stacked all-clears: this
+ * strip's `restState`, and `DailyLoopHero`'s "आज सगळं सांगून झालं — काही बाकी
+ * नाही" beside a 70% ring. *"there are two line only keep which is on the
+ * oversight bar and try to make it as asthetic as bottom line the ring on that
+ * oversight tapp if you can make that possible make it."* So: (1) the hero's
+ * settled line is DELETED at source, not gated — superseding the 2026-08-26
+ * "withhold" compromise and retiring the store that implemented it
+ * (`oversightWaitingSignal.ts` + its `AppHeader` publisher, that line being its
+ * only consumer); (2) the 28px glyph chip became a 44px RING carrying
+ * `waitingCount` — his ring's shell, this strip's fact (medallion comment
+ * below); (3) NOT DONE AND REPORTED RATHER THAN FAKED — the hero's ring NUMBER
+ * (`todayDayState.closurePercent`) did not come with it. A proportion of
+ * today's planned work and a count of rows awaiting the owner share no
+ * denominator, and one control holding both is exactly how the
+ * 70%-beside-"nothing left" contradiction would have been relocated here, at
+ * greater prominence. Doctrine `P4`.
  */
 import React from 'react';
-import { LandPlot, ChevronDown, AlertTriangle, CheckCircle2, Loader2, HelpCircle } from 'lucide-react';
+// The state glyphs left with the 2026-08-27 ring ruling — they live in
+// `StripStateRing.tsx` now, and `AlertTriangle` is gone outright: the waiting
+// slot holds `waitingCount`, and amber alone carries "this needs you" (§P-G).
+import { LandPlot, ChevronDown } from 'lucide-react';
 import type { Language } from '../../../i18n/language';
 import { oversightTranslations, resolveOversightString, PENDING_FOUNDER_STRINGS } from '../../../i18n/oversightTranslations';
 import { resolveDataFreshnessString } from '../../../i18n/dataFreshnessTranslations';
 import { formatOversightTemplate } from '../formatOversightTemplate';
 import { formatUpToWhen } from '../formatUpToWhen';
+// Founder ruling 2026-08-27 — the strip's leading mark, now a ring. Its own
+// file because it carries the whole §P-G / F7(a) colour argument plus the new
+// never-a-gauge one; the state SELECTION stays here.
+import StripStateRing from './StripStateRing';
 
 // Devanagari block. Used only to pick which of the two locked fonts a
 // resolved string needs (root CLAUDE.md Font Rules) — never to decide
@@ -139,6 +165,12 @@ function fontStyleFor(text: string): React.CSSProperties {
 // Spec §2: "both 52px tall (above the 44px minimum)". Kept as the waiting
 // button's own constant so its two states (waiting/rest) can never drift
 // from each other.
+//
+// 2026-08-27 — STILL 52, DELIBERATELY: a FLOOR, not a height, and it stopped
+// binding before today (Task 13's subtitle, then the freshness chip). The ring
+// makes the real box ~68px in ALL FOUR states, so what spec §2.2 locks — one
+// node, one floor, no reflow across the branch — is untouched, and is asserted
+// by `the_rest_state_keeps_its_exact_place_and_height`.
 const STRIP_MIN_HEIGHT = '52px';
 
 /**
@@ -615,7 +647,7 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
             // label — that one was untrue and had to go, this one is true and
             // has to be there.
             aria-label={`${primaryLabelText} — ${freshnessText}`}
-            className={`relative flex w-full items-center gap-2.5 rounded-2xl border px-3 py-2.5 text-left transition-colors ${
+            className={`relative flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-colors ${
                 isWaiting
                     ? 'border-amber-200 bg-amber-50'
                     : 'border-stone-200 bg-white'
@@ -634,41 +666,21 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
             />
 
             {/* FOUR states, one slot, one size — the strip stays a fixed
-                landmark (spec §2.2). The checking state is deliberately
-                STONE, not emerald: the green tick IS the completion claim
-                as far as a farmer reading colour before text is concerned
-                (§P-G's own reasoning), so it may not appear until the
-                claim is true. Finding F7(a).
-
-                CHANGE 2 — the unknown state shares the checking state's
-                STONE treatment on purpose. Colour must carry "we cannot
-                say" in both, and stone is already this strip's word for it;
-                amber would say "this needs you" (§P-G) about a situation the
-                farmer cannot act on, and emerald would say the one thing
-                that is not true. Only the GLYPH changes, from a spinner to a
-                question mark — motion is what promises "about to resolve",
-                so the stillness is the whole point. */}
-            <span
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-                    isWaiting
-                        ? 'bg-amber-700 text-white'
-                        : (isChecking || isUnknown ? 'bg-stone-100 text-stone-400' : 'bg-emerald-50 text-emerald-600')
-                }`}
-                data-testid={
-                    isWaiting
-                        ? 'canonical-strip-waiting-icon'
-                        : (isChecking
-                            ? 'canonical-strip-waiting-checking-icon'
-                            : (isUnknown
-                                ? 'canonical-strip-waiting-unknown-icon'
-                                : 'canonical-strip-waiting-rest-tick'))
-                }
-            >
-                {isWaiting && <AlertTriangle size={14} strokeWidth={2.25} />}
-                {!isWaiting && isChecking && <Loader2 size={15} strokeWidth={2.25} className="animate-spin" />}
-                {!isWaiting && isUnknown && <HelpCircle size={16} strokeWidth={2.25} />}
-                {!isWaiting && !isChecking && !isUnknown && <CheckCircle2 size={16} strokeWidth={2.25} />}
-            </span>
+                landmark (spec §2.2). Founder ruling 2026-08-27 turned that
+                slot into `DailyLoopHero`'s RING, carrying THIS strip's fact
+                (`waitingCount`) rather than the hero's closure percent, which
+                is also why the right-hand count pill below is gone. The §P-G
+                colour rule, finding F7(a)'s stone-not-emerald reasoning and
+                CHANGE 2's spinner-vs-question-mark all moved with it — see
+                `StripStateRing.tsx`, which owns the ring and its four
+                `data-testid`s. The state SELECTION stays here, above: the ring
+                is handed the answer, it never re-derives it. */}
+            <StripStateRing
+                isWaiting={isWaiting}
+                isChecking={isChecking}
+                isUnknown={isUnknown}
+                waitingCount={waitingCount}
+            />
 
             <span className="min-w-0 flex-1 pt-1">
                 <span
@@ -747,16 +759,12 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
                 </span>
             </span>
 
-            {isWaiting && (
-                <span
-                    data-testid="canonical-strip-waiting-count"
-                    className="flex min-w-[22px] shrink-0 items-center justify-center rounded-full bg-amber-600 px-1.5 py-0.5 text-xs font-extrabold text-white"
-                    style={ENGLISH_FONT}
-                >
-                    {waitingCount}
-                </span>
-            )}
-
+            {/* 2026-08-27 — the right-hand count pill is GONE, not hidden:
+                `waitingCount` renders inside the ring above. The same number
+                twice on one control is the defect he just had removed from
+                this screen, one level smaller — and the pill was the widest
+                thing competing with a title slot already too narrow for his
+                `unknownState`. The `data-testid` moved WITH the number. */}
             <ChevronDown size={14} className={`shrink-0 ${isWaiting ? 'text-amber-700' : 'text-stone-400'}`} />
         </button>
     );

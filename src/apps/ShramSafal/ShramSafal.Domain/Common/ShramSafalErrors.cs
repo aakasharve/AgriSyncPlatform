@@ -66,6 +66,19 @@ public static class ShramSafalErrors
         "ShramSafal.LabourManagementCarriedByRole",
         "This member's role already allows managing labour records, so the grant cannot be changed. Change their role instead.");
 
+
+    // DFES — worker-record portability. Restored during the main->dfes merge: taking
+    // main's ShramSafalErrors dropped it, and the two DFES worker handlers that
+    // reference it stopped compiling. Not a new decision, just one that main had
+    // never seen.
+    //
+    // The code ends in "Forbidden" deliberately: the worker endpoints map an error code
+    // with that suffix to HTTP 403, and this is an authorisation answer, not a malformed
+    // request.
+    public static readonly Error WorkerRecordPortabilityForbidden = Error.Forbidden(
+        "ShramSafal.WorkerRecordPortabilityForbidden",
+        "This worker's record cannot leave the farm that recorded it.");
+
     // --- Validation (bad caller input) -----------------------------------------------------
     public static readonly Error InvalidAmount = Error.Validation("ShramSafal.InvalidAmount", "Amount must be greater than zero.");
     public static readonly Error InvalidVerificationReason = Error.Validation("ShramSafal.InvalidVerificationReason", "Reason is required for disputed verification.");

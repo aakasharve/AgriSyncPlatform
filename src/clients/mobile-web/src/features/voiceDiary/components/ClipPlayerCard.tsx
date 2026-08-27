@@ -13,7 +13,7 @@
 // failed / queued / recorded) but uses the i18n bundle.
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, Clock, AlertCircle, Loader2, Mic, Play, Pause, Cloud, HardDrive } from 'lucide-react';
+import { CheckCircle2, Clock, AlertCircle, Loader2, Mic, Play, Pause, Cloud, CloudOff, HardDrive } from 'lucide-react';
 import type { VoiceClipCacheRecord, VoiceClipStatus } from '../../../infrastructure/storage/DexieDatabase';
 import { readVoiceClipPlaintext, resolveVoiceClipBinding } from '../../../infrastructure/voice/VoiceClipRetention';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
@@ -44,6 +44,15 @@ export interface UnifiedClip {
     source: 'local' | 'cloud';
     /** Underlying local record (only for source === 'local'). */
     localRecord?: VoiceClipCacheRecord;
+    /**
+     * spec: dfes-companion-2026-07-11 (farm-memory).
+     * True when this farmer keeps his voice as Farm Memory but the
+     * server has not acknowledged THIS clip yet. It is not an error
+     * state — the recording is safe on the phone and the upload will be
+     * retried — but he has to be able to see it, because until the
+     * acknowledgement arrives the phone holds the only copy.
+     */
+    pendingCloudSave?: boolean;
 }
 
 interface Props {
@@ -282,6 +291,15 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
                         <SourceIcon size={10} />
                         {tVoiceDiary(locale, sourceBadgeKey)}
                     </span>
+                    {clip.pendingCloudSave && (
+                        <span
+                            data-testid={`voice-diary-clip-pending-cloud-${clip.id}`}
+                            className="inline-flex items-center gap-1 border bg-amber-50 text-amber-800 border-amber-200 text-[10px] font-['DM_Sans'] font-bold uppercase tracking-wider rounded-full px-2 py-0.5"
+                        >
+                            <CloudOff size={10} />
+                            {tVoiceDiary(locale, 'clipBadge.pendingCloudSave')}
+                        </span>
+                    )}
                     {status && (
                         <span
                             className={`inline-flex items-center gap-1 border ${status.className} text-[10px] font-['DM_Sans'] font-bold uppercase tracking-wider rounded-full px-2 py-0.5`}

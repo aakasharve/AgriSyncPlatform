@@ -158,6 +158,49 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .FirstOrDefaultAsync(l => l.IdempotencyKey == idempotencyKey, ct);
     }
 
+    // spec: dfes-companion-2026-07-11 (wave-1.5) — see IShramSafalRepository for why the
+    // predicate is "no verification events at all" and not "reads Draft".
+    //
+    // TRACKED on purpose (no AsNoTracking, unlike the read-only pull queries): the caller
+    // mutates these aggregates and commits them in its own unit of work, exactly as
+    // GetDailyLogByIdAsync feeds VerifyLogHandler. VerificationEvents is Included because
+    // TrySelfVerifyAsCreator folds it to decide whether the log is still in Draft — an
+    // un-Included collection would fold to empty and read Draft for every log, including
+    // ones a human had already disputed.
+    public async Task<IReadOnlyList<DailyLog>> GetDailyLogsWithNoVerificationHistoryAsync(
+        int limit, DateTime? afterCreatedAtUtc, Guid? afterId, CancellationToken ct = default)
+    {
+        if (limit <= 0)
+        {
+            return Array.Empty<DailyLog>();
+        }
+
+        var query = db.DailyLogs
+            .Include(l => l.VerificationEvents)
+            .Where(l => !l.VerificationEvents.Any());
+
+        // KEYSET, not OFFSET. The candidate set shrinks underneath the walk (a repaired
+        // log gains events and stops being a candidate), so a sliding OFFSET would step
+        // over rows that moved up behind it. A (CreatedAtUtc, Id) cursor is stable against
+        // that: it names the last row seen rather than a position. Both halves are used
+        // together because CreatedAtUtc is not unique — the composite matches the
+        // OrderBy/ThenBy below exactly, which is what makes the page boundary total.
+        if (afterCreatedAtUtc is { } cursorCreatedAtUtc && afterId is { } cursorId)
+        {
+            query = query.Where(l =>
+                l.CreatedAtUtc > cursorCreatedAtUtc
+                || (l.CreatedAtUtc == cursorCreatedAtUtc && l.Id > cursorId));
+        }
+
+        return await query
+            // Oldest day first: if an operator ever has to read the backfill's audit
+            // rows in order, they should tell the farm's story forwards.
+            .OrderBy(l => l.CreatedAtUtc)
+            .ThenBy(l => l.Id)
+            .Take(limit)
+            .ToListAsync(ct);
+    }
+
     public async Task AddCostEntryAsync(CostEntry costEntry, CancellationToken ct = default)
     {
         await db.CostEntries.AddAsync(costEntry, ct);
@@ -251,6 +294,227 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .OrderBy(x => x.LedgerDate)
             .ThenBy(x => x.CreatedAtUtc)
             .ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// DFES (dfes-companion-2026-07-11) — the ONE locked aggregate read. Filters to the
+    /// caller's farm (RLS + this Where) and orders by local_date for the Phase-3 fold.
+    /// </summary>
+    public async Task<IReadOnlyList<ShramSafal.Domain.Dfes.DailyRichnessAggregate>> GetDailyRichnessAggregatesForFarmAsync(
+        Guid farmId, CancellationToken ct = default)
+    {
+        return await db.DailyRichnessAggregates
+            .AsNoTracking()
+            .Where(x => x.FarmId == farmId)
+            .OrderBy(x => x.LocalDate)
+            .ToListAsync(ct);
+    }
+
+    // ── DFES (dfes-companion-2026-07-11) daily richness derivation ─────────────
+    // spec: dfes-companion-2026-07-11 — .Include(l => l.Tasks) so
+    // DailyRichnessDerivationService's persisted-work fallback (a log with no
+    // usable AI-job JSON root) can see the log's real LogTask rows instead of
+    // an empty navigation. Mirrors the existing .Include(l => l.Tasks) pattern
+    // already used by GetDailyLogByIdAsync / GetDailyLogsChangedSinceAsync above.
+    public async Task<IReadOnlyList<DailyLog>> GetDailyLogsForFarmDateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+        return await db.DailyLogs
+            .AsNoTracking()
+            .Include(l => l.Tasks)
+            .Where(l => l.FarmId == typedFarmId && l.LogDate == localDate)
+            .OrderBy(l => l.Id)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<Domain.Farms.ObservationEvent>> GetObservationEventsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+    {
+        if (dailyLogIds.Count == 0)
+        {
+            return Array.Empty<Domain.Farms.ObservationEvent>();
+        }
+
+        return await db.ObservationEvents
+            .AsNoTracking()
+            .Where(o => dailyLogIds.Contains(o.DailyLogId))
+            .ToListAsync(ct);
+    }
+
+    // wave-3.5, Ruling 3 — the day's system weather, mirroring the ObservationEvent
+    // read above exactly: EXISTS-join child keyed by plain DailyLogId, no-tracking
+    // because the scorer only inspects it, empty id set short-circuited so we never
+    // emit `IN ()`. ssf.weather_stamps has been written since 20260630040851 and read
+    // by nothing until now.
+    public async Task<IReadOnlyList<Domain.Farms.WeatherStamp>> GetWeatherStampsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => dailyLogIds.Count == 0
+            ? Array.Empty<Domain.Farms.WeatherStamp>()
+            : await db.WeatherStamps.AsNoTracking()
+                .Where(w => dailyLogIds.Contains(w.DailyLogId)).ToListAsync(ct);
+
+    // ── the rest of the day's PERSISTED spine (task-7, 2026-08-13) ─────────────
+    // Same shape as the ObservationEvent read above: EXISTS-join children keyed
+    // by plain DailyLogId, read NO-TRACKING because the scorer only inspects
+    // them. Empty id set short-circuits so we never emit `IN ()`.
+
+    public async Task<IReadOnlyList<Domain.Farms.IrrigationEntry>> GetIrrigationEntriesForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => dailyLogIds.Count == 0
+            ? Array.Empty<Domain.Farms.IrrigationEntry>()
+            : await db.IrrigationEntries.AsNoTracking()
+                .Where(x => dailyLogIds.Contains(x.DailyLogId)).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Domain.Farms.MachineryUsage>> GetMachineryUsagesForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => dailyLogIds.Count == 0
+            ? Array.Empty<Domain.Farms.MachineryUsage>()
+            : await db.MachineryUsages.AsNoTracking()
+                .Where(x => dailyLogIds.Contains(x.DailyLogId)).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Domain.Farms.DisturbanceEvent>> GetDisturbanceEventsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => dailyLogIds.Count == 0
+            ? Array.Empty<Domain.Farms.DisturbanceEvent>()
+            : await db.DisturbanceEvents.AsNoTracking()
+                .Where(x => dailyLogIds.Contains(x.DailyLogId)).ToListAsync(ct);
+
+    public async Task<Domain.Dfes.DailyRichnessAggregate?> GetDailyRichnessAggregateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => await db.DailyRichnessAggregates
+            // READ-ONLY. The result is DETACHED — mutating it (ApplyDerivation) and
+            // calling SaveChangesAsync emits NO UPDATE, silently and without error.
+            // Any read-modify-write caller must use
+            // GetDailyRichnessAggregateForUpdateAsync below instead.
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.FarmId == farmId && a.LocalDate == localDate, ct);
+
+    // FIX (dfes-companion-2026-07-11) — TRACKED twin of the read above, for the
+    // recompute read-modify-write path. Identical query, deliberately WITHOUT
+    // .AsNoTracking() so ApplyDerivation + SaveChangesAsync actually persists.
+    public async Task<Domain.Dfes.DailyRichnessAggregate?> GetDailyRichnessAggregateForUpdateAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        => await db.DailyRichnessAggregates
+            .FirstOrDefaultAsync(a => a.FarmId == farmId && a.LocalDate == localDate, ct);
+
+    public async Task AddDailyRichnessAggregateAsync(
+        Domain.Dfes.DailyRichnessAggregate aggregate, CancellationToken ct = default)
+    {
+        await db.DailyRichnessAggregates.AddAsync(aggregate, ct);
+    }
+
+    public async Task AddQuestionEventAsync(ShramSafal.Domain.Dfes.QuestionEvent e, CancellationToken ct = default)
+        => await db.QuestionEvents.AddAsync(e, ct);
+
+    // wave-4.2 — the two append-only consent ledgers. Staged, never committed here: the
+    // handler flushes both in one SaveChanges so a tap can never leave one record behind.
+    public async Task AddTermsAcceptanceEventAsync(
+        ShramSafal.Domain.Consent.TermsAcceptanceEvent e, CancellationToken ct = default)
+        => await db.TermsAcceptanceEvents.AddAsync(e, ct);
+
+    public async Task AddConsentGrantEventAsync(
+        ShramSafal.Domain.Consent.ConsentGrantEvent e, CancellationToken ct = default)
+        => await db.ConsentGrantEvents.AddAsync(e, ct);
+
+    // B1 (2026-08-27) — the idempotency reads behind LinkConsentGateToUserHandler.
+    //
+    // NO-TRACKING: the caller needs the existing row's id to hand back, nothing more, and
+    // both tables are append-only by privilege so nothing here is ever mutated.
+    //
+    // Keyed on (user_id, pre_registration_session_id, event_type). The event type is part
+    // of the key on purpose: ssf.terms_acceptance_events also holds TERMS_ACCEPTED rows,
+    // and a signed-in re-acceptance writes one carrying BOTH a user id and the same
+    // session id. Omitting the type would make an in-app re-acceptance look like a
+    // completed link and suppress the linking row entirely — the exact orphaning this
+    // whole change exists to close, reintroduced through the back door.
+    //
+    // RLS already restricts these rows to the caller (the linking row has a user_id, so
+    // the self policy admits it); the explicit user_id predicate is defence in depth, and
+    // it is what makes the query correct if it is ever run under a wider scope.
+    //
+    // Oldest first: if a race ever produced two, the first one written is the link.
+    public async Task<ShramSafal.Domain.Consent.TermsAcceptanceEvent?> FindTermsAcceptanceLinkAsync(
+        Guid userId, string preRegistrationSessionId, CancellationToken ct = default)
+        => await db.TermsAcceptanceEvents
+            .AsNoTracking()
+            .Where(e => e.UserId == userId
+                && e.PreRegistrationSessionId == preRegistrationSessionId
+                && e.EventType == ShramSafal.Domain.Consent.TermsAcceptanceEvent.TermsAcceptanceLinkedEventType)
+            .OrderBy(e => e.RecordedAtUtc)
+            .FirstOrDefaultAsync(ct);
+
+    public async Task<ShramSafal.Domain.Consent.ConsentGrantEvent?> FindConsentGrantLinkAsync(
+        Guid userId, string preRegistrationSessionId, CancellationToken ct = default)
+        => await db.ConsentGrantEvents
+            .AsNoTracking()
+            .Where(e => e.UserId == userId
+                && e.PreRegistrationSessionId == preRegistrationSessionId
+                && e.EventType == ShramSafal.Domain.Consent.ConsentGrantEvent.CoreConsentLinkedEventType)
+            .OrderBy(e => e.RecordedAtUtc)
+            .FirstOrDefaultAsync(ct);
+
+    public async Task<IReadOnlyList<ShramSafal.Domain.Dfes.QuestionEvent>> GetRecentQuestionEventsForFarmAsync(
+        Guid farmId, DateTime sinceUtc, CancellationToken ct = default)
+        => await db.QuestionEvents
+            .AsNoTracking()
+            .Where(q => q.FarmId == farmId && q.CreatedAtUtc >= sinceUtc)
+            .OrderByDescending(q => q.CreatedAtUtc)
+            .ToListAsync(ct);
+
+    // wave-3.3, Ruling 1 — the idempotency read behind RecordQuestionEventHandler.
+    // NO-TRACKING: the caller only needs the existing row's Id to hand back, and the
+    // table is append-only by privilege, so nothing here is ever mutated. RLS already
+    // scopes the row set to the tenant; the handler membership-checks in addition, so
+    // this deliberately keys on (daily_log_id, question_key) only — exactly the columns
+    // ux_question_events_log_question constrains, so the read and the index can never
+    // disagree about what "already asked" means.
+    public async Task<ShramSafal.Domain.Dfes.QuestionEvent?> FindQuestionEventAsync(
+        Guid dailyLogId, string questionKey, CancellationToken ct = default)
+        => await db.QuestionEvents
+            .AsNoTracking()
+            .FirstOrDefaultAsync(q => q.DailyLogId == dailyLogId && q.QuestionKey == questionKey, ct);
+
+    // task-3 (2026-08-14), founder ruling A. question_events carries no local_date, so the
+    // day is a half-open UTC window (FarmLocalDay — the SAME rule the handler and the
+    // derivation service use; a second one here would credit the wrong day). ShownAtUtc is
+    // nullable, and CreatedAtUtc is the fallback the handler also derives from, so the two
+    // sides agree row-for-row.
+    public async Task<IReadOnlyList<Domain.Dfes.AnsweredGap>> GetAnsweredGapsAsync(
+        Guid farmId, DateOnly localDate, CancellationToken ct = default)
+    {
+        var (startUtc, endUtcExclusive) = Domain.Dfes.FarmLocalDay.UtcWindow(localDate);
+
+        var rows = await db.QuestionEvents
+            .AsNoTracking()
+            .Where(e => e.FarmId == farmId
+                        // A skip yields nothing — the contract AnsweredGap's own docstring
+                        // states. TryFrom cannot enforce it (it never sees the flag), so the
+                        // exclusion lives HERE, at the read, rather than in the question
+                        // handler's recompute guard: this way EVERY recompute path honours
+                        // it, including the daily-log ones that never look at a command.
+                        // A dismissal carrying text is contradictory data the shipped client
+                        // cannot produce; if one ever lands, it must still score nothing.
+                        && e.Skipped != true
+                        && (e.ShownAtUtc ?? e.CreatedAtUtc) >= startUtc
+                        && (e.ShownAtUtc ?? e.CreatedAtUtc) < endUtcExclusive)
+            .Select(e => new { e.QuestionKey, e.Response })
+            .ToListAsync(ct);
+
+        var gaps = new List<Domain.Dfes.AnsweredGap>();
+        foreach (var r in rows)
+        {
+            // TryFrom is the ONLY constructor used here: it enforces the gap-key and
+            // non-empty-answer rules and upper-cases the dimension the extractor matches
+            // on. Rehydrating an AnsweredGap straight from the column would silently
+            // credit nothing (casing) or credit silence.
+            if (Domain.Dfes.AnsweredGap.TryFrom(r.QuestionKey, r.Response, localDate, out var gap))
+            {
+                gaps.Add(gap);
+            }
+        }
+
+        return gaps;
     }
 
     public async Task AddAttachmentAsync(Attachment attachment, CancellationToken ct = default)
@@ -1119,10 +1383,20 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     }
 
     public Task<WorkerMetricsDto> GetWorkerMetricsAsync(
-        UserId workerUserId, Guid? scopedFarmId, DateTime since30d, CancellationToken ct = default)
+        UserId workerUserId, IReadOnlyCollection<Guid> scopedFarmIds, DateTime since30d, CancellationToken ct = default)
     {
         // For now return zeroed metrics — ReliabilityScore computation from DB queries
         // is deferred to a dedicated read-model in a future phase.
+        //
+        // spec: dfes-companion-2026-07-11 (wave-4.4) — WHEN YOU BUILD THAT READ-MODEL:
+        // scopedFarmIds is not advisory, and it is no longer nullable precisely so that
+        // "every farm this worker has ever worked" cannot be expressed by omission. It is
+        // the set of farms the caller was PERMITTED (WorkerRecordAccess.PermittedFarmIds),
+        // and a query here must filter on it. An empty set means no farms, never "all".
+        //
+        // Note also what these zeros mean for tier 3: nothing in this method is derived
+        // from anything, so ReliabilityScore is not a real number today. Do not let it
+        // become a portable reputation until it is.
         return Task.FromResult(new WorkerMetricsDto(0, 0, 0, 0, 0, 0, 0));
     }
 
@@ -1382,6 +1656,48 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ThenByDescending(m => m.ModifiedAtUtc)
             .FirstOrDefaultAsync(ct);
     }
+    // --- spec: dfes-companion-2026-07-11 (wave-4.4) — founder model, 2026-08-17 -------
+    // The farms this user OWNS, kept apart from the farms he merely belongs to.
+    // GetFarmIdsForUserAsync unions the two; the founder's ruling that "an owner with two
+    // farms of his own may see his own worker's record across both" needs the owned half
+    // on its own, or a mukadam on two farms would inherit the same widening.
+    public async Task<List<Guid>> GetOwnedFarmIdsForUserAsync(
+        Guid userId, CancellationToken ct = default)
+        => await db.Farms
+            .AsNoTracking()
+            .Where(f => (Guid)f.OwnerUserId == userId)
+            .Select(f => (Guid)f.Id)
+            .ToListAsync(ct);
+
+    // TIER 2 — a farm's own word about a worker.
+    //
+    // There is no ssf table for these yet and no endpoint that writes one, so the honest
+    // answer is nothing at all. Empty here means SILENCE: the farm has said nothing. It
+    // must never be rendered as a zero, an empty star row, or "not yet rated" — writing a
+    // statement is optional and an owner may never write one.
+    //
+    // When the table lands, query it here. The tier boundary, the attribution and the
+    // consent gate around this read are already built and tested against this seam.
+    public Task<IReadOnlyList<WorkerStatement>> GetWorkerStatementsAsync(
+        UserId workerUserId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<WorkerStatement>>([]);
+
+    // --- spec: dfes-companion-2026-07-11 (wave-4.4) — founder ruling A, 2026-08-17 ----
+    // Stated here rather than inherited silently from the port's default, because this
+    // is the file someone edits when they build the cross-farm worker feature and this
+    // is the answer that must stop them.
+    //
+    // There is NO grant surface for WORKER_RECORD_PORTABILITY: no screen asks a worker
+    // for it, no endpoint records it, and ssf.consent_grant_events has never held a row
+    // carrying that purpose code. So the honest answer is false, and returning false
+    // keeps every identifiable cross-farm read refused.
+    //
+    // Do not satisfy this by reading the FARMER's consent row. The farm owner is not the
+    // data principal for his worker's reputation; ruling A is explicit that the consent
+    // required at portability is the worker's own.
+    public Task<bool> HasWorkerRecordPortabilityConsentAsync(
+        UserId workerUserId, CancellationToken ct = default)
+        => Task.FromResult(false);
 
     // --- DATA_PRINCIPLE_SPINE sub-phase 02.3 (warm-tier transcripts) ------
     public Task AddTranscriptAsync(Transcript transcript, CancellationToken ct = default)

@@ -128,9 +128,14 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, on
                 <div className="relative z-10 flex justify-between items-center">
                     <div className="text-left space-y-1">
                         <p className="text-xs font-medium text-blue-50 opacity-90">{dateStr} | {timeStr}</p>
+                        {/* WAVE 2.3 (spec: dfes-companion-2026-07-11) — one temperature,
+                            and it is measured. A `/ 31.5°C` literal used to sit here in
+                            matched typography, reading as a second real figure. It was not
+                            a fallback: the fallbacks return other components entirely, so
+                            it rendered only once live weather had SUCCEEDED. Nothing
+                            computes 31.5. */}
                         <div className="flex items-baseline gap-2">
                             <span className="text-4xl font-bold tracking-tight">{formatTemperature(current.current.tempC)}</span>
-                            <span className="text-lg opacity-70 font-medium">/ 31.5°C</span>
                         </div>
                         <div className="flex items-center gap-1 text-blue-50 font-medium text-sm pt-1">
                             <MapPin size={14} />
@@ -192,9 +197,9 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ data, status, onRetry, on
                             <div className="flex justify-between items-start mb-6">
                                 <div>
                                     <p className="text-xs font-medium text-blue-50 opacity-80">{dateStr} | {timeStr}</p>
+                                    {/* WAVE 2.3 — the same invented figure, second copy. */}
                                     <div className="flex items-baseline gap-2 mt-1">
                                         <span className="text-4xl font-bold">{formatTemperature(current.current.tempC)}</span>
-                                        <span className="text-lg opacity-80">/ 31.5°C</span>
                                     </div>
                                     <p className="text-sm font-medium mt-1 flex items-center gap-1">
                                         <MapPin size={14} /> {locationName}

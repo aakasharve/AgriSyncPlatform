@@ -19,6 +19,15 @@ namespace ShramSafal.Application.Services;
 /// </list>
 /// </para>
 ///
+/// <para><b>And a sixth call, added 2026-08-27 — not a sixth rule.</b> Passing the
+/// enforcer was never enough to approve a log: <c>VerificationStateMachine</c> checked
+/// the role tier again one layer deeper and refused the very callers the enforcer had
+/// just admitted. <see cref="HasExplicitGrantAsync"/> hands that machine the SAME stored
+/// grant this file already reads, so the two layers agree by construction instead of by
+/// coincidence. Call sites: <c>VerifyLogHandler</c> (the decision),
+/// <c>GetLabourDataHandler</c> and <c>LogsEndpoints</c> (the two read surfaces that
+/// render what a caller may do next).</para>
+///
 /// <para><b>Why a static helper and not an injected service.</b> Four of the
 /// five call sites are handlers that already take <c>IShramSafalRepository</c>;
 /// the fifth lives in Infrastructure and takes it too. An injected service would
@@ -65,6 +74,47 @@ public static class LabourManagementGate
         if (LabourManagementPermission.IsCarriedByRole(role.Value))
         {
             return true;
+        }
+
+        return await repository.GetLabourManagementGrantAsync(farmId, userId, ct);
+    }
+
+    /// <summary>
+    /// spec: 2026-08-25-prod-cutover-waves — founder ruling 2026-08-27, verbatim:
+    /// <i>"if the owner has given that access to him then yes"</i>. The RAW stored
+    /// <c>can_manage_labour_records</c> flag, and the only sanctioned way for a handler
+    /// to obtain it — <see cref="IShramSafalRepository.GetLabourManagementGrantAsync"/>
+    /// says in its own remarks "do not call this member directly from a handler", and
+    /// that rule still holds; this is the one place that call lives.
+    ///
+    /// <para><b>Why the raw flag and not <see cref="IsAllowedAsync"/>.</b> Its consumer
+    /// is <c>VerificationStateMachine</c>, which is a Domain type and cannot read a
+    /// database (doctrine E2), so the resolved answer has to be passed in. And it must
+    /// be the GRANT, not the decision: <see cref="IsAllowedAsync"/> returns <c>true</c>
+    /// for a Mukadam on role alone (<see cref="LabourManagementPermission.IsCarriedByRole"/>,
+    /// founder decision O-4), so feeding IT to the FSM would let EVERY Mukadam approve —
+    /// role-gated, which is precisely the reading the 2026-08-27 ruling corrected.</para>
+    ///
+    /// <para><b>Why not <see cref="ResolveAsync"/> either.</b> That method deliberately
+    /// reports <c>HasExplicitGrant: false</c> for role-carried roles so the access UI
+    /// cannot render a switch that does nothing. Correct for that surface, wrong here:
+    /// it would hide a genuine grant held by a Mukadam, which is the exact caller this
+    /// ruling is about.</para>
+    ///
+    /// <para>Returns <c>false</c> for empty ids — fail-closed, same posture as
+    /// <see cref="IsAllowedAsync"/>.</para>
+    /// </summary>
+    public static async Task<bool> HasExplicitGrantAsync(
+        IShramSafalRepository repository,
+        Guid farmId,
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(repository);
+
+        if (farmId == Guid.Empty || userId == Guid.Empty)
+        {
+            return false;
         }
 
         return await repository.GetLabourManagementGrantAsync(farmId, userId, ct);

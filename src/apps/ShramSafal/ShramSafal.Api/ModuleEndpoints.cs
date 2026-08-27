@@ -44,6 +44,11 @@ public static class ModuleEndpoints
         group.MapReportEndpoints();
         group.MapAdminEndpoints();
         group.MapAttentionEndpoints();
+        // DFES companion (dfes-companion-2026-07-11) — read-only farmer
+        // engagement projection (streak / points / rich-day unlock bar).
+        group.MapDfesEndpoints();
+        // DFES Phase 5 — D8 question-engine telemetry (record + cooldown feed).
+        group.MapDfesQuestionEndpoints();
         group.MapReferenceDataEndpoints();
         group.MapAuditEndpoints();
         group.MapExportEndpoints();
@@ -60,6 +65,11 @@ public static class ModuleEndpoints
         // DATA_PRINCIPLE_SPINE 06.2 — consent state surface.
         // Mounts under /shramsafal/consent/* (same convention as security).
         group.MapConsentEndpoints();
+        // spec: dfes-companion-2026-07-11 (wave-4.2) — first-open Terms + DPDP gate.
+        // Mounts /shramsafal/consent-gate/accept. ANONYMOUS by necessity: consent has to
+        // precede the account, so this one route opts out of the group's
+        // RequireAuthorization. It is also on TenantTransactionMiddleware's skip list.
+        group.MapConsentGateEndpoints();
         // DATA_PRINCIPLE_SPINE 08.2 / 08.3 — DPDP §11 / §12 self-serve
         // data rights (export + erasure). Mounts under /shramsafal/me/*.
         group.MapDataRightsEndpoints();

@@ -20,9 +20,10 @@ import {
     ActivityExpenseEvent, ObservationNote,
     PlannedTask, AgriLogResponse, DisturbanceEvent
 } from '../../../types';
-import type { ObservationNoteDraft } from '../../../domain/types/log.types';
+import type { DayOutcome, ObservationNoteDraft } from '../../../domain/types/log.types';
 import { getPhaseAndDay } from '../../../shared/utils/timelineUtils';
 import { getDateKey } from '../services/DateKeyService';
+import { resolveDueDate } from '../dueDateResolver';
 import { LogProvenance } from '../../../domain/ai/LogProvenance';
 import { IdGenerator } from '../services/IdGenerator';
 import { VersionRegistry } from '../../contracts/VersionRegistry';
@@ -40,6 +41,7 @@ import {
     sumExpenseCost,
     computeReceiptTotal,
     priorityToSeverity,
+    hasApprovalAuthority,
     type LogPartition
 } from './log-factory-helpers';
 
@@ -59,8 +61,39 @@ export interface ManualEntryData {
     observations?: ObservationNote[];
     plannedTasks?: PlannedTask[];
     disturbance?: DisturbanceEvent;
+    /**
+     * FOUNDER DECISION 8 (2026-08-16), wave-3.10 - the farmer's OWN statement about
+     * the day, supplied only when he actually made one (the no-work declaration).
+     *
+     * When absent, `dayOutcome` is derived exactly as it always was. This field is
+     * therefore a COPY of something he said, never an inference, and it is the only
+     * way a typed day can carry `NO_WORK_PLANNED` - until now the manual path could
+     * produce only `WORK_RECORDED` or `DISTURBANCE_RECORDED`, so a rain-stopped day
+     * the farmer typed out had no honest representation at all.
+     *
+     * It is a DAY-LEVEL fact, so it rides `carriesDayFacts` exactly like
+     * `disturbance` and `manualTotalCost`: on a multi-plot save exactly one record
+     * carries it and the per-plot records fall back to the derived rule. Copying it
+     * onto every plot would record one declaration as three.
+     */
+    dayOutcome?: DayOutcome;
     fullTranscript?: string;
     manualTotalCost?: number;
+    /**
+     * BUGFIX_2026-07-19 (spec: dfes-companion-2026-07-11) - the confirm screen
+     * (ManualEntry) is the SINGLE submission surface for both genuinely-manual
+     * entries AND voice-drafted logs under review, and always submits through
+     * this "manual" factory branch. Without threading the real AI provenance
+     * through here, a voice-originated log silently lost its `source: 'ai'` /
+     * `sourceAiJobId` and was persisted as a plain manual entry - the backend
+     * DFES scorer then skips it entirely (0/UnaccountedDay) even though the
+     * voice parse succeeded. `undefined` for genuinely-manual submissions
+     * (byte-equivalent no-op - see `meta.provenance` below).
+     *
+     * NOT gated on `carriesDayFacts`: it describes how the WHOLE save originated,
+     * so every partition of one voice-drafted save is equally AI-derived.
+     */
+    provenance?: LogProvenance;
 }
 
 /** Inline type for a single element of AgriLogResponse.plannedTasks. */
@@ -234,7 +267,8 @@ export function buildManualPartitionLog(
     const disturbance = carriesDayFacts ? data.disturbance : undefined;
 
     // Trust & Verification Logic
-    const isOwner = profile.activeOperatorId === 'owner';
+    // WAVE-1.1: capability, never identity - see `hasApprovalAuthority`.
+    const isOwner = hasApprovalAuthority(profile);
     const autoApproveAll = profile.trust?.reviewPolicy === 'AUTO_APPROVE_ALL';
 
     let verificationStatus = LogVerificationStatus.PENDING;
@@ -246,7 +280,12 @@ export function buildManualPartitionLog(
         id: idGen.generate(),
         date: data.date,
         context: specificContext,
-        dayOutcome: disturbance && !hasExecution ? 'DISTURBANCE_RECORDED' : 'WORK_RECORDED',
+        // wave-3.10, founder decision 8 - a declaration the farmer MADE outranks
+        // anything derived from the shape of his data. Absent, the original rule
+        // stands untouched. Only the day-facts record carries it; see
+        // `ManualEntryData.dayOutcome`.
+        dayOutcome: (carriesDayFacts ? data.dayOutcome : undefined)
+            ?? (disturbance && !hasExecution ? 'DISTURBANCE_RECORDED' : 'WORK_RECORDED'),
 
         weatherStamp: undefined,
 
@@ -277,12 +316,15 @@ export function buildManualPartitionLog(
         meta: {
             createdAtISO: nowISO,
             createdByOperatorId: profile.activeOperatorId,
-            appVersion: VersionRegistry.APP_VERSION
+            appVersion: VersionRegistry.APP_VERSION,
+            // BUGFIX_2026-07-19 - see ManualEntryData.provenance doc comment.
+            provenance: data.provenance
         },
         verification: {
             status: verificationStatus,
             required: !isOwner,
-            verifiedByOperatorId: isOwner ? 'owner' : undefined,
+            // WAVE-1.1: the REAL id - 'owner' resolved to no operator.
+            verifiedByOperatorId: isOwner ? profile.activeOperatorId : undefined,
             verifiedAtISO: isOwner ? nowISO : undefined
         }
     };
@@ -301,9 +343,20 @@ export function buildVoicePartitionLog(
     weatherStamps: Record<string, WeatherStamp> | undefined,
     provenance: LogProvenance | undefined,
     nowISO: string,
-    idGen: IdGenerator
+    idGen: IdGenerator,
+    // Daily Clarity Loop gate (spec: dfes-companion-2026-07-11). Domain is
+    // flag-agnostic - the app-layer caller (useLogCommands, reading
+    // FEATURE_FLAGS.dailyLoop) passes this down through `LogFactory`. When FALSE
+    // the spoken-task due-date resolver is inert and the mirrored task behaves
+    // exactly as pre-feature (dueHint copied, dueDate left unset). Default FALSE
+    // so any caller that omits it stays a byte-equivalent no-op.
+    resolveDue: boolean = false
 ): DailyLog {
     const { plot: only, plots, carriesDayFacts } = partition;
+
+    // "Today" for due-date resolution - derived from the SAME clock reading as
+    // nowISO (no new clock). Spoken hints resolve relative to it.
+    const today = getDateKey(nowISO);
 
     const childPlotId = only ? only.plotId : null;
     const anchorPlotId = only ? only.plotId : FARM_GLOBAL_ID;
@@ -323,7 +376,8 @@ export function buildVoicePartitionLog(
     const mCost = sumMachineryCost(myMachine);
     const eCost = sumExpenseCost(myExpenses);
 
-    const isOwner = profile.activeOperatorId === 'owner';
+    // WAVE-1.1: capability, never identity - see `hasApprovalAuthority`.
+    const isOwner = hasApprovalAuthority(profile);
     const autoApprove = profile.trust?.reviewPolicy === 'AUTO_APPROVE_ALL' ||
         (profile.trust?.reviewPolicy === 'AUTO_APPROVE_OWNER' && isOwner);
 
@@ -336,6 +390,10 @@ export function buildVoicePartitionLog(
             priority: 'normal' as const,
             createdAt: nowISO,
             dueHint: pt.dueHint,
+            // Loop-gated: resolve the free-text hint to a concrete due date so
+            // the task carries forward in day-state counts (null for vague
+            // hints). When the loop is off, leave dueDate unset - pre-feature.
+            dueDate: resolveDue ? (resolveDueDate(pt.dueHint ?? undefined, today) ?? undefined) : undefined,
             sourceType: 'ai_extracted' as const,
             plotId: anchorPlotId,
             cropId: anchorCropId
@@ -356,7 +414,12 @@ export function buildVoicePartitionLog(
                 textCleaned: obs.textCleaned || obs.textRaw,
                 noteType: obs.noteType || 'observation',
                 severity: obs.severity || 'normal',
-                aiConfidence: obs.aiConfidence || 90,
+                // WAVE 2.1 (spec: dfes-companion-2026-07-11) - an observation the AI
+                // never scored stays unscored. Nothing computed 90; it is a number the
+                // app wrote about itself, and because ObservationEventCard shows its
+                // low-confidence caveat only below 60, the invention SUPPRESSED the
+                // one signal that told the farmer the machine was unsure.
+                aiConfidence: obs.aiConfidence,
                 tags: obs.tags || []
             })) || []),
         ...mirroredTasks.map(t => ({
@@ -428,7 +491,8 @@ export function buildVoicePartitionLog(
         verification: {
             status: autoApprove ? LogVerificationStatus.APPROVED : LogVerificationStatus.PENDING,
             required: !isOwner,
-            verifiedByOperatorId: isOwner ? 'owner' : undefined,
+            // WAVE-1.1: the REAL id - 'owner' resolved to no operator.
+            verifiedByOperatorId: isOwner ? profile.activeOperatorId : undefined,
             verifiedAtISO: isOwner ? nowISO : undefined
         }
     };

@@ -100,10 +100,16 @@ function makeLog(status: LogVerificationStatus): DailyLog {
     };
 }
 
+// WAVE-1.4: `resolveVerifierUserId` accepts only a SERVER-ISSUED id (a UUID) —
+// `'op-owner'` is the pre-sync placeholder class it refuses, so with it here the
+// hook returned at the identity guard and none of these cases ran. This is the
+// id a device that has actually synced holds.
+const OWNER_ID = '00000000-0000-4000-8000-00000000c0de';
+
 const PROFILE = {
-    activeOperatorId: 'op-owner',
+    activeOperatorId: OWNER_ID,
     operators: [{
-        id: 'op-owner',
+        id: OWNER_ID,
         name: 'Owner',
         role: 'PRIMARY_OWNER',
         capabilities: [],
@@ -138,6 +144,9 @@ function mountHook(setHistory: React.Dispatch<React.SetStateAction<DailyLog[]>>)
         farmerProfile: PROFILE,
         setFarmerProfile: vi.fn(),
         setHistory,
+        // WAVE-1.4 made approval failures visible instead of burying them in the
+        // log's farmer-facing `verification.notes`; the hook now takes a toast sink.
+        setToast: vi.fn(),
         isDemoMode: false,
     }));
 }
@@ -239,7 +248,16 @@ describe('useTrustLayer — §P-D, no optimistic success', () => {
         // No optimistic write to roll back, and no error string smuggled
         // into the RECORD's own `verification` object either — a queue's
         // health is not a property of the farmer's log.
-        expect(recorder.states).toHaveLength(0);
+        //
+        // WAVE-1.4 added a re-read on this branch (`restoreFromStore`), so the
+        // count is no longer zero — but the RULE this test defends is unchanged
+        // and is now asserted directly: every value this hook writes into
+        // history is `dataSource.logs.getAll()`'s own answer, never a status
+        // the device decided. A locally-invented APPROVED would fail this.
+        for (const state of recorder.states) {
+            expect(state).toEqual([draft]);
+        }
+        expect(recorder.current[0].verification?.status).toBe(LogVerificationStatus.DRAFT);
         expect(recorder.current[0].verification?.notes).toBeUndefined();
         expect(consoleError).toHaveBeenCalled();
     });

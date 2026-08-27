@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { rankMeterGaps } from '../meterGaps';
+import { rankMeterGaps, type StageContext } from '../meterGaps';
 import type { VlogScore, VlogScoreDimension } from '../../../../domain/types/log.types';
 
 // =============================================================================
@@ -115,10 +115,10 @@ describe('rankMeterGaps', () => {
             makeDim('COST',       true, 0,   12),  // leverage 12
         ]);
 
-        const top2 = rankMeterGaps(score, 2);
+        const top2 = rankMeterGaps(score, undefined, 2);
         expect(top2).toHaveLength(2);
 
-        const top1 = rankMeterGaps(score, 1);
+        const top1 = rankMeterGaps(score, undefined, 1);
         expect(top1).toHaveLength(1);
     });
 
@@ -185,7 +185,7 @@ describe('rankMeterGaps', () => {
             makeDim('DOSE', true, 0, 20),  // leverage 20, name D — lexically first
         ]);
 
-        const gaps = rankMeterGaps(score, 2);
+        const gaps = rankMeterGaps(score, undefined, 2);
         expect(gaps[0].dimension).toBe('DOSE');
         expect(gaps[1].dimension).toBe('WHAT');
     });
@@ -215,5 +215,28 @@ describe('rankMeterGaps', () => {
         const gaps = rankMeterGaps(score);
         expect(gaps).toHaveLength(1);
         expect(gaps[0].leverage).toBeCloseTo(6);
+    });
+});
+
+describe('rankMeterGaps stageContext (Phase 5)', () => {
+    it('accepts an optional StageContext as the 2nd positional arg without changing gap ordering', () => {
+        const score = makeScore([
+            makeDim('DOSE', true, 0, 20),   // biggest gap
+            makeDim('COST', true, 0.5, 12),
+        ]);
+        const stage: StageContext = { crop: 'grapes', expectedStage: 'flowering' };
+        const withStage = rankMeterGaps(score, stage);
+        const withoutStage = rankMeterGaps(score, undefined);
+        expect(withStage.map(g => g.dimension)).toEqual(withoutStage.map(g => g.dimension));
+        expect(withStage[0].dimension).toBe('DOSE');
+    });
+
+    it('still honours maxGaps as the 3rd positional arg', () => {
+        const score = makeScore([
+            makeDim('DOSE', true, 0, 20),
+            makeDim('COST', true, 0, 12),
+            makeDim('SCOPE', true, 0, 12),
+        ]);
+        expect(rankMeterGaps(score, undefined, 1)).toHaveLength(1);
     });
 });

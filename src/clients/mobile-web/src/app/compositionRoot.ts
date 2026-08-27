@@ -173,6 +173,9 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
         setHistory: appData.setHistory, // Unified History Setter
         setMockHistory: appData.setMockHistory,
         setRealHistory: appData.setRealHistory,
+        // WAVE-1.4 (spec: dfes-companion-2026-07-11): an approval that cannot
+        // be queued must say so out loud, not vanish.
+        setToast,
         isDemoMode: appData.isDemoMode
     });
 

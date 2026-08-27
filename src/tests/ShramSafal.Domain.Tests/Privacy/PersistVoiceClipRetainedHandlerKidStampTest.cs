@@ -148,8 +148,11 @@ public sealed class PersistVoiceClipRetainedHandlerKidStampTest
 
     private sealed class StubRetainedBlobStore : IRetainedBlobStore
     {
+        // Holds nothing, so "nothing to delete" is the only honest answer it
+        // can give. The kid-stamp test never exercises the delete path; this
+        // member exists to satisfy the port.
         public Task<RetainedVoiceDeletionOutcome> DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct)
-            => Task.FromResult(RetainedVoiceDeletionOutcome.NothingToDelete);
+            => Task.FromResult(RetainedVoiceDeletionOutcome.Nothing);
 
         public Task<Guid> PersistAsync(VoiceClipRetained metadata, byte[] cipherBytes, CancellationToken ct)
             => Task.FromResult(metadata.ClipId);

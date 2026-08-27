@@ -66,7 +66,16 @@ public sealed record CreateDailyLogCommand(
     // handler derives it from PlotId, so no existing caller has to change. For
     // Scope.MultiPlot it must carry two or more distinct real plots; for
     // Scope.Farm it must be absent or empty.
-    IReadOnlyList<Guid>? PlotIds = null)
+    IReadOnlyList<Guid>? PlotIds = null,
+    // spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — the
+    // farmer's typed day, as entered on the manual-entry screen. Before this the
+    // draft never left Dexie, so a manual log persisted NO typed children and
+    // scored 0/10 no matter how much the farmer wrote. When SourceAiJobId
+    // resolves to no AiJob and this is present, CreateDailyLogHandler normalises
+    // it (ManualDraftNormalizer) and derives the typed ledger from it with
+    // Provenance.Manual. NULL is the pre-task-0b behaviour exactly — older
+    // clients omit it and voice confirms do not send it.
+    ManualDraftItem? ManualDraft = null)
 {
     public string? IdempotencyKey
     {
