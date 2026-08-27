@@ -692,27 +692,32 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
     // ─────────────────────────────────────────────────────────────────────────
     // PROOF 7b — A CONSEQUENCE, RECORDED. NOT A FOUNDER RULING.
     //
-    // The grant is keyed on (farm, user) — it says nothing about who WROTE the log.
-    // So a granted mukadam can also approve his OWN day, which narrows proof 2's
-    // title ("a mukadam cannot approve his own log") to "an UNGRANTED mukadam
-    // cannot". That is a real change to the trust model and the founder has not
-    // ruled on it: he was asked whether a mukadam may approve, and answered "if the
-    // owner has given that access to him then yes".
+    // The grant is keyed on (farm, user) - it says nothing about who WROTE the log,
+    // so a granted mukadam can also approve his OWN day.
     //
-    // It is pinned here rather than left silent because the alternative is that the
-    // first person to discover it discovers it in production. Two ways to read it:
-    //   • intended — an owner-tier user already self-attests his own log (ruling 2,
-    //     "he wrote it; it is his word"), so a delegate doing the same is consistent;
-    //   • not intended — "four eyes on a foreman's day" was the point, and the grant
-    //     should carry approval of OTHERS' logs only.
+    // RULED BY THE FOUNDER, 2026-08-27, on being shown exactly this: "granted
+    // mukadam can approve his own log". It is INTENDED, not a side effect.
     //
-    // IF THE FOUNDER RULES THE SECOND WAY, this test is where it goes: flip to
-    // "failed", and add the authorship check to VerifyLogHandler (NOT to the FSM —
-    // the FSM does not know who wrote the log, and teaching it would be the wrong
-    // layer). Until then this asserts what the code measurably does.
-    // ─────────────────────────────────────────────────────────────────────────
+    // It was surfaced as an open consequence because he had been asked whether a
+    // mukadam may approve AT ALL - answer: "if the owner has given that access to
+    // him then yes" - and had NOT been asked whether that reaches the foreman's
+    // own work. Shown the narrower question, he ruled that it does.
+    //
+    // Consistent with ruling 2 the same day: an owner-tier user self-attests his
+    // own log because he wrote it and it is his word. A delegate the owner chose
+    // is doing the same thing with borrowed authority. The bar is the GRANT, not
+    // the authorship - an owner who does not want that simply does not grant it.
+    //
+    // So proof 2's title now reads exactly: an UNGRANTED mukadam cannot approve
+    // his own log. That refusal is still hard, still proven, and is what keeps
+    // the grant from becoming a hole.
+    //
+    // If this is ever reversed, the authorship check belongs in VerifyLogHandler
+    // and NOT in the FSM - the FSM does not know who wrote the log, and teaching
+    // it would be the wrong layer.
+    // ----------------------------------------------------------------------
     [SkippableFact]
-    public async Task A_granted_mukadam_can_also_approve_his_OWN_log_which_is_a_consequence_not_a_ruling()
+    public async Task A_granted_mukadam_can_also_approve_his_OWN_log_founder_ruled_2026_08_27()
     {
         SkipIfPostgresUnavailable();
 
