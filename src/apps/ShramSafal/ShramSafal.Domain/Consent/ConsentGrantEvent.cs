@@ -25,6 +25,12 @@ public sealed class ConsentGrantEvent : Entity<Guid>
     /// <summary>The event type written by the first-open gate.</summary>
     public const string CoreConsentGrantedEventType = "CORE_DPDP_CONSENT_GRANTED";
 
+    /// <summary>
+    /// The row written at registration attaching a pre-registration grant to the account it
+    /// produced. See <see cref="LinkToUser"/>.
+    /// </summary>
+    public const string CoreConsentLinkedEventType = "CORE_DPDP_CONSENT_LINKED";
+
     private ConsentGrantEvent() : base(Guid.Empty) { } // EF Core
 
     private ConsentGrantEvent(
@@ -74,4 +80,37 @@ public sealed class ConsentGrantEvent : Entity<Guid>
     public static ConsentGrantEvent Record(
         Guid id, string eventType, ConsentLedgerFacts facts, ConsentRecordStatus status, DateTime recordedAtUtc)
         => new(id, eventType, facts, status, recordedAtUtc);
+
+    /// <summary>
+    /// Attaches a pre-registration consent grant to the account it produced, as a NEW row.
+    /// </summary>
+    /// <remarks>
+    /// Counterpart to <c>TermsAcceptanceEvent.LinkToUser</c>, and it exists for the same
+    /// measured reason: the gate runs before login, so the granting row carries
+    /// <c>user_id NULL</c>; the RLS policy requires <c>user_id IS NOT NULL</c> to read, and
+    /// <c>UPDATE</c> is revoked. The grant was therefore recorded and immediately orphaned —
+    /// no error, no alarm, and nothing producible when a farmer or a regulator asks who
+    /// consented.
+    ///
+    /// This row carries the full facts rather than a pointer, because no role can read the
+    /// orphaned row back: the table is FORCE ROW LEVEL SECURITY and <c>agrisync_admin</c> holds
+    /// neither <c>rolsuper</c> nor <c>rolbypassrls</c>. A pointer would reference something
+    /// nothing can dereference.
+    ///
+    /// <paramref name="recordedAtUtc"/> is when the LINK was made. The consent moment stays on
+    /// the original row; back-dating this one would forge a tidier chain than the one that
+    /// actually happened.
+    /// </remarks>
+    public static ConsentGrantEvent LinkToUser(Guid id, ConsentLedgerFacts facts, DateTime recordedAtUtc)
+    {
+        if (facts.UserId is null)
+        {
+            throw new ArgumentException(
+                "LinkToUser requires a real account id — a linking row with no user attaches "
+                + "nothing to nobody, which is the defect this method exists to close.",
+                nameof(facts));
+        }
+
+        return new(id, CoreConsentLinkedEventType, facts, ConsentRecordStatus.Granted, recordedAtUtc);
+    }
 }

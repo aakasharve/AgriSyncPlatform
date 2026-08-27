@@ -23,12 +23,19 @@ public sealed class TermsAcceptanceEvent : Entity<Guid>
 
     private TermsAcceptanceEvent() : base(Guid.Empty) { } // EF Core
 
-    private TermsAcceptanceEvent(Guid id, ConsentLedgerFacts facts, ConsentRecordStatus status, DateTime recordedAtUtc)
+    /// <summary>
+    /// The row written at registration that attaches a pre-registration acceptance to the
+    /// account that resulted from it. See <see cref="LinkToUser"/> for why this exists.
+    /// </summary>
+    public const string TermsAcceptanceLinkedEventType = "TERMS_ACCEPTANCE_LINKED";
+
+    private TermsAcceptanceEvent(
+        Guid id, string eventType, ConsentLedgerFacts facts, ConsentRecordStatus status, DateTime recordedAtUtc)
         : base(id)
     {
         facts.EnsureComplete();
 
-        EventType = TermsAcceptedEventType;
+        EventType = eventType;
         UserId = facts.UserId;
         PreRegistrationSessionId = facts.PreRegistrationSessionId;
         NoticeVersion = facts.NoticeVersion;
@@ -61,10 +68,50 @@ public sealed class TermsAcceptanceEvent : Entity<Guid>
     public DateTime RecordedAtUtc { get; private set; }
 
     public static TermsAcceptanceEvent Accept(Guid id, ConsentLedgerFacts facts, DateTime recordedAtUtc)
-        => new(id, facts, ConsentRecordStatus.Granted, recordedAtUtc);
+        => new(id, TermsAcceptedEventType, facts, ConsentRecordStatus.Granted, recordedAtUtc);
 
     /// <summary>A later state change — a NEW row, because the granting row is immutable.</summary>
     public static TermsAcceptanceEvent Record(
         Guid id, ConsentLedgerFacts facts, ConsentRecordStatus status, DateTime recordedAtUtc)
-        => new(id, facts, status, recordedAtUtc);
+        => new(id, TermsAcceptedEventType, facts, status, recordedAtUtc);
+
+    /// <summary>
+    /// Attaches a pre-registration acceptance to the account it produced, as a NEW row.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>The defect this closes.</b> The consent gate runs BEFORE login, so the accepting
+    /// row is written with <c>user_id NULL</c>. The RLS policy on this table reads
+    /// <c>USING (user_id IS NOT NULL AND user_id = &lt;GUC&gt;)</c>, so that row is invisible to
+    /// every user, and <c>UPDATE</c> is revoked so it can never be attached to one. Measured on
+    /// 2026-08-26: consent was recorded and then silently orphaned — unproducible on a DPDP
+    /// access request, with no error raised anywhere.</para>
+    ///
+    /// <para><b>Why a new row and not a fix to the old one.</b> Append-only is not an
+    /// inconvenience here, it is the property that makes this a legal record: nobody can
+    /// retro-edit what a farmer agreed to. So the linkage is recorded the same way every other
+    /// state change is — as its own event, with its own timestamp.</para>
+    ///
+    /// <para><b>Why this row carries the full facts rather than pointing at the original.</b>
+    /// The orphaned row cannot be read back by ANY role — <c>agrisync_admin</c> holds neither
+    /// <c>rolsuper</c> nor <c>rolbypassrls</c>, and the table is FORCE ROW LEVEL SECURITY, so a
+    /// pointer would reference something nothing can dereference. This row therefore stands on
+    /// its own as evidence: who, which session, which notice version, which hash, and when.</para>
+    ///
+    /// <para><b>What it does NOT claim.</b> <paramref name="recordedAtUtc"/> is when the linkage
+    /// was recorded, not when the farmer accepted. The acceptance time lives on the original row.
+    /// Stamping this row with the earlier moment would be back-dating a legal record to make the
+    /// chain look tidier than it is.</para>
+    /// </remarks>
+    public static TermsAcceptanceEvent LinkToUser(Guid id, ConsentLedgerFacts facts, DateTime recordedAtUtc)
+    {
+        if (facts.UserId is null)
+        {
+            throw new ArgumentException(
+                "LinkToUser requires a real account id — a linking row with no user attaches "
+                + "nothing to nobody, which is the defect this method exists to close.",
+                nameof(facts));
+        }
+
+        return new(id, TermsAcceptanceLinkedEventType, facts, ConsentRecordStatus.Granted, recordedAtUtc);
+    }
 }
