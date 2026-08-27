@@ -21,7 +21,8 @@ public sealed class RecordCorrectionEventHandler : IRecordCorrectionEventHandler
             command.CorrectedParse,
             command.PromptVersion,
             command.Locale,
-            command.Trigger);
+            command.Trigger,
+            command.PromptContentHash);
 
         await _repository.AddAsync(correction, ct);
         return Result.Success(correction.Id);

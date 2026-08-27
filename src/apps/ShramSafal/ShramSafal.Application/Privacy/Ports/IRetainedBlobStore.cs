@@ -163,6 +163,24 @@ public enum RetainedVoiceDeletionStatus
     /// simultaneously unreachable by the farmer and undeleted in fact:
     /// the worst of both, and unrecoverable on retry. A caller seeing
     /// this MUST NOT report a completed deletion.
+    ///
+    /// <para>
+    /// That the object is still there is not speculation.
+    /// <c>PersistAsync</c> refuses to write while <c>BucketName</c> is
+    /// blank, so a <c>voice_clips_retained</c> row can only have been
+    /// created while a bucket WAS configured — which means the object
+    /// was written too. Rows present on this branch therefore point at
+    /// audio that exists.
+    /// </para>
+    ///
+    /// <para>
+    /// And the branch is reachable by a documented procedure, not only
+    /// by a typo: <c>aws/voice-retained/README.md:148</c> offers blanking
+    /// <c>RetainedBlobStore__BucketName</c> and redeploying as a "safer
+    /// alternative", whose stated effect is "clips remain in S3
+    /// untouched". Removing the rows here would make that supported
+    /// rollback silently destroy the farmer's index to their own audio.
+    /// </para>
     /// </summary>
     SkippedNoBucketConfigured,
 }

@@ -1,0 +1,45 @@
+{
+  "_comment": [
+    "S3 CORS configuration — agrisync-raw-ap-south-1.",
+    "spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN §11 (S11-infra-author)",
+    "",
+    "LIVE STATE CAPTURED 2026-08-15 (read-only, aws s3api get-bucket-cors):",
+    "  NoSuchCORSConfiguration — this bucket has NO CORS config today. Rollback:",
+    "    aws s3api delete-bucket-cors --bucket agrisync-raw-ap-south-1 --region ap-south-1",
+    "",
+    "HONESTY NOTE (repo-is-truth, verified before authoring this file):",
+    "S3RawBlobStore.cs (src/apps/ShramSafal/ShramSafal.Infrastructure/Storage/)",
+    "does GetObjectAsync / PutObjectAsync / DeleteObjectAsync entirely server-",
+    "side — no presigned URL is ever generated against this bucket anywhere in",
+    "src/ (grep for PreSignedUrl / GetPreSignedURL under src/apps found the",
+    "DPDP export-bundle presigned URL only, which targets a different,",
+    "currently-nonexistent bucket and is opened as a browser navigation, not a",
+    "CORS-relevant fetch/XHR). The browser never talks to this bucket directly",
+    "today.",
+    "",
+    "This file is authored per §11's explicit instruction as a conservative,",
+    "GET-only placeholder for a possible future direct-read path. Applying it",
+    "changes nothing observable today — nothing in the app would exercise it.",
+    "Given this bucket holds raw, unprocessed voice/receipt evidence rather",
+    "than user-facing display assets, think twice before ever widening this",
+    "beyond GET, and before making it the delivery path for evidence a farmer",
+    "did not explicitly request.",
+    "",
+    "APPLY (founder only): aws s3api put-bucket-cors --bucket agrisync-raw-ap-south-1 --cors-configuration file://cors-policy.json --region ap-south-1",
+    "  (apply-config.sh does this as part of the single transaction; strips",
+    "  _comment first since put-bucket-cors rejects unknown top-level keys.)",
+    "VERIFY: aws s3api get-bucket-cors --bucket agrisync-raw-ap-south-1 --region ap-south-1"
+  ],
+  "CORSRules": [
+    {
+      "AllowedOrigins": [
+        "https://app.shramsafal.in",
+        "https://shramsafal.in",
+        "https://admin.shramsafal.in"
+      ],
+      "AllowedMethods": ["GET"],
+      "AllowedHeaders": ["*"],
+      "MaxAgeSeconds": 3600
+    }
+  ]
+}

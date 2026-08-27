@@ -1,0 +1,7 @@
+# apply-config.sh writes a timestamped capture/<UTC-timestamp>/ folder on every
+# run (live-state capture + rendered-desired + diff, for audit trail). These
+# are generated artifacts, not source — never commit them. The durable
+# rollback record is lifecycle-policy.json's own _comment block (committed,
+# versioned) — not the commit message (round-1 finding I7: an earlier draft
+# of README.md claimed it was; it wasn't).
+capture/

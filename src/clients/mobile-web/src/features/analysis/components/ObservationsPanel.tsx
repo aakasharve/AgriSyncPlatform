@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, Bell, ChevronDown, ChevronUp, Lightbulb, Sprout } from 'lucide-react';
 import { ObservationNote } from '../../../types';
+import { formatDisplayTime } from '../../../shared/utils/displayTime';
 
 interface ObservationsPanelProps {
     observations: ObservationNote[];
@@ -21,7 +22,7 @@ const formatObservationTime = (timestamp?: string): string => {
     if (!timestamp) return '--:--';
     const date = new Date(timestamp);
     if (Number.isNaN(date.getTime())) return '--:--';
-    return date.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+    return formatDisplayTime(date);
 };
 
 const ObservationsPanel: React.FC<ObservationsPanelProps> = ({ observations, dateStr }) => {

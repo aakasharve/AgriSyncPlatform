@@ -20,17 +20,17 @@ jobs:
     runs-on: ubuntu-latest
 
     # Postgres service: ShramSafal.Admin.IntegrationTests' AdminTestFixture
-    # connects via ADMIN_TESTS_ADMIN_ROOT_CONN (falls back to a non-secret
-    # placeholder if unset, never a real credential). On the runner, we run
+    # connects via ADMIN_TESTS_ADMIN_ROOT_CONN (default points at the dev
+    # box's localhost:5433 with password ci_disposable_container_pw). On the runner, we run
     # postgres:16 as a service container, expose the standard 5432 to
     # localhost:5433 (matching local convention), and override the env var
-    # below with a CI-only throwaway password so the fixture finds it.
+    # so the fixture finds it.
     services:
       postgres:
         image: postgres:16
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: ci_throwaway_pw
+          POSTGRES_PASSWORD: ci_disposable_container_pw
           POSTGRES_DB: postgres
         ports:
           - 5433:5432
@@ -43,7 +43,16 @@ jobs:
     env:
       # Match AdminTestFixture.DefaultRootConnectionString verbatim — keeps
       # CI green even if a future test reads the env var directly.
-      ADMIN_TESTS_ADMIN_ROOT_CONN: "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=ci_throwaway_pw"
+      ADMIN_TESTS_ADMIN_ROOT_CONN: "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=ci_disposable_container_pw"
+      # RequiresPostgres category (SyncPushTenantScopeRealPostgresTests,
+      # SyncPushLedgerDerivationRealPostgresTests,
+      # LedgerDerivationSupersessionRealPostgresTests,
+      # LabourMoneyInvariantsRealPostgresTests) — same reasoning as above.
+      # Without this override these tenant-security / money-invariant tests
+      # resolve appsettings.Development.json's Database=agrisync_dev, which
+      # this service container never creates, and — post 2026-07-19 — now
+      # FAIL loudly instead of silently skipping-and-passing.
+      REQUIRES_POSTGRES_ROOT_CONN: "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=ci_disposable_container_pw"
 
     steps:
       - name: Checkout

@@ -6,7 +6,7 @@
  *  - context-display JSX helpers (helpers/appContentContextDisplay)
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 
 import BottomNavigation from './features/context/components/BottomNavigation';
 import AppHeader from './features/context/components/AppHeader';
@@ -22,7 +22,7 @@ import { CropProfile } from './types';
 import { useAgriLogApp } from './app/compositionRoot';
 import { AppFeatureProviders } from './app/context/AppFeatureContexts';
 import { useTemplateCatalogSync } from './app/hooks/useTemplateCatalogSync';
-import { useFarmContextState } from './app/hooks/useFarmContextState';
+import { useFarmContextState, OPEN_CREATE_FARM_WIZARD_EVENT } from './app/hooks/useFarmContextState';
 import { useCapacitorKeyboard } from './app/hooks/useCapacitorKeyboard';
 import { useSavedSurfaceScrollReset } from './app/hooks/useSavedSurfaceScrollReset';
 import {
@@ -33,6 +33,16 @@ import {
     buildContextColorIndicator,
     buildContextDisplay,
 } from './app/helpers/appContentContextDisplay';
+// spec: owner-oversight-loop (Ruling 12) — the narrow slice of
+// AppFeatureProviders-scoped state AppHeader's oversight strip needs. See
+// that file's header for what it does and does NOT solve (multi-farm data
+// isolation is a pre-existing, separate gap, not introduced here).
+import { buildOversightHeaderInputs } from './app/helpers/appContentOversightInputs';
+// spec: owner-oversight-loop (§P-I) — the ONE definition of "a view change
+// right now would destroy work in progress". The tap path (below) and the
+// swipe path (`core/navigation/MainViewTransition.tsx`, wired in
+// `AppRouter.tsx`) both call it, so the two can never drift apart.
+import { isRecordingPathBusy } from './shared/utils/recordingPathBusy';
 
 interface AppContentProps {
     crops: CropProfile[];
@@ -62,10 +72,6 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
         toast, setToast, handleReset: _handleReset, lastSavedLogSummary: _lastSavedLogSummary, lastSavedLogIds: _lastSavedLogIds,
     } = app;
 
-    useEffect(() => {
-        setCrops(data.crops);
-    }, [data.crops, setCrops]);
-
     // BUG-2 2026-08-14, cause 3 (founder: "there is no going back screen after
     // this screen"). `<main>` below is the app's ONE scroll container, so it —
     // not the route being swapped inside it — owns the scroll offset that
@@ -75,6 +81,25 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
     const pageScrollRef = React.useRef<HTMLElement>(null);
     useSavedSurfaceScrollReset(pageScrollRef, voice.status);
 
+    useEffect(() => {
+        setCrops(data.crops);
+    }, [data.crops, setCrops]);
+
+    // spec: owner-oversight-loop (Task 12) — the "तुमच्या शेती · Your farms"
+    // row in `SetupHubMenu.tsx` (deep inside `AppRouter`, no prop path to
+    // this component's local `setShowFirstFarmWizard`) opens the SAME
+    // `FirstFarmWizard` instance below via this event, rather than a second
+    // mount. `AppContent` renders once for the app's whole lifetime, so a
+    // listener attached here reliably outlives any later navigation into
+    // Profile. See `useFarmContextState.ts`'s own comment on
+    // `requestCreateFarmWizard` for why this is a `window` event and not a
+    // threaded prop.
+    useEffect(() => {
+        const openWizard = () => setShowFirstFarmWizard(true);
+        window.addEventListener(OPEN_CREATE_FARM_WIZARD_EVENT, openWizard);
+        return () => window.removeEventListener(OPEN_CREATE_FARM_WIZARD_EVENT, openWizard);
+    }, [setShowFirstFarmWizard]);
+
     const featureHelpers = {
         getTodayCounts: (plotId: string, dateStr: string) =>
             deriveTodayCounts(data.history, plotId, dateStr),
@@ -82,6 +107,21 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
         getContextColorIndicator: () => buildContextColorIndicator(context, data.crops),
         getContextDisplay: () => buildContextDisplay(context, data.crops),
     };
+
+    // spec: owner-oversight-loop (Ruling 12) — narrow, purpose-built props
+    // for AppHeader's oversight strip/drawer ONLY: not `data`, not `app`.
+    // `data.history` itself still has to be a prop (the drawer's per-person
+    // breakdown needs individual records, not a scalar), but nothing else
+    // from `data` crosses this boundary.
+    const oversightHeaderInputs = useMemo(
+        () => buildOversightHeaderInputs(
+            data.history,
+            data.crops,
+            data.farmerProfile.operators,
+            data.plannedTasks,
+        ),
+        [data.history, data.crops, data.farmerProfile.operators, data.plannedTasks],
+    );
 
     return (
         <div className="relative flex h-full flex-col bg-transparent text-stone-800 font-sans selection:bg-emerald-200">
@@ -91,7 +131,7 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 currentView={navigation.mainView}
                 onNavigate={navigation.setCurrentRoute}
                 onViewChange={navigation.setMainView}
-                disabled={voice.status === 'processing' || voice.status === 'recording'}
+                disabled={isRecordingPathBusy(voice.status)}
                 activeOperator={data.farmerProfile.operators.find(op => op.id === data.farmerProfile.activeOperatorId)}
                 farmContext={myFarms ? {
                     farms: myFarms,
@@ -100,6 +140,33 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                     onCreateFarm: () => setShowFirstFarmWizard(true),
                     onJoinViaQr: handleJoinViaQr,
                 } : undefined}
+                oversightData={{
+                    logs: data.history,
+                    operatorNameById: oversightHeaderInputs.operatorNameById,
+                    plotCount: oversightHeaderInputs.plotCount,
+                    unverifiedCount: oversightHeaderInputs.unverifiedCount,
+                    yesterdayNotClosed: oversightHeaderInputs.yesterdayNotClosed,
+                    // Genuinely unreachable honestly, not fabricated — see
+                    // AppHeader.tsx's own doc comment on this field.
+                    approvalHolderName: null,
+                    // Finding F7(a) — whether `data.history`/`data.crops`
+                    // above are a measured empty or simply not hydrated
+                    // yet. The strip may not claim "all work is complete"
+                    // from arrays nobody has read.
+                    dataLoaded: data.dataLoaded,
+                }}
+                // spec: owner-oversight-loop (Task 11) — the weather chip
+                // moved from mainView.tsx's home screen into AppHeader row
+                // 1. `weather` is the SAME `useWeatherMonitor()` state
+                // mainView.tsx used to read via `ctx.weatherData` etc.
+                // (`core/navigation/routeContext.ts`), forwarded here
+                // instead — no second fetch, no re-derivation.
+                weather={{
+                    data: weather.weatherData,
+                    status: weather.weatherStatus,
+                    boundaryUnset: weather.boundaryUnset,
+                    onRetry: weather.refetchWeather,
+                }}
             />
 
             <MeAlertRail />

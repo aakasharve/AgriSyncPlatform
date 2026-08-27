@@ -1,7 +1,10 @@
 import {
-    LabourEvent, InputEvent, MachineryEvent, ActivityExpenseEvent,
-    CropProfile, DailyLog, AgriLogResponse, PlannedTask, ObservationSeverity
+    InputEvent, ActivityExpenseEvent,
+    CropProfile, DailyLog, AgriLogResponse, PlannedTask, ObservationSeverity,
+    Plot, SelectedCropContext, LabourEvent, MachineryEvent,
+    FarmerProfile, OperatorCapability
 } from '../../../types';
+import { IdGenerator } from '../services/IdGenerator';
 
 /**
  * Pure helper functions extracted from LogFactory to keep that file under the
@@ -10,6 +13,18 @@ import {
  * extraction keeps the call sites identical apart from swapping `this.<fn>(...)`
  * for `<fn>(...)`.
  */
+
+/**
+ * "Farm scope: no plot, no crop." Declared here, in `core/domain`, and now
+ * IMPORTED by `LogFactory` and the partition builders rather than re-typed in
+ * each — one literal, three readers.
+ *
+ * `costAnalysisHelpers.ts`, `dayState.ts` and `logsReconciler.ts` still declare
+ * their own copies. They are in `features/`, and a `core/domain` module may not
+ * be imported the other way round without inverting the layering rule; folding
+ * those three in is its own change with its own blast radius.
+ */
+export const FARM_GLOBAL_ID = 'FARM_GLOBAL';
 
 /**
  * Project a DailyLog into the AgriLogResponse shape that scoreVlog reads.
@@ -55,136 +70,479 @@ export function priorityToSeverity(priority: PlannedTask['priority'] | undefined
     return 'normal';
 }
 
-export function scopeChildId(baseId: string, plotId: string): string {
-    return `${baseId}::${plotId}`;
+/**
+ * LABOUR_PHASE2 B1b — `plotId` may now be `null`.
+ *
+ * The `::<plotId>` suffix existed to keep the COPIES apart: one save became one
+ * log per plot, so the same event id landed in N records and had to be made
+ * unique. A shared engagement is now one record, so there are no copies to
+ * disambiguate and no plot to name — the id is already unique and is left
+ * exactly as the farmer's entry produced it.
+ */
+export function scopeChildId(baseId: string, plotId: string | null): string {
+    return plotId ? `${baseId}::${plotId}` : baseId;
 }
 
-export function filterEventsForPlot<T extends { id: string; targetPlotName?: string }>(
+/**
+ * LABOUR_PHASE2 B1b — WHICH events belong to a partition of one save.
+ *
+ * The farmer's own attribution is the only thing that decides this. There is no
+ * fourth mode that divides an unattributed event, because dividing one is
+ * exactly the invention founder decision O-2 closed.
+ *
+ * - `ownAndShared` — the selection is ONE plot, so there is nothing to divide
+ *   and nothing to withhold. Byte-for-byte the predicate this module has always
+ *   used, and the reason the dominant path is untouched by Phase 2b.
+ * - `ownOnly` — the selection is several plots and the farmer pinned this event
+ *   to THIS plot (`targetPlotName`). That is per-plot evidence he supplied, so
+ *   it is recorded per plot.
+ * - `sharedOnly` — the selection is several plots and the farmer pinned the
+ *   event to none of them. One engagement, one record, scoped to the whole set.
+ *
+ * AND THE FOURTH CASE, WHICH USED TO BE SILENT DATA LOSS. An event pinned to a
+ * plot name that NO plot of this save carries — `targetPlotName: "Plot Z"` when
+ * the farmer selected A, B and C — matched no branch above and was dropped from
+ * every record: `!t` is false because it has a name, and `t === name` is false
+ * for every plot there is. The farmer's five workers were reported "Logged." and
+ * then did not exist. It now belongs to the record carrying the save's own facts
+ * (`isUnplaceable` below).
+ *
+ * WHY THAT IS THE HONEST HOME FOR IT, and not a fabrication of its own.
+ * `targetPlotName` is written by exactly ONE producer in this codebase — the
+ * voice parser's schema (`AgriLogResponseSchema.ts:340,375,402,462,478`). No
+ * manual-entry surface sets it. So an unmatched name is an AI extraction that
+ * failed to match the farmer's selection, NOT an assertion the farmer made. The
+ * record's spatial assertion comes from the plots he actually selected; the
+ * parser's guess rides along on the event, untouched, exactly as it was heard
+ * (`P8` — the value and what we were told about it, side by side). Nothing is
+ * invented and nothing disappears.
+ */
+export type PlotEventScope = 'ownAndShared' | 'ownOnly' | 'sharedOnly';
+
+function belongsToPartition(
+    targetPlotName: string | undefined,
+    plotName: string | null,
+    eventScope: PlotEventScope,
+    savePlotNames: readonly string[]
+): boolean {
+    // Named a plot, but not one this save has: no per-plot record can exist for
+    // it, so the record carrying the save's own facts carries it too.
+    const isUnplaceable = Boolean(targetPlotName) && !savePlotNames.includes(targetPlotName as string);
+
+    switch (eventScope) {
+        case 'ownOnly':
+            return !isUnplaceable && Boolean(targetPlotName) && targetPlotName === plotName;
+        case 'sharedOnly':
+            return isUnplaceable || !targetPlotName;
+        case 'ownAndShared':
+        default:
+            return isUnplaceable || !targetPlotName || targetPlotName === plotName;
+    }
+}
+
+export function selectEventsForPartition<T extends { id: string; targetPlotName?: string }>(
     events: T[] | undefined,
-    plotName: string,
-    plotId: string
+    partition: LogPartition
 ): T[] {
+    const { plotName, plotId, eventScope, savePlotNames } = partitionSelector(partition);
+
     return (events || [])
-        .filter(event => !event.targetPlotName || event.targetPlotName === plotName)
+        .filter(event => belongsToPartition(event.targetPlotName, plotName, eventScope, savePlotNames))
         .map(event => ({
             ...event,
             id: scopeChildId(event.id, plotId)
         }));
 }
 
-export function allocateLabourForPlot(
-    labourEvents: LabourEvent[] | undefined,
-    plotName: string,
-    plotId: string,
-    plotIndex: number,
-    plotCount: number
-): LabourEvent[] {
-    return (labourEvents || [])
-        .filter(event => !event.targetPlotName || event.targetPlotName === plotName)
-        .map(event => {
-            const isShared = !event.targetPlotName;
-            return {
-                ...event,
-                id: scopeChildId(event.id, plotId),
-                totalCost: allocateOptionalAmount(event.totalCost, isShared, plotIndex, plotCount)
-            };
-        });
+/**
+ * The four facts the three selectors below need, read off the partition ONCE.
+ *
+ * They used to be four loose arguments threaded from the builders, which made it
+ * possible to pass one partition's `plotName` beside another's `eventScope`, and
+ * meant adding the save's plot set touched every call site. Reading them from
+ * the partition makes the mismatched combination unrepresentable.
+ */
+function partitionSelector(partition: LogPartition) {
+    return {
+        plotName: partition.plot ? partition.plot.plot.name : null,
+        plotId: partition.plot ? partition.plot.plotId : null,
+        eventScope: partition.eventScope,
+        savePlotNames: partition.savePlotNames,
+    };
 }
 
-export function allocateInputsForPlot(
+/**
+ * Labour V1 Task 7.3 — mints the stable `labourAssignmentId` on every labour
+ * event that does not already carry one.
+ *
+ * WHY IT LIVES HERE AND NOT IN THE PER-PARTITION EVENT SELECTION: that runs on
+ * only 2 of LogFactory's 4 branches. `createFarmGlobalManualLog` and
+ * `createFarmGlobalVoiceLog` pass `data.labour` / `response.labour` straight
+ * through, so a whole-farm log minted inside the plot split would reach the
+ * server with no id at all. The single shared boundary that all four branches
+ * pass through is `LogCommandServiceImpl.confirmAndSave`, which is the one and
+ * only call site.
+ *
+ * MUTATION SEMANTICS — IN PLACE, AND THIS IS LOAD-BEARING, NOT AN OVERSIGHT.
+ * The function mutates each `LabourEvent` object and returns `void`.
+ * `confirmAndSave` also returns `Promise<void>`, and all four of its callers
+ * (`useLogCommands`: `handleConfirm`, `handleAutoSave`, `handleManualSubmit`,
+ * `handleWizardSubmit` — named, not line-numbered, because the lines have
+ * already drifted ~90 once) then hand *their own* `newLogs` reference to
+ * `enqueueLogsForSync`. If this returned a fresh array instead of mutating, the
+ * ids would reach Dexie but never reach the wire, and the server's `Guid.Empty`
+ * rejection would then fire on every single log a farmer writes. Do not
+ * "purify" this into a copying function unless `confirmAndSave`'s signature and
+ * all four call sites change in the same edit.
+ *
+ * IDEMPOTENT: an event that already has an id keeps it untouched, so a
+ * re-entrant call can never renumber an engagement that is already on the wire.
+ *
+ * LABOUR_PHASE2 B1b — un-splitting is what collapses today's THREE ids for one
+ * engagement into one. Nothing here changed; it is the input that did.
+ */
+export function ensureLabourAssignmentIds(logs: DailyLog[], idGen: IdGenerator): void {
+    logs.forEach(log => {
+        (log.labour || []).forEach(event => {
+            if (!event.labourAssignmentId) {
+                event.labourAssignmentId = idGen.generate();
+            }
+        });
+    });
+}
+
+/**
+ * LABOUR_PHASE2 B1c — records WHICH FARM the farmer was working in, on the log
+ * itself, at the moment the log is saved.
+ *
+ * WHY THE RECORD HAS TO CARRY IT. Every other log answers "which farm?" through
+ * its plots: `logSyncMutationService.resolveLogPlots` reads
+ * `db.plots[].payload.farmId`. A `Farm`-scoped log (संपूर्ण शेत) has no plot BY
+ * DEFINITION, so that route cannot answer for it — the record fell into
+ * `skippedLogIds` and never left the phone. This is the non-plot answer.
+ *
+ * WHY CAPTURED HERE AND NOT RESOLVED AT PUSH TIME. The push runs whenever
+ * `BackgroundSyncWorker` next fires, which may be minutes or days later, on a
+ * phone whose farm context has since been switched. Reading "the current farm"
+ * then answers a question about the PAST with a fact about the PRESENT — and on
+ * this product multi-farm-per-login is a CORE use case, not an edge case. That
+ * is precisely how one farm's labour lands in another's ledger. Stamped at the
+ * save boundary, the value records what was true when the farmer spoke.
+ *
+ * WHY `meta` AND NOT `SelectedCropContext.farmId`, which already exists. A log
+ * has exactly ONE farm: `create_daily_log.farmId` is single-valued,
+ * `resolveLogPlots` refuses a plot set spanning two farms, and cross-farm
+ * mutation is forbidden. Hanging it off the per-crop selection entries admits a
+ * shape where two entries name two farms — an invalid state made representable,
+ * the same failure `ResolvedLogSyncTarget` is a discriminated union to avoid.
+ * `meta` is where this codebase already records creation-time facts about a
+ * record (who, when, which build, which parse job), which is exactly what this
+ * is. `SelectedCropContext.farmId` is left untouched and unpopulated, so the
+ * finance capture that reads it behaves identically to before.
+ *
+ * IT LIVES BESIDE `ensureLabourAssignmentIds`, AND FOR THE SAME REASON. The one
+ * boundary every log-creating path passes through is
+ * `LogCommandServiceImpl.confirmAndSave` — all four `LogFactory` branches
+ * (manual+plot, manual+entire-farm, voice+plot, voice+entire-farm) AND the
+ * wizard, which builds its `DailyLog[]` itself and never touches `LogFactory`.
+ * Stamping inside `LogFactory` would silently miss the wizard.
+ *
+ * MUTATES IN PLACE, RETURNS `void` — load-bearing, exactly as its sibling
+ * documents: every caller of `confirmAndSave` hands its OWN `logs` reference on
+ * to `enqueueLogsForSync` afterwards, so a copying version would put the farm in
+ * Dexie and never on the wire, which is the whole point of the field.
+ *
+ * PURE, and the farm id is a PARAMETER. The value is read from `SessionStore`
+ * (infrastructure) by the application service; `core/domain` acquires no
+ * infrastructure import for it.
+ *
+ * `null` / empty is a NO-OP, not a placeholder. If the app cannot say which farm
+ * it is in, the record says nothing — an unstamped farm-scoped log is refused at
+ * the push boundary and reported, which is the honest outcome. Writing a
+ * sentinel, an empty string, or a guessed farm here would turn "we do not know"
+ * into a cross-farm write.
+ *
+ * IDEMPOTENT AND NEVER OVERWRITES. A log that already names a farm keeps it —
+ * including one that came back from the server on a pull, where the value is the
+ * server's own record and outranks anything this device can assert.
+ */
+export function stampCreationFarmId(logs: DailyLog[], farmId: string | null | undefined): void {
+    if (!farmId) {
+        return;
+    }
+
+    logs.forEach(log => {
+        if (log.meta?.farmId) {
+            return;
+        }
+
+        if (log.meta) {
+            log.meta.farmId = farmId;
+            return;
+        }
+
+        // `meta` is optional on `DailyLog`, and the wizard path builds its own
+        // records — so it can genuinely be absent. `createdAtISO` is required on
+        // `LogMeta`; the log's own date at midday is the only non-invented value
+        // available, and it is the same fallback `captureMoneyEventsFromLog`
+        // already uses when `meta.createdAtISO` is missing.
+        log.meta = { createdAtISO: `${log.date}T12:00:00`, farmId };
+    });
+}
+
+/**
+ * LABOUR_PHASE2 B1b — `selectInputsForPartition` /
+ * `selectActivityExpensesForPartition` are what is LEFT of
+ * `allocateInputsForPlot` / `allocateActivityExpensesForPlot` once the invented
+ * per-plot division is gone: select the events that belong to this partition,
+ * and scope their child ids.
+ *
+ * Renamed, not kept: a function still called `allocate…` that allocates nothing
+ * is the kind of stale name the next reader reasons from. B1d finished the job
+ * — `…ForPlot` was the same stale-name hazard one step on, because a partition
+ * is a SET of plots as often as it is one.
+ *
+ * `allocateLabourForPlot` and `allocateMachineryForPlot` are GONE rather than
+ * renamed — with the division removed, both were `selectEventsForPartition`
+ * character for character, and two spellings of one rule is how they drift.
+ *
+ * These two survive as their own functions only because they carry CHILD
+ * collections (`mix`, `items`) whose ids must be scoped with the parent's.
+ */
+export function selectInputsForPartition(
     inputEvents: InputEvent[] | undefined,
-    plotName: string,
-    plotId: string,
-    plotIndex: number,
-    plotCount: number
+    partition: LogPartition
 ): InputEvent[] {
+    const { plotName, plotId, eventScope, savePlotNames } = partitionSelector(partition);
+
     return (inputEvents || [])
-        .filter(event => !event.targetPlotName || event.targetPlotName === plotName)
-        .map(event => {
-            const isShared = !event.targetPlotName;
-            return {
-                ...event,
-                id: scopeChildId(event.id, plotId),
-                cost: allocateOptionalAmount(event.cost, isShared, plotIndex, plotCount),
-                mix: (event.mix || []).map(item => ({
-                    ...item,
-                    id: scopeChildId(item.id, plotId)
-                }))
-            };
-        });
+        .filter(event => belongsToPartition(event.targetPlotName, plotName, eventScope, savePlotNames))
+        .map(event => ({
+            ...event,
+            id: scopeChildId(event.id, plotId),
+            mix: (event.mix || []).map(item => ({
+                ...item,
+                id: scopeChildId(item.id, plotId)
+            }))
+        }));
 }
 
-export function allocateMachineryForPlot(
-    machineryEvents: MachineryEvent[] | undefined,
-    plotName: string,
-    plotId: string,
-    plotIndex: number,
-    plotCount: number
-): MachineryEvent[] {
-    return (machineryEvents || [])
-        .filter(event => !event.targetPlotName || event.targetPlotName === plotName)
-        .map(event => {
-            const isShared = !event.targetPlotName;
-            return {
-                ...event,
-                id: scopeChildId(event.id, plotId),
-                rentalCost: allocateOptionalAmount(event.rentalCost, isShared, plotIndex, plotCount),
-                fuelCost: allocateOptionalAmount(event.fuelCost, isShared, plotIndex, plotCount)
-            };
-        });
-}
-
-export function allocateActivityExpensesForPlot(
+export function selectActivityExpensesForPartition(
     expenseEvents: ActivityExpenseEvent[] | undefined,
-    plotName: string,
-    plotId: string,
-    plotIndex: number,
-    plotCount: number
+    partition: LogPartition
 ): ActivityExpenseEvent[] {
+    const { plotName, plotId, eventScope, savePlotNames } = partitionSelector(partition);
+
     return (expenseEvents || [])
-        .filter(event => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const targetPlotName = (event as any).targetPlotName as string | undefined;
-            return !targetPlotName || targetPlotName === plotName;
-        })
-        .map(event => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const targetPlotName = (event as any).targetPlotName as string | undefined;
-            const isShared = !targetPlotName;
-
-            return {
-                ...event,
-                id: scopeChildId(event.id, plotId),
-                totalAmount: allocateOptionalAmount(event.totalAmount, isShared, plotIndex, plotCount),
-                items: (event.items || []).map(item => ({
-                    ...item,
-                    id: scopeChildId(item.id, plotId),
-                    total: allocateOptionalAmount(item.total, isShared, plotIndex, plotCount)
-                }))
-            };
-        });
+        // `ActivityExpenseEvent` does not declare `targetPlotName`, but the
+        // parser emits it and the filter has always honoured it. Kept as-is.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .filter(event => belongsToPartition((event as any).targetPlotName, plotName, eventScope, savePlotNames))
+        .map(event => ({
+            ...event,
+            id: scopeChildId(event.id, plotId),
+            items: (event.items || []).map(item => ({
+                ...item,
+                id: scopeChildId(item.id, plotId)
+            }))
+        }));
 }
 
-export function allocateOptionalAmount(
-    value: number | null | undefined,
-    isShared: boolean,
-    plotIndex: number,
-    plotCount: number
-): number | undefined {
-    if (value === null || value === undefined) return undefined;
-    if (!isShared || plotCount <= 1) return value;
-    return allocateAmountAcrossPlots(value, plotIndex, plotCount);
+/** A selected plot that this device can actually place on a crop. */
+export interface ResolvedLogPlot {
+    plotId: string;
+    plot: Plot;
+    crop: CropProfile;
 }
 
-export function allocateAmountAcrossPlots(total: number, plotIndex: number, plotCount: number): number {
-    if (plotCount <= 1) return total;
+/**
+ * The selected plot ids, paired with the crop each belongs to.
+ *
+ * A plot no crop claims is DROPPED, which is what the per-plot loop already did
+ * (`if (!crop) return;`) — it cannot be given a context, a timeline or a crop
+ * cycle, and inventing any of those is the fabrication O-1 closed.
+ */
+export function resolveSelectedPlots(plotIds: string[], crops: CropProfile[]): ResolvedLogPlot[] {
+    const resolved: ResolvedLogPlot[] = [];
 
-    const totalCents = Math.round(total * 100);
-    const baseShare = Math.trunc(totalCents / plotCount);
-    const remainder = totalCents - (baseShare * plotCount);
-    const shareCents = baseShare + (plotIndex < remainder ? 1 : 0);
+    plotIds.forEach(plotId => {
+        const crop = crops.find(c => c.plots.some(p => p.id === plotId));
+        if (!crop) return;
 
-    return shareCents / 100;
+        const plot = crop.plots.find(p => p.id === plotId);
+        if (!plot) return;
+
+        resolved.push({ plotId, plot, crop });
+    });
+
+    return resolved;
+}
+
+/** One record a save becomes, and the spatial assertion behind it. */
+export interface LogPartition {
+    /** The one plot this record is about, or `null` when it is about a set. */
+    plot: ResolvedLogPlot | null;
+    /** Every plot the record asserts, in the order the farmer selected them. */
+    plots: ResolvedLogPlot[];
+    eventScope: PlotEventScope;
+    /**
+     * Whether this record carries the facts that belong to the SAVE rather than
+     * to a plot: observations, planned tasks, the disturbance, the transcript,
+     * the farmer's stated total. Exactly one partition carries them, or a
+     * three-plot save would record one disturbance three times and one stated
+     * total three times — the headcount fault in another costume.
+     */
+    carriesDayFacts: boolean;
+    /**
+     * Every plot name the WHOLE SAVE asserts — not this record's.
+     *
+     * A per-plot partition knows only its own plot, so it cannot tell "pinned to
+     * a different plot of this save" (belongs to that plot's record) from
+     * "pinned to a plot this save does not have" (belongs nowhere, and used to
+     * be dropped). This is the set that tells them apart, computed once and
+     * carried on every partition so both answers come from the same list.
+     */
+    savePlotNames: readonly string[];
+}
+
+/**
+ * LABOUR_PHASE2 B1b — THE SPLIT, replaced.
+ *
+ * WHAT IT USED TO DO. `targetPlotIds.forEach(...)` emitted one `DailyLog` per
+ * selected plot and copied every unattributed event into each of them. For a
+ * shared engagement that meant the SAME object was read two contradictory ways
+ * at once: the money was divided ("one pool, split") while the headcount was
+ * copied verbatim ("this many on EACH plot"). Eight workers on three plots were
+ * stored as three rows of eight and summed to twenty-four, and the engagement
+ * was minted as three unrelated `labourAssignmentId`s that no correction or
+ * attribution could ever address as one thing.
+ *
+ * WHAT IT DOES NOW — founder decision O-2. The farmer's own attribution is the
+ * only thing that partitions a save:
+ *
+ *   - ONE plot selected: one record, and the predicate is unchanged. This is
+ *     every log in the database today, and it comes out identical.
+ *   - SEVERAL plots, event pinned to a plot (`targetPlotName`): that is per-plot
+ *     evidence the farmer supplied, so it keeps its own per-plot record.
+ *   - SEVERAL plots, event pinned to none: ONE record, scoped to the whole set.
+ *     `8 workers across A+B+C` = one engagement, `WorkerCount 8`, context
+ *     `{A,B,C}`. Never 8/8/8, and never an invented 3/3/2.
+ *
+ * The shared record comes FIRST: it is the one that exists in the ordinary case,
+ * and it is the one carrying the transcript and the observations.
+ *
+ * It is emitted even when there is nothing unattributed to put in it, IF there
+ * is no other record — so an empty save still produces exactly the one empty log
+ * it produces today, and `useLogCommands` does not mistake it for "no plots
+ * selected".
+ *
+ * `hasDayLevelFacts` is the OTHER reason it must exist. The disturbance, the
+ * transcript, the observations, the planned tasks and the farmer's own stated
+ * total belong to the save, not to a plot, so exactly one record carries them —
+ * and if every event happened to be pinned to a plot, that record would not have
+ * been built at all and those facts would have been silently dropped. Caught by
+ * `LogFactory.oneEngagementOneQuantity.test.ts`, not by reading.
+ *
+ * B1d ADDS A THIRD REASON, and it is the same class of loss. An event pinned to
+ * a plot name this save does not have belongs to no per-plot record, so if the
+ * shared record is not built it has nowhere to go and vanishes — which is what
+ * shipped. `hasUnplaceableWork` forces the record into existence for exactly
+ * that case. See `belongsToPartition` for why the save's own record is the
+ * honest home for it.
+ */
+export function partitionSelectionByFarmerEvidence(
+    resolved: ResolvedLogPlot[],
+    eventGroups: ReadonlyArray<ReadonlyArray<{ targetPlotName?: string }> | undefined>,
+    hasDayLevelFacts: boolean,
+): LogPartition[] {
+    if (resolved.length === 0) {
+        return [];
+    }
+
+    const savePlotNames: readonly string[] = resolved.map(({ plot }) => plot.name);
+
+    if (resolved.length === 1) {
+        return [{
+            plot: resolved[0],
+            plots: resolved,
+            eventScope: 'ownAndShared',
+            carriesDayFacts: true,
+            savePlotNames,
+        }];
+    }
+
+    const partitions: LogPartition[] = [];
+    const shared: LogPartition = {
+        plot: null,
+        plots: resolved,
+        eventScope: 'sharedOnly',
+        carriesDayFacts: true,
+        savePlotNames,
+    };
+
+    const targeted = resolved.filter(candidate => eventGroups.some(group =>
+        (group || []).some(event => Boolean(event.targetPlotName)
+            && event.targetPlotName === candidate.plot.name)));
+
+    const hasUnattributedWork = eventGroups.some(group =>
+        (group || []).some(event => !event.targetPlotName));
+
+    const hasUnplaceableWork = eventGroups.some(group =>
+        (group || []).some(event => Boolean(event.targetPlotName)
+            && !savePlotNames.includes(event.targetPlotName as string)));
+
+    if (hasUnattributedWork || hasUnplaceableWork || hasDayLevelFacts || targeted.length === 0) {
+        partitions.push(shared);
+    }
+
+    targeted.forEach(plot => partitions.push({
+        plot,
+        plots: [plot],
+        eventScope: 'ownOnly',
+        carriesDayFacts: false,
+        savePlotNames,
+    }));
+
+    return partitions;
+}
+
+/**
+ * The spatial assertion, in the shape this app already represents a selection:
+ * ONE ENTRY PER CROP, each carrying that crop's plots.
+ *
+ * The same grouping `LogContext` builds live and `logsReconciler.buildSelection`
+ * rebuilds from the wire, so a locally-created log and the same log pulled back
+ * describe themselves identically.
+ */
+export function buildSelectionForPlots(plots: ResolvedLogPlot[]): SelectedCropContext[] {
+    const byCropId = new Map<string, SelectedCropContext>();
+
+    plots.forEach(({ plotId, plot, crop }) => {
+        const entry = byCropId.get(crop.id) ?? {
+            cropId: crop.id,
+            cropName: crop.name,
+            selectedPlotIds: [],
+            selectedPlotNames: [],
+        };
+        entry.selectedPlotIds.push(plotId);
+        entry.selectedPlotNames.push(plot.name);
+        byCropId.set(crop.id, entry);
+    });
+
+    return [...byCropId.values()];
+}
+
+/**
+ * The crop a record can honestly name, or `undefined`.
+ *
+ * A record covering plots of two different crops has no single crop, and naming
+ * the first one would attribute the work to a crop the farmer did not single
+ * out. `cropId` is optional on both `ObservationNote` and `PlannedTask`, so
+ * silence is expressible — and silence is the truth here.
+ */
+export function soleCropId(plots: ResolvedLogPlot[]): string | undefined {
+    const cropIds = new Set(plots.map(({ crop }) => crop.id));
+    return cropIds.size === 1 ? [...cropIds][0] : undefined;
 }
 
 export function sumLabourCost(events: LabourEvent[]): number {
@@ -210,4 +568,33 @@ export function computeReceiptTotal(parts: {
 
 export function sumExpenseCost(events: ActivityExpenseEvent[]): number {
     return events.reduce((sum, event) => sum + (event.totalAmount || 0), 0);
+}
+
+
+/**
+ * Trust predicate: does the ACTIVE operator hold approval authority?
+ *
+ * WAVE-1.1 (spec: dfes-companion-2026-07-11). Was
+ * `profile.activeOperatorId === 'owner'` at four sites. Post-sync
+ * `profileAndCropsReconciler` overwrites `activeOperatorId` with a server
+ * GUID (its preserve-existing candidates are all `operator.userId`, so the
+ * literal `'owner'` can never match), so NOBODY matched and every log the
+ * owner recorded was filed PENDING — he logged work and his score dropped.
+ *
+ * Compare CAPABILITY, never identity: `capabilities` exists in BOTH states
+ * (pre-sync seeded by `useAppData`, post-sync via `capabilitiesForRole`),
+ * whereas the owner's GUID is absent on a new device — an id comparison has
+ * a day-one hole. APPROVE_LOGS rather than `role === 'PRIMARY_OWNER'`
+ * because SECONDARY_OWNER legitimately holds it (`operatorRole.ts`), and it
+ * is the same predicate `isVerifier` encodes.
+ *
+ * LIVES HERE, NOT ON `LogFactory`, because LABOUR_PHASE2 B1b split the four
+ * call sites across two files: two stayed on `LogFactory` (the farm-wide
+ * branches) and two moved to `log-partition-builders.ts`. A `private static`
+ * could not serve both, and duplicating the predicate is how the four sites
+ * drifted apart in the first place.
+ */
+export function hasApprovalAuthority(profile: FarmerProfile): boolean {
+    const actor = profile.operators?.find(op => op.id === profile.activeOperatorId);
+    return actor?.capabilities?.includes(OperatorCapability.APPROVE_LOGS) ?? false;
 }

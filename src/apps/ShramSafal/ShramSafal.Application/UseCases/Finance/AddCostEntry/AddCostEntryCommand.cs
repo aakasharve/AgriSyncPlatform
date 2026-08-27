@@ -1,3 +1,4 @@
+using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Location;
 
 namespace ShramSafal.Application.UseCases.Finance.AddCostEntry;
@@ -33,4 +34,18 @@ public sealed record AddCostEntryCommand(
     // row's DeviceId / IpHash columns. Default sentinels match the worker /
     // unknown path so direct-construction unit tests stay green.
     string AuditDeviceId = "unknown",
-    string AuditIpHash = "sha256:unknown");
+    string AuditIpHash = "sha256:unknown",
+    // Which way the money moved, as the farmer stated it. NULL means the
+    // caller made no statement — true of /finance/cost-entry (whose request
+    // shape has no direction field) and of every sync client shipped before
+    // add_cost_entry carried one. Never defaulted to Expense: see
+    // MoneyDirection's own remarks.
+    MoneyDirection? Direction = null,
+    // Line detail carried through from the payload, unchanged. Nothing here
+    // participates in computing Amount.
+    decimal? Quantity = null,
+    string? Unit = null,
+    decimal? UnitPrice = null,
+    string? PaymentMode = null,
+    string? VendorName = null,
+    string? ClientAttachmentIdsJson = null);

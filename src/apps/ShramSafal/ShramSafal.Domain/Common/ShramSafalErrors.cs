@@ -55,16 +55,22 @@ public static class ShramSafalErrors
         "ShramSafal.ConsentRequired",
         "Full History Journal consent is required to retain voice notes beyond 30 days.");
 
-    // spec: dfes-companion-2026-07-11 (wave-4.4) — founder model, 2026-08-17.
-    // Returned when a read would carry a worker's record past the farm that produced it
-    // and the tier does not permit that: TIER 1 never, at all; TIERS 2 and 3 only with
-    // that worker's own recorded consent. Naming a worker INSIDE his farm is never this
-    // error — see WorkerRecordTier and WorkerRecordPortability.
-    //
-    // One code covers both refusals on purpose: the caller's remedy differs but the
-    // answer does not, and the machine-readable WHICH is on the log line
-    // (WorkerRecordPortability.DenyReasons) rather than leaking the shape of another
-    // farm's data holdings back to whoever asked.
+    // LABOUR_PHASE2 Phase 5 (founder decision O-4) — the owner tried to toggle
+    // the explicit labour-record grant on a member whose ROLE already carries
+    // it (owner-tier or Mukadam). Storing the flag would have changed nothing
+    // and left the owner looking at a switch that does not work, so the request
+    // is refused with a code the UI can branch on (doctrine P5). Conflict, not
+    // Forbidden: the caller IS allowed to manage access — this particular
+    // member's capability simply is not a grant to give or take.
+    public static readonly Error LabourManagementCarriedByRole = Error.Conflict(
+        "ShramSafal.LabourManagementCarriedByRole",
+        "This member's role already allows managing labour records, so the grant cannot be changed. Change their role instead.");
+
+
+    // DFES — worker-record portability. Restored during the main->dfes merge: taking
+    // main's ShramSafalErrors dropped it, and the two DFES worker handlers that
+    // reference it stopped compiling. Not a new decision, just one that main had
+    // never seen.
     //
     // The code ends in "Forbidden" deliberately: the worker endpoints map an error code
     // with that suffix to HTTP 403, and this is an authorisation answer, not a malformed

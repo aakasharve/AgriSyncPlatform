@@ -96,6 +96,22 @@ internal sealed class FarmMembershipConfiguration : IEntityTypeConfiguration<Far
         builder.Property(x => x.ExitedAtUtc)
             .HasColumnName("exited_at_utc");
 
+        // LABOUR_PHASE2 Phase 5 (migration ②, founder decision O-4) — the
+        // owner's explicit grant of labour-record management.
+        //
+        // NOT NULL DEFAULT false, and no index: the column is only ever read
+        // alongside (farm_id, user_id), which ix_farm_memberships_farm_user_
+        // nonterminal already covers, so an index here would cost writes and
+        // buy nothing. No RLS change either — ssf.farm_memberships already
+        // carries p_tenant_farm_memberships (FOR ALL, USING + WITH CHECK on
+        // farm_id) from 20260516130000_EnableRowLevelSecurity, NULLIF-hardened
+        // by 20260609144905; a policy names TABLES and COLUMNS it filters on,
+        // and this column is neither.
+        builder.Property(x => x.CanManageLabourRecords)
+            .HasColumnName("can_manage_labour_records")
+            .HasDefaultValue(false)
+            .IsRequired();
+
         builder.HasIndex(x => x.FarmId);
         builder.HasIndex(x => x.UserId);
 

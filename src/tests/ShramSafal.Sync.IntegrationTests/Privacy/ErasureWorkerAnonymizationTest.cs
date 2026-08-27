@@ -63,6 +63,24 @@ namespace ShramSafal.Sync.IntegrationTests.Privacy;
 /// </para>
 ///
 /// <para>
+/// <b>2026-07-19 addition (founder Decision 5, spec
+/// 2026-07-13-labour-attendance-approval-design).</b> This test used to seed
+/// NO worker names at all and assert only a row count for
+/// <c>ssf.labour_assignments</c> and <c>ssf.workers</c>/<c>ssf.worker_assignments</c>
+/// weren't seeded or asserted at all — false assurance for anything worker-
+/// name-shaped. It now also seeds a real third-party worker name
+/// (<see cref="WorkerRawName"/>) into <c>ssf.workers</c>,
+/// <c>ssf.worker_assignments</c>, and <c>ssf.labour_assignments.worker_names_json</c>,
+/// then asserts the name is scrubbed from all three and that the grep step
+/// in section 4 below finds no trace of it anywhere. A Docker-runnable
+/// twin of this exact scrub logic — <c>ErasureWorkerWorkerNameScrubRealPostgresTests</c>
+/// (RequiresPostgres category, native Postgres, no Docker needed) — is the
+/// one actually EXECUTED locally to prove the before/after failure claim,
+/// since this file's own <c>RequiresDocker</c> category has no CI sweep
+/// (see the class remark on <c>WorkerNameProjectorActivationTests</c>).
+/// </para>
+///
+/// <para>
 /// Docker-gated — same collection + trait as
 /// <see cref="ShramSafal.Sync.IntegrationTests.Tenancy.RowLevelSecurityTests"/>.
 /// </para>
@@ -89,6 +107,16 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
     private const string DisplayName = "Akash Arve";
     private const string PhoneNumber = "9876543210";
     private const string TranscriptExcerpt = "Akash said the phone number is 9876543210";
+
+    // 2026-07-19 addition (founder Decision 5, spec
+    // 2026-07-13-labour-attendance-approval-design) — a genuine third-party
+    // worker name, distinct from the farmer's own DisplayName above, seeded
+    // into ssf.workers / ssf.worker_assignments / ssf.labour_assignments so
+    // this test actually proves the new worker-name erasure disposition
+    // instead of asserting only a row count.
+    private const string WorkerRawName = "Sunil WorkerPiiName";
+    private const string WorkerNormalizedName = "sunil workerpiiname";
+    private Guid _workerId;
 
     public async Task InitializeAsync()
     {
@@ -280,6 +308,46 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
             ("dlid", _dailyLogId)))!);
         laCount.Should().Be(1, "D-T5-ERASURE: labour_assignments survives erasure (KEEP) with total_cost still NULL");
 
+        // labour_assignments.worker_names_json (2026-07-19 addition): NOT KEEP —
+        // the farmer's own spoken free-text naming a third-party worker must be
+        // scrubbed, same as any other free-text PII column in this file.
+        var laWorkerNames = (string)(await ScalarAsync(raw,
+            "SELECT worker_names_json::text FROM ssf.labour_assignments WHERE daily_log_id = @dlid",
+            ("dlid", _dailyLogId)))!;
+        laWorkerNames.Should().NotContain(WorkerRawName,
+            "2026-07-19 manifest correction: worker_names_json is embedded PII, not a de-identified fact, and must be scrubbed");
+        laWorkerNames.Should().Be("[]", "worker_names_json must be reset to the empty-array default, not left partially scrubbed");
+
+        // ssf.workers (2026-07-19 addition): ANONYMIZE, not KEEP — name_raw/
+        // name_normalized hold a real third-party name and must be scrubbed
+        // in place. KEEP fields (farm_id, assignment_count, the row itself)
+        // survive so ssf.worker_assignments is never orphaned.
+        var workerNameRaw = (string)(await ScalarAsync(raw,
+            "SELECT name_raw FROM ssf.workers WHERE \"Id\" = @wid", ("wid", _workerId)))!;
+        workerNameRaw.Should().NotBe(WorkerRawName, "ssf.workers.name_raw must be scrubbed, not survive verbatim");
+        workerNameRaw.Should().NotContain("Sunil");
+
+        var workerNameNormalized = (string)(await ScalarAsync(raw,
+            "SELECT name_normalized FROM ssf.workers WHERE \"Id\" = @wid", ("wid", _workerId)))!;
+        workerNameNormalized.Should().NotContain("sunil");
+
+        var workerFarmId = (Guid)(await ScalarAsync(raw,
+            "SELECT farm_id FROM ssf.workers WHERE \"Id\" = @wid", ("wid", _workerId)))!;
+        workerFarmId.Should().Be(_farmId, "ssf.workers.farm_id is a KEEP field");
+
+        var workerAssignmentCount = (int)(await ScalarAsync(raw,
+            "SELECT assignment_count FROM ssf.workers WHERE \"Id\" = @wid", ("wid", _workerId)))!;
+        workerAssignmentCount.Should().Be(1, "ssf.workers.assignment_count is a KEEP field");
+
+        // ssf.worker_assignments (2026-07-19 addition): KEEP — the link row
+        // must NOT be orphaned/removed by the ssf.workers scrub above (that
+        // is exactly why the disposition is sentinel-replace, not DELETE).
+        var workerAssignmentsCount = Convert.ToInt32((await ScalarAsync(raw,
+            "SELECT count(*) FROM ssf.worker_assignments WHERE worker_id = @wid AND daily_log_id = @dlid",
+            ("wid", _workerId), ("dlid", _dailyLogId)))!);
+        workerAssignmentsCount.Should().Be(1,
+            "ssf.worker_assignments must survive the ssf.workers scrub unorphaned — it has no PII of its own");
+
         // machinery_usages (Track B table-6, D-T6-ERASURE): KEEP — survives erasure
         // (no user_id column); the structured equipment config is preserved.
         var muCount = Convert.ToInt32((await ScalarAsync(raw,
@@ -320,6 +388,11 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         wsCount.Should().Be(1, "weather_stamps survives erasure (KEEP) — system weather data, no PII to scrub");
 
         // ── 4. Regex-grep every free-text column for PII residue ────
+        // 2026-07-19 addition: also grep ssf.workers.name_raw/name_normalized
+        // and ssf.labour_assignments.worker_names_json — the two NEW
+        // worker-name surfaces this fix gives a real scrub disposition. A
+        // test that only counted rows before could never have caught a
+        // name surviving in either place.
         var phoneRegex = new Regex(@"\d{10}");
         var allTextSql = """
             SELECT description FROM ssf.cost_entries
@@ -329,6 +402,12 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
             SELECT COALESCE(deviation_note, '') FROM ssf.log_tasks
             UNION ALL
             SELECT reason FROM ssf.finance_corrections
+            UNION ALL
+            SELECT name_raw FROM ssf.workers
+            UNION ALL
+            SELECT name_normalized FROM ssf.workers
+            UNION ALL
+            SELECT worker_names_json::text FROM ssf.labour_assignments
             """;
         await using var grepCmd = raw.CreateCommand();
         grepCmd.CommandText = allTextSql;
@@ -348,6 +427,10 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
                 "DS-017 rule (b): display-name strings must be scrubbed");
             t.Should().NotContain("Akash",
                 "DS-017 rule (b): first-name token from the transcript excerpt must be scrubbed");
+            t.Should().NotContain(WorkerRawName,
+                "2026-07-19: the third-party worker's name must be scrubbed from every surface it reached");
+            t.Should().NotContain("Sunil",
+                "2026-07-19: the worker's first-name token must not survive anywhere");
         }
 
         // ── 5. Per-row audit assertion ──────────────────────────────
@@ -441,8 +524,8 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         await using (var c = db.CreateCommand())
         {
             c.CommandText = """
-                INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, operator_user_id, log_date, created_at_utc, source, model_version, prompt_version)
-                VALUES (@id, @fid, @pid, @cid, @uid, CURRENT_DATE, NOW(), 'pre_spine', 'unknown', 'unknown');
+                INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, plot_ids, scope, operator_user_id, log_date, created_at_utc, source, model_version, prompt_version)
+                VALUES (@id, @fid, @pid, @cid, ARRAY[@pid], 'Plot', @uid, CURRENT_DATE, NOW(), 'pre_spine', 'unknown', 'unknown');
                 """;
             c.Parameters.AddWithValue("id", _dailyLogId);
             c.Parameters.AddWithValue("fid", _farmId);
@@ -594,16 +677,57 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         }
 
         // labour_assignments (Track B table-5) — child of the seeded daily log.
-        // KEEP on erasure (no PII). total_cost intentionally NULL (no-multiply).
+        // The engagement facts (worker_count/wage_per_person/total_cost) are
+        // de-identified and KEEP on erasure. worker_names_json is NOT — it
+        // carries the farmer's own spoken free-text naming a third-party
+        // worker (2026-07-19 manifest correction) — seeded here with the PII
+        // name so the post-erasure assertions can prove it is scrubbed.
+        // total_cost intentionally NULL (no-multiply).
         await using (var c = db.CreateCommand())
         {
             c.CommandText = """
                 INSERT INTO ssf.labour_assignments
-                    ("Id", daily_log_id, engagement_type, worker_count, wage_per_person, total_cost, created_at_utc)
+                    ("Id", daily_log_id, engagement_type, worker_count, wage_per_person, total_cost, worker_names_json, created_at_utc, duration_hours, time_basis)
                 VALUES
-                    (@id, @dlid, 'Hired', 4, 50, NULL, NOW());
+                    (@id, @dlid, 'Hired', 4, 50, NULL, @names::jsonb, NOW(), 8, 'Assumed');
                 """;
             c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("dlid", _dailyLogId);
+            c.Parameters.AddWithValue("names", $"[\"{WorkerRawName}\"]");
+            await c.ExecuteNonQueryAsync();
+        }
+
+        // ssf.workers / ssf.worker_assignments (2026-07-19 addition) — a WTL
+        // v0 Worker aggregate produced by WorkerNameProjector from THIS
+        // user's own daily-log transcript, plus its link row. Third-party
+        // PII (name_raw/name_normalized) that must be scrubbed — not KEEP —
+        // when the operator who authored the log is erased.
+        _workerId = Guid.NewGuid();
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.workers
+                    ("Id", farm_id, name_raw, name_normalized, first_seen_utc, assignment_count)
+                VALUES
+                    (@id, @fid, @raw, @norm, NOW(), 1);
+                """;
+            c.Parameters.AddWithValue("id", _workerId);
+            c.Parameters.AddWithValue("fid", _farmId);
+            c.Parameters.AddWithValue("raw", WorkerRawName);
+            c.Parameters.AddWithValue("norm", WorkerNormalizedName);
+            await c.ExecuteNonQueryAsync();
+        }
+
+        await using (var c = db.CreateCommand())
+        {
+            c.CommandText = """
+                INSERT INTO ssf.worker_assignments
+                    ("Id", worker_id, daily_log_id, confidence, occurred_at_utc)
+                VALUES
+                    (@id, @wid, @dlid, 0.85, NOW());
+                """;
+            c.Parameters.AddWithValue("id", Guid.NewGuid());
+            c.Parameters.AddWithValue("wid", _workerId);
             c.Parameters.AddWithValue("dlid", _dailyLogId);
             await c.ExecuteNonQueryAsync();
         }
@@ -823,7 +947,7 @@ public sealed class ErasureWorkerAnonymizationTest : IAsyncLifetime
         var b = new NpgsqlConnectionStringBuilder(superuserConn)
         {
             Username = "agrisync_app",
-            Password = "dev_app_change_me",
+            Password = TestRoleCredentials.AppRolePassword,
         };
         return b.ConnectionString;
     }
@@ -886,8 +1010,7 @@ internal sealed class InMemoryRetainedBlobStore : IRetainedBlobStore
 {
     private readonly Dictionary<Guid, (VoiceClipRetained Meta, byte[] Cipher)> _store = new();
 
-    public Task<RetainedVoiceDeletionOutcome> DeleteRetainedVoiceForUserAsync(
-        Guid userId, CancellationToken ct)
+    public Task<RetainedVoiceDeletionOutcome> DeleteRetainedVoiceForUserAsync(Guid userId, CancellationToken ct)
     {
         var keys = _store
             .Where(kv => kv.Value.Meta.UserId == userId)
@@ -898,10 +1021,11 @@ internal sealed class InMemoryRetainedBlobStore : IRetainedBlobStore
             _store.Remove(key);
         }
 
-        // spec: dfes-companion-2026-07-11 (farm-memory) — the port now
-        // reports what it did rather than returning a bare Task. This
-        // fake holds a real object map, so it can answer honestly: an
-        // empty user is NothingToDelete, not a silent success.
+        // This fake genuinely removes what it holds, so Removed is the honest
+        // answer when there was something to remove — and the count it reports
+        // is the number it actually removed, not a literal chosen to satisfy a
+        // caller. A double whose counts cannot disagree with its own behaviour
+        // would prove nothing about the code that reads them.
         return Task.FromResult(keys.Count == 0
             ? RetainedVoiceDeletionOutcome.Nothing
             : RetainedVoiceDeletionOutcome.Removed(keys.Count));

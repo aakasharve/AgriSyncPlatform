@@ -40,9 +40,28 @@ export interface DayWorkSummary {
 export interface LabourSummary {
     maleCount: number;
     femaleCount: number;
+    /**
+     * The REAL total headcount for the day (Decision 3a, 2026-07-19) — per
+     * `resolveLabourHeadcount`/`sumLabourHeadcount`
+     * (domain/logs/labourHeadcount.ts): `count` when a bare total was
+     * stated (e.g. "चार माणसांनी काम केलं" — no gender split), else
+     * `maleCount + femaleCount`. Use THIS for "how many people worked"
+     * displays — `maleCount + femaleCount` alone is 0 for a count-only
+     * entry and under-counts.
+     */
+    headcount: number;
     maleRate: number;
     femaleRate: number;
-    hoursWorked: number;
+    /**
+     * Labour V1 Task 8.3 — `hoursWorked` USED TO LIVE HERE AND WAS DELETED.
+     * It was `settings.labour.defaultHours || 8` maximised inside a forEach,
+     * i.e. the maximum of a constant. `defaultHours` has no settings UI and no
+     * persistence, so every farmer saw the same "८ तास" whatever they did. A
+     * constant rendered as a measurement is a fabrication (doctrine P4). Real
+     * stated duration lives on `LabourEvent.durationHours` (Task 7) and is
+     * absent when the farmer said nothing. Do not reintroduce a summary-level
+     * hours field derived from defaults.
+     */
     totalCost: number;
     isEmpty: boolean;
     events: LabourEvent[];

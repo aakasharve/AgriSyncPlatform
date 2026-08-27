@@ -4,8 +4,11 @@
  *
  * Proves:
  * - Provider starts in 'checking' authStatus.
- * - Successful refreshSession() → 'authenticated'.
- * - Failed refreshSession() → 'anonymous'.
+ * - refreshSession() 'refreshed' → 'authenticated'.
+ * - refreshSession() 'rejected' (the server judged us) → 'anonymous', session cleared.
+ * - refreshSession() 'unreachable' (we never reached a server) → the warm
+ *   session is KEPT and nothing is cleared. See the dedicated describe block
+ *   at the bottom of this file for why that distinction is load-bearing.
  * - AppFrame does not render LoginPage while authStatus === 'checking'.
  * - FIX #2 regression: AUTH_SESSION_CHANGED_EVENT (OTP/QR-join path) flips
  *   authStatus to 'authenticated' when the new session is non-null, and back
@@ -16,6 +19,7 @@ import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { render, screen, waitFor, act, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { RefreshOutcome } from '../../../infrastructure/api/transport';
 
 // ---------------------------------------------------------------------------
 // Mocks — vi.mock is hoisted to top, factory must not reference outer vars.
@@ -70,7 +74,7 @@ vi.mock('../../../infrastructure/storage/RefreshSessionStore', () => ({
 
 import { AuthProvider, useAuth } from '../AuthProvider';
 import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';
-import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
+import { getAuthSession, clearAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -119,8 +123,8 @@ describe('AuthProvider — boot-validation state machine', () => {
     });
 
     it('starts in checking state before refresh resolves', () => {
-        let resolveFn!: (v: null) => void;
-        getRefreshSpy().mockReturnValueOnce(new Promise<null>(r => { resolveFn = r; }));
+        let resolveFn!: (v: RefreshOutcome) => void;
+        getRefreshSpy().mockReturnValueOnce(new Promise<RefreshOutcome>(r => { resolveFn = r; }));
 
         render(
             <AuthProvider>
@@ -129,7 +133,7 @@ describe('AuthProvider — boot-validation state machine', () => {
         );
 
         expect(screen.getByTestId('auth-status').textContent).toBe('checking');
-        resolveFn(null);
+        resolveFn({ kind: 'rejected' });
     });
 
     it('transitions to authenticated when refreshSession resolves with a session', async () => {
@@ -138,7 +142,7 @@ describe('AuthProvider — boot-validation state machine', () => {
             accessToken: 'tok-abc',
             expiresAtUtc: '2099-01-01T00:00:00Z',
         };
-        getRefreshSpy().mockResolvedValueOnce(fakeSession);
+        getRefreshSpy().mockResolvedValueOnce({ kind: 'refreshed', session: fakeSession });
 
         render(
             <AuthProvider>
@@ -154,8 +158,8 @@ describe('AuthProvider — boot-validation state machine', () => {
         expect(screen.getByTestId('is-authenticated').textContent).toBe('yes');
     });
 
-    it('transitions to anonymous when refreshSession resolves with null', async () => {
-        getRefreshSpy().mockResolvedValueOnce(null);
+    it('transitions to anonymous when the server rejects the credential', async () => {
+        getRefreshSpy().mockResolvedValueOnce({ kind: 'rejected' });
 
         render(
             <AuthProvider>
@@ -169,7 +173,7 @@ describe('AuthProvider — boot-validation state machine', () => {
         expect(screen.getByTestId('is-authenticated').textContent).toBe('no');
     });
 
-    it('transitions to anonymous when refreshSession rejects', async () => {
+    it('transitions to anonymous when refreshSession throws and there is no warm session', async () => {
         getRefreshSpy().mockRejectedValueOnce(new Error('network error'));
 
         render(
@@ -184,8 +188,8 @@ describe('AuthProvider — boot-validation state machine', () => {
     });
 
     it('AppFrame does not render LoginPage while auth is checking', async () => {
-        let resolveFn!: (v: null) => void;
-        getRefreshSpy().mockReturnValueOnce(new Promise<null>(r => { resolveFn = r; }));
+        let resolveFn!: (v: RefreshOutcome) => void;
+        getRefreshSpy().mockReturnValueOnce(new Promise<RefreshOutcome>(r => { resolveFn = r; }));
 
         render(
             <AuthProvider>
@@ -198,9 +202,9 @@ describe('AuthProvider — boot-validation state machine', () => {
         expect(screen.queryByTestId('login-page')).not.toBeInTheDocument();
         expect(screen.queryByTestId('app-content')).not.toBeInTheDocument();
 
-        // Resolve with null → anonymous → login page appears
+        // Resolve with a server rejection → anonymous → login page appears
         await act(async () => {
-            resolveFn(null);
+            resolveFn({ kind: 'rejected' });
         });
         await waitFor(() => {
             expect(screen.getByTestId('login-page')).toBeInTheDocument();
@@ -214,7 +218,7 @@ describe('AuthProvider — boot-validation state machine', () => {
             accessToken: 'tok-xyz',
             expiresAtUtc: '2099-01-01T00:00:00Z',
         };
-        getRefreshSpy().mockResolvedValueOnce(fakeSession);
+        getRefreshSpy().mockResolvedValueOnce({ kind: 'refreshed', session: fakeSession });
 
         render(
             <AuthProvider>
@@ -253,7 +257,7 @@ describe('AuthProvider — FIX #2: AUTH_SESSION_CHANGED_EVENT flips authStatus',
 
     it('isAuthenticated flips to true when AUTH_SESSION_CHANGED_EVENT fires with a non-null session', async () => {
         // Boot: refresh fails → anonymous
-        getRefreshSpy().mockResolvedValueOnce(null);
+        getRefreshSpy().mockResolvedValueOnce({ kind: 'rejected' });
         const mockGetAuthSession = getAuthSession as ReturnType<typeof vi.fn>;
         mockGetAuthSession.mockReturnValue(null);
 
@@ -293,7 +297,7 @@ describe('AuthProvider — FIX #2: AUTH_SESSION_CHANGED_EVENT flips authStatus',
             accessToken: 'tok-3',
             expiresAtUtc: '2099-01-01T00:00:00Z',
         };
-        getRefreshSpy().mockResolvedValueOnce(fakeSession);
+        getRefreshSpy().mockResolvedValueOnce({ kind: 'refreshed', session: fakeSession });
         const mockGetAuthSession = getAuthSession as ReturnType<typeof vi.fn>;
         mockGetAuthSession.mockReturnValue(fakeSession);
 
@@ -318,5 +322,132 @@ describe('AuthProvider — FIX #2: AUTH_SESSION_CHANGED_EVENT flips authStatus',
             expect(screen.getByTestId('auth-status').textContent).toBe('anonymous');
         });
         expect(screen.getByTestId('is-authenticated').textContent).toBe('no');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// 2026-08-23 — the farmer must not be logged out by a lost signal.
+// ---------------------------------------------------------------------------
+//
+// This is the provider half of the fix proven at the client layer in
+// `infrastructure/api/__tests__/RefreshTransportFailure.test.ts`.
+//
+// The whole failure took two steps, and both had to be closed. The client
+// destroyed the durable credential on any error; the provider then cleared the
+// warm session and dropped to 'anonymous', which points the app at an empty
+// database. To the farmer standing in his field on one bar of signal, forty
+// days of records had simply vanished — and because an APK bundles its code at
+// build time, no later deploy could reach him.
+//
+// 'unreachable' means nothing judged the credential. The correct response to
+// "we don't know" is to change nothing.
+//
+// evidence: docs/LAUNCH-READINESS-AND-AGRISTACK-2026-08-23.md — Decision 2 item 1
+describe('AuthProvider — an unreachable server must not end the session', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+        cleanup();
+    });
+
+    it('keeps the warm session and stays authenticated when the server is unreachable', async () => {
+        const warmSession = {
+            userId: 'u-field',
+            accessToken: 'tok-warm',
+            expiresAtUtc: '2099-01-01T00:00:00Z',
+        };
+        const mockGetAuthSession = getAuthSession as ReturnType<typeof vi.fn>;
+        mockGetAuthSession.mockReturnValue(warmSession);
+        getRefreshSpy().mockResolvedValueOnce({ kind: 'unreachable' });
+
+        render(
+            <AuthProvider>
+                <StatusProbe />
+            </AuthProvider>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('auth-status').textContent).toBe('authenticated');
+        });
+        expect(screen.getByTestId('is-authenticated').textContent).toBe('yes');
+        expect(clearAuthSession).not.toHaveBeenCalled();
+    });
+
+    it('renders the app, not the login page, when the boot refresh cannot reach the server', async () => {
+        const warmSession = {
+            userId: 'u-field',
+            accessToken: 'tok-warm',
+            expiresAtUtc: '2099-01-01T00:00:00Z',
+        };
+        (getAuthSession as ReturnType<typeof vi.fn>).mockReturnValue(warmSession);
+        getRefreshSpy().mockResolvedValueOnce({ kind: 'unreachable' });
+
+        render(
+            <AuthProvider>
+                <AppFrameStub />
+            </AuthProvider>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('app-content')).toBeInTheDocument();
+        });
+        expect(screen.queryByTestId('login-page')).not.toBeInTheDocument();
+    });
+
+    it('clears nothing when unreachable and there is no warm session either', async () => {
+        (getAuthSession as ReturnType<typeof vi.fn>).mockReturnValue(null);
+        getRefreshSpy().mockResolvedValueOnce({ kind: 'unreachable' });
+
+        render(
+            <AuthProvider>
+                <StatusProbe />
+            </AuthProvider>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('auth-status').textContent).toBe('anonymous');
+        });
+        // Anonymous because there is nothing to show — but the Android Keystore
+        // token is untouched, so the next launch with signal logs him back in.
+        expect(clearAuthSession).not.toHaveBeenCalled();
+    });
+
+    it('a thrown refresh is treated as unknown, not as proof the credential is dead', async () => {
+        const warmSession = {
+            userId: 'u-field',
+            accessToken: 'tok-warm',
+            expiresAtUtc: '2099-01-01T00:00:00Z',
+        };
+        (getAuthSession as ReturnType<typeof vi.fn>).mockReturnValue(warmSession);
+        getRefreshSpy().mockRejectedValueOnce(new Error('Network Error'));
+
+        render(
+            <AuthProvider>
+                <StatusProbe />
+            </AuthProvider>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('auth-status').textContent).toBe('authenticated');
+        });
+        expect(clearAuthSession).not.toHaveBeenCalled();
+    });
+
+    it('still clears when the server actually rejects the credential', async () => {
+        (getAuthSession as ReturnType<typeof vi.fn>).mockReturnValue(null);
+        getRefreshSpy().mockResolvedValueOnce({ kind: 'rejected' });
+
+        render(
+            <AuthProvider>
+                <StatusProbe />
+            </AuthProvider>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('auth-status').textContent).toBe('anonymous');
+        });
+        expect(clearAuthSession).toHaveBeenCalled();
     });
 });

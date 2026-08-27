@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Labour;
 using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Farms;
@@ -29,8 +30,9 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
 {
     private static readonly JsonSerializerOptions ReadOptions = new(JsonSerializerDefaults.Web);
 
-    public Task<DerivationOutcome> DeriveAsync(
-        DailyLog log, AiJob sourceJob, IIdGenerator ids, IClock clock, CancellationToken ct = default)
+    public async Task<DerivationOutcome> DeriveAsync(
+        DailyLog log, AiJob sourceJob, IIdGenerator ids, IClock clock,
+        bool deriveLabour = true, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(log);
         ArgumentNullException.ThrowIfNull(sourceJob);
@@ -47,8 +49,14 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
 
         // Identity is scoped to the parse job: two logs confirmed from the SAME
         // voice parse share a lineage and must supersede one another per plot.
-        return DeriveCoreAsync(
-            log, sourceJob.NormalizedResultJson, provenance, sourceJob.Id, ids, clock, ct);
+        //
+        // Labour V1 Task 6.3 — deriveLabour is the CALLER's single-producer decision
+        // and is carried through untouched to the shared body, where it gates the
+        // labour branch and nothing else. This wrapper neither makes that decision
+        // nor softens it.
+        return await DeriveCoreAsync(
+            log, sourceJob.NormalizedResultJson, provenance, sourceJob.Id, ids, clock,
+            deriveLabour, ct);
     }
 
     public Task<DerivationOutcome> DeriveFromManualDraftAsync(
@@ -71,7 +79,19 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         // came from, and it is stable across re-saves, so a second derivation of
         // the same log recomputes the same DerivedEventKey and SUPERSEDES rather
         // than duplicating the farmer's single application.
-        return DeriveCoreAsync(log, manualWireJson, provenance, log.Id, ids, clock, ct);
+        // The manual path derives labour. Its only source of labour rows is the
+        // draft's own labour[], normalised by ManualDraftNormalizer, so within this
+        // call there is nothing for it to be a second producer OF. Passed explicitly
+        // rather than defaulted, because Labour V1 Task 6.3 made "who produces this
+        // row" a decision every caller must take deliberately.
+        //
+        // Note what this deliberately does NOT do: it does not consult
+        // CreateDailyLogCommand.Labour. Suppressing on that would need the decision
+        // plumbed through ILedgerDerivationService.DeriveFromManualDraftAsync, which
+        // is a contract change, not a merge resolution.
+        return DeriveCoreAsync(
+            log, manualWireJson, provenance, log.Id, ids, clock,
+            deriveLabour: true, ct);
     }
 
     /// <summary>
@@ -80,9 +100,14 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
     /// anchors every <see cref="DerivedEventKey"/> — nothing else differs between the
     /// two callers, which is precisely why there is no second writer.
     /// </summary>
+    /// <param name="deriveLabour">
+    /// Labour V1 Task 6.3 — the SINGLE-PRODUCER guard, gating the labour branch and
+    /// ONLY the labour branch. Required (no default) so neither caller can acquire
+    /// this behaviour by omission.
+    /// </param>
     private async Task<DerivationOutcome> DeriveCoreAsync(
         DailyLog log, string? wireJson, Provenance provenance, Guid sourceId,
-        IIdGenerator ids, IClock clock, CancellationToken ct)
+        IIdGenerator ids, IClock clock, bool deriveLabour, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(ids);
         ArgumentNullException.ThrowIfNull(clock);
@@ -109,6 +134,13 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         var operations = 0;
         var children = 0;
 
+        // LABOUR_PHASE2 P2.3 (landmine L8) — read the SCOPE once, here, instead
+        // of letting every downstream call inherit whatever `log.PlotId`
+        // happens to be. `log.PlotId` is null for BOTH MultiPlot and Farm, and
+        // the two sinks below read a null plot in opposite ways. See
+        // DerivedPlotScope / RoutineIsRepresentableForScope.
+        var derivedPlotScope = DerivedPlotScope(log);
+
         // ── inputs → FarmOperation(application) + ApplicationInputItem children ──
         if (root.TryGetProperty("inputs", out var inputs) && inputs.ValueKind == JsonValueKind.Array)
         {
@@ -120,16 +152,19 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                 // two DailyLogs for two DIFFERENT plots that share one SourceAiJobId
                 // (the mobile one-log-per-plot flow) don't collide on
                 // (farm_id, derived_event_key) and silently supersede each other.
-                // The scope is log.PlotId (stable across re-confirms of the SAME
+                // The scope is the log's plot (stable across re-confirms of the SAME
                 // plot), so a same-plot offline re-confirm still recomputes the same
-                // key and supersedes as intended.
-                var key = DerivedEventKey.Compute(sourceId, log.PlotId, span, "input");
+                // key and supersedes as intended. LABOUR_PHASE2 P2.3: for a
+                // plot-less log the scope is null and folds in as the empty
+                // string — see DerivedPlotScope for why that is a deliberate
+                // reading and what it costs.
+                var key = DerivedEventKey.Compute(sourceId, derivedPlotScope, span, "input");
 
                 var opId = ids.New();
                 var op = FarmOperation.Create(
                     id: opId,
                     farmId: log.FarmId,
-                    plotId: log.PlotId,
+                    plotId: derivedPlotScope,
                     operationType: "application",
                     operationDate: log.LogDate,
                     sourceDailyLogId: log.Id,
@@ -275,28 +310,51 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         }
 
         // ── labour → LabourAssignment (daily_logs child) ───────────────────────
-        if (root.TryGetProperty("labour", out var labour) && labour.ValueKind == JsonValueKind.Array)
+        // Labour V1 Task 6.3 — SINGLE PRODUCER. `deriveLabour` is false exactly
+        // when the confirm carried structured labour[], which the handler has
+        // already staged as CANONICAL Phase-1 rows. Deriving again here would
+        // record one real engagement twice. Note the guard is on THIS branch only:
+        // every other family below (and the inputs/irrigation above) still derives,
+        // so a voice confirm that also carries manual labour keeps its full ledger.
+        if (deriveLabour
+            && root.TryGetProperty("labour", out var labour) && labour.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in labour.EnumerateArray())
             {
-                var assignment = LabourAssignment.Create(
+                // ONE shared construction site (Labour V1 Task 3) — the manual
+                // path added in Task 6 goes through the same factory so the same
+                // engagement can never be recorded two ways.
+                var assignment = LabourAssignmentFactory.FromParsed(
                     id: ids.New(),
                     dailyLogId: log.Id,
-                    engagementType: MapLabourEngagement(ReadString(item, "engagementType"), ReadString(item, "type")),
+                    engagementType: LabourAssignmentFactory.MapLabourEngagement(ReadString(item, "engagementType"), ReadString(item, "type")),
                     maleCount: ReadInt(item, "maleCount"),
                     femaleCount: ReadInt(item, "femaleCount"),
                     workerCount: ReadInt(item, "count"),
                     // rate spoken lands on WagePerPerson; new `rate` wins, legacy
                     // `wagePerPerson` is the fallback.
                     wagePerPerson: ReadDecimal(item, "rate") ?? ReadDecimal(item, "wagePerPerson"),
-                    contractUnit: MapContractUnit(ReadString(item, "contractUnit")),
+                    contractUnit: LabourAssignmentFactory.MapContractUnit(ReadString(item, "contractUnit")),
                     contractQuantity: ReadDecimal(item, "contractQuantity"),
                     // NO-MULTIPLY (D3): only an EXPLICIT stated total — never rate × count.
                     totalCost: ReadDecimal(item, "totalCost"),
                     linkedActivityId: ReadGuid(item, "linkedActivityId"),
                     createdAtUtc: now,
-                    // wave-3.12 — how sure he was of the COST. CostEntry.Create throws on
-                    // amount <= 0, so an unknown cost has nowhere else honest to live.
+                    // Task 4: the model emits no duration key (A5/outputContract.md) — every
+                    // voice-derived row is honestly Assumed, never a fabricated Explicit.
+                    time: LabourTime.ServerAssumed(),
+                    // Descriptive only (Task 2.3) — never touch money above.
+                    shift: LabourAssignmentFactory.MapLabourShift(ReadString(item, "shift")),
+                    task: ReadTrimmedString(item, "activity"),
+                    workerNames: ReadStringArray(item, "whoWorked"),
+                    // wave-3.12 — how sure he was of the COST. Keyed on "totalCost", the
+                    // sibling number it qualifies, so a farmer vague about the wage and
+                    // exact about the dose is recorded as exactly that.
+                    // RESTORED: the main merge took main's LabourAssignment and dropped
+                    // this pair, so "मजुरीचा खर्च अंदाजे ५०००" rode the wire, passed the
+                    // normalizer, and had nowhere to land — discarded with no error (P10).
+                    // CostEntry.Create throws on amount <= 0, so an unknown cost has
+                    // nowhere else honest to live.
                     costCertainty: ReadCertainty(ReadNumericFact(item, "totalCost")),
                     costSpokenText: ReadSpokenText(ReadNumericFact(item, "totalCost")));
                 await repository.AddLabourAssignmentAsync(assignment, ct);
@@ -388,14 +446,82 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         // farm+plot+op-type → idempotent under replay (sync replay is idempotency-
         // keyed upstream, so a replayed mutation never re-enters this path and
         // won't double-count). POPULATE only — the "नेहमी प्रमाणे" read is deferred.
-        if (irrigationRoutine is RoutineSeed seed)
+        //
+        // LABOUR_PHASE2 P2.3 (L8) — NOT every scope can be written here. A
+        // MultiPlot log is skipped, deliberately and visibly; see
+        // RoutineIsRepresentableForScope.
+        if (irrigationRoutine is RoutineSeed seed && RoutineIsRepresentableForScope(log.Scope))
         {
             await UpsertRoutineAsync(
-                log.FarmId, log.PlotId, "irrigation", seed, ids, now, ct);
+                log.FarmId, derivedPlotScope, "irrigation", seed, ids, now, ct);
         }
 
         return new DerivationOutcome(operations, children);
     }
+
+    /// <summary>
+    /// LABOUR_PHASE2 P2.3 — the plot that this log's DERIVED rows are allowed to
+    /// name, decided from <see cref="DailyLog.Scope"/> rather than inherited from
+    /// a nullable <see cref="DailyLog.PlotId"/>.
+    ///
+    /// <list type="bullet">
+    /// <item><b>Plot</b> — the single plot the farmer named. Byte-identical to
+    /// the pre-Phase-2 behaviour, which matters: <c>farm_operations</c> rows
+    /// already in the database carry <see cref="DerivedEventKey"/>s computed
+    /// from this value, and changing it would stop an offline re-confirm
+    /// superseding its own earlier row.</item>
+    /// <item><b>MultiPlot</b> — null, because <c>farm_operations</c> has one
+    /// nullable <c>plot_id</c> and no plot-set column. Null here is LOSSY (the
+    /// named subset is not carried) but it is not FALSE: it says "no single
+    /// plot", not "the whole farm". The true scope stays recoverable from
+    /// <c>farm_operations.source_daily_log_id → daily_logs.plot_ids</c>.
+    /// Picking the first plot, or writing one operation per plot, are the two
+    /// fabrications founder decision O-1 closed.</item>
+    /// <item><b>Farm</b> — null, and here null is the whole truth: the farmer
+    /// named no plot.</item>
+    /// </list>
+    /// </summary>
+    private static Guid? DerivedPlotScope(DailyLog log) => log.Scope switch
+    {
+        DailyLogScope.Plot => log.PlotId,
+        DailyLogScope.MultiPlot => null,
+        DailyLogScope.Farm => null,
+        _ => null,
+    };
+
+    /// <summary>
+    /// LABOUR_PHASE2 P2.3 — whether a <c>routine_patterns</c> row may be written
+    /// for a log of this scope. This is the sink where a null plot means
+    /// something DIFFERENT from what it means everywhere else, so it gets its
+    /// own explicit rule instead of inheriting <see cref="DerivedPlotScope"/>.
+    ///
+    /// <para><c>routine_patterns.plot_id IS NULL</c> is not "unknown plot" — it
+    /// is a positive claim, spelled out at <c>RoutinePattern.cs:49</c>: <i>"null
+    /// = farm-wide pattern"</i>, and enforced as such by the partial unique
+    /// index <c>ux_routine_patterns_farm_op_no_plot</c>. So:</para>
+    ///
+    /// <list type="bullet">
+    /// <item><b>Plot</b> — write it against that plot. Unchanged.</item>
+    /// <item><b>Farm</b> — write it with a null plot. The farmer's assertion
+    /// was farm-wide and the column's null means farm-wide; the two agree.</item>
+    /// <item><b>MultiPlot</b> — SKIP. Passing null would upgrade "these two
+    /// plots" into "the whole farm" — a claim about plots the farmer never
+    /// named, on a row whose whole purpose is to be replayed back to him as
+    /// "नेहमी प्रमाणे". Fanning out to one row per plot is the other direction of
+    /// the same fault: it would take ONE stated duration and assert it
+    /// individually of each plot, and would count one log as N samples in
+    /// <see cref="RoutinePattern.SampleCount"/>. Representing a
+    /// named-subset routine needs a schema that can hold a plot SET, which is a
+    /// separate decision on a separate table.</item>
+    /// </list>
+    ///
+    /// <para>Nothing is lost that a farmer can see: <c>routine_patterns</c> is
+    /// populate-only today (the "नेहमी प्रमाणे" read is deferred), and the
+    /// underlying irrigation entries are still written for every scope by the
+    /// block above — only the derived <i>pattern</i> is withheld.</para>
+    /// </summary>
+    private static bool RoutineIsRepresentableForScope(DailyLogScope scope)
+        => scope is DailyLogScope.Plot or DailyLogScope.Farm;
 
     // Create-or-reinforce the routine_patterns row for one (farm, plot, op-type).
     private async Task UpsertRoutineAsync(
@@ -526,6 +652,41 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
             ? v.GetRawText()
             : null;
 
+    // Like ReadString, but trims and normalizes blank-after-trim to null
+    // (e.g. labour "activity" — the spoken task). Case/script preserved
+    // (Devanagari), unlike Norm() which lowercases for enum matching.
+    private static string? ReadTrimmedString(JsonElement el, string prop)
+    {
+        var s = ReadString(el, prop);
+        return string.IsNullOrWhiteSpace(s) ? null : s!.Trim();
+    }
+
+    // Reads a JSON array of strings (labour "whoWorked" — names as stated) into
+    // a plain list; blank entries dropped, null when absent/empty so
+    // LabourAssignment.Create's own "[]" default applies.
+    private static IReadOnlyList<string>? ReadStringArray(JsonElement el, string prop)
+    {
+        if (!el.TryGetProperty(prop, out var v) || v.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var names = new List<string>();
+        foreach (var entry in v.EnumerateArray())
+        {
+            if (entry.ValueKind == JsonValueKind.String)
+            {
+                var name = entry.GetString();
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    names.Add(name!);
+                }
+            }
+        }
+
+        return names.Count == 0 ? null : names;
+    }
+
     // ── tolerant string → enum maps (safe default; never throw) ────────────────
     private static IrrigationRole MapIrrigationRole(string? s) => Norm(s) switch
     {
@@ -534,36 +695,10 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         _ => IrrigationRole.Irrigation,
     };
 
-    private static LabourEngagementType MapLabourEngagement(string? engagementType, string? legacyType)
-    {
-        // Prefer the richer B2.4 engagementType; fall back to the legacy HIRED/CONTRACT/SELF.
-        var e = Norm(engagementType);
-        if (e is not null)
-        {
-            return e switch
-            {
-                "contract_piece" or "contract" => LabourEngagementType.Contract,
-                "self" or "exchange" => LabourEngagementType.Self,
-                _ => LabourEngagementType.Hired, // hired_daily + default
-            };
-        }
-
-        return Norm(legacyType) switch
-        {
-            "contract" => LabourEngagementType.Contract,
-            "self" => LabourEngagementType.Self,
-            _ => LabourEngagementType.Hired,
-        };
-    }
-
-    private static ContractUnit? MapContractUnit(string? s) => Norm(s) switch
-    {
-        "tree" => ContractUnit.Tree,
-        "acre" => ContractUnit.Acre,
-        "row" => ContractUnit.Row,
-        "lump sum" or "lump_sum" or "lumpsum" => ContractUnit.LumpSum,
-        _ => null,
-    };
+    // The three labour maps (MapLabourEngagement / MapLabourShift / MapContractUnit)
+    // moved to LabourAssignmentFactory in Labour V1 Task 3 — the manual entry path
+    // needs the same wire-string → enum mapping. They are still called from the
+    // labour block above, now as LabourAssignmentFactory.Map…; behaviour unchanged.
 
     private static MachineType MapMachineType(string? s) => Norm(s) switch
     {

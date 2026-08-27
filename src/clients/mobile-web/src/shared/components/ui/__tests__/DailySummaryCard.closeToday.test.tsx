@@ -15,6 +15,41 @@
 //
 // The real Marathi table is used (not an echo mock), so a regression that
 // re-points the pill at `dfes.closeToday` fails here.
+//
+// ======================================================================
+// 🔴 ONE TEST IN THIS FILE IS DELIBERATELY RED, AWAITING A FOUNDER RULING.
+//    DO NOT "FIX" IT. IT IS NOT A DEFECT AND NOT A MERGE ERROR.
+// ======================================================================
+//
+// "opening it shows the founder's sentence VERBATIM as the panel heading"
+// fails, and it is the only failure here. `main` and `feat/dfes-companion`
+// each rewrote `dfes.closeToday` from the same base ('आज बंद करा'), into two
+// different sentences that differ on ONE open question — नोंदी (records) vs
+// कामे (work):
+//
+//   main (LIVE on farmers' phones, and the value in i18n/dfesTranslations.ts):
+//     'आजच्या सर्व नोंदी माझ्यापर्यंत पोहोचल्या का याची खात्री करा'
+//   dfes (recorded in dfesTranslations.ts, left UNAPPLIED; asserted below):
+//     'आजची सगळी कामे माझ्यापर्यंत पोहोचली का याची खात्री करा'
+//
+// `i18n/dfesTranslations.ts`'s own header marks this as the one ruling that
+// is "DELIBERATELY UNSETTLED" — नोंद is banned from Shram Sathi's first-person
+// voice and legitimate in UI chrome, and which side this string falls on has
+// not been answered. It also carries the standing instruction: "Do not
+// resolve this by reasoning about it — it was closed that way once and
+// reverted." A merge may not pick between two founder-facing strings, and
+// neither may a test.
+//
+// The assertion is therefore left EXACTLY as dfes wrote it, red, so the
+// question stays visible until the founder answers it. Everything else this
+// file pins — the control carries the short label and never the sentence, the
+// panel starts closed, opening it neither closes the day nor navigates, only
+// हो reaches `onCloseToday`, and the Devanagari serif font rule — is
+// independent of the wording and passes.
+//
+// TO CLOSE THIS: the founder picks a sentence. Whichever he picks becomes
+// `mr.closeToday` in `i18n/dfesTranslations.ts` AND `FOUNDER_SENTENCE` below,
+// and this note is deleted.
 import React from 'react';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';

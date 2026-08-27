@@ -89,6 +89,38 @@ public sealed class ExportRequest
         Status = ExportRequestStatus.InProgress;
     }
 
+    /// <summary>
+    /// Marker a download URL must carry to be accepted here. AWS SigV4 names the
+    /// signature <c>X-Amz-Signature</c>; SigV2 named it <c>Signature</c>. Either
+    /// proves the URL was minted by something holding credentials.
+    /// </summary>
+    private static readonly string[] SignatureQueryParameters =
+    [
+        "X-Amz-Signature=",
+        "Signature=",
+    ];
+
+    /// <summary>
+    /// Complete the request with a download URL that actually carries authority.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Why this guards more than emptiness.</b> This method used to accept any
+    /// non-blank string. That checked the <i>shape</i> of a value whose entire
+    /// purpose is to carry <i>authority</i>, and the worker duly handed it a
+    /// hand-concatenated URL with no signature and no credential, against a
+    /// bucket that does not exist. A 404 was recorded as the download link for a
+    /// complete DPDP personal-data export, and every layer above reported the
+    /// export as delivered.
+    /// </para>
+    /// <para>
+    /// An unsigned URL is not a weaker link — against a private bucket it is not
+    /// a link at all. So it is refused here rather than persisted: a request that
+    /// cannot hand the data principal their data must say so
+    /// (<see cref="MarkFailed"/>), not record a dead address and call itself
+    /// Completed.
+    /// </para>
+    /// </remarks>
     public void MarkCompleted(string presignedUrl, DateTime expiresAtUtc, DateTime nowUtc)
     {
         if (Status != ExportRequestStatus.InProgress)
@@ -100,8 +132,33 @@ public sealed class ExportRequest
         {
             throw new ArgumentException("presignedUrl required", nameof(presignedUrl));
         }
+
+        var candidate = presignedUrl.Trim();
+
+        if (!Uri.TryCreate(candidate, UriKind.Absolute, out var uri)
+            || uri.Scheme != Uri.UriSchemeHttps)
+        {
+            throw new ArgumentException(
+                "presignedUrl must be an absolute https URL — a personal-data export link is "
+                + "never served over anything else.",
+                nameof(presignedUrl));
+        }
+
+        var query = uri.Query;
+        var carriesSignature = SignatureQueryParameters.Any(
+            marker => query.Contains(marker, StringComparison.Ordinal));
+
+        if (!carriesSignature)
+        {
+            throw new ArgumentException(
+                "presignedUrl carries no signature, so it grants no access to the export bundle. "
+                + "Refusing to record an unsigned URL as a working download link — mark the "
+                + "request Failed with the reason instead.",
+                nameof(presignedUrl));
+        }
+
         Status = ExportRequestStatus.Completed;
-        PresignedUrl = presignedUrl.Trim();
+        PresignedUrl = candidate;
         ExpiresAtUtc = expiresAtUtc;
         CompletedAtUtc = nowUtc;
     }

@@ -25,7 +25,19 @@ jobs:
       run:
         working-directory: src/clients/mobile-web
     steps:
+      # T-IGH-DEXIE-V23-COLLISION — fetch-depth: 0 is REQUIRED for the
+      # check:dexie-version step below, not optional. That check compares
+      # this branch's DATABASE_VERSION against every other visible ref; the
+      # default shallow, single-ref checkout leaves it nothing to compare
+      # against. See scripts/check-dexie-version.mjs's own header for the
+      # incident (two branches both declared version 23 for different
+      # schemas — a collision no single-branch gate could ever see) and
+      # task-7-report.md / task-9-report.md under
+      # .superpowers/sdd/FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN/ for how
+      # this was verified before being wired here.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -42,6 +54,42 @@ jobs:
       # Sub-plan 04 Task 3 — localStorage architecture gate (strict; fails on
       # any new violation outside the named allow-list).
       - run: npm run check:storage-discipline
+      # T-IGH-DEXIE-V23-COLLISION — cross-branch Dexie schema-version guard.
+      # Needs fetch-depth: 0 above; without it (or if ref-visibility breaks
+      # some other way in the future) this step's cross-branch half is inert.
+      #
+      # scripts/check-dexie-version.mjs is owned by another agent and is not
+      # modified here. UPDATE (2026-08-16): the exit-0-on-SKIPPED defect
+      # found while wiring this (task-9-report.md) is now FIXED AT SOURCE —
+      # the script owner closed it and independently found and closed two
+      # more zeros of the same shape: zero readable version files for this
+      # branch's own HEAD, and refs that exist but are every one unreadable
+      # (so `compared` stays 0 while `refs.length` does not, see
+      # check-dexie-version.mjs:352). All three now call `fail(...)` and the
+      # script exits non-zero on each. Verified directly against the current
+      # file, not assumed from the changelog.
+      #
+      # The grep below is now a SECOND layer, not the only thing holding
+      # this gate closed — kept deliberately, on the script owner's judgment
+      # (relayed here, not overridden): removing a redundant guard the
+      # moment the primary one is fixed is how a gate ends up covered by
+      # neither. No false-positive risk: the only remaining path that still
+      # prints "SKIPPED" is `--local-only`, which self-labels "NOT a CI-valid
+      # run" in its own note text, and this step never passes that flag.
+      - name: Dexie cross-branch schema-version check
+        run: |
+          set +e
+          npm run check:dexie-version > /tmp/dexie-version.log 2>&1
+          code=$?
+          cat /tmp/dexie-version.log
+          if [ "$code" -ne 0 ]; then
+            echo "::error::check:dexie-version failed (exit $code) -- see the collision/coherence details above."
+            exit "$code"
+          fi
+          if grep -q "cross-branch: SKIPPED" /tmp/dexie-version.log; then
+            echo "::error::check:dexie-version's cross-branch half did not run (see 'SKIPPED' above) even though it exited 0. Refusing to treat an unfetched comparison as a pass -- this means fetch-depth: 0 above did not make other branches visible. Investigate before trusting this job's result."
+            exit 1
+          fi
 
   admin-web-lint:
     runs-on: ubuntu-latest

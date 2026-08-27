@@ -28,13 +28,10 @@ const WIRE_STATUS: Record<VerifyLogPayload['verificationStatus'], string> = {
 
 export class VerifyLogCommand {
      /**
-      * Enqueues a `verify_log` sync mutation (v1). `verify_log_v2` IS now
-      * wired server-side (task 1.4, commit 37c506d1 — the owner-approves-a-
-      * mukadam's-log flow uses it via VerifyLog.ts). This command still
-      * targets v1 deliberately: it drives the finance `correction_pending`
-      * path (see financeCommandService.ts), which is a separate, untouched
-      * use case in this task's scope. Migrating it to v2 is a follow-up,
-      * not done here.
+      * Enqueues a `verify_log` sync mutation (v1 — `verify_log_v2` is
+      * catalog-listed but its server handler is not wired yet and returns
+      * MUTATION_TYPE_UNIMPLEMENTED; clients must keep using v1 until that
+      * changes).
       *
       * WIRE SHAPE (important): the server's `PayloadHasOnly` allow-list for
       * verify_log is exactly {verificationEventId, dailyLogId, status,

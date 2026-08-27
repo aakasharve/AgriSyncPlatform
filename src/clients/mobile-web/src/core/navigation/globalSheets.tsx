@@ -4,7 +4,7 @@
 // stays small.
 
 import React from 'react';
-import { LogSegment, LogVerificationStatus, type BucketIssueType } from '../../types';
+import { LogSegment, type BucketIssueType } from '../../types';
 import { TaskCreationSheet, ReviewInboxSheet, QuickLogSheet } from './lazyComponents';
 import { AppRouterContext } from './routeContext';
 import { ConflictBadge } from '../../features/sync/conflict/ConflictBadge';
@@ -14,7 +14,7 @@ export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
     const {
         showTaskCreationSheet, setShowTaskCreationSheet, handleSaveTask,
         crops, farmerProfile,
-        showReviewInbox, setShowReviewInbox, history, handleVerifyLog,
+        showReviewInbox, setShowReviewInbox, history,
         showQuickLog, setShowQuickLog,
         setMode, setStatus, setRecordingSegment,
         currentRoute, setCurrentRoute, mainView, status, recordingSegment, hasActiveLogContext,
@@ -68,16 +68,19 @@ export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
                 people={farmerProfile.operators.map(op => ({ ...op, isActive: op.isActive ?? true }))}
             />
 
-            {/* DFES Phase 0: Review Inbox Sheet */}
+            {/* The owner's read surface for unverified entries. It no longer
+                takes approve/dispute callbacks: those queued `verify_log_v2`,
+                whose server handler answers MUTATION_TYPE_UNIMPLEMENTED, so
+                every tap became a permanent rejection while the app showed a
+                tick. See `ReviewInboxSheet.tsx`'s header for the full trail and
+                for why the working v1 mutation is NOT the fix (it turns on a
+                job-card payout path). spec: owner-oversight-loop */}
             <ReviewInboxSheet
                 isOpen={showReviewInbox}
                 onClose={() => setShowReviewInbox(false)}
                 logs={history}
                 operators={farmerProfile.operators}
                 currentOperatorId={farmerProfile.activeOperatorId || 'owner'}
-                onApproveLog={(logId: string) => handleVerifyLog(logId, LogVerificationStatus.APPROVED)}
-                onApproveAll={(logIds: string[]) => logIds.forEach(id => handleVerifyLog(id, LogVerificationStatus.APPROVED))}
-                onDisputeLog={(logId: string, note: string) => handleVerifyLog(logId, LogVerificationStatus.REJECTED, note)}
             />
 
             {/* DFES: QuickLogSheet (INT-3 Voice Integration) */}

@@ -125,6 +125,18 @@ public static class OpenTelemetryConfig
             .WithMetrics(metrics =>
             {
                 metrics
+                    // RG5 (Rulebook §4.1 — Observability). Auto-instrumentation
+                    // answers "did the request 200?", which is exactly the
+                    // question that hides a rejected sync mutation: /sync/push
+                    // returns 200 with per-mutation failures inside it. This
+                    // wildcard admits the hand-rolled AgriSync meters that
+                    // measure whether the PRODUCT worked — currently
+                    // AgriSync.ShramSafal.Sync (see
+                    // ShramSafal.Application...PushSyncBatch.SyncPushMetrics).
+                    // Wildcard, not a hard reference, so the composition root
+                    // does not couple to one Application assembly — the same
+                    // shape as AddSource("AgriSync.*") on the tracing side.
+                    .AddMeter("AgriSync.*")
                     .AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
                     .AddRuntimeInstrumentation()

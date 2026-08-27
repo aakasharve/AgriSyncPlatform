@@ -21,6 +21,11 @@
 // The long-lived refresh token is never stored here (web: HttpOnly cookie;
 // Android: Keystore via RefreshSessionStore).
 
+// P0.1 — a session ending is an isolation event, not only an auth event.
+// See `endFarmerSession.ts` for what it does and why it hangs off this
+// function rather than off the logout button.
+import { endFarmerSessionLocally } from './endFarmerSession';
+
 export interface AuthSession {
     userId: string;
     accessToken: string;
@@ -172,6 +177,12 @@ export function clearAuthSession(): void {
     if (canUseStorage()) {
         window.localStorage.removeItem(AUTH_SESSION_KEY);
     }
+
+    // P0.1: the handset stops pointing at the outgoing farmer's farm and
+    // database in the same breath as it drops their token. Runs BEFORE the
+    // change event, so no listener can re-render against the farmer whose
+    // session has just ended. Deletes no farmer record.
+    endFarmerSessionLocally();
 
     notifyAuthSessionChanged();
 }

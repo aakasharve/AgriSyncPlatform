@@ -194,6 +194,39 @@ describe('useManualEntryHydration — Entire Farm (no single plot)', () => {
     });
 });
 
+describe('useManualEntryHydration — labour fields survive the rebuild (Task 7.5)', () => {
+    // This hook rebuilds each labour event field by field rather than
+    // spreading it, so any field not named in that literal is silently
+    // dropped ON THE VOICE PATH ONLY — it keeps working in manual testing
+    // and fails in production. These two must be named there.
+    it('carries durationHours and labourAssignmentId through hydration', () => {
+        const initialData = makeInitialData();
+        initialData.labour = [{
+            id: 'ai_lab_1',
+            type: 'HIRED',
+            count: 2,
+            activity: 'Weeding',
+            durationHours: 6,
+            labourAssignmentId: 'minted-upstream',
+        } as LabourEvent];
+
+        const { captured } = runHydration({ initialData, activePlot: makePlot() });
+
+        expect(captured.labourMap['act_global_daily'].durationHours).toBe(6);
+        expect(captured.labourMap['act_global_daily'].labourAssignmentId).toBe('minted-upstream');
+    });
+
+    it('leaves both undefined when the parse states neither', () => {
+        const { captured } = runHydration({
+            initialData: makeInitialData(),
+            activePlot: makePlot(),
+        });
+
+        expect(captured.labourMap['act_global_daily'].durationHours).toBeUndefined();
+        expect(captured.labourMap['act_global_daily'].labourAssignmentId).toBeUndefined();
+    });
+});
+
 describe('useManualEntryHydration — single plot (regression-safe)', () => {
     it('hydrates parsed buckets identically when activePlot is set', () => {
         const { captured, onDataConsumed } = runHydration({

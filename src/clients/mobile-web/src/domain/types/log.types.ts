@@ -10,6 +10,12 @@
  * Layer: Domain (can only import from other domain types)
  */
 
+// LABOUR_PHASE2 Phase 3 — `LabourEvent` lives in `log.labour.types.ts` (see the
+// LABOUR EVENTS section below for why). It is imported here as well as
+// re-exported, because `DailyLog` and `DayLog` reference the name directly and a
+// re-export alone does not bring it into this module's scope. The two modules
+// reference each other for TYPES ONLY, which erases at compile time.
+import type { AttributedOperator, LabourEvent } from './log.labour.types';
 import type { WeatherStamp, WeatherSnapshot } from './weather.types';
 import type { LogProvenance } from '../ai/LogProvenance';
 import type { PatchEvent } from '../ledger/PatchEvent';
@@ -190,52 +196,14 @@ export interface IrrigationEvent {
 // =============================================================================
 // LABOUR EVENTS
 // =============================================================================
-
-export interface LabourEvent {
-    id: string;
-    /**
-     * wave-3.12, spec Ruling 5 — how sure the farmer was of each number on this row,
-     * keyed by the sibling field it qualifies. A DIFFERENT axis from provenance (P8).
-     */
-    numbers?: NumericFacts;
-    linkedActivityId?: string;
-    type: 'HIRED' | 'CONTRACT' | 'SELF';
-    shiftId?: string;
-    maleCount?: number;
-    femaleCount?: number;
-    count?: number;
-    wagePerPerson?: number;
-    contractUnit?: 'Tree' | 'Acre' | 'Row' | 'Lump Sum';
-    contractQuantity?: number;
-    operatorId?: string;
-    totalCost?: number;
-    notes?: string;
-    detectedCrop?: string;
-    whoWorked?: 'OWNER' | 'OPERATOR' | 'HIRED_LABOUR' | 'UNKNOWN';
-    activity?: string;
-    targetPlotName?: string;
-
-    // Track B Wave-2 (B2.4) — richer labour capture (all optional, back-compat;
-    // legacy fields above retained; NO totalCost auto-derivation from rate×count).
-    gender?: 'male' | 'female' | 'mixed' | 'unknown';                                  // §3.2d
-    engagementType?: 'hired_daily' | 'contract_piece' | 'self' | 'exchange';          // §3.2d
-    rate?: number;                                                                     // §3.2d (per the rateBasis)
-    rateBasis?: 'per_person_day' | 'per_vine' | 'per_row' | 'per_acre' | 'lump_sum';   // §3.2d
-
-    // Transparency
-    sourceText?: string;
-    systemInterpretation?: string;
-
-    // Per-Bucket Issue (Phase 22)
-    issue?: BucketIssue;
-
-    // W1.P2 — per-field provenance (how was this value determined?)
-    provenance?: FieldProvenance;
-
-    // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11) — see
-    // CropActivityEvent.provenanceVerified for the contract. Missing = verified.
-    provenanceVerified?: boolean;
-}
+//
+// LABOUR_PHASE2 Phase 3 — `AttributedOperator` and `LabourEvent` MOVED to
+// `log.labour.types.ts` and re-exported here unchanged, so every existing
+// `import { LabourEvent } from './log.types'` still resolves. This file stood
+// at 799 of the 800-line cap `scripts/check-file-sizes.mjs` enforces, so the
+// labour read-back could not add a field without tripping that gate. The block
+// that moved is the one this phase extends; nothing else was touched.
+export type { AttributedOperator, LabourEvent };
 
 // =============================================================================
 // INPUT EVENTS (Fertilizers, Pesticides, etc.)
@@ -669,6 +637,13 @@ export interface LogMeta {
     appVersion?: string;
     schemaVersion?: number; // 1 = V1, 2 = V2 (DFES)
     provenance?: LogProvenance;
+    /**
+     * LABOUR_PHASE2 B1c — the farm the farmer was working in when this record was
+     * created; the only non-plot answer to "which farm is this log for". Written by
+     * `stampCreationFarmId`, read by `logSyncMutationService` — rationale lives
+     * there. Absent means "not recorded", and never licenses a guess (O-1, P4).
+     */
+    farmId?: string;
 }
 
 /**

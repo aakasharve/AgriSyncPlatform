@@ -63,7 +63,12 @@ export default defineConfig([
   // "no-matching-config" or "file-ignored" warning. DATA_PRINCIPLE_SPINE
   // sub-phase 01.W0 (Y.md §7) added the vite.config.ts privacy guard.
   {
-    files: ['vite.config.ts'],
+    // Extended 2026-08-27: the same reasoning already applied to vite.config.ts
+    // applies to every build/test config at this root. The merge staged them,
+    // the hook linted them, and each returned "File ignored because no matching
+    // configuration was supplied" — a warning about the CONFIG's coverage, not
+    // about the file's contents, which --max-warnings 0 cannot tell apart.
+    files: ['vite.config.ts', 'vite.*.config.ts', 'vitest.config.ts', 'vitest.*.config.ts'],
     extends: [tseslint.configs.recommended],
     languageOptions: {
       ecmaVersion: 2022,

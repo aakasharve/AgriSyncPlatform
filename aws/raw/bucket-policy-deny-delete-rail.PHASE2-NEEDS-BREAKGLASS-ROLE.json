@@ -1,0 +1,102 @@
+{
+  "_comment": [
+    "🛑🛑 DO NOT APPLY THIS FILE YET. 🛑🛑",
+    "S3 bucket policy ADDITION — agrisync-raw-ap-south-1. Denies the two",
+    "actions that could turn 178-objects-recoverable-today into gone-forever:",
+    "s3:DeleteObjectVersion (permanently erases a noncurrent version, no",
+    "undelete) and s3:PutLifecycleConfiguration (a lifecycle rule that expires",
+    "noncurrent versions achieves the same permanent loss on a delay — this is",
+    "the 'lifecycle rule applied in error' scenario named in the backup task).",
+    "",
+    "spec: raw-bucket-backup-recovery (dispatched task, no plan-doc §N yet)",
+    "runbook: _COFOUNDER/runbooks/raw-bucket-backup-recovery.md",
+    "",
+    "WHY THIS IS PHASE 2, NOT SAFE TO APPLY TODAY: both Deny statements below",
+    "carry a StringNotLike escape for one named role, agrisync-raw-breakglass-",
+    "role. THAT ROLE DOES NOT EXIST YET. Applying this policy before the role",
+    "exists denies these two actions to EVERYONE, including the root account —",
+    "not a hazard today (nobody legitimately calls DeleteObjectVersion or",
+    "PutLifecycleConfiguration on this bucket as part of normal operation) but",
+    "there needs to be a working escape hatch in place before this locks, or",
+    "the next time this bucket genuinely needs a lifecycle change (e.g. to",
+    "raise the backup's Object Lock retention, or to add a rule this bucket",
+    "itself may eventually need) someone has to talk their way past a policy",
+    "with no valid principal at all.",
+    "",
+    "REQUIRED BEFORE APPLYING:",
+    "  1. Create agrisync-raw-breakglass-role: an IAM role that (a) only a",
+    "     human principal can assume (not an instance profile / not the app",
+    "     role), and (b) requires MFA to assume, via a trust-policy condition",
+    "     Bool: {\"aws:MultiFactorAuthPresent\": \"true\"}. This mirrors the",
+    "     shape of aws/raw/replication-role-trust-policy.json's principal-",
+    "     scoping discipline but trusts a human IAM principal instead of the",
+    "     S3 service.",
+    "  2. Replace <ACCOUNT_ID> below with the real account ID (951921970996 in",
+    "     the account this was authored against — do not hardcode it in this",
+    "     committed file; apply-config.sh should substitute it the same way",
+    "     apply-replication.sh substitutes the replication role ARN).",
+    "  3. Merge the two statements below into bucket-policy.json's Statement",
+    "     array (do not apply as a second separate put-bucket-policy call —",
+    "     that replaces the whole document and would silently drop the",
+    "     existing DenyInsecureTransport statement). Apply via",
+    "     aws/raw/apply-config.sh as one transaction, matching the CMK deny",
+    "     rail's own instruction on this point.",
+    "",
+    "WHAT THIS DOES NOT COVER — stated plainly, not glossed over:",
+    "  - It does not stop someone who can call iam:PutRolePolicy /",
+    "    sts:AssumeRole against the breakglass role itself from then deleting",
+    "    versions freely. A bucket policy can restrict WHICH principal may act,",
+    "    but cannot stop an account admin from first granting themselves that",
+    "    principal's identity. This raises the bar (requires a second,",
+    "    deliberate, loggable IAM action first) — it does not make deletion",
+    "    impossible. Only Object Lock in Compliance mode does that, and only",
+    "    for the bucket it is set on (the backup, not this source bucket,",
+    "    since Object Lock cannot be added to an existing bucket at all — see",
+    "    create-backup-bucket.sh's header comment).",
+    "  - It does not stop s3:DeleteBucketPolicy — an account admin can always",
+    "    remove this policy entirely and then delete versions freely. This is",
+    "    a bucket-policy-shaped tool, not an IAM-boundary-shaped one; it stops",
+    "    accidents and casual/scripted mistakes (the stated threat: 'a",
+    "    lifecycle rule applied in error'), not a determined or compromised",
+    "    root/admin credential. Credential compromise at the admin level is",
+    "    covered by the CROSS-REGION BACKUP existing at all, not by this file —",
+    "    see the runbook's coverage-comparison table.",
+    "  - It does not touch s3:DeleteObject (creating a NEW delete marker on a",
+    "    still-current object) — that action is left alone deliberately.",
+    "    Soft-delete-via-marker is recoverable (it is exactly the mechanism",
+    "    that made the 178 recoverable) and is not the hazard this rail exists",
+    "    to close; DELETING THE MARKER'S OWN VERSION, or the object's other",
+    "    noncurrent versions, is s3:DeleteObjectVersion — which this DOES deny.",
+    "",
+    "D9 note: DenyPutLifecycleConfigurationExceptBreakglass does not itself add",
+    "or remove any lifecycle action — it restricts WHO may change the",
+    "lifecycle document, which today (per lifecycle-policy.json) contains no",
+    "expiring actions at all. No D9 conflict."
+  ],
+  "AdditionalStatementsForPhase2": [
+    {
+      "Sid": "DenyPermanentVersionDeletionExceptBreakglass",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:DeleteObjectVersion",
+      "Resource": "arn:aws:s3:::agrisync-raw-ap-south-1/*",
+      "Condition": {
+        "StringNotLike": {
+          "aws:PrincipalArn": "arn:aws:iam::<ACCOUNT_ID>:role/agrisync-raw-breakglass-role"
+        }
+      }
+    },
+    {
+      "Sid": "DenyPutLifecycleConfigurationExceptBreakglass",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutLifecycleConfiguration",
+      "Resource": "arn:aws:s3:::agrisync-raw-ap-south-1",
+      "Condition": {
+        "StringNotLike": {
+          "aws:PrincipalArn": "arn:aws:iam::<ACCOUNT_ID>:role/agrisync-raw-breakglass-role"
+        }
+      }
+    }
+  ]
+}

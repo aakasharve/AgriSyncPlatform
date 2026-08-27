@@ -18,7 +18,27 @@
  */
 export interface WeatherStamp {
     id: string;
-    plotId: string;
+    /**
+     * LABOUR_PHASE2 B1d — the ONE plot this reading is recorded against, or
+     * ABSENT when the record it belongs to names no single plot.
+     *
+     * OPTIONAL, and this aligns the client with every other layer rather than
+     * loosening anything: `weather_stamps.plot_id` is `uuid NULL`
+     * (`20260630040851_AddWeatherStampsTable.cs:21`), the domain models it as
+     * `Guid? PlotId` (`WeatherStamp.cs:52`), the wire schema is
+     * `ZGuid.optional()` (`create_daily_log.zod.ts:37`) and the client's own
+     * payload interface already declared `plotId?: string`
+     * (`CreateDailyLogCommand.ts:15`). This type was the only one asserting the
+     * value always exists, which is why a multi-plot record had nowhere honest
+     * to put its weather.
+     *
+     * It is NOT a claim about where the reading was taken. In production the
+     * injected provider is `FarmAnchoredWeatherService`, which replaces the
+     * requested coordinates with the FARM CENTRE whenever the app knows one —
+     * so even a single-plot log's stamp is a farm-level observation associated
+     * with that plot, not a measurement at its boundary.
+     */
+    plotId?: string;
     timestampLocal: string;
     timestampProvider: string;
     provider: 'tomorrow.io' | 'open_weather' | 'mock';

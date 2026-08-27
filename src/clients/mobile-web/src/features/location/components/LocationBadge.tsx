@@ -9,6 +9,7 @@
 import React, { useState } from 'react';
 import { MapPin } from 'lucide-react';
 import type { LocationDto } from '../../../infrastructure/api/AgriSyncClient';
+import { formatDisplayTime } from '../../../shared/utils/displayTime';
 
 interface LocationBadgeProps {
      location?: LocationDto | null;
@@ -76,10 +77,7 @@ const LocationBadge: React.FC<LocationBadgeProps> = ({ location }) => {
                                    <div className="flex justify-between text-[11px]">
                                         <span className="text-slate-400">Time</span>
                                         <span className="text-slate-600">
-                                             {new Date(location.capturedAtUtc).toLocaleTimeString([], {
-                                                  hour: '2-digit',
-                                                  minute: '2-digit',
-                                             })}
+                                             {formatDisplayTime(location.capturedAtUtc)}
                                         </span>
                                    </div>
                                    <div className="flex justify-between text-[11px]">

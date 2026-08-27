@@ -1,0 +1,54 @@
+{
+  "_comment": [
+    "S3 CORS configuration — shramsafal-uploads-prod.",
+    "spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN §11 (S11-infra-author)",
+    "",
+    "LIVE STATE CAPTURED 2026-08-15 (read-only, aws s3api get-bucket-cors):",
+    "  NoSuchCORSConfiguration — this bucket has NO CORS config today. Rollback:",
+    "    aws s3api delete-bucket-cors --bucket shramsafal-uploads-prod --region ap-south-1",
+    "",
+    "HONESTY NOTE (repo-is-truth, verified before authoring this file): as of",
+    "2026-08-15, NOTHING in src/ performs a direct browser-to-S3 request against",
+    "this bucket. grep across S3AttachmentStorageService.cs / S3RawBlobStore.cs /",
+    "the receipt+patti capture components found no presigned PUT or GET URL for",
+    "attachments or ai-sessions objects — every upload and download is",
+    "server-mediated (multipart POST to the API, API does the S3 PutObject; API",
+    "streams GET back). The one presigned-URL code path in this codebase",
+    "(ExportRequest.PresignedUrl, DPDP export bundles) targets a DIFFERENT,",
+    "currently-nonexistent bucket, is opened as a top-level browser navigation",
+    "(not fetch/XHR), and does not need CORS even if that bucket existed.",
+    "",
+    "This file is authored per §11's explicit instruction ('plus bucket",
+    "policies ... and CORS') as a conservative, GET-only default so a future",
+    "direct-to-browser read path (e.g. thumbnail fetch/canvas access) does not",
+    "have to wait on an AWS change — but applying it changes nothing observable",
+    "today; no code path exercises it. If this stays unused past the next",
+    "infra review, that is a signal to remove it rather than carry unused",
+    "attack surface.",
+    "",
+    "Scope: GET only. No PUT/POST — this bucket's write path is server-side",
+    "only per the honesty note above, and CORS should not be widened to PUT",
+    "unless a genuine presigned-upload feature lands (§11 gap register item:",
+    "'no presigned upload' is tracked elsewhere, not by this file).",
+    "",
+    "Origins mirror the API's own Cors:AllowedOrigins",
+    "(src/AgriSync.Bootstrapper/appsettings.Production.json) — no wildcard.",
+    "",
+    "APPLY (founder only): aws s3api put-bucket-cors --bucket shramsafal-uploads-prod --cors-configuration file://cors-policy.json --region ap-south-1",
+    "  (apply-config.sh does this as part of the single transaction; strips",
+    "  _comment first since put-bucket-cors rejects unknown top-level keys.)",
+    "VERIFY: aws s3api get-bucket-cors --bucket shramsafal-uploads-prod --region ap-south-1"
+  ],
+  "CORSRules": [
+    {
+      "AllowedOrigins": [
+        "https://app.shramsafal.in",
+        "https://shramsafal.in",
+        "https://admin.shramsafal.in"
+      ],
+      "AllowedMethods": ["GET"],
+      "AllowedHeaders": ["*"],
+      "MaxAgeSeconds": 3600
+    }
+  ]
+}

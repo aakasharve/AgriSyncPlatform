@@ -24,9 +24,22 @@
 // audit row.
 //
 // Per OQ-8 (IRetainedBlobStore): the worker calls the port
-// unconditionally; the stub throws NotImplementedException which the
-// worker catches + logs + marks voice_clips_retained_deferred=true on
-// the request payload.
+// unconditionally.
+//
+// SUPERSEDED — the rest of the original OQ-8 note said the stub throws
+// NotImplementedException which the worker catches, logs, and records as
+// voice_clips_retained_deferred=true. That stub (PendingRetainedBlobStore)
+// was DELETED in the Voice Diary ship; Program.cs:445-451 binds the real
+// S3RetainedBlobStore, and the port's own docstring says the catch is no
+// longer needed. The narrow catch survived the stub by ~3 months and
+// guarded the one exception that could no longer be thrown while letting
+// through every one that could — aborting the run AFTER nine tables were
+// irreversibly scrubbed but BEFORE any audit row was written.
+//
+// The worker now catches everything from that step and records the outcome
+// as ErasureStatus.CompletedWithResidue. voice_clips_retained_deferred is
+// still emitted for payload compatibility, but the meaningful fields are
+// retainedVoiceDeleted / retainedVoiceResidue. See the block at step (e).
 //
 // SARVAM_PRIMARY_VOICE_PIPELINE Task 3.4 — extension to the cascade.
 // The voice-spine schema adds three user-keyed surfaces that DELETE
@@ -97,11 +110,89 @@
 //     manifest), severing re-attribution. KEEP (survives, DPDP §12 de-identified
 //     operational retention). No scrub action; conscious gate-4 disposition.
 //   - ssf.labour_assignments — Track B daily_logs-child (ADR 0023 §2 / D-T5-ERASURE).
-//     NO user_id/PII column: gendered worker counts, engagement type, wage/rate and
-//     the (nullable, never-fabricated) total_cost are de-identified farm operational
-//     facts; the free-text notes field was deliberately EXCLUDED. The parent
-//     daily_logs.operator_user_id is already scrubbed to ErasedFarmer, severing
-//     re-attribution. KEEP (survives, DPDP §12). No scrub action; conscious gate-4 disposition.
+//     CORRECTED 2026-07-19 (founder Decision 5, spec
+//     2026-07-13-labour-attendance-approval-design) — this bullet previously said
+//     the table has "NO user_id/PII column" and takes "No scrub action." That
+//     became FALSE the moment migration 20260718132540_AddLabourAssignmentShiftTaskNames
+//     added worker_names_json: it holds the farmer's own spoken free-text naming a
+//     third-party worker, verbatim, in a jsonb array — real PII, not a de-identified
+//     operational fact. The rest of the row (engagement_type, gendered worker counts,
+//     wage/rate, shift, task, and the nullable never-fabricated total_cost) is still
+//     de-identified and still KEEPs, exactly as before. worker_names_json is now
+//     ANONYMIZE'd (see AnonymizeLabourAssignmentWorkerNamesAsync below): scrubbed to
+//     '[]'::jsonb whenever the parent daily_log's operator_user_id matches the erased
+//     user — same scope as every other daily_logs-child in this file. A knowingly
+//     false statement in a compliance artifact is worse than a tracked gap; do not
+//     revert this bullet to the old text.
+//   - ssf.workers — ADDED 2026-07-19 (founder Decision 5, "5b: ship names, but do the
+//     erasure work first" — spec 2026-07-13-labour-attendance-approval-design). WTL v0
+//     Worker aggregate (ADR 2026-05-04 wtl-v0-entity-shape): a third-party (non-user)
+//     worker identity captured passively from voice transcripts by WorkerNameProjector.
+//     Previously ABSENT from this manifest entirely. HAS PII: name_raw / name_normalized
+//     hold an actual person's name — unlike every de-identified Track B table above,
+//     this is not a de-identified operational fact, so it cannot get a bare KEEP
+//     disposition. ANONYMIZE, not DELETE (see AnonymizeWorkersDerivedFromUserLogsAsync
+//     below): scrub name_raw/name_normalized to a redaction sentinel while KEEPING
+//     farm_id/assignment_count/first_seen_utc and the row itself intact —
+//     worker_assignments.worker_id carries ON DELETE CASCADE, so hard-deleting the
+//     Worker row would silently destroy every WorkerAssignment link row (and the
+//     assignment_count history the admin Mode A drilldown reads); sentinel-replace
+//     avoids that orphaning. Scope: a Worker is reached via
+//     ssf.worker_assignments -> ssf.daily_logs.operator_user_id — i.e. any Worker whose
+//     name was extracted from a transcript belonging to a log THIS erased user
+//     authored. Must run BEFORE AnonymizeDailyLogsAsync scrubs operator_user_id (the
+//     join needs the ORIGINAL value) — same ordering rule as NullLogTaskNotesAsync.
+//     DISCLOSED LIMIT: a Worker who ALSO has assignments from a DIFFERENT operator on
+//     the same farm is still scrubbed here — a name touched by the erased user's own
+//     voice log is redacted regardless of who else later mentioned the same Worker
+//     row. The alternative (skip scrubbing because someone else also named them) would
+//     let one operator's erasure fail to remove PII their own log produced, which is
+//     the worse failure mode. Workers cannot self-initiate an erasure request — no
+//     login, no user_id column, no consent capture today — so this disposition is a
+//     cascade FROM the registered farmer's own erasure, not a first-class DPDP right
+//     exercised BY the worker; see the phase-5 privacy report for what this covers and
+//     does not, and the still-open LEGAL_REVIEW_PENDING note on third-party worker
+//     notice/consent.
+//   - ssf.worker_assignments — ADDED 2026-07-19 alongside ssf.workers above. WTL v0 link
+//     entity (ADR 2026-05-04 wtl-v0-entity-shape) tying a Worker to the DailyLog its
+//     name was extracted from. NO PII column of its own: worker_id/daily_log_id/
+//     confidence/occurred_at_utc are structural references — the identifying text lives
+//     entirely on the referenced ssf.workers row, scrubbed above. KEEP the link row
+//     unchanged; do NOT delete it — that is exactly the orphaning the sentinel-replace
+//     choice on ssf.workers exists to avoid. No independent scrub action on this table;
+//     conscious gate-4 disposition.
+//   - ssf.field_operators / ssf.field_operator_work_rows — ADDED 2026-08-11
+//     (Labour V1 Task 10, spec 2026-07-13-labour-attendance-approval-design).
+//     HAS PII: field_operators.display_name / .display_name_normalized /
+//     .full_name and field_operator_work_rows.display_name_at_attach all hold a
+//     real person's name. BOTH TABLES ARE DELIBERATELY ABSENT FROM THE
+//     CREATOR-ERASURE SEQUENCE IN ProcessOneAsync, AND THAT ABSENCE IS THE
+//     DESIGN, NOT A GAP:
+//       CREATOR IS NOT THE DATA SUBJECT. The farmer who typed a worker's name
+//       is not that worker's data subject. Erasing the FARMER'S account must
+//       NOT anonymize the WORKER — the worker never asked, and their identity
+//       is co-owned work history that outlives any one account. This is exactly
+//       why these tables are NOT reached via daily_logs.operator_user_id the way
+//       ssf.workers is by AnonymizeWorkersDerivedFromUserLogsAsync above. The
+//       WTL v0 ssf.workers disposition is a cascade FROM the farmer's erasure
+//       because those names were extracted passively from that farmer's own
+//       transcripts; a FieldOperator is a durable, deliberately-created work
+//       identity, so the same cascade would be wrong.
+//       THE WORKER-SPECIFIC CAPABILITY EXISTS: AnonymizeFieldOperatorAsync
+//       below, invoked by an explicit worker-erasure decision and never by
+//       account deletion, sentinel-replaces all four name columns above.
+//       ANONYMIZE, not DELETE, and never the work: FieldOperatorId, the
+//       LabourAssignment relationship, work_date and all non-identifying
+//       execution history are PRESERVED. All three FKs on
+//       field_operator_work_rows are ON DELETE RESTRICT, so a hard delete could
+//       not orphan-cascade even if attempted — anonymize the person, never the
+//       work.
+//     DISCLOSED LIMIT: the retention/erasure POLICY — the legal trigger and the
+//     retention period — still requires founder + counsel sign-off before broad
+//     real-worker rollout. What exists today is the CAPABILITY, which is what
+//     founder Decision 5 ("5b — ship names, but do the erasure work FIRST")
+//     gates on. Stating otherwise here would be a knowingly false compliance
+//     claim, which this file holds to be worse than a tracked gap.
 //   - ssf.machinery_usages — Track B daily_logs-child (ADR 0023 §2 / D-T6-ERASURE).
 //     NO user_id/PII column: machine type/ownership, hours/costs, and the structured
 //     equipment config (implement, nozzles_active, fan_state, fuel) are de-identified
@@ -130,10 +221,6 @@
 //     already-scrubbed parent daily_logs.operator_user_id (→ ErasedFarmer); the observation CONTENT
 //     SURVIVES. Rare embedded third-party PII is handled by a future surgical-redaction pass (B-FT1),
 //     never a blanket scrub. KEEP — conscious gate-4 disposition. No scrub action.
-//     The Phase-1 DFES InsightEntry facet columns (observation/change/comparison/challenge/
-//     uncertainty/hypothesis/evidence/learning/next_action/crop_stage/farmer_confirmed_summary/
-//     source_question_id) are additional PRESERVED free-text/structured knowledge on this same
-//     row — covered by this KEEP disposition, never scrubbed.
 //   - ssf.disturbance_events — Track B daily_logs-child (ADR 0023 §2 / D-FREETEXT-PRESERVE-2026-06-29).
 //     HAS free-text (reason) — the farmer's words for why the day's work was disrupted. Same disposition
 //     as observation_events: FARM-co-owned knowledge, PRESERVED on erasure (a single member's erasure must
@@ -141,53 +228,15 @@
 //     parent daily_logs.operator_user_id (→ ErasedFarmer); the reason CONTENT SURVIVES. Rare embedded
 //     third-party PII → future surgical-redaction pass (B-FT1), never a blanket scrub. KEEP — conscious
 //     gate-4 disposition. No scrub action.
-//   - ssf.daily_richness_aggregates — DFES (dfes-companion-2026-07-11) DIRECT-farm_id derived
-//     aggregate (one row per farm per local day; scores/classification/reward/streak/bar).
-//     Like routine_patterns / weather_events: NO user_id column, NO farmer free-text, NO PII —
-//     a per-day derived farm fact. A single member's erasure must NOT delete the farm's richness
-//     history. KEEP (survives, DPDP §12 de-identified operational retention). No scrub action;
-//     conscious gate-4 disposition.
-//   - ssf.question_events — DFES (dfes-companion-2026-07-11) append-only D8 question telemetry
-//     keyed on farm_id (nullable daily_log_id). REVOKE UPDATE/DELETE (append-only by privilege).
-//     Carries an optional free-text `response` (farmer's words) → same disposition as
-//     observation_events: FARM-co-owned knowledge, PRESERVED on erasure. There is no user_id to
-//     scrub; the WHO is de-attributed via the already-scrubbed parent daily_logs.operator_user_id
-//     when daily_log_id is set. KEEP — conscious gate-4 disposition. No scrub action.
 //   - ssf.consent_audit / ssf.audit_events — append-only by
 //     privilege; flagged "redacted" at the column level, never
 //     deleted.
-//   - ssf.terms_acceptance_events / ssf.consent_grant_events — spec: dfes-companion-2026-07-11
-//     (wave-4.2/4.3). The two legal records behind the first-open gate. Both carry a NULLABLE
-//     user_id (NULL for a pre-registration row, whose only key is pre_registration_session_id),
-//     the notice/policy/terms versions, the displayed language, the accepted purpose codes and a
-//     SHA-256 of the exact notice displayed. KEEP — conscious gate-4 disposition, and the one
-//     case where keeping is the pro-privacy answer rather than the convenient one.
-//
-//     Why. These rows are the EVIDENCE OF THE LAWFUL BASIS on which everything else was held.
-//     Erasing them would destroy the only proof that the data we are erasing was ever lawfully
-//     collected, and would make a later "we never had your permission" impossible to answer
-//     truthfully in either direction. DPDP §12 requires erasure of personal data, and permits
-//     retaining what the law requires — a consent record is precisely that. §W4.3 step 5 states
-//     the same rule from the farmer's side: "retain only what law requires."
-//
-//     They also CANNOT be scrubbed by this worker even if we wanted to: the migration issues
-//     REVOKE UPDATE, DELETE ... FROM agrisync_app (20260816170524_AddConsentGateLedgers), so the
-//     app role has no UPDATE privilege to redact with. The disposition and the privilege agree,
-//     which is how it should be — a KEEP that depended on nobody writing the wrong line of code
-//     would be a wish, not a control.
-//
-//     The identifier exposure is bounded by design: a user_id and a session id, no name, no phone
-//     number, no farm content, no free-text. Withdrawal is expressed the same append-only way —
-//     a NEW row with status='Withdrawn' — so an erased farmer's ledger still reads truthfully as
-//     "granted, then withdrawn", which is the sequence a regulator would ask about. No scrub
-//     action.
 //
 // All DB writes use IAdminDbContextFactory<ShramSafalDbContext> per
 // Phase 04 precedent (the cross-tenant span here is by definition
 // admin-elevated — the worker iterates rows across every farm the
 // user touched).
 
-using System.Globalization;
 using AgriSync.BuildingBlocks.Auditing;
 using AgriSync.BuildingBlocks.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -316,6 +365,20 @@ public sealed class ErasureWorker(
         perTableCounts["log_tasks"] = await NullLogTaskNotesAsync(admin, targetUserId, ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["log_tasks"];
 
+        // 2026-07-19 additions (founder Decision 5, spec
+        // 2026-07-13-labour-attendance-approval-design) — ssf.workers and
+        // ssf.labour_assignments.worker_names_json both hold a third party's
+        // real name and are both reached via the parent daily_log's
+        // operator_user_id, so BOTH must run here, alongside
+        // NullLogTaskNotesAsync, BEFORE AnonymizeDailyLogsAsync scrubs that
+        // column to the sentinel. See the ssf.workers / ssf.labour_assignments
+        // manifest comments above for the full disposition + disclosed limits.
+        perTableCounts["workers"] = await AnonymizeWorkersDerivedFromUserLogsAsync(admin, targetUserId, ct).ConfigureAwait(false);
+        totalAnonymized += perTableCounts["workers"];
+
+        perTableCounts["labour_assignments"] = await AnonymizeLabourAssignmentWorkerNamesAsync(admin, targetUserId, ct).ConfigureAwait(false);
+        totalAnonymized += perTableCounts["labour_assignments"];
+
         perTableCounts["daily_logs"] = await AnonymizeDailyLogsAsync(admin, targetUserId, sentinel, ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["daily_logs"];
 
@@ -417,201 +480,145 @@ public sealed class ErasureWorker(
             .ConfigureAwait(false);
         totalAnonymized += perTableCounts["golden_set_candidate"];
 
-        // (e) Retained voice — the farmer's Farm Memory.
+        // (e) Retained voice S3 — via port.
         //
-        // spec: dfes-companion-2026-07-11 (farm-memory) — founder ITEM 4
-        // HARD RULE, doctrine P4, ADR-DS-009 (c).
+        // ── EVERY exception is caught here, and that is the whole point ──
         //
-        // Three things were wrong here and they compounded. The catch
-        // was for NotImplementedException, thrown by a stub that was
-        // deleted in the Voice Diary ship — S3RetainedBlobStore cannot
-        // throw it — so `voiceClipsDeferred` was permanently false and
-        // the erasure path had no failure signal at all. The port
-        // returned a bare Task, so even a delete that touched nothing
-        // looked identical to one that purged the bucket. And the
-        // clips themselves left no individual trace, so once the sweep
-        // stopped removing Farm Memory there was no per-recording
-        // lifecycle record anywhere.
+        // By the time control reaches this line the nine tables above are
+        // ALREADY SCRUBBED AND COMMITTED. There is no transaction around the
+        // cascade: each anonymizer runs ExecuteSqlRawAsync/ExecuteDeleteAsync,
+        // which autocommits immediately on this admin context. The audit rows,
+        // by contrast, are only tracked — they do not exist until the
+        // SaveChangesAsync at the end of this method.
         //
-        // Now: read the clips first, act on the outcome the port
-        // reports, and write per-clip evidence ONLY for clips actually
-        // removed. Since Farm Memory no longer has a calendar expiry,
-        // erasure is the sole way it ends, which makes this the only
-        // place that per-recording accountability can live.
+        // So an exception escaping this block does not "abort the erasure". The
+        // erasure has happened. What it aborts is the RECORD of it: the run
+        // unwinds to RunPassAsync, which stamps the request Failed with no audit
+        // events at all. A support person or DPDP auditor then reads `Failed`
+        // and truthfully but wrongly tells the farmer their deletion did not go
+        // through — and a retry cannot correct them, because the rows it would
+        // count are already gone, so it reports SMALLER numbers than the truth.
+        //
+        // The previous catch handled exactly one type, NotImplementedException,
+        // for a stub (PendingRetainedBlobStore) that no longer exists — deleted
+        // in the Voice Diary ship, which Program.cs:445-451 and this port's own
+        // docstring both record. It guarded against the one thing that could no
+        // longer be thrown while letting through everything that could:
+        // AccessDenied, throttling, a network fault, a DB error on the metadata
+        // read, cancellation at shutdown.
+        //
+        // Fixing this by making the scrub conditional on the S3 delete would be
+        // the wrong direction: it would mean erasure never completes at all
+        // wherever the delete cannot succeed, which is strictly worse for the
+        // farmer. What has to become atomic is the RECORD, not the deletion.
+        string? retainedVoiceResidue = null;
+
+        // Recorded verbatim in the audit payload. A boolean could not tell a
+        // skip from a failure, and conflating them is exactly the bug fixed
+        // here.
+        //
+        // Domain of this field: the three RetainedVoiceDeletionStatus names
+        // (NothingToDelete | Deleted | SkippedNoBucketConfigured) PLUS the
+        // string "Failed", which is NOT an enum member — the store threw, so it
+        // returned no outcome at all. A consumer must therefore parse this as a
+        // string with a four-value domain; Enum.Parse over
+        // RetainedVoiceDeletionStatus will throw on "Failed".
+        var retainedVoiceOutcome = nameof(RetainedVoiceDeletionStatus.NothingToDelete);
+
+        // Magnitude, not just a verb. The port returns
+        // RetainedVoiceDeletionOutcome — a record carrying counts — so the audit
+        // row can state HOW MUCH was removed and how much was knowingly left
+        // behind, instead of a bare outcome name the reader has to size for
+        // themselves.
+        //
+        // All three stay 0 on the throw path, where the store returned nothing
+        // and we therefore know nothing. That is why retainedVoiceOutcome
+        // carries "Failed" alongside them: without it, three zeros read exactly
+        // like a clean run over an empty tier.
+        var retainedVoiceBlobsDeleted = 0;
+        var retainedVoiceMetadataRowsRemoved = 0;
+        var retainedVoiceClipsLeftInPlace = 0;
+
         var retainedStore = sp.GetRequiredService<IRetainedBlobStore>();
-
-        // Read before deleting: afterwards the rows are gone and there
-        // is nothing left to name in the audit trail.
-        var retainedClips = await admin.VoiceClipsRetained
-            .AsNoTracking()
-            .Where(c => c.UserId == targetUserId)
-            .Select(c => new { c.ClipId, c.S3Key, c.RecordedAtUtc })
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
-
-        var consentKid = await admin.UserConsentStates
-            .AsNoTracking()
-            .Where(c => c.UserId == targetUserId)
-            .Select(c => c.CurrentTokenKid)
-            .FirstOrDefaultAsync(ct)
-            .ConfigureAwait(false);
-
-        RetainedVoiceDeletionOutcome retainedOutcome;
-        string? retainedFailureReason = null;
         try
         {
-            retainedOutcome = await retainedStore
+            var storeOutcome = await retainedStore
                 .DeleteRetainedVoiceForUserAsync(targetUserId, ct)
                 .ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            retainedOutcome = RetainedVoiceDeletionOutcome.SkippedNoBucket(retainedClips.Count);
-            retainedFailureReason = ex.Message;
-            logger.LogError(ex,
-                "ErasureWorker: retained-voice purge threw for user {UserId}; {ClipCount} clip(s) may still exist.",
-                targetUserId, retainedClips.Count);
-        }
+            retainedVoiceOutcome = storeOutcome.Status.ToString();
+            retainedVoiceBlobsDeleted = storeOutcome.BlobsDeleted;
+            retainedVoiceMetadataRowsRemoved = storeOutcome.MetadataRowsRemoved;
+            retainedVoiceClipsLeftInPlace = storeOutcome.ClipsLeftInPlace;
 
-        voiceClipsDeferred = !retainedOutcome.CanBeReportedAsDeleted;
-
-        if (voiceClipsDeferred)
-        {
-            // The audio may still be sitting in the bucket. Founder
-            // ITEM 4: never tell a farmer something is deleted while we
-            // knowingly keep the active copy. So we do not write a
-            // single per-clip "Erased" row, we do not mark the request
-            // Completed, and we record the residue positively rather
-            // than by omission — an absent claim is easy to misread as
-            // nothing having happened.
-            var reason = retainedFailureReason
-                ?? $"retained voice not purged ({retainedOutcome.Status}); "
-                   + $"{retainedOutcome.ClipsLeftInPlace} clip(s) remain";
-
-            // The structured anonymization above already ran — those are
-            // ExecuteSqlRaw/ExecuteDelete calls, not deferred writes — so its
-            // per-table evidence must be emitted even though the request as a
-            // whole is about to fail. Returning without it would leave the
-            // ledger silent about work that really was done to the farmer's
-            // rows, which is the same defect as claiming work that was not.
-            await EmitPerRowAuditEventsAsync(admin, request, perTableCounts, sentinel, ct)
-                .ConfigureAwait(false);
-
-            admin.AuditEvents.Add(AuditEventFactory.Create(
-                entityType: "ErasureRequest",
-                entityId: request.Id,
-                action: "RetainedVoiceNotPurged",
-                actorUserId: sentinel,
-                actorRole: "system_erasure_worker",
-                payload: new
-                {
-                    requestId = request.Id,
-                    targetUserId,
-                    status = retainedOutcome.Status.ToString(),
-                    clipsLeftInPlace = retainedOutcome.ClipsLeftInPlace,
-                    clipIdsLeftInPlace = retainedClips.Select(c => c.ClipId).ToArray(),
-                    reason,
-                },
-                farmId: null,
-                clientCommandId: null,
-                appVersion: AppVersionProvider.Current,
-                deviceId: "system",
-                ipHash: "sha256:system",
-                sourceAiJobId: null));
-
-            // Failed, not Completed. The structured anonymization landed
-            // and the rows just emitted say so, but the §12 request as a
-            // whole was not satisfied, and a terminal
-            // "Failed" with a stated reason is the only status here that
-            // is true. It is also the status a human can act on: founder
-            // ITEM 4 permits a documented manual deletion at pilot
-            // scale, and that operator needs to be able to find this.
-            request.MarkFailed(reason, nowUtc);
-
-            admin.AuditEvents.Add(AuditEventFactory.Create(
-                entityType: "ErasureRequest",
-                entityId: request.Id,
-                action: "Failed",
-                actorUserId: sentinel,
-                actorRole: "system_erasure_worker",
-                payload: new
-                {
-                    requestId = request.Id,
-                    targetUserId,
-                    rowsAnonymizedCount = totalAnonymized,
-                    perTableCounts,
-                    voiceClipsRetainedDeferred = true,
-                    reason,
-                },
-                farmId: null,
-                clientCommandId: null,
-                appVersion: AppVersionProvider.Current,
-                deviceId: "system",
-                ipHash: "sha256:system",
-                sourceAiJobId: null));
-
-            await admin.SaveChangesAsync(ct).ConfigureAwait(false);
-
-            logger.LogError(
-                "ErasureWorker request {RequestId} for user {UserId} marked Failed: {Reason}.",
-                request.Id, targetUserId, reason);
-            return;
-        }
-
-        // ADR-DS-009 (c) — per-recording lifecycle auditability. One row
-        // per clip actually removed, carrying the consent-token kid that
-        // authorised the retention right up to the erasure.
-        //
-        // The count is cross-checked rather than assumed. The port's
-        // contract is "every clip this user owns", so the two numbers
-        // agree by construction; if they ever disagree we do not know
-        // WHICH clips died, and naming individual clips we cannot
-        // account for would be the same false claim in a subtler form.
-        if (retainedOutcome.MetadataRowsRemoved == retainedClips.Count)
-        {
-            foreach (var c in retainedClips)
+            // A silent skip is residue too, not success. With no bucket
+            // configured the store now touches NOTHING — not the S3 object, and
+            // deliberately not the metadata row either, because that row is the
+            // farmer's only pointer to audio which is still in the bucket.
+            // Removing it would leave the recording unreachable by the farmer
+            // AND undeleted in fact, unrecoverably. That state is reachable
+            // through a DOCUMENTED rollback (aws/voice-retained/README.md:148
+            // blanks RetainedBlobStore__BucketName and states "clips remain in
+            // S3 untouched"), not just by a typo. Recording it as
+            // retainedVoiceDeleted:true would be an affirmative false claim on
+            // the erasure path, which is worse than the silence it replaced.
+            //
+            // The test is CanBeReportedAsDeleted, not equality against one
+            // status. "May I call this a deletion?" is the question the record
+            // exists to answer, and any status added later that also fails it
+            // lands here by default instead of falling through as success.
+            if (!storeOutcome.CanBeReportedAsDeleted)
             {
-                admin.AuditEvents.Add(AuditEventFactory.Create(
-                    entityType: "VoiceClipRetained",
-                    entityId: c.ClipId,
-                    action: "Erased",
-                    actorUserId: sentinel,
-                    actorRole: "system_erasure_worker",
-                    payload: new
-                    {
-                        consentTokenKid = consentKid,
-                        clipId = c.ClipId,
-                        userId = targetUserId,
-                        s3Key = c.S3Key,
-                        recordedAtUtc = c.RecordedAtUtc.ToString("O", CultureInfo.InvariantCulture),
-                        erasureRequestId = request.Id,
-                        reason = "dpdp_section_12_erasure",
-                    },
-                    farmId: null,
-                    clientCommandId: null,
-                    appVersion: AppVersionProvider.Current,
-                    deviceId: "system",
-                    ipHash: "sha256:system",
-                    sourceAiJobId: null));
+                voiceClipsDeferred = true;
+                retainedVoiceResidue = Truncate(
+                    $"{storeOutcome.Status}: RetainedBlobStore:BucketName is blank, so "
+                    + $"{storeOutcome.ClipsLeftInPlace} voice_clips_retained row(s) were LEFT IN "
+                    + "PLACE and no S3 object was touched. PersistAsync refuses to write a row "
+                    + "without a bucket, so those clips were stored while one was configured and "
+                    + "are still in the bucket; the rows that locate them are retained on purpose "
+                    + "so the purge can actually be completed once a bucket is configured.");
             }
         }
-        else if (retainedClips.Count > 0)
+        catch (Exception ex)
         {
-            logger.LogError(
-                "ErasureWorker: retained-voice delete for user {UserId} reported {Removed} row(s) removed "
-                + "but {Listed} were listed; per-clip audit rows withheld because the set cannot be named.",
-                targetUserId, retainedOutcome.MetadataRowsRemoved, retainedClips.Count);
+            // Cancellation is deliberately included. At shutdown the scrub is
+            // still done, so the record still has to land — see recordCt below.
+            voiceClipsDeferred = true;
+            retainedVoiceOutcome = "Failed";
+            retainedVoiceResidue = Truncate($"{ex.GetType().Name}: {ex.Message}");
+
+            logger.LogError(ex,
+                "ErasureWorker: retained voice deletion FAILED for user {UserId}. The database scrub "
+                + "already completed and is committed; request will be stamped CompletedWithResidue "
+                + "so the record does not claim nothing happened.",
+                targetUserId);
         }
 
-        // Reported like the other DELETE-manifest tables (ai_jobs,
-        // transcript_history, golden_set_candidate): a table-level count
-        // whose ScrubbedColumnsFor sentinel is "deleted", so the audit row
-        // cannot be read as "anonymized in place". Without that entry the
-        // generic emitter would claim N rows anonymized with an empty
-        // scrubbed-columns list — a self-contradicting record, and the
-        // exact kind of false claim this change exists to remove.
-        perTableCounts["voice_clips_retained"] = retainedOutcome.MetadataRowsRemoved;
-        totalAnonymized += retainedOutcome.MetadataRowsRemoved;
+        // From here to SaveChangesAsync the work is NON-CANCELLABLE, on purpose.
+        //
+        // The irreversible part is done. If a shutdown token cancelled the audit
+        // write we would reproduce the exact defect this change removes — data
+        // gone, no record — only triggered by a deploy instead of by S3. Writing
+        // the record is a handful of local inserts; finishing it is always
+        // correct and always fast.
+        //
+        // ── FOLLOW-UP: erasure-cancellation-midscrub — TRACKED ──
+        //
+        // This does NOT cover a cancellation that lands mid-scrub, higher up.
+        // That window is much larger than the one closed here: the nine
+        // anonymizers run raw SQL across nine tables and account for nearly all
+        // the wall-clock in which a shutdown can land, whereas the guard above
+        // protects a single await.
+        //
+        // Consequences there are worse, not equal: RunPassAsync's catch is
+        // `when (ex is not OperationCanceledException)`, so MarkFailedSafelyAsync
+        // never runs; and the poller selects only Requested rows, so the request
+        // is stranded at InProgress PERMANENTLY and is never retried — some
+        // tables scrubbed, no audit, no terminal state, no second attempt.
+        //
+        // Deferred on scope, not on judgement. Tracked at
+        // _COFOUNDER/specs/_inbox/erasure-cancellation-midscrub-2026-08-16.md.
+        // Grep marker: erasure-cancellation-midscrub.
+        var recordCt = CancellationToken.None;
 
         // Per-row audit emission per DS-017 rule (d). We emit one
         // aggregate "ErasureAnonymize/Applied" row per TABLE (carrying
@@ -621,11 +628,20 @@ public sealed class ErasureWorker(
         // surviving rows carry the sentinel + per-row AuditEvent
         // entries). To keep that contract honest we emit one
         // AuditEvent per anonymized data row, batched here.
-        await EmitPerRowAuditEventsAsync(admin, request, perTableCounts, sentinel, ct).ConfigureAwait(false);
+        await EmitPerRowAuditEventsAsync(admin, request, perTableCounts, sentinel, recordCt).ConfigureAwait(false);
 
-        request.MarkCompleted(totalAnonymized, nowUtc);
+        if (retainedVoiceResidue is null)
+        {
+            request.MarkCompleted(totalAnonymized, nowUtc);
+        }
+        else
+        {
+            // Scrub done, something named still exists. Distinguishable in the
+            // persisted state from both "clean" and "nothing happened".
+            request.MarkCompletedWithResidue(totalAnonymized, nowUtc);
+        }
 
-        // Final ErasureRequest/Completed audit row (single, not per-table).
+        // Final ErasureRequest audit row (single, not per-table).
         var completionPayload = new
         {
             requestId = request.Id,
@@ -633,12 +649,39 @@ public sealed class ErasureWorker(
             rowsAnonymizedCount = totalAnonymized,
             perTableCounts,
             voiceClipsRetainedDeferred = voiceClipsDeferred,
+
+            // What actually happened to the retained voice tier, stated either
+            // way rather than only on failure — an absent field reads as "not
+            // considered", which is what we are trying to stop doing.
+            //
+            // retainedVoiceDeleted is TRUE only when the tier is genuinely
+            // clear (Deleted, or NothingToDelete because the subject had none).
+            // A no-bucket skip touches neither the S3 object nor the row that
+            // locates it, so it reports FALSE and carries residue text — it is
+            // not success, and the clips are still there to be purged later.
+            retainedVoiceDeleted = retainedVoiceResidue is null,
+            retainedVoiceOutcome,
+            retainedVoiceResidue,
+
+            // The magnitude behind the outcome name. clipsLeftInPlace is the
+            // number this record is actually accountable for: clips we know
+            // still exist and have said, here, that we did not delete.
+            retainedVoiceBlobsDeleted,
+            retainedVoiceMetadataRowsRemoved,
+            retainedVoiceClipsLeftInPlace,
+
+            // Requirement: a retry must not report smaller numbers than the
+            // truth. These counts are what THIS run scrubbed. Any later run for
+            // the same subject necessarily counts fewer rows, because this run
+            // already removed them — such counts are post-hoc and are not a
+            // measure of what was erased.
+            countsAreFromThisRunOnly = true,
         };
 
         var completionAudit = AuditEventFactory.Create(
             entityType: "ErasureRequest",
             entityId: request.Id,
-            action: "Completed",
+            action: retainedVoiceResidue is null ? "Completed" : "CompletedWithResidue",
             actorUserId: sentinel,
             actorRole: "system_erasure_worker",
             payload: completionPayload,
@@ -650,11 +693,60 @@ public sealed class ErasureWorker(
             sourceAiJobId: null);
         admin.AuditEvents.Add(completionAudit);
 
-        await admin.SaveChangesAsync(ct).ConfigureAwait(false);
+        // recordCt, not ct — see the note above. The scrub is irreversible and
+        // already committed; the record must land even if we are shutting down.
+        //
+        // ── The status transition is in-memory until THIS line commits ──
+        //
+        // MarkCompleted/MarkCompletedWithResidue above only mutate the tracked
+        // entity. Until this SaveChangesAsync succeeds the row is still
+        // InProgress in the database. So if this call is the thing that fails —
+        // statement timeout on a loaded box, connection drop, deadlock — the
+        // exception unwinds to RunPassAsync, MarkFailedSafelyAsync opens a
+        // FRESH context, reads InProgress, passes its own guard, and stamps
+        // Failed. Nine tables scrubbed, zero audit rows, status Failed: the
+        // exact defect this method exists to remove, reached through a
+        // different door. The terminal-state guard cannot help, because the
+        // terminal state was never written.
+        //
+        // So a failure here gets one fallback attempt on a fresh context that
+        // writes the MINIMUM honest record — the status transition plus a single
+        // compact audit row. It deliberately drops the per-row audit events,
+        // which are the bulk of the payload and the likeliest cause of a slow or
+        // oversized write; a smaller write is the one most likely to succeed
+        // where the first did not.
+        try
+        {
+            await admin.SaveChangesAsync(recordCt).ConfigureAwait(false);
+        }
+        catch (Exception saveEx)
+        {
+            await TryWriteMinimalOutcomeRecordAsync(
+                sp, request.Id, targetUserId, totalAnonymized,
+                retainedVoiceOutcome, retainedVoiceResidue, saveEx)
+                .ConfigureAwait(false);
 
-        logger.LogInformation(
-            "ErasureWorker completed request {RequestId} for user {UserId}: {Count} rows anonymized.",
-            request.Id, targetUserId, totalAnonymized);
+            // Rethrow so the failure stays visible. This is now safe: if the
+            // fallback landed, the row is already terminal and
+            // MarkFailedSafelyAsync's guard blocks the downgrade to Failed.
+            throw;
+        }
+
+        if (retainedVoiceResidue is null)
+        {
+            logger.LogInformation(
+                "ErasureWorker completed request {RequestId} for user {UserId}: {Count} rows anonymized.",
+                request.Id, targetUserId, totalAnonymized);
+        }
+        else
+        {
+            logger.LogError(
+                "ErasureWorker completed request {RequestId} for user {UserId} WITH RESIDUE: {Count} rows "
+                + "anonymized, but retained voice deletion failed ({Residue}). The farmer's raw audio still "
+                + "exists. Status is CompletedWithResidue and the audit event carries the detail — query "
+                + "ssf.erasure_requests, do not rely on this log line reaching anyone.",
+                request.Id, targetUserId, totalAnonymized, retainedVoiceResidue);
+        }
     }
 
     // ── Per-table anonymizers ────────────────────────────────────────
@@ -699,6 +791,130 @@ UPDATE ssf.log_tasks AS t
         // the original user_id here.
         return await db.Database.ExecuteSqlRawAsync(sql, new object[] { userId }, ct)
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 2026-07-19 addition (founder Decision 5, spec
+    /// 2026-07-13-labour-attendance-approval-design). Sentinel-replaces
+    /// <c>ssf.workers.name_raw</c> / <c>name_normalized</c> — never a hard
+    /// DELETE, since <c>worker_assignments.worker_id</c> carries
+    /// <c>ON DELETE CASCADE</c> and deleting the Worker row would silently
+    /// orphan-destroy every WorkerAssignment link row plus the
+    /// assignment_count history the admin Mode A drilldown reads. Scope: any
+    /// Worker reached via a WorkerAssignment on a daily_log THIS erased user
+    /// authored — see the ssf.workers manifest comment above for the
+    /// disclosed limit (a Worker with assignments from a different operator
+    /// too is still scrubbed). MUST run before <see cref="AnonymizeDailyLogsAsync"/>
+    /// — the join needs the original operator_user_id.
+    /// </summary>
+    private static async Task<int> AnonymizeWorkersDerivedFromUserLogsAsync(
+        ShramSafalDbContext db, Guid userId, CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE ssf.workers AS w
+   SET name_raw = 'Erased worker',
+       name_normalized = 'erased worker'
+  FROM ssf.worker_assignments AS wa
+  JOIN ssf.daily_logs AS dl ON dl.""Id"" = wa.daily_log_id
+ WHERE w.""Id"" = wa.worker_id
+   AND dl.operator_user_id = {0}
+   AND w.name_raw <> 'Erased worker';";
+        return await db.Database.ExecuteSqlRawAsync(sql, new object[] { userId }, ct)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 2026-07-19 addition (founder Decision 5). <c>worker_names_json</c> was
+    /// added to <c>ssf.labour_assignments</c> by migration
+    /// <c>20260718132540_AddLabourAssignmentShiftTaskNames</c> and holds the
+    /// farmer's own spoken free-text naming a third-party worker — unlike the
+    /// rest of that row, this is embedded PII, not a de-identified
+    /// operational fact (see the corrected manifest comment above). Scrubbed
+    /// to <c>'[]'::jsonb</c> whenever the parent daily_log's operator_user_id
+    /// matches the erased user. MUST run before
+    /// <see cref="AnonymizeDailyLogsAsync"/> for the same reason as
+    /// <see cref="NullLogTaskNotesAsync"/> — the join needs the original
+    /// operator_user_id.
+    /// </summary>
+    private static async Task<int> AnonymizeLabourAssignmentWorkerNamesAsync(
+        ShramSafalDbContext db, Guid userId, CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE ssf.labour_assignments AS la
+   SET worker_names_json = '[]'::jsonb
+  FROM ssf.daily_logs AS dl
+ WHERE la.daily_log_id = dl.""Id""
+   AND dl.operator_user_id = {0}
+   AND la.worker_names_json <> '[]'::jsonb;";
+        return await db.Database.ExecuteSqlRawAsync(sql, new object[] { userId }, ct)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Labour V1 Task 10.5 (spec: 2026-07-13-labour-attendance-approval-design).
+    /// <b>Worker-subject erasure.</b> Sentinel-replaces every name column that
+    /// identifies ONE <c>FieldOperator</c>:
+    /// <c>ssf.field_operators.display_name</c>, <c>.display_name_normalized</c>,
+    /// <c>.full_name</c>, and <c>ssf.field_operator_work_rows.display_name_at_attach</c>
+    /// on every work row attributed to that operator.
+    /// <para>
+    /// <b>Invoked by an explicit worker-erasure decision, never by account
+    /// deletion.</b> It is deliberately NOT called from
+    /// <c>ProcessOneAsync</c>'s creator-erasure sequence and takes a
+    /// <c>fieldOperatorId</c> — not a <c>userId</c> — precisely so it cannot be
+    /// wired to one by accident: the farmer who typed a worker's name is not
+    /// that worker's data subject (see the manifest comment above).
+    /// </para>
+    /// <para>
+    /// <b>Anonymize the person, never the work.</b> The row itself survives, as
+    /// do <c>Id</c> (the FieldOperatorId), <c>originating_farm_id</c>,
+    /// <c>created_at_utc</c>, and on every work row the
+    /// <c>field_operator_id</c> / <c>labour_assignment_id</c> relationship and
+    /// <c>work_date</c>. The engagement's own reported headcount is untouched —
+    /// attribution never changed the reported quantity, so erasing attribution
+    /// must not either.
+    /// </para>
+    /// <para>
+    /// Sentinels match the existing <c>ssf.workers</c> idiom
+    /// (<c>'Erased worker'</c> / <c>'erased worker'</c>). Returns the total
+    /// number of rows updated across both tables. Idempotent: the
+    /// already-scrubbed guards make a second call a no-op returning 0.
+    /// </para>
+    /// </summary>
+    public static async Task<int> AnonymizeFieldOperatorAsync(
+        ShramSafalDbContext db, Guid fieldOperatorId, CancellationToken ct)
+    {
+        // Work rows FIRST: the snapshot column is what a reader actually sees
+        // on a payout, so it must not be the last thing to disappear.
+        const string workRowSql = @"
+UPDATE ssf.field_operator_work_rows
+   SET display_name_at_attach = 'Erased worker'
+ WHERE field_operator_id = {0}
+   AND display_name_at_attach <> 'Erased worker';";
+        var workRows = await db.Database
+            .ExecuteSqlRawAsync(workRowSql, new object[] { fieldOperatorId }, ct)
+            .ConfigureAwait(false);
+
+        // All four name columns get the sentinel — full_name included rather
+        // than NULLed, so "erased" is an explicit, readable state everywhere
+        // instead of being indistinguishable from "never captured".
+        // IS DISTINCT FROM, not <>, because full_name is nullable and NULL <> x
+        // is NULL (never true) — with <> the guard would skip a row whose
+        // full_name is NULL and leave the other two columns unscrubbed.
+        const string operatorSql = @"
+UPDATE ssf.field_operators
+   SET display_name = 'Erased worker',
+       display_name_normalized = 'erased worker',
+       full_name = 'Erased worker'
+ WHERE ""Id"" = {0}
+   AND (display_name <> 'Erased worker'
+        OR display_name_normalized <> 'erased worker'
+        OR full_name IS DISTINCT FROM 'Erased worker');";
+        var operators = await db.Database
+            .ExecuteSqlRawAsync(operatorSql, new object[] { fieldOperatorId }, ct)
+            .ConfigureAwait(false);
+
+        return workRows + operators;
     }
 
     private static async Task<int> AnonymizeCostEntriesAsync(
@@ -815,6 +1031,17 @@ UPDATE ssf.farm_operations
         "correction_events" => new[] { "user_id" },
         "finance_corrections" => new[] { "corrected_by_user_id", "reason" },
         "farm_operations" => new[] { "created_by_user_id" },
+        // 2026-07-19 additions (founder Decision 5) — see the ssf.workers /
+        // ssf.labour_assignments manifest comments above.
+        "workers" => new[] { "name_raw", "name_normalized" },
+        "labour_assignments" => new[] { "worker_names_json" },
+        // Labour V1 Task 10.5b — WORKER-subject erasure only
+        // (AnonymizeFieldOperatorAsync), never creator/account erasure. These
+        // tables are absent from the ProcessOneAsync sequence by design; the
+        // entries exist so an explicit worker-erasure audit row names the
+        // columns it scrubbed instead of emitting an empty array.
+        "field_operators" => new[] { "display_name", "display_name_normalized", "full_name" },
+        "field_operator_work_rows" => new[] { "display_name_at_attach" },
         // SARVAM_PRIMARY_VOICE_PIPELINE Task 3.4 — voice-spine tables
         // follow a DELETE manifest. The audit payload records "deleted"
         // as the scrubbed-columns sentinel so the audit row's shape
@@ -823,13 +1050,143 @@ UPDATE ssf.farm_operations
         "ai_jobs" => new[] { "deleted" },
         "transcript_history" => new[] { "deleted" },
         "golden_set_candidate" => new[] { "deleted" },
-        // spec: dfes-companion-2026-07-11 (farm-memory). Retained voice is
-        // purged outright, never scrubbed — there is nothing to anonymize
-        // inside raw audio (ADR-DS-017 rule (c)). Same "deleted" sentinel
-        // as the voice-spine tables above.
-        "voice_clips_retained" => new[] { "deleted" },
         _ => Array.Empty<string>(),
     };
+
+    /// <summary>
+    /// Cap for text going into a durable record. Matches the 1000-char limit
+    /// <see cref="MarkFailedSafelyAsync"/> already applies to
+    /// <c>ErasureRequest.FailureReason</c>.
+    ///
+    /// <para>
+    /// An exception message is unbounded and, from Npgsql, can embed row or
+    /// parameter detail. This value lands in a jsonb payload on the erasure
+    /// path that is designed to outlive the data it describes, so it gets the
+    /// same cap its sibling field has always had.
+    /// </para>
+    /// </summary>
+    private static string Truncate(string value) =>
+        value.Length <= 1000 ? value : value[..1000];
+
+    /// <summary>
+    /// Last-ditch honest record when the main audit write fails. Fresh context,
+    /// fresh connection, smallest possible write: the status transition plus one
+    /// compact audit row. Best-effort by definition — if this fails too there is
+    /// nothing further to try, and the caller's rethrow surfaces the original
+    /// error.
+    ///
+    /// <para>
+    /// Note what it does NOT do: re-emit the per-row audit events. Those are the
+    /// bulk of the failed write. Dropping them is what makes this attempt more
+    /// likely to succeed than the one that just failed, and the aggregate row
+    /// still records the counts.
+    /// </para>
+    /// </summary>
+    private async Task TryWriteMinimalOutcomeRecordAsync(
+        IServiceProvider sp,
+        Guid requestId,
+        Guid targetUserId,
+        int totalAnonymized,
+        string retainedVoiceOutcome,
+        string? retainedVoiceResidue,
+        Exception saveFailure)
+    {
+        try
+        {
+            var adminFactory = sp.GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>();
+            await using var admin = await adminFactory.CreateAsync(
+                reason: $"{nameof(ErasureWorker)}.minimalRecord.{requestId:N}",
+                actorUserId: SystemActor.ErasedFarmer,
+                ct: CancellationToken.None).ConfigureAwait(false);
+
+            var req = await admin.ErasureRequests
+                .FirstOrDefaultAsync(r => r.Id == requestId, CancellationToken.None)
+                .ConfigureAwait(false);
+
+            if (req is null || req.Status != ErasureStatus.InProgress)
+            {
+                return;
+            }
+
+            if (retainedVoiceResidue is null)
+            {
+                req.MarkCompleted(totalAnonymized, DateTime.UtcNow);
+            }
+            else
+            {
+                req.MarkCompletedWithResidue(totalAnonymized, DateTime.UtcNow);
+            }
+
+            admin.AuditEvents.Add(AuditEventFactory.Create(
+                entityType: "ErasureRequest",
+                entityId: requestId,
+                action: retainedVoiceResidue is null ? "Completed" : "CompletedWithResidue",
+                actorUserId: SystemActor.ErasedFarmer,
+                actorRole: "system_erasure_worker",
+                payload: new
+                {
+                    requestId,
+
+                    // Present for the same reason the full payload carries it:
+                    // a DPDP handler arrives holding a SUBJECT, not a request
+                    // id. Omitting it made this record unfindable by the only
+                    // handle they have.
+                    targetUserId,
+                    rowsAnonymizedCount = totalAnonymized,
+                    retainedVoiceDeleted = retainedVoiceResidue is null,
+                    retainedVoiceOutcome,
+                    retainedVoiceResidue,
+                    countsAreFromThisRunOnly = true,
+
+                    // Says why this record is thinner than the normal one, so a
+                    // handler does not read the absence of per-row events as
+                    // "those tables were not touched".
+                    degradedRecord = true,
+                    degradedReason = Truncate(
+                        "Primary audit write failed; per-row audit events were dropped to land the "
+                        + $"outcome. Original error: {saveFailure.GetType().Name}: {saveFailure.Message}"),
+                },
+                farmId: null,
+                clientCommandId: null,
+                appVersion: AppVersionProvider.Current,
+                deviceId: "system",
+                ipHash: "sha256:system",
+                sourceAiJobId: null));
+
+            await admin.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
+
+            logger.LogError(saveFailure,
+                "ErasureWorker: primary audit write failed for request {RequestId}; wrote a DEGRADED "
+                + "outcome record instead (status + aggregate audit row, no per-row events).",
+                requestId);
+        }
+        catch (Exception ex)
+        {
+            // Be precise about WHICH audit row is missing. Querying
+            // ssf.audit_events for entity_type='ErasureRequest' AND
+            // entity_id=<requestId> DOES return a row on this path: exactly one,
+            // the 'Requested' event RequestErasureHandler committed at
+            // submission. What does not exist is the OUTCOME event — the per-row
+            // events died with the primary transaction and this fallback wrote
+            // nothing. Saying "no audit event" would send a handler away from a
+            // row that is there.
+            //
+            // (The admin factory's 'admin_cross_tenant'/'open' rows are NOT part
+            // of that result set and are not evidence here: they carry
+            // entityType 'admin_cross_tenant' and a freshly minted entityId, so
+            // they match neither half of the query.)
+            logger.LogError(ex,
+                "ErasureWorker: fallback outcome record ALSO failed for request {RequestId} "
+                + "(subject {TargetUserId}). The scrub COMPLETED and is committed, but the row will "
+                + "be stamped Failed and NO OUTCOME audit event exists for it — the "
+                + "'ErasureRequest'/'Requested' row from submission is still there, so do not read "
+                + "the presence of audit rows as proof the run was recorded. What survives: the "
+                + "ssf.erasure_requests row (status Failed, failure_reason), and the scrub itself, "
+                + "evidenced by rows carrying the ErasedFarmer sentinel for this subject. Treat the "
+                + "Failed status as unreliable for this request.",
+                requestId, targetUserId);
+        }
+    }
 
     private async Task MarkFailedSafelyAsync(
         IServiceProvider sp, Guid requestId, string reason, CancellationToken ct)
@@ -844,7 +1201,16 @@ UPDATE ssf.farm_operations
             var req = await admin.ErasureRequests
                 .FirstOrDefaultAsync(r => r.Id == requestId, ct)
                 .ConfigureAwait(false);
-            if (req is not null && req.Status != ErasureStatus.Failed && req.Status != ErasureStatus.Completed)
+            // CompletedWithResidue is terminal and must be protected here for
+            // the same reason Completed is: it records that nine tables were
+            // irreversibly scrubbed. Letting a later error downgrade it to
+            // Failed would restore the exact lie this change removes — and it
+            // is reachable, because the audit write now runs after a caught
+            // retained-voice failure.
+            if (req is not null
+                && req.Status != ErasureStatus.Failed
+                && req.Status != ErasureStatus.Completed
+                && req.Status != ErasureStatus.CompletedWithResidue)
             {
                 req.MarkFailed(reason.Length > 1000 ? reason[..1000] : reason, DateTime.UtcNow);
                 await admin.SaveChangesAsync(ct).ConfigureAwait(false);

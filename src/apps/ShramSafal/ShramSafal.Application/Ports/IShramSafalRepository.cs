@@ -4,6 +4,7 @@ using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Privacy;
@@ -178,8 +179,24 @@ public interface IShramSafalRepository
         => GetPlannedActivitiesChangedSinceAsync(sinceUtc, ct);
     Task<List<Attachment>> GetAttachmentsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
         => GetAttachmentsChangedSinceAsync(sinceUtc, ct);
+    /// <summary>
+    /// §P0.2 — this default used to FAIL OPEN. It forwarded to the unscoped
+    /// overload, so any implementation that did not override it answered a
+    /// farm-scoped audit request with the WHOLE ledger, silently, while the
+    /// call site read as if it were scoped. Roughly 25 test doubles implement
+    /// only the unscoped overload, so deleting the default is a suite-wide
+    /// compile break and keeping the forward preserves the hazard.
+    ///
+    /// Throwing is the third option: a double that never calls this is
+    /// unaffected, and one that does gets a loud stop instead of the ledger.
+    /// The production override in ShramSafalRepository is the only real
+    /// implementation.
+    /// </summary>
     Task<List<AuditEvent>> GetAuditEventsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
-        => GetAuditEventsChangedSinceAsync(sinceUtc, ct);
+        => throw new NotSupportedException(
+            "GetAuditEventsChangedSinceAsync(farmIds, ...) has no fail-open default. "
+            + "Forwarding to the unscoped overload returned the entire audit ledger "
+            + "for a farm-scoped request (§P0.2). Override it on this implementation.");
 
     Task<List<AuditEvent>> GetAuditEventsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default);
     Task<List<AuditEvent>> GetAuditEventsForFarmAsync(Guid farmId, DateOnly from, DateOnly to, int limit, int offset, CancellationToken ct = default);
@@ -458,13 +475,39 @@ public interface IShramSafalRepository
     /// upload of the same SHA-256. The unique key is
     /// <see cref="RawBlobRef.Sha256"/>.
     /// <para>
+    /// <b>The increment is best-effort under RLS, and that is not a bug here.</b>
+    /// <c>p_tenant_raw_blob_index</c> scopes visibility by an EXISTS-join to
+    /// <c>ssf.ai_jobs</c> on <c>agrisync.farm_id</c>. When the row exists but
+    /// belongs to a different farm the caller cannot see it, so the increment
+    /// matches nothing and <c>ref_count</c> undercounts. The subject linkage
+    /// below is still written — which is the part that must not be lost.
+    /// </para>
+    /// <para>
+    /// <b>§P0.9 — <paramref name="subjectUserId"/> is the data-subject
+    /// linkage.</b> The implementation also records
+    /// <c>(sha256, subjectUserId)</c> in <c>ssf.raw_blob_subjects</c>,
+    /// idempotently. This is the ONLY user→audio pointer that survives a DPDP
+    /// erasure: the cascade deletes <c>ai_jobs WHERE user_id = X</c>, and
+    /// <c>ai_jobs.raw_input_ref</c> was previously the only link, so the S3
+    /// object was left permanently unattributable.
+    /// </para>
+    /// <para>
+    /// <b>Pass <c>null</c> when the subject is genuinely unknown</b> — and only
+    /// then. The linkage row is skipped, so an unknown owner is recorded as the
+    /// ABSENCE of a row. Never pass <see cref="Guid.Empty"/> or a fresh GUID to
+    /// fill the parameter; a fabricated owner reads as a real one and is worse
+    /// than an honest gap.
+    /// </para>
+    /// <para>
     /// Default impl is a no-op so the dozens of in-tree
     /// <c>IShramSafalRepository</c> test doubles keep compiling. Production
-    /// <c>ShramSafalRepository</c> overrides with EF Core writes; integration
-    /// suites that care about ref-count semantics override as well.
+    /// <c>ShramSafalRepository</c> overrides with raw parameterised SQL — NOT EF
+    /// Core writes, which cannot express the conflict tolerance the RLS policy
+    /// above forces; integration suites that care about ref-count semantics
+    /// override as well.
     /// </para>
     /// </summary>
-    Task UpsertRawBlobIndexAsync(RawBlobRef blobRef, CancellationToken ct = default)
+    Task UpsertRawBlobIndexAsync(RawBlobRef blobRef, Guid? subjectUserId, CancellationToken ct = default)
         => Task.CompletedTask;
 
     // --- SARVAM_PRIMARY_VOICE_PIPELINE Task 2.10 (transcript idempotency) ---
@@ -686,6 +729,290 @@ public interface IShramSafalRepository
     Task AddRoutinePatternAsync(RoutinePattern p, CancellationToken ct = default)
         => Task.CompletedTask;
 
+    // --- Labour Management read-model (Task 1.2, spec: 2026-07-13-labour-attendance-approval-design) ---
+
+    /// <summary>
+    /// All <see cref="FarmMembership"/> rows for a farm (any status) — the
+    /// source for <c>GetLabourDataHandler</c>'s People assembly. Unlike
+    /// <see cref="GetFarmMembershipAsync"/> (single user) this returns the
+    /// whole roster. Default impl returns empty so the many in-tree
+    /// <see cref="IShramSafalRepository"/> test doubles keep compiling;
+    /// production <c>ShramSafalRepository</c> overrides.
+    /// </summary>
+    Task<List<FarmMembership>> GetFarmMembershipsAsync(FarmId farmId, CancellationToken ct = default)
+        => Task.FromResult(new List<FarmMembership>());
+
+    /// <summary>
+    /// The farm's labour <see cref="CostEntry"/> rows — <c>CategoryId</c>
+    /// <c>labour_payout</c> OR <c>labour_misc</c> (Decision 3a, 2026-07-19,
+    /// spec: 2026-07-13-labour-attendance-approval-design: दिलं = ALL labour
+    /// money paid out, not just job-card settlements) — each paired with the
+    /// linked <see cref="JobCard.AssignedWorkerUserId"/> when one exists
+    /// (read at the repo layer via <c>CostEntry.JobCardId → JobCard</c>,
+    /// since <c>CostEntryDto</c> does not expose <c>JobCardId</c>).
+    /// <c>labour_misc</c> rows are never linked to a JobCard, so their
+    /// <c>AssignedWorkerUserId</c> is always <c>null</c> — the caller counts
+    /// them at the farm-wide level only, never attributes them to a person.
+    /// <para>
+    /// MONEY-CONSISTENCY INVARIANT — these are the EXACT SAME rows
+    /// <c>GetFinanceSummaryHandler</c> sums for the "Labour" bucket
+    /// (<c>labour_payout</c> + <c>labour_misc</c>). The caller (handler)
+    /// applies the latest <see cref="FinanceCorrection"/> and rounding
+    /// identically to that handler so the labour "Paid" figure equals the
+    /// finance page.
+    /// </para>
+    /// Default impl returns empty so in-tree test doubles keep compiling;
+    /// production <c>ShramSafalRepository</c> overrides.
+    /// </summary>
+    Task<List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)>> GetLabourPayoutCostEntriesWithJobCardAsync(
+        FarmId farmId, CancellationToken ct = default)
+        => Task.FromResult(new List<(CostEntry, Guid?)>());
+
+    /// <summary>
+    /// <see cref="LabourAssignment"/> rows (voice-derived, NO-MULTIPLY
+    /// descriptive attendance — count/shift/task/names only) for daily logs
+    /// on this farm dated on/after <paramref name="weekStart"/>. Interim
+    /// source for <c>Dashboard.ManDays</c> (sum of
+    /// <see cref="LabourAssignment.WorkerCount"/>) until the Stage 5
+    /// per-worker attendance ledger lands — <c>Ledger.Rows</c> stays empty
+    /// until then. Default impl returns empty so in-tree test doubles keep
+    /// compiling; production <c>ShramSafalRepository</c> overrides.
+    /// </summary>
+    Task<List<LabourAssignment>> GetLabourAssignmentsForFarmSinceAsync(
+        FarmId farmId, DateOnly weekStart, CancellationToken ct = default)
+        => Task.FromResult(new List<LabourAssignment>());
+
+    // --- Field Operator identity (Task 11, spec: 2026-07-13-labour-attendance-approval-design) ---
+    // A10: IShramSafalRepository has 28 implementors and uses default interface
+    // implementations DELIBERATELY — an abstract member here produces ~135
+    // compile errors across the test tree. Every member below ships a default
+    // body so every existing test double keeps compiling untouched; production
+    // ShramSafalRepository overrides all five.
+
+    /// <summary>Stage a new <see cref="FieldOperator"/> identity (Task 9). No SaveChanges — the caller commits.</summary>
+    Task AddFieldOperatorAsync(FieldOperator o, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Single <see cref="FieldOperator"/> lookup by id. <b>NOT farm-scoped by
+    /// itself</b> — <c>p_user_select_field_operators</c> is a PERMISSIVE RLS
+    /// policy OR-ed with the tenant policy (A11), so under a multi-farm login
+    /// this can return a row belonging to a DIFFERENT farm than the caller's
+    /// current <c>agrisync.farm_id</c>. Every caller MUST assert
+    /// <see cref="FieldOperator.OriginatingFarmId"/> against the authorised
+    /// farm before using the result — see <c>AttachFieldOperatorHandler</c>'s
+    /// file header for the full rationale.
+    /// </summary>
+    Task<FieldOperator?> GetFieldOperatorByIdAsync(Guid id, CancellationToken ct = default)
+        => Task.FromResult<FieldOperator?>(null);
+
+    /// <summary>
+    /// Single <see cref="LabourAssignment"/> lookup by id. <b>NOT farm-scoped by
+    /// itself</b> — <c>p_user_select_labour_assignments</c> is the same kind of
+    /// PERMISSIVE, OR-ed RLS policy as <see cref="GetFieldOperatorByIdAsync"/>
+    /// above; a multi-farm caller can load a row belonging to another farm.
+    /// Callers must resolve the parent <c>DailyLog</c> and assert its
+    /// <c>FarmId</c> before trusting this result.
+    /// </summary>
+    Task<LabourAssignment?> GetLabourAssignmentByIdAsync(Guid id, CancellationToken ct = default)
+        => Task.FromResult<LabourAssignment?>(null);
+
+    /// <summary>All active-or-not <see cref="FieldOperator"/> identities originated on a farm, for the field-operator list read.</summary>
+    Task<IReadOnlyList<FieldOperator>> GetFieldOperatorsForFarmAsync(FarmId farmId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<FieldOperator>>([]);
+
+    /// <summary>
+    /// "ON CONFLICT DO NOTHING" insert for the (FieldOperator, LabourAssignment)
+    /// attribution row — <c>true</c> = inserted, <c>false</c> = this pair
+    /// already existed (a retried attach; NOT an error — Task 11.5). Mirrors
+    /// <see cref="ISyncMutationStore.TryStoreSuccessAsync"/>, the one existing
+    /// outcome-returning precedent in this codebase (A10). Production
+    /// <c>ShramSafalRepository</c> commits immediately (its own SaveChanges) so
+    /// the caller learns the real outcome; PostgreSQL specifics (SQLSTATE
+    /// 23505) never leave Infrastructure — this port never throws a
+    /// provider-specific exception.
+    /// </summary>
+    Task<bool> TryAddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default)
+        => Task.FromResult(true);
+
+    // --- Labour review & correction (Task 12b, spec: 2026-07-13-labour-attendance-approval-design) ---
+    // Same A10 rule as the Task 11 block above: every member ships a DEFAULT
+    // body. IShramSafalRepository has 28 implementors and an abstract member
+    // here produces ~135 compile errors across the test tree. Production
+    // ShramSafalRepository overrides all three.
+
+    /// <summary>
+    /// Stage an APPEND-ONLY <see cref="LabourCorrection"/> row. No SaveChanges —
+    /// the caller commits it in the SAME unit of work as the in-place mutation
+    /// of the <see cref="LabourAssignment"/> it explains. There is deliberately
+    /// no update or delete counterpart: correction history that can itself be
+    /// rewritten proves nothing.
+    /// </summary>
+    Task AddLabourCorrectionAsync(LabourCorrection c, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// The LIVE attribution set for one engagement — every
+    /// <see cref="FieldOperatorWorkRow"/> currently pointing at it.
+    /// <b>NOT farm-scoped by itself</b>, for the same reason as
+    /// <see cref="GetLabourAssignmentByIdAsync"/>: <c>p_user_select_field_operator_work_rows</c>
+    /// is a PERMISSIVE RLS policy OR-ed with the tenant policy, so a multi-farm
+    /// caller can see rows outside the farm established for this request.
+    /// Callers must assert the parent engagement's farm first.
+    /// </summary>
+    Task<IReadOnlyList<FieldOperatorWorkRow>> GetFieldOperatorWorkRowsForAssignmentAsync(
+        Guid labourAssignmentId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<FieldOperatorWorkRow>>([]);
+
+    /// <summary>
+    /// Stage the removal of one attribution row. No SaveChanges — the caller
+    /// commits it together with the <see cref="LabourCorrection"/> that records
+    /// WHICH operator was removed, so the deletion can never commit without its
+    /// explanation (Task 12b.4).
+    /// </summary>
+    Task RemoveFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// STAGE-ONLY sibling of <see cref="TryAddFieldOperatorWorkRowAsync"/>. That
+    /// one commits immediately (Task 11's attach route needs the real outcome
+    /// before it answers the farmer); a correction cannot use it, because the
+    /// added attribution and the <see cref="LabourCorrection"/> explaining it
+    /// must reach the database in ONE unit of work. The unique index
+    /// <c>ux_field_operator_work_rows_operator_assignment</c> remains the
+    /// backstop; the correction handler pre-filters operators that are already
+    /// attributed, so the ordinary re-add is a no-op rather than a violation.
+    /// </summary>
+    Task AddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    // --- Labour read-back on /sync/pull (LABOUR_PHASE2 Phase 3) ---------------
+    // Same A10/F7 rule as the two blocks above: BOTH members ship a DEFAULT body,
+    // because an abstract member on this interface produces ~135 compile errors
+    // across the 28 in-tree implementors. Production ShramSafalRepository
+    // overrides both.
+    //
+    // Read-only, no farm parameter, and that is deliberate: the caller passes the
+    // ids of daily logs it has ALREADY farm-scoped, so these can only widen to
+    // children of rows the caller was entitled to. They are not a farm-scoped
+    // entry point and must not be used as one.
+
+    /// <summary>
+    /// Every <see cref="LabourAssignment"/> whose parent <c>DailyLog</c> is in
+    /// <paramref name="dailyLogIds"/> — the labour half of a <c>/sync/pull</c>
+    /// delta, fetched in ONE round trip rather than per log.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>There is no "changed since" here, and that is not an oversight.</b>
+    /// <c>ssf.labour_assignments</c> has NO <c>modified_at_utc</c> and corrections
+    /// mutate the row IN PLACE, so a delta keyed on this table could not see a
+    /// correction at all. The delta is the PARENT log's <c>ModifiedAtUtc</c>, which
+    /// <c>CorrectLabourHandler</c> bumps; this method then returns current truth for
+    /// whatever logs that delta selected. Adding a timestamp filter here would
+    /// silently hide every correction.</para>
+    /// <para>Ordered by <c>created_at_utc</c> so a device sees engagements in the
+    /// order they were recorded.</para>
+    /// </remarks>
+    Task<IReadOnlyList<LabourAssignment>> GetLabourAssignmentsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<LabourAssignment>>([]);
+
+    /// <summary>
+    /// The LIVE attribution rows for a set of engagements — the bulk sibling of
+    /// <see cref="GetFieldOperatorWorkRowsForAssignmentAsync"/>.
+    /// </summary>
+    /// <remarks>
+    /// <b>NOT farm-scoped by itself</b>, exactly like its single-assignment
+    /// sibling: <c>p_user_select_field_operator_work_rows</c> is a PERMISSIVE
+    /// policy OR-ed with the tenant policy, and Postgres FK checks bypass RLS
+    /// entirely, so a row here can carry a <c>farm_id</c> other than its parent
+    /// log's. The caller must assert that itself (doctrine E4 — both sides).
+    /// </remarks>
+    Task<IReadOnlyList<FieldOperatorWorkRow>> GetFieldOperatorWorkRowsForAssignmentsAsync(
+        IReadOnlyCollection<Guid> labourAssignmentIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<FieldOperatorWorkRow>>([]);
+
+    // --- Labour capability (LABOUR_PHASE2 Phase 5, migration ②) ---------------
+    // Same A10/F7 rule as every block above, and it is LOAD-BEARING here:
+    // IShramSafalRepository has 28 implementors and an ABSTRACT member on this
+    // interface produces ~135 compile errors across the test tree. Both members
+    // below therefore ship a DEFAULT body. Production ShramSafalRepository
+    // overrides both.
+    //
+    // ⚠ KNOWN CONSEQUENCE, stated rather than discovered later: because the
+    // default for GetLabourManagementGrantAsync is `false`, EVERY in-tree test
+    // double silently reports "not granted". That is the correct fail-closed
+    // direction, and it is what keeps the pre-existing Worker-denial baselines
+    // (FarmMembershipAuthorizationBaselineTests) passing untouched — but it also
+    // means a FUTURE test that asserts a denial can pass for the wrong reason:
+    // it would pass identically against a repository that never consulted the
+    // grant at all. Any test that means to prove the GRANT path must override
+    // this member (see LabourCapabilityGateTests, which uses a double that
+    // returns true, and the real-Postgres suite, which uses the real row).
+
+    /// <summary>
+    /// Does this user hold the EXPLICIT <c>can_manage_labour_records</c> grant
+    /// on this farm? Non-terminal memberships only — a grant cannot outlive the
+    /// membership that carries it.
+    ///
+    /// <para><b>This is one INPUT to the decision, never the decision.</b>
+    /// Owner-tier and Mukadam are allowed with this flag <c>false</c>; the
+    /// effective rule is <see cref="ShramSafal.Domain.Farms.LabourManagementPermission.IsAllowed"/>,
+    /// resolved once in <c>LabourManagementGate</c>. Do not call this member
+    /// directly from a handler.</para>
+    /// </summary>
+    Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+        => Task.FromResult(false);
+
+    /// <summary>
+    /// The caller's non-terminal <see cref="FarmMembership"/> on a farm,
+    /// <b>TRACKED</b> — for the grant/revoke write path only.
+    ///
+    /// <para><b>Why this exists next to <see cref="GetFarmMembershipAsync"/>
+    /// rather than reusing it.</b> That method is <c>AsNoTracking()</c>, so a
+    /// domain mutation applied to what it returns is never persisted by
+    /// <c>SaveChangesAsync</c> — the change is made on a detached POCO and
+    /// silently discarded. (<c>ExitMembershipHandler</c> does exactly that
+    /// today; see the Phase 5 report. Reusing the no-tracking read here would
+    /// have shipped a grant endpoint that answers 200 and writes nothing.)
+    /// Widening <c>GetFarmMembershipAsync</c> to tracked would change behaviour
+    /// for every existing caller, so the write path gets its own read that says
+    /// what it is.</para>
+    /// </summary>
+    Task<FarmMembership?> GetTrackedFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+        => Task.FromResult<FarmMembership?>(null);
+
+    /// <summary>
+    /// The caller's <see cref="FarmMembership"/> on a farm <b>whatever its
+    /// status</b>, <b>TRACKED</b> — for the exit write path only.
+    ///
+    /// <para><b>Why the terminal rows have to come back.</b>
+    /// <c>ExitMembershipHandler</c> answers "you have already left" as an
+    /// idempotent success rather than an error, because a farmer on a rural
+    /// connection re-sending the same request must converge instead of being
+    /// told something went wrong. That branch reads
+    /// <c>membership.IsTerminal</c> — and every other membership read in this
+    /// port filters <c>Revoked</c>/<c>Exited</c> out, so with any of them the
+    /// branch is unreachable and a repeat exit answers "you are not a member of
+    /// this farm" about a farm the caller demonstrably was a member of.</para>
+    ///
+    /// <para><b>Deterministic when several rows exist.</b>
+    /// <c>ix_farm_memberships_farm_user_nonterminal</c> permits at most ONE
+    /// non-terminal row per (farm, user) but any number of terminal ones (a
+    /// worker may rejoin by QR after leaving). The live row wins; otherwise the
+    /// most recently modified terminal row, so the answer does not depend on
+    /// scan order.</para>
+    ///
+    /// <para><b>Default is the narrower sibling, deliberately.</b> Falling back
+    /// to <see cref="GetTrackedFarmMembershipAsync"/> leaves every in-tree test
+    /// double on the behaviour it has today (non-terminal only) instead of on
+    /// <c>null</c>, so a double that has not overridden this member degrades to
+    /// "not a member" — the answer it already gave — rather than to a new,
+    /// silently wrong one.</para>
+    /// </summary>
+    Task<FarmMembership?> GetTrackedFarmMembershipIncludingTerminalAsync(
+        Guid farmId, Guid userId, CancellationToken ct = default)
+        => GetTrackedFarmMembershipAsync(farmId, userId, ct);
     /// <summary>
     /// DFES (dfes-companion-2026-07-11) — all <see cref="ShramSafal.Domain.Dfes.DailyRichnessAggregate"/>
     /// rows for a farm (the Phase-3 engagement fold reads these). Default impl returns empty so the
@@ -735,10 +1062,6 @@ public interface IShramSafalRepository
     // the scorer the same rows the farmer actually created. Default impls return
     // empty so the in-tree test doubles keep compiling; production overrides.
 
-    /// <summary>DFES — the <see cref="LabourAssignment"/> rows of the day's logs.</summary>
-    Task<IReadOnlyList<LabourAssignment>> GetLabourAssignmentsForDailyLogsAsync(
-        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<LabourAssignment>>(Array.Empty<LabourAssignment>());
 
     /// <summary>DFES — the <see cref="IrrigationEntry"/> rows of the day's logs.</summary>
     Task<IReadOnlyList<IrrigationEntry>> GetIrrigationEntriesForDailyLogsAsync(

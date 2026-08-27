@@ -1,31 +1,65 @@
 import React, { useEffect } from 'react';
-import { CheckCircle, XCircle, X } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, X } from 'lucide-react';
+
+/**
+ * Labour Phase 2 -> Phase 1, Task T2 (review round 1, §R6 item 2).
+ *
+ * `'partial'` exists because this component offered only success and error, and
+ * a partly-skipped save is neither. It was rendering red with an `XCircle` —
+ * the "everything is gone" signal — over a record that IS safely in the local
+ * ledger and simply has not been queued for the server. A farmer who reads
+ * "gone" re-records, and the app ends the day holding two of the same log. The
+ * leading `फोनवर सेव्ह ✓` was a mitigation, not a cure; the cure is not to
+ * raise an alarm we do not mean.
+ *
+ * Amber, not red, and an `AlertCircle` rather than an `XCircle`: this is an
+ * incompleteness the farmer should notice, not a failure they should fear.
+ */
+type ActionToastType = 'success' | 'error' | 'partial';
 
 interface ActionToastProps {
     message: string;
-    type?: 'success' | 'error';
+    type?: ActionToastType;
     duration?: number;
     onDismiss: () => void;
     actionLabel?: string;
     onAction?: () => void;
 }
 
+/**
+ * How long each kind of message stays up.
+ *
+ * 3000ms is unchanged for success and error — every existing caller keeps its
+ * exact behaviour. `'partial'` gets longer because the honest message is longer
+ * than the lie it replaced ("फोनवर सेव्ह ✓ — 2 of 3 cannot be sent." against
+ * "Logged.") and the audience may be reading slowly, in a second script, in
+ * sunlight. Three seconds to read that is the same mistake the original 3s undo
+ * pill made on the approval screen.
+ */
+const DEFAULT_DURATION_MS: Record<ActionToastType, number> = {
+    success: 3000,
+    error: 3000,
+    partial: 7000,
+};
+
 const ActionToast: React.FC<ActionToastProps> = ({
     message,
     type = 'success',
-    duration = 3000,
+    duration,
     onDismiss,
     actionLabel,
     onAction
 }) => {
+    const effectiveDuration = duration ?? DEFAULT_DURATION_MS[type];
+
     useEffect(() => {
-        if (duration > 0) {
+        if (effectiveDuration > 0) {
             const timer = setTimeout(() => {
                 onDismiss();
-            }, duration);
+            }, effectiveDuration);
             return () => clearTimeout(timer);
         }
-    }, [duration, onDismiss]);
+    }, [effectiveDuration, onDismiss]);
 
     return (
         <div
@@ -36,11 +70,15 @@ const ActionToast: React.FC<ActionToastProps> = ({
                 flex items-center justify-between p-4 rounded-2xl shadow-hard border backdrop-blur-md
                 ${type === 'success'
                     ? 'bg-emerald-900/90 border-emerald-500/30 text-emerald-50 shadow-emerald-900/40'
-                    : 'bg-red-900/90 border-red-500/30 text-red-50 shadow-red-900/40'}
+                    : type === 'partial'
+                        ? 'bg-amber-900/90 border-amber-500/30 text-amber-50 shadow-amber-900/40'
+                        : 'bg-red-900/90 border-red-500/30 text-red-50 shadow-red-900/40'}
             `}>
                 <div className="flex items-center gap-3.5">
                     {type === 'success' ? (
                         <CheckCircle className="w-6 h-6 text-emerald-400 shrink-0" strokeWidth={2.5} />
+                    ) : type === 'partial' ? (
+                        <AlertCircle className="w-6 h-6 text-amber-400 shrink-0" strokeWidth={2.5} />
                     ) : (
                         <XCircle className="w-6 h-6 text-red-400 shrink-0" strokeWidth={2.5} />
                     )}

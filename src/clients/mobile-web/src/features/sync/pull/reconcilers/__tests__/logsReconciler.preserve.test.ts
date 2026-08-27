@@ -235,6 +235,13 @@ describe('reconcileLogs — device-only truth survives a pull', () => {
             db,
             pullPayloadWith(serverLog({
                 id: 'log-5',
+                // LABOUR_PHASE2 A2b — `context` is overwritten on exactly the
+                // condition that the RESPONSE STATED IT, and `serverStatedContext`
+                // reads `Array.isArray(dto.plotIds)`. A live server sends this on
+                // every log; without it here the pull makes no spatial statement,
+                // so the guard correctly keeps the device's own `selection` and
+                // this test's "the server wins" premise never applies.
+                plotIds: [PLOT_ID],
                 tasks: [{
                     id: 'task-1',
                     activityType: 'Pruning',

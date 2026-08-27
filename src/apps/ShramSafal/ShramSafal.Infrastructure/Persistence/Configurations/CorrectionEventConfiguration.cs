@@ -12,29 +12,39 @@ internal sealed class CorrectionEventConfiguration : IEntityTypeConfiguration<Co
         builder.ToTable("correction_events", "ssf");
         builder.HasKey(x => x.Id);
 
-        // spec: dfes-companion-2026-07-11 — explicit snake_case column mappings.
-        // 20260504010000_AddCorrectionEvent creates ssf.correction_events with
-        // unquoted (lowercase, snake_case) column identifiers except "Id"; this
-        // codebase has no global snake_case naming convention (unlike some EF
-        // setups), so every property needs its own HasColumnName — the previous
-        // absence of these calls left EF defaulting to the quoted PascalCase
-        // property name (e.g. "CapturedAtUtc"), which Postgres rejects with
-        // 42703 "column does not exist" because the physical column is
-        // captured_at_utc. This was masked in production because the tenant-
-        // scope fail-closed 500 (fixed alongside this) always short-circuited
-        // the request before SaveChangesAsync ever ran the INSERT.
-        builder.Property(x => x.UserId).IsRequired().HasColumnName("user_id");
-        builder.Property(x => x.OriginalParseId).IsRequired().HasColumnName("original_parse_id");
-        builder.Property(x => x.OriginalParseRaw).IsRequired().HasColumnType("jsonb").HasColumnName("original_parse_raw");
-        builder.Property(x => x.CorrectedParse).IsRequired().HasColumnType("jsonb").HasColumnName("corrected_parse");
-        builder.Property(x => x.PromptVersion).IsRequired().HasMaxLength(20).HasColumnName("prompt_version");
-        builder.Property(x => x.Locale).IsRequired().HasMaxLength(10).HasColumnName("locale");
-        builder.Property(x => x.Trigger).IsRequired()
-            .HasConversion<string>().HasMaxLength(30).HasColumnName("trigger");
-        builder.Property(x => x.CapturedAtUtc).IsRequired().HasColumnName("captured_at_utc");
+        // ── Column names ────────────────────────────────────────────────
+        // §P0.4 — MEASURED, not assumed. The physical table is created by
+        // raw SQL in `20260504010000_AddCorrectionEvent` with snake_case
+        // columns ("Id" alone is quoted PascalCase). This configuration
+        // never said so, and there is no snake_case naming convention on
+        // the context, so EF has been addressing columns that do not
+        // exist — `select "UserId" from ssf.correction_events` answers
+        // `ERROR: column "UserId" does not exist`. Every insert through
+        // this mapping throws 42703, which is why the table is empty.
+        //
+        // The names below are transcribed from `information_schema.columns`
+        // on the live dev database, so the model now matches the table
+        // rather than the table being expected to match the model.
+        builder.Property(x => x.Id).HasColumnName("Id");
+        builder.Property(x => x.UserId).HasColumnName("user_id").IsRequired();
+        // §P0.4 — nullable: "no known originating AiJob" beats a fabricated UUID.
+        builder.Property(x => x.OriginalParseId).HasColumnName("original_parse_id").IsRequired(false);
+        builder.Property(x => x.OriginalParseRaw).HasColumnName("original_parse_raw").IsRequired().HasColumnType("jsonb");
+        builder.Property(x => x.CorrectedParse).HasColumnName("corrected_parse").IsRequired().HasColumnType("jsonb");
+        builder.Property(x => x.PromptVersion).HasColumnName("prompt_version").IsRequired().HasMaxLength(20);
+        // §P0.4 — SHA-256 hex; the tamper-evident prompt identifier.
+        builder.Property(x => x.PromptContentHash).HasColumnName("prompt_content_hash").IsRequired(false).HasMaxLength(64);
+        builder.Property(x => x.Locale).HasColumnName("locale").IsRequired().HasMaxLength(10);
+        builder.Property(x => x.Trigger).HasColumnName("trigger").IsRequired()
+            .HasConversion<string>().HasMaxLength(30);
+        builder.Property(x => x.CapturedAtUtc).HasColumnName("captured_at_utc").IsRequired();
 
-        builder.HasIndex(x => x.UserId);
-        builder.HasIndex(x => x.PromptVersion);
-        builder.HasIndex(x => x.CapturedAtUtc);
+        // Index names likewise transcribed from `pg_indexes` — the raw-SQL
+        // creation migration named them `ix_…`, while EF's default would be
+        // `IX_correction_events_UserId`. Without this, a future model diff
+        // would emit a rename of an index that does not exist.
+        builder.HasIndex(x => x.UserId).HasDatabaseName("ix_correction_events_user_id");
+        builder.HasIndex(x => x.PromptVersion).HasDatabaseName("ix_correction_events_prompt_version");
+        builder.HasIndex(x => x.CapturedAtUtc).HasDatabaseName("ix_correction_events_captured_at_utc");
     }
 }

@@ -26,6 +26,15 @@ export interface UseAppDataResult {
     history: DailyLog[];
     setHistory: React.Dispatch<React.SetStateAction<DailyLog[]>>;
 
+    /**
+     * Whether a hydration pass has actually COMPLETED — i.e. whether an
+     * empty `history`/`crops` is a measured empty or an unfilled initial
+     * value. spec: owner-oversight-loop, finding F7(a). See the state
+     * declaration inside the hook for the full reasoning; read it only if
+     * you turn the ABSENCE of records into a positive claim.
+     */
+    dataLoaded: boolean;
+
     // Deprecated, kept for compatibility
     mockHistory: DailyLog[];
     realHistory: DailyLog[];
@@ -78,8 +87,25 @@ interface UseAppDataProps {
  */
 export function createInitialFarmerProfile(): FarmerProfile {
     return {
-        name: 'Shetkari Raja',
-        village: 'Nashik',
+        // It used to be a stranger's: name "Shetkari Raja", village "Nashik", and
+        // three invented colleagues — "Suresh (Manager)" and "Agronomist" — carrying
+        // phone numbers that belong to somebody. None of it was behind a demo guard
+        // (the real demo seed IS gated, in `purveshDemoEnrichment.ts`), so every new
+        // farmer opened the app to another man's identity and had to work out that
+        // the app did not know who he was.
+        //
+        // `P4`/`P5` — an empty field that says "—" is honest; a filled one that is
+        // wrong is not. IdentitySection already renders `profile.name || '—'` and has
+        // an empty-operators branch, so blank needs no new UI.
+        //
+        // The single `owner` operator STAYS, and so does `activeOperatorId: 'owner'`:
+        // that id is a load-bearing identity check (`isOwner` in `LogFactory` and
+        // `log-partition-builders` partitions logs on it), and "Owner" is a role, not
+        // a claimed person. The sync pull replaces this list with real operators.
+        //
+        // evidence: docs/LAUNCH-READINESS-AND-AGRISTACK-2026-08-23.md — Decision 2 item 3
+        name: '',
+        village: '',
         phone: '',
         language: 'mr',
         verificationStatus: VerificationStatus.Unverified,
@@ -91,24 +117,6 @@ export function createInitialFarmerProfile(): FarmerProfile {
                 capabilities: Object.values(OperatorCapability) as OperatorCapability[],
                 isVerifier: true,
                 isActive: true
-            },
-            {
-                id: 'manager1',
-                name: 'Suresh (Manager)',
-                role: 'SECONDARY_OWNER',
-                capabilities: [OperatorCapability.VIEW_ALL, OperatorCapability.LOG_DATA, OperatorCapability.APPROVE_LOGS],
-                isVerifier: true,
-                isActive: true,
-                phone: '9876543210'
-            },
-            {
-                id: 'verifier1',
-                name: 'Agronomist',
-                role: 'WORKER',
-                capabilities: [OperatorCapability.VIEW_ALL, OperatorCapability.APPROVE_LOGS],
-                isVerifier: true,
-                isActive: true,
-                phone: '9876543211'
             }
         ],
         activeOperatorId: 'owner',
@@ -129,10 +137,20 @@ export function createInitialFarmerProfile(): FarmerProfile {
             },
             updatedAt: new Date().toISOString()
         },
+        // 20.0N 73.8E is Nashik, and `source: 'manual'` claimed the FARMER had
+        // set it. He had not. It is not a cosmetic default either: weather
+        // resolution goes farm centre → profile location → device GPS
+        // (`useWeatherMonitor.ts`), so this stamp sat AHEAD of his real GPS and a
+        // farmer in Sangli was shown Nashik's forecast — with no way to tell.
+        //
+        // 0/0/'unknown' is the sentinel the sync reconciler already uses for
+        // "we don't know yet" (`profileAndCropsReconciler.ts`), and both the
+        // profile and device paths in useWeatherMonitor explicitly reject it, so
+        // the fallback chain now runs on to the farmer's actual location.
         location: {
-            lat: 20.0,
-            lon: 73.8,
-            source: 'manual',
+            lat: 0,
+            lon: 0,
+            source: 'unknown',
             updatedAt: new Date().toISOString()
         },
         infrastructure: {
@@ -173,6 +191,25 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
     // --- UI STATE ---
     const [showTaskCreationSheet, setShowTaskCreationSheet] = useState(false);
 
+    /**
+     * Whether the load effect below has actually FINISHED a hydration pass —
+     * i.e. whether an empty `history`/`crops` is a measured empty or just an
+     * unfilled initial value.
+     *
+     * spec: owner-oversight-loop, finding F7(a). Everything this hook returns
+     * starts empty and fills in asynchronously. A surface that turns "no
+     * records" into a positive claim — the oversight strip's rest state, a
+     * green tick reading "आज पर्यन्त सर्व कामे पूर्ण आहेत" ("all work is
+     * complete as of today") — would otherwise make that claim during the
+     * first-load window, from data nobody has read yet. Consumers that only
+     * RENDER the data (every existing one) are unaffected and need not read
+     * this; consumers that make a claim FROM ITS ABSENCE must.
+     *
+     * Set only after a hydration pass completes. `loadData`'s `catch` leaves
+     * it false on purpose: a failed load has proven nothing.
+     */
+    const [dataLoaded, setDataLoaded] = useState(false);
+
     // --- LOAD DATA EFFECT ---
     useEffect(() => {
         let mounted = true;
@@ -200,6 +237,9 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
             setPlannedTasks(Array.isArray(plannedTasksMeta?.value) ? plannedTasksMeta.value as PlannedTask[] : []);
             setHarvestSessions([]);
             setProcurementExpenses([]);
+            // Last line of the pass, after every `await` above resolved —
+            // see `dataLoaded`'s own doc comment (finding F7(a)).
+            setDataLoaded(true);
         };
 
         const loadData = async () => {
@@ -223,6 +263,8 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
                     if (mounted && loadedProfile && loadedProfile.name) {
                         setFarmerProfile(loadedProfile);
                     }
+                    // Demo branch's own completion point (finding F7(a)).
+                    if (mounted) setDataLoaded(true);
                 } else {
                     if (isAuthenticated) {
                         await backgroundSyncWorker.triggerNow();
@@ -334,6 +376,11 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
         setHistory, // Unified setter
         setMockHistory: setHistory,
         setRealHistory: setHistory,
+
+        // spec: owner-oversight-loop, finding F7(a) — see this flag's own
+        // declaration above. Read it before turning "no records" into a
+        // positive claim; ignore it if you only render the records.
+        dataLoaded,
 
         ledgerDefaults, setLedgerDefaults,
         userResources, setUserResources,

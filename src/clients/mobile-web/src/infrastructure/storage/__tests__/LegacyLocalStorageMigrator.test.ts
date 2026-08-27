@@ -21,6 +21,16 @@ import {
     __resetLegacyMigrationFlagForTesting,
 } from '../LegacyLocalStorageMigrator';
 import { storageNamespace } from '../StorageNamespace';
+import { activateDatabaseForUser } from '../activateUserDatabase';
+
+/**
+ * P0.1: the migrator imports into the database of the farmer who owns the
+ * pre-Dexie entries, and refuses to run for anybody else — including an
+ * unidentified boot, which now lands on a database that belongs to nobody.
+ * These tests therefore establish a farmer first; before the isolation
+ * boundary they relied on an anonymous boot silently opening `AgriLogDB`.
+ */
+const TEST_FARMER = 'user-migrator-1111';
 
 const sampleCrops = [
     { id: 'crop_grapes', name: 'Grapes' },
@@ -44,6 +54,10 @@ describe('LegacyLocalStorageMigrator (Sub-plan 04 Task 2)', () => {
         __resetLegacyMigrationFlagForTesting();
         // Default to user namespace (matches DataSourceProvider boot path).
         storageNamespace.setNamespace('user');
+        // ...and an authenticated farmer, which is the only thing that opens a
+        // farmer's database at all (P0.1). Adopts `AgriLogDB`, since no other
+        // farmer has claimed it on this fresh fixture.
+        activateDatabaseForUser(TEST_FARMER);
     });
 
     it('is a no-op when no legacy localStorage data exists', async () => {

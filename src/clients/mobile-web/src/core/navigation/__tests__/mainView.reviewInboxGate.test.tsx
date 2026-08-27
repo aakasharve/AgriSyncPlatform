@@ -4,32 +4,68 @@
 //
 // "Hide the dead ends while nothing is waiting." For a solo farmer with an
 // empty review queue, mainView must not offer a route into an empty
-// ReviewInboxSheet. Covers 3 of the brief's 4 entry points that live in
-// mainView.tsx (the 4th, the auto-open nudge, is covered in
-// useNudgeRouteEffect.test.tsx):
-//   - mainView.tsx:270-274  "Pending approvals: {count}"
-//   - mainView.tsx:284-289  "Verify now" in the Close-Day summary
-//   - mainView.tsx:325-330  "Verify now" in the Close-Yesterday summary
-//   - mainView.tsx:354-359  "Verify now" in the Running Cost card
+// ReviewInboxSheet. Originally covered 3 of the brief's 4 entry points, all
+// of which lived in mainView.tsx (the 4th, the auto-open nudge, was covered
+// in useNudgeRouteEffect.test.tsx):
+//   - "Pending approvals: {count}"
+//   - "Verify now" in the Close-Day summary
+//   - "Verify now" in the Close-Yesterday summary
+//   - "Verify now" in the Running Cost card
 //
 // EMPIRICAL FINDING (Step 1/2, recorded before any code change):
-// The first three sites gate on todayDayState.unverifiedCount /
+// The first three sites gated on todayDayState.unverifiedCount /
 // yesterdayDayState.unverifiedCount, which (post Waves 1.1-1.4, LogFactory
 // auto-approves the owner's own log) genuinely reaches zero for a solo
-// farmer — those three were ALREADY correct. The Running Cost site
-// (mainView.tsx:353) gates on a DIFFERENT signal, costSnapshot.unverifiedToday
-// — sourced from useAppRouterDerivations.ts's financeSelectors.getBreakdown,
-// whose trustStatus is 'Unverified' unless a cost entry has been manually
-// CORRECTED (financeService.ts:158, `entry.isCorrected ? 'Adjusted' :
+// farmer — those three were ALREADY correct. The Running Cost site gated on
+// a DIFFERENT signal, costSnapshot.unverifiedToday — sourced from
+// useAppRouterDerivations.ts's financeSelectors.getBreakdown, whose
+// trustStatus is 'Unverified' unless a cost entry has been manually
+// CORRECTED (financeService.ts, `entry.isCorrected ? 'Adjusted' :
 // 'Unverified'`) — nothing to do with log/operator verification. So for an
 // ordinary solo-farmer day with real expenses and zero mukadam activity,
-// costSnapshot.unverifiedToday stays > 0 even though there is genuinely
-// nothing to review — the exact dead end the brief describes. The
-// "empty review queue, non-zero costSnapshot.unverifiedToday" case below is
-// the real, reproducible scenario, not a synthetic edge case.
+// costSnapshot.unverifiedToday stayed > 0 even though there was genuinely
+// nothing to review — the exact dead end the brief describes.
+//
+// ======================================================================
+// SUPERSEDED BY `main`'s owner-oversight-loop — REWRITTEN IN THE MERGE.
+// ======================================================================
+//
+// dfes hid these four sites CONDITIONALLY, while nothing was waiting.
+// `main` went further and removed all four from the log view outright
+// (`0e4ad118`, "feat(home-screen): move the plot selector above closure and
+// cost", spec: owner-oversight-loop §4.2): the Daily Closure card, the
+// yesterday-not-closed block and the "Cost may be inaccurate" line are gone
+// from mainView, and what they said now reaches the owner as rows in the
+// oversight drawer instead. The dfes brief's goal is therefore met
+// unconditionally rather than by a gate.
+//
+// The consequence for THIS FILE is that its first test — "empty queue: none
+// of them render" — now passes because the sites do not exist at all, which
+// makes it true but no longer discriminating. So the second test is inverted
+// rather than deleted: it feeds a genuinely pending mukadam log, the input
+// that used to make all three appear, and asserts they STILL do not. That is
+// the assertion that fails if anyone re-adds a dead end to the log view, and
+// it is the only version of this file's question that is still live here.
+//
+// The other half of the original test — that a genuinely pending log DOES
+// reach the owner — has NOT been dropped, it moved with the behaviour:
+//   - oversightSelectors.ts emits `{ kind: 'approval', count }` only when
+//     `unverifiedCount > 0`            -> oversightSelectors.test.ts
+//   - WaitingDrawer renders that row with its count and no row at zero
+//                                      -> WaitingDrawer.test.tsx
+//   - tapping it becomes requestOpenReviewInbox()
+//                                      -> AppHeader.oversight.test.tsx
+//   - AppRouter hears it and opens ReviewInboxSheet
+//                                      -> AppRouter.reviewInboxRequest.test.tsx
+//
+// `log-view-home-reorder.test.tsx` also asserts the removal, from the
+// element tree rather than the DOM. This file is kept alongside it because
+// it comes at the same question from the farmer's side — a rendered screen
+// with a real pending count in the context — and because it is the record of
+// what wave-1.7 asked for and how it was answered.
 import React from 'react';
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { cleanup, render, screen, fireEvent } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import type { AppRouterContext } from '../routeContext';
 
@@ -146,12 +182,14 @@ afterEach(() => {
     vi.resetModules();
 });
 
-describe('renderLogView — review-inbox dead ends stay hidden while nothing is waiting', () => {
+describe('renderLogView — the log view offers no route into the review inbox, waiting or not', () => {
     it('empty review queue: no "Pending approvals", no "Verify now" (Close-Day/Close-Yesterday), and no Running Cost warning', async () => {
         const renderLogView = await loadRenderLogView();
         const ctx = makeCtx({
-            showCloseDaySummary: true,
-            showCloseYesterdaySummary: true,
+            // `showCloseDaySummary` / `showCloseYesterdaySummary` were REMOVED from
+            // AppRouterContext (routeContext.ts FINDING F3): their only readers went
+            // with the Daily Closure card when owner-oversight-loop moved it into the
+            // waiting drawer, so setting them here was a write to nothing.
             // hasStarted true: the farmer DID record his day (that is why closure
             // reads 100) — the point under test is that nothing is awaiting
             // review, not that the day is empty.
@@ -180,12 +218,24 @@ describe('renderLogView — review-inbox dead ends stay hidden while nothing is 
         expect(screen.queryByText(/Cost may be inaccurate/)).toBeNull();
     });
 
-    it('a genuinely pending mukadam log: all three sites render and route to the review inbox', async () => {
+    // INVERTED IN THE MERGE. Was: "a genuinely pending mukadam log: all three
+    // sites render and route to the review inbox" — it asserted
+    // 'Pending approvals: 1', two 'Verify now' buttons, the
+    // "Cost may be inaccurate" line, and that clicking one called
+    // setShowReviewInbox(true).
+    //
+    // All four are gone from the log view by `0e4ad118`, deliberately, and
+    // `setShowReviewInbox` went with them (finding F3 removed it from
+    // AppRouterContext). The input is kept EXACTLY as it was — a real pending
+    // count on both days, plus the finance signal — because that is what makes
+    // this test discriminating: the previous test proves nothing renders when
+    // nothing is waiting, and only this one proves nothing renders when
+    // something IS. Without it, re-adding a count-gated dead end to the log
+    // view would pass the whole file.
+    it('a genuinely pending mukadam log: STILL none of them render — the log view is not where approvals live', async () => {
         const renderLogView = await loadRenderLogView();
         const setShowReviewInbox = vi.fn();
         const ctx = makeCtx({
-            showCloseDaySummary: true,
-            showCloseYesterdaySummary: true,
             setShowReviewInbox,
             todayDayState: {
                 closurePercent: 70, isClosed: false, hasStarted: true,
@@ -199,13 +249,18 @@ describe('renderLogView — review-inbox dead ends stay hidden while nothing is 
         });
         render(<>{renderLogView(ctx)}</>);
 
-        expect(screen.getByText('Pending approvals: 1')).toBeInTheDocument();
-        // Close-Day summary + Close-Yesterday summary "Verify now" buttons.
-        const verifyButtons = screen.getAllByText('Verify now');
-        expect(verifyButtons).toHaveLength(2);
-        expect(screen.getByText(/Cost may be inaccurate - 1 entries unverified\. Verify now\./)).toBeInTheDocument();
+        expect(screen.queryByText(/Pending approvals/)).toBeNull();
+        expect(screen.queryAllByText('Verify now')).toHaveLength(0);
+        expect(screen.queryByText(/Cost may be inaccurate/)).toBeNull();
+        // Nothing on this screen can reach the review inbox any more. The
+        // route in is the drawer's approval row (see this file's header for
+        // the four tests that cover that path end to end).
+        expect(setShowReviewInbox).not.toHaveBeenCalled();
 
-        fireEvent.click(verifyButtons[0]);
-        expect(setShowReviewInbox).toHaveBeenCalledWith(true);
+        // ...but the log view did NOT go blank. Running Cost stayed; §4.2
+        // moved it below the plot selector as ambient status rather than
+        // deleting it. Asserted so "nothing renders" cannot be satisfied by a
+        // render that failed outright.
+        expect(screen.getByText(/Running Cost/)).toBeInTheDocument();
     });
 });

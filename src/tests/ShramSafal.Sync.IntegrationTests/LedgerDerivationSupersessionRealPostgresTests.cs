@@ -87,23 +87,26 @@ namespace ShramSafal.Sync.IntegrationTests;
 /// pre-flag-flip fix (spec <c>ai-intelligence-plan-2026-06-25</c>); this test
 /// does not cover it.</para>
 ///
-/// <para><b>Native :5433, opt-in, self-skipping.</b> Tagged
+/// <para><b>Native :5433, fail-loud (2026-07-19).</b> Tagged
 /// <c>[Trait("Category","RequiresPostgres")]</c> so it never runs in the
 /// InMemory unit suite and stays out of the Docker-gated sweep. If native
-/// Postgres :5433 is unreachable (no dev DB running) the fixture skips cleanly
-/// rather than failing. It creates its OWN scratch database, applies the full
-/// migration chain to it, and drops it on dispose — it never touches
+/// Postgres is unreachable (no dev DB running, or CI's Postgres service is
+/// unconfigured), <see cref="RequiresPostgresConnection.ResolveReachableConnectionOrThrowAsync"/>
+/// THROWS out of <see cref="InitializeAsync"/> — the [Fact]s report FAILED,
+/// never a silent skip (this suite used to <c>Assert.True(true, ...)</c> and
+/// report a false green on every CI run; see the 2026-07-19 CI-truthfulness
+/// fix). It creates its OWN scratch database, applies the full migration
+/// chain to it, and drops it on dispose — it never touches
 /// <c>agrisync_dev</c> data.</para>
 /// </summary>
 [Trait("Category", "RequiresPostgres")]
 public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstractions.ITestOutputHelper output) : IAsyncLifetime
 {
-    // agrisync_app is created by migration 20260515090000_BootstrapDbRoles. Roles are
-    // CLUSTER-global, so on a cluster where it already exists the migration is a no-op
-    // and the live password is whatever it was rotated to — hence IntegrationPostgres
-    // resolves it from AGRISYNC_TEST_APP_ROLE_PASSWORD, not a constant.
-    private const string AppRoleUser = IntegrationPostgres.AppRoleUser;
-    private static string AppRolePassword => IntegrationPostgres.AppRolePassword;
+    // agrisync_app is created by migration 20260515090000_BootstrapDbRoles with
+    // this literal local-dev password; roles are cluster-global so it already
+    // exists on the :5433 cluster.
+    private const string AppRoleUser = "agrisync_app";
+    private static string AppRolePassword => TestRoleCredentials.AppRolePassword;
 
     private static readonly Guid FarmId = Guid.Parse("aaaa1111-1111-1111-1111-111111111111");
     private static readonly Guid OwnerAccountId = Guid.Parse("aaaa2222-2222-2222-2222-222222222222");
@@ -156,25 +159,15 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
     private string _superuserConn = string.Empty;
     private string _scratchDbName = string.Empty;
     private string _appConn = string.Empty;
-    private bool _skip;
-    private string _skipReason = string.Empty;
     private ServiceProvider? _rootProvider;
 
     public async Task InitializeAsync()
     {
-        // ── Resolve the superuser connection (never echoed) ────────────────────
-        var baseConn = IntegrationPostgres.ResolveRootConnection();
-
-        // ── Reachability probe — an ABSENT server skips cleanly; a server that
-        //    answers and REFUSES us throws, because a misconfigured credential
-        //    reported as a skip is how an unexecuted proof reports green. ───────
-        var probeSkip = await IntegrationPostgres.ProbeOrSkipReasonAsync(baseConn);
-        if (probeSkip is not null)
-        {
-            _skip = true;
-            _skipReason = probeSkip;
-            return;
-        }
+        // ── Resolve + prove the local dev superuser connection (never echoed).
+        // Throws (does not skip) if Postgres is unconfigured/unreachable — see
+        // RequiresPostgresConnection's doc comment for the 2026-07-19
+        // CI-truthfulness fix this enforces. ─────────────────────────────────
+        var baseConn = await RequiresPostgresConnection.ResolveReachableConnectionOrThrowAsync();
 
         // ── Create an isolated scratch DB (never touches agrisync_dev data) ────
         _scratchDbName = $"ssf_f2_proof_{Guid.NewGuid():N}";
@@ -256,7 +249,7 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
             await _rootProvider.DisposeAsync();
         }
 
-        if (!_skip && !string.IsNullOrEmpty(_scratchDbName) && !string.IsNullOrEmpty(_adminConn))
+        if (!string.IsNullOrEmpty(_scratchDbName) && !string.IsNullOrEmpty(_adminConn))
         {
             try
             {
@@ -278,36 +271,14 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
         }
     }
 
-    /// <summary>
-    /// spec: dfes-companion-2026-07-11 (wave-1.4) — <c>Assert.True(true, _skipReason)</c> used
-    /// to report these proofs as PASSING on any runner without Postgres on :5433, having
-    /// exercised nothing. <c>Skip.If</c> (Xunit.SkippableFact) reports the run as Skipped —
-    /// visually and in exit-code terms distinct from both Passed and Failed — so a database-less
-    /// run can never be read as proof the F2 supersession fix behaves.
-    /// </summary>
-    private void SkipIfPostgresUnavailable()
-    {
-        if (_skip)
-        {
-            output.WriteLine($"[SKIPPED] {_skipReason} — NO DATABASE WAS EXERCISED; this run proves nothing.");
-        }
-
-        Skip.If(_skip, _skipReason);
-    }
-
     // ─────────────────────────────────────────────────────────────────────────
     // THE PROOF — one test drives BOTH confirms and asserts (i)-(iii); a second
     // test proves (iv) the forced-failure isolation on real Postgres.
     // ─────────────────────────────────────────────────────────────────────────
 
-    [SkippableFact]
+    [Fact]
     public async Task Confirming_twice_same_ai_job_supersedes_to_one_current_row_and_persists_both_logs_with_all_child_families()
     {
-        // spec: dfes-companion-2026-07-11 (wave-1.4) — Assert.True(true, _skipReason) here used
-        // to report this proof as PASSING on any runner without Postgres on :5433, having
-        // exercised nothing. Skip.If (Xunit.SkippableFact) reports the run as Skipped instead.
-        SkipIfPostgresUnavailable();
-
         var log1 = Guid.Parse("bbbb1111-1111-1111-1111-111111111111");
         var log2 = Guid.Parse("bbbb2222-2222-2222-2222-222222222222");
 
@@ -409,11 +380,9 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
         output.WriteLine("[EVIDENCE] no 23505 raised across two confirms with same SourceAiJobId, distinct clientRequestId");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Forced_derivation_failure_does_not_roll_back_the_log_on_real_postgres()
     {
-        SkipIfPostgresUnavailable();
-
         var logId = Guid.Parse("cccc1111-1111-1111-1111-111111111111");
 
         // Inject a DB-level failure INSIDE the side-car: a BEFORE-INSERT trigger

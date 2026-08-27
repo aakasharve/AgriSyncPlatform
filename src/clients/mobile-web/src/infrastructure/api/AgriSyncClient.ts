@@ -23,7 +23,6 @@ import {
     clearAuthSession,
     getAuthSession,
     setAuthSession,
-    type AuthSession,
 } from '../storage/AuthTokenStore';
 import { getOrCreateDeviceId } from '../storage/DeviceIdStore';
 import { getRememberDevice } from '../storage/RememberDeviceStore';
@@ -34,10 +33,17 @@ import {
     isNativeSecureRefreshEnabled,
 } from '../storage/RefreshSessionStore';
 import { SYNC_MUTATION_TYPES } from '../sync/SyncMutationCatalog';
+// The TRANSPORT-vs-REJECTION classifier. It already exists, is already unit
+// tested, and is already the codebase's answer to "did anything judge this
+// request, or did we simply never arrive?" — the auth layer had been answering
+// that question differently (and wrongly) one module over.
+import { categorizePushFailure } from '../sync/RejectionPolicy';
 import {
     APP_VERSION,
     type HttpTransport,
+    type RefreshOutcome,
     type RetriableRequestConfig,
+    isAuthResponse,
     resolveApiBaseUrl,
     shouldSkipAuthRetry,
     toAuthSession,
@@ -112,6 +118,7 @@ export type {
     AttachmentDto,
     AttentionBoardDto,
     AttentionCardDto,
+    AttributedOperatorDto,
     AuthResponseDto,
     CoVeReverifyRequest,
     CoVeReverifyResponse,
@@ -122,12 +129,14 @@ export type {
     CropCycleDto,
     CropScheduleTemplateDto,
     DailyLogDto,
+    DailyLogScope,
     DayLedgerAllocationDto,
     DayLedgerDto,
     ExtractionSessionDraftResponse,
     FarmDto,
     FinanceCorrectionDto,
     GetExtractionSessionResponse,
+    LabourEngagementDto,
     LocationDto,
     LoginRequest,
     LogTaskDto,
@@ -165,7 +174,7 @@ export type {
 export class AgriSyncClient implements HttpTransport {
     readonly http: AxiosInstance;
     readonly authHttp: AxiosInstance;
-    private refreshPromise: Promise<AuthSession | null> | null = null;
+    private refreshPromise: Promise<RefreshOutcome> | null = null;
 
     constructor() {
         const baseURL = resolveApiBaseUrl();
@@ -512,12 +521,16 @@ export class AgriSyncClient implements HttpTransport {
 
         originalConfig._agriSyncRetry = true;
 
-        const refreshedSession = await this.refreshSession();
-        if (!refreshedSession) {
+        // Either non-'refreshed' outcome means we have no new token to retry
+        // with, so the original 401 stands. The difference between them —
+        // whether the credential was destroyed — has already been applied
+        // inside refreshSession(); nothing further is owed here.
+        const outcome = await this.refreshSession();
+        if (outcome.kind !== 'refreshed') {
             throw error;
         }
 
-        originalConfig.headers.set('Authorization', `Bearer ${refreshedSession.accessToken}`);
+        originalConfig.headers.set('Authorization', `Bearer ${outcome.session.accessToken}`);
         return this.http.request(originalConfig);
     }
 
@@ -527,15 +540,38 @@ export class AgriSyncClient implements HttpTransport {
     //   WEB: POST /user/auth/refresh with NO token body — the HttpOnly cookie
     //   agrisync_refresh carries the token (withCredentials handles this).
     //   Sends rememberDevice + deviceId + platform:'web'. Never reads a
-    //   refreshToken field. This path is UNCHANGED from the original.
+    //   refreshToken field.
     //
     //   ANDROID NATIVE: reads the NativeRefreshSession from the Android
     //   Keystore. If absent → fail-closed (clear + anonymous). If present →
     //   POST /user/auth/refresh with body { refreshToken, rememberDevice,
     //   deviceId, platform:'android' }. On success the server returns a
     //   NEW refreshToken (rotation); persist it via setNativeRefreshSession.
-    //   On 401 → clearNativeRefreshSession + clear + anonymous.
-    async refreshSession(): Promise<AuthSession | null> {
+    //
+    // AMENDED 2026-08-23 — fail-closed now applies to REJECTION only.
+    //
+    //   Both branches used to `catch` everything and run the fail-closed path,
+    //   which on Android destroys the Keystore refresh token. That token is the
+    //   only durable credential on the device, so a single dropped packet at
+    //   app launch — bad rural signal, a captive portal, or the backend's own
+    //   nightly hibernation window — logged the farmer out PERMANENTLY and left
+    //   him staring at an empty database where his records had been. An APK
+    //   cannot be patched after it is handed out, so this had to be right
+    //   before the pilot build.
+    //
+    //   The rule now: destroy the credential only when a server judged it
+    //   (4xx). When we never reached a server that could judge it — no response
+    //   at all, 5xx/408/429, or a 200 that is not a session — the credential's
+    //   validity is still unknown, so it is left untouched and the next attempt
+    //   on a working connection recovers. This is not a weakening of
+    //   fail-closed: an unverified access token still authorizes nothing,
+    //   because every real request is validated server-side and a genuine 401
+    //   routes straight back here and clears.
+    //
+    //   `categorizePushFailure` is the same classifier the sync queue uses for
+    //   exactly this distinction (`RejectionPolicy.ts`).
+    //   evidence: docs/LAUNCH-READINESS-AND-AGRISTACK-2026-08-23.md, Decision 2 item 1
+    async refreshSession(): Promise<RefreshOutcome> {
         if (this.refreshPromise) {
             return this.refreshPromise;
         }
@@ -543,15 +579,20 @@ export class AgriSyncClient implements HttpTransport {
         const deviceId = getOrCreateDeviceId();
         const rememberDevice = getRememberDevice();
 
+        // Fail-closed teardown. Called ONLY on a judged rejection.
+        const reject = async (): Promise<RefreshOutcome> => {
+            clearAuthSession();
+            await clearNativeRefreshSession();
+            return { kind: 'rejected' };
+        };
+
         if (isNativeSecureRefreshEnabled()) {
             // --- NATIVE (Android Keystore) branch ---
-            this.refreshPromise = (async () => {
+            this.refreshPromise = (async (): Promise<RefreshOutcome> => {
                 const stored = await getNativeRefreshSession();
                 if (!stored) {
-                    // No stored session → fail-closed, force re-login.
-                    clearAuthSession();
-                    await clearNativeRefreshSession();
-                    return null;
+                    // Nothing to send and nothing to preserve → force re-login.
+                    return reject();
                 }
                 try {
                     const response = await this.authHttp.post<AuthResponseDto>(
@@ -564,6 +605,11 @@ export class AgriSyncClient implements HttpTransport {
                         },
                     );
                     const data = response.data;
+                    if (!isAuthResponse(data)) {
+                        // Something answered 200 that was not our server.
+                        // Keep the Keystore token; do not write a junk session.
+                        return { kind: 'unreachable' };
+                    }
                     // Persist the rotated token (server always issues a new one).
                     if (data.refreshToken) {
                         await setNativeRefreshSession({
@@ -574,39 +620,38 @@ export class AgriSyncClient implements HttpTransport {
                     }
                     const session = toAuthSession(data);
                     setAuthSession(session);
-                    return session;
-                } catch {
-                    // spec: secure-remembered-device-sessions-2026-06-24 / Task 6.2
-                    // Fail-closed on any error (401, network, etc.).
-                    clearAuthSession();
-                    await clearNativeRefreshSession();
-                    return null;
+                    return { kind: 'refreshed', session };
+                } catch (error) {
+                    if (categorizePushFailure(error) === 'TRANSPORT') {
+                        // The Keystore token survives a bad signal.
+                        return { kind: 'unreachable' };
+                    }
+                    return reject();
                 }
             })().finally(() => {
                 this.refreshPromise = null;
             });
         } else {
-            // --- WEB (HttpOnly cookie) branch — UNCHANGED ---
+            // --- WEB (HttpOnly cookie) branch ---
             this.refreshPromise = this.authHttp
                 .post<AuthResponseDto>('/user/auth/refresh', {
                     rememberDevice,
                     deviceId,
                     platform: 'web',
                 })
-                .then(response => {
+                .then((response): RefreshOutcome => {
+                    if (!isAuthResponse(response.data)) {
+                        return { kind: 'unreachable' };
+                    }
                     const session = toAuthSession(response.data);
                     setAuthSession(session);
-                    return session;
+                    return { kind: 'refreshed', session };
                 })
-                .catch(() => {
-                    // spec: secure-remembered-device-sessions-2026-06-24 / Task 6.2
-                    // Fail-closed: clear ALL local auth state so an invalid session
-                    // never grants access on a subsequent attempt. On web,
-                    // clearNativeRefreshSession is a no-op; on Android it wipes the
-                    // Keystore-backed secure storage.
-                    clearAuthSession();
-                    void clearNativeRefreshSession();
-                    return null;
+                .catch((error: unknown): Promise<RefreshOutcome> | RefreshOutcome => {
+                    if (categorizePushFailure(error) === 'TRANSPORT') {
+                        return { kind: 'unreachable' };
+                    }
+                    return reject();
                 })
                 .finally(() => {
                     this.refreshPromise = null;

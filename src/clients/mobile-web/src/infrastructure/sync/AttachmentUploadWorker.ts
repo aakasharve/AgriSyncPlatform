@@ -5,6 +5,7 @@ import { type DeviceFilesService, webDeviceFilesService } from '../device/Device
 import { getDatabase, type AttachmentRecord, type UploadQueueItem } from '../storage/DexieDatabase';
 import { enqueueCreateAttachmentMutation } from './AttachmentMutationQueue';
 import { backgroundSyncWorker } from './BackgroundSyncWorker';
+import { reclaimAbandonedUploads } from './abandonedStateRecovery';
 
 const MAX_RETRY_COUNT = 5;
 const BASE_BACKOFF_MS = 2000;
@@ -113,6 +114,13 @@ export class AttachmentUploadWorker {
 
         this.cycleInProgress = true;
         try {
+            // P0.7 — reclaim rows a killed session left in `uploading`, BEFORE
+            // this cycle takes anything in hand. The `cycleInProgress` guard
+            // above is what makes this safe: at this instant this worker holds
+            // nothing, so an `uploading` row has no live owner. See
+            // `abandonedStateRecovery.ts` for why it may not move any lower.
+            await reclaimAbandonedUploads();
+
             const queueItems = await this.getDueQueueItems();
             for (const item of queueItems) {
                 await this.processQueueItem(item);

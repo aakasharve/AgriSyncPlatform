@@ -6,7 +6,6 @@ import { getAuthSession } from '../storage/AuthTokenStore';
 import { getDatabase, type PendingAiJobContext, type VoiceClipStatus } from '../storage/DexieDatabase';
 import { IdempotencyKeyFactory } from './IdempotencyKeyFactory';
 import { annotateFieldConfidencesWithBuckets } from '../../domain/ai/contracts/FieldConfidence';
-import { AgriLogResponseSchema } from '../../domain/ai/contracts/AgriLogResponseSchema';
 import { computeProcessingVoiceClipExpiry, purgeExpiredProcessingVoiceClips } from '../voice/VoiceClipRetention';
 import { resolveApiBaseUrl } from '../api/transport';
 import { parseStreamConsumer } from './ParseStreamConsumer';
@@ -28,7 +27,7 @@ import {
 import {
     safeTrim,
     normalizeSuggestedAction,
-    normalizeDriftedParsedLog,
+    normalizeParsedLog,
     resolveFarmIdFromCache,
     base64ToBlob,
     resolveUserIdFromSession,
@@ -89,40 +88,13 @@ export class BackendAiClient implements VoiceParserPort {
                 .map(([field]) => field);
             const suggestedAction = normalizeSuggestedAction(apiResult.suggestedAction);
 
-            // DATA_PRINCIPLE_SPINE 02.6 — strict Zod validation at the
-            // wire boundary. The shallow `isAgriLogResponse` typeof check
-            // accepted any object with the eight expected array keys,
-            // letting hallucinated fields and off-canon enum values
-            // (e.g. `categoryId: "made_up"`) corrupt the trust ledger
-            // silently. The schema below enforces:
-            //   - `.strict()` at the top level (unknown keys rejected)
-            //   - canonical 13-code `categoryId` on activity expenses
-            //   - typed enums for dayOutcome / labour.type / etc.
-            //   - YYYY-MM-DD date-keys and ISO-8601 timestamps
-            // Anything that fails throws synchronously and the caller
-            // surfaces a parse error rather than persisting drift.
-            const parseResult = AgriLogResponseSchema.safeParse(apiResult.parsedLog);
-            // We cast back to the structural `AgriLogResponse` from
-            // log.types.ts because that interface (with its concrete
-            // event-event union shapes) is what the rest of the app
-            // consumes. The schema and the TS interface are kept in
-            // lockstep by the AgriLogResponseSchema header invariant.
-            let parsedLog: AgriLogResponse;
-            if (parseResult.success) {
-                parsedLog = parseResult.data as unknown as AgriLogResponse;
-            } else {
-                // ROBUSTNESS_2026-06-10 (Option A): the server parsed the log fine,
-                // but its legacy-prompt shape fails the strict schema (missing event
-                // ids, scalar confidence, extra _meta keys). Don't discard a usable
-                // parse — log the drift for telemetry and normalize the raw payload so
-                // it renders on the confirm screen (the human review is the integrity
-                // gate). Proper schema/prompt contract alignment tracked as follow-up B.
-                console.warn(
-                    '[voice-parse] AgriLogResponse schema drift — using normalized raw parse instead of discarding.',
-                    parseResult.error?.issues,
-                );
-                parsedLog = normalizeDriftedParsedLog(apiResult.parsedLog) as unknown as AgriLogResponse;
-            }
+            // THE ONE READING of a raw `parsedLog` payload into the strict
+            // `AgriLogResponse` shape the rest of the app consumes — extracted
+            // to `BackendAiClient.helpers.ts` (`normalizeParsedLog`) so the
+            // offline-drafts reviewing surface (`PendingAiResultsReader.ts`)
+            // normalizes a drained job's stored payload through this SAME
+            // function instead of a second, drift-prone copy of this logic.
+            const parsedLog: AgriLogResponse = normalizeParsedLog(apiResult.parsedLog);
             const inferredTranscript = typeof parsedLog?.fullTranscript === 'string'
                 ? parsedLog.fullTranscript
                 : (input.type === 'text' ? input.content : undefined);

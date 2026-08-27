@@ -24,7 +24,14 @@ public sealed class CostEntry : Entity<Guid>
         LocationSnapshot? location,
         DateTime createdAtUtc,
         Provenance provenance,
-        Guid? sourceAiJobId)
+        Guid? sourceAiJobId,
+        MoneyDirection? direction,
+        decimal? quantity,
+        string? unit,
+        decimal? unitPrice,
+        string? paymentMode,
+        string? vendorName,
+        string? clientAttachmentIdsJson)
         : base(id)
     {
         FarmId = farmId;
@@ -41,6 +48,13 @@ public sealed class CostEntry : Entity<Guid>
         ModifiedAtUtc = createdAtUtc;
         Provenance = provenance;
         SourceAiJobId = sourceAiJobId;
+        Direction = direction;
+        Quantity = quantity;
+        Unit = unit;
+        UnitPrice = unitPrice;
+        PaymentMode = paymentMode;
+        VendorName = vendorName;
+        ClientAttachmentIdsJson = clientAttachmentIdsJson;
     }
 
     public FarmId FarmId { get; private set; }
@@ -66,6 +80,53 @@ public sealed class CostEntry : Entity<Guid>
     public Provenance Provenance { get; private set; } = null!;
     public Guid? SourceAiJobId { get; private set; }
 
+    /// <summary>
+    /// Which way the money moved, as the farmer stated it.
+    /// <c>null</c> means NOBODY EVER SAID — every row written before the
+    /// direction field existed, and any producer that omits it. Read it as
+    /// unknown; never as <see cref="MoneyDirection.Expense"/>, even though this
+    /// type is called <c>CostEntry</c> and every such row used to be counted as
+    /// one. That silent equation is precisely what made a farmer's ₹50,000 sale
+    /// read back as ₹50,000 spent.
+    /// </summary>
+    public MoneyDirection? Direction { get; private set; }
+
+    // ── Line detail the client used to hold locally and drop at the outbox ──
+    // All nullable, and null means NOT STATED. Nothing here is used to compute
+    // <see cref="Amount"/>: the total is the farmer's own figure, and a row with
+    // a quantity and a unit price but no stated total is deliberately left
+    // without one rather than multiplied into existence.
+
+    /// <summary>How much of it — 12 (kg), 3 (bags). Null = not stated.</summary>
+    public decimal? Quantity { get; private set; }
+
+    /// <summary>The farmer's own unit word. Null = not stated.</summary>
+    public string? Unit { get; private set; }
+
+    /// <summary>Price per unit as stated. Null = not stated.</summary>
+    public decimal? UnitPrice { get; private set; }
+
+    /// <summary>Cash / UPI / Bank / Credit, as stated. Null = not stated.</summary>
+    public string? PaymentMode { get; private set; }
+
+    /// <summary>Who it was paid to or received from. Null = not stated.</summary>
+    public string? VendorName { get; private set; }
+
+    /// <summary>
+    /// The attachment ids the CLIENT stated at capture time, as a JSON string
+    /// array. Null = the producer made no statement; <c>"[]"</c> = it said
+    /// "none".
+    /// <para>
+    /// This is NOT the authoritative photo linkage — that is
+    /// <c>ssf.attachments.linked_entity_id</c>, which is what the app's
+    /// attachment list actually reads. It is kept because the two can
+    /// legitimately disagree: a receipt the farmer attached on his phone and
+    /// that never finished uploading appears here and not there, and that gap
+    /// is a real, detectable condition rather than something to paper over.
+    /// </para>
+    /// </summary>
+    public string? ClientAttachmentIdsJson { get; private set; }
+
     public static CostEntry Create(
         Guid id,
         FarmId farmId,
@@ -80,7 +141,19 @@ public sealed class CostEntry : Entity<Guid>
         LocationSnapshot? location,
         DateTime createdAtUtc,
         Provenance? provenance = null,
-        Guid? sourceAiJobId = null)
+        Guid? sourceAiJobId = null,
+        // Optional, and OMITTED means the caller made no statement about which
+        // way the money moved — which is the truth for the HTTP endpoint, the
+        // demo seeder and every client shipped before the field existed. Do not
+        // default this to Expense to "keep the old behaviour": the old
+        // behaviour is the defect.
+        MoneyDirection? direction = null,
+        decimal? quantity = null,
+        string? unit = null,
+        decimal? unitPrice = null,
+        string? paymentMode = null,
+        string? vendorName = null,
+        string? clientAttachmentIdsJson = null)
     {
         if (string.IsNullOrWhiteSpace(categoryId))
         {
@@ -118,7 +191,14 @@ public sealed class CostEntry : Entity<Guid>
             location,
             createdAtUtc,
             effectiveProvenance,
-            sourceAiJobId);
+            sourceAiJobId,
+            direction,
+            quantity,
+            Normalize(unit),
+            unitPrice,
+            Normalize(paymentMode),
+            Normalize(vendorName),
+            Normalize(clientAttachmentIdsJson));
 
         entry.Raise(new CostEntryCreatedEvent(
             Guid.NewGuid(),
@@ -129,6 +209,14 @@ public sealed class CostEntry : Entity<Guid>
 
         return entry;
     }
+
+    /// <summary>
+    /// Blank is not a statement. A whitespace-only unit or vendor name is the
+    /// absence of an answer, so it is stored as NULL rather than as an empty
+    /// string that later reads like the farmer typed something.
+    /// </summary>
+    private static string? Normalize(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     public static CostEntry CreateLabourPayout(
         Guid id,
@@ -170,7 +258,17 @@ public sealed class CostEntry : Entity<Guid>
             location: null,
             createdAtUtc,
             effectiveProvenance,
-            sourceAiJobId);
+            sourceAiJobId,
+            // Not a guess and not derived: settling a job card IS paying money
+            // out. The factory's own name is the statement, and there is no
+            // caller of it for which the money moves the other way.
+            direction: MoneyDirection.Expense,
+            quantity: null,
+            unit: null,
+            unitPrice: null,
+            paymentMode: null,
+            vendorName: null,
+            clientAttachmentIdsJson: null);
 
         entry.JobCardId = jobCardId;
 

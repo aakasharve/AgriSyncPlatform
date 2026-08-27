@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { installGlobalErrorHandlers } from './infrastructure/telemetry/ClientErrorReporter';
 import { AdminOpsPreview } from './features/admin/ops/AdminOpsPreview';
+import { LabourPreview } from './features/labour/LabourPreview';
 import { BrowserRouter } from 'react-router-dom';
 import { Capacitor, SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { StatusBar, Style } from '@capacitor/status-bar';
@@ -28,6 +29,7 @@ import { recordConsentGateAcceptance } from './features/consent/gate/consentGate
 // spec: 2026-08-25-prod-cutover-waves (B1) — the pre-login acceptance gets its owner.
 import { rememberConsentGateAcceptanceForLinking } from './features/consent/gate/consentGateLinkReconciler';
 import { useConsentGateLinkReconciliation } from './features/consent/gate/useConsentGateLink';
+import { IS_OVERSIGHT_PREVIEW_ENABLED } from './app/featureFlags';
 
 const hasJoinDeepLink = (): boolean => {
     if (typeof window === 'undefined') return false;
@@ -142,9 +144,49 @@ const AppFrame: React.FC<{
     );
 };
 
-// DEV-ONLY: ?preview=ops-admin bypasses auth entirely — mock data only
-const DEV_PREVIEW = typeof window !== 'undefined'
+// DEV-ONLY: ?preview=ops-admin bypasses auth entirely — mock data only.
+//
+// `import.meta.env.DEV` is load-bearing, not belt-and-braces. Both of these
+// were a URLSearchParams check ALONE, which is a runtime test — it ships in
+// the production bundle and stays reachable. `app.shramsafal.in?preview=labour`
+// rendered a full screen of invented workers (रोकडे / रमेश / सुनीता), invented
+// ₹ balances and invented plot percentages, to anyone, with no login. That is
+// exactly what `P4` forbids, aimed at the public internet.
+//
+// The correct pattern is documented twelve lines below and was already in this
+// release for the oversight preview: gate on DEV so Vite folds the branch to
+// dead code. Vite statically replaces `import.meta.env.DEV` with `false` in a
+// production build, so these constants become unconditionally false and the
+// previews cannot render.
+//
+// NOT done here, deliberately: `React.lazy` would also drop the modules and
+// their mock fixtures from the bundle entirely. That is the larger change the
+// oversight preview made, and this cutover is fenced against drift — the
+// screens are unreachable now, which is the farmer-facing defect. Carried to
+// Wave 2 as the completing fix.
+const DEV_PREVIEW = import.meta.env.DEV
+    && typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('preview') === 'ops-admin';
+
+// DEV-ONLY: ?preview=labour — Labour Management UI (mock data, no auth/backend)
+const LABOUR_PREVIEW = import.meta.env.DEV
+    && typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('preview') === 'labour';
+
+// DEV-ONLY: ?preview=oversight — Owner Oversight Loop, full-app preview
+// (spec: owner-oversight-loop). Unlike the two bypasses above, this one is
+// ALSO gated on `IS_OVERSIGHT_PREVIEW_ENABLED` (`app/featureFlags.ts`, wraps
+// `import.meta.env.DEV`) and loaded via `React.lazy`, so Vite/Rollup folds
+// the whole branch to dead code and drops `OversightAppPreview` (and its
+// seed fixtures) from a production bundle entirely — a query-param check
+// alone would still ship the module. `OversightPreviewLazy` is `null`
+// whenever the flag is off, which in a production build is unconditionally.
+const OversightPreviewLazy = IS_OVERSIGHT_PREVIEW_ENABLED
+    ? React.lazy(() => import('./features/oversight/OversightAppPreview'))
+    : null;
+const OVERSIGHT_PREVIEW = IS_OVERSIGHT_PREVIEW_ENABLED
+    && typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('preview') === 'oversight';
 
 const App: React.FC = () => {
     const [crops, setCrops] = useState<CropProfile[]>([]);
@@ -189,6 +231,14 @@ const App: React.FC = () => {
 
     // Dev preview bypass: rendered before any auth providers mount.
     if (DEV_PREVIEW) return <AdminOpsPreview />;
+    if (LABOUR_PREVIEW) return <LabourPreview />;
+    if (OVERSIGHT_PREVIEW && OversightPreviewLazy) {
+        return (
+            <React.Suspense fallback={null}>
+                <OversightPreviewLazy />
+            </React.Suspense>
+        );
+    }
 
     return (
         <BrowserRouter>

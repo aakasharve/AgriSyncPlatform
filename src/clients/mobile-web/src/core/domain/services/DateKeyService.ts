@@ -172,15 +172,39 @@ export function compareDateKeys(a: string, b: string): -1 | 0 | 1 {
 }
 
 /**
+ * Options this may be given: DATE parts only.
+ *
+ * spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN (twelve-hour-time-display), review B001
+ *
+ * This function took a full `Intl.DateTimeFormatOptions` and passed it straight
+ * to a formatter with no `timeZone` pin, so any caller handing it `hour` got a
+ * device-timezone, device-locale clock — outside the shared 12-hour formatter
+ * and invisible to a text scanner, because the options never appear at this
+ * call site at all.
+ *
+ * Closed at the TYPE level rather than by pinning a zone. `parseDateKey`
+ * deliberately returns LOCAL NOON ("to avoid timezone issues"), so forcing IST
+ * here would shift the rendered DATE on far-western devices — a date change
+ * smuggled in by a time task. Forbidding the time parts fixes the actual defect
+ * and changes no behaviour: all three call sites pass date parts only.
+ *
+ * The structural guard reads this type, so widening it back re-opens the alarm.
+ */
+export type DateOnlyFormatOptions = Omit<
+    Intl.DateTimeFormatOptions,
+    'hour' | 'minute' | 'second' | 'timeStyle' | 'hour12' | 'dayPeriod'
+>;
+
+/**
  * Format a date key for display in a user-friendly format.
  *
  * @param dateKey - Date key in YYYY-MM-DD format
- * @param options - Intl.DateTimeFormat options
+ * @param options - DATE-part options only; see `DateOnlyFormatOptions`
  * @returns Formatted date string (e.g., "6 Feb 2026" or "Thursday, 6 February")
  */
 export function formatDateKeyForDisplay(
     dateKey: string,
-    options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' }
+    options: DateOnlyFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' }
 ): string {
     const date = parseDateKey(dateKey);
     if (isNaN(date.getTime())) return dateKey;

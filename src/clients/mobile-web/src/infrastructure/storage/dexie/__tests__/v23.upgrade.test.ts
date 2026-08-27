@@ -27,8 +27,13 @@
  *      written and read back BOTH by primary key AND via the new
  *      `[status+createdAtUtc]` compound index.
  *
+ *   3. ADDED IN THE main -> feat/dfes-companion MERGE — the v23 store still
+ *      exists, and still round-trips, once main's v24 is applied on top. See
+ *      that block's own header: skipping `applyV23` silently deletes this
+ *      store on any handset that took dfes first, and reports success.
+ *
  * Uses fake-indexeddb (as the v16 / v17 / v22 upgrade tests do) driving the
- * full v1→v23 version chain, so the real Dexie upgrade machinery executes.
+ * full v1→v23→v24 version chain, so the real Dexie upgrade machinery executes.
  */
 
 import 'fake-indexeddb/auto';
@@ -59,6 +64,7 @@ import { applyV20 } from '../versions/v20';
 import { applyV21 } from '../versions/v21';
 import { applyV22 } from '../versions/v22';
 import { applyV23 } from '../versions/v23';
+import { applyV24 } from '../versions/v24';
 
 const DB_NAME = 'AgriLogDB_v23_upgrade_test';
 
@@ -147,6 +153,19 @@ async function openV23(): Promise<Dexie> {
     return db;
 }
 
+/**
+ * The chain the MERGED app actually declares: v1 -> v23 (dfes) -> v24 (main).
+ * Mirrors `DexieDatabase.ts`'s constructor exactly.
+ */
+async function openV24(): Promise<Dexie> {
+    const db = new Dexie(DB_NAME);
+    applyChainToV22(db);
+    applyV23(db);
+    applyV24(db);
+    await db.open();
+    return db;
+}
+
 async function deleteDb(): Promise<void> {
     await Dexie.delete(DB_NAME);
 }
@@ -155,9 +174,24 @@ async function deleteDb(): Promise<void> {
 // Constant guard
 // ============================================================================
 
-describe('dfes v23 — DATABASE_VERSION constant', () => {
-    it('DATABASE_VERSION is 23', () => {
-        expect(DATABASE_VERSION).toBe(23);
+// SUPERSEDED NUMBER, UNCHANGED INTENT.
+//
+// This assertion read `toBe(23)` on `feat/dfes-companion`, where 23 was the
+// top of the chain. It is 24 now and that is CORRECT, not a drift: `main`
+// carries its own §P0.4 version, and `versions/v24.ts`'s header records the
+// reason it took 24 rather than 23 — Dexie runs an upgrade only for versions
+// ABOVE the one a handset has recorded, so a second, different `23` would
+// have compared 23 to 23 and run NOTHING, leaving the transcript strip
+// looking shipped on every phone that took dfes first. 23 is reserved for
+// dfes; the merged app declares BOTH.
+//
+// The constant's job is unchanged: it must equal the top of the version
+// chain `DexieDatabase.ts` declares. A bump is a one-way door for every APK
+// user, so the number is pinned literally and on purpose — anyone changing
+// it has to come here and say why.
+describe('DATABASE_VERSION tracks the top of the merged version chain', () => {
+    it('DATABASE_VERSION is 24 — dfes v23 plus main v24, both declared', () => {
+        expect(DATABASE_VERSION).toBe(24);
     });
 });
 
@@ -298,5 +332,88 @@ describe('dfes v22 → v23 upgrade: offline data survives + new store is usable'
         expect(byIndex?.captureId).toBe('cap-1');
 
         db23.close();
+    });
+});
+
+// ============================================================================
+// v23 → v24: dfes's store must survive main's version
+// ============================================================================
+//
+// ADDED IN THE main -> feat/dfes-companion MERGE, and this is the assertion
+// the merge actually needed. `versions/v24.ts`'s own header states the hazard
+// in the imperative: "if these two branches merge, the merger must keep DFES's
+// v23 store list intact". `DexieDatabase.ts`'s constructor states the measured
+// consequence of getting it wrong: Dexie's schema is the UNION of the versions
+// the running build DECLARES, and `deleteRemovedTables` drops any object store
+// that union does not contain — so a build that skipped `applyV23` upgraded a
+// dfes handset to verno 24 and SILENTLY DELETED `pendingInterpretations` and
+// every row in it, reporting the upgrade a success and raising no error.
+//
+// A farmer's un-interpreted voice captures are the rows at stake: things he
+// said that could not be structured at record time and have no other home.
+// Nothing above catches this — the v23 tests all pass on a chain that stops at
+// 23. Only driving the chain to 24, exactly as the app does, does.
+describe('v23 → v24: the merged chain keeps dfes\'s pendingInterpretations store', () => {
+    beforeEach(async () => {
+        await deleteDb();
+    });
+
+    afterEach(async () => {
+        await deleteDb();
+    });
+
+    it('a capture written at v23 is still there, field-intact, after the upgrade to v24', async () => {
+        const db23 = await openV23();
+        const capture: MinimalPendingInterpretationRow = {
+            captureId: 'cap-survives-24',
+            farmId: 'farm-1',
+            status: 'pending',
+            createdAtUtc: 1_752_400_000_000,
+            transcript: 'आज ठिबक चालू केलं',
+        };
+        await db23.table('pendingInterpretations').add(capture);
+        db23.close();
+
+        const db24 = await openV24();
+
+        const recovered = await db24
+            .table('pendingInterpretations')
+            .get('cap-survives-24') as MinimalPendingInterpretationRow | undefined;
+        expect(recovered).toBeDefined();
+        expect(recovered?.farmId).toBe('farm-1');
+        expect(recovered?.status).toBe('pending');
+        expect(recovered?.transcript).toBe('आज ठिबक चालू केलं');
+
+        // The compound index survives too — a store that exists but lost its
+        // index is a different, quieter version of the same data loss.
+        const byIndex = await db24
+            .table('pendingInterpretations')
+            .where('[status+createdAtUtc]')
+            .equals(['pending', 1_752_400_000_000])
+            .first() as MinimalPendingInterpretationRow | undefined;
+        expect(byIndex?.captureId).toBe('cap-survives-24');
+
+        expect(db24.verno).toBe(24);
+        db24.close();
+    });
+
+    it('the store is still writable at v24 — a fresh capture round-trips', async () => {
+        const db23 = await openV23();
+        db23.close();
+
+        const db24 = await openV24();
+        await db24.table('pendingInterpretations').add({
+            captureId: 'cap-new-at-24',
+            farmId: 'farm-2',
+            status: 'pending',
+            createdAtUtc: 1_752_500_000_000,
+            transcript: null,
+        } satisfies MinimalPendingInterpretationRow);
+
+        const recovered = await db24
+            .table('pendingInterpretations')
+            .get('cap-new-at-24') as MinimalPendingInterpretationRow | undefined;
+        expect(recovered?.farmId).toBe('farm-2');
+        db24.close();
     });
 });

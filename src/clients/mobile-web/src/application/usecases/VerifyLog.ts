@@ -1,3 +1,44 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * spec: owner-oversight-loop
+ *
+ * ⚠ NOTHING IN THE SHIPPING UI CALLS `verifyLog` / `batchVerifyLogs` ANY
+ * MORE, AND NOTHING MAY UNTIL BOTH OF THE FOLLOWING ARE FIXED.
+ *
+ * 1. THE SERVER CANNOT ACCEPT WHAT THIS QUEUES. Both functions enqueue
+ *    `SyncMutationName.VerifyLogV2` (`verify_log_v2`). Its handler is not
+ *    wired: `PushSyncBatchHandler.cs` returns a typed
+ *    `MUTATION_TYPE_UNIMPLEMENTED`, `infrastructure/sync/RejectionPolicy.ts`
+ *    lists that code as PERMANENT, and the row therefore lands in
+ *    `REJECTED_USER_REVIEW` — durable, never auto-retried, counted by
+ *    `stuckMutations.needsFarmerAction` as something the farmer must fix.
+ *
+ * 2. `success: true` HERE MEANS "ENQUEUED", NOT "ACCEPTED". Both functions
+ *    return success the moment `mutationQueue.enqueue` resolves. A caller
+ *    that renders a confirmation off this result is claiming a server
+ *    outcome it has not been told. That is what spec §P-D ("No optimistic
+ *    success") forbids, and it is why `app/hooks/useTrustLayer.ts` no
+ *    longer writes anything into history before reading the durable store
+ *    back.
+ *
+ * THE OBVIOUS "FIX" IS NOT A FIX. `application/usecases/sync/
+ * VerifyLogCommand.ts` queues the working v1 `verify_log`, and it is
+ * tempting to repoint these two functions at it. Do not, without a founder
+ * decision: `VerifyLogHandler.cs` calls
+ * `OnLogVerifiedAutoVerifyJobCard.HandleAsync(...)` on every successful
+ * verification, and a job card moves `Completed -> VerifiedForPayout ->
+ * PaidOut`. Making approval reach the server therefore switches on a money
+ * path for pilot farmers. (`VerificationStateMachine.cs` also has no
+ * `Draft -> Verified` transition — only `Draft -> Confirmed` then
+ * `Confirmed -> Verified` — so a single-hop approve would fail for every
+ * Draft log whichever mutation carried it.)
+ *
+ * `getLogsNeedingVerification` below is a pure read and is unaffected by
+ * any of the above.
+ */
+
 import { DailyLog, LogVerificationStatus, FarmerProfile } from '../../types';
 import { LogsRepository } from '../ports';
 import { AuditPort } from '../ports/AuditPort';

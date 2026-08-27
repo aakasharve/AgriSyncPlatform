@@ -5,7 +5,13 @@
  */
 import React from 'react';
 import { AdminOpsHealthDto } from '../../../infrastructure/api/AgriSyncClient';
-import { AdminOpsPage } from './AdminOpsPage';
+// NOTE: `AdminOpsPage` is deliberately NOT imported. This preview renders that
+// page's UI inline with a mock injected (see the comment at the render site
+// below); the import was left behind when that approach changed and had been
+// an unused-variable warning ever since. Removed only because the pre-commit
+// hook enforces zero warnings on STAGED files and this file is staged for the
+// 12-hour time change — not a silent widening of that task's scope.
+import { formatDisplayTime } from '../../../shared/utils/displayTime';
 
 const MOCK: AdminOpsHealthDto = {
     voiceInvocations24h: 247,
@@ -153,7 +159,7 @@ const MockAdminOpsContent: React.FC = () => {
                                     )}
                                     {e.latencyMs && <span className="text-[10px] text-stone-400">{e.latencyMs}ms</span>}
                                     <span className="text-[10px] text-stone-300">
-                                        {new Date(e.occurredAtUtc).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                                        {formatDisplayTime(e.occurredAtUtc)}
                                     </span>
                                 </div>
                             </div>

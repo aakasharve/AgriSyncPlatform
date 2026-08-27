@@ -41,6 +41,8 @@ export const ServiceProofPage = React.lazy(() => import('../../features/reports/
 export const JobCardsPage = React.lazy(() => import('../../features/work/pages/JobCardsPage'));
 export const JobCardDetailPage = React.lazy(() => import('../../features/work/pages/JobCardDetailPage'));
 export const WorkerProfilePage = React.lazy(() => import('../../features/work/pages/WorkerProfilePage'));
+// Labour Management — one route; sub-navigation is local to the feature.
+export const LabourFeaturePage = React.lazy(() => import('../../features/labour/components/LabourFeature'));
 // Sub-plan 04 Task 5 — offline conflict resolution.
 export const OfflineConflictPage = React.lazy(() => import('../../features/sync/conflict/OfflineConflictPage'));
 // spec: data-principle-spine-2026-05-05/06.4 — privacy/consent settings screen.
@@ -50,6 +52,9 @@ export const ErasureRequestScreen = React.lazy(() => import('../../features/data
 export const ExportRequestScreen = React.lazy(() => import('../../features/dataRights/ExportRequestScreen'));
 // spec: data-principle-spine-2026-05-05/10.4 — admin PII review queue.
 export const PiiReviewQueuePage = React.lazy(() => import('../../features/admin/piiReview/PiiReviewQueuePage'));
+// spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — offline
+// voice-note drafts review surface.
+export const AiDraftsPage = React.lazy(() => import('../../pages/AiDraftsPage'));
 
 export const RouteLoader: React.FC = () => (
     React.createElement('div', {

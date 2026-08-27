@@ -37,7 +37,28 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
     const { plotLookup, receivedAtUtc } = await reconcileProfileAndCrops(payload);
 
     const db = getDatabase();
-    const pendingLogIds = await readPendingLogIds(db);
+
+    // P0.5 — FAIL CLOSED ON AN UNREADABLE MUTATION QUEUE.
+    //
+    // `readPendingLogIds` now throws rather than answering "nothing is pending"
+    // when it cannot read the queue. Without the guard's answer there is no safe
+    // way to decide which logs a pull may overwrite, so the log reconciliation
+    // is SKIPPED for this cycle. Everything else — reference data, farms, plots,
+    // finance — carries no unsent local intent and still lands, so a farmer does
+    // not lose a whole sync over it. The next cycle retries, and the honesty
+    // chip continues to report the unsent work truthfully.
+    let pendingLogIds: Set<string> | undefined;
+    try {
+        pendingLogIds = await readPendingLogIds(db);
+    } catch (error) {
+        console.warn(
+            JSON.stringify({
+                component: 'SyncPullReconciler',
+                action: 'skip_log_reconciliation_guard_unavailable',
+                reason: error instanceof Error ? error.message : String(error),
+            }));
+    }
+
     const attachmentsCount = (payload.attachments ?? []).length;
 
     let importedLogs = 0;
@@ -50,7 +71,9 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
         db.farms, db.plots, db.cropCycles, db.costEntries, db.financeCorrections,
         db.dayLedgers, db.plannedTasks, db.attentionCards,
     ], async () => {
-        importedLogs = await reconcileLogs(db, payload, plotLookup, pendingLogIds);
+        if (pendingLogIds) {
+            importedLogs = await reconcileLogs(db, payload, plotLookup, pendingLogIds);
+        }
         await reconcileAttachments(db, payload, receivedAtUtc);
         referenceDataUpdated = await reconcileReferenceData(db, payload, receivedAtUtc);
         const ledgerSummary = await reconcileDayLedgersAndPlannedTasks(db, payload, receivedAtUtc);

@@ -7,6 +7,7 @@ import React from 'react';
 import { DayWorkSummary } from '../../../types';
 import { formatCurrency } from '../../../shared/utils/currency';
 import { Users, Droplets, Tractor, Package, CheckSquare, FileText, User, ShieldCheck, Clock, SprayCan, Leaf } from 'lucide-react';
+import { formatDisplayTime } from '../../../shared/utils/displayTime';
 
 interface DailyWorkSummaryViewProps {
     summary: DayWorkSummary;
@@ -75,7 +76,7 @@ const DailyWorkSummaryView: React.FC<DailyWorkSummaryViewProps> = ({ summary }) 
                     {!summary.labour.isEmpty && (
                         <div className="flex items-center gap-1.5 bg-orange-100 text-orange-800 px-3 py-1.5 rounded-lg border border-orange-200">
                             <Users size={14} strokeWidth={2.5} />
-                            <span className="text-xs font-bold">{summary.labour.maleCount + summary.labour.femaleCount} Workers</span>
+                            <span className="text-xs font-bold">{summary.labour.headcount} Workers</span>
                         </div>
                     )}
                     {!summary.inputs.isEmpty && (
@@ -161,9 +162,15 @@ const DailyWorkSummaryView: React.FC<DailyWorkSummaryViewProps> = ({ summary }) 
                                     <span className="font-mono text-xs">{formatCurrency(summary.labour.femaleCount * summary.labour.femaleRate)}</span>
                                 </div>
                             )}
-                            <div className="text-xs text-slate-500 mt-1">
-                                Hours worked: {summary.labour.hoursWorked}h
-                            </div>
+                            {/*
+                              * Labour V1 Task 8.4 — the "Hours worked: Nh" line was
+                              * DELETED. It rendered `settings.labour.defaultHours || 8`
+                              * — a constant with no settings UI and no persistence —
+                              * as though it were a measurement, so every farmer saw the
+                              * same 8h whatever they actually did (doctrine P4).
+                              * Nothing replaces it until a real stated duration
+                              * (LabourEvent.durationHours, Task 7) is available to show.
+                              */}
                         </div>
                     </div>
                 )}
@@ -291,7 +298,7 @@ const DailyWorkSummaryView: React.FC<DailyWorkSummaryViewProps> = ({ summary }) 
                         {summary.loggedAt && (
                             <div className="flex items-center gap-1.5">
                                 <Clock size={12} className="text-slate-400" />
-                                <span>{new Date(summary.loggedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                                <span>{formatDisplayTime(summary.loggedAt)}</span>
                             </div>
                         )}
                     </div>

@@ -1,6 +1,5 @@
 import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
-import { idGenerator } from '../../../core/domain/services/IdGenerator';
 
 export interface SetPriceConfigPayload {
      configId: string;
@@ -12,8 +11,9 @@ export interface SetPriceConfigPayload {
 }
 
 export class SetPriceConfigCommand {
+     /** P0.6 — stable key on the config's own id. See `AddCostEntryCommand`. */
      static async enqueue(payload: SetPriceConfigPayload): Promise<string> {
-          const clientRequestId = idGenerator.generate();
+          const clientRequestId = `${SyncMutationName.SetPriceConfig}:${payload.configId}`;
           return mutationQueue.enqueue(SyncMutationName.SetPriceConfig, payload, {
                clientRequestId,
                clientCommandId: clientRequestId

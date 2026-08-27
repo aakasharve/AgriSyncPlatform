@@ -246,3 +246,89 @@ textarea:focus-visible {
 .animate-slide-up {
     animation: slide-up 400ms cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+/*
+ * तपासणी review-sheet confirm-then-collapse animation (spec:
+ * 2026-07-13-labour-attendance-approval-design, Task 3.2). Purely visual —
+ * nothing is SENT during this; it plays before the 3s undo window even
+ * starts. ReviewSheet.tsx drives it with a single `confirming` flag per
+ * card so the fill/checkmark keyframes (auto-play on mount) and the
+ * shell's delayed collapse transition stay in lockstep.
+ */
+@keyframes review-confirm-fill {
+    from {
+        opacity: 0;
+        transform: scale(0.94);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.review-card-overlay {
+    animation: review-confirm-fill 160ms ease-out both;
+}
+
+@keyframes review-checkmark-draw {
+    from {
+        stroke-dashoffset: 1;
+    }
+
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+.review-checkmark-path {
+    /* SVG2 `pathLength={1}` on the element normalises the path to length 1,
+       so the draw-in animation never needs the real geometric length. */
+    stroke-dasharray: 1;
+    animation: review-checkmark-draw 200ms ease-out 60ms both;
+}
+
+.review-card-shell {
+    /* Oversized on purpose — this only CAPS height, so a max-height
+       transition plays the same collapse regardless of the real card
+       height (the standard CSS max-height collapse technique). */
+    max-height: 2000px;
+    opacity: 1;
+    overflow: hidden;
+    transition: max-height 220ms ease-in-out 160ms, opacity 220ms ease-in-out 160ms;
+}
+
+.review-card-shell.is-collapsing {
+    max-height: 0px;
+    opacity: 0;
+}
+
+@keyframes review-undo-shrink {
+    from {
+        transform: scaleX(1);
+    }
+
+    to {
+        transform: scaleX(0);
+    }
+}
+
+.review-undo-progress {
+    transform-origin: left;
+    animation: review-undo-shrink 3000ms linear forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .review-card-overlay,
+    .review-checkmark-path {
+        animation: none !important;
+    }
+
+    .review-card-shell {
+        transition: none !important;
+    }
+
+    .review-undo-progress {
+        animation: none !important;
+    }
+}

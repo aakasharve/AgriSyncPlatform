@@ -33,6 +33,9 @@ public sealed class PurveshDemoSeeder
     // Trialing subscription row in accounts.subscriptions.
     private const string SeedVersion = "purvesh-demo-v2";
     private const string PurveshFarmName = "पुरुषोत्तमशेत, खार्डी";
+    // UserSeeds key of the farm owner — the one seat that is the PrimaryOwner
+    // on both public.memberships and ssf.farm_memberships.
+    private const string PurveshUserKey = "purvesh";
 
     // Deterministic OwnerAccountId for Purvesh's farm. v2 (2026-05-13):
     // seeder now creates the matching accounts.owner_accounts row itself
@@ -465,6 +468,46 @@ public sealed class PurveshDemoSeeder
         new("farm-overview", "farm-overview.jpg", "Farm", null, null, "shankar", 210_510)
     ];
 
+    // ── Labour V1 Task 10 (spec: 2026-07-13-labour-attendance-approval-design) ──
+    // The SINGLE SOURCE OF TRUTH for which ssf.field_operators rows this seeder
+    // owns. It is the teardown's identification set: ClearPurveshDemoAsync mints
+    // ids from CreateDeterministicGuid($"{SeedVersion}:field-operator:{key}")
+    // and deletes ONLY those, on the demo farm only.
+    //
+    // DELIBERATELY EMPTY (founder-gated, 2026-08-11). The seeder creates no
+    // field operators, so the teardown can only ever throw-or-no-op on this
+    // table: with an empty set there is no id it will ever delete, which is
+    // zero deletion risk BY CONSTRUCTION on the founder's only real farm.
+    // Seeding demo identities is not ours to decide — a FieldOperator is a work
+    // subject rather than a login, but the standing directive that the demo seed
+    // contains only Purvesh and no other named people is close enough that it is
+    // the founder's call. Worse, these rows carry NO seed-marker column, so once
+    // the Task 11+ UI lists operators they would be indistinguishable from real
+    // workers.
+    //
+    // If the founder later approves demo operators, add the key here AND a
+    // creation side that mints the id from the SAME expression above — so
+    // identification stays correct by construction, never by inference.
+    private static readonly FieldOperatorSeed[] FieldOperatorSeeds = [];
+
+    // Seed keys for ssf.field_operator_work_rows. EMPTY for a second, structural
+    // reason on top of the one above: a work row requires a LabourAssignment
+    // (FK, ON DELETE RESTRICT), and this seeder creates no LabourAssignments —
+    // its daily logs are written directly, never through the create_daily_log
+    // handler that stages canonical labour. So the seeder owns ZERO work rows,
+    // and every work row on the demo farm is real attribution of a real person's
+    // work: the teardown throws on any of them and deletes nothing.
+    private static readonly string[] FieldOperatorWorkRowSeedKeys = [];
+
+    /// <summary>
+    /// Thrown by <see cref="ClearPurveshDemoAsync"/> when the demo farm holds
+    /// field-operator identity data this seeder did not create. Public so tests
+    /// can assert the guard fired rather than matching on prose.
+    /// </summary>
+    public const string NonSeedFieldOperatorDataMessage =
+        "PurveshDemoSeeder refuses to clear the demo farm: it holds field-operator "
+        + "identity data that this seeder did not create.";
+
     private readonly ShramSafalDbContext _ssfContext;
     private readonly UserDbContext _userContext;
     private readonly AccountsDbContext _accountsContext;
@@ -504,6 +547,17 @@ public sealed class PurveshDemoSeeder
         await _accountsContext.SaveChangesAsync(cancellationToken);
 
         var farm = await EnsureFarmAsync(purvesh.Id, nowUtc, cancellationToken);
+        // ssf.farm_memberships MUST be seeded alongside the farm. The User
+        // context's public.memberships rows created by EnsureUserAsync are a
+        // DIFFERENT thing (app-level role per user); every farm-scoped read
+        // path — /user/auth/me/context (FarmMembershipSnapshotReader), the
+        // labour wage book (GetLabourDataHandler step 1), authorization
+        // (ShramSafalAuthorizationEnforcer) — resolves the farm roster from
+        // ssf.farm_memberships. Without these rows me/context answers
+        // "farms": [] + alert no_farms_yet, the client drops its persisted
+        // farm id, and every real screen renders zeros.
+        var farmMembershipsAdded = await EnsurePurveshFarmMembershipsAsync(
+            farm.Id, usersByKey, nowUtc, cancellationToken);
         var plotContexts = await EnsurePlotsAndCropCyclesAsync(farm.Id, nowUtc, cancellationToken);
         var phase3Stats = await EnsureScheduleTemplatesAndPlannedActivitiesAsync(plotContexts, purvesh.Id, nowUtc, cancellationToken);
         var contextByPlotKey = plotContexts.ToDictionary(c => c.Seed.Key, c => c, StringComparer.Ordinal);
@@ -538,6 +592,7 @@ public sealed class PurveshDemoSeeder
         var totals = new PhaseTotals(
             UserCount: usersByKey.Count,
             FarmCount: 1,
+            FarmMembershipsAdded: farmMembershipsAdded,
             PlotCount: plotContexts.Count,
             CropCycleCount: plotContexts.Count,
             ScheduleTemplateCount: TemplateSeeds.Length,
@@ -559,7 +614,8 @@ public sealed class PurveshDemoSeeder
 
         return $"Refreshed {SeedVersion}. {refreshResult} | " +
                $"Phase 2+3+4+5+6 seeded. " +
-               $"users={totals.UserCount}, farms={totals.FarmCount}, plots={totals.PlotCount}, " +
+               $"users={totals.UserCount}, farms={totals.FarmCount}, " +
+               $"farmMembershipsAdded={totals.FarmMembershipsAdded}, plots={totals.PlotCount}, " +
                $"cropCycles={totals.CropCycleCount}, templates={totals.ScheduleTemplateCount}, " +
                $"templateActivitiesAdded={totals.TemplateActivitiesAdded}, plannedActivitiesAdded={totals.PlannedActivitiesAdded}, " +
                $"dailyLogsAdded={totals.DailyLogsAdded}, logTasksAdded={totals.LogTasksAdded}, " +
@@ -606,6 +662,88 @@ public sealed class PurveshDemoSeeder
         var deletedTemplateActivityCount = await _ssfContext.TemplateActivities
             .Where(a => templateIds.Contains(a.ScheduleTemplateId))
             .CountAsync(cancellationToken);
+
+        // ── Labour V1 Task 10.4 (spec: 2026-07-13-labour-attendance-approval-design) ──
+        // Field-operator attribution teardown. MUST run BEFORE the daily-log
+        // teardown immediately below, and MUST NOT be nested inside its
+        // `if (dailyLogs.Count > 0)` block — nesting it there would silently
+        // skip this cleanup whenever there are zero seeded daily logs.
+        //
+        // WHY BEFORE: ssf.labour_assignments.daily_log_id is ON DELETE CASCADE,
+        // so removing seeded daily logs removes their labour_assignments too;
+        // ssf.field_operator_work_rows.labour_assignment_id is ON DELETE
+        // RESTRICT, so a surviving work row turns the re-seed into an opaque
+        // 23503. The farm delete at the end of this method would fail the same
+        // way on field_operators.originating_farm_id.
+        //
+        // SCOPED, NEVER BLANKET. This method runs against the founder's only
+        // real farm whenever CLEAR_PURVESH_DEMO=true (Program.cs:1025-1046).
+        // Rows are identified by DETERMINISTIC ID, minted from the same
+        // expression the creation side uses, so identification is correct by
+        // construction rather than by inference. Anything on this farm the
+        // seeder did not create is a REAL worker's identity, or a REAL record
+        // of whose work it was: we THROW and delete nothing. Constraint 13 —
+        // destroying a farm must FAIL rather than destroy identities. The
+        // RESTRICT guard is the protection, not the defect.
+        //
+        // Work rows are matched on their OWN ids, never on their parent
+        // FieldOperatorId: a real attribution attached to a SEEDED demo
+        // operator is still real work, and deleting it because its parent was
+        // seeded is exactly the mistake this scoping exists to prevent.
+        var seededFieldOperatorIds = FieldOperatorSeeds
+            .Select(seed => CreateDeterministicGuid($"{SeedVersion}:field-operator:{seed.Key}"))
+            .ToHashSet();
+        var seededFieldOperatorWorkRowIds = FieldOperatorWorkRowSeedKeys
+            .Select(key => CreateDeterministicGuid($"{SeedVersion}:field-operator-work-row:{key}"))
+            .ToHashSet();
+
+        var fieldOperatorWorkRows = await _ssfContext.FieldOperatorWorkRows
+            .Where(r => r.FarmId == farmId)
+            .ToListAsync(cancellationToken);
+        var nonSeedWorkRows = fieldOperatorWorkRows
+            .Count(r => !seededFieldOperatorWorkRowIds.Contains(r.Id));
+        if (nonSeedWorkRows > 0)
+        {
+            throw new InvalidOperationException(
+                $"{NonSeedFieldOperatorDataMessage} {nonSeedWorkRows} ssf.field_operator_work_rows "
+                + $"row(s) on farm {farmId.Value} were not created by seed version '{SeedVersion}'. "
+                + "These record which real person did which real work; the seeder will never delete "
+                + "them. Remove them deliberately, or clear a different database.");
+        }
+
+        var fieldOperators = await _ssfContext.FieldOperators
+            .Where(o => o.OriginatingFarmId == farmId)
+            .ToListAsync(cancellationToken);
+        var nonSeedFieldOperators = fieldOperators
+            .Count(o => !seededFieldOperatorIds.Contains(o.Id));
+        if (nonSeedFieldOperators > 0)
+        {
+            throw new InvalidOperationException(
+                $"{NonSeedFieldOperatorDataMessage} {nonSeedFieldOperators} ssf.field_operators "
+                + $"row(s) on farm {farmId.Value} were not created by seed version '{SeedVersion}'. "
+                + "These are real people's work identities; the seeder will never delete them. "
+                + "Remove them deliberately, or clear a different database.");
+        }
+
+        var deletedFieldOperatorWorkRowsCount = fieldOperatorWorkRows.Count;
+        if (fieldOperatorWorkRows.Count > 0)
+        {
+            _ssfContext.FieldOperatorWorkRows.RemoveRange(fieldOperatorWorkRows);
+        }
+
+        var deletedFieldOperatorsCount = fieldOperators.Count;
+        if (fieldOperators.Count > 0)
+        {
+            _ssfContext.FieldOperators.RemoveRange(fieldOperators);
+        }
+
+        // Own flush so the ordering above is explicit. The rest of this
+        // teardown flushes once further down, where EF's ordering is not
+        // guaranteed to satisfy the RESTRICT constraints.
+        if (deletedFieldOperatorWorkRowsCount > 0 || deletedFieldOperatorsCount > 0)
+        {
+            await _ssfContext.SaveChangesAsync(cancellationToken);
+        }
 
         var dailyLogs = await _ssfContext.DailyLogs
             .Where(l =>
@@ -720,6 +858,21 @@ public sealed class PurveshDemoSeeder
         if (invitations.Count > 0)
         {
             _ssfContext.FarmInvitations.RemoveRange(invitations);
+        }
+
+        // farm_memberships BEFORE the farm. There is no DB-level FK from
+        // ssf.farm_memberships.farm_id to ssf.farms (see migration
+        // 20260418023102_AddFarmMemberships — the table has only a PK), so
+        // nothing cascades: without this the demo farm's roster would survive
+        // as orphan rows pointing at a deleted farm and deleted users, and a
+        // re-seed would then collide on the deterministic membership PK.
+        var farmMemberships = await _ssfContext.FarmMemberships
+            .Where(m => m.FarmId == farmId)
+            .ToListAsync(cancellationToken);
+        var deletedFarmMembershipsCount = farmMemberships.Count;
+        if (farmMemberships.Count > 0)
+        {
+            _ssfContext.FarmMemberships.RemoveRange(farmMemberships);
         }
 
         var farm = await _ssfContext.Farms.FirstOrDefaultAsync(f => f.Id == farmId, cancellationToken);
@@ -842,11 +995,14 @@ public sealed class PurveshDemoSeeder
                $"plannedActivities={deletedPlannedCount}, dailyLogs={deletedDailyLogsCount}, dayLedgers={deletedDayLedgersCount}, " +
                $"costEntries={deletedCostEntriesCount}, corrections={deletedCorrectionsCount}, attachments={deletedAttachmentsCount}, " +
                $"priceConfigs={deletedPriceConfigsCount}, memberships={deletedMembershipCount}, " +
+               $"farmMemberships={deletedFarmMembershipsCount}, " +
                $"farmInvitations={deletedFarmInvitationsCount}, farmJoinTokens={deletedFarmJoinTokensCount}, " +
                $"ownerAccounts={deletedOwnerAccountCount}, ownerMemberships={deletedOwnerMembershipsCount}, " +
                $"subscriptions={deletedSubscriptionsCount}, referralCodes={deletedReferralCodesCount}, " +
                $"referralRelationships={deletedRelationshipsCount}, growthEvents={deletedGrowthEventsCount}, " +
-               $"benefitLedgerEntries={deletedBenefitEntriesCount}.";
+               $"benefitLedgerEntries={deletedBenefitEntriesCount}, " +
+               $"fieldOperators={deletedFieldOperatorsCount}, " +
+               $"fieldOperatorWorkRows={deletedFieldOperatorWorkRowsCount}.";
     }
 
     private async Task<User.Domain.Identity.User> EnsureUserAsync(
@@ -936,6 +1092,87 @@ public sealed class PurveshDemoSeeder
         farm.AttachToOwnerAccount(PurveshOwnerAccountId, nowUtc);
         _ssfContext.Farms.Add(farm);
         return farm;
+    }
+
+    /// <summary>
+    /// Seeds the <c>ssf.farm_memberships</c> roster for the demo farm — the
+    /// row set the seeder never created (0 rows in ssf while public.memberships
+    /// held 5), which is what made every real screen render zeros:
+    /// <c>/user/auth/me/context</c> reads memberships only, answered
+    /// <c>"farms": []</c> + alert <c>no_farms_yet</c>, and the client then
+    /// cleared its persisted farm id so no farm-scoped endpoint was ever called.
+    ///
+    /// <para>
+    /// Roster: Purvesh as <see cref="SharedAppRole.PrimaryOwner"/> via
+    /// <see cref="JoinedVia.PrimaryOwnerBootstrap"/> (mirrors what
+    /// <c>FirstFarmBootstrapEndpoints</c> writes for a real first farm), and the
+    /// three worker users via <see cref="JoinedVia.OwnerManualAdd"/> — the demo
+    /// farm's roster was assembled by the owner, not through the QR/OTP
+    /// invitation flow, so <see cref="FarmMembership.CreateFromInvitation"/>
+    /// (which yields a Pending* status) would misrepresent provenance AND leave
+    /// the rows non-Active, i.e. still invisible to the wage book. Roles come
+    /// from the SAME <see cref="UserSeeds"/> table that drives
+    /// <c>public.memberships</c> (via <see cref="ResolveSharedRole"/>), so the
+    /// two contexts can never drift apart. All rows are
+    /// <see cref="MembershipStatus.Active"/> — the status
+    /// <c>GetLabourDataHandler</c> filters on.
+    /// </para>
+    /// <para>
+    /// <c>owner_account_id</c> is NOT set here: it is a shadow property
+    /// populated centrally in <c>ShramSafalDbContext.SaveChangesAsync</c> from
+    /// the membership's farm, which resolves to
+    /// <see cref="PurveshOwnerAccountId"/> (…c2) for the tracked demo farm.
+    /// </para>
+    /// <para>
+    /// Idempotent on two axes with a single round trip: the deterministic
+    /// membership id (PK reuse) and the partial unique index
+    /// <c>ix_farm_memberships_farm_user_nonterminal</c> on
+    /// <c>(farm_id, user_id) WHERE status NOT IN (5, 6)</c> — the latter also
+    /// covers a membership created outside the seeder (bootstrap endpoint /
+    /// ClaimJoin) with a random id.
+    /// </para>
+    /// </summary>
+    private async Task<int> EnsurePurveshFarmMembershipsAsync(
+        FarmId farmId,
+        IReadOnlyDictionary<string, User.Domain.Identity.User> usersByKey,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var existing = await _ssfContext.FarmMemberships
+            .Where(m => m.FarmId == farmId)
+            .ToListAsync(cancellationToken);
+
+        var added = 0;
+
+        foreach (var seed in UserSeeds)
+        {
+            if (!usersByKey.TryGetValue(seed.Key, out var user))
+            {
+                continue;
+            }
+
+            var membershipId = CreateDeterministicGuid($"{SeedVersion}:farmMembership:{seed.Key}");
+            if (existing.Any(m => m.Id == membershipId || (m.UserId == user.Id && !m.IsTerminal)))
+            {
+                continue;
+            }
+
+            var membership = FarmMembership.Create(
+                membershipId,
+                farmId,
+                user.Id,
+                ResolveSharedRole(seed.Key),
+                nowUtc,
+                joinedVia: seed.Key == PurveshUserKey
+                    ? JoinedVia.PrimaryOwnerBootstrap
+                    : JoinedVia.OwnerManualAdd);
+
+            _ssfContext.FarmMemberships.Add(membership);
+            existing.Add(membership);
+            added++;
+        }
+
+        return added;
     }
 
     private async Task<List<PlotCycleContext>> EnsurePlotsAndCropCyclesAsync(
@@ -1435,7 +1672,16 @@ public sealed class PurveshDemoSeeder
                 entryDate,
                 usersByKey[costSeed.CreatedByUserKey].Id,
                 null,
-                createdAtUtc);
+                createdAtUtc,
+                // Stated, not assumed. Every row in `costSeeds` is authored
+                // here as a purchase or a payout — fertilizer, pesticide,
+                // labour — so this seeder is the thing that KNOWS, and saying
+                // so is a statement rather than a guess about someone else's
+                // record. Without it the demo's cost entries read back as
+                // direction-unknown and fall out of the expense total, which
+                // would make a correct app look broken on the one dataset the
+                // founder demonstrates with.
+                direction: MoneyDirection.Expense);
 
             _ssfContext.CostEntries.Add(entry);
             costById[costId] = entry;
@@ -2405,6 +2651,13 @@ public sealed class PurveshDemoSeeder
 
     private sealed record PriceConfigSeed(string ItemName, decimal UnitPrice);
 
+    /// <summary>
+    /// Labour V1 Task 10. <paramref name="Key"/> is the stable seed key the
+    /// deterministic id is minted from — never change it for an existing
+    /// operator, or the teardown stops recognising rows it created.
+    /// </summary>
+    private sealed record FieldOperatorSeed(string Key, string DisplayName, string? FullName);
+
     private sealed record AttachmentSeed(
         string SeedKey,
         string FileName,
@@ -2442,6 +2695,7 @@ public sealed class PurveshDemoSeeder
     private sealed record PhaseTotals(
         int UserCount,
         int FarmCount,
+        int FarmMembershipsAdded,
         int PlotCount,
         int CropCycleCount,
         int ScheduleTemplateCount,

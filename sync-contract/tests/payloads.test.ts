@@ -236,7 +236,7 @@ describe('VerifyLogPayload', () => {
             verificationEventId: VALID_GUID_A,
             dailyLogId: VALID_GUID_B,
             status: 'Verified',
-            targetStatus: 'Verified',
+            reason: 'Checked in the field',
         });
         expect(r.success).toBe(true);
     });

@@ -1,12 +1,19 @@
 using ShramSafal.Application.Contracts.Sync.Payloads;
 using ShramSafal.Domain.Location;
+using ShramSafal.Domain.Logs;
 
 namespace ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 
 public sealed record CreateDailyLogCommand(
     Guid FarmId,
-    Guid PlotId,
-    Guid CropCycleId,
+    // LABOUR_PHASE2 P2.2 — nullable IN PLACE rather than appended, because a
+    // `MultiPlot` or `Farm` log genuinely has neither. Widening a positional
+    // parameter from Guid to Guid? is source-compatible (every existing caller
+    // still passes a Guid, which converts implicitly), so no call site moves.
+    // NULL here means "the farmer named no single plot" — it is never a stand-in
+    // for one, and nothing downstream may substitute Guid.Empty for it (P4).
+    Guid? PlotId,
+    Guid? CropCycleId,
     Guid RequestedByUserId,
     Guid OperatorUserId,
     DateOnly LogDate,
@@ -39,6 +46,27 @@ public sealed record CreateDailyLogCommand(
     // NON-BLOCKING best-effort basis (a bad/missing stamp never rejects the
     // log). Added at the END so existing callers/tests compile unchanged.
     WeatherStampItem? WeatherStamp = null,
+    // Labour V1 Task 5 — structured manual labour entries carried on the
+    // create_daily_log mutation. Transport only: nothing in this task
+    // persists them (Task 6 adds the write path via LabourAssignmentFactory).
+    // Added at the END, after WeatherStamp, so existing positional
+    // construction keeps compiling.
+    IReadOnlyList<LabourItem>? Labour = null,
+    // LABOUR_PHASE2 P2.2 — what the farmer asserted about WHERE the work
+    // happened. Added at the END with a default, after Labour, so existing
+    // positional construction keeps compiling and keeps meaning exactly what it
+    // meant before: DailyLogScope.Plot, the Labour V1 shape.
+    //
+    // The default is safe precisely BECAUSE it is the restrictive value — a
+    // caller who says nothing gets the plot-scoped path, which still demands a
+    // real PlotId and a real CropCycleId. There is no default that could
+    // accidentally produce a farm-wide log.
+    DailyLogScope Scope = DailyLogScope.Plot,
+    // The canonical spatial set. NULL means "not supplied": for Scope.Plot the
+    // handler derives it from PlotId, so no existing caller has to change. For
+    // Scope.MultiPlot it must carry two or more distinct real plots; for
+    // Scope.Farm it must be absent or empty.
+    IReadOnlyList<Guid>? PlotIds = null,
     // spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — the
     // farmer's typed day, as entered on the manual-entry screen. Before this the
     // draft never left Dexie, so a manual log persisted NO typed children and

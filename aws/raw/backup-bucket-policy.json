@@ -1,0 +1,75 @@
+{
+  "_comment": [
+    "S3 bucket policy — agrisync-raw-backup-ap-south-2 (the NEW cross-region",
+    "backup/vault bucket for agrisync-raw-ap-south-1).",
+    "spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN (raw-bucket-backup-recovery)",
+    "runbook: _COFOUNDER/runbooks/raw-bucket-backup-recovery.md",
+    "",
+    "AUTHORED, NOT APPLIED. This bucket does not exist yet — see",
+    "create-backup-bucket.sh, which must run BEFORE this policy can attach.",
+    "",
+    "TLS-only, matching aws/raw/bucket-policy.json's Phase-1 pattern (round-1",
+    "review finding C1 on the PRIMARY bucket applies equally here: do not add",
+    "an encryption-header-deny statement without the same CloudTrail-verified",
+    "proof that finding required — none has been done for this new bucket,",
+    "so none is authored here either).",
+    "",
+    "DELIBERATELY ALSO DENIES DeleteObjectVersion AND PutLifecycleConfiguration",
+    "bucket-wide, with NO break-glass exception carved out here (unlike the",
+    "source bucket's deny-delete addition, which does carve one out for",
+    "genuine DPDP erasure). This bucket's entire purpose is to be the copy",
+    "nothing can touch. If a real erasure ever needs to remove a specific",
+    "farmer's data from THIS bucket too (DPDP erasure requests apply to",
+    "backups, not just primary storage), that is a deliberate, logged,",
+    "founder-approved exception process — see the runbook's 'Erasure reaching",
+    "the backup copy' section — not a standing IAM grant.",
+    "",
+    "APPLY (founder only, after create-backup-bucket.sh):",
+    "  aws s3api put-bucket-policy --bucket agrisync-raw-backup-ap-south-2 --policy file://backup-bucket-policy.json --region ap-south-2"
+  ],
+  "Version": "2012-10-17",
+  "Id": "AgrisyncRawBackupBucketPolicy",
+  "Statement": [
+    {
+      "Sid": "DenyInsecureTransport",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::agrisync-raw-backup-ap-south-2",
+        "arn:aws:s3:::agrisync-raw-backup-ap-south-2/*"
+      ],
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "false"
+        }
+      }
+    },
+    {
+      "Sid": "DenyMissingEncryptionHeader",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::agrisync-raw-backup-ap-south-2/*",
+      "Condition": {
+        "Null": {
+          "s3:x-amz-server-side-encryption": "true"
+        }
+      }
+    },
+    {
+      "Sid": "DenyPermanentVersionDeletion",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:DeleteObjectVersion",
+      "Resource": "arn:aws:s3:::agrisync-raw-backup-ap-south-2/*"
+    },
+    {
+      "Sid": "DenyLifecycleChanges",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutLifecycleConfiguration",
+      "Resource": "arn:aws:s3:::agrisync-raw-backup-ap-south-2"
+    }
+  ]
+}

@@ -1,11 +1,9 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useAppNavigationState } from '../app/context/AppFeatureContexts';
-import { BookOpen, FlaskConical, Bot, Coins, Leaf, Check, Pencil, ChevronDown, Mic, Activity } from 'lucide-react';
-import { LedgerDefaults, LabourShift, CropProfile, HarvestConfig } from '../types';
-import { getHarvestConfig } from '../services/harvestService';
+import { BookOpen, FlaskConical, Bot, Coins, Leaf, Mic, Activity } from 'lucide-react';
+import { LedgerDefaults, LabourShift, CropProfile } from '../types';
 import NotificationTestComponent from '../shared/components/NotificationTestComponent';
-import HarvestConfigSheet from '../features/logs/components/harvest/HarvestConfigSheet';
-import { CropSymbol } from '../features/context/components/CropSelector';
+import HarvestComingSoon from '../features/logs/components/harvest/HarvestComingSoon';
 import { useLanguage } from '../i18n/LanguageContext';
 import { idGenerator } from '../core/domain/services/IdGenerator';
 // spec: voice-diary-e2e-2026-05-17 (D.19) — Settings entry for the
@@ -23,17 +21,10 @@ interface SettingsPageProps {
 
 const SettingsPage: React.FC<SettingsPageProps> = ({
     defaults,
-    onUpdateDefaults,
-    crops
+    onUpdateDefaults
 }) => {
     const { setCurrentRoute } = useAppNavigationState();
     const { t, language } = useLanguage();
-
-    // Harvest Configuration state
-    const [harvestConfigExpanded, setHarvestConfigExpanded] = useState(false);
-    const [editingPlotId, setEditingPlotId] = useState<string | null>(null);
-    const [editingCrop, setEditingCrop] = useState<CropProfile | null>(null);
-    const [_configRefreshKey, setConfigRefreshKey] = useState(0);
 
     const handleDefaultChange = (category: keyof LedgerDefaults, field: string, value: unknown) => {
         onUpdateDefaults({
@@ -64,20 +55,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     const _deleteShift = (id: string) => {
         const newShifts = defaults.labour.shifts.filter(s => s.id !== id);
         handleDefaultChange('labour', 'shifts', newShifts);
-    };
-
-    const getConfigLabel = (config: HarvestConfig): string => {
-        const pattern = config.pattern;
-        const unit = config.primaryUnit;
-        let unitLabel = '';
-        if (unit.type === 'WEIGHT') {
-            unitLabel = unit.weightUnit || 'KG';
-        } else if (unit.type === 'CONTAINER') {
-            unitLabel = `${unit.containerName || 'Container'}${unit.containerSizeKg ? ` (${unit.containerSizeKg}kg)` : ''}`;
-        } else if (unit.type === 'COUNT') {
-            unitLabel = unit.countUnit || 'Count';
-        }
-        return `${pattern} / ${unitLabel}`;
     };
 
     return (
@@ -134,100 +111,20 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 </div>
             </div>
 
-            {/* 4. Harvest Configuration */}
+            {/* 4. Harvest — coming soon (spec D4, Task 6). Harvest config alone
+                persisted fine, but it sets a farmer up for a sale/session
+                flow that has no backend and never did — same honest surface
+                as the Income tab's Harvest section. */}
             <div className="glass-panel p-0 overflow-hidden">
-                <button
-                    onClick={() => setHarvestConfigExpanded(!harvestConfigExpanded)}
-                    className="w-full p-5 flex items-center justify-between text-left hover:bg-stone-50/50 transition-colors"
-                >
-                    <div className="flex items-center gap-4 text-stone-700">
-                        <div className="bg-emerald-100 p-3 rounded-2xl text-emerald-700 shadow-sm"><Leaf size={22} strokeWidth={2.5} /></div>
-                        <div>
-                            <h4 className="font-bold text-lg">{t('settings.harvestConfig')}</h4>
-                            <p className="text-xs text-stone-400 font-medium mt-0.5">{t('settings.harvestDescription')}</p>
-                        </div>
+                <div className="w-full p-5 flex items-center gap-4 text-stone-700">
+                    <div className="bg-emerald-100 p-3 rounded-2xl text-emerald-700 shadow-sm"><Leaf size={22} strokeWidth={2.5} /></div>
+                    <div>
+                        <h4 className="font-bold text-lg">{t('settings.harvestConfig')}</h4>
+                        <p className="text-xs text-stone-400 font-medium mt-0.5">{t('settings.harvestDescription')}</p>
                     </div>
-                    <div className={`transition-transform duration-300 ${harvestConfigExpanded ? 'rotate-180' : ''}`}>
-                        <ChevronDown size={20} className="text-stone-400" />
-                    </div>
-                </button>
-
-                {harvestConfigExpanded && (
-                    <div className="px-5 pb-5 space-y-5 animate-slide-up">
-                        {crops.length === 0 ? (
-                            <p className="text-sm text-stone-400 text-center py-4">{t('settings.noCrops')}</p>
-                        ) : (
-                            crops.map(crop => (
-                                <div key={crop.id}>
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <CropSymbol name={crop.iconName} size="sm" />
-                                        <span className="text-sm font-bold text-stone-700">{crop.name}</span>
-                                    </div>
-
-                                    {crop.plots.length === 0 ? (
-                                        <p className="text-xs text-stone-400 ml-5">{t('profile.noPlots')}</p>
-                                    ) : (
-                                        <div className="border border-stone-100 rounded-xl overflow-hidden ml-5 bg-surface-100/50">
-                                            {crop.plots.map((plot, idx) => {
-                                                const plotConfig = getHarvestConfig(plot.id);
-                                                return (
-                                                    <div
-                                                        key={plot.id}
-                                                        className={`flex items-center justify-between p-3.5 ${idx > 0 ? 'border-t border-stone-100' : ''}`}
-                                                    >
-                                                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                                                            <span className="text-sm font-medium text-stone-700 truncate">{plot.name}</span>
-                                                            {plotConfig ? (
-                                                                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200/50 whitespace-nowrap">
-                                                                    <Check size={10} strokeWidth={3} />
-                                                                    {getConfigLabel(plotConfig)}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-[10px] font-bold text-stone-400 bg-stone-100 px-2 py-1 rounded-md border border-stone-200 whitespace-nowrap">
-                                                                    {t('settings.notConfigured')}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        <button
-                                                            onClick={() => {
-                                                                setEditingPlotId(plot.id);
-                                                                setEditingCrop(crop);
-                                                            }}
-                                                            className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all active:scale-95 flex items-center gap-1.5 shrink-0 ml-2 ${plotConfig
-                                                                ? 'text-stone-500 bg-white shadow-sm border border-stone-200 hover:text-stone-800'
-                                                                : 'text-emerald-700 bg-emerald-100 hover:bg-emerald-200 border border-emerald-200'
-                                                                }`}
-                                                        >
-                                                            {plotConfig ? <><Pencil size={12} /> {t('confirmation.edit')}</> : t('settings.setup')}
-                                                        </button>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
-                            ))
-                        )}
-                    </div>
-                )}
+                </div>
+                <HarvestComingSoon language={language} />
             </div>
-
-            {/* HarvestConfigSheet modal for settings editing */}
-            {editingPlotId && editingCrop && (
-                <HarvestConfigSheet
-                    plotId={editingPlotId}
-                    crop={editingCrop}
-                    onClose={() => {
-                        setEditingPlotId(null);
-                        setEditingCrop(null);
-                    }}
-                    onConfigSaved={() => {
-                        setConfigRefreshKey(prev => prev + 1);
-                        setEditingPlotId(null);
-                        setEditingCrop(null);
-                    }}
-                />
-            )}
 
             {/* Engineer-only tools — hidden from farmers in production builds. */}
             {import.meta.env.DEV && (

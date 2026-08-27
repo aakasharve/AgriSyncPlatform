@@ -6,6 +6,8 @@
 
 import type { VisibleBucketId } from '../../domain/ai/BucketId';
 import type { CostCategoryId, CostCategoryRef } from '../../domain/finance/CostCategory';
+// LABOUR_PHASE2 Phase 3 — see the LABOUR ENGAGEMENT DTOS section below.
+import type { AttributedOperatorDto, LabourEngagementDto } from './labourDtos';
 
 export type VerificationStatus =
     | 'draft'
@@ -124,11 +126,57 @@ export interface VerificationEventDto {
     occurredAtUtc: string;
 }
 
+/**
+ * LABOUR_PHASE2 A2b — what the farmer asserted about WHERE the work happened.
+ *
+ * The exact three strings `ssf.daily_logs.scope` stores, `ck_daily_logs_scope`
+ * compares against, `DailyLogScope` (ShramSafal.Domain.Logs) names, and
+ * `create_daily_log.zod.ts` accepts on the way UP. One vocabulary in both
+ * directions, so a device sends and receives one contract rather than two.
+ *
+ * Always a JSON string on the wire, never an ordinal: the server projects it
+ * as `string` precisely so that no serializer option can turn it into a number
+ * (`DailyLogDto.cs:29-39`).
+ */
+export type DailyLogScope = 'Plot' | 'MultiPlot' | 'Farm';
+
+// =============================================================================
+// LABOUR ENGAGEMENT DTOS
+// =============================================================================
+//
+// LABOUR_PHASE2 Phase 3 — `AttributedOperatorDto` and `LabourEngagementDto` live
+// in `labourDtos.ts` and are re-exported here unchanged, so every
+// `from './dtos'` import site is untouched. They were MOVED, not changed:
+// adding them to this file put it over the 800-line cap
+// `scripts/check-file-sizes.mjs` enforces in CI. `DailyLogDto` below references
+// `LabourEngagementDto` directly, so it is imported at the top of this file as
+// well as re-exported here.
+export type { AttributedOperatorDto, LabourEngagementDto };
+
 export interface DailyLogDto {
     id: string;
     farmId: string;
-    plotId: string;
-    cropCycleId: string;
+    /**
+     * LABOUR_PHASE2 P2.3 — nullable because the server's record is
+     * (`ShramSafal.Application/Contracts/Dtos/DailyLogDto.cs:19-20`, `Guid?`),
+     * and it is nullable there because `ssf.daily_logs` can now record what the
+     * farmer actually asserted: a `Farm`-scoped log has no plot and no crop
+     * cycle. The alternative the server deliberately rejected —
+     * `log.PlotId ?? Guid.Empty` — would put a fabricated plot on the wire and
+     * from there into canonical client state (P4).
+     *
+     * This interface is a HAND-MAINTAINED twin of that C# record. Nothing
+     * compiles the two against each other, so TypeScript will never surface the
+     * drift on its own; it has to be widened deliberately. It is widened now,
+     * BEFORE any client can produce a farm-scoped log (Phase 2b), so that every
+     * reader that assumed a plot is corrected while it is still unreachable.
+     *
+     * `?: string | null` and not `?: string`, because the wire value for a null
+     * `Guid?` is JSON `null`, not an absent key — same shape as
+     * `LogTaskDto.deviationReasonCode` above.
+     */
+    plotId?: string | null;
+    cropCycleId?: string | null;
     operatorUserId: string;
     logDate: string;
     idempotencyKey?: string;
@@ -138,6 +186,75 @@ export interface DailyLogDto {
     lastVerificationStatus?: string;
     tasks: LogTaskDto[];
     verificationEvents: VerificationEventDto[];
+
+    /**
+     * LABOUR_PHASE2 A2b — the farmer's spatial assertion, read back.
+     *
+     * `ShramSafal.Application/Contracts/Dtos/DailyLogDto.cs:53-82` declares both
+     * of these NON-nullable and always sends them. They are declared OPTIONAL
+     * here for one reason only, and it is not laziness: this twin is
+     * hand-maintained, so it describes what a *running* device may actually
+     * receive, and a device can outlive the server build it talks to (web,
+     * APK-with-bundled-assets and API all deploy separately, and a backend
+     * rollback puts a new client in front of an old server). Declaring them
+     * required would make `source.plotIds.map(...)` type-check and then throw a
+     * TypeError inside the pull transaction, failing the reconcile of every
+     * entity in the batch — not just logs.
+     *
+     * The consequence is a rule, enforced in `logsReconciler.toDailyLog`:
+     * ABSENT means "the response made no statement about location" and must
+     * never be read as "the empty set". Only a plot-set that is actually on the
+     * wire — INCLUDING the empty one, which is exactly how a `Farm` log states
+     * itself — is the farmer's assertion. Reading absence as empty would turn
+     * every plot-scoped log from an older server into a farm-wide log; reading
+     * empty as absence would ignore a genuine farm-wide correction.
+     *
+     * Invariants the server and a database CHECK both enforce, so readers may
+     * rely on them when the fields ARE present:
+     *   "Plot"      => plotIds.length === 1 && plotIds[0] === plotId && cropCycleId !== null
+     *   "MultiPlot" => plotIds.length >= 2  && plotId === null && cropCycleId === null
+     *   "Farm"      => plotIds.length === 0 && plotId === null && cropCycleId === null
+     *
+     * `plotIds` arrives in STORED order, not sorted — it is the order the
+     * farmer's selection was recorded in, and reordering it would restate it.
+     */
+    scope?: DailyLogScope;
+    plotIds?: string[];
+
+    /**
+     * LABOUR_PHASE2 Phase 3 — the labour engagements recorded against this log,
+     * as CURRENT truth. Labour was written and never read back: a farmer
+     * recorded 8 workers on Phone A and Phone B, freshly installed, saw the log
+     * with no labour on it at all (founder decision B4).
+     *
+     * THREE STATES, THREE DIFFERENT STATEMENTS, NOT INTERCHANGEABLE:
+     *   `undefined`/`null` — this response makes NO STATEMENT about labour.
+     *                        Every endpoint that returns a `DailyLogDto` without
+     *                        loading the engagements says exactly this: `POST
+     *                        /logs`, verify, add-task. So does a server build
+     *                        that predates Phase 3 — this twin is
+     *                        hand-maintained, and a device outlives the server
+     *                        build it talks to (web, APK and API deploy
+     *                        separately, and a backend rollback puts a new
+     *                        client in front of an old server).
+     *   `[]`               — the server STATES this log has no labour.
+     *   non-empty          — the engagements.
+     *
+     * The reconciler guard turns on precisely that distinction — "the response
+     * CARRIED the field" (`Array.isArray`), never "the array came back
+     * non-empty" — which is the same predicate `plotIds` already uses
+     * (`logsReconciler.serverStatedContext`). Reading an absent field as an
+     * empty one is what deleted a farmer's labour from his own device in Labour
+     * V1; reading an empty one as absence would drop a genuine "there is no
+     * labour here" statement. Both readings are wrong, in opposite directions.
+     *
+     * `?: … | null` and not `?: …`, because BOTH shapes are on the wire: the
+     * C# member is `IReadOnlyList<LabourEngagementDto>? = null`, so a
+     * non-projecting endpoint serialises JSON `null`, while an older server
+     * omits the key entirely. Both mean "no statement" and both must be read
+     * that way — same shape as `LogTaskDto.deviationReasonCode` above.
+     */
+    labour?: LabourEngagementDto[] | null;
 }
 
 export interface CostEntryDto {
@@ -158,6 +275,41 @@ export interface CostEntryDto {
     modifiedAtUtc: string;
     location?: LocationDto;
     isCorrected: boolean;
+    /**
+     * Which way the money moved, as the farmer stated it.
+     *
+     * `?: … | null` and not `?: …`, because BOTH shapes are on the wire and
+     * both mean the same thing: the C# member is `string? Direction = null`,
+     * so a row with no stated direction serialises as JSON `null`, while a
+     * server older than this field omits the key entirely. Same shape and same
+     * reasoning as `DailyLogDto.labour` above.
+     *
+     * A reader must NOT resolve the absent case to `'Expense'`. Every cost
+     * entry written before the column existed carries it, and the client used
+     * to push income down the expense wire — so those rows include sales.
+     * Turning "not stated" into "spent" one layer up is the defect this field
+     * exists to end.
+     */
+    direction?: 'Expense' | 'Income' | null;
+    /** How much of it. Absent/null = not stated. */
+    qty?: number | null;
+    /** The farmer's own unit word. Absent/null = not stated. */
+    unit?: string | null;
+    /** Price per unit as stated. Absent/null = not stated. */
+    unitPrice?: number | null;
+    /** Absent/null = not stated. */
+    paymentMode?: 'Cash' | 'UPI' | 'Bank' | 'Credit' | null;
+    /** Paid to / received from. Absent/null = not stated. */
+    vendorName?: string | null;
+    /**
+     * Attachment ids the CLIENT stated at capture. `null`/absent = no
+     * statement; `[]` = "none linked".
+     *
+     * NOT the authoritative photo linkage — the attachment list reads the
+     * `attachments` table by `linkedEntityId`, and the two can legitimately
+     * disagree when a receipt never finished uploading.
+     */
+    clientAttachmentIds?: string[] | null;
 }
 
 export interface FinanceCorrectionDto {

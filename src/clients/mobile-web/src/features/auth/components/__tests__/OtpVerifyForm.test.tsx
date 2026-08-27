@@ -156,4 +156,77 @@ describe('OtpVerifyForm — remember-device controls', () => {
 
         expect(mockSetRememberDevice).toHaveBeenCalledWith(false);
     });
+
+    // -----------------------------------------------------------------------
+    // 2026-08-23 — the app must learn the farmer's name.
+    // -----------------------------------------------------------------------
+    //
+    // The name field was rendered only when `isNewUser` was true, and
+    // `isNewUser` was only ever set from `createdNewUser` in the RESPONSE of the
+    // very call it was meant to shape. So on the request that mattered it was
+    // always false: no name went to the server, `VerifyOtpHandler` fell through
+    // to `$"User {phone[^4..]}"`, and the pilot's farmers would all have been
+    // greeted as "User 4567". The field could not render either — `onVerified()`
+    // unmounts the page in the same tick.
+    //
+    // evidence: docs/LAUNCH-READINESS-AND-AGRISTACK-2026-08-23.md — Decision 2 item 4
+    it('shows the name field immediately, without waiting for a response', () => {
+        renderForm();
+        expect(screen.getByRole('textbox', { name: /your name/i })).toBeInTheDocument();
+    });
+
+    it('sends the typed name to verifyOtp so the server never invents one', async () => {
+        mockVerifyOtp.mockResolvedValueOnce({
+            userId: 'u-3',
+            accessToken: 'tok',
+            expiresAtUtc: '2099-01-01T00:00:00Z',
+            createdNewUser: true,
+        });
+
+        renderForm();
+
+        fireEvent.change(screen.getByRole('textbox', { name: /your name/i }), {
+            target: { value: '  पुरुषोत्तम आरवे  ' },
+        });
+        const otpInput = screen.getByRole('textbox', { name: /6-digit code/i });
+        fireEvent.change(otpInput, { target: { value: '123456' } });
+        fireEvent.submit(otpInput.closest('form')!);
+
+        await waitFor(() => {
+            expect(mockVerifyOtp).toHaveBeenCalledWith(
+                '9876543210',
+                '123456',
+                'पुरुषोत्तम आरवे',
+                expect.objectContaining({ platform: 'web' }),
+            );
+        });
+    });
+
+    it('sends undefined when the farmer leaves the name blank', async () => {
+        mockVerifyOtp.mockResolvedValueOnce({
+            userId: 'u-4',
+            accessToken: 'tok',
+            expiresAtUtc: '2099-01-01T00:00:00Z',
+            createdNewUser: false,
+        });
+
+        renderForm();
+
+        // Whitespace only — not a name.
+        fireEvent.change(screen.getByRole('textbox', { name: /your name/i }), {
+            target: { value: '   ' },
+        });
+        const otpInput = screen.getByRole('textbox', { name: /6-digit code/i });
+        fireEvent.change(otpInput, { target: { value: '123456' } });
+        fireEvent.submit(otpInput.closest('form')!);
+
+        await waitFor(() => {
+            expect(mockVerifyOtp).toHaveBeenCalledWith(
+                '9876543210',
+                '123456',
+                undefined,
+                expect.objectContaining({ platform: 'web' }),
+            );
+        });
+    });
 });

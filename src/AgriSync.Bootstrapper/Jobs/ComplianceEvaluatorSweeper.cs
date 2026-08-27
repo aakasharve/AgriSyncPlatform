@@ -3,11 +3,12 @@ using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Auditing;
 using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Compliance.EvaluateCompliance;
+using ShramSafal.Domain.Farms;
 using ShramSafal.Infrastructure.Persistence;
 
 namespace AgriSync.Bootstrapper.Jobs;
@@ -43,9 +44,17 @@ public sealed class ComplianceEvaluatorSweeper(
         logger.LogInformation("ComplianceEvaluatorSweeper stopping.");
     }
 
+    /// <summary>
+    /// One (farm, owning account) pair from the privileged enumeration. The
+    /// owner account id is carried alongside because the per-farm pass needs it
+    /// to establish the tenant scope — looking it up later would be another
+    /// RLS-bound read with no identity, i.e. the very bug this pass had.
+    /// </summary>
+    private readonly record struct SweepTarget(Guid FarmId, Guid OwnerAccountId);
+
     private async Task RunPassAsync(CancellationToken ct)
     {
-        List<Guid> farmIds;
+        List<SweepTarget> targets;
 
         await using (var scope = scopeFactory.CreateAsyncScope())
         {
@@ -55,36 +64,47 @@ public sealed class ComplianceEvaluatorSweeper(
             // row with farm_id=NULL BEFORE returning, recording the pre-
             // pass enumeration on ssf.audit_events.
             //
-            // The returned context is disposed immediately — the resolved
-            // IShramSafalRepository binds to the SCOPED ShramSafalDbContext
-            // (interceptor-attached), which still needs TenantContext
-            // elevation to skip the fail-closed GUC-injection prelude.
+            // RLS FIX (2026-08-10). The pass used to DISCARD this privileged
+            // context and re-ask the question through the SCOPED
+            // IShramSafalRepository under ElevateToAdminCrossTenant. Admin
+            // elevation only tells TenantConnectionInterceptor to skip its GUC
+            // prelude — it grants no visibility. ssf.farm_memberships has RLS
+            // ENABLED and FORCED and the app connects as agrisync_app (owns
+            // nothing, no BYPASSRLS), so `SELECT DISTINCT farm_id FROM
+            // ssf.farm_memberships WHERE status = 3` returned ZERO rows and the
+            // sweeper logged "no active farms found" every single night since it
+            // shipped — a nightly job that had never once run its body in normal
+            // operation. The enumeration now runs ON the privileged context the
+            // factory hands back (ShramSafalDb_Migration role, which does bypass
+            // the policies), which is what that context was always for.
             var adminFactory = scope.ServiceProvider
                 .GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>();
-            await using (await adminFactory.CreateAsync(
+            await using var adminDb = await adminFactory.CreateAsync(
                 reason: $"{nameof(ComplianceEvaluatorSweeper)}.enumerate",
                 actorUserId: SystemActor.Worker,
-                ct: ct))
-            {
-                // Audit row committed; primary context disposed.
-            }
-            scope.ServiceProvider
-                .GetRequiredService<TenantContext>()
-                .ElevateToAdminCrossTenant();
-            var repository = scope.ServiceProvider.GetRequiredService<IShramSafalRepository>();
-            farmIds = await repository.GetAllActiveFarmIdsAsync(ct);
+                ct: ct);
+
+            targets = await adminDb.FarmMemberships
+                .AsNoTracking()
+                .Where(m => m.Status == MembershipStatus.Active)
+                .Join(adminDb.Farms.AsNoTracking(),
+                    m => m.FarmId,
+                    f => f.Id,
+                    (m, f) => new SweepTarget((Guid)f.Id, (Guid)f.OwnerAccountId))
+                .Distinct()
+                .ToListAsync(ct);
         }
 
-        if (farmIds.Count == 0)
+        if (targets.Count == 0)
         {
             logger.LogDebug("ComplianceEvaluatorSweeper: no active farms found.");
             return;
         }
 
-        logger.LogInformation("ComplianceEvaluatorSweeper evaluating {Count} farms.", farmIds.Count);
+        logger.LogInformation("ComplianceEvaluatorSweeper evaluating {Count} farms.", targets.Count);
         int totalOpened = 0, totalRefreshed = 0, totalAutoResolved = 0;
 
-        foreach (var farmId in farmIds)
+        foreach (var (farmId, ownerAccountId) in targets)
         {
             try
             {
@@ -98,15 +118,6 @@ public sealed class ComplianceEvaluatorSweeper(
                 // is keyed to the FarmId so investigators can correlate
                 // the opening with downstream tenant-scoped audit writes
                 // emitted by EvaluateComplianceHandler itself.
-                //
-                // The returned context is disposed immediately — the
-                // resolved EvaluateComplianceHandler operates on the
-                // SCOPED ShramSafalDbContext + IShramSafalRepository
-                // chain (interceptor-attached), which still needs
-                // TenantContext elevation to skip the fail-closed GUC-
-                // injection prelude. A future hardening can downgrade to
-                // SetTenant(farmId, ownerAccountId) once a per-farm owner
-                // lookup is wired here.
                 var adminFactory = scope.ServiceProvider
                     .GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>();
                 await using (await adminFactory.CreateAsync(
@@ -116,9 +127,28 @@ public sealed class ComplianceEvaluatorSweeper(
                 {
                     // Audit row committed; primary context disposed.
                 }
-                scope.ServiceProvider
-                    .GetRequiredService<TenantContext>()
-                    .ElevateToAdminCrossTenant();
+
+                // RLS FIX (2026-08-10) — the handler runs on the SCOPED
+                // ShramSafalDbContext, so it needs a REAL tenant identity, not
+                // just elevation. Elevate first so the interceptor no-ops (its
+                // per-command SET LOCAL prepend desyncs EF's rows-affected
+                // accounting on writes — see
+                // reference_interceptor_setlocal_desyncs_ef_writes, and this
+                // handler WRITES ssf.compliance_signals + ssf.audit_events),
+                // then let RlsIdentityScope set agrisync.farm_id +
+                // agrisync.owner_account_id itself. That is the same
+                // admin-elevate-then-set_config technique CallerFarmTenantScope
+                // uses on the HTTP path. The helper owns the transaction,
+                // because a cron pass has no request pipeline to open one and
+                // `set_config(..., is_local := true)` outside a transaction is a
+                // silent no-op.
+                //
+                // Cross-tenant enumeration stays privileged (above); per-farm
+                // work is genuinely single-farm-scoped, so a bug in the handler
+                // cannot reach another farm's rows.
+                var tenantContext = scope.ServiceProvider.GetRequiredService<TenantContext>();
+                tenantContext.ElevateToAdminCrossTenant();
+                var scopedDb = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
                 var handler = scope.ServiceProvider.GetRequiredService<IHandler<EvaluateComplianceCommand, EvaluateComplianceResult>>();
 
                 // DATA_PRINCIPLE_SPINE sub-phase 04.3b §Part 2 — cron path
@@ -128,12 +158,21 @@ public sealed class ComplianceEvaluatorSweeper(
                 // AppVersionProvider.Current. Every AuditEvent row emitted
                 // by the handler inherits this forensic-provenance trio.
                 var (deviceId, ipHash) = AuditContextAccessor.WorkerClaims();
-                var result = await handler.HandleAsync(
-                    new EvaluateComplianceCommand(
-                        FarmId: new FarmId(farmId),
-                        ClientAppVersion: AppVersionProvider.Current,
-                        AuditDeviceId: deviceId,
-                        AuditIpHash: ipHash),
+                var result = await RlsIdentityScope.RunAsFarmAsync(
+                    scopedDb,
+                    farmId,
+                    ownerAccountId,
+                    // No human actor on a cron pass. Leaving agrisync.user_id
+                    // unset keeps the user-scoped policies fail-closed; the
+                    // farm-scoped p_tenant_* policies are what this pass needs.
+                    actorUserId: null,
+                    token => handler.HandleAsync(
+                        new EvaluateComplianceCommand(
+                            FarmId: new FarmId(farmId),
+                            ClientAppVersion: AppVersionProvider.Current,
+                            AuditDeviceId: deviceId,
+                            AuditIpHash: ipHash),
+                        token),
                     ct);
 
                 if (result.IsSuccess && result.Value is not null)

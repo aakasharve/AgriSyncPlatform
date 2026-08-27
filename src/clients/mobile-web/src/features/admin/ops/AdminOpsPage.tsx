@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useOpsHealth } from '../../../app/hooks/useOpsHealth';
 import { OpsErrorEventDto, OpsFarmErrorDto } from '../../../infrastructure/api/AgriSyncClient';
+import { formatDisplayTime, formatDisplayTimeWithSeconds } from '../../../shared/utils/displayTime';
 
 interface AdminOpsPageProps {
     onBack: () => void;
@@ -74,7 +75,7 @@ function ErrorRow({ e }: { e: OpsErrorEventDto }) {
                         <span className="text-[10px] text-stone-400">{e.latencyMs}ms</span>
                     )}
                     <span className="text-[10px] text-stone-300">
-                        {new Date(e.occurredAtUtc).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                        {formatDisplayTime(e.occurredAtUtc)}
                     </span>
                 </div>
             </div>
@@ -150,7 +151,7 @@ export const AdminOpsPage: React.FC<AdminOpsPageProps> = ({ onBack }) => {
                             Live · auto-refreshes every 30s
                             {refreshedAt && (
                                 <span className="text-stone-400 ml-2">
-                                    · Last: {new Date(refreshedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                    · Last: {formatDisplayTimeWithSeconds(refreshedAt)}
                                 </span>
                             )}
                         </p>

@@ -1,0 +1,59 @@
+{
+  "_comment": [
+    "IAM permissions policy — agrisync-raw-replication-role.",
+    "spec: FINAL_SERVER_AUTHORITATIVE_EXECUTION_PLAN (raw-bucket-backup-recovery)",
+    "AUTHORED, NOT APPLIED.",
+    "",
+    "Scoped to exactly the two buckets in this replication pair, in exactly",
+    "the directions replication needs: READ + ACL-read on the SOURCE (to see",
+    "what to copy), WRITE + tag-replicate + Object-Lock-metadata-replicate on",
+    "the DESTINATION (to write the copy and preserve its lock state).",
+    "",
+    "DELIBERATELY EXCLUDED: s3:ReplicateDelete. Do not grant it. Without it,",
+    "a delete (soft, via marker) on the source is NOT propagated to the",
+    "backup — a delete marker created on the source (whether legitimate",
+    "cleanup or a mistake) leaves the object intact on the backup copy.",
+    "This is the point of the backup: it must not mirror deletes. A genuine,",
+    "founder-approved DPDP erasure that must also remove data from the",
+    "backup is a separate, deliberate, logged action — see the runbook's",
+    "'Erasure reaching the backup copy' section — not something replication",
+    "does automatically.",
+    "",
+    "APPLY (founder only):",
+    "  aws iam put-role-policy --role-name agrisync-raw-replication-role \\",
+    "    --policy-name agrisync-raw-replication-permissions \\",
+    "    --policy-document file://replication-role-permissions-policy.json"
+  ],
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SourceBucketRead",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetReplicationConfiguration",
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::agrisync-raw-ap-south-1"
+    },
+    {
+      "Sid": "SourceObjectRead",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObjectVersionForReplication",
+        "s3:GetObjectVersionAcl",
+        "s3:GetObjectVersionTagging"
+      ],
+      "Resource": "arn:aws:s3:::agrisync-raw-ap-south-1/*"
+    },
+    {
+      "Sid": "DestinationWrite",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ReplicateObject",
+        "s3:ReplicateTags",
+        "s3:ObjectOwnerOverrideToBucketOwner"
+      ],
+      "Resource": "arn:aws:s3:::agrisync-raw-backup-ap-south-2/*"
+    }
+  ]
+}

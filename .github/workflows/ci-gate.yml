@@ -25,7 +25,7 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: ci_throwaway_pw
+          POSTGRES_PASSWORD: ci_disposable_container_pw
           POSTGRES_DB: postgres
         ports:
           - 5433:5432
@@ -35,7 +35,18 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      ADMIN_TESTS_ADMIN_ROOT_CONN: "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=ci_throwaway_pw"
+      ADMIN_TESTS_ADMIN_ROOT_CONN: "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=ci_disposable_container_pw"
+      # RequiresPostgres category (SyncPushTenantScopeRealPostgresTests,
+      # SyncPushLedgerDerivationRealPostgresTests,
+      # LedgerDerivationSupersessionRealPostgresTests,
+      # LabourMoneyInvariantsRealPostgresTests) — these tests assert real
+      # tenant-security / money invariants against native Postgres and must
+      # never silently pass (see RequiresPostgresConnection.cs). Without this
+      # override they'd resolve appsettings.Development.json's
+      # Database=agrisync_dev, which this service container never creates
+      # (only its own POSTGRES_DB=postgres exists), and — post 2026-07-19 —
+      # would now FAIL the gate instead of the old silent skip-and-pass.
+      REQUIRES_POSTGRES_ROOT_CONN: "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=ci_disposable_container_pw"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -62,6 +73,28 @@ jobs:
         # stabilised. Everything else (~1130 tests) must pass.
         run: dotnet test src/AgriSync.sln --configuration Release --no-build --filter "Category!=RequiresDocker&FullyQualifiedName!~ReceiptExtract_DoesNotFallbackToSarvam&FullyQualifiedName!~ReceiptExtract_RejectsUnsupportedImageMimeType"
 
+      # ── Cross-farm isolation. BLOCKING, and deliberately its own step. ──
+      #
+      # These three assert that farm A can never read farm B's rows AS THE
+      # APPLICATION ROLE against a freshly-built database. No other suite
+      # covers that: row-level security is bypassed entirely by superusers,
+      # and the RequiresPostgres suite connects to the service container as
+      # postgres. So without this step, "tenants are isolated" is asserted
+      # nowhere that can fail.
+      #
+      # They carry Category=RequiresDocker and were therefore swept up by the
+      # blanket exclusion in the step above, whose stated reason is that the
+      # Testcontainers localstack/S3 suite is chronically red. That reason
+      # does not apply to these three: they reference no S3 and no LocalStack
+      # at all (only 4 of the 22 RequiresDocker classes do), and need nothing
+      # but a Postgres container, which ubuntu-latest runners provide.
+      #
+      # Named individually rather than by namespace on purpose — Tenancy/ also
+      # contains TestFixtureServiceTests, which is unrelated to isolation and
+      # must not be able to redden or greenden this gate.
+      - name: Cross-farm isolation (RLS as the app role, fresh container)
+        run: dotnet test src/AgriSync.sln --configuration Release --no-build --filter "FullyQualifiedName~Tenancy.RowLevelSecurityTests|FullyQualifiedName~Tenancy.UserDbRowLevelSecurityTests|FullyQualifiedName~Tenancy.CallerFarmTenantScopeTests"
+
   frontend:
     runs-on: ubuntu-latest
     steps:
@@ -78,20 +111,32 @@ jobs:
         working-directory: sync-contract
       - run: npm ci
         working-directory: src/clients/mobile-web
+      # G1 contract-parity gate. Compiles the server's 13 hand-written
+      # `PayloadHasOnly` allow-lists against the canonical Zod key sets and
+      # fails the moment either side drifts. Pure file reads — no database, no
+      # server, no network — so it belongs in the blocking gate, not in the
+      # path-filtered sync-contract workflow (which never runs on a PR that
+      # only touches PushSyncBatchHandler.cs, i.e. exactly the PR that can
+      # break parity). Also runs the catalog + payload smoke suites.
+      - name: Contract tests (sync-contract, incl. G1 allow-list parity)
+        run: npm test
+        working-directory: sync-contract
       - name: TypeScript check
         run: npx tsc --noEmit
         working-directory: src/clients/mobile-web
       - name: Unit tests (vitest)
         run: npm test
         working-directory: src/clients/mobile-web
+      # Runtime reproductions of KNOWN, OPEN defects. Red on purpose until the
+      # named task lands, so this step reports and never blocks — the trunk gate
+      # above answers "did this change break something?", not "is the backlog
+      # empty?". Nothing is skipped or masked: every assertion runs and the
+      # tally is printed here. It must only ever go down.
+      - name: Open-defect reproductions (reporting only)
+        run: npm run test:repro
+        working-directory: src/clients/mobile-web
+        continue-on-error: true
       - name: Build
-        # spec: dfes-companion-2026-07-11 (wave-0.3) — vite.config.ts fails a
-        # production `vite build` if VITE_AGRISYNC_API_URL is unset (nine
-        # client call sites would otherwise silently fall back to
-        # http://localhost:5048). Public prod URL, not a secret — matches
-        # android-release.yml's value.
-        env:
-          VITE_AGRISYNC_API_URL: "https://api.shramsafal.in"
         run: npm run build
         working-directory: src/clients/mobile-web
 

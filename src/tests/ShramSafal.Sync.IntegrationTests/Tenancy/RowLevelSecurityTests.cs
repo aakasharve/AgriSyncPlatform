@@ -206,14 +206,16 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
     }
 
     // Rewrite testcontainer's superuser connection string into one
-    // authenticated as agrisync_app. Password matches the literal in
-    // 20260515090000_BootstrapDbRoles.cs (dev_app_change_me).
+    // authenticated as agrisync_app. The credential comes from
+    // TestRoleCredentials, which defaults to the literal created by migration
+    // 20260515090000_BootstrapDbRoles and is overridable via
+    // AGRISYNC_TEST_APP_ROLE_PASSWORD on a machine whose roles were rotated.
     private static string BuildAppRoleConnectionString(string superuserConn)
     {
         var builder = new Npgsql.NpgsqlConnectionStringBuilder(superuserConn)
         {
             Username = "agrisync_app",
-            Password = "dev_app_change_me",
+            Password = TestRoleCredentials.AppRolePassword,
         };
         return builder.ConnectionString;
     }
@@ -637,9 +639,9 @@ public sealed class RowLevelSecurityTests : IAsyncLifetime
         // seed not flowing through the spine path.
         await using var cmd = db.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, operator_user_id, log_date, created_at_utc,
+            INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, plot_ids, scope, operator_user_id, log_date, created_at_utc,
                                          source, model_version, prompt_version)
-            VALUES (@id, @fid, @plot, @cycle, @op, @date, @created,
+            VALUES (@id, @fid, @plot, @cycle, ARRAY[@plot], 'Plot', @op, @date, @created,
                     'pre_spine', 'unknown', 'unknown');
             """;
         cmd.Parameters.AddWithValue("id", logId);

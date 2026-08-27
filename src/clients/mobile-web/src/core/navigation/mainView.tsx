@@ -16,14 +16,40 @@ import LiveCaption from '../../features/voice/components/LiveCaption';
 import { DEFAULT_VOICE_CONFIG } from '../../infrastructure/voice/types';
 import ManualEntry from '../../features/logs/components/ManualEntry';
 import DailyLogCard from '../../features/logs/components/DailyLogCard';
+// `ArrowLeft` left with `LabourLogBanner`, its only consumer. `Users` stays —
+// the success card's bucket chips still use it.
 import { Leaf, Droplets, Users, Package, Tractor, Sprout } from 'lucide-react';
 import { getSegmentVisual } from '../../shared/utils/uiUtils';
 import { getDateKey } from '../domain/services/DateKeyService';
 import { buildTimelineEntries } from '../../services/transcriptTimelineService';
-import WeatherWidget from '../../features/weather/components/WeatherWidget';
-import { formatCurrencyINR, getCarriedTasks } from '../../shared/utils/dayState';
+import { formatCurrencyINR } from '../../shared/utils/dayState';
 import { getCropTheme } from '../../shared/utils/colorTheme';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
+// `MeterDisplay` is NOT imported here any more. main rendered it directly on the
+// success card; dfes-companion moved that score block INTO
+// `LedgerRecognitionPanel` (via `DayUnderstandingCard`), and
+// `mainView.dayUnderstandingOrder.test.tsx` asserts it renders EXACTLY ONCE with
+// the real panel mounted — so a second, direct render here would be the copy that
+// test exists to forbid.
+// Only the SUMMARY is needed here — `mainView` hands it to `ManualEntry`,
+// which owns the decision to render the panel (it is the component that knows
+// whether the farmer's context is the whole farm).
+import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
+// spec: owner-oversight-loop (Task 13, changes 3 + 5) — real components
+// (not inlined here), because both call `useLanguage()` internally and this
+// file's render functions are plain functions, not components — see
+// `mainViewComponents.tsx`'s header for why that hook rule forces the split.
+import SathiGuideCard from '../../features/oversight/components/SathiGuideCard';
+import HelpBar from '../../features/oversight/components/HelpBar';
+import {
+    LabourLogBanner,
+    NotQueuedForServerBadge,
+    SavedLocallyHeadline,
+    // main's is the processing <h3> LINE; dfes's (imported above) is
+    // the full video-character screen. Different components, one name.
+    ShramSathiUnderstanding as ShramSathiUnderstandingLine,
+} from './mainViewComponents';
+import { getCarriedTasks } from '../../shared/utils/dayState';
 import { LedgerRecognitionPanel } from '../../features/logs/components/LedgerRecognitionPanel';
 import {
     stashPendingQuestionAnswer, abandonPendingQuestionAnswer, readPendingQuestionAnswer,
@@ -44,12 +70,28 @@ import { logger } from '../../infrastructure/observability/Logger';
 
 import { AppRouterContext } from './routeContext';
 import { ReflectPage, ComparePage } from './lazyComponents';
+import { DISPLAY_TIME_ZONE } from '../../shared/utils/displayTime';
 import {
     formatLogTime,
     getPrimaryWorkDone,
     getSummaryLines,
     getVerificationPresentation
 } from './helpers';
+
+/*
+ * The four components this module renders live in `./mainViewComponents`.
+ *
+ * They were moved there to keep this file under the 800-line `check:file-sizes`
+ * cap once the farm-wide panel and the two hook-bearing headlines landed. The
+ * move is VERBATIM — same DOM, same component identities — so the viewport
+ * measurements taken against this screen still hold.
+ *
+ * `NotQueuedForServerBadge` and `LabourLogBanner` are RE-EXPORTED below because
+ * two test files import them from this module, and `labour-log-banner.test.tsx`
+ * compares `el.type === LabourLogBanner`. A second copy would satisfy the
+ * import and silently fail that identity check.
+ */
+export { NotQueuedForServerBadge, LabourLogBanner } from './mainViewComponents';
 
 // Task 5 (spec: dfes-companion-2026-07-11) — thin per-candidate wrapper so
 // नाही ("hide it for this render") can use real React state. `renderLogView`
@@ -138,11 +180,14 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
 
     const {
         status, mode, recordingSegment,
-        weatherData, weatherStatus, boundaryUnset, refetchWeather, setCurrentRoute,
-        ownerDisplayName, todayDayState, yesterdayDayState,
-        showCloseDaySummary, setShowCloseDaySummary,
-        showCloseYesterdaySummary, setShowCloseYesterdaySummary,
-        setShowReviewInbox, setMainView,
+        setCurrentRoute,
+        setMainView,
+        // Read by dfes-companion surfaces only: `weatherData` by
+        // LedgerRecognitionPanel (Task 4A weather questions), `todayDayState` by
+        // DailyLoopHero and DailyLoopClarity. main dropped both from this list
+        // when owner-oversight-loop deleted the weather + closure cards; the
+        // fields themselves never left AppRouterContext.
+        weatherData, todayDayState,
         crops, logScope, setLogScope, setMode, setStatus,
         hasActiveLogContext, isContextReady, error, errorTranscript,
         handleAudioReady, handleTextReady, handleManualSubmit,
@@ -157,11 +202,9 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         getLogContextSnapshot, handleEditLog,
         costSnapshot, yesterdayCost,
         setRecordingSegment,
-        lastSavedLogSummary, lastSavedLogIds, mockHistory, handleReset
+        lastSavedLogSummary, lastSavedLogIds, mockHistory, handleReset,
+        logIntent
     } = ctx;
-
-    // Single boundary handoff: flag it + route to Profile, where the drawer auto-opens.
-    const openBoundary = () => { window.sessionStorage.setItem('open_farm_boundary', '1'); setCurrentRoute('profile'); };
 
     // Focus the existing recorder by scrolling to (and briefly ringing) the
     // crop selector. Shared by the daily-loop hero tap and the recorder's own
@@ -189,235 +232,65 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         })
         : [];
 
-    // spec: dfes-companion-2026-07-11 (wave-2.4 follow-up) — the legacy Daily
-    // Closure card, which is what PRODUCTION renders today (VITE_DAILY_LOOP
-    // defaults OFF), gets the same honest treatment DailyLoopHero already has.
-    //
-    // Wave 2.4 stopped an empty day scoring a vacuous 100 / `isClosed`. Read
-    // through a two-state label, that turned a day that has not begun into
-    // "0%" + "Day Not Closed" — a farmer with no schedule template, i.e. day 1
-    // of the pilot, opening the app to a failing grade and a reproach for
-    // having done nothing wrong. A day is one of THREE things, not two:
-    //
-    //   not started  — nothing planned, nothing recorded: there is no
-    //                  denominator, so no number is shown (a flat track and a
-    //                  dash) and the label says so plainly, in neutral stone
-    //                  rather than warning amber.
-    //   not closed   — something is planned or recorded and not everything is
-    //                  settled: the filled ring, amber label. Unchanged.
-    //   closed       — everything done and confirmed: 100%, emerald. Unchanged.
-    const dayClosureLabel = !todayDayState.hasStarted
-        ? 'Day Not Started'
-        : todayDayState.isClosed ? 'Day Closed' : 'Day Not Closed';
-    const dayClosureTone = !todayDayState.hasStarted
-        ? 'text-stone-500'
-        : todayDayState.isClosed ? 'text-emerald-700' : 'text-amber-700';
 
     return (
         <>
             {/* IDLE / RECORDING STATE */}
             {status !== 'confirming' && status !== 'success' && status !== 'processing' && (
                 <>
-                    {!recordingSegment && (
-                        <div className="mb-4 animate-in slide-in-from-top-4 duration-300 delay-100 space-y-3">
-                            {/* Daily Clarity Loop v1 — morning trigger. The FIRST calm line the
-                                farmer sees: "आज {N} कामं बाकी" (or the empty-day invite), with the
-                                carried "काल राहिलं" signal folded in beside it. Flag-gated OFF by
-                                default, so this is a byte-equivalent no-op in production. */}
-                            {FEATURE_FLAGS.dailyLoop && (
-                                <DailyLoopHero
-                                    pendingCount={todayDayState.pendingCount}
-                                    carriedCount={carriedTasks.length}
-                                    carriedTitle={carriedTasks.length === 1 ? carriedTasks[0].title : undefined}
-                                    closurePercent={todayDayState.closurePercent}
-                                    onFocusRecorder={focusRecorder}
-                                />
-                            )}
-                            <WeatherWidget
-                                data={weatherData}
-                                status={weatherStatus}
-                                boundaryUnset={boundaryUnset}
-                                onRetry={refetchWeather}
-                                onAddLocation={openBoundary}
-                                onOpenBoundary={openBoundary}
+                    {/* Daily Clarity Loop v1 (spec: dfes-companion-2026-07-11) — the
+                        morning trigger: "आज {N} कामं बाकी" (or the empty-day invite)
+                        with the carried "काल राहिलं" signal folded in beside it.
+                        Flag-gated OFF by default, so production renders exactly the
+                        oversight-loop layout below and nothing else.
+
+                        The weather card, Daily Closure card and "Daily Log" heading +
+                        owner chip that used to sit around this hero are NOT restored:
+                        owner-oversight-loop Task 7/11 deliberately removed them and
+                        moved weather into AppHeader (`CompactWeatherChip`). Re-adding
+                        them here would render weather twice. */}
+                    {!recordingSegment && FEATURE_FLAGS.dailyLoop && (
+                        <div className="mb-4 animate-in slide-in-from-top-4 duration-300 delay-100">
+                            <DailyLoopHero
+                                pendingCount={todayDayState.pendingCount}
+                                carriedCount={carriedTasks.length}
+                                carriedTitle={carriedTasks.length === 1 ? carriedTasks[0].title : undefined}
+                                closurePercent={todayDayState.closurePercent}
+                                onFocusRecorder={focusRecorder}
                             />
-
-                            <div className="flex items-center justify-between px-1">
-                                <p className="text-base font-black tracking-tight text-stone-800">Daily Log</p>
-                                <span
-                                    className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[11px] font-bold text-emerald-700"
-                                    data-testid="home-greeting"
-                                >
-                                    Owner: {ownerDisplayName}
-                                </span>
-                            </div>
-
-                            <div className="bg-white border border-stone-200 rounded-2xl p-3.5 shadow-sm space-y-2">
-                                <div className="flex items-center justify-between gap-3">
-                                    <div className="flex items-center gap-3">
-                                        {/* Daily Clarity Loop v1 (Fix 2): the hero above already
-                                            carries this closure ring, so suppress this duplicate
-                                            when the loop is ON — one ring only. OFF renders it
-                                            exactly as before (byte-equivalent no-op). */}
-                                        {!FEATURE_FLAGS.dailyLoop && (
-                                            <div
-                                                className="w-14 h-14 rounded-full p-1"
-                                                style={{
-                                                    background: todayDayState.hasStarted
-                                                        ? `conic-gradient(#059669 ${todayDayState.closurePercent * 3.6}deg, #e7e5e4 0deg)`
-                                                        : '#e7e5e4'
-                                                }}
-                                            >
-                                                <div
-                                                    data-testid="daily-closure-ring"
-                                                    className="w-full h-full rounded-full bg-white flex items-center justify-center text-[11px] font-black text-stone-700"
-                                                >
-                                                    {todayDayState.hasStarted ? `${todayDayState.closurePercent}%` : '—'}
-                                                </div>
-                                            </div>
-                                        )}
-                                        <div>
-                                            <p className="text-xs uppercase tracking-wide font-bold text-stone-400">Daily Closure</p>
-                                            <p
-                                                data-testid="daily-closure-label"
-                                                className={`text-sm font-bold ${dayClosureTone}`}
-                                            >
-                                                {dayClosureLabel}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => setShowCloseDaySummary(prev => !prev)}
-                                        className="px-3 py-1.5 rounded-full bg-stone-900 text-white text-xs font-bold"
-                                    >
-                                        Close Day
-                                    </button>
-                                </div>
-
-                                {/* Daily Clarity Loop v1 (Fix 2): the hero replaces this buried
-                                    English tasks line as the single calm opener. Suppress it when
-                                    the loop is ON; OFF keeps it exactly as before. */}
-                                {!FEATURE_FLAGS.dailyLoop && (
-                                    <p className="text-sm font-semibold text-stone-700">
-                                        Tasks: Done {todayDayState.completedCount} / Planned {todayDayState.plannedCount}
-                                    </p>
-                                )}
-                                {todayDayState.unverifiedCount > 0 && (
-                                    <p className="text-xs font-semibold text-amber-700">
-                                        Pending approvals: {todayDayState.unverifiedCount}
-                                    </p>
-                                )}
-
-                                {showCloseDaySummary && (
-                                    <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2">
-                                        {/* Same three states as the label above — otherwise one
-                                            fact renders as "Day Not Started" up here and
-                                            "Day closure pending: 0 tasks and 0 unverified
-                                            entries" three lines below it. */}
-                                        <p className="text-xs font-semibold text-stone-700">
-                                            {!todayDayState.hasStarted
-                                                ? 'Nothing recorded yet today.'
-                                                : todayDayState.isClosed
-                                                    ? 'Today is fully closed.'
-                                                    : `Day closure pending: ${todayDayState.pendingCount} tasks and ${todayDayState.unverifiedCount} unverified entries.`}
-                                        </p>
-                                        {todayDayState.unverifiedCount > 0 && (
-                                            <button
-                                                onClick={() => setShowReviewInbox(true)}
-                                                className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold"
-                                            >
-                                                Verify now
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* Daily Clarity Loop v1: when the loop is ON, yesterday's leftover
-                                    is carried into the hero above ("काल राहिलं"), so this separate
-                                    banner is suppressed.
-
-                                    wave-2.4 follow-up: `!isClosed` alone now fires on a yesterday
-                                    that never STARTED — the second morning of the pilot, for a
-                                    farmer with no schedule, would open to "Yesterday not fully
-                                    closed" about a day on which nothing was ever planned or
-                                    recorded. There is no leftover to chase, so there is nothing to
-                                    say. It still fires for a yesterday that genuinely has open
-                                    work, and the summary stays reachable once opened. */}
-                                {!FEATURE_FLAGS.dailyLoop
-                                    && ((yesterdayDayState.hasStarted && !yesterdayDayState.isClosed) || showCloseYesterdaySummary) && (
-                                    <div className="pt-1">
-                                        <button
-                                            onClick={() => setShowCloseYesterdaySummary(prev => !prev)}
-                                            className="w-full text-left rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800"
-                                        >
-                                            Yesterday not fully closed
-                                        </button>
-                                    </div>
-                                )}
-
-                                {showCloseYesterdaySummary && (
-                                    <div className="mt-2 rounded-xl border border-stone-200 bg-stone-50 px-3 py-3 space-y-2">
-                                        <p className="text-xs uppercase tracking-wide font-bold text-stone-400">Close Yesterday</p>
-                                        <p className="text-sm text-stone-700">
-                                            Planned {yesterdayDayState.plannedCount}, completed {yesterdayDayState.completedCount}, pending {yesterdayDayState.pendingCount}, unverified {yesterdayDayState.unverifiedCount}.
-                                        </p>
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => {
-                                                    setMainView('reflect');
-                                                    setShowCloseYesterdaySummary(false);
-                                                }}
-                                                className="px-3 py-1.5 rounded-lg bg-stone-900 text-white text-xs font-bold"
-                                            >
-                                                Review summary
-                                            </button>
-                                            {yesterdayDayState.unverifiedCount > 0 && (
-                                                <button
-                                                    onClick={() => setShowReviewInbox(true)}
-                                                    className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold"
-                                                >
-                                                    Verify now
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="rounded-2xl bg-stone-900 text-white p-3.5 space-y-2">
-                                <p className="text-[10px] uppercase tracking-wide font-bold text-stone-300">Running Cost</p>
-                                <div className="grid grid-cols-3 gap-2 text-sm">
-                                    <div>
-                                        <p className="text-stone-400 text-xs">Today</p>
-                                        <p className="font-black">Rs {formatCurrencyINR(costSnapshot.today)}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-stone-400 text-xs">Yesterday</p>
-                                        <p className="font-black">Rs {formatCurrencyINR(yesterdayCost)}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-stone-400 text-xs">Running</p>
-                                        <p className="font-black">Rs {formatCurrencyINR(costSnapshot.cropSoFar)}</p>
-                                    </div>
-                                </div>
-                                {/* Task 1.7 (spec: dfes-companion-2026-07-11) — costSnapshot.unverifiedToday
-                                    (financeSelectors trustStatus) is 'Unverified' for ANY uncorrected cost
-                                    entry, including the owner's own — it does NOT track whether anything is
-                                    genuinely awaiting review. Gate the visit-a-dead-end button on
-                                    todayDayState.unverifiedCount too, the same signal the Close-Day summary
-                                    above already uses, so this only offers the route when a mukadam's log
-                                    really is waiting. */}
-                                {costSnapshot.unverifiedToday > 0 && todayDayState.unverifiedCount > 0 && (
-                                    <button
-                                        onClick={() => setShowReviewInbox(true)}
-                                        className="w-full text-left rounded-lg border border-amber-300/50 bg-amber-200/20 px-2.5 py-2 text-xs text-amber-100 font-semibold"
-                                    >
-                                        Cost may be inaccurate - {costSnapshot.unverifiedToday} entries unverified. Verify now.
-                                    </button>
-                                )}
-                            </div>
                         </div>
                     )}
+
+                    {/* spec: owner-oversight-loop (Task 7, design doc §4.2, §5) —
+                        the large gradient weather card, the Daily Closure
+                        card and the "Daily Log" heading + owner chip used to
+                        sit here, above the plot selector, making a farmer
+                        scroll ~380px before reaching the only question this
+                        screen exists for. The header already shows the
+                        owner (canonical strip), the closure/pending-approval
+                        facts now live in the oversight drawer. The weather
+                        chip that used to sit here (Task 7's one-line
+                        `CompactWeatherChip`) MOVED AGAIN in Task 11 — the
+                        founder's header restructure put it into `AppHeader`
+                        row 1 instead ("in the dead space on the right,
+                        before the gear"), so it is not rendered here any
+                        more (never rendered twice). */}
+
+                    {/* spec: 2026-07-13-labour-attendance-approval-design (Task 3.5) —
+                        promoted from the Task-3.4 dismissible hint to a full
+                        banner (founder ask #1). Purely presentational + a
+                        null-check on logIntent; no effect on capture/parsing/
+                        submission. Tapping it navigates straight back to
+                        Labour Management (founder ask #2) — there is no ✕
+                        dismiss any more. */}
+                    {!recordingSegment && logIntent === 'labour' && (
+                        <LabourLogBanner onBackToLabour={() => setCurrentRoute('labour')} />
+                    )}
+
+                    {/* spec: owner-oversight-loop (Task 13, change 3) — the
+                        Sathi guide card, above the plot selector, per the
+                        founder's own reference image. */}
+                    {!recordingSegment && <SathiGuideCard />}
 
                     {!recordingSegment && (
                         <div id="crop-selector-container" className="mb-6 animate-in slide-in-from-top-4 duration-500">
@@ -449,7 +322,46 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                     }
                                 }}
                                 disabled={false}
+                                // spec: owner-oversight-loop (Task 13, change
+                                // 4) — "संपूर्ण शेत" demoted out of the
+                                // carousel, below as its own quiet row.
+                                hideGlobalCard
                             />
+                        </div>
+                    )}
+
+                    {/* spec: owner-oversight-loop (Task 13, change 5) — the
+                        closing help bar. */}
+                    {!recordingSegment && <HelpBar />}
+
+                    {/* spec: owner-oversight-loop (Task 7, design doc §4.2,
+                        §5) — Running Cost, MOVED below the plot selector:
+                        ambient status a farmer sees after acting, not a
+                        blocker before it. The "cost may be inaccurate — N
+                        unverified" line is REMOVED here (not moved) — that
+                        same fact already lives in the oversight drawer's
+                        decision rows, and a third copy is exactly what this
+                        reorder exists to remove (spec §4.2's own ruling). */}
+                    {!recordingSegment && (
+                        <div
+                            data-testid="running-cost-card"
+                            className="mb-6 rounded-2xl bg-stone-900 text-white p-3.5 space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500"
+                        >
+                            <p className="text-[10px] uppercase tracking-wide font-bold text-stone-300">Running Cost</p>
+                            <div className="grid grid-cols-3 gap-2 text-sm">
+                                <div>
+                                    <p className="text-stone-400 text-xs">Today</p>
+                                    <p className="font-black">Rs {formatCurrencyINR(costSnapshot.today)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-stone-400 text-xs">Yesterday</p>
+                                    <p className="font-black">Rs {formatCurrencyINR(yesterdayCost)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-stone-400 text-xs">Running</p>
+                                    <p className="font-black">Rs {formatCurrencyINR(costSnapshot.cropSoFar)}</p>
+                                </div>
+                            </div>
                         </div>
                     )}
 
@@ -579,6 +491,17 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                             }
                                             return map;
                                         })()}
+                                        /* LABOUR_PHASE2 P2.4 — the farm-wide half of the
+                                           day, carried SEPARATELY. A farm-wide context
+                                           yields no plot ids, so the map above is
+                                           legitimately `{}` and ManualEntry showed zeros
+                                           for a day the farmer HAD recorded work in. The
+                                           fix is NOT to fold farm-wide logs into that map:
+                                           `R24` measured that its consumer sums it across
+                                           the plots in context, turning a plot's 3 labour
+                                           entries into 11. No plot key here, so the two can
+                                           never be added. */
+                                        farmWideToday={getFarmWideDaySummary(history, getDateKey())}
                                         transcriptEntries={(() => {
                                             // Build timeline entries for today's logs in current context
                                             const todayStr = getDateKey();
@@ -632,7 +555,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                 <div className="flex items-center justify-between px-2 mb-4">
                                     <h3 className="text-slate-800 font-bold text-lg tracking-tight">Activity Feed</h3>
                                     <span className="text-[10px] uppercase font-bold text-slate-500 bg-white border border-slate-100 px-2 py-1 rounded-lg shadow-sm">
-                                        {new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' })}
+                                        {new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short', timeZone: DISPLAY_TIME_ZONE })}
                                     </span>
                                 </div>
 
@@ -646,7 +569,16 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                             const contextDetails = getLogContextSnapshot(log);
                                             const verification = getVerificationPresentation(log.verification?.status);
                                             const createdById = log.meta?.createdByOperatorId || '';
-                                            const loggedBy = operatorNameById.get(createdById) || ownerDisplayName;
+                                            // Truth audit T1.12b, finding 4. This used to fall back
+                                            // to `ownerDisplayName` — so a record nobody was recorded
+                                            // as making was attributed, by name, to a real person.
+                                            // `oversightSelectors.ts:20-22` states the opposite rule in
+                                            // this same release: "a person can only be counted if they
+                                            // were named." `अज्ञात` is the word the app already uses for
+                                            // this exact fact (the unattributed row in
+                                            // OversightBriefingCard), so "no identity" reads the same
+                                            // everywhere. `P4`/`P7`.
+                                            const loggedBy = operatorNameById.get(createdById) || 'अज्ञात';
                                             const primaryCropId = log.context.selection[0]?.cropId;
                                             const cropColor = crops.find(crop => crop.id === primaryCropId)?.color || 'bg-slate-400';
 
@@ -710,7 +642,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center"><Leaf size={32} className="text-emerald-600 animate-pulse" /></div>
                         </div>
                     </div>
-                    <h3 className="text-xl font-bold text-stone-800 mb-3 leading-snug">Your Shram sathi is trying to understand what work you did today...</h3>
+                    <ShramSathiUnderstandingLine />
                     {/* SARVAM_PRIMARY_VOICE_PIPELINE — live transcript, placed right below the
                         recorder/banner so the farmer sees their words appear as Sarvam transcribes
                         the clip (post-Stop, cost-safe: reuses the single transcribe-stream that
@@ -776,6 +708,11 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                     <div className="relative z-10">
                         <SathiSaidCard />
 
+                            <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-600 shadow-sm border border-emerald-50">
+                                <Leaf size={40} className="drop-shadow-sm" />
+                            </div>
+                        <SavedLocallyHeadline />
+
                         {/* WHAT I UNDERSTOOD — the /10, its bar, and one line saying
                             what the number measures. Self-gates on
                             FEATURE_FLAGS.understandingMeter (renders null when OFF),
@@ -829,9 +766,19 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                                     </div>
                                                     <div className="min-w-0 flex-1">
                                                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">कुठे</p>
-                                                        <p className="truncate text-base font-black text-stone-900">
+                                                        {/* Since 2b this reads `Grapes • Plot A,
+                                                            Plot B, Plot C` and `truncate` silently
+                                                            cut it at 412px — the farmer saw which
+                                                            plots the record landed on, minus the
+                                                            ones that did not fit, with no ellipsis
+                                                            to warn him. The DATA was right; the
+                                                            presentation was not. `line-clamp-2`
+                                                            shows it and still bounds a pathological
+                                                            selection. */}
+                                                        <p className="line-clamp-2 break-words text-base font-black leading-snug text-stone-900">
                                                             {item.cropName} • {item.plotName}
                                                         </p>
+                                                        <NotQueuedForServerBadge syncQueued={item.syncQueued} />
                                                     </div>
                                                 </div>
                                                 {/* Bucket Breakdown */}

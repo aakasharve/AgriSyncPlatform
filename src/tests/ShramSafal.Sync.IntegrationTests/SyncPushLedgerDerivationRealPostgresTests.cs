@@ -55,20 +55,22 @@ namespace ShramSafal.Sync.IntegrationTests;
 /// treated as absent → Manual, no derivation).</item>
 /// </list></para>
 ///
-/// <para><b>Native :5433, opt-in, self-skipping.</b> Tagged
+/// <para><b>Native :5433, fail-loud (2026-07-19).</b> Tagged
 /// <c>[Trait("Category","RequiresPostgres")]</c>; creates its OWN scratch DB,
-/// applies the full migration chain, drops it on dispose. Skips cleanly if
-/// native Postgres :5433 is unreachable.</para>
+/// applies the full migration chain, drops it on dispose. If native Postgres
+/// is unreachable, <see cref="RequiresPostgresConnection.ResolveReachableConnectionOrThrowAsync"/>
+/// THROWS out of <see cref="InitializeAsync"/> — the [Fact]s report FAILED,
+/// never a silent skip. This suite proves a real tenant-security /
+/// money-adjacent invariant and must never pass without having run.</para>
 /// </summary>
 [Trait("Category", "RequiresPostgres")]
 public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions.ITestOutputHelper output) : IAsyncLifetime
 {
-    // agrisync_app is created by migration 20260515090000_BootstrapDbRoles. Roles are
-    // CLUSTER-global, so on a cluster where it already exists the migration is a no-op
-    // and the live password is whatever it was rotated to — hence IntegrationPostgres
-    // resolves it from AGRISYNC_TEST_APP_ROLE_PASSWORD, not a constant.
-    private const string AppRoleUser = IntegrationPostgres.AppRoleUser;
-    private static string AppRolePassword => IntegrationPostgres.AppRolePassword;
+    // agrisync_app is created by migration 20260515090000_BootstrapDbRoles with
+    // this literal local-dev password; roles are cluster-global so it already
+    // exists on the :5433 cluster.
+    private const string AppRoleUser = "agrisync_app";
+    private static string AppRolePassword => TestRoleCredentials.AppRolePassword;
 
     // Farm A — the same-farm derivation case.
     private static readonly Guid FarmA = Guid.Parse("dddd1111-1111-1111-1111-111111111111");
@@ -118,24 +120,14 @@ public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions
     private string _scratchDbName = string.Empty;
     private string _appConn = string.Empty;
     private string _adminConn = string.Empty;
-    private bool _skip;
-    private string _skipReason = string.Empty;
     private ServiceProvider? _rootProvider;
 
     public async Task InitializeAsync()
     {
-        var baseConn = IntegrationPostgres.ResolveRootConnection();
-
-        // A genuinely ABSENT server self-skips; a server that answers and refuses us
-        // throws (IntegrationPostgres.ProbeOrSkipReasonAsync) — a misconfigured
-        // credential must never masquerade as a clean skip.
-        var probeSkip = await IntegrationPostgres.ProbeOrSkipReasonAsync(baseConn);
-        if (probeSkip is not null)
-        {
-            _skip = true;
-            _skipReason = probeSkip;
-            return;
-        }
+        // Throws (does not skip) if Postgres is unconfigured/unreachable — see
+        // RequiresPostgresConnection's doc comment for the 2026-07-19
+        // CI-truthfulness fix this enforces.
+        var baseConn = await RequiresPostgresConnection.ResolveReachableConnectionOrThrowAsync();
 
         _scratchDbName = $"ssf_fix1_proof_{Guid.NewGuid():N}";
         await using (var admin = new NpgsqlConnection(baseConn))
@@ -209,7 +201,7 @@ public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions
             await _rootProvider.DisposeAsync();
         }
 
-        if (!_skip && !string.IsNullOrEmpty(_scratchDbName) && !string.IsNullOrEmpty(_adminConn))
+        if (!string.IsNullOrEmpty(_scratchDbName) && !string.IsNullOrEmpty(_adminConn))
         {
             try
             {
@@ -231,31 +223,12 @@ public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions
         }
     }
 
-    /// <summary>
-    /// spec: dfes-companion-2026-07-11 (wave-1.4) — <c>Assert.True(true, _skipReason)</c> here
-    /// used to report these proofs as PASSING on any runner without Postgres on :5433, having
-    /// exercised nothing. <c>Skip.If</c> (Xunit.SkippableFact) reports the run as Skipped —
-    /// visually and in exit-code terms distinct from both Passed and Failed — so a database-less
-    /// run can never be read as proof the Fix 1 derivation behaves.
-    /// </summary>
-    private void SkipIfPostgresUnavailable()
-    {
-        if (_skip)
-        {
-            output.WriteLine($"[SKIPPED] {_skipReason} — NO DATABASE WAS EXERCISED; this run proves nothing.");
-        }
-
-        Skip.If(_skip, _skipReason);
-    }
-
     // ─────────────────────────────────────────────────────────────────────────
     // PROOF 1 — same-farm sourceAiJobId derives the typed ledger on /sync/push.
     // ─────────────────────────────────────────────────────────────────────────
-    [SkippableFact]
+    [Fact]
     public async Task SyncPush_create_daily_log_with_same_farm_source_job_populates_farm_operations_and_input_items()
     {
-        SkipIfPostgresUnavailable();
-
         var dailyLogId = Guid.Parse("eeee1111-1111-1111-1111-111111111111");
 
         var response = await RunSyncPushCreateDailyLogAsync(
@@ -324,11 +297,9 @@ public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions
     // ─────────────────────────────────────────────────────────────────────────
     // PROOF 2 — cross-farm sourceAiJobId derives nothing (F1 isolation gate).
     // ─────────────────────────────────────────────────────────────────────────
-    [SkippableFact]
+    [Fact]
     public async Task SyncPush_create_daily_log_with_cross_farm_source_job_derives_nothing_and_leaves_other_farm_untouched()
     {
-        SkipIfPostgresUnavailable();
-
         var dailyLogId = Guid.Parse("eeee2222-2222-2222-2222-222222222222");
 
         // Farm B's owner submits a create_daily_log carrying Farm A's AiJob id.
@@ -434,7 +405,6 @@ public sealed class SyncPushLedgerDerivationRealPostgresTests(Xunit.Abstractions
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers (mirror LedgerDerivationSupersessionRealPostgresTests).
     // ─────────────────────────────────────────────────────────────────────────
-
 
     private static async Task<long> ScalarLongAsync(
         NpgsqlConnection db, string sql, params (string Name, object Value)[] args)

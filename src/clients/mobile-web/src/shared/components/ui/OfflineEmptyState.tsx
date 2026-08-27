@@ -3,6 +3,15 @@
  *
  * Displays a centered message with icon when offline or no data.
  * Configurable icon, message, and CTA button.
+ *
+ * `title` and `message` are `ReactNode`, not `string`. They were widened for
+ * `features/logs/components/harvest/HarvestComingSoon.tsx`, which is bilingual
+ * and therefore has to set `font-family` ON THE TEXT: this component declares
+ * no font of its own, so its `h3`/`p` inherit whatever the cascade hands them,
+ * and project rule (`CLAUDE.md` § Font Rules) forbids leaving Marathi to a
+ * generic fallback. Passing a pre-styled `<span>` is the smallest way to let a
+ * caller own that decision without this component learning about languages.
+ * Every existing caller passes a plain string and is unaffected.
  */
 
 import React from 'react';
@@ -10,8 +19,8 @@ import { WifiOff } from 'lucide-react';
 
 interface OfflineEmptyStateProps {
      icon?: React.ReactNode;
-     title?: string;
-     message?: string;
+     title?: React.ReactNode;
+     message?: React.ReactNode;
      ctaLabel?: string;
      onCta?: () => void;
      variant?: 'offline' | 'empty';

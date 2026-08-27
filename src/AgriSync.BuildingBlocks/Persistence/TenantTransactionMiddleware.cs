@@ -66,6 +66,86 @@ namespace AgriSync.BuildingBlocks.Persistence;
 /// </summary>
 public sealed class TenantTransactionMiddleware
 {
+    // ADR 0019 — user-scoped (multi-farm, NON-admin) READ surfaces.
+    //
+    // Each entry is an endpoint that legitimately spans EVERY farm the caller belongs
+    // to, so no single farmId can be in scope, yet it still reads farm-scoped tables
+    // under FORCE-RLS. Requests matching one of these prefixes enter
+    // TenantContext.SetUserScoped from the validated JWT claim and run inside the
+    // per-context transaction(s), so the interceptor prepends
+    // `SET LOCAL agrisync.user_id` to every command and the p_user_select_* policies
+    // filter the read to the caller's own farms.
+    //
+    // This is deliberately NOT the admin skip-list: admin elevation sets NO GUC, so a
+    // farm-scoped read under it returns zero rows (and for a repository method with no
+    // WHERE farm_id of its own it would be an outright cross-tenant leak if the
+    // policies ever loosened). READ surfaces only — user-scoped mode has no write path.
+    /// <summary>
+    /// One user-scoped read surface. <paramref name="Method"/> is null when EVERY
+    /// verb on the prefix is a user-scoped read, and an explicit verb when the
+    /// same prefix also carries writes that must stay on the admin skip-list
+    /// (attachments is the case that forced this: GET list/metadata/download are
+    /// user-scoped reads, POST create/upload are farm-scoped writes).
+    /// </summary>
+    private readonly record struct UserScopedReadRoute(string? Method, string Prefix);
+
+    private static readonly UserScopedReadRoute[] UserScopedReadPathPrefixes =
+    {
+        // GET /sync/pull — the original ADR 0019 surface. PullSyncChangesHandler
+        // projects every farm the caller can see; see the "/sync/" note in the skip
+        // list below for why /sync/push stays admin-elevated.
+        new(null, "/sync/pull"),
+        // GET /shramsafal/finance/summary — GetFinanceSummaryHandler is user-scoped by
+        // construction: it resolves the caller's farms via
+        // ShramSafalRepository.GetFarmIdsForUserAsync(actorUserId) and then reads
+        // ssf.cost_entries + ssf.finance_corrections ACROSS all of them.
+        // ShramSafalRepository.GetCostEntriesAsync carries no farm_id predicate at all —
+        // it leans entirely on RLS for scoping — so this endpoint must run with the
+        // user_id GUC set, not admin-elevated.
+        //
+        // Before this entry the route was neither skip-listed nor farm-claimed:
+        // ShramSafalAuthorizationEnforcer.EnsureIsFarmMember never runs (there is no
+        // farmId to enforce against), TenantContext stayed empty, and the very first
+        // DbCommand fail-closed in TenantConnectionInterceptor with "no tenant claim set
+        // and not in admin scope" → HTTP 500 at GetFarmIdsForUserAsync.
+        //
+        // The policies this relies on already shipped:
+        // p_user_select_farms / p_user_select_memberships (20260606074635) and
+        // p_user_select_cost_entries / p_user_select_finance_corrections
+        // (20260607120000_AddUserScopedDataReadPolicies). No new DB object is needed.
+        //
+        // NOTE: deliberately NOT the whole "/shramsafal/finance" group. The finance
+        // WRITE endpoints (cost-entry, cost-entry/{id}/correct, allocate-global,
+        // price-config) and /finance/plot-summary each carry a FarmId/PlotId and MUST
+        // keep running under the single-tenant farm_id claim so the write-side RLS
+        // policies enforce farm isolation. Adding a peer "summary across my farms"
+        // endpoint here should follow the same per-route audit: confirm the handler is
+        // read-only and genuinely spans the caller's tenancies.
+        new(null, "/shramsafal/finance/summary"),
+        // GET /shramsafal/attachments (+ /{id}, /{id}/download) — user-scoped
+        // multi-farm READS. The whole "/shramsafal/attachments" prefix is on the
+        // admin skip-list below for the sake of its WRITES (create + upload), and
+        // admin elevation sets NO GUC. ssf.attachments has RLS ENABLED and FORCED,
+        // so under FORCE-RLS every one of these reads returned nothing: the list
+        // answered `[]` and metadata/download answered 404 AttachmentNotFound for
+        // rows that demonstrably exist on the caller's own farm (verified
+        // 2026-08-10 — 4 seeded attachments on farm d7b187c8, all invisible).
+        // Silently: photos attached to a daily log simply never appeared.
+        //
+        // These three are read-only (no AuditEvent, no SaveChanges), which is the
+        // precondition ADR 0019 puts on user-scoped mode, and each handler keeps
+        // its OWN authorization check on top of RLS — ListAttachmentsForEntity
+        // intersects with GetFarmIdsForUserAsync, GetAttachmentMetadata and
+        // GetAttachmentFile both call IsUserMemberOfFarmAsync — so this only
+        // restores visibility, it never widens it.
+        //
+        // METHOD-SCOPED on purpose: POST /shramsafal/attachments and
+        // POST /shramsafal/attachments/{id}/upload WRITE ssf.attachments under a
+        // WITH CHECK on farm_id and must keep falling through to the skip-list
+        // entry below. User-scoped mode is a read mode and sets no farm_id.
+        new("GET", "/shramsafal/attachments"),
+    };
+
     private static readonly string[] SkipPathPrefixes =
     {
         "/health", "/version", "/metrics", "/swagger", "/telemetry/client-error", "/test",
@@ -233,6 +313,19 @@ public sealed class TenantTransactionMiddleware
     /// </summary>
     private const string ConsentGateLinkPath = "/shramsafal/consent-gate/link";
 
+    /// <summary>
+    /// Exactly <see cref="ConsentGateLinkPath"/>, tolerating one trailing slash.
+    /// Never a prefix — see the call site for why.
+    /// </summary>
+    private static bool IsConsentGateLinkPath(string path)
+    {
+        var trimmed = path.Length > 1 && path.EndsWith('/')
+            ? path[..^1]
+            : path;
+
+        return string.Equals(trimmed, ConsentGateLinkPath, StringComparison.OrdinalIgnoreCase);
+    }
+
     private readonly RequestDelegate _next;
     public TenantTransactionMiddleware(RequestDelegate next) => _next = next;
 
@@ -243,25 +336,36 @@ public sealed class TenantTransactionMiddleware
     {
         var path = context.Request.Path.Value ?? string.Empty;
 
-        // ADR 0019 — GET /sync/pull is user-scoped (multi-farm, NON-admin).
-        // Enter user-scoped mode from the validated JWT claim (Caveat B) and run
-        // the whole request inside the per-context transaction(s) so the
-        // tx-scoped SET LOCAL agrisync.user_id reaches every read, including the
-        // sub-handlers that share the request-scoped ShramSafalDbContext.
-        // Scoped to /sync/pull ONLY: /sync/push is a multi-farm WRITE surface
-        // whose per-mutation handlers touch farm-scoped tables (RLS keyed on
-        // agrisync.farm_id, which user-scoped mode never sets), so it stays on
-        // the admin-elevated skip-list below with its own per-handler
-        // IsUserMemberOfFarmAsync checks instead.
-        if (path.StartsWith("/sync/pull", StringComparison.OrdinalIgnoreCase))
+        // ADR 0019 — user-scoped (multi-farm, NON-admin) read surfaces. Enter
+        // user-scoped mode from the validated JWT claim (Caveat B) and run the whole
+        // request inside the per-context transaction(s) so the tx-scoped
+        // SET LOCAL agrisync.user_id reaches every read, including sub-handlers that
+        // share the request-scoped ShramSafalDbContext. This block is checked BEFORE
+        // the admin skip-list so a user-scoped read is never silently admin-elevated
+        // (which would set no GUC and return an empty result set).
+        foreach (var userScopedRoute in UserScopedReadPathPrefixes)
         {
-            if (!TryGetAuthenticatedUserId(context, out var syncUserId))
+            if (!path.StartsWith(userScopedRoute.Prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            // A verb-qualified entry only claims that verb; every other verb on
+            // the same prefix falls through to the skip-list below (this is what
+            // keeps the attachment WRITES admin-elevated).
+            if (userScopedRoute.Method is { } requiredMethod &&
+                !string.Equals(context.Request.Method, requiredMethod, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!TryGetAuthenticatedUserId(context, out var scopedUserId))
             {
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 return;
             }
 
-            tenantContext.SetUserScoped(syncUserId);
+            tenantContext.SetUserScoped(scopedUserId);
             await RunPipelineInTransactionsAsync(context, registry);
             return;
         }
@@ -284,7 +388,13 @@ public sealed class TenantTransactionMiddleware
         //
         // The tx is required as well as the mode: the interceptor emits SET LOCAL, which is
         // a no-op outside a transaction.
-        if (path.StartsWith(ConsentGateLinkPath, StringComparison.OrdinalIgnoreCase))
+        // EXACT match, not StartsWith. A prefix match here also claims
+        // /consent-gate/linkage, /links and /link-user — measured, all three entered
+        // user-scoped mode with the caller id in the GUC. Nothing routes there today,
+        // so this is a trap rather than a live bug: the next endpoint added under this
+        // prefix would silently inherit a tenant posture nobody chose for it. A
+        // carve-out that claims more than its own path is not a carve-out.
+        if (IsConsentGateLinkPath(path))
         {
             if (!TryGetAuthenticatedUserId(context, out var consentLinkUserId))
             {

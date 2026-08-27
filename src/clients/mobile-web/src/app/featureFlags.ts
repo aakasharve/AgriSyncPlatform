@@ -28,6 +28,20 @@ export const IS_E2E_HARNESS_ENABLED: boolean = import.meta.env.VITE_E2E_HARNESS 
 
 export const isE2EHarnessEnabled = (): boolean => IS_E2E_HARNESS_ENABLED;
 
+// spec: owner-oversight-loop
+// DEV-ONLY preview route (`?preview=oversight`, `App.tsx`) must be
+// IMPOSSIBLE to reach in a production build — not just query-param-gated,
+// the way the earlier `?preview=ops-admin`/`?preview=labour` bypasses in
+// `App.tsx` are (both predate this rule; out of this task's scope to
+// change). `import.meta.env.DEV` is a Vite build-time constant — `true`
+// under `vite dev`, statically folded to the literal `false` in a
+// production `vite build` — so gating a `React.lazy(() => import(...))`
+// branch on it, exactly like `IS_E2E_HARNESS_ENABLED` gates `TestE2EPage`
+// above, lets Rollup eliminate that branch as dead code and drop the
+// imported preview module (and its seed fixtures) from the production
+// bundle entirely, not just hide it behind an unreachable `if`.
+export const IS_OVERSIGHT_PREVIEW_ENABLED: boolean = import.meta.env.DEV;
+
 // DWC v2 §2.9 — runtime feature flags object. Plan placed this at
 // `shared/feature-flags/flags.ts`, but the existing repo convention is
 // `app/featureFlags.ts`; a second location would split the source of

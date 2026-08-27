@@ -25,6 +25,7 @@ import MarkCollectedSheet from '../components/MarkCollectedSheet';
 import RecordResultSheet from '../components/RecordResultSheet';
 import { getTestQueue } from '../data/testsClient';
 import type { AppRoute } from '../../../domain/types/farm.types';
+import { formatDisplayTime } from '../../../shared/utils/displayTime';
 
 interface TestQueuePageProps {
     onNavigate?: (route: AppRoute) => void;
@@ -180,7 +181,7 @@ const TestQueuePage: React.FC<TestQueuePageProps> = ({ onNavigate }) => {
     })();
 
     const asOfLabel = lastRefreshedAt
-        ? new Date(lastRefreshedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+        ? formatDisplayTime(lastRefreshedAt)
         : '';
 
     if (isLoading && instances.length === 0) {

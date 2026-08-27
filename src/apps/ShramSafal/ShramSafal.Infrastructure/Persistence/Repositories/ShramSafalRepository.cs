@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
@@ -10,6 +12,7 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Privacy;
@@ -355,12 +358,6 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     // Same shape as the ObservationEvent read above: EXISTS-join children keyed
     // by plain DailyLogId, read NO-TRACKING because the scorer only inspects
     // them. Empty id set short-circuits so we never emit `IN ()`.
-    public async Task<IReadOnlyList<Domain.Farms.LabourAssignment>> GetLabourAssignmentsForDailyLogsAsync(
-        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
-        => dailyLogIds.Count == 0
-            ? Array.Empty<Domain.Farms.LabourAssignment>()
-            : await db.LabourAssignments.AsNoTracking()
-                .Where(x => dailyLogIds.Contains(x.DailyLogId)).ToListAsync(ct);
 
     public async Task<IReadOnlyList<Domain.Farms.IrrigationEntry>> GetIrrigationEntriesForDailyLogsAsync(
         IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
@@ -602,12 +599,72 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    /// <summary>
+    /// Every <see cref="LogTask"/> executed against one crop cycle.
+    ///
+    /// <para><b>LABOUR_PHASE2 P2.3 (landmine L6).</b> Until Phase 2 every daily
+    /// log named a crop cycle, so <c>log.CropCycleId == cropCycleId</c> was the
+    /// whole answer. A <c>MultiPlot</c> or <c>Farm</c> scoped log carries
+    /// <c>crop_cycle_id IS NULL</c> BY DESIGN — the farmer named no single plot,
+    /// so there is no one cycle to name — and the old filter therefore made its
+    /// tasks vanish from every consumer of this method:
+    /// <c>EvaluateComplianceHandler</c>, <c>ComputePlannedVsExecutedDeltaHandler</c>
+    /// and <c>GetAttentionBoardHandler</c>. All three feed CompareEngine, so the
+    /// farmer would be told he had failed to do work he had actually done — a
+    /// fabricated breach, `P4`, on three surfaces.</para>
+    ///
+    /// <para><b>How a plot-less log is attributed, and why that is not
+    /// over-counting.</b> A plot-less log joins a cycle when all three hold:
+    /// it belongs to the same FARM; the cycle's plot is actually covered by it
+    /// (<c>Farm</c> covers every plot; <c>MultiPlot</c> covers exactly the plots
+    /// in <c>plot_ids</c> — never "all of them"); and its <c>log_date</c> falls
+    /// inside the cycle's own window, which is what stops last season's work
+    /// being counted as this season's. The cycle id is the time bound for a
+    /// plot-scoped log; the cycle's dates are the only honest equivalent when
+    /// there is no cycle id. No plot, cycle or sentinel is invented anywhere:
+    /// the log is matched by what it already says.</para>
+    ///
+    /// <para>Quantities are unaffected: <c>CompareEngine</c> de-duplicates
+    /// executed activity types before comparing, so including a farm-wide spray
+    /// can make a planned spray MATCH, and can never make it count twice
+    /// (`P7`).</para>
+    /// </summary>
     public async Task<List<LogTask>> GetExecutedTasksByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default)
     {
+        var cycle = await db.CropCycles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == cropCycleId, ct);
+
+        if (cycle is null)
+        {
+            // Unknown cycle: nothing to attribute a plot-less log to. Behaviour
+            // identical to Labour V1.
+            return await (
+                from task in db.LogTasks
+                join log in db.DailyLogs on task.DailyLogId equals log.Id
+                where log.CropCycleId == cropCycleId
+                select task)
+                .ToListAsync(ct);
+        }
+
+        var cycleFarmId = cycle.FarmId;
+        var cyclePlotId = cycle.PlotId;
+        var cycleStart = cycle.StartDate;
+        var cycleEnd = cycle.EndDate;
+
         return await (
             from task in db.LogTasks
             join log in db.DailyLogs on task.DailyLogId equals log.Id
-            where log.CropCycleId == cropCycleId
+            where
+                // (a) the log names this cycle — the Labour V1 predicate, untouched
+                log.CropCycleId == cropCycleId
+                // (b) the log names no cycle because it names no single plot
+                || (log.CropCycleId == null
+                    && log.FarmId == cycleFarmId
+                    && log.LogDate >= cycleStart
+                    && (cycleEnd == null || log.LogDate <= cycleEnd)
+                    && (log.Scope == DailyLogScope.Farm
+                        || EF.Property<List<Guid>>(log, "_plotIds").Contains(cyclePlotId)))
             select task)
             .ToListAsync(ct);
     }
@@ -874,14 +931,23 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    // §P0.2 — farm-scoped changed-since audit read. The `!a.FarmId.HasValue ||`
+    // disjunct that used to lead this predicate was one of the three places the
+    // same hole was written (the other two: the pull handler's filter and the
+    // p_tenant_audit_events USING clause). It admitted every NULL-farm row —
+    // the cross-farm ones — to every caller, whatever farms they asked for.
+    // Nothing in production calls this today: the pull no longer reads the
+    // ledger. It is kept, and kept tight, so that a future caller that DOES
+    // reach for a farm-scoped audit slice gets farm rows and nothing else.
     public async Task<List<AuditEvent>> GetAuditEventsChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
     {
         var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0) return [];
 
         return await db.AuditEvents
             .AsNoTracking()
             .Where(a => a.OccurredAtUtc > sinceUtc)
-            .Where(a => !a.FarmId.HasValue || ids.Contains(a.FarmId.Value))
+            .Where(a => a.FarmId.HasValue && ids.Contains(a.FarmId.Value))
             .OrderBy(a => a.OccurredAtUtc)
             .ToListAsync(ct);
     }
@@ -944,32 +1010,29 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     {
         // /shramsafal/farms/mine is skip-listed in TenantTransactionMiddleware →
         // admin-elevated → the interceptor injects NO GUC AND the middleware opens
-        // NO transaction. Open our own tx so `SET LOCAL agrisync.user_id` survives
-        // the SELECT (Postgres scopes SET LOCAL to the current transaction). The
-        // interceptor is in admin no-op mode here, so it does not rewrite these
-        // commands — the manual GUC below is authoritative.
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        // NO transaction. RlsIdentityScope (the ONE shared helper) opens the
+        // transaction that `set_config(..., is_local: true)` needs — Postgres scopes
+        // the setting to the current transaction — and sets `agrisync.user_id`
+        // through a PARAMETERISED call. The interceptor is in admin no-op mode here,
+        // so it does not rewrite these commands: the helper's GUC is authoritative.
+        var (farms, memberships) = await RlsIdentityScope.RunAsUserAsync(
+            db,
+            userId,
+            async token =>
+            {
+                // RLS (p_user_select_farms) filters to the caller's owned +
+                // active-member farms — no WHERE needed.
+                var scopedFarms = await db.Farms.AsNoTracking().ToListAsync(token);
 
-        // Set the tx-local GUC the p_user_select_* policies key on, via a
-        // PARAMETERISED set_config (is_local=true ≡ SET LOCAL but injectable —
-        // avoids EF1002 on ExecuteSqlRaw + string interpolation). Run as its own
-        // command (NOT prepended to the SELECT), so the set_config result row is
-        // discarded by ExecuteNonQuery and never confuses the reader of the
-        // farms query that follows.
-        await db.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT set_config('agrisync.user_id', {userId.ToString()}, true)", ct);
+                var scopedMemberships = await db.FarmMemberships
+                    .AsNoTracking()
+                    .Where(m => (Guid)m.UserId == userId
+                        && m.Status != MembershipStatus.Revoked && m.Status != MembershipStatus.Exited)
+                    .ToListAsync(token);
 
-        // RLS (p_user_select_farms) filters to the caller's owned + active-member
-        // farms — no WHERE needed.
-        var farms = await db.Farms.AsNoTracking().ToListAsync(ct);
-
-        var memberships = await db.FarmMemberships
-            .AsNoTracking()
-            .Where(m => (Guid)m.UserId == userId
-                && m.Status != MembershipStatus.Revoked && m.Status != MembershipStatus.Exited)
-            .ToListAsync(ct);
-
-        await tx.CommitAsync(ct);
+                return (scopedFarms, scopedMemberships);
+            },
+            ct);
 
         var roleByFarm = memberships
             .GroupBy(m => (Guid)m.FarmId)
@@ -1337,6 +1400,262 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         return Task.FromResult(new WorkerMetricsDto(0, 0, 0, 0, 0, 0, 0));
     }
 
+    // --- Labour Management read-model (Task 1.2, spec: 2026-07-13-labour-attendance-approval-design) ---
+
+    public async Task<List<FarmMembership>> GetFarmMembershipsAsync(FarmId farmId, CancellationToken ct = default)
+    {
+        return await db.FarmMemberships
+            .AsNoTracking()
+            .Where(m => m.FarmId == farmId)
+            .OrderBy(m => m.GrantedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)>> GetLabourPayoutCostEntriesWithJobCardAsync(
+        FarmId farmId, CancellationToken ct = default)
+    {
+        // Decision 3a (2026-07-19, spec: 2026-07-13-labour-attendance-approval-design):
+        // दिलं = ALL labour money paid out, not just job-card settlements.
+        // "labour" on the wire is exactly the two CostCategoryId codes
+        // labour_payout + labour_misc (CostCategory.ts / _shared.zod.ts) — the
+        // same pair the frontend's mapCategory() buckets into "Labour" for the
+        // finance page. Widening this filter (rather than adding a second
+        // query) keeps ONE derivation for both categories.
+        var entries = await db.CostEntries
+            .Where(c => c.FarmId == farmId && (c.CategoryId == "labour_payout" || c.CategoryId == "labour_misc"))
+            .OrderBy(c => c.EntryDate)
+            .ToListAsync(ct);
+
+        if (entries.Count == 0)
+        {
+            return [];
+        }
+
+        var jobCardIds = entries
+            .Where(e => e.JobCardId.HasValue)
+            .Select(e => e.JobCardId!.Value)
+            .Distinct()
+            .ToList();
+
+        var workerByJobCardId = jobCardIds.Count == 0
+            ? []
+            : await db.JobCards
+                .Where(j => jobCardIds.Contains(j.Id))
+                .Select(j => new { j.Id, j.AssignedWorkerUserId })
+                .ToDictionaryAsync(
+                    x => x.Id,
+                    x => x.AssignedWorkerUserId.HasValue ? (Guid?)x.AssignedWorkerUserId.Value.Value : null,
+                    ct);
+
+        return entries
+            .Select(e => (
+                e,
+                e.JobCardId.HasValue && workerByJobCardId.TryGetValue(e.JobCardId.Value, out var w) ? w : null))
+            .ToList();
+    }
+
+    public async Task<List<LabourAssignment>> GetLabourAssignmentsForFarmSinceAsync(
+        FarmId farmId, DateOnly weekStart, CancellationToken ct = default)
+    {
+        return await (
+            from la in db.LabourAssignments
+            join log in db.DailyLogs on la.DailyLogId equals log.Id
+            where log.FarmId == farmId && log.LogDate >= weekStart
+            select la)
+            .ToListAsync(ct);
+    }
+
+    // --- Field Operator identity (Task 11, spec: 2026-07-13-labour-attendance-approval-design) ---
+
+    public async Task AddFieldOperatorAsync(FieldOperator o, CancellationToken ct = default)
+    {
+        await db.FieldOperators.AddAsync(o, ct);
+    }
+
+    public async Task<FieldOperator?> GetFieldOperatorByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        return await db.FieldOperators.FindAsync([id], ct);
+    }
+
+    public async Task<LabourAssignment?> GetLabourAssignmentByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        return await db.LabourAssignments.FindAsync([id], ct);
+    }
+
+    public async Task<IReadOnlyList<FieldOperator>> GetFieldOperatorsForFarmAsync(FarmId farmId, CancellationToken ct = default)
+    {
+        return await db.FieldOperators
+            .AsNoTracking()
+            .Where(o => o.OriginatingFarmId == farmId)
+            .OrderBy(o => o.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// "ON CONFLICT DO NOTHING" semantics for the (FieldOperator,
+    /// LabourAssignment) attribution row — same shape as
+    /// <see cref="UpsertTranscriptHistoryAsync"/> above: attempt the INSERT
+    /// directly (the unique index <c>ux_field_operator_work_rows_operator_assignment</c>
+    /// is the source of truth, so no pre-check query), commit immediately so
+    /// the caller learns the real outcome before returning to the farmer, and
+    /// on a unique-violation race detach the losing entity and report `false`.
+    /// `false` is a SUCCESS outcome to the caller (Task 11.5 — attach is
+    /// idempotent by intent), never re-thrown as an error.
+    /// </summary>
+    public async Task<bool> TryAddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(r);
+
+        try
+        {
+            await db.FieldOperatorWorkRows.AddAsync(r, ct);
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            db.Entry(r).State = EntityState.Detached;
+            return false;
+        }
+    }
+
+    // --- Labour review & correction (Task 12b, spec: 2026-07-13-labour-attendance-approval-design) ---
+
+    public async Task AddLabourCorrectionAsync(LabourCorrection c, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(c);
+        await db.LabourCorrections.AddAsync(c, ct);
+    }
+
+    public async Task<IReadOnlyList<FieldOperatorWorkRow>> GetFieldOperatorWorkRowsForAssignmentAsync(
+        Guid labourAssignmentId, CancellationToken ct = default)
+    {
+        // TRACKED (no AsNoTracking): the caller removes rows from this set in
+        // the same unit of work, so EF must already be tracking them.
+        return await db.FieldOperatorWorkRows
+            .Where(r => r.LabourAssignmentId == labourAssignmentId)
+            .OrderBy(r => r.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public Task RemoveFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(r);
+        db.FieldOperatorWorkRows.Remove(r);
+        return Task.CompletedTask;
+    }
+
+    public async Task AddFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(r);
+        await db.FieldOperatorWorkRows.AddAsync(r, ct);
+    }
+
+    // --- Labour read-back on /sync/pull (LABOUR_PHASE2 Phase 3) ---------------
+
+    public async Task<IReadOnlyList<LabourAssignment>> GetLabourAssignmentsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+    {
+        if (dailyLogIds is null || dailyLogIds.Count == 0)
+        {
+            return [];
+        }
+
+        // AsNoTracking: a pull is a pure read, and tracking hundreds of engagements
+        // would put them in the same ChangeTracker the push path saves through.
+        var ids = dailyLogIds as IList<Guid> ?? dailyLogIds.ToList();
+        return await db.LabourAssignments
+            .AsNoTracking()
+            .Where(a => ids.Contains(a.DailyLogId))
+            .OrderBy(a => a.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<FieldOperatorWorkRow>> GetFieldOperatorWorkRowsForAssignmentsAsync(
+        IReadOnlyCollection<Guid> labourAssignmentIds, CancellationToken ct = default)
+    {
+        if (labourAssignmentIds is null || labourAssignmentIds.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = labourAssignmentIds as IList<Guid> ?? labourAssignmentIds.ToList();
+        return await db.FieldOperatorWorkRows
+            .AsNoTracking()
+            .Where(r => ids.Contains(r.LabourAssignmentId))
+            .OrderBy(r => r.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    // --- Labour capability (LABOUR_PHASE2 Phase 5, migration ②) ------------
+
+    /// <summary>
+    /// Projected to a bare <c>bool</c> on purpose: this runs on the hot path of
+    /// five governed actions and never needs the entity. It is also reached
+    /// ONLY for roles that do not already carry the capability
+    /// (<c>LabourManagementGate</c> short-circuits owner-tier and Mukadam), so
+    /// in practice it is one extra round trip on the rarest branch.
+    /// <para>The non-terminal filter matches <see cref="GetUserRoleForFarmAsync"/>
+    /// exactly, so the grant and the role can never disagree about whether the
+    /// membership counts.</para>
+    /// </summary>
+    public async Task<bool> GetLabourManagementGrantAsync(
+        Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+        var typedUserId = new UserId(userId);
+
+        return await db.FarmMemberships
+            .AsNoTracking()
+            .AnyAsync(m => m.FarmId == typedFarmId
+                && m.UserId == typedUserId
+                && m.Status != MembershipStatus.Revoked
+                && m.Status != MembershipStatus.Exited
+                && m.CanManageLabourRecords, ct);
+    }
+
+    /// <summary>
+    /// TRACKED, deliberately — the grant/revoke handler mutates what this
+    /// returns and relies on <c>SaveChangesAsync</c> to persist it. The sibling
+    /// <see cref="GetFarmMembershipAsync"/> is <c>AsNoTracking()</c> and would
+    /// throw the mutation away in silence.
+    /// </summary>
+    public async Task<FarmMembership?> GetTrackedFarmMembershipAsync(
+        Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+        var typedUserId = new UserId(userId);
+
+        return await db.FarmMemberships
+            .FirstOrDefaultAsync(m => m.FarmId == typedFarmId
+                && m.UserId == typedUserId
+                && m.Status != MembershipStatus.Revoked
+                && m.Status != MembershipStatus.Exited, ct);
+    }
+
+    /// <summary>
+    /// TRACKED and status-blind — the exit write path. See the port docs: every
+    /// other membership read here filters the terminal statuses out, which makes
+    /// <c>ExitMembershipHandler</c>'s already-exited branch unreachable and turns
+    /// a retried exit into "you are not a member of this farm".
+    /// <para>The ordering is load-bearing, not cosmetic: a (farm, user) pair may
+    /// hold one live row plus any number of terminal ones (leave, rejoin by QR,
+    /// leave again). Live first, then most-recently-modified, so the row this
+    /// returns never depends on scan order.</para>
+    /// </summary>
+    public async Task<FarmMembership?> GetTrackedFarmMembershipIncludingTerminalAsync(
+        Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+        var typedUserId = new UserId(userId);
+
+        return await db.FarmMemberships
+            .Where(m => m.FarmId == typedFarmId && m.UserId == typedUserId)
+            .OrderBy(m => m.Status == MembershipStatus.Revoked
+                || m.Status == MembershipStatus.Exited ? 1 : 0)
+            .ThenByDescending(m => m.ModifiedAtUtc)
+            .FirstOrDefaultAsync(ct);
+    }
     // --- spec: dfes-companion-2026-07-11 (wave-4.4) — founder model, 2026-08-17 -------
     // The farms this user OWNS, kept apart from the farms he merely belongs to.
     // GetFarmIdsForUserAsync unions the two; the founder's ruling that "an owner with two
@@ -1399,23 +1718,241 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     /// upsert call BEFORE it adds the AiJob to the tracker, so nothing else
     /// is in flight at this point.
     /// </summary>
-    public async Task UpsertRawBlobIndexAsync(RawBlobRef blobRef, CancellationToken ct = default)
+    /// <remarks>
+    /// <para>
+    /// <b>§P0.9 addendum — the subject linkage.</b> After the index row is
+    /// durable, <c>(sha256, subjectUserId)</c> is recorded in
+    /// <c>ssf.raw_blob_subjects</c>. That table is the only user→audio pointer
+    /// that outlives a DPDP erasure, which deletes
+    /// <c>ai_jobs WHERE user_id = X</c> and with it the former sole link
+    /// (<c>ai_jobs.raw_input_ref</c>).
+    /// </para>
+    /// <para>
+    /// <b>Why the linkage is NOT conditional on the ref-count increment.</b>
+    /// The two answer different questions and are deliberately decoupled:
+    /// <c>ref_count</c> counts persist events for a blob, the linkage counts
+    /// DISTINCT subjects of it. Gating the insert on "was this a first
+    /// sighting" would mean the SECOND farmer to upload an identical clip is
+    /// never linked — precisely the many-to-many case this table exists for.
+    /// </para>
+    /// <para>
+    /// <b>A null subject writes no row.</b> Absence means unknown. No
+    /// placeholder, no <see cref="Guid.Empty"/>, no minted GUID.
+    /// </para>
+    /// <para>
+    /// <b>Why neither write uses <c>ON CONFLICT</c>, despite that being the
+    /// obvious idiom.</b> MEASURED on this schema as <c>agrisync_app</c>, with
+    /// a committed <c>raw_blob_index</c> row that the tenant's RLS policy hides:
+    /// plain <c>INSERT</c> → <c>23505</c>; <c>ON CONFLICT … DO NOTHING</c> →
+    /// <c>ERROR: new row violates row-level security policy</c>;
+    /// <c>ON CONFLICT … DO UPDATE</c> → same error; bare <c>UPDATE</c> →
+    /// <c>UPDATE 0</c>, no error. <c>ON CONFLICT</c> needs the conflicting row
+    /// to be policy-visible, and under <c>p_tenant_raw_blob_index</c> —
+    /// an EXISTS-join to <c>ssf.ai_jobs</c> keyed on <c>agrisync.farm_id</c> —
+    /// another farm's row is not. So the conflict is absorbed with a SAVEPOINT
+    /// instead, which needs no visibility at all.
+    /// </para>
+    /// </remarks>
+    public async Task UpsertRawBlobIndexAsync(RawBlobRef blobRef, Guid? subjectUserId, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(blobRef);
 
-        var existing = await db.RawBlobIndices
-            .FirstOrDefaultAsync(x => x.Sha256 == blobRef.Sha256, ct);
+        await UpsertBlobIndexRowAsync(blobRef, ct);
 
-        if (existing is not null)
-        {
-            existing.IncrementRefCount();
-        }
-        else
-        {
-            await db.RawBlobIndices.AddAsync(RawBlobIndexEntry.New(blobRef), ct);
-        }
-
+        // Flush any tracked work the caller had pending, preserving the
+        // durability contract this method has always advertised. A no-op in
+        // practice — the orchestrator upserts BEFORE adding the AiJob — but
+        // free, and removing it would be a silent behaviour change for any
+        // future caller that does have state in flight.
         await db.SaveChangesAsync(ct);
+
+        // The index row is now durable, so the FK on the linkage row resolves.
+        // (FK checks bypass RLS by design, so this holds even when the index
+        // row belongs to a different tenant and is invisible here.)
+        if (subjectUserId is not { } userId || userId == Guid.Empty)
+        {
+            return;
+        }
+
+        await InsertIgnoringDuplicateAsync(
+            @"INSERT INTO ssf.raw_blob_subjects (sha256, user_id, first_seen_utc)
+              VALUES ({0}, {1}, {2});",
+            [blobRef.Sha256, userId, DateTime.UtcNow],
+            ct);
+    }
+
+    /// <summary>
+    /// §P0.9 — create-or-increment the <c>ssf.raw_blob_index</c> row without
+    /// ever throwing, so the subject linkage that follows it always gets to run.
+    ///
+    /// <para>
+    /// <b>The bug this replaces.</b> The previous EF read-then-write was
+    /// <c>FirstOrDefaultAsync</c> → <c>Add</c> or <c>IncrementRefCount</c>. That
+    /// read is RLS-filtered. When farmer B uploads bytes identical to farmer A's
+    /// earlier clip, B cannot see A's index row, so EF took the INSERT branch
+    /// and Postgres raised <c>23505</c>;
+    /// <c>AiOrchestrator.TryPersistRawBlobAsync</c> swallowed it, and B got no
+    /// linkage row and no <c>ai_jobs.raw_input_ref</c>. The flagship
+    /// many-to-many case — the entire reason this is a join table — produced
+    /// nothing in production. Two users uploading identical bytes concurrently
+    /// hit the same shape.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>UPDATE first, then INSERT.</b> The UPDATE is the atomic form of the
+    /// old increment (it also fixes the read-modify-write lost-update race the
+    /// EF version had). It affects 0 rows when the row is absent OR hidden —
+    /// neither is an error. Only then do we try to create it.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Known, deliberate limitation.</b> When the row exists but is hidden
+    /// from this tenant, <c>ref_count</c> is NOT incremented — the UPDATE
+    /// matched nothing and the INSERT hit a duplicate. That undercount is a
+    /// property of <c>p_tenant_raw_blob_index</c>, not of this method, and
+    /// fixing it means changing that policy (out of scope for §P0.9). It is
+    /// strictly better than the previous behaviour, where the same case threw
+    /// and cost us the subject linkage as well as the increment.
+    /// </para>
+    /// </summary>
+    private async Task UpsertBlobIndexRowAsync(RawBlobRef blobRef, CancellationToken ct)
+    {
+        var incremented = await db.Database.ExecuteSqlRawAsync(
+            "UPDATE ssf.raw_blob_index SET ref_count = ref_count + 1 WHERE sha256 = {0};",
+            [blobRef.Sha256],
+            ct);
+
+        if (incremented > 0)
+        {
+            return;
+        }
+
+        // First sighting (or a sighting of a row this tenant cannot see). The
+        // domain factory still governs the initial state — RefCount=1 and the
+        // FirstSeenUtc stamp come from RawBlobIndexEntry.New, not from SQL.
+        var entry = RawBlobIndexEntry.New(blobRef);
+
+        await InsertIgnoringDuplicateAsync(
+            @"INSERT INTO ssf.raw_blob_index
+                  (sha256, s3_key, content_type, size_bytes, first_seen_utc, ref_count)
+              VALUES ({0}, {1}, {2}, {3}, {4}, {5});",
+            [entry.Sha256, entry.S3Key, entry.ContentType, entry.SizeBytes, entry.FirstSeenUtc, entry.RefCount],
+            ct);
+    }
+
+    /// <summary>
+    /// Run an INSERT, treating a unique violation as success (the row is
+    /// already there — possibly invisible to this tenant under RLS).
+    ///
+    /// <para>
+    /// The SAVEPOINT is load-bearing, not defensive. In Postgres a failed
+    /// statement poisons the whole transaction — every later command answers
+    /// <c>25P02 current transaction is aborted</c> — and these writes run inside
+    /// the per-request transaction <c>TenantTransactionMiddleware</c> opened. So
+    /// catching <c>23505</c> without a savepoint would convert one duplicate
+    /// blob into a failure of the entire request. Rolling back to the savepoint
+    /// discards only the failed INSERT.
+    /// </para>
+    ///
+    /// <para>
+    /// With no ambient transaction each statement is its own implicit
+    /// transaction, so a failure is already contained and no savepoint is
+    /// needed — hence the null check rather than an assumption.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Every exit path settles the savepoint</b> — released on success,
+    /// rolled back on ANY failure, not only on <c>23505</c>. An earlier version
+    /// rolled back solely inside the unique-violation filter, so a different
+    /// SQLSTATE (a <c>42501</c> permission denial, say — reachable on this very
+    /// table before the GRANT landed) escaped with the savepoint unsettled and
+    /// left the outer request transaction aborted: exactly the <c>25P02</c> this
+    /// helper exists to prevent, on the path where it matters most. Non-duplicate
+    /// failures are still rethrown; the rollback only keeps the caller's
+    /// transaction usable enough to report them.
+    /// </para>
+    /// </summary>
+    private async Task InsertIgnoringDuplicateAsync(string sql, object[] parameters, CancellationToken ct)
+    {
+        var transaction = db.Database.CurrentTransaction;
+
+        if (transaction is null)
+        {
+            // Implicit per-statement transaction — a failure is already
+            // contained, so there is nothing to protect the caller from.
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(sql, parameters, ct);
+            }
+            catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+            {
+                // Row already exists (possibly invisible to this tenant).
+            }
+
+            return;
+        }
+
+        var savepoint = "sp_blob_upsert_" + Guid.NewGuid().ToString("N");
+        await transaction.CreateSavepointAsync(savepoint, ct);
+
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(sql, parameters, ct);
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+            // Row already exists (possibly invisible to this tenant). Discard
+            // only the failed INSERT and carry on.
+            await RollBackQuietlyAsync(transaction, savepoint);
+            return;
+        }
+        catch
+        {
+            // Anything else is a real error the caller must see — but leave the
+            // outer transaction usable rather than poisoned on the way out.
+            await RollBackQuietlyAsync(transaction, savepoint);
+            throw;
+        }
+
+        // Success: release, so savepoints do not accumulate across the many
+        // blobs a single request can persist.
+        try
+        {
+            await transaction.ReleaseSavepointAsync(savepoint, ct);
+        }
+        catch (PostgresException)
+        {
+            // Releasing is housekeeping. If the provider or server declines it,
+            // the savepoint is discarded at COMMIT anyway; failing the caller's
+            // write over it would be strictly worse.
+        }
+    }
+
+    /// <summary>
+    /// Roll back to <paramref name="savepoint"/> without letting a secondary
+    /// failure mask the primary one. If the connection is already broken the
+    /// rollback cannot succeed and there is nothing left to protect.
+    ///
+    /// <para>
+    /// Deliberately NOT passed the caller's <c>CancellationToken</c>: this runs
+    /// on the failure path, and cancellation is one of the ways we get here. A
+    /// cancelled token would abort the cleanup that exists precisely to leave
+    /// the transaction usable.
+    /// </para>
+    /// </summary>
+    private static async Task RollBackQuietlyAsync(
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,
+        string savepoint)
+    {
+        try
+        {
+            await transaction.RollbackToSavepointAsync(savepoint, CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            // Swallowed deliberately: the caller is already handling or
+            // rethrowing a more informative exception.
+        }
     }
 
     // --- SARVAM_PRIMARY_VOICE_PIPELINE Task 2.10 (transcript idempotency) ---

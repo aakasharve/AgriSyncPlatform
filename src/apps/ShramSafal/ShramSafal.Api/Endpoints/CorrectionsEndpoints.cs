@@ -58,7 +58,8 @@ public static class CorrectionsEndpoints
             request.CorrectedParse,
             request.PromptVersion,
             request.Locale ?? "mr-IN",
-            request.Trigger);
+            request.Trigger,
+            request.PromptContentHash);
 
         var result = await handler.HandleAsync(command, ct);
         return result.IsSuccess
@@ -67,11 +68,21 @@ public static class CorrectionsEndpoints
     }
 }
 
-/// <summary>Request body for POST /corrections.</summary>
+/// <summary>
+/// Request body for POST /corrections.
+/// </summary>
+/// <remarks>
+/// §P0.4 — <c>OriginalParseId</c> is nullable (absent = no known originating
+/// AiJob, rather than a fabricated UUID) and <c>PromptContentHash</c> is now
+/// accepted. The two draft payloads are redacted of verbatim speech inside
+/// <see cref="CorrectionEvent.Record"/>, so a stale client that still sends a
+/// transcript cannot get one persisted.
+/// </remarks>
 public sealed record RecordCorrectionRequest(
-    Guid OriginalParseId,
+    Guid? OriginalParseId,
     string OriginalParseRaw,
     string CorrectedParse,
     string PromptVersion,
     string? Locale,
-    CorrectionTrigger Trigger);
+    CorrectionTrigger Trigger,
+    string? PromptContentHash = null);
