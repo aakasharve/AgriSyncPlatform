@@ -74,6 +74,17 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
     /// <summary>A SECOND foreman. Proof 3: peers do not approve each other either.</summary>
     private static readonly Guid OtherMukadamUserId = Guid.Parse("1d000000-0000-0000-0000-000000000007");
 
+    /// <summary>
+    /// spec: 2026-08-25-prod-cutover-waves — a real user of the platform who has NO
+    /// membership on THIS farm. Deliberately never passed to
+    /// <c>SeedFarmMembershipAsync</c>. Proof 3b uses him to keep the two refusal
+    /// paths DISTINGUISHABLE after the Wave-1 merge collapsed proofs 2 and 3 onto
+    /// the FSM's code: "you are not on this farm" and "you are on this farm but you
+    /// do not hold this edge" are different facts, and a suite that cannot tell them
+    /// apart cannot notice the day one of them starts answering for the other.
+    /// </summary>
+    private static readonly Guid StrangerUserId = Guid.Parse("1d000000-0000-0000-0000-00000000000f");
+
     private string _adminConn = string.Empty;
     private string _superuserConn = string.Empty;
     private string _appConn = string.Empty;
@@ -280,9 +291,54 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
 
         result.Status.Should().Be("failed",
             "a foreman approving his own work is the single thing the approval model exists to prevent");
-        result.ErrorCode.Should().Be("ShramSafal.Forbidden",
-            "the refusal must be a PERMANENT code (RejectionPolicy.ts normalizes the tail to FORBIDDEN) so the " +
-            "device parks it for review instead of retrying it every 15 seconds forever");
+        // ── 2026-08-27: THE CODE MOVED. THE REFUSAL DID NOT. ────────────────────
+        // This asserted "ShramSafal.Forbidden" until the Wave-1 merge, and the old
+        // expectation encoded a MEMBERSHIP MODEL that Wave 1 replaced — it was never
+        // describing this scenario accurately.
+        //
+        // Then: ShramSafalAuthorizationEnforcer.EnsureCanVerify held a PRIVATE
+        // OwnerRoles = [PrimaryOwner, SecondaryOwner] set. A Mukadam failed that gate
+        // and never reached the FSM, so the pipeline answered Forbidden.
+        //
+        // Now: founder decision O-4 (LABOUR_PHASE2 Phase 5, 2026-08-13) deleted that
+        // private list and pointed EnsureCanVerify at LabourManagementGate, which
+        // carries the Mukadam by role (LabourManagementPermission.IsCarriedByRole).
+        // The Mukadam therefore PASSES the enforcer now and is refused one layer
+        // deeper, by VerificationStateMachine: Confirmed -> Verified is held by
+        // [PrimaryOwner, SecondaryOwner, Agronomist, FpcTechnicalManager] and by
+        // nobody else, so DailyLog.VerifyReachingTarget throws before it constructs
+        // a single VerificationEvent and the handler maps that to this code.
+        //
+        // NOTHING WAS WIDENED. The assertions below this line are the ones that say
+        // so, and they are unchanged: the log is still Draft and the ledger is still
+        // EMPTY. A Mukadam self-approving is still impossible; only the sentence the
+        // server uses to say no got more accurate.
+        result.ErrorCode.Should().Be("ShramSafal.VerificationTransitionNotAllowedForRole",
+            "the FSM, not the enforcer, is now the layer that refuses him — and it refuses him " +
+            "for the true reason: he holds no Confirmed->Verified edge");
+
+        // ── OPEN, AND NOT MINE TO CLOSE: the DEVICE no longer parks this refusal. ──
+        // The expectation this replaced carried a true statement that the code change
+        // has now falsified, and deleting it silently would be the papering-over this
+        // gate exists to prevent, so it is recorded here instead of dropped.
+        //
+        // RejectionPolicy.ts (mobile-web) classifies by the code's tail, upper-cased:
+        // "ShramSafal.Forbidden" -> FORBIDDEN, which is in PERMANENT_REJECTION_CODES,
+        // so the row went straight to REJECTED_USER_REVIEW and surfaced on
+        // OfflineConflictPage. "ShramSafal.VerificationTransitionNotAllowedForRole"
+        // -> VERIFICATIONTRANSITIONNOTALLOWEDFORROLE, which is in NO list, and the
+        // message "Transition not allowed for role." contains no permanent code as a
+        // substring either — so categorizeRejection falls through to RETRYABLE. The
+        // refused approval is then re-pushed every 15 s until the cap, and parks in
+        // FAILED, which ConflictResolutionService.list() does not read. That is the
+        // exact invisible-failure shape the P0.6 note in RejectionPolicy.ts describes,
+        // re-created by a different code.
+        //
+        // The SERVER is correct and is not the place to fix this — emitting
+        // "Forbidden" again to please a client list would throw away the accurate
+        // reason. The fix is one entry in PERMANENT_REJECTION_CODES, which lives under
+        // src/clients/** and belongs to implementor-frontend. Until it lands, this is a
+        // device-visible regression, not a cosmetic one.
 
         var pulled = await PullDailyLogAsync(MukadamUserId, dailyLogId);
         pulled.LastVerificationStatus.Should().Be("Draft",
@@ -321,11 +377,82 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
         result.Status.Should().Be("failed",
             "'a second pair of eyes' is not the rule — the rule is owner-tier eyes. Two foremen covering for " +
             "each other is the failure mode this farm hires an owner to prevent");
-        result.ErrorCode.Should().Be("ShramSafal.Forbidden");
+        // Same layer move as proof 2 — see the long note there. A peer Mukadam is a
+        // MEMBER of this farm, so "Forbidden" (which on the sync path means "no
+        // membership at all") was never the semantically right answer for him; it was
+        // an artefact of the enforcer's old owner-only list. The proof that matters is
+        // the pair of assertions underneath: Draft, and no events.
+        result.ErrorCode.Should().Be("ShramSafal.VerificationTransitionNotAllowedForRole");
 
         var pulled = await PullDailyLogAsync(OwnerUserId, dailyLogId);
         pulled.LastVerificationStatus.Should().Be("Draft");
         pulled.VerificationEvents.Should().BeEmpty();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PROOF 3b — AND THE TWO REFUSALS STAY TELLABLE APART.
+    //
+    // Proofs 2 and 3 refuse a MEMBER whose role lacks the edge. This refuses a
+    // caller with no membership on the farm at all. Before the Wave-1 merge both
+    // situations answered "ShramSafal.Forbidden" and this proof could not have
+    // existed; the merge separated them, and this pins the separation so a future
+    // change cannot quietly route "not on this farm" through the FSM's answer (or
+    // the reverse) without a red test.
+    // ─────────────────────────────────────────────────────────────────────────
+    [SkippableFact]
+    public async Task A_caller_with_no_membership_is_refused_before_the_state_machine_is_consulted()
+    {
+        SkipIfPostgresUnavailable();
+
+        var dailyLogId = Guid.Parse("1ddd7777-7777-7777-7777-777777777777");
+
+        var created = await PushAsync(
+            MukadamUserId, "Mukadam", "req-mukadam-log-3b",
+            "create_daily_log", CreateLogPayload(dailyLogId, MukadamUserId, new DateOnly(2026, 8, 13)));
+        Assert.Single(created.Value!.Results).Status.Should().Be("applied");
+
+        var approve = await PushAsync(
+            StrangerUserId, "PrimaryOwner",
+            "req-stranger-approves",
+            "verify_log_v2", ApprovePayload(dailyLogId, verifierUserIdInPayload: StrangerUserId));
+
+        var result = Assert.Single(approve.Value!.Results);
+        output.WriteLine($"[EVIDENCE] stranger approve → status='{result.Status}' errorCode='{result.ErrorCode}'");
+
+        result.Status.Should().Be("failed",
+            "a user with no relationship to this farm may not touch its verification ledger, whatever " +
+            "role he puts on the wire");
+
+        result.ErrorCode.Should().NotBe("ShramSafal.VerificationTransitionNotAllowedForRole",
+            "that code means 'you are a member of this farm and your role lacks this edge'. Answering it " +
+            "to a non-member would tell an outsider he has standing here, and would make proofs 2 and 3 " +
+            "unable to distinguish the peer case from the stranger case");
+
+        // MEASURED, not assumed — 2026-08-27, this fixture, real :5433, agrisync_app
+        // with no BYPASSRLS. It is NOT "ShramSafal.Forbidden", and writing that here
+        // would have been a guess that happened to be wrong.
+        //
+        // EstablishFarmScopeForLogAsync reads the log FIRST under the caller's own
+        // user-scoped RLS policies, with agrisync.farm_id neutralised to the all-zeros
+        // sentinel, precisely so a forged log id from another farm cannot be used to
+        // probe what exists. For a non-member that read returns ZERO rows, so the
+        // handler answers DailyLogNotFound and never reaches its own `!isMember ->
+        // Forbidden` branch at all. Refusing without confirming the row exists is the
+        // STRONGER posture, and it is deliberate.
+        //
+        // Consequence worth knowing: on the real Postgres path that Forbidden branch is
+        // defence-in-depth that a relational run cannot reach. It still fires on the
+        // non-relational (EF InMemory) sync harness, which has no RLS to hide the row —
+        // so do not "clean it up" as dead code.
+        result.ErrorCode.Should().Be("ShramSafal.DailyLogNotFound",
+            "under FORCE-RLS the outsider's read surfaces nothing, so the server refuses without ever " +
+            "confirming the log exists — an existence probe is a leak, and this is the posture that " +
+            "denies it one");
+
+        var pulled = await PullDailyLogAsync(OwnerUserId, dailyLogId);
+        pulled.LastVerificationStatus.Should().Be("Draft");
+        pulled.VerificationEvents.Should().BeEmpty(
+            "a refused approval must leave NO trace — the same rule proofs 2 and 3 assert");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
