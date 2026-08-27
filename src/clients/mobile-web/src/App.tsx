@@ -25,6 +25,9 @@ import { useMorningNotificationWiring } from './app/hooks/useMorningNotification
 import ConsentGateScreen from './features/consent/gate/ConsentGateScreen';
 import { useConsentGate } from './features/consent/gate/useConsentGate';
 import { recordConsentGateAcceptance } from './features/consent/gate/consentGateApi';
+// spec: 2026-08-25-prod-cutover-waves (B1) — the pre-login acceptance gets its owner.
+import { rememberConsentGateAcceptanceForLinking } from './features/consent/gate/consentGateLinkReconciler';
+import { useConsentGateLinkReconciliation } from './features/consent/gate/useConsentGateLink';
 
 const hasJoinDeepLink = (): boolean => {
     if (typeof window === 'undefined') return false;
@@ -43,7 +46,7 @@ const AppFrame: React.FC<{
     // spec: secure-remembered-device-sessions-2026-06-24
     // Use authStatus (not isAuthenticated) so we can show a neutral loading
     // shell during 'checking' and never flash LoginPage before boot validation.
-    const { isAuthenticated, authStatus } = useAuth();
+    const { isAuthenticated, authStatus, session } = useAuth();
     const [joinActive, setJoinActive] = useState<boolean>(hasJoinDeepLink);
     const { t } = useLanguage();
 
@@ -56,6 +59,17 @@ const AppFrame: React.FC<{
     // native local notification. Flag-off / non-native no-op is guaranteed
     // inside the hook — see useMorningNotificationWiring.ts.
     useMorningNotificationWiring(isAuthenticated, t('dfes.morningNotificationTitle'));
+
+    // spec: 2026-08-25-prod-cutover-waves (B1) — the gate runs pre-login, so its two legal
+    // records land with no user attached and are readable by nobody. This attaches them to
+    // the account the farmer just made (or signed back into) by writing a linking row.
+    //
+    // It is a SILENT BACKGROUND RECONCILIATION and must stay one: nothing is awaited here,
+    // nothing renders, nothing is shown to the farmer on success or on failure, and it can
+    // neither block nor delay registration, login or logging work (doctrine P9 / P4). It
+    // fires on every authenticated app start, so a farmer who was offline when he
+    // registered is linked the next time he opens the app with signal.
+    useConsentGateLinkReconciliation(authStatus === 'authenticated' ? session?.userId : null);
 
     // The QR deep-link wins over login. Semi-literate workers must never
     // see a generic password screen when they scan a farm QR.
@@ -101,6 +115,19 @@ const AppFrame: React.FC<{
                         // holding it, which is the one outcome consent exists to prevent.
                         await recordConsentGateAcceptance(
                             acceptance, consentGate.preRegistrationSessionId);
+
+                        // B1 — keep what was DISPLAYED so it can be restated once an
+                        // account exists. After the accepting write, never before: a
+                        // payload stored for an acceptance that never landed would later
+                        // produce a linking row asserting a consent that does not exist.
+                        //
+                        // Deliberately NOT awaited. Doctrine P9 — a wedged IndexedDB must
+                        // not be able to hold a farmer on the consent screen. Losing the
+                        // race between this write and the app being killed costs one
+                        // unlinked acceptance, which is the state we are already in.
+                        void rememberConsentGateAcceptanceForLinking(
+                            acceptance, consentGate.preRegistrationSessionId);
+
                         consentGate.markPassed();
                     }}
                 />

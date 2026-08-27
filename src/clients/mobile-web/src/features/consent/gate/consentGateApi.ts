@@ -12,6 +12,14 @@
 // A failure THROWS. The screen catches it, stays on the gate, and says so — the one
 // outcome that must never happen is a farmer walking into the app believing a consent
 // record exists when it does not.
+//
+// THE OTHER HALF LIVES ELSEWHERE. The row this writes carries `user_id NULL` and is
+// therefore readable by nobody, so it has to be attached to an account after the fact:
+// `POST /shramsafal/consent-gate/link`, in
+// `infrastructure/consent/ConsentGateLinkClient.ts`, driven by
+// `./consentGateLinkReconciler.ts`. That call is authenticated and goes through
+// `agriSyncClient`, which is why it is not in this file (spec:
+// 2026-08-25-prod-cutover-waves, B1).
 
 import { APP_VERSION } from '../../../infrastructure/api/transport';
 import type { ConsentGateAcceptance } from './ConsentGateScreen';
