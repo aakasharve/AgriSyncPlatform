@@ -24,7 +24,16 @@ namespace ShramSafal.Sync.IntegrationTests.Dfes;
 
 /// <summary>
 /// spec: dfes-companion-2026-07-11 (wave-1.4) — AN OWNER MUST BE ABLE TO APPROVE A
-/// MUKADAM'S LOG, AND NOBODY ELSE MAY.
+/// MUKADAM'S LOG, AND NOBODY THE OWNER HAS NOT AUTHORISED MAY.
+///
+/// <para><b>The title changed on 2026-08-27 and the change is the point.</b> It read
+/// "and NOBODY ELSE may", which was true when only owner-tier roles held the
+/// <c>Confirmed → Verified</c> edge. Founder ruling 2026-08-27 — <i>"if the owner has
+/// given that access to him then yes"</i> — makes approval PERMISSION-gated: a member
+/// carrying the owner's explicit <c>can_manage_labour_records</c> grant may approve
+/// too. Proof 7 is that half. Proofs 2/3/3b are unchanged and still refuse every
+/// caller WITHOUT the grant, which is what keeps the ruling from becoming a hole. The
+/// two halves only mean something together — see proof 7's header.</para>
 ///
 /// <para><b>The blocker.</b> Wave-1.3 made an owner's OWN log self-attest to
 /// <c>Verified</c>. The other half of the pilot — a foreman records the day, the owner
@@ -73,6 +82,35 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
 
     /// <summary>A SECOND foreman. Proof 3: peers do not approve each other either.</summary>
     private static readonly Guid OtherMukadamUserId = Guid.Parse("1d000000-0000-0000-0000-000000000007");
+
+    /// <summary>
+    /// spec: 2026-08-25-prod-cutover-waves — FOUNDER RULING 2026-08-27, verbatim:
+    /// <i>"if the owner has given that access to him then yes"</i>.
+    ///
+    /// <para>A third foreman, identical to <see cref="MukadamUserId"/> in every
+    /// respect except ONE: the owner switched <c>can_manage_labour_records</c> on for
+    /// him (see <see cref="GrantsLabourManagementToTheGrantedMukadam"/>). He is the
+    /// whole difference between proofs 2/3 and proof 7 — same role, same farm, same
+    /// mutation, opposite answer. That is what makes this suite able to show the rule
+    /// is keyed on the PERMISSION and not on the role.</para>
+    /// </summary>
+    private static readonly Guid GrantedMukadamUserId = Guid.Parse("1d000000-0000-0000-0000-000000000008");
+
+    /// <summary>
+    /// THE MUTATION SWITCH. Flip to <c>false</c> and proofs 7 and 7b must go RED — if
+    /// they stay green the grant was never what allowed the approval, and this suite is
+    /// proving nothing about the ruling.
+    ///
+    /// <para><b>Measured both ways 2026-08-27, real :5433, <c>agrisync_app</c> with no
+    /// BYPASSRLS — not reasoned about:</b></para>
+    /// <code>
+    /// grant = true  -> status='applied'  errorCode=''
+    /// grant = false -> status='failed'   errorCode='ShramSafal.VerificationTransitionNotAllowedForRole'
+    /// </code>
+    /// <para>Same code, same role, same mutation; the stored flag is the only input
+    /// that moved. That is the evidence the rule is permission-gated.</para>
+    /// </summary>
+    private const bool GrantsLabourManagementToTheGrantedMukadam = true;
 
     /// <summary>
     /// spec: 2026-08-25-prod-cutover-waves — a real user of the platform who has NO
@@ -132,6 +170,9 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
             await SeedFarmMembershipAsync(raw, OwnerUserId, "PrimaryOwner");
             await SeedFarmMembershipAsync(raw, MukadamUserId, "Mukadam");
             await SeedFarmMembershipAsync(raw, OtherMukadamUserId, "Mukadam");
+            await SeedFarmMembershipAsync(
+                raw, GrantedMukadamUserId, "Mukadam",
+                canManageLabourRecords: GrantsLabourManagementToTheGrantedMukadam);
             await SeedPlotAsync(raw);
             await SeedCropCycleAsync(raw);
         }
@@ -561,6 +602,150 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // PROOF 7 — THE OTHER HALF OF THE RULE. A mukadam the owner GRANTED can approve.
+    //
+    // spec: 2026-08-25-prod-cutover-waves — founder ruling 2026-08-27, verbatim:
+    // "if the owner has given that access to him then yes".
+    //
+    // Proofs 2 and 3 refuse a mukadam. This one permits a mukadam. The ONLY thing
+    // that differs between them is the owner's stored can_manage_labour_records
+    // flag — same role, same farm, same mutation, same wire shape. Read them as a
+    // pair: together they say the rule is keyed on the PERMISSION, and a suite that
+    // had only the refusals could not tell permission-gated from role-gated at all.
+    //
+    // Before this ruling landed, this test was IMPOSSIBLE to pass: EnsureCanVerify
+    // admitted the mukadam (LabourManagementGate carries him by role, O-4) and then
+    // VerificationStateMachine refused him on an owner-tier check one layer deeper.
+    // That is the two-layer disagreement this change closed.
+    // ─────────────────────────────────────────────────────────────────────────
+    [SkippableFact]
+    public async Task A_mukadam_the_owner_granted_can_approve_another_mukadams_log()
+    {
+        SkipIfPostgresUnavailable();
+
+        var dailyLogId = Guid.Parse("1ddd8888-8888-8888-8888-888888888888");
+
+        // Sanity FIRST: the grant is genuinely on the row. Without this line a future
+        // fixture change could silently drop the column write and this proof would
+        // then be asserting that an UNGRANTED mukadam can approve — the precise
+        // regression it exists to catch, reported as green.
+        await using (var read = new NpgsqlConnection(_superuserConn))
+        {
+            await read.OpenAsync();
+            var granted = Convert.ToBoolean(await ScalarAsync(read,
+                "SELECT can_manage_labour_records FROM ssf.farm_memberships WHERE user_id = @u",
+                ("u", GrantedMukadamUserId)));
+            var ungranted = Convert.ToBoolean(await ScalarAsync(read,
+                "SELECT can_manage_labour_records FROM ssf.farm_memberships WHERE user_id = @u",
+                ("u", OtherMukadamUserId)));
+
+            output.WriteLine($"[EVIDENCE] ssf.farm_memberships.can_manage_labour_records: " +
+                             $"granted-mukadam={granted} peer-mukadam={ungranted}");
+
+            granted.Should().Be(GrantsLabourManagementToTheGrantedMukadam,
+                "the fixture must have written the real column — this proof means nothing otherwise");
+            ungranted.Should().BeFalse(
+                "proofs 2 and 3 rely on their mukadams NOT holding the grant");
+        }
+
+        // A different foreman records the day. Delegated approval, not self-approval —
+        // that case is proof 7b.
+        var created = await PushAsync(
+            OtherMukadamUserId, "Mukadam", "req-mukadam-log-7",
+            "create_daily_log", CreateLogPayload(dailyLogId, OtherMukadamUserId, new DateOnly(2026, 8, 17)));
+        Assert.Single(created.Value!.Results).Status.Should().Be("applied");
+
+        var beforeApproval = await PullDailyLogAsync(OwnerUserId, dailyLogId);
+        beforeApproval.LastVerificationStatus.Should().Be("Draft",
+            "a foreman's day still starts unapproved — the grant changes who may approve it, not that it needs approving");
+
+        // He under-states his role on the wire, exactly as proof 1's owner does. The
+        // grant must be read from the DATABASE or the whole thing is client-declared
+        // authority wearing a new name.
+        var approve = await PushAsync(
+            GrantedMukadamUserId, "Worker",
+            "req-granted-mukadam-approves",
+            "verify_log_v2", ApprovePayload(dailyLogId, verifierUserIdInPayload: GrantedMukadamUserId));
+
+        var result = Assert.Single(approve.Value!.Results);
+        output.WriteLine($"[EVIDENCE] granted mukadam approve → status='{result.Status}' " +
+                         $"errorCode='{result.ErrorCode}' message='{result.ErrorMessage}'");
+
+        result.Status.Should().Be("applied",
+            "the owner gave him this access; refusing him is the bug the 2026-08-27 ruling named");
+
+        var pulled = await PullDailyLogAsync(OwnerUserId, dailyLogId);
+        pulled.LastVerificationStatus.Should().Be("Verified");
+
+        pulled.VerificationEvents.Should().HaveCount(2,
+            "the grant opens ONE edge (Confirmed->Verified). It adds no Draft->Verified shortcut, so he walks " +
+            "the identical two hops an owner walks. One event here would mean the shortcut edge was added, " +
+            "which lets every role self-approve regardless of any grant");
+        pulled.VerificationEvents.Select(e => e.Status).Should().ContainInOrder("confirmed", "verified");
+        pulled.VerificationEvents.Should().OnlyContain(e => e.VerifiedByUserId == GrantedMukadamUserId,
+            "the ledger records who actually acted — the same rule proof 4 pins for the owner");
+
+        ClientRingContractMirror.TheRingCountsIt(
+            ClientRingContractMirror.MapVerificationStatus(pulled.LastVerificationStatus)).Should().BeTrue();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PROOF 7b — A CONSEQUENCE, RECORDED. NOT A FOUNDER RULING.
+    //
+    // The grant is keyed on (farm, user) — it says nothing about who WROTE the log.
+    // So a granted mukadam can also approve his OWN day, which narrows proof 2's
+    // title ("a mukadam cannot approve his own log") to "an UNGRANTED mukadam
+    // cannot". That is a real change to the trust model and the founder has not
+    // ruled on it: he was asked whether a mukadam may approve, and answered "if the
+    // owner has given that access to him then yes".
+    //
+    // It is pinned here rather than left silent because the alternative is that the
+    // first person to discover it discovers it in production. Two ways to read it:
+    //   • intended — an owner-tier user already self-attests his own log (ruling 2,
+    //     "he wrote it; it is his word"), so a delegate doing the same is consistent;
+    //   • not intended — "four eyes on a foreman's day" was the point, and the grant
+    //     should carry approval of OTHERS' logs only.
+    //
+    // IF THE FOUNDER RULES THE SECOND WAY, this test is where it goes: flip to
+    // "failed", and add the authorship check to VerifyLogHandler (NOT to the FSM —
+    // the FSM does not know who wrote the log, and teaching it would be the wrong
+    // layer). Until then this asserts what the code measurably does.
+    // ─────────────────────────────────────────────────────────────────────────
+    [SkippableFact]
+    public async Task A_granted_mukadam_can_also_approve_his_OWN_log_which_is_a_consequence_not_a_ruling()
+    {
+        SkipIfPostgresUnavailable();
+
+        var dailyLogId = Guid.Parse("1ddd9999-9999-9999-9999-999999999999");
+
+        var created = await PushAsync(
+            GrantedMukadamUserId, "Mukadam", "req-granted-mukadam-log-7b",
+            "create_daily_log", CreateLogPayload(dailyLogId, GrantedMukadamUserId, new DateOnly(2026, 8, 18)));
+        Assert.Single(created.Value!.Results).Status.Should().Be("applied");
+
+        var beforeApproval = await PullDailyLogAsync(OwnerUserId, dailyLogId);
+        beforeApproval.LastVerificationStatus.Should().Be("Draft",
+            "ruling 2 self-attestation is owner-tier only — a granted mukadam's log is NOT verified on save, " +
+            "he has to ask for it, and that keeps 'who approved this day' a question with one answer");
+
+        var approve = await PushAsync(
+            GrantedMukadamUserId, "Mukadam",
+            "req-granted-mukadam-selfapproves",
+            "verify_log_v2", ApprovePayload(dailyLogId, verifierUserIdInPayload: GrantedMukadamUserId));
+
+        var result = Assert.Single(approve.Value!.Results);
+        output.WriteLine($"[EVIDENCE] granted mukadam SELF-approve → status='{result.Status}' " +
+                         $"errorCode='{result.ErrorCode}' — see this proof's header before changing it");
+
+        result.Status.Should().Be("applied",
+            "MEASURED, not decided: the grant is keyed on (farm, user) and carries no authorship condition. " +
+            "Read the header — this is the line a founder ruling would flip");
+
+        var pulled = await PullDailyLogAsync(OwnerUserId, dailyLogId);
+        pulled.LastVerificationStatus.Should().Be("Verified");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Wire helpers — the canonical verify_log_v2 payload
     // (sync-contract/schemas/payloads/verify_log_v2.zod.ts).
     // ─────────────────────────────────────────────────────────────────────────
@@ -706,20 +891,34 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
         await cmd.ExecuteNonQueryAsync();
     }
 
-    /// <summary>status 3 = <c>MembershipStatus.Active</c>.</summary>
-    private static async Task SeedFarmMembershipAsync(NpgsqlConnection db, Guid userId, string role)
+    /// <summary>
+    /// status 3 = <c>MembershipStatus.Active</c>.
+    ///
+    /// <para><paramref name="canManageLabourRecords"/> writes the REAL
+    /// <c>can_manage_labour_records</c> column added by migration
+    /// <c>20260813081843_AddFarmMembershipLabourCapability</c> — not a stub. The port
+    /// doc on <c>GetLabourManagementGrantAsync</c> warns that every in-tree test double
+    /// defaults it to <c>false</c>, so a denial can pass identically against code that
+    /// never consulted the grant at all. This suite reads the actual row through the
+    /// actual repository, which is the only way the GRANT path can be proven rather
+    /// than assumed.</para>
+    /// </summary>
+    private static async Task SeedFarmMembershipAsync(
+        NpgsqlConnection db, Guid userId, string role, bool canManageLabourRecords = false)
     {
         await using var cmd = db.CreateCommand();
         cmd.CommandText = """
             INSERT INTO ssf.farm_memberships
-                ("Id", farm_id, user_id, role, granted_at_utc, modified_at_utc, owner_account_id, status)
-            VALUES (@id, @farm, @user, @role, NOW(), NOW(), @account, 3);
+                ("Id", farm_id, user_id, role, granted_at_utc, modified_at_utc, owner_account_id, status,
+                 can_manage_labour_records)
+            VALUES (@id, @farm, @user, @role, NOW(), NOW(), @account, 3, @grant);
             """;
         cmd.Parameters.AddWithValue("id", Guid.NewGuid());
         cmd.Parameters.AddWithValue("farm", FarmId);
         cmd.Parameters.AddWithValue("user", userId);
         cmd.Parameters.AddWithValue("role", role);
         cmd.Parameters.AddWithValue("account", OwnerAccountId);
+        cmd.Parameters.AddWithValue("grant", canManageLabourRecords);
         await cmd.ExecuteNonQueryAsync();
     }
 

@@ -6,6 +6,7 @@ using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Contracts.Sync.Payloads;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
@@ -206,9 +207,17 @@ public static class LogsEndpoints
             }
             var resolvedCallerRole = callerRole.Value;
 
+            // spec: 2026-08-25-prod-cutover-waves — founder ruling 2026-08-27. This
+            // endpoint IS the client's answer to "what may I do with this log". Asked
+            // on role alone it would omit "Verified" for a member the owner explicitly
+            // granted approval authority, and the device would hide a button the server
+            // would have honoured. Same stored grant the decision path reads.
+            var hasLabourManagementGrant = await LabourManagementGate.HasExplicitGrantAsync(
+                repository, (Guid)log.FarmId, callerUserId, ct);
+
             var currentStatus = log.CurrentVerificationStatus;
             var availableTransitions = VerificationStateMachine
-                .GetAvailableTransitions(currentStatus, resolvedCallerRole)
+                .GetAvailableTransitions(currentStatus, resolvedCallerRole, hasLabourManagementGrant)
                 .Select(status => status.ToString())
                 .ToArray();
 

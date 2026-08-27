@@ -13,6 +13,13 @@ namespace ShramSafal.Domain.Farms;
 /// not a member                   -> denied
 /// </code>
 ///
+/// <para><b>Scope, stated precisely — founder ruling 2026-08-27.</b> The table above
+/// governs the four labour-EDIT actions. APPROVING a log is a fifth action and does
+/// NOT read this table: <c>VerificationStateMachine</c> owns that edge and takes
+/// owner-tier OR the explicit grant, so a Mukadam approves only when the owner has
+/// given him that access. See <see cref="IsCarriedByRole"/> for why the two must not
+/// be collapsed back into one answer.</para>
+///
 /// <para><b>Why this type exists at all.</b> Before Phase 5 the five governed
 /// actions obeyed THREE different rules: creating / renaming / attaching a
 /// field operator accepted any member (a Worker included), correcting labour
@@ -43,12 +50,37 @@ public static class LabourManagementPermission
     /// explicit grant required and no way for an owner to take it away short of
     /// changing the role itself.
     ///
-    /// <para><see cref="AppRole.Mukadam"/> is in this set BY FOUNDER DECISION,
-    /// and adding it is a real behaviour change: before Phase 5 the
-    /// approve/verify path (<c>ShramSafalAuthorizationEnforcer.EnsureCanVerify</c>)
-    /// was owner-tier only, so the Mukadam could correct a headcount but could
-    /// not verify the log it belonged to. That contradiction is what O-4
-    /// closed.</para>
+    /// <para><see cref="AppRole.Mukadam"/> is in this set BY FOUNDER DECISION
+    /// (O-4), and it genuinely changed the four labour-EDIT actions: correcting a
+    /// headcount, correcting a duration, changing attribution, and managing
+    /// FieldOperator identity.</para>
+    ///
+    /// <para><b>CORRECTION, 2026-08-27 — this comment used to claim more than the
+    /// code did.</b> It said O-4 "closed" the contradiction that a Mukadam could
+    /// correct a headcount but not verify the log it belonged to. It did not.
+    /// <c>EnsureCanVerify</c> did start asking this predicate, so the Mukadam passed
+    /// the ENFORCER — and was then refused one layer deeper by
+    /// <c>VerificationStateMachine</c>, whose <c>Confirmed → Verified</c> edge is
+    /// owner-tier. For fifteen days the claim was false in production and no test
+    /// said so, because every test double defaults the grant to <c>false</c> and a
+    /// denial that passes for the wrong reason looks exactly like one that passes for
+    /// the right one.</para>
+    ///
+    /// <para><b>What is true now.</b> Founder ruling 2026-08-27, verbatim:
+    /// <i>"if the owner has given that access to him then yes"</i> — approval is
+    /// PERMISSION-gated, not role-gated. So:</para>
+    /// <code>
+    /// the four labour-EDIT actions  -> this set applies; a Mukadam needs no grant
+    /// approving a log (Confirmed->Verified) -> owner-tier, OR the EXPLICIT
+    ///                                          can_manage_labour_records grant
+    /// </code>
+    /// <para>An UNGRANTED Mukadam still cannot approve, and that is the ruling
+    /// working as intended rather than a leftover of the old bug — it is what stops a
+    /// foreman signing off his own day. The verification FSM therefore takes the
+    /// STORED grant flag, never <see cref="IsCarriedByRole"/>: feeding this predicate
+    /// to it would restore role-gating and hand the edge to every Mukadam on every
+    /// farm. Proofs: <c>OwnerCanApproveAMukadamsLogRealPostgresTests</c> — one
+    /// granted Mukadam approves, three ungranted callers are refused.</para>
     /// </summary>
     public static bool IsCarriedByRole(AppRole role) =>
         role is AppRole.PrimaryOwner or AppRole.SecondaryOwner or AppRole.Mukadam;

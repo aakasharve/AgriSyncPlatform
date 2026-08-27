@@ -6,6 +6,7 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Application.UseCases.Work.Handlers;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
@@ -21,9 +22,12 @@ namespace ShramSafal.Application.UseCases.Logs.VerifyLog;
 ///
 /// <para>
 /// T-IGH-03-PIPELINE-ROLLOUT (VerifyLog): caller-shape validation lives
-/// in <see cref="VerifyLogValidator"/>; the strict
-/// owner-tier <see cref="IAuthorizationEnforcer.EnsureCanVerify"/> check
-/// lives in <see cref="VerifyLogAuthorizer"/>. When this handler is
+/// in <see cref="VerifyLogValidator"/>; the
+/// <see cref="IAuthorizationEnforcer.EnsureCanVerify"/> check
+/// lives in <see cref="VerifyLogAuthorizer"/>. (That check stopped being
+/// "strict owner-tier" at founder decision O-4, which pointed it at
+/// <c>LabourManagementGate</c>; the word is removed rather than left to
+/// describe a list that no longer exists.) When this handler is
 /// resolved via the pipeline, both run before the body. Direct
 /// construction (legacy unit tests) bypasses those decorators and
 /// exercises only the body's own defense-in-depth checks
@@ -71,6 +75,29 @@ public sealed class VerifyLogHandler(
         }
         var resolvedCallerRole = callerRole.Value;
 
+        // ── spec: 2026-08-25-prod-cutover-waves — FOUNDER RULING 2026-08-27 ──────
+        // "if the owner has given that access to him then yes."
+        //
+        // The Mukadam question is PERMISSION-gated, not ROLE-gated. Until now the
+        // enforcer admitted him (LabourManagementGate carries the Mukadam by role,
+        // founder decision O-4) and the state machine refused him one layer deeper on
+        // an owner-tier check — so the doc claiming O-4 "restores the Mukadam's ability
+        // to approve and verify" described something that had never once happened.
+        //
+        // The grant is read HERE and passed DOWN: VerificationStateMachine is a Domain
+        // type and doctrine E2 forbids it reaching for a repository.
+        //
+        // The read is skipped for callers whose ROLE already holds Confirmed->Verified,
+        // which is the traffic that dominates — the same ordering LabourManagementGate
+        // documents, and for the same reason. It is a short-circuit, never a widening:
+        // a caller who fails BOTH the role check and the grant read is refused exactly
+        // as before.
+        var hasLabourManagementGrant =
+            !VerificationStateMachine.CanTransitionWithRole(
+                VerificationStatus.Confirmed, VerificationStatus.Verified, resolvedCallerRole)
+            && await LabourManagementGate.HasExplicitGrantAsync(
+                repository, (Guid)log.FarmId, command.VerifiedByUserId, ct);
+
         // Phase 5 entitlement gate (PaidFeature.RunVerification).
         var gate = await EntitlementGate.CheckAsync<DailyLogDto>(
             entitlementPolicy, new UserId(command.VerifiedByUserId), log.FarmId,
@@ -103,7 +130,8 @@ public sealed class VerifyLogHandler(
                 command.VerifiedByUserId,
                 clock.UtcNow,
                 targetEventId: command.VerificationEventId ?? idGenerator.New(),
-                enRouteEventId: idGenerator.New());
+                enRouteEventId: idGenerator.New(),
+                hasLabourManagementGrant: hasLabourManagementGrant);
 
             verification = emitted[^1];
 

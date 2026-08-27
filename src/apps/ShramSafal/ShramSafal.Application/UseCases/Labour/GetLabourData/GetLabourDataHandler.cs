@@ -4,6 +4,7 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Logs;
@@ -77,6 +78,14 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             return Result.Failure<LabourDataDto>(ShramSafalErrors.Forbidden);
         }
         var resolvedCallerRole = callerRole.Value;
+
+        // spec: 2026-08-25-prod-cutover-waves — founder ruling 2026-08-27. The review
+        // inbox (§8) lists logs by asking the FSM what this caller may do next. Asked
+        // on role alone it would hide a Confirmed log from the very member the owner
+        // GRANTED approval authority to — the button would not merely be disabled, the
+        // row would not exist. Same flag the decision path reads, one place.
+        var hasLabourManagementGrant = await LabourManagementGate.HasExplicitGrantAsync(
+            repository, query.FarmId.Value, query.CallerUserId.Value, ct);
 
         // ── 1. Memberships → labour People (Worker / Mukadam only — owners
         //       and other roles are not "labour"). ──────────────────────────
@@ -239,7 +248,8 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // ── 8. Review — Draft/Confirmed logs still awaiting the owner. ─────
         var reviewLogs = farmLogs
             .Where(l => l.CurrentVerificationStatus is VerificationStatus.Draft or VerificationStatus.Confirmed
-                && VerificationStateMachine.GetAvailableTransitions(l.CurrentVerificationStatus, resolvedCallerRole).Length > 0)
+                && VerificationStateMachine.GetAvailableTransitions(
+                    l.CurrentVerificationStatus, resolvedCallerRole, hasLabourManagementGrant).Length > 0)
             .OrderByDescending(l => l.ModifiedAtUtc)
             .ToList();
 

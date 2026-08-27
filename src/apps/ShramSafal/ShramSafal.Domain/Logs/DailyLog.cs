@@ -407,16 +407,31 @@ public sealed class DailyLog : Entity<Guid>
         return editMarker;
     }
 
+    /// <param name="hasLabourManagementGrant">
+    /// spec: 2026-08-25-prod-cutover-waves — founder ruling 2026-08-27,
+    /// <i>"if the owner has given that access to him then yes"</i>. The caller's
+    /// EXPLICIT <c>can_manage_labour_records</c> grant on this log's farm, resolved by
+    /// <c>LabourManagementGate</c> before it gets here (the Domain has no database, and
+    /// doctrine E2 says it must not acquire one). It opens the single
+    /// <c>Confirmed → Verified</c> edge and nothing else — see
+    /// <see cref="VerificationStateMachine.CanTransitionWithRole(VerificationStatus, VerificationStatus, AppRole, bool)"/>.
+    ///
+    /// <para>Defaults to <c>false</c> so that every pre-existing caller — the seeder,
+    /// the backfill, the self-attestation path — keeps the role-only behaviour it had.
+    /// A caller that has not looked the grant up must not imply one.</para>
+    /// </param>
     public VerificationEvent Verify(
         Guid verificationEventId,
         VerificationStatus status,
         string? reason,
         AppRole callerRole,
         UserId verifiedByUserId,
-        DateTime occurredAtUtc)
+        DateTime occurredAtUtc,
+        bool hasLabourManagementGrant = false)
     {
         var currentStatus = CurrentVerificationStatus;
-        if (!VerificationStateMachine.CanTransitionWithRole(currentStatus, status, callerRole))
+        if (!VerificationStateMachine.CanTransitionWithRole(
+                currentStatus, status, callerRole, hasLabourManagementGrant))
         {
             throw new InvalidOperationException("Transition not allowed for role.");
         }
@@ -555,6 +570,13 @@ public sealed class DailyLog : Entity<Guid>
     /// <exception cref="ArgumentException">
     /// <paramref name="target"/> is <see cref="VerificationStatus.Disputed"/> with no reason.
     /// </exception>
+    /// <param name="hasLabourManagementGrant">
+    /// spec: 2026-08-25-prod-cutover-waves — founder ruling 2026-08-27. See the same
+    /// parameter on <see cref="Verify"/>. It is applied to BOTH hops of the walk, so a
+    /// granted member reaches <c>Verified</c> from <c>Draft</c> by the identical
+    /// two-event path an owner takes; the grant adds no shortcut edge, and the first
+    /// hop is still the one his ROLE must hold on its own.
+    /// </param>
     public IReadOnlyList<VerificationEvent> VerifyReachingTarget(
         VerificationStatus target,
         string? reason,
@@ -562,13 +584,19 @@ public sealed class DailyLog : Entity<Guid>
         UserId verifiedByUserId,
         DateTime occurredAtUtc,
         Guid targetEventId,
-        Guid enRouteEventId)
+        Guid enRouteEventId,
+        bool hasLabourManagementGrant = false)
     {
         var current = CurrentVerificationStatus;
 
-        if (VerificationStateMachine.CanTransitionWithRole(current, target, callerRole))
+        if (VerificationStateMachine.CanTransitionWithRole(
+                current, target, callerRole, hasLabourManagementGrant))
         {
-            return [Verify(targetEventId, target, reason, callerRole, verifiedByUserId, occurredAtUtc)];
+            return
+            [
+                Verify(targetEventId, target, reason, callerRole, verifiedByUserId, occurredAtUtc,
+                    hasLabourManagementGrant)
+            ];
         }
 
         // The ONLY status the server may pass through. See the rule above.
@@ -576,9 +604,9 @@ public sealed class DailyLog : Entity<Guid>
             current == VerificationStatus.Draft
             && target != VerificationStatus.Confirmed
             && VerificationStateMachine.CanTransitionWithRole(
-                VerificationStatus.Draft, VerificationStatus.Confirmed, callerRole)
+                VerificationStatus.Draft, VerificationStatus.Confirmed, callerRole, hasLabourManagementGrant)
             && VerificationStateMachine.CanTransitionWithRole(
-                VerificationStatus.Confirmed, target, callerRole);
+                VerificationStatus.Confirmed, target, callerRole, hasLabourManagementGrant);
 
         if (!canWalkViaConfirmed)
         {
@@ -597,10 +625,10 @@ public sealed class DailyLog : Entity<Guid>
 
         var enRoute = Verify(
             enRouteEventId, VerificationStatus.Confirmed, EnRouteConfirmReason,
-            callerRole, verifiedByUserId, occurredAtUtc);
+            callerRole, verifiedByUserId, occurredAtUtc, hasLabourManagementGrant);
         var arrived = Verify(
             targetEventId, target, reason,
-            callerRole, verifiedByUserId, occurredAtUtc.AddMilliseconds(1));
+            callerRole, verifiedByUserId, occurredAtUtc.AddMilliseconds(1), hasLabourManagementGrant);
 
         return [enRoute, arrived];
     }
@@ -626,6 +654,19 @@ public sealed class DailyLog : Entity<Guid>
     /// the first edge (Mukadam, Worker, Consultant) gets NOTHING here: his log stays Draft
     /// and still needs an owner. That is the whole point of the state machine and the pilot
     /// depends on it.</para>
+    ///
+    /// <para><b>Role-only ON PURPOSE — spec: 2026-08-25-prod-cutover-waves, founder ruling
+    /// 2026-08-27.</b> The ruling has two halves and they are not the same half. Ruling 2
+    /// ("an owner's own log is Verified on save") is what THIS method implements, and the
+    /// founder scoped it to owner-tier: <i>"He wrote it; it is his word."</i> Ruling 1 (the
+    /// owner may GRANT approval authority) is about the deliberate act of approving, and it
+    /// is honoured on the <c>VerifyLog</c> path, where the caller resolves the grant.
+    /// So a granted Mukadam's own log still lands in Draft and he then approves it — one
+    /// explicit act, recorded as one — instead of the server silently self-approving on his
+    /// behalf at save time. Passing the grant in here would collapse those two acts into
+    /// one and make "who approved this day" unanswerable, which is the single question the
+    /// verification ledger exists to answer. Reversible: it is one argument if the founder
+    /// rules otherwise.</para>
     ///
     /// <para><b>Why the 1 ms offset.</b> <see cref="CurrentVerificationStatus"/> resolves by
     /// <c>OrderBy(OccurredAtUtc).Last()</c>. Two events sharing one instant would leave the
