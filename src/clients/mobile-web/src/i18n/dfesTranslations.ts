@@ -43,7 +43,18 @@
  * closing a book — which is why `closeTodayQuestion`, `reviewAndClose` and
  * `clickToClose` no longer say it. Putting it back undoes a founder decision.
  *
- * ONE RULING IS DELIBERATELY UNSETTLED, AND `closeToday` IS WHERE IT SHOWS.
+ * TWO OF THE SIX OPEN STRINGS ARE NOW RULED. FOUR REMAIN OPEN.
+ *
+ * Founder, 2026-08-27: `closeToday` and `weeklyReviewPrompt` take the कामे
+ * (work) wording, and of the नोंदी (records) wording he said "remove that".
+ * Both are applied and the rejected wordings are deleted, not parked.
+ *
+ * He ruled on TWO. The other four of the six named below are STILL OPEN and
+ * must not be inferred from this ruling — a first-person Sathi line and a piece
+ * of UI chrome can honestly fall on different sides, which is the whole reason
+ * the set was split rather than answered at once.
+ *
+ * THE ORIGINAL NOTE, kept because the reasoning still governs the other four:
  * `नोंद`/`नोंदी` is banned from Shram Sathi's own voice and stays legitimate in
  * UI chrome (`sathi-only`) — hence `weekSummary`, `daysLoggedThisWeek` and
  * `ownerHasQuestion` keep it. What has NOT been answered is which side of that
@@ -430,23 +441,16 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
 
     mr: {
         // Closure ritual
-        // 👁️ UNRESOLVED IN THE main -> feat/dfes-companion MERGE. NOT A DEFECT.
-        //
-        // Both branches rewrote this key, differently, from the same base
-        // ('आज बंद करा'). The value BELOW is main's - the authority
-        // document's main-table byte, live on farmers' phones today - and it is
-        // kept because a merge may not pick between two founder-facing strings.
-        //
-        // feat/dfes-companion's competing wording, recorded verbatim so it is not
-        // lost, and left UNAPPLIED:
-        //   'आजची सगळी कामे माझ्यापर्यंत पोहोचली का याची खात्री करा'
-        //
-        // The difference is exactly the open नोंद/कामे question this file's
-        // header names: dfes says कामे (work), main says नोंदी (records).
-        // \`DailySummaryCard.closeToday.test.tsx\` asserts the dfes form and is RED
-        // until the founder answers. Do not resolve it by reasoning - it was
-        // closed that way once and reverted.
-        closeToday: 'आजच्या सर्व नोंदी माझ्यापर्यंत पोहोचल्या का याची खात्री करा',
+          // ✅ RULED BY THE FOUNDER, 2026-08-27. Settled, not open.
+          //
+          // Both branches rewrote this key from the same base. The founder chose the
+          // कामे (work) wording and said of the नोंदी (records) wording:
+          // "remove that". It is removed, not parked — keeping a rejected string in a
+          // comment invites someone to "restore" it later.
+          //
+          // The नोंदी/कामे question this file's header called DELIBERATELY
+          // UNSETTLED is now settled for these two keys. Do not reopen it by reasoning.
+        closeToday: 'आजची सगळी कामे माझ्यापर्यंत पोहोचली का याची खात्री करा',
         todayClosed: 'आजचं आटपलं. सगळी कामे आणि गोष्टी समजल्या',
         closeTodayQuestion: 'आजचं सगळं सांगून झालं का?',
 
@@ -483,16 +487,17 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
         comeBackTomorrow: 'उद्या संध्याकाळी या.',
 
         // Owner verification trigger
-        // 👁️ UNRESOLVED IN THE main -> feat/dfes-companion MERGE. NOT A DEFECT.
         //
-        // main holds the base byte; feat/dfes-companion rewrote it. The dfes
-        // wording, recorded verbatim and left UNAPPLIED:
-        //   'तुमच्या शेतात नवीन कामे आहेत. तपासा.'
+        // ✅ RULED BY THE FOUNDER, 2026-08-27. Settled, not open.
         //
-        // Same open question as \`closeToday\` above, and this file's header names
-        // this key as one of the six the authority document leaves open. Kept as
-        // the authority document has it until the founder answers.
-        weeklyReviewPrompt: 'तुमच्या शेतनोंदीत नवीन नोंदी आहेत. तपासा.',
+        // Both branches rewrote this key from the same base. The founder chose the
+        // कामे (work) wording and said of the नोंदी (records) wording:
+        // "remove that". It is removed, not parked — keeping a rejected string in a
+        // comment invites someone to "restore" it later.
+        //
+        // The नोंदी/कामे question this file's header called DELIBERATELY
+        // UNSETTLED is now settled for these two keys. Do not reopen it by reasoning.
+        weeklyReviewPrompt: 'तुमच्या शेतीत नवीन कामे आहेत. तपासा.',
         reviewAndClose: 'तपासा आणि खात्री करा',
         farmBookOpen: 'या आठवड्याची शेतनोंद उघडी आहे.',
 

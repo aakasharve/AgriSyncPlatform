@@ -141,7 +141,7 @@ const DFES_APPROVED_COPY = {
         unlockSpokenLine: 'Well done! Now I have truly come to know your farm.',
     },
     mr: {
-        closeToday: 'आजच्या सर्व नोंदी माझ्यापर्यंत पोहोचल्या का याची खात्री करा',
+        closeToday: 'आजची सगळी कामे माझ्यापर्यंत पोहोचली का याची खात्री करा',
         todayClosed: 'आजचं आटपलं. सगळी कामे आणि गोष्टी समजल्या',
         closeTodayQuestion: 'आजचं सगळं सांगून झालं का?',
         todaySummary: 'आजची {activities} कामे, खर्च रु. {cost}',
@@ -166,7 +166,7 @@ const DFES_APPROVED_COPY = {
         whatWorkToday: 'आज काय काम झालं?',
         firstLogCelebration: 'तुमचे पहिले काम मला समजले',
         comeBackTomorrow: 'उद्या संध्याकाळी या.',
-        weeklyReviewPrompt: 'तुमच्या शेतनोंदीत नवीन नोंदी आहेत. तपासा.',
+        weeklyReviewPrompt: 'तुमच्या शेतीत नवीन कामे आहेत. तपासा.',
         reviewAndClose: 'तपासा आणि खात्री करा',
         farmBookOpen: 'या आठवड्याची शेतनोंद उघडी आहे.',
         trustedTotal: 'खात्रीशीर एकूण',
@@ -256,7 +256,7 @@ describe('translations.ts split — the copy moved, and only the copy', () => {
     it('`t()` still resolves a DFES key rather than echoing it back', () => {
         // `t()` returns the KEY when a lookup misses, so a broken composition
         // would render `dfes.closeToday` on a button instead of throwing.
-        expect(t('dfes.closeToday', 'mr')).toBe('आजच्या सर्व नोंदी माझ्यापर्यंत पोहोचल्या का याची खात्री करा');
+        expect(t('dfes.closeToday', 'mr')).toBe('आजची सगळी कामे माझ्यापर्यंत पोहोचली का याची खात्री करा');
         expect(t('dfes.closeToday', 'en')).toBe('Close today');
         expect(t('dfes.clickToClose', 'mr')).not.toBe('dfes.clickToClose');
     });

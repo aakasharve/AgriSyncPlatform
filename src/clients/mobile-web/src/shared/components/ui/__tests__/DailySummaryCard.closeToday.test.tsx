@@ -28,7 +28,7 @@
 // कामे (work):
 //
 //   main (LIVE on farmers' phones, and the value in i18n/dfesTranslations.ts):
-//     'आजच्या सर्व नोंदी माझ्यापर्यंत पोहोचल्या का याची खात्री करा'
+//     'आजची सगळी कामे माझ्यापर्यंत पोहोचली का याची खात्री करा'
 //   dfes (recorded in dfesTranslations.ts, left UNAPPLIED; asserted below):
 //     'आजची सगळी कामे माझ्यापर्यंत पोहोचली का याची खात्री करा'
 //
