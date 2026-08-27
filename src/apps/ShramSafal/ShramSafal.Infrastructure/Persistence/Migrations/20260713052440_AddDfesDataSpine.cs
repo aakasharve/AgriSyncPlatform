@@ -302,7 +302,8 @@ BEGIN
     -- Append-only by privilege (mirrors the audit-integrity hardening recipe).
     -- Net effect for question_events after the GRANT above: SELECT + INSERT only.
     --
-    -- This sits INSIDE the role guard. It used to sit after `END $$;`, which
+    -- This sits INSIDE the role guard. It used to sit after the guard block
+    -- closed, which
     -- meant a database where the roles were never bootstrapped raised
     -- 42704 (role agrisync_app does not exist) -- breaking precisely the
     -- un-bootstrapped throwaway lane where privilege bugs are supposed to be
