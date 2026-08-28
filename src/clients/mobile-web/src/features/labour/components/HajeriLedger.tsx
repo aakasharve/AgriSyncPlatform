@@ -12,8 +12,35 @@ import type { LabourData, PresenceStatus } from '../labourMock';
 import { Avatar, EmptyState } from './LabourUiKit';
 import { isReadableWeekRange } from '../weekLabel';
 
-const cellClass = (s: PresenceStatus) => s === 'present' ? 'bg-emerald-50 text-emerald-700' : s === 'half' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-300';
-const cellGlyph = (s: PresenceStatus): React.ReactNode => s === 'present' ? <Check size={13} strokeWidth={3.2} /> : s === 'half' ? '½' : '–';
+/**
+ * Task 5 (spec: 2026-08-28-labour-v2-release-1, P4, founder Global
+ * Constraint 6) — the defect this fixes: before this task, `s` was typed
+ * `PresenceStatus` (no `null` member), so ANY value that was not `'present'`
+ * or `'half'` fell into the LAST branch, which was the real-absence style.
+ * The moment `LedgerRow.cells` became `(PresenceStatus | null)[]` (this
+ * task), a day with no fact yet (`null`) would have rendered PIXEL-IDENTICAL
+ * to a deliberate `नाही` tap — exactly the fabricated-absence bug this
+ * release exists to remove, one layer down from the money version Task 1
+ * fixed in `netBalance`. `null` now gets its own branch: a plain, unfilled
+ * cell — visually distinct from both a real mark and a real absence, no new
+ * word.
+ *
+ * Exported (not just used locally) so `AttendanceDefaultsBlank.test.tsx` can
+ * assert the `null` branch directly, the same way `netBalance` (Task 1) is
+ * unit-tested rather than only exercised through a full component render.
+ */
+export const cellClass = (s: PresenceStatus | null) => {
+    if (s === 'present') return 'bg-emerald-50 text-emerald-700';
+    if (s === 'half') return 'bg-amber-100 text-amber-700';
+    if (s === 'absent') return 'bg-slate-100 text-slate-300';
+    return 'border border-dashed border-slate-200 bg-white text-slate-200'; // null — no fact yet, not absent.
+};
+export const cellGlyph = (s: PresenceStatus | null): React.ReactNode => {
+    if (s === 'present') return <Check size={13} strokeWidth={3.2} />;
+    if (s === 'half') return '½';
+    if (s === 'absent') return '–';
+    return null; // null — no fact yet: an empty cell, never the '–' absence glyph.
+};
 
 /**
  * Screen currently unreachable from the hub/dashboard (`SHOW_LEDGER_TILE` /
@@ -65,7 +92,7 @@ const HajeriLedger: React.FC<{ data: LabourData; onToast: (m: string) => void }>
                 {L.rows.map((r) => (
                     <div key={r.personId} className="flex items-center gap-2 py-1.5">
                         <span className="flex w-[82px] flex-none items-center gap-2 text-[12.5px] font-extrabold text-slate-700"><Avatar tone={r.tone} initial={r.initial} size="sm" />{r.name}</span>
-                        <span className="flex flex-1 gap-1.5">{r.cells.map((c, i) => <span key={i} className={`flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg text-[12px] font-extrabold ${cellClass(c)}`}>{cellGlyph(c)}</span>)}</span>
+                        <span className="flex flex-1 gap-1.5">{r.cells.map((c, i) => <span key={i} data-testid="ledger-cell" className={`flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg text-[12px] font-extrabold ${cellClass(c)}`}>{cellGlyph(c)}</span>)}</span>
                         <span className="w-9 flex-none text-center text-[15px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">{r.total}</span>
                     </div>
                 ))}

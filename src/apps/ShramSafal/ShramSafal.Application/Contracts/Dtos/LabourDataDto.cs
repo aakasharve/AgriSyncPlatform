@@ -97,13 +97,22 @@ public sealed record LabourLedgerDto(
     IReadOnlyList<int> DailyTotals,
     int WeekTotal);
 
-/// <summary>`Cells` are `"present"|"half"|"absent"` strings.</summary>
+/// <summary>
+/// <c>Cells</c> are one slot per ledger day, each <c>"present"|"half"|"absent"</c>
+/// or <c>null</c>. Task 5 (spec: 2026-08-28-labour-v2-release-1, P4, founder
+/// Global Constraint 6) — a slot must exist for every day even before the
+/// farmer has said anything about it (a day not yet reached, or simply not
+/// marked yet), so `null` here means "no fact for this day", never a real
+/// absence. `GetLabourDataHandler` returns `Rows: []` unconditionally today
+/// (Stage 5 attendance ledger not built), so this is a forward-looking
+/// contract fix, not a live repair.
+/// </summary>
 public sealed record LabourLedgerRowDto(
     string PersonId,
     string Name,
     string Initial,
     string Tone,
-    IReadOnlyList<string> Cells,
+    IReadOnlyList<string?> Cells,
     int Total);
 
 /// <summary>
@@ -135,7 +144,13 @@ public sealed record LabourAttendanceDraftDto(
     int Headcount,
     IReadOnlyList<LabourAttendanceRowDto> Rows);
 
-/// <summary>`Status` is `"present"|"half"|"absent"`.</summary>
+/// <summary>
+/// `Status` is `"present"|"half"|"absent"` — never null. Task 5 (founder
+/// Global Constraint 6) — a row is created ONLY by a deliberate tap; an
+/// untouched worker has no row at all in `Rows` below, so "not yet said" is
+/// structural (array absence), not a nullable status on a row that exists
+/// regardless.
+/// </summary>
 public sealed record LabourAttendanceRowDto(
     string PersonId,
     string Status);

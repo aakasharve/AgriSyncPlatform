@@ -110,7 +110,10 @@ export interface LabourLedgerRowDto {
     name: string;
     initial: string;
     tone: string;
-    cells: string[];
+    // Task 5 (spec: 2026-08-28-labour-v2-release-1, P4) — one slot per ledger
+    // day; `null` = no fact for that day (not yet reached / not marked),
+    // never a real absence. Mirrors `LabourLedgerRowDto.Cells` (backend).
+    cells: (string | null)[];
     total: number;
 }
 
@@ -219,7 +222,12 @@ const mapLedgerRow = (r: LabourLedgerRowDto): LedgerRow => ({
     name: r.name,
     initial: r.initial,
     tone: r.tone as LedgerRow['tone'],
-    cells: r.cells as PresenceStatus[],
+    // Task 5 (P4) — `null` (no fact for that day) passes straight through,
+    // never coerced/defaulted to a real status. The previous blind
+    // `as PresenceStatus[]` cast let a wire `null` silently masquerade as a
+    // valid status to the type checker; mapping element-by-element keeps the
+    // `| null` honest end to end.
+    cells: r.cells.map((c) => c as PresenceStatus | null),
     total: r.total,
 });
 

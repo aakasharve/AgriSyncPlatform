@@ -23,10 +23,27 @@
  * consumer: `netBalance` returns `null` (unknown) rather than deriving a
  * balance against it, and every render site shows `—`/omits the balance line
  * instead of a fabricated ₹0 or a fabricated overpayment.
+ *
+ * Task 5 (P4, founder Global Constraint 6) — `PresenceStatus` carries exactly
+ * the three farmer-tappable facts, on purpose: no fourth "unknown" button.
+ * "Not yet said" is `null` wherever a slot exists per day (`LedgerRow.cells`)
+ * and structural absence wherever a mark is optional
+ * (`LabourData.attendance.rows`). Same house rule as `recorded` above: `null`
+ * is never defaulted/coerced to a real value by any reader.
  */
 
 import type { LabourEntry } from './labourParse';
 
+/**
+ * Task 5 (spec: 2026-08-28-labour-v2-release-1, founder Global Constraint 6)
+ * — exactly the three farmer-tappable facts. There is deliberately NO fourth
+ * value here for "not yet said": the farmer never sees a fourth button.
+ * "Not yet said" is represented STRUCTURALLY wherever a fact must exist per
+ * slot (see `LedgerRow.cells` below) — as `null`, never as a member of this
+ * union — and structurally by ABSENCE wherever a fact is optional (see
+ * `LabourData.attendance.rows`: an unmarked person simply has no row).
+ * `null` is never defaulted to `'absent'` by any reader of either shape.
+ */
 export type PresenceStatus = 'present' | 'half' | 'absent';
 export type LabourRole = 'mukadam' | 'submukadam' | 'worker';
 export type AvatarTone = 'or' | 'em' | 'bl' | 'vi' | 'rs' | 'am';
@@ -77,7 +94,16 @@ export interface LedgerRow {
     name: string;
     initial: string;
     tone: AvatarTone;
-    cells: PresenceStatus[];
+    /**
+     * Task 5 (P4) — one slot per ledger day, so a slot MUST exist even before
+     * the farmer has said anything about that day (a day not yet reached, or
+     * simply not marked yet). `null` = no fact for that day; it is NEVER a
+     * real absence and must never render or count identically to a
+     * deliberate `'absent'` tap. See `HajeriLedger.tsx`'s `cellClass` /
+     * `cellGlyph`, which give `null` its own neutral, visually-distinct
+     * rendering.
+     */
+    cells: (PresenceStatus | null)[];
     total: number;
 }
 
@@ -133,7 +159,15 @@ export interface LabourData {
     dashboard: DashboardData;
     ledger: { weekLabel: string; days: string[]; rows: LedgerRow[]; dailyTotals: number[]; weekTotal: number };
     review: ReviewItem[];
-    /** attendance draft for "today" (a plot's gang). */
+    /**
+     * Attendance draft for "today" (a plot's gang). Task 5 (founder Global
+     * Constraint 6) — this array is the structural representation of "not
+     * yet said": a row exists ONLY once a deliberate tap creates it, so an
+     * untouched worker simply has no row here (never a `null`/placeholder
+     * status). Do not add a `null` status to this row shape — that would
+     * let a person appear "on the sheet" before any real tap, which is a
+     * different (Phase 1) feature.
+     */
     attendance: { plot: string; headcount: number; rows: { personId: string; status: PresenceStatus }[] };
 }
 
