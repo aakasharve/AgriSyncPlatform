@@ -88,6 +88,24 @@ function serverStatedVerification(source: DailyLogDto): boolean {
         || (Array.isArray(source.verificationEvents) && source.verificationEvents.length > 0);
 }
 
+/**
+ * task-0b — "did this response STATE the farmer's day-outcome declaration?"
+ *
+ * Unlike `plotIds`/`verificationEvents` above, `dayOutcome` is a NULLABLE
+ * SCALAR, so `Array.isArray`/`!= null` cannot be the discriminator: a present
+ * key with JSON `null` is a real statement here ("no declaration made" — true
+ * on every ordinary work day, doctrine P4), while an ABSENT key is silence
+ * from a server build that predates this member. `!== undefined` is exactly
+ * that line: JSON `null` deserialises to JS `null` (`!== undefined` → true,
+ * stated), an omitted key deserialises to `undefined` (`!== undefined` →
+ * false, not stated). Getting this backwards would either re-fabricate
+ * `WORK_RECORDED` over a genuine local declaration, or silently drop a real
+ * server correction — see `serverStatedContext` above for the same trap.
+ */
+function serverStatedDayOutcome(source: DailyLogDto): boolean {
+    return source.dayOutcome !== undefined;
+}
+
 export async function reconcileLogs(
     db: AgriLogDatabase,
     payload: SyncPullResponse,
@@ -99,6 +117,7 @@ export async function reconcileLogs(
     const serverModifiedByLogId = new Map<string, string>();
     const contextStatedLogIds = new Set<string>();
     const verificationStatedLogIds = new Set<string>();
+    const dayOutcomeStatedLogIds = new Set<string>();
     for (const dto of payload.dailyLogs) {
         if (dto.modifiedAtUtc) {
             serverModifiedByLogId.set(dto.id, dto.modifiedAtUtc);
@@ -108,6 +127,9 @@ export async function reconcileLogs(
         }
         if (serverStatedVerification(dto)) {
             verificationStatedLogIds.add(dto.id);
+        }
+        if (serverStatedDayOutcome(dto)) {
+            dayOutcomeStatedLogIds.add(dto.id);
         }
     }
 
@@ -147,6 +169,7 @@ export async function reconcileLogs(
             existing?.log,
             contextStatedLogIds.has(log.id),
             verificationStatedLogIds.has(log.id),
+            dayOutcomeStatedLogIds.has(log.id),
         );
 
         await db.logs.put({
@@ -229,6 +252,7 @@ function preserveLocalOnlyFields(
     existing: DailyLog | undefined,
     serverStatedContext: boolean,
     serverStatedVerification: boolean,
+    serverStatedDayOutcome: boolean,
 ): DailyLog {
     if (!existing) {
         return incoming;
@@ -278,10 +302,19 @@ function preserveLocalOnlyFields(
             ? { ...existing.meta, ...incoming.meta }
             : existing.meta,
 
-        // `dayOutcome` is a literal `'WORK_RECORDED'` in `toDailyLog` — it is
-        // not on the wire in any form, so it belongs to the set above. A day the
-        // farmer recorded as a disturbance came back as a day he worked.
-        dayOutcome: existing.dayOutcome ?? incoming.dayOutcome,
+        // task-0b — `dayOutcome` moved OFF this "wire has no word for it" list.
+        // The wire now carries it (`DailyLogDto.dayOutcome`, read verbatim off
+        // the entity by `DtoMappingExtensions.ToDto` on every response), so it
+        // follows the SAME "server wins when it stated something" rule as
+        // `context`/`verification` above, not the "local always wins" rule the
+        // fields below still need. Preserving local unconditionally here would
+        // now do the opposite of its old job: it would let a STALE local
+        // declaration outlive a genuine server correction (e.g. a day
+        // re-classified after a late voice confirmation) instead of protecting
+        // one the wire could not express.
+        dayOutcome: serverStatedDayOutcome
+            ? incoming.dayOutcome
+            : (existing.dayOutcome ?? incoming.dayOutcome),
 
         // ── DELIBERATELY NOT PRESERVED HERE: cropActivities, irrigation,
         //    inputs, observations. THE FABRICATION ON THOSE IS REAL AND STILL
@@ -663,7 +696,17 @@ function toDailyLog(
                 plotLookup,
             ),
         },
-        dayOutcome: 'WORK_RECORDED',
+        // task-0b (spec 2026-08-28-labour-v2-release-1) — read the farmer's own
+        // declaration off the wire, verbatim. THIS WAS a hardcoded literal
+        // `'WORK_RECORDED'`: every pulled log — including one the farmer
+        // declared `NO_WORK_PLANNED` — came back a work day on a second device
+        // or after a reinstall. `?? null`, NEVER `?? 'WORK_RECORDED'`: `source
+        // .dayOutcome` is `undefined` only for a server build that predates
+        // this member (`preserveLocalOnlyFields` protects local truth in that
+        // case via `serverStatedDayOutcome`); a JSON `null` here is the
+        // server's own honest "he did not say" and must land as `null`, not as
+        // a fabricated assertion that work happened (doctrine P4).
+        dayOutcome: source.dayOutcome ?? null,
         cropActivities,
         irrigation,
         // LABOUR_PHASE2 Phase 3 — the read-back. `?? []` is NOT a reading of the

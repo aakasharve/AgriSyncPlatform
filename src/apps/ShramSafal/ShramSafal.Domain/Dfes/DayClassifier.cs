@@ -33,7 +33,15 @@ public static class DayClassifier
     {
         if (!s.ClientDatePlausible) return DayClassification.PendingReconciliation;
 
-        if (s.HasWork)
+        // task-0b (spec 2026-08-28-labour-v2-release-1) — the farmer's OWN
+        // declaration outranks a derived HasWork signal. `HasWork` is unioned
+        // across AI roots AND the farmer's persisted rows (DfesLensExtractor),
+        // so stray/leftover bucket data must not push a day he explicitly
+        // declared NO_WORK_PLANNED into RichWorkDay/BasicWorkDay — that would
+        // silently overrule his own statement with a bucket count. Noticing
+        // (learning / a meaningful observation) still outranks a BARE no-work
+        // declaration exactly as before; only the HasWork short-circuit moves.
+        if (s.HasWork && !s.HasDeclaredNoWorkReason)
         {
             var noticed = s.HasMeaningfulObservation || s.HasLearning
                           || (s.InsightScore ?? 0) >= RichInsightFloor;
@@ -42,7 +50,8 @@ public static class DayClassifier
                 : DayClassification.BasicWorkDay;
         }
 
-        // No work — noticing beats a bare no-work declaration.
+        // No work (or work the farmer said didn't happen) — noticing beats a
+        // bare no-work declaration.
         if (s.HasLearning || s.HasExperimentOutcome) return DayClassification.LearningDay;
         if (s.HasMeaningfulObservation) return DayClassification.ObservationDay;
         if (s.HasDeclaredNoWorkReason) return DayClassification.DeclaredNoWorkDay;

@@ -45,6 +45,24 @@ public sealed class DayClassifierTests
         => DayClassifier.Classify(Base(declaredNoWork: true, disturbance: true, noWorkCode: "weather"))
             .Should().Be(DayClassification.DeclaredNoWorkDay);
 
+    // task-0b (spec 2026-08-28-labour-v2-release-1) — the farmer's own
+    // NO_WORK_PLANNED declaration must outrank a derived HasWork=true, so a
+    // stray bucket (e.g. leftover/AI-derived data) cannot silently overrule
+    // his own statement into RichWorkDay/BasicWorkDay.
+    [Fact]
+    public void DeclaredNoWork_outranks_derived_HasWork_and_stays_DeclaredNoWorkDay()
+        => DayClassifier.Classify(Base(hasWork: true, exec: 90, declaredNoWork: true, noWorkCode: "rest"))
+            .Should().Be(DayClassification.DeclaredNoWorkDay);
+
+    // The counterweight to the case above: noticing still outranks a BARE
+    // no-work declaration when there is genuinely no derived work — the
+    // pre-existing priority order (documented on the "No work" branch) is
+    // untouched by moving the HasWork short-circuit.
+    [Fact]
+    public void DeclaredNoWork_with_learning_and_no_derived_work_is_still_LearningDay()
+        => DayClassifier.Classify(Base(learning: true, declaredNoWork: true, noWorkCode: "rest"))
+            .Should().Be(DayClassification.LearningDay);
+
     [Fact]
     public void Silent_day_is_UnaccountedDay()
         => DayClassifier.Classify(Base())

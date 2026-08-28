@@ -124,7 +124,13 @@ internal static class DtoMappingExtensions
             // so what the device sends is what the device reads back.
             log.Scope.ToString(),
             log.PlotIds.ToList(),
-            labour);
+            labour,
+            // task-0b — read back VERBATIM. `log.DayOutcome` is a plain
+            // property read off the loaded entity, never a caller-supplied
+            // default, so there is no `??` here to defend against: NULL on
+            // the entity produces NULL on the wire, exactly as doctrine P4
+            // requires (see the remarks on DailyLogDto.DayOutcome).
+            log.DayOutcome);
 
     /// <summary>
     /// LABOUR_PHASE2 Phase 3 — the ONE place a <see cref="LabourEngagementDto"/> is

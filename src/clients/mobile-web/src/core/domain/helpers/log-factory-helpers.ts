@@ -37,7 +37,13 @@ export const FARM_GLOBAL_ID = 'FARM_GLOBAL';
 export function projectLogForScoring(log: DailyLog): AgriLogResponse {
     return {
         summary: '',
-        dayOutcome: log.dayOutcome,
+        // task-0b — `DailyLog.dayOutcome` is now `DayOutcome | null` (a pulled
+        // log with no declaration genuinely holds `null`; see log.types.ts).
+        // `AgriLogResponse.dayOutcome` predates that and stays required, so
+        // this adapter boundary falls back exactly as EVERY pulled log used to
+        // read before task-0b — behaviour-preserving for scoreVlog, which this
+        // task does not touch.
+        dayOutcome: log.dayOutcome ?? 'WORK_RECORDED',
         cropActivities: log.cropActivities,
         irrigation: log.irrigation,
         labour: log.labour,

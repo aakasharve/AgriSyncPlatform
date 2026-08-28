@@ -255,6 +255,28 @@ export interface DailyLogDto {
      * that way — same shape as `LogTaskDto.deviationReasonCode` above.
      */
     labour?: LabourEngagementDto[] | null;
+
+    /**
+     * task-0b (spec 2026-08-28-labour-v2-release-1) — the farmer's OWN
+     * statement about the day, read back verbatim from
+     * `ShramSafal.Application/Contracts/Dtos/DailyLogDto.cs` (`string?
+     * DayOutcome = null`). See the doctrine-P4 comment on
+     * `DailyLog.DayOutcome` (`ShramSafal.Domain/Logs/DailyLog.cs:792-811`):
+     * NULL on every ordinary work day, never inferred, never defaulted to
+     * `"WORK_RECORDED"` — "he did not say" and "he said work happened" are
+     * different facts.
+     *
+     * UNLIKE `labour` above, a present-but-`null` value here is NOT "the
+     * caller made no statement" — `DtoMappingExtensions.ToDto` reads this
+     * straight off the loaded entity on every endpoint that returns a
+     * `DailyLogDto`, so `null` IS the farmer's state whenever the field is
+     * present. Absence of the KEY (`undefined`) is the one genuinely silent
+     * case, reachable only from a server build that predates this member —
+     * this twin is hand-maintained and a device can outlive the server build
+     * it talks to. `logsReconciler.serverStatedDayOutcome` reads exactly that
+     * presence, mirroring `serverStatedContext` above.
+     */
+    dayOutcome?: 'WORK_RECORDED' | 'DISTURBANCE_RECORDED' | 'NO_WORK_PLANNED' | 'IRRELEVANT_INPUT' | null;
 }
 
 export interface CostEntryDto {
