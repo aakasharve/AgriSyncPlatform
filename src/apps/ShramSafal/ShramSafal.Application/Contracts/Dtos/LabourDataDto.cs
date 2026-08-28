@@ -59,7 +59,16 @@ public sealed record LabourPersonDto(
 public sealed record LabourDashboardDto(
     string WeekLabel,
     string Insight,
-    int ManDays,
+    // Task 6 (spec: 2026-08-28-labour-v2-release-1, P4) — `decimal?`, not `int`.
+    // `null` when labour WAS logged this week but no assignment in it ever
+    // stated a headcount (LabourHeadcount.Resolve returns null for every one
+    // of them) — an ABSENCE of evidence, never a fabricated 0 मजूर-दिवस. A week
+    // with real evidence for at least one assignment sums only the known ones
+    // (an unstated assignment contributes NOTHING, not 0); a week with no
+    // assignments logged at all is the one genuine `0m` case. `decimal` (not
+    // `int`) because this same value backs `LabourLedgerDto.WeekTotal` below
+    // — see that member's doc for why the two totals share a representation.
+    decimal? ManDays,
     int ManDaysTrend,
     decimal Wages,
     decimal Advances,
@@ -90,12 +99,29 @@ public sealed record LabourMoneyDto(
     decimal Advance,
     decimal? Owed);
 
+/// <summary>
+/// Task 6 (spec: 2026-08-28-labour-v2-release-1, P4, D9.9 — supersedes D4) —
+/// <c>DailyTotals</c> and <c>WeekTotal</c> were <c>int</c>, which cannot hold a
+/// half day (0.5). Half a day is 0.5 day of EVIDENCE, never half a wage — no
+/// money is derived from it, that is Release 2.
+///
+/// <para><c>WeekTotal</c> is `decimal?`, not plain `decimal`: `GetLabourDataHandler`
+/// currently derives it from the SAME interim value as `LabourDashboardDto.ManDays`
+/// (`Rows` stays `[]` until the Stage 5 per-worker ledger lands, so there is no
+/// real per-worker total to roll up yet). That value can legitimately be
+/// unknown (Task 6 Defect B), so `WeekTotal` inherits both constraints at
+/// once — decimal for the half-day fix, nullable for the unknown-headcount
+/// fix. Once Stage 5 lands and `WeekTotal` becomes a true sum of `Rows[].Total`
+/// (always a real, non-null decimal — an unmarked day contributes 0, it does
+/// not make the row's own total unknown), this nullability will no longer be
+/// reachable, but removing it is that future task's call, not this one's.</para>
+/// </summary>
 public sealed record LabourLedgerDto(
     string WeekLabel,
     IReadOnlyList<string> Days,
     IReadOnlyList<LabourLedgerRowDto> Rows,
-    IReadOnlyList<int> DailyTotals,
-    int WeekTotal);
+    IReadOnlyList<decimal> DailyTotals,
+    decimal? WeekTotal);
 
 /// <summary>
 /// <c>Cells</c> are one slot per ledger day, each <c>"present"|"half"|"absent"</c>
@@ -113,7 +139,13 @@ public sealed record LabourLedgerRowDto(
     string Initial,
     string Tone,
     IReadOnlyList<string?> Cells,
-    int Total);
+    // Task 6 (spec: 2026-08-28-labour-v2-release-1, P4, D9.9) — `decimal`, not
+    // `int`: a half day (`"half"` in Cells) is worth 0.5, and an `int` Total
+    // could only round that up to a fabricated whole day. Never `null` — a
+    // day with no fact yet (`null` in Cells) contributes 0 to this sum without
+    // making the ROW's own total unknown; see `LabourLedgerDto.WeekTotal`
+    // above for the one member of this DTO that IS nullable, and why.
+    decimal Total);
 
 /// <summary>
 /// <c>Status</c> is the log's real <see cref="ShramSafal.Domain.Logs.VerificationStatus"/>

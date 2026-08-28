@@ -174,4 +174,16 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
     public virtual Task<List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)>> GetLabourPayoutCostEntriesWithJobCardAsync(
         FarmId farmId, CancellationToken ct = default)
         => Task.FromResult(new List<(CostEntry, Guid?)>());
+
+    // Task 6 (spec: 2026-08-28-labour-v2-release-1) — restated `virtual` for the
+    // SAME reason as every block above: an interface DEFAULT implementation is
+    // not a virtual class member, so a FakeRepo subclass could not override it
+    // — every override would silently no-op instead of failing to compile.
+    // Same default (empty) as the interface body. UnknownHeadcountIsNotZeroTests
+    // needs this overridable to seed a LabourAssignment whose headcount was
+    // never stated (all three of WorkerCount/MaleCount/FemaleCount null) — the
+    // exact row shape that used to sum to a fabricated 0 man-days.
+    public virtual Task<List<LabourAssignment>> GetLabourAssignmentsForFarmSinceAsync(
+        FarmId farmId, DateOnly weekStart, CancellationToken ct = default)
+        => Task.FromResult(new List<LabourAssignment>());
 }

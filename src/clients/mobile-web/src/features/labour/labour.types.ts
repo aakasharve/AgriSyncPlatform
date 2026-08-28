@@ -104,6 +104,14 @@ export interface LedgerRow {
      * rendering.
      */
     cells: (PresenceStatus | null)[];
+    /**
+     * Task 6 (spec: 2026-08-28-labour-v2-release-1, P4, D9.9 — supersedes D4)
+     * — a half day (a `'half'` cell) is worth 0.5, so this is real-valued
+     * (`5.5`, not an `int`-rounded `6`), never `null`: a `null` cell (no fact
+     * yet) contributes 0 to this sum without making the ROW's own total
+     * unknown. No money is derived from it — half a day is 0.5 day of
+     * EVIDENCE, never half a wage; money is Release 2.
+     */
     total: number;
 }
 
@@ -134,7 +142,14 @@ export interface PlotBar { name: string; days: number; pct: number }
 export interface DashboardData {
     weekLabel: string;
     insight: string;
-    manDays: number;
+    /**
+     * Task 6 (spec: 2026-08-28-labour-v2-release-1, P4) — `null` when labour
+     * WAS logged this week but no log in it ever stated a headcount (never
+     * a fabricated `0` मजूर-दिवस). A week with real evidence for at least one
+     * log sums only the known ones; a week with nothing logged at all is the
+     * one genuine `0`. Render `—`, never `String(null)` (`"null"`).
+     */
+    manDays: number | null;
     manDaysTrend: number;
     wages: number;
     advances: number;
@@ -157,7 +172,14 @@ export interface LabourData {
     topLevelIds: string[];
     people: Record<string, LabourPerson>;
     dashboard: DashboardData;
-    ledger: { weekLabel: string; days: string[]; rows: LedgerRow[]; dailyTotals: number[]; weekTotal: number };
+    /**
+     * Task 6 — `weekTotal` mirrors `Dashboard.manDays` server-side (Stage 5's
+     * per-worker ledger is not built; `rows` stays `[]` until then, so there
+     * is no real per-worker roll-up yet) and inherits the same nullability:
+     * `null` when this week's labour was logged but no headcount was ever
+     * stated. `dailyTotals` elements are never `null` — see `LedgerRow.total`.
+     */
+    ledger: { weekLabel: string; days: string[]; rows: LedgerRow[]; dailyTotals: number[]; weekTotal: number | null };
     review: ReviewItem[];
     /**
      * Attendance draft for "today" (a plot's gang). Task 5 (founder Global

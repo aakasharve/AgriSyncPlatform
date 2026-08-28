@@ -80,9 +80,11 @@ public static class LabourAssignmentFactory
             femaleCount: femaleCount,
             // P4/P8: nothing stated => NULL means "we were not told", never "zero people
             // worked". An explicitly stated 0 still stores 0 and stays distinguishable.
-            workerCount: (workerCount ?? maleCount ?? femaleCount) is null
-                ? null
-                : LabourHeadcount.Resolve(workerCount, maleCount, femaleCount),
+            // Task 6 (spec: 2026-08-28-labour-v2-release-1) — LabourHeadcount.Resolve
+            // itself now returns null for the all-silent case, so this call needs no
+            // outer null-check anymore; see LabourAssignment.CorrectHeadcount for the
+            // same simplification and why (the check was equivalent, just duplicated).
+            workerCount: LabourHeadcount.Resolve(workerCount, maleCount, femaleCount),
             wagePerPerson: wagePerPerson,
             contractUnit: contractUnit,
             contractQuantity: contractQuantity,

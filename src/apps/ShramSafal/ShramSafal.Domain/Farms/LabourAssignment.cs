@@ -198,16 +198,20 @@ public sealed class LabourAssignment : Entity<Guid>
     /// resolved to a fabricated <c>0</c>. This mirrors
     /// <c>LabourAssignmentFactory.FromParsed</c> exactly, so a corrected row and
     /// a freshly recorded row obey the same rule. An explicitly stated 0 still
-    /// stores 0 and stays distinguishable from silence.</para>
+    /// stores 0 and stays distinguishable from silence.
+    /// Task 6 (spec: 2026-08-28-labour-v2-release-1) — <see cref="LabourHeadcount.Resolve"/>
+    /// now preserves that same all-silent-is-null rule itself, so calling it
+    /// directly is sufficient; the explicit outer null-check this method used
+    /// to need before that change is gone (it was equivalent, and duplicating
+    /// the same predicate in two places invites the two copies drifting apart
+    /// later).</para>
     /// </summary>
     public void CorrectHeadcount(int? workerCount, int? maleCount, int? femaleCount)
     {
         // The split is stored exactly as stated; only the total is resolved.
         MaleCount = maleCount;
         FemaleCount = femaleCount;
-        WorkerCount = (workerCount ?? maleCount ?? femaleCount) is null
-            ? null
-            : LabourHeadcount.Resolve(workerCount, maleCount, femaleCount);
+        WorkerCount = LabourHeadcount.Resolve(workerCount, maleCount, femaleCount);
     }
 
     /// <summary>

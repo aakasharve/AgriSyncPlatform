@@ -100,7 +100,12 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger }) => {
 
             <GroupLabel>या आठवड्यात</GroupLabel>
             <div className="grid grid-cols-2 gap-2.5">
-                <StatTile icon={<Users size={17} />} tone="em" value={String(d.manDays)} label="मजूर-दिवस" trend={d.manDaysTrend} />
+                {/* TASK 6 (spec: 2026-08-28-labour-v2-release-1, P4) — `d.manDays`
+                  * is `null` when labour was logged this week but no log in it
+                  * stated a headcount. `String(null)` is the literal text
+                  * `"null"` in JS — this would have PRINTED THE WORD "null" on
+                  * screen instead of the house `—` pattern for an absent fact. */}
+                <StatTile icon={<Users size={17} />} tone="em" value={d.manDays === null ? '—' : String(d.manDays)} label="मजूर-दिवस" trend={d.manDaysTrend} />
                 <StatTile icon={<Wallet size={17} />} tone="em" value={inr(d.wages)} label="मजुरी" />
                 {SHOW_ADVANCE_STAT && (
                     <StatTile icon={<ArrowUpRight size={17} />} tone="am" value={inr(d.advances)} label="उचल दिली" />

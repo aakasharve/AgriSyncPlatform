@@ -114,17 +114,26 @@ export const LABOUR_MOCK: LabourData = {
         ],
         money: { recorded: 16800, paid: 8400, advance: 3000, owed: 5400 },
     },
+    // Task 6 (spec: 2026-08-28-labour-v2-release-1, P4, D9.9 — supersedes D4)
+    // — this fixture is the "shipped design fixture" the brief names as
+    // ALREADY fabricating a half-day bug: `रमेश` (5 present + 1 half) was
+    // given `total: 6`, and `विलास` (2 present + 2 half) was given `total: 4`
+    // — both silently rounded every half day up to a whole one. Both totals
+    // below are now the real sum (present=1, half=0.5, absent/no-fact=0);
+    // `dailyTotals`/`weekTotal` are recomputed to match (the old `weekTotal:
+    // 28` did not even equal the sum of the old row totals — 6+5+4+7=22 — it
+    // was a stray copy of the unrelated `dashboard.manDays` figure above).
     ledger: {
         weekLabel: '७–१३ जुलै',
         days: ['सो', 'मं', 'बु', 'गु', 'शु', 'श', 'र'],
         rows: [
-            { personId: 'ramesh', name: 'रमेश', initial: 'र', tone: 'or', cells: [p('present'), p('present'), p('half'), p('present'), p('present'), p('present'), p('absent')], total: 6 },
+            { personId: 'ramesh', name: 'रमेश', initial: 'र', tone: 'or', cells: [p('present'), p('present'), p('half'), p('present'), p('present'), p('present'), p('absent')], total: 5.5 },
             { personId: 'sunita', name: 'सुनीता', initial: 'सु', tone: 'em', cells: [p('present'), p('present'), p('present'), p('present'), p('present'), p('absent'), p('absent')], total: 5 },
-            { personId: 'vilas', name: 'विलास', initial: 'वि', tone: 'rs', cells: [p('absent'), p('half'), p('present'), p('present'), p('half'), p('absent'), p('absent')], total: 4 },
+            { personId: 'vilas', name: 'विलास', initial: 'वि', tone: 'rs', cells: [p('absent'), p('half'), p('present'), p('present'), p('half'), p('absent'), p('absent')], total: 3 },
             { personId: 'sandip', name: 'संदीप', initial: 'सं', tone: 'am', cells: [p('present'), p('present'), p('present'), p('present'), p('present'), p('present'), p('present')], total: 7 },
         ],
-        dailyTotals: [3, 4, 4, 4, 4, 2, 1],
-        weekTotal: 28,
+        dailyTotals: [3, 3.5, 3.5, 4, 3.5, 2, 1],
+        weekTotal: 20.5,
     },
     // ids are GUID-shaped (not literal "r1"/"r2"/"r3") so मंजूर/शंका in preview
     // exercise the SAME `VerifyLogPayload.dailyLogId` zod shape (`ZGuid`) a

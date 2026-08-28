@@ -93,7 +93,10 @@ export interface LabourMoneyDto {
 export interface LabourDashboardDto {
     weekLabel: string;
     insight: string;
-    manDays: number;
+    // Task 6 (spec: 2026-08-28-labour-v2-release-1, P4) — `null` when labour
+    // was logged this week but no log in it stated a headcount. Never coerced
+    // to 0; passed straight through by `mapDashboard` below.
+    manDays: number | null;
     manDaysTrend: number;
     wages: number;
     advances: number;
@@ -114,6 +117,8 @@ export interface LabourLedgerRowDto {
     // day; `null` = no fact for that day (not yet reached / not marked),
     // never a real absence. Mirrors `LabourLedgerRowDto.Cells` (backend).
     cells: (string | null)[];
+    // Task 6 (P4, D9.9) — a half day is 0.5; never `null` (an unmarked cell
+    // contributes 0 to this sum without making the row's own total unknown).
     total: number;
 }
 
@@ -122,7 +127,9 @@ export interface LabourLedgerDto {
     days: string[];
     rows: LabourLedgerRowDto[];
     dailyTotals: number[];
-    weekTotal: number;
+    // Task 6 (P4) — mirrors `LabourDashboardDto.manDays`'s nullability; see
+    // that field and `LabourLedgerDto.WeekTotal` (backend DTO) for why.
+    weekTotal: number | null;
 }
 
 export interface LabourPointsDto {

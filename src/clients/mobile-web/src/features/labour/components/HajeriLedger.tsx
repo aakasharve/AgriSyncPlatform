@@ -99,7 +99,11 @@ const HajeriLedger: React.FC<{ data: LabourData; onToast: (m: string) => void }>
                 <div className="mt-1 flex items-center gap-2 border-t border-slate-100 pt-2">
                     <span className="w-[82px] flex-none text-[12.5px] font-extrabold text-slate-700">एकूण</span>
                     <span className="flex flex-1 gap-1.5">{L.dailyTotals.map((n, i) => <span key={i} className="flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">{n}</span>)}</span>
-                    <span className="w-9 flex-none text-center text-[15px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">{L.weekTotal}</span>
+                    {/* Task 6 (P4) — `weekTotal` can be `null` (labour was
+                      * logged this week but no headcount was ever stated).
+                      * The house pattern for an absent fact is `—`, never a
+                      * fabricated `0`. */}
+                    <span className="w-9 flex-none text-center text-[15px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">{L.weekTotal === null ? '—' : L.weekTotal}</span>
                 </div>
             </div>
             <div className="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[11.5px] leading-relaxed text-slate-600">हिरवा = आला · पिवळा = अर्धा दिवस · राखाडी = नाही. शेवटचा आकडा = किती दिवस काम केलं.</div>

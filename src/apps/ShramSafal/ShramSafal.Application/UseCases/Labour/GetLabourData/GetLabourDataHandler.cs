@@ -272,7 +272,30 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         var daysSinceMonday = ((int)today.DayOfWeek + 6) % 7; // Sunday=0..Saturday=6 -> Monday-anchored offset.
         var weekStart = today.AddDays(-daysSinceMonday);
         var weekAssignments = await repository.GetLabourAssignmentsForFarmSinceAsync(query.FarmId, weekStart, ct);
-        var manDays = weekAssignments.Sum(a => LabourHeadcount.Resolve(a.WorkerCount, a.MaleCount, a.FemaleCount));
+
+        // Task 6 (spec: 2026-08-28-labour-v2-release-1, P4) — LabourHeadcount.Resolve
+        // now returns null for an assignment whose headcount was never stated
+        // at all ("we were not told", not "nobody came"). LINQ's own
+        // Sum(IEnumerable<int?>) would silently treat that identically to a
+        // real 0 — it returns 0 for an all-null (or empty) sequence, never
+        // null — which is exactly the fabrication this task removes, just
+        // moved from JS `null + n` into LINQ instead of out of it. So it is
+        // deliberately not used here.
+        //
+        // Mirrors Task 1's farm-wide-evidence-vs-per-item-absence split
+        // (`hasJobCardEvidence`, step 2 above): an assignment with no stated
+        // headcount contributes NOTHING to the sum, never a fabricated 0. The
+        // week total itself is unknown only when labour WAS logged this week
+        // but its headcount was never captured in ANY of it (every resolved
+        // value is null) — a week with NO assignments logged at all is a
+        // different, genuine fact: a confirmed zero man-days, not an unknown
+        // one (nobody claims work happened that we merely failed to count).
+        var resolvedHeadcounts = weekAssignments
+            .Select(a => LabourHeadcount.Resolve(a.WorkerCount, a.MaleCount, a.FemaleCount))
+            .ToList();
+        var manDays = resolvedHeadcounts.Count > 0 && resolvedHeadcounts.All(h => h is null)
+            ? (decimal?)null
+            : (decimal?)resolvedHeadcounts.Sum(h => h ?? 0);
 
         // ── 8. Review — Draft/Confirmed logs still awaiting the owner. ─────
         var reviewLogs = farmLogs

@@ -174,4 +174,33 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
             expect(screen.queryByText(inr(5400))).toBeNull();
         });
     });
+
+    // TASK 6 (spec: 2026-08-28-labour-v2-release-1, P4) — Defect B: a log
+    // where the farmer never stated a headcount used to contribute a
+    // confident zero to मजूर-दिवस. `d.manDays` is now `number | null`; `null`
+    // must render as `—`, never as the literal word "null"
+    // (`String(null) === "null"` in JS — the exact bug this locks against).
+    describe('Task 6 — Man-days unknown (P4), never the literal word "null" or a fabricated 0', () => {
+        const withManDays = (manDays: number | null): LabourData => ({
+            ...LABOUR_MOCK,
+            dashboard: { ...LABOUR_MOCK.dashboard, manDays },
+        });
+
+        it('renders "—" for मजूर-दिवस when manDays is unknown (null), never the string "null"', () => {
+            render(<WeeklyDashboard {...baseProps()} data={withManDays(null)} />);
+            expect(screen.getByText('—')).toBeInTheDocument();
+            expect(screen.queryByText('null')).toBeNull();
+            expect(screen.queryByText('0')).toBeNull();
+        });
+
+        it('still shows the real मजूर-दिवस figure once it is known (LABOUR_MOCK: 28)', () => {
+            render(<WeeklyDashboard {...baseProps()} data={LABOUR_MOCK} />);
+            expect(screen.getByText('28')).toBeInTheDocument();
+        });
+
+        it('renders a genuine 0 (a real, known fact) distinctly from unknown — never "—" for a real zero', () => {
+            render(<WeeklyDashboard {...baseProps()} data={withManDays(0)} />);
+            expect(screen.getByText('0')).toBeInTheDocument();
+        });
+    });
 });
