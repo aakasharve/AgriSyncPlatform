@@ -274,6 +274,31 @@ describe('useLabourState — a failed farm-context lookup is not "no farm" (Task
         expect(mockFetchLabourData).not.toHaveBeenCalled();
     });
 
+    // Task 6f — the wiring, not just the state. The test above proves the
+    // banner SHOWS; this proves its "पुन्हा प्रयत्न करा" button actually
+    // DOES something. Without `refresh()` re-asking `/me`, bumping
+    // `retryToken` alone re-reads the same `loadFailed` FarmContext already
+    // has — the button re-renders the identical banner and the farmer taps
+    // forever. This is the one line (`if (!farmId) void farmCtxRefresh?.();`)
+    // that makes the affordance real; delete it and this test is the one
+    // that goes red, not the banner-visibility test above.
+    it('refresh() with no farm id re-asks FarmContext, not just the labour fetch (Task 6e retry wiring)', () => {
+        const mockFarmCtxRefresh = vi.fn();
+        mockUseOptionalFarmContext.mockReturnValue({
+            currentFarmId: null, isLoading: false, loadFailed: true, refresh: mockFarmCtxRefresh,
+        });
+
+        const { result } = renderHook(() => useLabourState());
+        expect(result.current.error).toBe(true);
+
+        act(() => { result.current.refresh(); });
+
+        expect(mockFarmCtxRefresh).toHaveBeenCalledTimes(1);
+        // Still no farm id to fetch labour data for — the retry targets the
+        // upstream `/me` lookup, not `fetchLabourData`.
+        expect(mockFetchLabourData).not.toHaveBeenCalled();
+    });
+
     // THE COMPANION TEST THAT STOPS OVER-REACH (brief Step 4). `/me`
     // SUCCEEDED and the account genuinely has zero farms: a record that
     // exists and contains nothing is a real, honest empty (Ruling R8), and

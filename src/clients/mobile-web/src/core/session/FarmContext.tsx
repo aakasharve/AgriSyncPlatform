@@ -34,6 +34,25 @@ interface FarmContextValue {
     currentFarm: MeFarm | null;
     farms: MeFarm[];
     switchFarm: (farmId: string) => void;
+    /**
+     * Task 6f (spec: 2026-08-28-labour-v2-release-1) — this reference is NOT
+     * memo-stable: it is rebuilt inside the `value` `useMemo` below, whose
+     * deps include `isLoading` and `meContext`, both of which change at
+     * least twice per `/me` call (once when the fetch starts, again when it
+     * settles). So `refresh` gets a new identity on every fetch cycle, not
+     * just on the renders that actually change what it does.
+     *
+     * That must stay true for every consumer to call it imperatively
+     * (`onClick`, or — per Task 6e — from inside `useLabourState`'s own
+     * `refresh`) and NEVER put it in a `useEffect` dependency array: an
+     * effect keyed on this identity would re-fire on every fetch it
+     * triggers, i.e. loop. Nothing does that today, but `useLabourState`'s
+     * retry wiring now reads this reference to make its own retry work
+     * (Task 6e) — so an accidental future stabilisation of this into a
+     * fixed reference is not a free simplification either; anything that
+     * changes when this identity changes needs re-checking against both
+     * directions.
+     */
     refresh: () => Promise<void>;
     /**
      * Task 6e (spec: 2026-08-28-labour-v2-release-1, P5, Ruling R8) — true
