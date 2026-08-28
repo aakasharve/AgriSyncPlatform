@@ -136,7 +136,16 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
                                 <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[14px] bg-orange-100">
                                     <Users size={20} className="text-orange-700" strokeWidth={2.5} />
                                 </span>
-                                <span className="text-[17px] font-bold text-stone-800">बोलून नोंदवलेली हजेरी</span>
+                                {/*
+                                  * Task 7 (labour-v2-release-1) — DELETED the
+                                  * header label here: "बोलून नोंदवलेली हजेरी"
+                                  * ("attendance recorded by voice"). This card
+                                  * shows real labour cost/headcount data, but
+                                  * calling it हजेरी (attendance) claims a
+                                  * dedicated attendance capture that doesn't
+                                  * exist. The money and breakdown below are
+                                  * untouched — only the false framing is gone.
+                                  */}
                             </div>
                             {/* "किती दिलं" — a bare ₹ figure never says whose money or which way it moved. */}
                             <span className="text-right">
@@ -212,8 +221,17 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
                 <Mic size={32} strokeWidth={2.4} />
             </span>
             <span className="min-w-0 flex-1">
-                <span className="block text-[23px] font-black leading-tight text-white">बोलून हजेरी घ्या</span>
-                <span className="mt-1 block text-[16px] font-medium leading-snug text-emerald-50">“रोकडेचे दहा लोक आले” — असं बोला</span>
+                {/*
+                  * Task 7 (labour-v2-release-1) — DELETED the headline here:
+                  * "बोलून हजेरी घ्या" ("take attendance by voice"). Tapping
+                  * this button opens the generic log mic (`onGoToLog`), not
+                  * a dedicated attendance capture — there is no attendance
+                  * capture anywhere in this feature. The example line below
+                  * is untouched: it is truthful (the generic mic really does
+                  * parse a headcount statement like this) and now carries
+                  * the button's only text.
+                  */}
+                <span className="mt-1 block text-[16px] font-medium leading-snug text-emerald-50">"रोकडेचे दहा लोक आले" — असं बोला</span>
             </span>
             <span className="flex-shrink-0 rounded-full bg-white/25 px-4 py-3 text-[17px] font-extrabold text-white">उघडा</span>
         </button>
@@ -233,9 +251,18 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
             <LabourJustLogged logs={justLoggedLogs} defaults={ledgerDefaults} />
         )}
 
+        {/*
+          * Task 7 (labour-v2-release-1) — `what`/`act` below each DELETED a
+          * हजेरी (attendance) claim: `what` said "टीमची हजेरी, ..." (team's
+          * attendance, among what this hub covers); `act` said "बोलून हजेरी
+          * घ्या · ..." — a verbatim duplicate of the voice-CTA headline
+          * removed above. Neither claim has a feature behind it. Every word
+          * remaining is pre-existing text with the false fragment deleted,
+          * not reworded.
+          */}
         <HelpNote
-            what="टीमची हजेरी, मजुरी, उचल व नोंदींची तपासणी — सगळं एका जागी."
-            act="बोलून हजेरी घ्या · नोंदी तपासा · विश्वासू कामगाराच्या नोंदी आपोआप मंजूर करा."
+            what="टीमची मजुरी, उचल व नोंदींची तपासणी — सगळं एका जागी."
+            act="नोंदी तपासा · विश्वासू कामगाराच्या नोंदी आपोआप मंजूर करा."
             why="'टीम सेटअप'मध्ये कोण नोंद करू शकतो ते ठरतं; इथे त्यांनी काय केलं आणि त्यावर किती विश्वास — ते दिसतं व ठरतं."
             label="कामगार व्यवस्थापन कसं वापरायचं?"
         />

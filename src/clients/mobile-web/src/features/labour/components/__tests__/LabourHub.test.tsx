@@ -208,3 +208,52 @@ describe('LabourHub — screen honesty (Decision 4b)', () => {
         expect(screen.getByText('आढावा')).toBeInTheDocument();
     });
 });
+
+// ---------------------------------------------------------------------------
+// Task 7 (labour-v2-release-1) — the two REACHABLE false attendance claims on
+// this hub. Neither is behind a SHOW_* flag (unlike हजेरी घ्या / हजेरी वही
+// above, which already ARE hidden and already covered by the test above).
+// LabourMic is a 52-line doorway to the generic log mic — there is no
+// dedicated attendance capture anywhere in this feature.
+// ---------------------------------------------------------------------------
+describe('LabourHub — no attendance-capture claims (Task 7)', () => {
+    afterEach(() => cleanup());
+
+    it('the primary voice CTA no longer claims "बोलून हजेरी घ्या" (take attendance by voice)', () => {
+        render(<LabourHub {...baseProps()} />);
+        expect(screen.queryByText('बोलून हजेरी घ्या')).toBeNull();
+    });
+
+    it('keeps the honest example line under the voice CTA — it is truthful (the generic mic really does parse it)', () => {
+        render(<LabourHub {...baseProps()} />);
+        expect(screen.getByText(/रोकडेचे दहा लोक आले/)).toBeInTheDocument();
+    });
+
+    it('the "just logged" card is not labelled बोलून नोंदवलेली हजेरी — it is a labour-cost summary, not attendance', () => {
+        render(
+            <LabourHub
+                {...baseProps()}
+                history={[labourLog()]}
+                ledgerDefaults={ledgerDefaults}
+                lastLabourLogIds={['log-1']}
+            />
+        );
+        expect(screen.getByTestId('labour-just-logged-card')).toBeInTheDocument();
+        expect(screen.queryByText('बोलून नोंदवलेली हजेरी')).toBeNull();
+        // The real data (cost, breakdown) is untouched by this fix.
+        expect(screen.getByText('₹1,600')).toBeInTheDocument();
+    });
+
+    it('the "how to use" help note no longer claims हजेरी (attendance) capture anywhere in its text', () => {
+        render(<LabourHub {...baseProps()} />);
+        fireEvent.click(screen.getByText('कामगार व्यवस्थापन कसं वापरायचं?'));
+        expect(screen.queryByText(/हजेरी/)).toBeNull();
+    });
+
+    it('the help note keeps its true neighbouring words after the surgical deletion (मजुरी / नोंदी तपासा)', () => {
+        render(<LabourHub {...baseProps()} />);
+        fireEvent.click(screen.getByText('कामगार व्यवस्थापन कसं वापरायचं?'));
+        expect(screen.getByText(/मजुरी/)).toBeInTheDocument();
+        expect(screen.getByText(/नोंदी तपासा/)).toBeInTheDocument();
+    });
+});

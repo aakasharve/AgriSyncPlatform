@@ -273,7 +273,12 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                         onClick={() => setShowFarmSwitcher(true)}
                     />
                 )}
-                {onOpenLabour && <RowCard icon={<Users size={20} />} label="कामगार व्यवस्थापन · Labour" subtitle="हजेरी · मजुरी · उचल" tone="emerald" onClick={onOpenLabour} />}
+                {/* Task 7 (labour-v2-release-1) — DELETED "हजेरी · " from the
+                    subtitle below: this row's live/reachable Marathi claimed
+                    "attendance" as a headline capability of Labour
+                    Management, but no attendance capture exists in that
+                    feature. */}
+                {onOpenLabour && <RowCard icon={<Users size={20} />} label="कामगार व्यवस्थापन · Labour" subtitle="मजुरी · उचल" tone="emerald" onClick={onOpenLabour} />}
                 <RowCard icon={<BarChart3 size={20} />} label="पैसे व हिशोब · Finance" onClick={onOpenFinance} />
                 {onOpenReferrals && <RowCard icon={<Medal size={20} />} label="रेफरल्स · Referrals" onClick={onOpenReferrals} />}
             </div>

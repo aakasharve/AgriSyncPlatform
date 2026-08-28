@@ -614,7 +614,15 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                             <p className="mt-1.5 text-[17px] text-stone-500">तपासायला काही उरलं नाही.</p>
                         </div>
                     )}
-                    <div className="rounded-xl border border-stone-100 bg-stone-50 p-3.5 text-[16px] leading-relaxed text-stone-600">मंजूर केल्यावर हजेरीही निश्चित होते.</div>
+                    {/*
+                      * Task 7 (labour-v2-release-1) — DELETED a static footer
+                      * note here: "मंजूर केल्यावर हजेरीही निश्चित होते." ("approving
+                      * also settles attendance"). No attendance record exists yet
+                      * (`attendance_marks` lands later this release) — approving
+                      * settles nothing about presence. P5: a truthful missing
+                      * feature beats a fake working one. Removal only, per the
+                      * task's copy constraint — no replacement text authored.
+                      */}
                 </div>
                 {topUndo && (
                     <div

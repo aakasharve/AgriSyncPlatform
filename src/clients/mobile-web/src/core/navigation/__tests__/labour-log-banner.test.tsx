@@ -66,6 +66,23 @@ describe('LabourLogBanner (component)', () => {
         expect(el.props['aria-label']).toContain('कामगार व्यवस्थापन');
         expect(el.props['aria-label']).not.toMatch(/dismiss/i);
     });
+
+    // Task 7 (labour-v2-release-1) — this banner's subtitle read
+    // "मजूर · हजेरी · मजुरी बोला" ("Worker · Attendance · Wages — speak"),
+    // live on the main log screen whenever logIntent is 'labour'. There is
+    // no attendance capture anywhere in the Labour feature — this banner is
+    // not `LabourMic.tsx` (Task 11, untouched) but makes the same claim.
+    it('does not promise हजेरी (attendance) capture anywhere in its text', () => {
+        const el = LabourLogBanner({ onBackToLabour: vi.fn() }) as React.ReactElement;
+        const collectText = (node: React.ReactNode): string => {
+            if (node === null || node === undefined || typeof node === 'boolean') return '';
+            if (typeof node === 'string' || typeof node === 'number') return String(node);
+            if (Array.isArray(node)) return node.map(collectText).join('');
+            if (React.isValidElement(node)) return collectText((node.props as { children?: React.ReactNode }).children);
+            return '';
+        };
+        expect(collectText(el)).not.toContain('हजेरी');
+    });
 });
 
 // Minimal-but-complete AppRouterContext for renderLogView's idle branch.
