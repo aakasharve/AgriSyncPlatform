@@ -105,7 +105,18 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger }) => {
                 {SHOW_ADVANCE_STAT && (
                     <StatTile icon={<ArrowUpRight size={17} />} tone="am" value={inr(d.advances)} label="उचल दिली" />
                 )}
-                <StatTile icon={<Scale size={17} />} tone="or" value={inr(Math.abs(d.owed))} label={d.owed >= 0 ? 'बाकी देणं' : 'जास्त दिलं'} />
+                {/*
+                  * TASK 1 (P4) — `d.owed` is `null` whenever the farm carries
+                  * zero job-card evidence (production holds zero today). That
+                  * is an ABSENCE of evidence, not evidence of zero, so this
+                  * tile — बाकी देणं / जास्त दिलं — is omitted OUTRIGHT rather
+                  * than rendering a fabricated ₹0 or a fabricated overpayment.
+                  * This leaves a visible gap in the grid below; new wording to
+                  * fill it needs founder approval and is out of scope here.
+                  */}
+                {d.owed !== null && (
+                    <StatTile icon={<Scale size={17} />} tone="or" value={inr(Math.abs(d.owed))} label={d.owed >= 0 ? 'बाकी देणं' : 'जास्त दिलं'} />
+                )}
                 <StatTile icon={<ClipboardList size={17} />} tone="bl" value={String(d.logs)} label="नोंदी" />
                 <StatTile icon={<Inbox size={17} />} tone="or" value={String(d.pending)} label="तपासायचं" onClick={onReview} />
             </div>
@@ -134,14 +145,20 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger }) => {
             <div className="rounded-[20px] border border-slate-100 bg-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
                 <div className="mb-2.5 flex items-baseline justify-between">
                     <span className="text-[11.5px] font-semibold text-slate-500">काम झालं · एकूण नोंदवलं</span>
-                    <span className="text-[16px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">{inr(d.money.recorded)}</span>
+                    {/* TASK 1 (P4) — `null` = zero job-card evidence; the house
+                      * pattern for an absent fact is `—`, never a fabricated ₹0. */}
+                    <span className="text-[16px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">{d.money.recorded === null ? '—' : inr(d.money.recorded)}</span>
                 </div>
                 <div className="flex h-7 gap-0.5 overflow-hidden rounded-lg">
                     <span className="flex items-center justify-center bg-emerald-600 text-[11px] font-extrabold text-white" style={{ flexGrow: Math.max(0, d.money.paid) }}>{inr(d.money.paid)}</span>
                     {d.money.advance > 0 && (
                         <span className="flex items-center justify-center bg-amber-500 text-[11px] font-extrabold text-white" style={{ flexGrow: d.money.advance }}>{inr(d.money.advance)}</span>
                     )}
-                    {d.money.owed >= 0 && (
+                    {/* TASK 1 — `d.money.owed` may now be `null`; guarded
+                      * explicitly rather than `>= 0` alone, because JS coerces
+                      * `null >= 0` to `true` (Number(null) === 0), which would
+                      * render a segment/figure for an unknown balance. */}
+                    {d.money.owed !== null && d.money.owed >= 0 && (
                         <span className="flex items-center justify-center bg-slate-300 text-[11px] font-extrabold text-slate-600" style={{ flexGrow: d.money.owed }}>{inr(d.money.owed)}</span>
                     )}
                 </div>

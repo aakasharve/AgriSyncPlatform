@@ -60,7 +60,10 @@ export interface LabourPersonDto {
     temporary: boolean;
     taskScope: string | null;
     appointedById: string | null;
-    recordedWages: number;
+    // Task 1 (spec: 2026-08-28-labour-v2-release-1, P4) — `null` when the
+    // server has zero job-card evidence for this worker. Never coerced to 0
+    // here; passed straight through by `mapPerson` below.
+    recordedWages: number | null;
     paid: number;
     advance: number;
     todayStatus: string | null;
@@ -79,10 +82,12 @@ export interface LabourPlotBarDto {
 }
 
 export interface LabourMoneyDto {
-    recorded: number;
+    // Task 1 (P4) — `recorded`/`owed` are `null` when zero job-card evidence
+    // exists farm-wide. Never coerced to 0.
+    recorded: number | null;
     paid: number;
     advance: number;
-    owed: number;
+    owed: number | null;
 }
 
 export interface LabourDashboardDto {
@@ -92,7 +97,8 @@ export interface LabourDashboardDto {
     manDaysTrend: number;
     wages: number;
     advances: number;
-    owed: number;
+    // Task 1 (P4) — `null` when zero job-card evidence exists farm-wide.
+    owed: number | null;
     logs: number;
     pending: number;
     plots: LabourPlotBarDto[];

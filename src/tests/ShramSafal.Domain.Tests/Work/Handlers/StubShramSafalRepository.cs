@@ -161,4 +161,17 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
     // on it changes — it simply becomes overridable, which the Phase 5
     // labour-permission roster read needs.
     public virtual Task<List<FarmMembership>> GetFarmMembershipsAsync(FarmId farmId, CancellationToken ct = default) => Task.FromResult(new List<FarmMembership>());
+
+    // Task 1 (spec: 2026-08-28-labour-v2-release-1) — restated `virtual` for the
+    // SAME reason as every block above: an interface DEFAULT implementation is
+    // not a virtual class member, so a FakeRepo subclass could not override it
+    // — every override would silently no-op instead of failing to compile.
+    // Same default (empty) as the interface body. EarnedIsUnknownNotZeroTests
+    // needs this overridable to prove a farm can carry real labour-money
+    // CostEntry rows while GetJobCardsForFarmAsync stays at its (already
+    // overridable) empty default — the exact "money paid, zero job cards"
+    // shape production is in today.
+    public virtual Task<List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)>> GetLabourPayoutCostEntriesWithJobCardAsync(
+        FarmId farmId, CancellationToken ct = default)
+        => Task.FromResult(new List<(CostEntry, Guid?)>());
 }

@@ -105,6 +105,15 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                 g => g.Key,
                 g => decimal.Round(g.Sum(jc => jc.EstimatedTotal.Amount), 2, MidpointRounding.AwayFromZero));
 
+        // Task 1 (spec: 2026-08-28-labour-v2-release-1, P4) — whether ANY
+        // job-card evidence exists on this farm at all. Production holds ZERO
+        // job cards, so `recordedWagesByWorker` is always empty there — that is
+        // an ABSENCE of evidence, not evidence of zero, and must not be
+        // conflated with "nobody earned anything". Gates both the per-person
+        // and the farm-wide RecordedWages/Owed figures below: null, never `0m`,
+        // whenever this is false.
+        var hasJobCardEvidence = recordedWagesByWorker.Count > 0;
+
         // ── 3. Labour CostEntries — labour_payout + labour_misc (finance-consistent Paid — दिलं). ──
         // Decision 3a (2026-07-19): दिलं = ALL labour money paid out, not just
         // job-card settlements — labour_misc (generic voice/manual labour
@@ -184,7 +193,14 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                 continue; // defends the "People ids are unique" wire-contract invariant.
             }
 
-            var recordedWages = recordedWagesByWorker.GetValueOrDefault(workerId);
+            // Task 1 (P4) — null when THIS worker carries no job-card evidence
+            // (no Completed/VerifiedForPayout/PaidOut card), never a fabricated
+            // ₹0. `TryGetValue` in place of `GetValueOrDefault`: the latter
+            // silently substitutes decimal's default (0m) for "not found",
+            // which is exactly the conflation this task removes.
+            var recordedWages = recordedWagesByWorker.TryGetValue(workerId, out var recordedWagesValue)
+                ? recordedWagesValue
+                : (decimal?)null;
             var paid = paidByWorker.GetValueOrDefault(workerId);
             const decimal advance = 0m; // Stage 4 (LabourAdvance) — not yet built.
 
@@ -233,10 +249,23 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // Decision 3a requires दिलं to equal ALL labour money paid, matching
         // the finance page. Per-person Paid is untouched (still attribution-
         // only); only this farm-wide total absorbs the unattributed slice.
-        var totalRecorded = decimal.Round(people.Sum(p => p.RecordedWages), 2, MidpointRounding.AwayFromZero);
+        // Task 1 (P4) — `totalRecorded` is null when the farm carries zero
+        // job-card evidence (`hasJobCardEvidence` false), exactly mirroring the
+        // per-person rule above. Do NOT gate this on "every person's
+        // RecordedWages happens to be null" — an active roster with zero
+        // members would then vacuously read as "unknown" even when real
+        // evidence exists elsewhere (e.g. for a departed worker), which is a
+        // different and legitimate `0m` case handled below. `totalOwed` is
+        // NEVER derived from a null `totalRecorded` — the balance is absent
+        // too, not zero, not negative.
+        var totalRecorded = hasJobCardEvidence
+            ? decimal.Round(people.Sum(p => p.RecordedWages ?? 0m), 2, MidpointRounding.AwayFromZero)
+            : (decimal?)null;
         var totalPaid = decimal.Round(people.Sum(p => p.Paid) + unattributedPaid, 2, MidpointRounding.AwayFromZero);
         var totalAdvance = decimal.Round(people.Sum(p => p.Advance), 2, MidpointRounding.AwayFromZero);
-        var totalOwed = decimal.Round(totalRecorded - totalPaid - totalAdvance, 2, MidpointRounding.AwayFromZero);
+        var totalOwed = totalRecorded is null
+            ? (decimal?)null
+            : decimal.Round(totalRecorded.Value - totalPaid - totalAdvance, 2, MidpointRounding.AwayFromZero);
 
         // ── 7. This-week man-days (interim, from LabourAssignment.WorkerCount — NO-MULTIPLY descriptive only). ──
         var today = DateOnly.FromDateTime(clock.UtcNow.Date);

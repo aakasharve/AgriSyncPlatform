@@ -23,7 +23,7 @@ import { render, screen, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import WeeklyDashboard from '../WeeklyDashboard';
 import type { LabourData } from '../../labourMock';
-import { EMPTY_LABOUR_DATA, LABOUR_MOCK } from '../../labourMock';
+import { EMPTY_LABOUR_DATA, LABOUR_MOCK, inr } from '../../labourMock';
 
 const noop = () => {};
 const baseProps = () => ({ onReview: noop, onLedger: noop, onToast: vi.fn() });
@@ -108,5 +108,70 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
         // the day the server sends a real range, the heading comes back.
         expect(screen.getByTestId('weekly-dashboard-week-label'))
             .toHaveTextContent(LABOUR_MOCK.dashboard.weekLabel);
+    });
+
+    // TASK 1 (spec: 2026-08-28-labour-v2-release-1, P4) — Earned money is
+    // unknown, not zero. `GetLabourDataHandler` computes RecordedWages purely
+    // from job-card evidence; production holds zero job cards while real
+    // labour money IS paid out, so treating the absence as `0` fabricated an
+    // "overpaid" (जास्त दिलं) claim against a farmer who was never overpaid.
+    // `d.owed`/`d.money.recorded`/`d.money.owed` are now `number | null`;
+    // `null` must never render as ₹0 or drive a fabricated balance.
+    describe('Task 1 — Earned unknown (P4), never a fabricated ₹0/overpayment', () => {
+        const withOwed = (owed: number | null): LabourData => ({
+            ...LABOUR_MOCK,
+            dashboard: { ...LABOUR_MOCK.dashboard, owed },
+        });
+
+        // Mirrors real server output: `Dashboard.Owed` and `Money.Owed` are
+        // DERIVED from the same `totalOwed` in `GetLabourDataHandler`, so a
+        // fixture that varies one without the other would not be a shape the
+        // backend can actually send.
+        const withMoney = (recorded: number | null, owed: number | null): LabourData => ({
+            ...LABOUR_MOCK,
+            dashboard: {
+                ...LABOUR_MOCK.dashboard,
+                owed,
+                money: { ...LABOUR_MOCK.dashboard.money, recorded, owed },
+            },
+        });
+
+        it('omits the बाकी देणं/जास्त दिलं stat tile entirely when Owed is unknown (null)', () => {
+            render(<WeeklyDashboard {...baseProps()} data={withOwed(null)} />);
+            expect(screen.queryByText('बाकी देणं')).toBeNull();
+            expect(screen.queryByText('जास्त दिलं')).toBeNull();
+        });
+
+        it('still shows the stat tile for a real, evidenced Owed figure (LABOUR_MOCK: 5400, owed)', () => {
+            render(<WeeklyDashboard {...baseProps()} data={LABOUR_MOCK} />);
+            expect(screen.getByText('बाकी देणं')).toBeInTheDocument();
+        });
+
+        it('never renders a negative or zero ₹ figure for the overpayment tile as a substitute for null', () => {
+            render(<WeeklyDashboard {...baseProps()} data={withOwed(null)} />);
+            // The tile (and therefore any ₹ figure it would have carried) is
+            // gone outright — not present with a clamped/zeroed value.
+            expect(screen.queryByText('₹0')).toBeNull();
+        });
+
+        it('renders "—" for काम झालं (money.recorded) when it is unknown, never a fabricated ₹0', () => {
+            render(<WeeklyDashboard {...baseProps()} data={withMoney(null, null)} />);
+            expect(screen.getByText('—')).toBeInTheDocument();
+            expect(screen.queryByText('₹0')).toBeNull();
+        });
+
+        it('still renders the real recorded figure once it is known (LABOUR_MOCK: ₹16,800)', () => {
+            render(<WeeklyDashboard {...baseProps()} data={LABOUR_MOCK} />);
+            expect(screen.getByText(inr(LABOUR_MOCK.dashboard.money.recorded as number))).toBeInTheDocument();
+        });
+
+        it('does not render the money-bar बाकी segment/figure when money.owed is null', () => {
+            render(<WeeklyDashboard {...baseProps()} data={withMoney(16800, null)} />);
+            // The known दिलं figure (₹8,400 in LABOUR_MOCK) still renders...
+            expect(screen.getAllByText(inr(LABOUR_MOCK.dashboard.money.paid)).length).toBeGreaterThan(0);
+            // ...but no ₹ figure exists anywhere for the unknown owed amount
+            // (neither the stat tile nor the money-bar segment).
+            expect(screen.queryByText(inr(5400))).toBeNull();
+        });
     });
 });

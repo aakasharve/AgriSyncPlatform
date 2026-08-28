@@ -37,7 +37,15 @@ public sealed record LabourPersonDto(
     // Advance (उचल) = 0 until Stage 4 (LabourAdvance). Owed/बाकी =
     // RecordedWages − Paid − Advance is DERIVED by the client/handler, never
     // stored here (no stale copy).
-    decimal RecordedWages,
+    //
+    // Task 1 (spec: 2026-08-28-labour-v2-release-1, P4) — RecordedWages is
+    // `decimal?`: `null` means this worker has ZERO Completed/VerifiedForPayout/
+    // PaidOut job cards, i.e. no evidence, not evidence of zero. Production
+    // holds zero job cards farm-wide today, so treating that absence as `0m`
+    // made a farmer who was genuinely paid look "overpaid" against nothing.
+    // Never derive Owed/बाकी from a null RecordedWages — the balance must be
+    // absent too, not zero, not negative.
+    decimal? RecordedWages,
     decimal Paid,
     decimal Advance,
     string? TodayStatus,
@@ -55,7 +63,10 @@ public sealed record LabourDashboardDto(
     int ManDaysTrend,
     decimal Wages,
     decimal Advances,
-    decimal Owed,
+    // Task 1 — `null` when zero job-card evidence exists farm-wide (see
+    // LabourMoneyDto.Owed below); never a fabricated ₹0 or a balance derived
+    // from one.
+    decimal? Owed,
     int Logs,
     int Pending,
     IReadOnlyList<LabourPlotBarDto> Plots,
@@ -66,11 +77,18 @@ public sealed record LabourPlotBarDto(
     int Days,
     int Pct);
 
+/// <summary>
+/// Task 1 (P4) — <c>Recorded</c> is `null` when the farm has ZERO
+/// Completed/VerifiedForPayout/PaidOut job cards anywhere (absence of
+/// evidence, not evidence of zero). <c>Owed</c> is DERIVED from
+/// <c>Recorded</c>, so it is `null` under the exact same condition — never a
+/// balance computed against an unknown.
+/// </summary>
 public sealed record LabourMoneyDto(
-    decimal Recorded,
+    decimal? Recorded,
     decimal Paid,
     decimal Advance,
-    decimal Owed);
+    decimal? Owed);
 
 public sealed record LabourLedgerDto(
     string WeekLabel,

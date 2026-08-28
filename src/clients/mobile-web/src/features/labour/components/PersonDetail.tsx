@@ -119,7 +119,14 @@ const PersonDetail: React.FC<Props> = ({ data, personId, onAdvance, onSettle, on
                 onAdvance={onAdvance}
                 onSettle={onSettle}
                 showActions={SHOW_MONEY_ACTIONS}
-                why={`काम झालं ${inr(w.balance.recorded)} − दिलं ${inr(w.balance.paid)} − उचल ${inr(w.balance.advance)} · आपोआप वजा`}
+                // Task 1 (P4) — this explanation states the काम झालं figure
+                // itself, so it makes no sense (and would need invented copy
+                // to caveat) when that figure is unknown. `undefined` lets
+                // `BalanceCard` skip the line entirely — the same "leave the
+                // gap" treatment as the balance tile it explains.
+                why={w.balance.recorded === null
+                    ? undefined
+                    : `काम झालं ${inr(w.balance.recorded)} − दिलं ${inr(w.balance.paid)} − उचल ${inr(w.balance.advance)} · आपोआप वजा`}
             />
 
             {SHOW_TRUST_GRADUATION && (

@@ -88,4 +88,39 @@ describe('PersonDetail — screen honesty (Decision 4b)', () => {
         render(<PersonDetail {...baseProps()} personId="sunita" />);
         expect(screen.queryByText(/विश्वास 76/)).toBeNull();
     });
+
+    // Task 1 (spec: 2026-08-28-labour-v2-release-1, P4) — a worker with no
+    // job-card evidence carries `balance.recorded: null`. BalanceCard must
+    // show "—" for काम झालं (never a fabricated ₹0) and must omit the
+    // द्यायचे/उचल बाकी/जास्त दिलं headline + tile entirely (never a balance
+    // derived from an unknown). No new Marathi copy is introduced anywhere
+    // in this fallback.
+    describe('Task 1 — an unknown RecordedWages (null) never becomes a fabricated balance', () => {
+        const withUnknownRecorded = () => ({
+            ...LABOUR_MOCK,
+            people: {
+                ...LABOUR_MOCK.people,
+                ramesh: { ...LABOUR_MOCK.people.ramesh, balance: { ...LABOUR_MOCK.people.ramesh.balance, recorded: null } },
+            },
+        });
+
+        it('renders "—" for काम झालं instead of a fabricated ₹0', () => {
+            render(<PersonDetail {...baseProps()} data={withUnknownRecorded()} personId="ramesh" />);
+            expect(screen.getByText('काम झालं')).toBeInTheDocument();
+            expect(screen.getByText('—')).toBeInTheDocument();
+        });
+
+        it('omits जास्त दिलं / द्यायचे / उचल बाकी entirely rather than deriving a balance from the unknown', () => {
+            render(<PersonDetail {...baseProps()} data={withUnknownRecorded()} personId="ramesh" />);
+            expect(screen.queryByText('जास्त दिलं')).toBeNull();
+            expect(screen.queryByText('द्यायचे')).toBeNull();
+            expect(screen.queryByText('उचल बाकी')).toBeNull();
+        });
+
+        it('still shows the real balance for a worker whose RecordedWages IS evidenced (सुनीता)', () => {
+            render(<PersonDetail {...baseProps()} personId="sunita" />);
+            // सुनीता: recorded 2000, paid 500, advance 0 -> owes 1500, "द्यायचे".
+            expect(screen.getByText('द्यायचे')).toBeInTheDocument();
+        });
+    });
 });

@@ -180,6 +180,26 @@ describe('labourClient.fetchLabourData', () => {
         expect(data.dashboard.owed).toBe(5400);
     });
 
+    // Task 1 (spec: 2026-08-28-labour-v2-release-1, P4) — a null
+    // recordedWages/owed on the wire is an ABSENCE of job-card evidence, not
+    // a zero. The mapper must pass `null` straight through — never `?? 0`,
+    // which would silently reintroduce the exact fabrication this task fixes.
+    it('passes a null recordedWages/owed straight through — never coerced to 0', async () => {
+        const dto = buildDto();
+        dto.people[0].recordedWages = null;
+        dto.dashboard.owed = null;
+        dto.dashboard.money.recorded = null;
+        dto.dashboard.money.owed = null;
+        mockGet.mockResolvedValueOnce(mockOkResponse(dto));
+
+        const data = await fetchLabourData('farm-123');
+
+        expect(data.people['p1'].balance.recorded).toBeNull();
+        expect(data.dashboard.owed).toBeNull();
+        expect(data.dashboard.money.recorded).toBeNull();
+        expect(data.dashboard.money.owed).toBeNull();
+    });
+
     it('populates review[].points and review[].status from the DTO', async () => {
         mockGet.mockResolvedValueOnce(mockOkResponse(buildDto()));
 
