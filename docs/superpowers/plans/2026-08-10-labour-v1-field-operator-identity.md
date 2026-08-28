@@ -8,6 +8,41 @@
 
 ---
 
+## ⚠️ FOUNDER AMENDMENTS — 2026-08-28 (read before the Global Constraints below)
+
+The founder amended this frozen architecture on **2026-08-28**, in place, per `W5`
+("architecture locks; documents get patched in place"). **No V6 was created.** Three
+constraints below are narrowed. Everything not listed here stands unchanged.
+
+The amendments were requested because the founder ruled that **per-worker attendance
+(हजेरी) must ship and must work offline**, and that `अर्धा` equals half the agreed wage.
+Those requirements collided head-on with Task 13.1, Constraint 2 and Constraint 6 as
+originally frozen. The collision was surfaced to him and he amended rather than letting an
+agent route around it.
+
+| # | What it amends | The amendment |
+|---|---|---|
+| **A1** | **Task 13.1** — *"Attribution happens after the fact, **online** — no offline Field Operator sync, no attendance wizard."* | **Attendance MARKING may happen offline.** Field Operator **creation** stays online — minting a worker identity on a handset is precisely how two different people named रमेश get merged into one record, which `D3` exists to prevent. So: mark offline against a roster already on the device; create workers only with signal. |
+| **A2** | **Constraint 2** — bans *"any alternative work anchor (… `AttendanceWork` …)"* | **A per-worker, per-day attendance record is permitted.** The ban is narrowed to its actual intent: no work anchor keyed on **account identity**, and no second anchor that competes with `LabourAssignment` as the record of *what work happened*. Attendance records **who was present**; it does not restate the work, and it must never contradict `LabourAssignment` on quantity (`P7`). |
+| **A3** | **Constraint 6** — *"Money is a hard boundary… **No wage derivation from attendance**."* | **Wage MAY be derived from attendance — in Release 2 only.** Release 1 (attendance capture + हजेरी वही ledger) touches no money whatsoever. The derivation is fixed by ruling `D4`: `अर्धा` = exactly half the **agreed** wage, and where no wage was recorded the display is `—`, never half of an assumed number (`P4`). |
+
+**Why A3 was necessary and is not a loosening of the money boundary.** The founder's money
+model (ruled 2026-08-28) is: an `उचल` is recorded once and dated; each day of recorded
+presence **accrues earnings that draw the advance down**; `सेटल` squares the balance. His
+stated daily obligation is *only* to say who was present. Attendance is therefore the engine
+that retires an advance — the derivation is the feature, not a side effect. `cost_entries`
+and `job_cards` remain unmodified, so the original boundary holds where it was aimed.
+
+**Still binding, and unchanged by these amendments:** `P7` (naming people never changes a
+reported headcount), `P4` (no figure without explainable evidence), `P9` (no optional field
+may reject a farmer's record), `P10` (offline capture stays *unsynchronized intent* until the
+server acknowledges it), and Constraint 1 (`FieldOperatorId` is the only work subject — `A2`
+does **not** reopen account-identity attribution).
+
+Companion ruling file: `docs/superpowers/handoffs/2026-08-28-LABOUR-V2-LOCKED-DECISIONS.md`.
+
+---
+
 ## Global Constraints
 
 Binding on every task. Frozen by the founder, 2026-08-11.
