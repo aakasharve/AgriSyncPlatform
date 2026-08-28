@@ -233,13 +233,57 @@ public sealed class PushSyncBatchHandler(
 
         foreach (var mutation in mutations)
         {
-            var result = await ProcessMutationAsync(
-                normalizedDeviceId,
-                mutation,
-                command.AuthenticatedUserId,
-                actorRole,
-                command.AppVersion,
-                ct);
+            SyncMutationResultDto result;
+            try
+            {
+                result = await ProcessMutationAsync(
+                    normalizedDeviceId,
+                    mutation,
+                    command.AuthenticatedUserId,
+                    actorRole,
+                    command.AppVersion,
+                    ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // The caller went away. That is not this mutation's verdict, and we
+                // do not manufacture one for it.
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // 2026-08-28 containment. This loop had no guard, so one row's
+                // unexpected fault took every OTHER mutation in the batch down with
+                // it -- including ones that had already committed their own
+                // transaction and would otherwise have been acknowledged. One row's
+                // failure is now one row's failure.
+                //
+                // The code is deliberately NOT in the client's
+                // PERMANENT_REJECTION_CODES: we do not know this is permanent, and
+                // RejectionPolicy's documented default for an unknown code is
+                // RETRYABLE, which is the honest answer for an unexplained fault.
+                var failedRequestId = string.IsNullOrWhiteSpace(mutation.ClientRequestId)
+                    ? UnknownIdentifier
+                    : mutation.ClientRequestId.Trim();
+                var failedMutationType = string.IsNullOrWhiteSpace(mutation.MutationType)
+                    ? UnknownIdentifier
+                    : mutation.MutationType.Trim();
+
+                logger.LogError(
+                    ex,
+                    "SyncMutationUnhandled: mutationType={MutationType} device={DeviceId} clientRequestId={ClientRequestId}. "
+                    + "The batch continues; this row alone is reported failed.",
+                    LogSafe.Text(failedMutationType),
+                    LogSafe.Text(normalizedDeviceId),
+                    LogSafe.Text(failedRequestId));
+
+                result = CreateFailedResult(
+                    failedRequestId,
+                    failedMutationType,
+                    "ShramSafal.SyncMutationUnhandled",
+                    "This mutation failed unexpectedly and was rolled back. Nothing was saved for it; other mutations in the batch were unaffected.");
+            }
+
             results.Add(result);
 
             // RG5 chokepoint. Every rejection in this handler — all 71
@@ -512,7 +556,22 @@ public sealed class PushSyncBatchHandler(
                 clientRequestId,
                 mutationType,
                 "ShramSafal.SyncMutationStoreError",
-                "Mutation failed during persistence and could not be safely deduplicated.");
+                // The previous message asserted two things that are false on the
+                // path that actually reaches here most often. This catch fires for
+                // ANY DbUpdateException raised anywhere in the mutation -- including
+                // one raised by the DOMAIN write, long before the sync-mutation
+                // store is touched. On 2026-08-27 that was a 23505 on
+                // PK_labour_assignments, and the operator was told the sync mutation
+                // store had failed and that deduplication had been attempted.
+                // Neither happened. The one thing this branch can honestly claim is
+                // what the rollback guarantees.
+                //
+                // The CODE is deliberately UNCHANGED: tests assert on it, it is the
+                // error_code tag on the RG5 rejection metric, and it drives
+                // RejectionPolicy classification for every other DbUpdateException,
+                // where RETRYABLE remains the honest default because we do not know
+                // the cause.
+                "A database constraint rejected this mutation. It was rolled back in full — nothing was saved.");
         }
         finally
         {

@@ -277,12 +277,34 @@ public sealed class LabourPhaseOneDurabilityRealPostgresTests(Xunit.Abstractions
 
         var failed = await RunHandlerAsync(targetLogId, clientRequestId, sourceAiJobId: null, labour: labour);
 
-        failed.Exception.Should().NotBeNull(
-            "canonical labour is staged in PHASE 1, so a DB failure on the Phase-1 batch must surface as a LOUD, retryable failure — never a silent best-effort skip");
-        var pg = FindPostgresException(failed.Exception!);
-        pg.Should().NotBeNull("the failure must be the planted primary-key clash, not some unrelated error");
-        pg!.SqlState.Should().Be("23505",
-            "the named failure mechanism is the PK_labour_assignments unique violation");
+        // RETARGETED 2026-08-28. This assertion used to require a raw Postgres
+        // 23505 to escape the handler, because that is what actually happened: the
+        // colliding client-minted assignment id reached PK_labour_assignments and
+        // the unique violation surfaced as an exception.
+        //
+        // That is no longer the shape, and the change is the fix for a production
+        // incident (device db658ce1, 2026-08-27). The raw 23505 was translated to
+        // the generic "ShramSafal.SyncMutationStoreError", which the client
+        // classifies RETRYABLE, so the phone re-sent identical bytes four times
+        // against a payload no retry could ever satisfy.
+        // CreateDailyLogHandler now REFUSES the contradiction before staging
+        // anything, and names it.
+        //
+        // The property this test exists to defend is UNCHANGED and is asserted
+        // below exactly as before: no log, no audit row, no labour row, and a
+        // clean retry on the same ClientRequestId. Refusing earlier makes that
+        // property strictly stronger — nothing is staged at all, so there is no
+        // Phase-1 batch left to roll back.
+        failed.Exception.Should().BeNull(
+            "the collision is now refused before anything is staged, so no exception escapes the handler");
+        failed.Result.Should().NotBeNull("the handler must return a verdict rather than throw");
+        failed.Result!.IsSuccess.Should().BeFalse(
+            "the log genuinely was not saved — P10 runs in both directions, so this must not be reported as success");
+        failed.Result.Error!.Code.Should().Be("ShramSafal.LabourAssignment.Conflict",
+            "the THREE segments are load-bearing: RejectionPolicy.normalizeCode keeps the tail after the LAST dot, "
+            + "so this normalizes to CONFLICT, which every fielded client already treats as permanent. "
+            + "A two-segment code would normalize to LABOURASSIGNMENTCONFLICT, miss PERMANENT_REJECTION_CODES, "
+            + "and the phone would resume the retry loop this fix exists to stop.");
 
         // ── THE THREE COUNTS. All unchanged: log, audit row and labour rows share
         //    ONE unit of work, so either all three commit or none do. ───────────
@@ -296,7 +318,7 @@ public sealed class LabourPhaseOneDurabilityRealPostgresTests(Xunit.Abstractions
         afterLabour.Should().Be(baselineLabour, "labour_assignments must be UNCHANGED — only the planted conflict row remains");
 
         output.WriteLine("[EVIDENCE] === 6.4 Phase-1 boundary (real Npgsql :5433) ===");
-        output.WriteLine($"[EVIDENCE] failure SqlState                    = {pg.SqlState} (expect 23505)");
+        output.WriteLine($"[EVIDENCE] refusal error code                 = {failed.Result!.Error!.Code} (expect ShramSafal.LabourAssignment.Conflict)");
         output.WriteLine($"[EVIDENCE] daily_logs          before/after    = {baselineLogs} / {afterLogs} (expect unchanged)");
         output.WriteLine($"[EVIDENCE] audit_events        before/after    = {baselineAudit} / {afterAudit} (expect unchanged)");
         output.WriteLine($"[EVIDENCE] labour_assignments  before/after    = {baselineLabour} / {afterLabour} (expect unchanged)");

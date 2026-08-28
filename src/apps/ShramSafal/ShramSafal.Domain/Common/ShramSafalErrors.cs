@@ -42,6 +42,30 @@ public static class ShramSafalErrors
     public static readonly Error ScheduleTemplateUnpublished = Error.Conflict("ShramSafal.ScheduleTemplateUnpublished", "Schedule template has not been published.");
     public static readonly Error ScheduleNotActive = Error.Conflict("ShramSafal.ScheduleNotActive", "Schedule subscription is not active and cannot transition.");
 
+    // 2026-08-27 prod incident (device db658ce1, 4 rejected create_daily_log
+    // attempts 19:15:19-19:15:57, plus 20 cascaded add_log_task rejections). The
+    // client re-asserted a labourAssignmentId that is already the PRIMARY KEY of a
+    // committed ssf.labour_assignments row on a DIFFERENT daily log. It reached
+    // Postgres as 23505 on PK_labour_assignments, was translated to the generic
+    // "ShramSafal.SyncMutationStoreError", classified RETRYABLE by the phone, and
+    // retried until the cap -- a payload no retry could ever satisfy.
+    //
+    // THE CODE HAS THREE SEGMENTS ON PURPOSE. RejectionPolicy.ts normalizeCode
+    // keeps the tail after the LAST dot and upper-cases it, so this yields
+    // "CONFLICT" -- already in PERMANENT_REJECTION_CODES (RejectionPolicy.ts:69)
+    // in every client shipped since 503af2a7 (2026-05-02), which includes APK
+    // v1.0.9 / versionCode 17 and the 0.9.0 build in these logs. The phones
+    // already in the field therefore stop retrying and park the row in
+    // REJECTED_USER_REVIEW with NO client change (doctrine P11), and its orphaned
+    // children escalate through PARENT_UNRECOVERABLE instead of waiting on a
+    // parent that will never land. A conventional two-segment code
+    // ("ShramSafal.LabourAssignmentConflict") would normalize to
+    // LABOURASSIGNMENTCONFLICT, miss the set, and keep looping. DO NOT "tidy"
+    // this back to two segments without shipping a client first.
+    public static readonly Error LabourAssignmentConflict = Error.Conflict(
+        "ShramSafal.LabourAssignment.Conflict",
+        "This labour entry is already recorded on another daily log. The same engagement cannot belong to two logs — recording it again would count the same workers twice.");
+
     // --- Forbidden (role / ownership / not-allowed) ----------------------------------------
     public static readonly Error Forbidden = Error.Forbidden("ShramSafal.Forbidden", "User is not allowed to modify this farm.");
     public static readonly Error VerificationTransitionNotAllowedForRole =
@@ -84,6 +108,19 @@ public static class ShramSafalErrors
     public static readonly Error InvalidVerificationReason = Error.Validation("ShramSafal.InvalidVerificationReason", "Reason is required for disputed verification.");
     public static readonly Error MissingVoiceTranscript = Error.Validation("ShramSafal.MissingVoiceTranscript", "Text transcript is required for AI parsing.");
     public static readonly Error InvalidCommand = Error.Validation("ShramSafal.InvalidCommand", "Request is invalid.");
+
+    // 2026-08-28. POST /shramsafal/corrections passed three client-supplied
+    // strings straight into length-capped columns with no bound anywhere on the
+    // path; CorrectionEvent.Record only checks non-blank. An over-long value
+    // therefore reached Postgres and came back as 22001 -> DbUpdateException ->
+    // an unhandled 500, not the 400 the endpoint is already wired to return.
+    // REFUSED, NEVER TRUNCATED: the identifying part of a prompt version is the
+    // trailing `hash:<16hex>`, so a trimmed value is byte-identical across every
+    // prompt build ever shipped - a fabricated identifier (P4) stored in the one
+    // table whose whole purpose is reconstructing which prompt ran (P10).
+    public static readonly Error CorrectionFieldTooLong = Error.Validation(
+        "ShramSafal.CorrectionFieldTooLong",
+        "A correction field exceeds its stored length. The value is refused, not truncated — a shortened prompt version is not the prompt version.");
     public static readonly Error ScheduleTemplateCropMismatch = Error.Validation("ShramSafal.ScheduleTemplateCropMismatch", "Schedule template crop does not match the crop cycle.");
 
     // --- Internal (server-side fault / config / external service) --------------------------
