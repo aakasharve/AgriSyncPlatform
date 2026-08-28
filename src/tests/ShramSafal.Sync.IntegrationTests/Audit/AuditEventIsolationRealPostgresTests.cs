@@ -1112,6 +1112,31 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         "20260816153300_AddDailyLogDayOutcome",
         "20260816155627_AddNumericCertainty",
         "20260816170524_AddConsentGateLedgers",
+        // WidenCorrectionEventPromptVersion — reviewed 2026-08-28, added because
+        // this guard correctly refused to revert it unreviewed.
+        //
+        // Relevance to THIS proof: none. It names neither ssf.audit_events nor
+        // TRUNCATE in either direction; it touches exactly two columns,
+        // ssf.correction_events.prompt_version and
+        // ssf.golden_set_candidate.prompt_version. So the fact this test asserts —
+        // the app role cannot truncate the audit ledger but can still append and
+        // read — is untouched by it going down and coming back up.
+        //
+        // Down() safety, stated honestly rather than waved through. Up() WIDENS
+        // (20->256 and 64->256), which is metadata-only and rewrites nothing.
+        // Down() NARROWS, which is NOT symmetric in cost: narrowing rewrites the
+        // table and would FAIL outright on any row holding a longer value. That is
+        // deliberate — a Down() that silently truncated a trust-ledger identifier
+        // would be worse than one that refuses.
+        //
+        // It is nonetheless safe HERE, and only here: this scratch database is
+        // created and dropped per [Fact], and both tables are empty within it, so
+        // the narrowing has no row to reject and the rewrite is of nothing. In
+        // PRODUCTION the same Down() must never be run against populated tables;
+        // rollback there is redeploying the previous API, which needs no schema
+        // change at all because a wider column accepts every value an older binary
+        // can send.
+        "20260828061500_WidenCorrectionEventPromptVersion",
     ];
 
     /// <summary>
