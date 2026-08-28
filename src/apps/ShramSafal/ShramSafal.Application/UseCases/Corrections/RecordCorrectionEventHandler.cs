@@ -38,10 +38,15 @@ public sealed class RecordCorrectionEventHandler : IRecordCorrectionEventHandler
         // across every prompt build ever shipped, so storing one would put a
         // fabricated identifier (P4) in the one table whose entire purpose is
         // reconstructing which prompt actually ran (P10).
+        // PromptVersion and Locale are declared non-nullable on the command, so
+        // they are read directly: adding a `?.` here would assert they might be
+        // null and CS8604 would then fire on passing them to Record below, which
+        // is a contradiction the compiler is right to reject. PromptContentHash
+        // IS nullable and is read accordingly.
         var tooLong =
-            (command.PromptVersion?.Length ?? 0) > CorrectionEvent.PromptVersionMaxLength ? "promptVersion" :
+            command.PromptVersion.Length > CorrectionEvent.PromptVersionMaxLength ? "promptVersion" :
             (command.PromptContentHash?.Length ?? 0) > CorrectionEvent.PromptContentHashMaxLength ? "promptContentHash" :
-            (command.Locale?.Length ?? 0) > CorrectionEvent.LocaleMaxLength ? "locale" :
+            command.Locale.Length > CorrectionEvent.LocaleMaxLength ? "locale" :
             null;
 
         if (tooLong is not null)
