@@ -186,4 +186,13 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
     public virtual Task<List<LabourAssignment>> GetLabourAssignmentsForFarmSinceAsync(
         FarmId farmId, DateOnly weekStart, CancellationToken ct = default)
         => Task.FromResult(new List<LabourAssignment>());
+
+    // Task 6 fix round 1/5 (spec: 2026-08-28-labour-v2-release-1) — restated
+    // `virtual` for the SAME reason as every block above. UnknownHeadcountIsNotZeroTests
+    // needs this overridable to distinguish "no daily log at all this week" from
+    // "logs exist this week but none carries labour" — the three-case split the
+    // review required (Fix round 1/5): absence of any record is UNKNOWN, a
+    // recorded day with no labour is a genuine 0.
+    public virtual Task<List<DailyLog>> GetDailyLogsByFarmAsync(FarmId farmId, CancellationToken ct = default)
+        => Task.FromResult(new List<DailyLog>());
 }

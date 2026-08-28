@@ -7,6 +7,7 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Labour.GetLabourData;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Tests.Work.Handlers;
 using Xunit;
 
@@ -20,13 +21,23 @@ namespace ShramSafal.Domain.Tests.Labour;
 /// to a figure he reads as fact — NULL means "we were not told"; <c>0</c> means "he said nobody
 /// came". They are different facts and the schema already distinguishes them (P4/P8).
 ///
-/// <para>Mirrors Task 1's farm-wide-evidence-vs-per-item-absence split
-/// (<c>hasJobCardEvidence</c> in <c>GetLabourDataHandler</c>): one assignment with no stated
-/// headcount contributes NOTHING to the week's sum (never a fabricated 0m). The week total itself
-/// is unknown only when labour WAS logged this week but its headcount was never captured in any
-/// of it — an empty week (nothing logged at all) is a different, genuine fact: a confirmed zero
-/// man-days, not an unknown one. See the report for this judgment call, written out the way
-/// Task 1's R6 ruling was.</para>
+/// <para><b>Fix round 1/5 — the THREE-CASE rule.</b> The first pass at this task collapsed two
+/// genuinely different situations into one <c>0</c> ("no assignments this week" and "assignments
+/// exist but none states a headcount"), which inverted Task 1's own <c>hasJobCardEvidence</c>
+/// ruling (R6: absence of ANY evidence farm-wide is unknown, never zero) for the structurally
+/// analogous week-wide case. The corrected rule, in the order <c>GetLabourDataHandler</c> checks
+/// it:</para>
+/// <list type="number">
+/// <item><description><b>No daily log at all this week</b> — we have no record of the week
+/// whatsoever. Silence is not a statement: UNKNOWN (`null`), same polarity as R6.</description></item>
+/// <item><description><b>Logs exist this week, but none carries a <see cref="LabourAssignment"/></b>
+/// — the farmer told us about those days, and none of them involved hired labour. That IS a real,
+/// evidenced fact: a genuine <c>0</c>.</description></item>
+/// <item><description><b>Labour WAS logged this week, but no assignment in it ever stated a
+/// headcount</b> — UNKNOWN (`null`), unchanged from the first pass. Within this case, an
+/// assignment with a KNOWN headcount alongside unknown ones still contributes its real number —
+/// mirrors Task 1's per-item-absence-contributes-nothing pattern.</description></item>
+/// </list>
 /// </summary>
 public sealed class UnknownHeadcountIsNotZeroTests
 {
@@ -43,10 +54,10 @@ public sealed class UnknownHeadcountIsNotZeroTests
         return repo;
     }
 
-    private static LabourAssignment BuildAssignment(int? workerCount, int? maleCount, int? femaleCount)
+    private static LabourAssignment BuildAssignment(int? workerCount, int? maleCount, int? femaleCount, Guid dailyLogId)
         => LabourAssignment.Create(
             id: Guid.NewGuid(),
-            dailyLogId: Guid.NewGuid(),
+            dailyLogId: dailyLogId,
             engagementType: LabourEngagementType.Hired,
             maleCount: maleCount,
             femaleCount: femaleCount,
@@ -59,11 +70,58 @@ public sealed class UnknownHeadcountIsNotZeroTests
             createdAtUtc: Now,
             time: LabourTime.ServerAssumed());
 
+    /// <summary>A daily log dated "today" (the fixed clock's date) — always inside the current week.</summary>
+    private static DailyLog BuildLog(Guid id)
+        => DailyLog.CreateForFarm(
+            id: id,
+            farmId: new FarmId(FarmGuid),
+            operatorUserId: new UserId(OwnerGuid),
+            logDate: DateOnly.FromDateTime(Now),
+            idempotencyKey: null,
+            location: null,
+            createdAtUtc: Now);
+
+    [Fact]
+    public async Task No_daily_log_at_all_this_week_makes_the_week_total_unknown_not_zero()
+    {
+        // Neither a log nor an assignment seeded — we have no record of the
+        // week at all. Different from "logged, but no labour" (below): this
+        // is an absence of EVIDENCE about the week, not evidence of an empty one.
+        var repo = BaseRepo();
+
+        var result = await BuildHandler(repo).HandleAsync(
+            new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(OwnerGuid)));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Dashboard.ManDays.Should().BeNull(
+            "silence is not a statement — no log this week means we know nothing about it, "
+            + "mirroring Task 1's R6 (farm-wide absence of job-card evidence is unknown, never zero)");
+    }
+
+    [Fact]
+    public async Task Logged_days_with_no_labour_at_all_is_a_genuine_zero_not_unknown()
+    {
+        // A real daily log exists this week, but it carries no LabourAssignment
+        // at all — the farmer told us about the day, and it involved no hired
+        // labour. That IS a real, evidenced fact.
+        var repo = BaseRepo();
+        repo.SeedDailyLog(BuildLog(Guid.NewGuid()));
+
+        var result = await BuildHandler(repo).HandleAsync(
+            new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(OwnerGuid)));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Dashboard.ManDays.Should().Be(0m,
+            "the farmer DID tell us about this day — a logged day with no labour assignment is a genuine 0, not an unknown");
+    }
+
     [Fact]
     public async Task A_log_with_no_stated_headcount_makes_the_week_total_unknown_not_zero()
     {
         var repo = BaseRepo();
-        repo.SeedAssignment(BuildAssignment(workerCount: null, maleCount: null, femaleCount: null));
+        var logId = Guid.NewGuid();
+        repo.SeedDailyLog(BuildLog(logId));
+        repo.SeedAssignment(BuildAssignment(workerCount: null, maleCount: null, femaleCount: null, dailyLogId: logId));
 
         var result = await BuildHandler(repo).HandleAsync(
             new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(OwnerGuid)));
@@ -77,8 +135,10 @@ public sealed class UnknownHeadcountIsNotZeroTests
     public async Task An_unstated_headcount_contributes_nothing_to_a_week_with_other_known_assignments()
     {
         var repo = BaseRepo();
-        repo.SeedAssignment(BuildAssignment(workerCount: 3, maleCount: null, femaleCount: null));
-        repo.SeedAssignment(BuildAssignment(workerCount: null, maleCount: null, femaleCount: null));
+        var logId = Guid.NewGuid();
+        repo.SeedDailyLog(BuildLog(logId));
+        repo.SeedAssignment(BuildAssignment(workerCount: 3, maleCount: null, femaleCount: null, dailyLogId: logId));
+        repo.SeedAssignment(BuildAssignment(workerCount: null, maleCount: null, femaleCount: null, dailyLogId: logId));
 
         var result = await BuildHandler(repo).HandleAsync(
             new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(OwnerGuid)));
@@ -88,22 +148,6 @@ public sealed class UnknownHeadcountIsNotZeroTests
         // known 3, not silently under-reported to something else, and not
         // poisoned to null just because ONE of several logs was silent.
         result.Value!.Dashboard.ManDays.Should().Be(3m);
-    }
-
-    [Fact]
-    public async Task A_week_with_no_assignments_logged_at_all_is_a_genuine_zero_not_unknown()
-    {
-        // No SeedAssignment call at all — nobody logged any labour this week.
-        // Different fact from "logged, but headcount unstated": this is a
-        // confirmed absence of work, not an absence of evidence about work
-        // that happened.
-        var repo = BaseRepo();
-
-        var result = await BuildHandler(repo).HandleAsync(
-            new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(OwnerGuid)));
-
-        result.IsSuccess.Should().BeTrue();
-        result.Value!.Dashboard.ManDays.Should().Be(0m);
     }
 
     // ─── Test doubles ────────────────────────────────────────────────────────
@@ -117,9 +161,11 @@ public sealed class UnknownHeadcountIsNotZeroTests
     {
         private readonly Dictionary<(Guid farmId, Guid userId), AppRole> _roles = new();
         private readonly List<LabourAssignment> _assignments = [];
+        private readonly List<DailyLog> _dailyLogs = [];
 
         public void SetRole(Guid farmId, Guid userId, AppRole role) => _roles[(farmId, userId)] = role;
         public void SeedAssignment(LabourAssignment a) => _assignments.Add(a);
+        public void SeedDailyLog(DailyLog l) => _dailyLogs.Add(l);
 
         public override Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
             => Task.FromResult(_roles.TryGetValue((farmId, userId), out var role) ? (AppRole?)role : null);
@@ -142,5 +188,8 @@ public sealed class UnknownHeadcountIsNotZeroTests
         public override Task<List<LabourAssignment>> GetLabourAssignmentsForFarmSinceAsync(
             FarmId farmId, DateOnly weekStart, CancellationToken ct = default)
             => Task.FromResult(_assignments.ToList());
+
+        public override Task<List<DailyLog>> GetDailyLogsByFarmAsync(FarmId farmId, CancellationToken ct = default)
+            => Task.FromResult(_dailyLogs.ToList());
     }
 }

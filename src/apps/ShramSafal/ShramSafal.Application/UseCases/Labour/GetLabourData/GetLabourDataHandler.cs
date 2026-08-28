@@ -282,20 +282,30 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // moved from JS `null + n` into LINQ instead of out of it. So it is
         // deliberately not used here.
         //
-        // Mirrors Task 1's farm-wide-evidence-vs-per-item-absence split
-        // (`hasJobCardEvidence`, step 2 above): an assignment with no stated
-        // headcount contributes NOTHING to the sum, never a fabricated 0. The
-        // week total itself is unknown only when labour WAS logged this week
-        // but its headcount was never captured in ANY of it (every resolved
-        // value is null) — a week with NO assignments logged at all is a
-        // different, genuine fact: a confirmed zero man-days, not an unknown
-        // one (nobody claims work happened that we merely failed to count).
+        // Fix round 1/5 — THREE cases, not two, mirroring Task 1's `hasJobCardEvidence`
+        // ruling (R6) correctly instead of inverting it:
+        //   1. NO daily log at all this week (`farmLogs`, already fetched in step 4,
+        //      filtered to this week) — we have no record of the week whatsoever.
+        //      Silence is not a statement: UNKNOWN, same polarity as R6.
+        //   2. Logs exist this week, but NONE of them carries a LabourAssignment —
+        //      the farmer told us about those days and none involved hired labour.
+        //      That IS a real fact: a genuine 0.
+        //   3. Logs carry labour, but no assignment in it ever stated a headcount —
+        //      UNKNOWN (unchanged from the first pass at this task).
+        // "Assignment contributes nothing to the sum" (not a fabricated 0) still
+        // holds inside case 3's mixed sub-case: a known figure among unknowns is
+        // never poisoned to null, and an unknown one never drags a known sum down.
+        var hasLogsThisWeek = farmLogs.Any(l => l.LogDate >= weekStart);
         var resolvedHeadcounts = weekAssignments
             .Select(a => LabourHeadcount.Resolve(a.WorkerCount, a.MaleCount, a.FemaleCount))
             .ToList();
-        var manDays = resolvedHeadcounts.Count > 0 && resolvedHeadcounts.All(h => h is null)
-            ? (decimal?)null
-            : (decimal?)resolvedHeadcounts.Sum(h => h ?? 0);
+        var manDays = !hasLogsThisWeek
+            ? (decimal?)null                                          // case 1: no record of the week at all.
+            : resolvedHeadcounts.Count == 0
+                ? 0m                                                  // case 2: logged days, none involved labour.
+                : resolvedHeadcounts.All(h => h is null)
+                    ? (decimal?)null                                  // case 3: labour logged, headcount never stated.
+                    : (decimal?)resolvedHeadcounts.Sum(h => h ?? 0);   // real evidence — sum the known ones.
 
         // ── 8. Review — Draft/Confirmed logs still awaiting the owner. ─────
         var reviewLogs = farmLogs
