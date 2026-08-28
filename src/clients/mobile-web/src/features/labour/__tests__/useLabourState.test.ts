@@ -10,6 +10,14 @@
  * `LABOUR_MOCK` (रोकडे/रमेश/सुनीता + their mock ₹ balances) — not on first
  * paint, not on a fetch error. Only the no-farm-context path (preview /
  * no provider) may show the mock.
+ *
+ * Task 6c (spec: 2026-08-28-labour-v2-release-1, P4) — the `dashboard.money`
+ * assertions below were updated from `{ recorded: 0, ..., owed: 0 }` to
+ * `{ recorded: null, ..., owed: null }`. That `0` was pinning the exact
+ * defect Task 6c fixes: `EMPTY_LABOUR_DATA` hardcoded a fabricated ₹0
+ * instead of the unknown `null` Task 1 already made these fields capable of
+ * expressing. The assertions still prove the same thing (no mock money
+ * leaks into this state) — only the honest shape of "no money" changed.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderHook, waitFor, act, cleanup } from '@testing-library/react';
@@ -66,7 +74,7 @@ describe('useLabourState — money safety', () => {
         expect(result.current.data).toBe(EMPTY_LABOUR_DATA);
         expect(result.current.data).not.toBe(LABOUR_MOCK);
         expect(Object.keys(result.current.data.people)).toHaveLength(0);
-        expect(result.current.data.dashboard.money).toEqual({ recorded: 0, paid: 0, advance: 0, owed: 0 });
+        expect(result.current.data.dashboard.money).toEqual({ recorded: null, paid: 0, advance: 0, owed: null });
         expect(result.current.error).toBe(false);
         expect(result.current.loading).toBe(true);
         expect(mockFetchLabourData).not.toHaveBeenCalled();
@@ -99,7 +107,7 @@ describe('useLabourState — money safety', () => {
         expect(result.current.data).toBe(EMPTY_LABOUR_DATA);
         expect(result.current.data).not.toBe(LABOUR_MOCK);
         expect(Object.keys(result.current.data.people)).toHaveLength(0);
-        expect(result.current.data.dashboard.money).toEqual({ recorded: 0, paid: 0, advance: 0, owed: 0 });
+        expect(result.current.data.dashboard.money).toEqual({ recorded: null, paid: 0, advance: 0, owed: null });
         expect(result.current.loading).toBe(false);
     });
 
@@ -211,7 +219,7 @@ describe('useLabourState — auth gate (BUG 1)', () => {
         expect(result.current.data).toBe(EMPTY_LABOUR_DATA);
         expect(result.current.data).not.toBe(LABOUR_MOCK);
         expect(Object.keys(result.current.data.people)).toHaveLength(0);
-        expect(result.current.data.dashboard.money).toEqual({ recorded: 0, paid: 0, advance: 0, owed: 0 });
+        expect(result.current.data.dashboard.money).toEqual({ recorded: null, paid: 0, advance: 0, owed: null });
     });
 
     it('preview (no FarmContext provider) still shows LABOUR_MOCK regardless of auth', () => {

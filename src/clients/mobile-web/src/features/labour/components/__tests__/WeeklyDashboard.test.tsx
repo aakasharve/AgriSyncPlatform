@@ -203,4 +203,46 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
             expect(screen.getByText('0')).toBeInTheDocument();
         });
     });
+
+    // TASK 6c (spec: 2026-08-28-labour-v2-release-1, P4) — completes Tasks 1
+    // and 6. Both fixed `GetLabourDataHandler` and this screen's own render
+    // sites; neither touched `EMPTY_LABOUR_DATA`, the FALLBACK CONSTANT a
+    // real farm renders while `useLabourState` is loading and again if its
+    // fetch fails (`useLabourState.ts:109,126,135,156`) — a state rural
+    // connectivity makes common, not rare. That constant still hardcoded the
+    // same five fields Tasks 1 and 6 made nullable to a fabricated `0`, so an
+    // outage rendered a confident "0 मजूर-दिवस" and "बाकी देणं ₹0" underneath
+    // the "couldn't load" banner (the banner renders ABOVE the content, not
+    // instead of it, once the very first load has happened —
+    // `LabourFeature.tsx`'s `showInitialLoading`). Ruling R8: absence of any
+    // record — an outage means we could not reach it, not that the farmer
+    // said nothing happened — is always the unknown case, never a genuine 0.
+    //
+    // Uses the real `EMPTY_LABOUR_DATA` export (not a synthetic fixture) on
+    // purpose: this locks the actual fallback object every real farm sees,
+    // not a stand-in shaped like it.
+    describe('Task 6c — the outage/loading fallback constant is not a fabricated zero', () => {
+        it('मजूर-दिवस renders "—" for the real EMPTY_LABOUR_DATA fallback, never "0" or the string "null"', () => {
+            render(<WeeklyDashboard {...baseProps()} data={EMPTY_LABOUR_DATA} />);
+            const label = screen.getByText('मजूर-दिवस');
+            expect(label.previousElementSibling?.textContent).toBe('—');
+        });
+
+        it('काम झालं (money.recorded) renders "—" for the real EMPTY_LABOUR_DATA fallback, never ₹0', () => {
+            render(<WeeklyDashboard {...baseProps()} data={EMPTY_LABOUR_DATA} />);
+            const label = screen.getByText('काम झालं · एकूण नोंदवलं');
+            expect(label.nextElementSibling?.textContent).toBe('—');
+        });
+
+        it('omits the बाकी देणं/जास्त दिलं stat tile entirely for the real EMPTY_LABOUR_DATA fallback, never a fabricated ₹0/overpayment', () => {
+            render(<WeeklyDashboard {...baseProps()} data={EMPTY_LABOUR_DATA} />);
+            // The stat tile itself (label text) is gone outright — not present
+            // with a clamped ₹0. NB: `paid` stays non-nullable `0` (a real,
+            // known "nothing paid yet" fact, unaffected by this task) and
+            // legitimately renders its own "₹0" in the money bar's दिलं
+            // segment, so this test does not assert on "₹0" globally.
+            expect(screen.queryByText('बाकी देणं')).toBeNull();
+            expect(screen.queryByText('जास्त दिलं')).toBeNull();
+        });
+    });
 });
