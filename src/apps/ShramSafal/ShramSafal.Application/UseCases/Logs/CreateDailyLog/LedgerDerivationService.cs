@@ -61,7 +61,7 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
 
     public Task<DerivationOutcome> DeriveFromManualDraftAsync(
         DailyLog log, string manualWireJson, string? appVersion,
-        IIdGenerator ids, IClock clock, CancellationToken ct = default)
+        IIdGenerator ids, IClock clock, bool deriveLabour, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(log);
 
@@ -79,19 +79,19 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         // came from, and it is stable across re-saves, so a second derivation of
         // the same log recomputes the same DerivedEventKey and SUPERSEDES rather
         // than duplicating the farmer's single application.
-        // The manual path derives labour. Its only source of labour rows is the
-        // draft's own labour[], normalised by ManualDraftNormalizer, so within this
-        // call there is nothing for it to be a second producer OF. Passed explicitly
-        // rather than defaulted, because Labour V1 Task 6.3 made "who produces this
-        // row" a decision every caller must take deliberately.
-        //
-        // Note what this deliberately does NOT do: it does not consult
-        // CreateDailyLogCommand.Labour. Suppressing on that would need the decision
-        // plumbed through ILedgerDerivationService.DeriveFromManualDraftAsync, which
-        // is a contract change, not a merge resolution.
+        // Labour V2 R1 Task 2 — the single-producer decision is the CALLER's here too,
+        // and is carried through untouched. It used to be hardcoded `true` on the
+        // reasoning that the draft's own labour[] was this call's only source of labour
+        // rows, so there was nothing here to be a second producer OF. That was true of
+        // this call and false of the request: the manual client builds BOTH arrays from
+        // one list (`buildManualDraft` sets `draft.labour = log.labour`;
+        // `buildLabourPayloads` maps the same `log.labour`), so the handler had already
+        // staged those rows as canonical Phase-1 data before reaching here, and this
+        // call added a second row for the same engagement — carrying the eight-hour
+        // server assumption over a duration the farmer had stated outright.
         return DeriveCoreAsync(
             log, manualWireJson, provenance, log.Id, ids, clock,
-            deriveLabour: true, ct);
+            deriveLabour, ct);
     }
 
     /// <summary>

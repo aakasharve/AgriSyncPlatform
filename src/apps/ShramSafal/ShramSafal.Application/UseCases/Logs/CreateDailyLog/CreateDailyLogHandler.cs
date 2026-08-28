@@ -921,8 +921,20 @@ public sealed class CreateDailyLogHandler(
             // supersedes rather than duplicates.
             // The log's OWN AppVersion, so the derived rows and the log they came from
             // can never disagree about which client wrote them.
+            //
+            // Labour V2 R1 Task 2 — suppress ONLY the labour branch when this confirm
+            // already carried structured labour[], mirroring the voice branch above
+            // verbatim. This is not a hypothetical: the manual client builds both arrays
+            // from one list, so every hand-typed day with labour arrived carrying the
+            // same engagement twice and left two rows in ssf.labour_assignments — the
+            // canonical one the farmer's phone owns, and a derived twin stamped with the
+            // eight-hour server assumption over the hours he actually stated. Everything
+            // else in the draft — inputs, irrigation, machinery, observations,
+            // disturbance — still derives.
             await ledgerDerivation.DeriveFromManualDraftAsync(
-                log, manualWireJson, log.Provenance.AppVersion, idGenerator, clock, ct);
+                log, manualWireJson, log.Provenance.AppVersion, idGenerator, clock,
+                deriveLabour: command.Labour is not { Count: > 0 },
+                ct: ct);
         }
 
         await repository.SaveChangesAsync(ct);
