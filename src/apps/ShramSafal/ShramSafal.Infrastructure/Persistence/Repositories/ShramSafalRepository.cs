@@ -2235,6 +2235,39 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         await db.LabourAssignments.AddAsync(a, ct);
     }
 
+    // Read side of the client-minted labour PK. Runs under whatever tenant GUCs
+    // the caller established: ssf.labour_assignments carries TWO permissive
+    // policies -- p_tenant_labour_assignments (ALL) joins daily_logs on
+    // agrisync.farm_id, and p_user_select_labour_assignments (r) makes a row
+    // visible on any farm the caller owns or is an active member of. On
+    // /sync/push both are established before the handler runs, so the visible set
+    // is every farm this caller belongs to -- exactly the scope in which a client
+    // can collide with its OWN ids. An id held by an unrelated account stays
+    // invisible and still reaches the PK; that residue is named in the handler and
+    // PushSyncBatchHandler's DbUpdateException catch remains its backstop.
+    //
+    // AsNoTracking + projection is REQUIRED, not stylistic: tracking a row whose
+    // PK the caller is about to Add throws InvalidOperationException from the
+    // change tracker, which is not a DbUpdateException and would 500 the batch.
+    public async Task<IReadOnlyDictionary<Guid, Guid>> GetLabourAssignmentOwnerLogIdsAsync(
+        IReadOnlyCollection<Guid> labourAssignmentIds, CancellationToken ct = default)
+    {
+        if (labourAssignmentIds.Count == 0)
+        {
+            return new Dictionary<Guid, Guid>();
+        }
+
+        var ids = labourAssignmentIds.Distinct().ToArray();
+
+        var rows = await db.LabourAssignments
+            .AsNoTracking()
+            .Where(a => ids.Contains(a.Id))
+            .Select(a => new { a.Id, a.DailyLogId })
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(r => r.Id, r => r.DailyLogId);
+    }
+
     public async Task AddMachineryUsageAsync(MachineryUsage m, CancellationToken ct = default)
     {
         await db.MachineryUsages.AddAsync(m, ct);

@@ -267,6 +267,59 @@ public sealed class CreateDailyLogHandler(
             }
         }
 
+        // -- Labour V1 Task 6.1, THIRD gate (2026-08-27 prod incident) ----------
+        // A labourAssignmentId is that row's PRIMARY KEY, it is CLIENT-MINTED
+        // (LabourAssignmentConfiguration, ValueGeneratedNever), and it is unique
+        // GLOBALLY -- not per log.
+        //
+        // The phone mints it ONCE per LabourEvent object and never re-mints
+        // (ensureLabourAssignmentIds is idempotent by design), while LogFactory
+        // mints a FRESH dailyLogId on every call and carries the labour array BY
+        // REFERENCE. So a re-confirm of the same draft produces a NEW log that
+        // re-asserts an ALREADY-COMMITTED engagement id. On 2026-08-27 that
+        // reached Postgres as 23505 on PK_labour_assignments; PushSyncBatchHandler
+        // translated it to the generic "ShramSafal.SyncMutationStoreError", the
+        // phone read that as RETRYABLE, and it re-sent identical bytes four times
+        // (19:15:19/27/42/57) before parking FAILED.
+        //
+        // REFUSE IT HERE, before anything is staged, and say what it is.
+        //   - We do NOT reparent the row: that would move an already-recorded
+        //     engagement off the log it actually belongs to.
+        //   - We do NOT re-mint the id: that would record the same workers twice
+        //     (P4) and show the farmer a day of work nobody did.
+        //   - We do NOT return success: the log genuinely was not saved, and P10
+        //     runs in both directions.
+        //
+        // A GENUINE REPLAY NEVER REACHES THIS LINE. clientRequestId is
+        // `create_daily_log:<dailyLogId>`, so a resend of the SAME log
+        // short-circuits at the idempotency return above, and on /sync/push at the
+        // sync_mutations dedup before this handler is called at all. Only a NEW log
+        // re-using an OLD engagement id gets here.
+        //
+        // SCOPE, STATED: this compares against command.DailyLogId, so it fires only
+        // for a DIFFERENT owning log -- the incident shape. The same-log shape (a
+        // resend under a rotated deviceId, which misses both idempotency layers) is
+        // a daily_logs_pkey collision and is deliberately left on the existing
+        // generic path: it means "already saved", not "conflict".
+        if (command.Labour is { Count: > 0 } assertedLabour)
+        {
+            var ownerLogIds = await repository.GetLabourAssignmentOwnerLogIdsAsync(
+                assertedLabour.Select(item => item.LabourAssignmentId).ToArray(), ct);
+
+            foreach (var item in assertedLabour)
+            {
+                // command.DailyLogId is null only when the SERVER will mint the id,
+                // in which case the log is brand new and ANY pre-existing
+                // engagement id is by definition on a different log. Guid? != Guid
+                // lifts correctly: null != <any guid> is true.
+                if (ownerLogIds.TryGetValue(item.LabourAssignmentId, out var ownerLogId)
+                    && ownerLogId != command.DailyLogId)
+                {
+                    return Result.Failure<DailyLogDto>(ShramSafalErrors.LabourAssignmentConflict);
+                }
+            }
+        }
+
         // DATA_PRINCIPLE_SPINE sub-phase 01.4 — voice-from-Confirm vs. true-manual.
         // If the client passed SourceAiJobId (the AiJob id from the original voice
         // parse), lift Voice provenance from that job and stamp the client app

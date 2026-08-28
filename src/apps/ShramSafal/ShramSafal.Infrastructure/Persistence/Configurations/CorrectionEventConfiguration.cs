@@ -31,10 +31,14 @@ internal sealed class CorrectionEventConfiguration : IEntityTypeConfiguration<Co
         builder.Property(x => x.OriginalParseId).HasColumnName("original_parse_id").IsRequired(false);
         builder.Property(x => x.OriginalParseRaw).HasColumnName("original_parse_raw").IsRequired().HasColumnType("jsonb");
         builder.Property(x => x.CorrectedParse).HasColumnName("corrected_parse").IsRequired().HasColumnType("jsonb");
-        builder.Property(x => x.PromptVersion).HasColumnName("prompt_version").IsRequired().HasMaxLength(20);
+        // 20 was sized for a LABEL. This column stores the modular prompt
+        // MANIFEST from AiPromptLineage.ResolvePromptVersion - 158 chars today.
+        // The cap is the aggregate's constant so the mapping and the handler's
+        // validator cannot drift; that drift IS this bug's class.
+        builder.Property(x => x.PromptVersion).HasColumnName("prompt_version").IsRequired().HasMaxLength(CorrectionEvent.PromptVersionMaxLength);
         // §P0.4 — SHA-256 hex; the tamper-evident prompt identifier.
-        builder.Property(x => x.PromptContentHash).HasColumnName("prompt_content_hash").IsRequired(false).HasMaxLength(64);
-        builder.Property(x => x.Locale).HasColumnName("locale").IsRequired().HasMaxLength(10);
+        builder.Property(x => x.PromptContentHash).HasColumnName("prompt_content_hash").IsRequired(false).HasMaxLength(CorrectionEvent.PromptContentHashMaxLength);
+        builder.Property(x => x.Locale).HasColumnName("locale").IsRequired().HasMaxLength(CorrectionEvent.LocaleMaxLength);
         builder.Property(x => x.Trigger).HasColumnName("trigger").IsRequired()
             .HasConversion<string>().HasMaxLength(30);
         builder.Property(x => x.CapturedAtUtc).HasColumnName("captured_at_utc").IsRequired();

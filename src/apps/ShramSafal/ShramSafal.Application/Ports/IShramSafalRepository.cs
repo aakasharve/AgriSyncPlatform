@@ -694,6 +694,33 @@ public interface IShramSafalRepository
     Task AddLabourAssignmentAsync(LabourAssignment a, CancellationToken ct = default)
         => Task.CompletedTask;
 
+    /// <summary>
+    /// For each supplied labour-assignment id that ALREADY EXISTS, the
+    /// <c>daily_log_id</c> it is attached to. Ids with no row are simply absent
+    /// from the result.
+    ///
+    /// <para>The id is that row's PRIMARY KEY and it is CLIENT-MINTED
+    /// (LabourAssignmentConfiguration, ValueGeneratedNever), so a client that
+    /// carries one across two daily logs produces a 23505 the server can only
+    /// translate after the fact. This read is what lets
+    /// <c>CreateDailyLogHandler</c> refuse the contradiction BEFORE anything is
+    /// staged, and name it.</para>
+    ///
+    /// <para><b>Projection only, AsNoTracking - this matters.</b> The existing
+    /// <c>GetLabourAssignmentByIdAsync</c> is implemented as
+    /// <c>db.LabourAssignments.FindAsync</c>, which TRACKS what it returns.
+    /// Tracking a row whose PK the caller is about to <c>Add</c> turns the
+    /// same-log case into an InvalidOperationException from the change tracker -
+    /// which is NOT a DbUpdateException, escapes the sync handler's catch, and
+    /// 500s the whole batch. Do not "simplify" this method into that one.</para>
+    ///
+    /// <para>Default impl returns empty so in-memory doubles compile, matching
+    /// the convention of the staging methods above.</para>
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, Guid>> GetLabourAssignmentOwnerLogIdsAsync(
+        IReadOnlyCollection<Guid> labourAssignmentIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyDictionary<Guid, Guid>>(new Dictionary<Guid, Guid>());
+
     /// <summary>Stage a derived <see cref="MachineryUsage"/> (daily_logs child).</summary>
     Task AddMachineryUsageAsync(MachineryUsage m, CancellationToken ct = default)
         => Task.CompletedTask;

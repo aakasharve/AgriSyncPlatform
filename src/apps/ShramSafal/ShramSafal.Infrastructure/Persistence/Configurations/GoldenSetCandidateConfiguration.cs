@@ -65,9 +65,16 @@ internal sealed class GoldenSetCandidateConfiguration : IEntityTypeConfiguration
             .HasColumnName("transcript_verbatim")
             .HasColumnType("text");
 
+        // Widened 64 -> 256 in step with ssf.correction_events, deliberately as a
+        // literal (this file has no using for ShramSafal.Domain.Corrections and
+        // must not gain one). GoldenSetFeedbackWorker copies
+        // CorrectionEvent.PromptVersion into this column VERBATIM and swallows
+        // every tick exception into a LogWarning, so leaving this at 64 would
+        // trade the correction endpoint's loud 500 for a background worker that
+        // silently projects nothing the day the flag is switched on.
         builder.Property(x => x.PromptVersion)
             .HasColumnName("prompt_version")
-            .HasMaxLength(64);
+            .HasMaxLength(256);
 
         // ai-intelligence-plan-2026-06-25 W1.P2 T3 — width widened 40→64 to
         // match the shared Provenance mapping (see ProvenanceConfiguration).

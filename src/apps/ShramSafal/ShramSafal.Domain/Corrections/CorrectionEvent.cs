@@ -31,6 +31,29 @@ public sealed class CorrectionEvent
     /// <summary>Farmer-corrected draft, JSON — structured signal only, no speech.</summary>
     public string CorrectedParse { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// Storage cap for <see cref="PromptVersion"/>. Declared on the aggregate so
+    /// the EF mapping and the use-case validator read the SAME number - a cap
+    /// declared in only one of the two places is exactly what turned an
+    /// out-of-contract value into a 500 instead of a 400.
+    ///
+    /// <para>256, not 20 and not 64. This column does NOT store the short "v1"
+    /// label the sibling Provenance columns carry; it stores what
+    /// <c>AiPromptLineage.ResolvePromptVersion</c> returns, which is the modular
+    /// prompt MANIFEST built by <c>AiPromptTemplateRegistry.BuildVersionString</c>:
+    /// <c>base:{v};output:{v};buckets:{8 id:version pairs};disturbance:{v};hash:{16 hex}</c>.
+    /// With all 8 required buckets at v1 that is 158 characters TODAY, and 169 if
+    /// every module reaches a two-digit version. 64 - the widest prompt_version
+    /// anywhere in ssf - would still raise 22001 on every single row.</para>
+    /// </summary>
+    public const int PromptVersionMaxLength = 256;
+
+    /// <summary>Storage cap for <see cref="PromptContentHash"/> - 64-hex SHA-256.</summary>
+    public const int PromptContentHashMaxLength = 64;
+
+    /// <summary>Storage cap for <see cref="Locale"/>.</summary>
+    public const int LocaleMaxLength = 10;
+
     public string PromptVersion { get; private set; } = string.Empty;
 
     /// <summary>
