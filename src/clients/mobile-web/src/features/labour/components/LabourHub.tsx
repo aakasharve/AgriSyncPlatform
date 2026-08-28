@@ -215,23 +215,23 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
           * told the farmer he could speak right now; he would talk at it and
           * lose what he said. The ring is gone and the words say where the tap
           * takes him.
+          *
+          * Task 7 (labour-v2-release-1), fix round 1 — the headline used to say
+          * "बोलून हजेरी घ्या" ("take attendance by voice"), which this button
+          * cannot back (it opens the generic log mic, not a dedicated
+          * attendance capture). Reusing `LabourMic.tsx`'s own headline,
+          * "बोलून नोंद करा" ("record by speaking") verbatim: it is already
+          * founder-approved, already on a screen in this same feature, for
+          * this exact doorway pattern (navigate-to-log-and-speak), and makes
+          * no attendance claim. Reuse, not new copy.
           */}
         <button type="button" onClick={onGoToLog} className="relative flex w-full items-center gap-4 overflow-hidden rounded-[24px] bg-gradient-to-br from-emerald-500 to-emerald-700 p-5 text-left shadow-[0_16px_32px_-12px_rgba(5,150,105,0.65)] transition-transform active:scale-[0.99]">
             <span className="relative flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white">
                 <Mic size={32} strokeWidth={2.4} />
             </span>
             <span className="min-w-0 flex-1">
-                {/*
-                  * Task 7 (labour-v2-release-1) — DELETED the headline here:
-                  * "बोलून हजेरी घ्या" ("take attendance by voice"). Tapping
-                  * this button opens the generic log mic (`onGoToLog`), not
-                  * a dedicated attendance capture — there is no attendance
-                  * capture anywhere in this feature. The example line below
-                  * is untouched: it is truthful (the generic mic really does
-                  * parse a headcount statement like this) and now carries
-                  * the button's only text.
-                  */}
-                <span className="mt-1 block text-[16px] font-medium leading-snug text-emerald-50">"रोकडेचे दहा लोक आले" — असं बोला</span>
+                <span className="block text-[23px] font-black leading-tight text-white">बोलून नोंद करा</span>
+                <span className="mt-1 block text-[16px] font-medium leading-snug text-emerald-50">“रोकडेचे दहा लोक आले” — असं बोला</span>
             </span>
             <span className="flex-shrink-0 rounded-full bg-white/25 px-4 py-3 text-[17px] font-extrabold text-white">उघडा</span>
         </button>

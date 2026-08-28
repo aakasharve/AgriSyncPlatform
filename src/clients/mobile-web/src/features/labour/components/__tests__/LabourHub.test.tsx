@@ -229,6 +229,16 @@ describe('LabourHub — no attendance-capture claims (Task 7)', () => {
         expect(screen.getByText(/रोकडेचे दहा लोक आले/)).toBeInTheDocument();
     });
 
+    // Fix round 1/5 — a primary CTA with no headline was flagged as a
+    // degraded control. Resolution (coordinator ruling): reuse
+    // `LabourMic.tsx`'s own headline, "बोलून नोंद करा", verbatim — it is
+    // already founder-approved, already on a screen in this feature, and
+    // makes no attendance claim (unlike the deleted headline).
+    it('the voice CTA headline is reused, truthful copy — "बोलून नोंद करा" (record by speaking), not invented', () => {
+        render(<LabourHub {...baseProps()} />);
+        expect(screen.getByText('बोलून नोंद करा')).toBeInTheDocument();
+    });
+
     it('the "just logged" card is not labelled बोलून नोंदवलेली हजेरी — it is a labour-cost summary, not attendance', () => {
         render(
             <LabourHub
