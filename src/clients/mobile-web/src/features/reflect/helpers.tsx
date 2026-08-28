@@ -90,8 +90,31 @@ export const getIrrigationStatus = (date: Date, plot?: Plot, log?: DailyLog): Ir
 export const getDayStatus = (log?: DailyLog) => {
     if (!log) return 'empty';
     if (log.disturbance?.scope === 'FULL_DAY') return 'blocked';
+
+    // task-0b fix-round-1 — an explicit declaration WINS first, mirroring the
+    // precedence `DayClassifier.Classify` already gives the farmer's own
+    // statement over derived signals (P4): NO_WORK_PLANNED is not worked,
+    // WORK_RECORDED is worked, full stop, regardless of what buckets hold.
+    if (log.dayOutcome === 'NO_WORK_PLANNED') return 'empty';
     if (log.dayOutcome === 'WORK_RECORDED') return 'worked';
-    return 'empty';
+
+    // `dayOutcome` is `null` (or DISTURBANCE_RECORDED/IRRELEVANT_INPUT,
+    // neither of which asserts "no work" on its own) — the farmer DID NOT
+    // SAY, which is not the same fact as "no work" (P4). This is the common
+    // case for an ordinary cross-device pull: `logSyncMutationService.ts`
+    // omits `dayOutcome` from the push whenever it would be WORK_RECORDED, so
+    // the server stores NULL and `logsReconciler.toDailyLog` carries it back
+    // as null. Fall back to the buckets actually recorded — the SAME five
+    // checks `DfesLensExtractor.HasWork` uses server-side — instead of
+    // rendering real logged work as an empty red-tinted card.
+    const hasEvidenceOfWork =
+        log.cropActivities.length > 0
+        || log.irrigation.length > 0
+        || log.inputs.length > 0
+        || log.labour.length > 0
+        || log.machinery.length > 0;
+
+    return hasEvidenceOfWork ? 'worked' : 'empty';
 };
 
 export const getPrimaryActivityName = (log: DailyLog) => {
