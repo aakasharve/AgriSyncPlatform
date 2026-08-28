@@ -15,7 +15,7 @@
  * omits the prop on purpose — the fallback below surfaces the feature's own
  * existing toast instead of crashing or attempting to navigate.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { useLabourState } from '../useLabourState';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
 import type { DailyLog, LedgerDefaults } from '../../../types';
@@ -68,18 +68,18 @@ export const LabourFeature: React.FC<{
     const toastTimer = useRef<number | undefined>(undefined);
 
     /**
-     * Screen honesty (Decision 4b, 2026-07-19) — a money screen must never
-     * show a confident ₹0 it hasn't verified. `loading` stays true for every
-     * `refresh()` too (approving in ReviewSheet triggers one — see below),
-     * not just the first fetch, so this only gates the VERY FIRST load: once
-     * `loading` has gone false once, `hasLoadedOnceRef` latches and later
-     * background refreshes update the screen in place instead of blanking it.
+     * Screen honesty (Decision 4b, 2026-07-19; extended Task 6d, 2026-08-28)
+     * — a money screen must never show a confident ₹0 it hasn't verified.
+     * This used to gate only the VERY FIRST load (`hasLoadedOnceRef` latched
+     * once `loading` went false, so a later background refresh — e.g.
+     * ReviewSheet's `onApproved -> refresh()` — updated the screen "in
+     * place" instead of blanking it). But `useLabourState.ts:135` resets
+     * `data` to `EMPTY_LABOUR_DATA` before EVERY fetch, first or not, so
+     * "in place" actually meant a flash of fabricated zeros/"no workers"
+     * over the farmer's real numbers on every refresh. Gating on `loading`
+     * itself removes that flash: any fetch in flight shows the honest
+     * spinner, never `EMPTY_LABOUR_DATA` dressed up as real.
      */
-    const hasLoadedOnceRef = useRef(false);
-    useEffect(() => {
-        if (!loading) hasLoadedOnceRef.current = true;
-    }, [loading]);
-    const showInitialLoading = loading && !hasLoadedOnceRef.current;
 
     const cur = stack[stack.length - 1];
     const push = useCallback((s: ScreenState) => setStack((st) => [...st, s]), []);
@@ -103,9 +103,25 @@ export const LabourFeature: React.FC<{
             <BackHeader title={title} onBack={handleBack} />
             {error && <LoadErrorBanner onRetry={refresh} />}
             <div className="flex-1">
-                {showInitialLoading ? (
+                {loading ? (
                     <LoadingState />
-                ) : (
+                ) : error ? null : (
+                    /*
+                     * Task 6d (spec: 2026-08-28-labour-v2-release-1, P4/P5,
+                     * Ruling R8) — an outage renders ONLY the banner above,
+                     * nothing here. Before this, a failed fetch still fell
+                     * through to this content switch over
+                     * `EMPTY_LABOUR_DATA`, so the hub asserted "अजून कोणी
+                     * कामगार जोडलेला नाही" (no worker added yet) and "0
+                     * नोंदी" to a farmer whose data simply hadn't loaded —
+                     * a false SENTENCE, not just a false number. This branch
+                     * is keyed on `error` alone, never on "data looks
+                     * empty": when the fetch genuinely SUCCEEDS with no
+                     * workers (or no farm has resolved yet — both come
+                     * through as `error: false`, per `useLabourState.ts`),
+                     * that same empty-state message is TRUE and must still
+                     * render — this `else` branch is exactly what does that.
+                     */
                     <>
                         {cur.name === 'hub' && (
                             <LabourHub
