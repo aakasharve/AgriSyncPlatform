@@ -52,9 +52,19 @@ import { useOptionalAuth } from '../../app/providers/AuthProvider';
 export interface UseLabourStateResult {
     data: LabourData;
     loading: boolean;
-    /** true only when a REAL farm's fetch failed — `data` is `EMPTY_LABOUR_DATA`, never mock. */
+    /**
+     * True when the screen could not find out what is true — a REAL farm's
+     * labour fetch failed, or (Task 6e) the `/me` farm-context lookup itself
+     * failed so there is no farm id to fetch for. `data` is
+     * `EMPTY_LABOUR_DATA` in both cases, never the mock. NOT true for a
+     * successful lookup that returns nothing: that is a real, honest empty.
+     */
     error: boolean;
-    /** Re-runs the fetch for the current farm (retry affordance). No-op in preview. */
+    /**
+     * Retry affordance. Re-runs the fetch for the current farm; when there
+     * is no farm id it re-asks `/me` instead (Task 6e), because that is
+     * where the failure actually was. No-op in preview.
+     */
     refresh: () => void;
 }
 
@@ -63,6 +73,15 @@ export const useLabourState = (): UseLabourStateResult => {
     const isPreview = farmCtx === null; // no provider at all — the ONLY mock case
     const farmId = farmCtx?.currentFarmId ?? null;
     const farmCtxLoading = farmCtx?.isLoading ?? false;
+    /**
+     * Task 6e — did the LAST `/me` attempt fail? `FarmContext` swallows that
+     * failure by design (other screens keep stale data through it) and only
+     * surfaces this flag; see the `!farmId` branch below for why the labour
+     * screen cannot treat "no farm id" as an answer on its own.
+     */
+    const farmCtxLoadFailed = farmCtx?.loadFailed ?? false;
+    /** `undefined` only outside a provider (preview) — see `refresh` below. */
+    const farmCtxRefresh = farmCtx?.refresh;
 
     // --- Auth gate (see the AUTH GATE note in this file's header) ----------
     // `auth === null` means there is no AuthProvider ABOVE this hook at all.
@@ -104,11 +123,35 @@ export const useLabourState = (): UseLabourStateResult => {
 
         if (!farmId) {
             // Real app, but no farm resolved yet — FarmContext may still be
-            // loading, or the farmer genuinely has no farm. Either way: the
-            // honest empty state, NEVER the mock.
+            // loading, the `/me` lookup may have FAILED, or the farmer
+            // genuinely has no farm. Either way: the honest empty state,
+            // NEVER the mock.
+            //
+            // TASK 6e (spec: 2026-08-28-labour-v2-release-1, P5, Ruling R8)
+            // — those last two are not the same thing, and this branch used
+            // to report both as `error: false`. On a fresh install there is
+            // no cached `currentFarmId`, so a failed `/me` settles here with
+            // `farmCtxLoading` already false: the screen rendered the hub
+            // over EMPTY_LABOUR_DATA and stated "अजून कोणी कामगार जोडलेला
+            // नाही" (no worker has been added yet) to a farmer who may have
+            // twelve — the identical falsehood Task 6d removed from the
+            // labour-fetch path, reached through the farm-context door
+            // instead. Reinstall + weak rural signal is the pilot's normal
+            // condition, not an edge case.
+            //
+            // Once the context has SETTLED (`!farmCtxLoading`) and reports
+            // `loadFailed`, this is an outage: `error` sends it to Task 6d's
+            // render gate, which withholds every claim and shows the
+            // existing banner + retry. Nothing new is rendered or
+            // translated for it.
+            //
+            // The gate is `loadFailed`, NEVER "farmId is null": a `/me` that
+            // SUCCEEDS for an account with zero farms is a real answer, and
+            // its empty-state message is true — that path keeps returning
+            // `error: false` exactly as before (locked by its own test).
             setData(EMPTY_LABOUR_DATA);
             setLoading(farmCtxLoading);
-            setError(false);
+            setError(!farmCtxLoading && farmCtxLoadFailed);
             return;
         }
 
@@ -162,9 +205,19 @@ export const useLabourState = (): UseLabourStateResult => {
         })();
 
         return () => { cancelled = true; };
-    }, [isPreview, farmId, farmCtxLoading, authReady, authPending, retryToken]);
+    }, [isPreview, farmId, farmCtxLoading, farmCtxLoadFailed, authReady, authPending, retryToken]);
 
-    const refresh = useCallback(() => setRetryToken((t) => t + 1), []);
+    const refresh = useCallback(() => {
+        // Task 6e — when there is no farm id, the failure is UPSTREAM (the
+        // `/me` lookup), and re-running this effect on its own can only
+        // reach the same conclusion. Re-ask `/me` as well, or the banner's
+        // "पुन्हा प्रयत्न करा" is an affordance that cannot do what it
+        // offers — a fresh falsehood in place of the one just removed.
+        // No-op outside a provider (preview), and untouched for the farm-id
+        // path, which re-fetches labour data exactly as before.
+        if (!farmId) void farmCtxRefresh?.();
+        setRetryToken((t) => t + 1);
+    }, [farmId, farmCtxRefresh]);
 
     return { data, loading, error, refresh };
 };

@@ -35,6 +35,27 @@ interface FarmContextValue {
     farms: MeFarm[];
     switchFarm: (farmId: string) => void;
     refresh: () => Promise<void>;
+    /**
+     * Task 6e (spec: 2026-08-28-labour-v2-release-1, P5, Ruling R8) — true
+     * when the LAST `/me` attempt threw. PURELY ADDITIVE: the swallow below
+     * is unchanged and deliberate (other screens legitimately keep stale
+     * data through a failed refresh), so no existing consumer's behaviour
+     * moves. This only makes the failure *visible* to the consumers that
+     * need to tell "we could not find out" apart from "there is nothing".
+     *
+     * Why that distinction is not cosmetic: on a fresh install there is no
+     * cached `currentFarmId`, so a failed `/me` settles as
+     * `currentFarmId: null, isLoading: false` — indistinguishable from an
+     * account that genuinely has no farm. The labour screen read that as an
+     * answer and told a farmer he had no workers when he may have twelve
+     * (see `useLabourState.ts`). Absence of any record means unknown; a
+     * record that exists and contains nothing is a real, honest empty.
+     *
+     * NOT a general "is the app offline" flag, and not a licence to blank a
+     * screen: consumers that are content with stale data should keep
+     * ignoring it.
+     */
+    loadFailed: boolean;
 }
 
 const FarmCtx = createContext<FarmContextValue | null>(null);
@@ -46,12 +67,15 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const [currentFarmId, setCurrentFarmId] = useState<string | null>(
         () => SessionStore.getCurrentFarmId(),
     );
+    // Task 6e — see the `loadFailed` note on FarmContextValue.
+    const [loadFailed, setLoadFailed] = useState(false);
 
     const refresh = useCallback(async (force = false) => {
         if (!isAuthenticated) return;
         setIsLoading(true);
         try {
             const ctx = await fetchMeContext({ force });
+            setLoadFailed(false);
             setMeContext(ctx);
             const ids = ctx.farms.map(f => f.farmId);
             setCurrentFarmId(prev => {
@@ -60,7 +84,12 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
                 return valid;
             });
         } catch {
-            // silently keep stale data
+            // silently keep stale data — UNCHANGED (Task 6e touched nothing
+            // here but the flag): consumers that are happy with a stale farm
+            // list must not be blanked by a failed refresh. The flag simply
+            // stops the failure from being invisible to the ones that must
+            // not mistake it for an answer.
+            setLoadFailed(true);
         } finally {
             setIsLoading(false);
         }
@@ -94,7 +123,8 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
         farms,
         switchFarm,
         refresh: () => refresh(true),
-    }), [meContext, isLoading, currentFarmId, currentFarm, farms, switchFarm, refresh]);
+        loadFailed,
+    }), [meContext, isLoading, currentFarmId, currentFarm, farms, switchFarm, refresh, loadFailed]);
 
     return <FarmCtx.Provider value={value}>{children}</FarmCtx.Provider>;
 };

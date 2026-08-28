@@ -232,3 +232,92 @@ describe('useLabourState — auth gate (BUG 1)', () => {
         expect(mockFetchLabourData).not.toHaveBeenCalled();
     });
 });
+
+// ---------------------------------------------------------------------------
+// TASK 6e (spec: 2026-08-28-labour-v2-release-1, P4/P5, Ruling R8) —
+// "we could not find out which farm this is" is not "this farmer has no farm".
+//
+// Task 6d stopped the hub asserting "अजून कोणी कामगार जोडलेला नाही" (no
+// worker has been added yet) when the LABOUR fetch fails. The same false
+// sentence stayed reachable through a second door: `FarmContext`'s `/me`
+// call swallows its own failure (`catch { // silently keep stale data }`)
+// and then clears `isLoading`, so on a fresh install — no cached
+// `currentFarmId` — the context settles at `currentFarmId: null` with no
+// failure visible anywhere. This hook read that as "genuinely no farm",
+// returned `error: false`, and the screen made the claim.
+//
+// The pilot scenario exactly: reinstall the APK, log in on weak rural
+// signal, `/me` fails, open कामगार — and the app tells a farmer with twelve
+// workers that he has none.
+//
+// `FarmContext` now surfaces `loadFailed` (purely additive; the swallow
+// itself is unchanged, because other screens legitimately keep stale data
+// on a failed refresh). The gate below is `loadFailed` — NEVER "farmId is
+// null", which is precisely the conflation Ruling R8 forbids.
+// ---------------------------------------------------------------------------
+
+describe('useLabourState — a failed farm-context lookup is not "no farm" (Task 6e)', () => {
+    it('farm context SETTLED with loadFailed → error true, so the screen withholds the "no workers" claim', () => {
+        mockUseOptionalFarmContext.mockReturnValue({
+            currentFarmId: null, isLoading: false, loadFailed: true,
+        });
+
+        const { result } = renderHook(() => useLabourState());
+
+        // The whole point: this state is an outage, not an answer.
+        expect(result.current.error).toBe(true);
+        expect(result.current.loading).toBe(false);
+        // Still money-safe: the honest empty fallback, never the mock.
+        expect(result.current.data).toBe(EMPTY_LABOUR_DATA);
+        expect(result.current.data).not.toBe(LABOUR_MOCK);
+        // There is no farm id to fetch for, so nothing is fetched.
+        expect(mockFetchLabourData).not.toHaveBeenCalled();
+    });
+
+    // THE COMPANION TEST THAT STOPS OVER-REACH (brief Step 4). `/me`
+    // SUCCEEDED and the account genuinely has zero farms: a record that
+    // exists and contains nothing is a real, honest empty (Ruling R8), and
+    // today's behaviour is already correct. Gating on `farmId === null`
+    // instead of on `loadFailed` would break exactly this case.
+    it('farm context settled, load SUCCEEDED, account genuinely has zero farms → error stays false (unchanged)', () => {
+        mockUseOptionalFarmContext.mockReturnValue({
+            currentFarmId: null, isLoading: false, loadFailed: false,
+        });
+
+        const { result } = renderHook(() => useLabourState());
+
+        expect(result.current.error).toBe(false);
+        expect(result.current.loading).toBe(false);
+        expect(result.current.data).toBe(EMPTY_LABOUR_DATA);
+        expect(result.current.data).not.toBe(LABOUR_MOCK);
+        expect(mockFetchLabourData).not.toHaveBeenCalled();
+    });
+
+    // The gate requires the context to have SETTLED. A refresh in flight
+    // after an earlier failure is a genuine "loading", not an outage to
+    // report — the spinner is the honest answer while the retry runs.
+    it('a retry still in flight (isLoading true) after an earlier failure → loading, not error', () => {
+        mockUseOptionalFarmContext.mockReturnValue({
+            currentFarmId: null, isLoading: true, loadFailed: true,
+        });
+
+        const { result } = renderHook(() => useLabourState());
+
+        expect(result.current.loading).toBe(true);
+        expect(result.current.error).toBe(false);
+        expect(result.current.data).toBe(EMPTY_LABOUR_DATA);
+    });
+
+    // Pre-Task-6e consumers/tests that never supplied `loadFailed` (and the
+    // no-provider preview path) must keep behaving identically — an absent
+    // flag is not a failure.
+    it('a farm context that reports no loadFailed field at all behaves exactly as before', () => {
+        mockUseOptionalFarmContext.mockReturnValue({ currentFarmId: null, isLoading: false });
+
+        const { result } = renderHook(() => useLabourState());
+
+        expect(result.current.error).toBe(false);
+        expect(result.current.loading).toBe(false);
+        expect(result.current.data).toBe(EMPTY_LABOUR_DATA);
+    });
+});

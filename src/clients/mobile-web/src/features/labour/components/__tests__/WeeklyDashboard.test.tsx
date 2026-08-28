@@ -208,13 +208,18 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
     // and 6. Both fixed `GetLabourDataHandler` and this screen's own render
     // sites; neither touched `EMPTY_LABOUR_DATA`, the FALLBACK CONSTANT a
     // real farm renders while `useLabourState` is loading and again if its
-    // fetch fails (`useLabourState.ts:109,126,135,156`) — a state rural
+    // fetch fails (`useLabourState.ts` — every `setData(EMPTY_LABOUR_DATA)`
+    // site) — a state rural
     // connectivity makes common, not rare. That constant still hardcoded the
     // same five fields Tasks 1 and 6 made nullable to a fabricated `0`, so an
     // outage rendered a confident "0 मजूर-दिवस" and "बाकी देणं ₹0" underneath
-    // the "couldn't load" banner (the banner renders ABOVE the content, not
-    // instead of it, once the very first load has happened —
-    // `LabourFeature.tsx`'s `showInitialLoading`). Ruling R8: absence of any
+    // the "couldn't load" banner. (That last part is HISTORY as of Task 6d,
+    // 2026-08-28: `LabourFeature.tsx` now withholds the whole content switch
+    // on `error`, so an outage renders the banner and nothing else — this
+    // screen is not reachable in that state at all. `showInitialLoading`,
+    // named here before, no longer exists. The constant below still matters:
+    // it is what a real farm renders while LOADING, and what any future
+    // caller would render.) Ruling R8: absence of any
     // record — an outage means we could not reach it, not that the farmer
     // said nothing happened — is always the unknown case, never a genuine 0.
     //
