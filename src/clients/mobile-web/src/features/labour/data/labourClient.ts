@@ -36,6 +36,7 @@
  * @module features/labour/data/labourClient
  */
 import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';
+import { DEFAULT_LABOUR_WINDOW, type LabourWindow } from '../labourWindow';
 import type {
     LabourData,
     LabourPerson,
@@ -255,8 +256,18 @@ const mapReview = (r: LabourReviewItemDto): ReviewItem => ({
 });
 
 /**
- * Fetches the farm's Option-3 wage-book read-model and maps it into the
- * frontend `LabourData` contract.
+ * Fetches the farm's Option-3 wage-book read-model for ONE time window and
+ * maps it into the frontend `LabourData` contract.
+ *
+ * TASK 11 (spec: 2026-08-28-labour-v2-release-1) — `window` is the adjustable
+ * time window (`?window=alltime|today|week|month`, server half in `da07f668`).
+ * It is ALWAYS sent, even for the all-time default, although the server treats
+ * an omitted value as all-time too. The difference is not cosmetic: silence is
+ * also what a client that predates the parameter sends, so an omitted window
+ * says "I do not know this question exists" where a stated one says which
+ * question was asked. `ManDays`/`Wages`/`Recorded`/`Logs` move with it;
+ * `Pending` deliberately does NOT (`GetLabourDataHandler` §8) — it is the
+ * owner's approval backlog, not a statistic about a period.
  *
  * A 401 is handled BEFORE this function's caller ever sees it: the shared
  * client refreshes the session once and replays this exact request (see the
@@ -265,8 +276,14 @@ const mapReview = (r: LabourReviewItemDto): ReviewItem => ({
  * `useLabourState` turns it into the honest empty state plus a retry
  * affordance. It NEVER falls back to mock money.
  */
-export async function fetchLabourData(farmId: string): Promise<LabourData> {
-    const response = await agriSyncClient.http.get<LabourDataDto>(labourDataPath(farmId));
+export async function fetchLabourData(
+    farmId: string,
+    window: LabourWindow = DEFAULT_LABOUR_WINDOW,
+): Promise<LabourData> {
+    const response = await agriSyncClient.http.get<LabourDataDto>(
+        labourDataPath(farmId),
+        { params: { window } },
+    );
     const dto = response.data;
 
     return {

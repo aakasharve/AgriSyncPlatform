@@ -46,6 +46,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { LABOUR_MOCK, EMPTY_LABOUR_DATA, type LabourData } from './labourMock';
 import { fetchLabourData } from './data/labourClient';
+import { DEFAULT_LABOUR_WINDOW, type LabourWindow } from './labourWindow';
 import { useOptionalFarmContext } from '../../core/session/FarmContext';
 import { useOptionalAuth } from '../../app/providers/AuthProvider';
 
@@ -66,6 +67,22 @@ export interface UseLabourStateResult {
      * where the failure actually was. No-op in preview.
      */
     refresh: () => void;
+    /**
+     * TASK 11 (spec: 2026-08-28-labour-v2-release-1) — the time window the
+     * data currently on screen ANSWERS FOR. It opens on
+     * `DEFAULT_LABOUR_WINDOW` (आजपर्यंत, the founder's choice) and lives here,
+     * not in a screen, because it is a property of the question asked of the
+     * server and this hook is the only thing that asks.
+     */
+    timeWindow: LabourWindow;
+    /**
+     * Selects a different window. Re-asks the server for the SAME farm — the
+     * period is never re-derived on the device (see `labourWindow.ts`).
+     * Selecting the window already in force is a no-op: `useState` bails out
+     * on an identical value, so the effect below does not re-run and no
+     * request is issued.
+     */
+    setTimeWindow: (window: LabourWindow) => void;
 }
 
 export const useLabourState = (): UseLabourStateResult => {
@@ -110,6 +127,15 @@ export const useLabourState = (): UseLabourStateResult => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(false);
     const [retryToken, setRetryToken] = useState(0);
+    /**
+     * TASK 11 — the window every fetch below is scoped to. NOT persisted
+     * across visits (no storage read/write anywhere in this file): a farmer
+     * returning to the screen gets आजपर्यंत, the widest and least
+     * misreadable answer, rather than a narrow period he selected days ago
+     * and has no reason to remember. Persisting it is a founder call, not a
+     * default.
+     */
+    const [timeWindow, setTimeWindow] = useState<LabourWindow>(DEFAULT_LABOUR_WINDOW);
 
     useEffect(() => {
         if (isPreview) {
@@ -180,7 +206,7 @@ export const useLabourState = (): UseLabourStateResult => {
         setError(false);
         (async () => {
             try {
-                const real = await fetchLabourData(farmId);
+                const real = await fetchLabourData(farmId, timeWindow);
                 if (!cancelled) {
                     setData(real);
                     setError(false);
@@ -205,7 +231,16 @@ export const useLabourState = (): UseLabourStateResult => {
         })();
 
         return () => { cancelled = true; };
-    }, [isPreview, farmId, farmCtxLoading, farmCtxLoadFailed, authReady, authPending, retryToken]);
+        // TASK 11 — `timeWindow` is a dependency, so selecting a window
+        // re-runs this effect exactly as changing farms does. That means a
+        // window change also passes through the `setData(EMPTY_LABOUR_DATA)`
+        // + `setLoading(true)` reset above, and `LabourFeature` renders the
+        // spinner for it. That is deliberate, not a cost to route around: the
+        // alternative is last window's numbers sitting under the new window's
+        // heading for the length of the request — a period label over figures
+        // that answer a different period, which is the exact defect this task
+        // exists to remove, reintroduced one layer lower.
+    }, [isPreview, farmId, farmCtxLoading, farmCtxLoadFailed, authReady, authPending, retryToken, timeWindow]);
 
     const refresh = useCallback(() => {
         // Task 6e — when there is no farm id, the failure is UPSTREAM (the
@@ -219,5 +254,5 @@ export const useLabourState = (): UseLabourStateResult => {
         setRetryToken((t) => t + 1);
     }, [farmId, farmCtxRefresh]);
 
-    return { data, loading, error, refresh };
+    return { data, loading, error, refresh, timeWindow, setTimeWindow };
 };

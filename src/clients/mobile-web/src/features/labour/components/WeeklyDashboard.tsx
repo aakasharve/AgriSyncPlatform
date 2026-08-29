@@ -28,13 +28,23 @@
  *     comment (Stage 5 attendance ledger not built; always empty for a real
  *     farm). Hidden here too (`SHOW_LEDGER_BUTTON`) so this screen doesn't
  *     offer a second doorway to the same dead end.
+ *
+ * TASK 11 (spec: 2026-08-28-labour-v2-release-1) — this screen is no longer
+ * about a week. `da07f668` gave the server four windows and made all-time the
+ * default; this file gained the control that selects between them
+ * (`LabourWindowSlider`), a heading that names the one in force instead of the
+ * hard-coded `या आठवड्यात`, and a तपासायचं strip lifted out of the stat grid
+ * because it is the owner's approval inbox and does NOT move with the window.
+ * Each of those three has its reasoning at its own render site below.
  */
 import React from 'react';
-import { ChevronRight, Users, Wallet, ArrowUpRight, Scale, ClipboardList, Inbox, BookText, Star, MapPin } from 'lucide-react';
+import { ChevronRight, Users, Wallet, ArrowUpRight, Scale, ClipboardList, BookText, Star, MapPin } from 'lucide-react';
 import type { LabourData } from '../labourMock';
 import { inr } from '../labourMock';
 import { StatTile, GroupLabel, EmptyState } from './LabourUiKit';
 import { isReadableWeekRange } from '../weekLabel';
+import LabourWindowSlider from './LabourWindowSlider';
+import { LABOUR_WINDOW_LABELS, type LabourWindow } from '../labourWindow';
 
 const SHOW_ADVANCE_STAT = false;
 // TEMPORARILY true (2026-08-10) — the SECOND doorway to हजेरी वही. Must flip back
@@ -69,12 +79,32 @@ const SHOW_LEDGER_BUTTON = false;
 // `features/labour/weekLabel.ts` so HajeriLedger shares it rather than carrying
 // a second copy that can drift. See that file.
 
-interface Props { data: LabourData; onReview: () => void; onLedger: () => void; onToast: (m: string) => void }
+interface Props {
+    data: LabourData;
+    onReview: () => void;
+    onLedger: () => void;
+    onToast: (m: string) => void;
+    /**
+     * TASK 11 (spec: 2026-08-28-labour-v2-release-1) — the window `data`
+     * ANSWERS FOR. Required, never optional with a default: an optional
+     * window invites `?? 'week'` at a call site, and a defaulted label over
+     * somebody else's numbers is precisely the defect this prop exists to
+     * remove.
+     */
+    timeWindow: LabourWindow;
+    /** Reports a tapped window upward; `useLabourState` re-asks the server. */
+    onTimeWindowChange: (window: LabourWindow) => void;
+}
 
-const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger }) => {
+const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow, onTimeWindowChange }) => {
     const d = data.dashboard;
     return (
         <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2">
+            {/* TASK 11 — the window control sits ABOVE everything it governs,
+                so a farmer never reads a figure before he can see which period
+                it covers. Every number below it except तपासायचं moves with it. */}
+            <LabourWindowSlider value={timeWindow} onChange={onTimeWindowChange} />
+
             {/* Renders only for a real week range — see `isReadableWeekRange`. */}
             {isReadableWeekRange(d.weekLabel) && (
                 <div
@@ -98,8 +128,21 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger }) => {
                 />
             )}
 
-            <GroupLabel>या आठवड्यात</GroupLabel>
-            <div className="grid grid-cols-2 gap-2.5">
+            {/*
+              * TASK 11 (spec: 2026-08-28-labour-v2-release-1) — this heading
+              * was the hard-coded literal `या आठवड्यात` ("this week"). Commit
+              * `da07f668` moved the server's DEFAULT window from the week to
+              * all time, which turned that literal into an actively false
+              * label: the farm's entire history of मजूर-दिवस and मजुरी,
+              * printed under a heading that said seven days. It now names the
+              * window actually in force, from the same closed, founder-approved
+              * table the control above is labelled from — one fact, one source,
+              * so the heading and the selected segment cannot disagree.
+              */}
+            <GroupLabel>
+                <span data-testid="labour-window-heading">{LABOUR_WINDOW_LABELS[timeWindow]}</span>
+            </GroupLabel>
+            <div data-testid="labour-stat-grid" className="grid grid-cols-2 gap-2.5">
                 {/* TASK 6 (spec: 2026-08-28-labour-v2-release-1, P4) — `d.manDays`
                   * is `null` when labour was logged this week but no log in it
                   * stated a headcount. `String(null)` is the literal text
@@ -123,8 +166,54 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger }) => {
                     <StatTile icon={<Scale size={17} />} tone="or" value={inr(Math.abs(d.owed))} label={d.owed >= 0 ? 'बाकी देणं' : 'जास्त दिलं'} />
                 )}
                 <StatTile icon={<ClipboardList size={17} />} tone="bl" value={String(d.logs)} label="नोंदी" />
-                <StatTile icon={<Inbox size={17} />} tone="or" value={String(d.pending)} label="तपासायचं" onClick={onReview} />
             </div>
+
+            {/*
+              * TASK 11 — तपासायचं LEFT THE STAT GRID, and it must never go
+              * back. Two separate reasons, both binding:
+              *
+              * 1. IT IS NOT A STATISTIC ABOUT A PERIOD. It is the owner's
+              *    approval inbox — work waiting on HIM. Founder ruling: it
+              *    follows the oversight design language ("same UI and banner
+              *    will come there by tapping on that as we built for oversight
+              *    screen"), i.e. `CanonicalStrip.tsx`'s row 2 — a full-width
+              *    strip carrying a count and a chevron that opens the queue.
+              *    Sitting in a 2-up grid of period figures said the opposite:
+              *    that it was one more measurement of the selected window.
+              *
+              * 2. IT IS DELIBERATELY NOT WINDOW-SCOPED. `GetLabourDataHandler`
+              *    §8 states it outright — "`Pending` deliberately does NOT
+              *    move with the window" — because a log awaiting the owner's
+              *    approval is outstanding whatever period he happens to be
+              *    looking at, and hiding it behind आज would let real work
+              *    disappear from the one place he is meant to act on it.
+              *    DO NOT "fix" this to follow the filter above. If it ever
+              *    needs to be scoped, that is a server change and a founder
+              *    decision, not a change here.
+              *
+              * The strip is CanonicalStrip's visual treatment, not its code:
+              * that component is bound to `OversightModel`/`Language`/
+              * `resolveOversightString`/`StripStateRing` and its sync-freshness
+              * chip, none of which exists in this feature. Amber only when
+              * something is actually waiting — spec §P-G reserves amber for
+              * "this needs you", and a zero backlog does not.
+              *
+              * `d.pending` is a plain `number`, never `null`: it is the size of
+              * a list the server always computes, so 0 here is a genuine "you
+              * are clear", not an absence of evidence (Ruling R8).
+              */}
+            <button
+                type="button"
+                onClick={onReview}
+                data-testid="labour-review-strip"
+                className={`flex w-full items-center gap-3 rounded-2xl border px-3.5 py-3.5 text-left transition-transform active:scale-[0.99] ${d.pending > 0 ? 'border-amber-200 bg-amber-50' : 'border-stone-200 bg-white'}`}
+            >
+                <span className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-[19px] font-black [font-variant-numeric:tabular-nums] ${d.pending > 0 ? 'bg-amber-100 text-amber-800' : 'bg-stone-100 text-stone-500'}`}>
+                    <span data-testid="labour-review-strip-count">{String(d.pending)}</span>
+                </span>
+                <span className={`min-w-0 flex-1 text-[17px] font-bold ${d.pending > 0 ? 'text-amber-900' : 'text-stone-700'}`}>तपासायचं</span>
+                <ChevronRight size={22} className={`flex-shrink-0 ${d.pending > 0 ? 'text-amber-700' : 'text-stone-400'}`} />
+            </button>
 
             <GroupLabel>कुठे काम झालं · plots</GroupLabel>
             {d.plots.length === 0 ? (

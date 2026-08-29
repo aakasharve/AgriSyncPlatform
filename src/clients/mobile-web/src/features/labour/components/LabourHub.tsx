@@ -91,12 +91,15 @@ interface Props {
  * used `slate-*`, which is off the app's design language — see
  * shared/components/ui/LogCard.tsx for the canonical card).
  */
-const QuickTile: React.FC<{ icon: React.ReactNode; chip: string; label: string; sub: string; badge?: number; onClick: () => void }> = ({ icon, chip, label, sub, badge, onClick }) => (
+const QuickTile: React.FC<{ icon: React.ReactNode; chip: string; label: string; sub?: string; badge?: number; onClick: () => void }> = ({ icon, chip, label, sub, badge, onClick }) => (
     <button type="button" onClick={onClick} className="flex min-h-[92px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-transform active:scale-[0.98]">
         <span className={`flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[16px] ${chip}`}>{icon}</span>
         <span className="min-w-0">
             <span className="flex items-center gap-2 text-[19px] font-bold leading-tight text-stone-800">{label}{badge != null && <span className="rounded-full bg-amber-600 px-2 py-0.5 text-[15px] font-extrabold text-white">{badge}</span>}</span>
-            <span className="mt-0.5 block truncate text-[16px] text-stone-500">{sub}</span>
+            {/* TASK 11 — optional. A tile whose sub-line would have to name a
+                period the farmer now chooses for himself carries no sub-line
+                rather than a fixed one; see the आढावा tile below. */}
+            {sub && <span className="mt-0.5 block truncate text-[16px] text-stone-500">{sub}</span>}
         </span>
     </button>
 );
@@ -244,7 +247,17 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
                 <QuickTile icon={<BookText size={20} />} chip="bg-blue-100 text-blue-600" label="हजेरी वही" sub="सर्व दिवस" onClick={onLedger} />
             )}
             <QuickTile icon={<Inbox size={20} />} chip="bg-amber-100 text-amber-700" label="तपासा" sub="मंजूर करा" badge={data.dashboard.pending} onClick={onReview} />
-            <QuickTile icon={<LayoutDashboard size={20} />} chip="bg-violet-100 text-violet-600" label="आढावा" sub="या आठवड्याचा" onClick={onDashboard} />
+            {/*
+              * TASK 11 (spec: 2026-08-28-labour-v2-release-1) — the sub-line
+              * read `या आठवड्याचा` ("this week's"). `da07f668` made the
+              * आढावा screen's default window all-time and let the farmer pick
+              * one of four, so this tile promised a period the screen behind
+              * it no longer shows — the same falsehood the screen's own title
+              * and heading carried, on the doorway rather than the room. The
+              * clause is DELETED, not reworded: no new farmer-facing word is
+              * introduced, and the tile still says exactly what it opens.
+              */}
+            <QuickTile icon={<LayoutDashboard size={20} />} chip="bg-violet-100 text-violet-600" label="आढावा" onClick={onDashboard} />
         </div>
 
         {ledgerDefaults && justLoggedLogs.length > 0 && (

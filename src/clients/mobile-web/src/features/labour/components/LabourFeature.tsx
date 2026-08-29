@@ -37,7 +37,16 @@ const TITLES: Record<ScreenName, string> = {
     mukadam: 'मुकादम',
     person: 'कामगार',
     attendance: 'आजची हजेरी',
-    dashboard: 'या आठवड्याचा आढावा',
+    /*
+     * TASK 11 (spec: 2026-08-28-labour-v2-release-1) — was
+     * `या आठवड्याचा आढावा` ("this week's review"). Commit `da07f668` made the
+     * server's default window all-time and gave the farmer three others to
+     * choose from, so a title naming ONE fixed period is false three times out
+     * of four and false by default. Shortened to `आढावा` (founder-approved):
+     * the title now names the SCREEN, and the control on it names the period.
+     * No new word — this is the existing title with the week clause deleted.
+     */
+    dashboard: 'आढावा',
     ledger: 'हजेरी वही',
 };
 
@@ -55,7 +64,7 @@ export const LabourFeature: React.FC<{
     ledgerDefaults?: LedgerDefaults;
     lastLabourLogIds?: string[];
 }> = ({ onExit, onGoToLog, history, ledgerDefaults, lastLabourLogIds }) => {
-    const { data, loading, error, refresh } = useLabourState();
+    const { data, loading, error, refresh, timeWindow, setTimeWindow } = useLabourState();
     // Safe (non-throwing) outside a provider (`?preview=labour` mounts with
     // none) — `farm` stays `null` there, and the QR-invite CTA below hides
     // itself accordingly.
@@ -162,7 +171,14 @@ export const LabourFeature: React.FC<{
                             <Attendance data={data} onSave={() => { back(); showToast('जतन झाले → मंजुरीसाठी'); }} onToast={showToast} onGoToLog={goToLog} />
                         )}
                         {cur.name === 'dashboard' && (
-                            <WeeklyDashboard data={data} onReview={() => setReviewOpen(true)} onLedger={() => push({ name: 'ledger' })} onToast={showToast} />
+                            <WeeklyDashboard
+                                data={data}
+                                onReview={() => setReviewOpen(true)}
+                                onLedger={() => push({ name: 'ledger' })}
+                                onToast={showToast}
+                                timeWindow={timeWindow}
+                                onTimeWindowChange={setTimeWindow}
+                            />
                         )}
                         {cur.name === 'ledger' && <HajeriLedger data={data} onToast={showToast} />}
                     </>

@@ -26,7 +26,19 @@ import type { LabourData } from '../../labourMock';
 import { EMPTY_LABOUR_DATA, LABOUR_MOCK, inr } from '../../labourMock';
 
 const noop = () => {};
-const baseProps = () => ({ onReview: noop, onLedger: noop, onToast: vi.fn() });
+// Task 11 (spec: 2026-08-28-labour-v2-release-1) — the screen now takes the
+// time window it is displaying. `alltime` is the founder-chosen default and
+// the window every assertion in THIS file was written against (they predate
+// the control and are about absence/fabrication, not about the period), so
+// pinning it here keeps them testing what they always tested. The window's
+// own behaviour lives in `WeeklyDashboard.window.test.tsx`.
+const baseProps = () => ({
+    onReview: noop,
+    onLedger: noop,
+    onToast: vi.fn(),
+    timeWindow: 'alltime' as const,
+    onTimeWindowChange: vi.fn(),
+});
 
 describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
     afterEach(() => cleanup());
