@@ -57,13 +57,17 @@ public sealed record LabourPersonDto(
     bool? CleanRecord);
 
 /// <summary>
-/// Task 9 (spec: 2026-08-28-labour-v2-release-1) — FOUR of these figures move
-/// with <c>GetLabourDataQuery.Window</c> (<c>ManDays</c>, <c>Wages</c>,
-/// <c>Owed</c>/<c>Money</c>, <c>Logs</c>); <c>Pending</c> deliberately does
-/// NOT. It is an approval inbox, not a statistic — a time filter must never
-/// hide work still waiting on the owner (founder ruling). Every mention of
-/// "this week" below therefore reads as "the window in force", whose default
-/// is आजपर्यंत (all time).
+/// Task 9 (spec: 2026-08-28-labour-v2-release-1) — THREE of these figures
+/// move with <c>GetLabourDataQuery.Window</c> (<c>ManDays</c>, <c>Wages</c>,
+/// <c>Logs</c>, and <c>Money.Recorded</c>); <c>Pending</c> and <c>Owed</c>/
+/// <c>Money.Owed</c> deliberately do NOT (R13 ruling, Task 10, corrects Task
+/// 9's original mistake of windowing Owed alongside the real flows).
+/// <c>Pending</c> is an approval inbox, not a statistic — a time filter must
+/// never hide work still waiting on the owner. <c>Owed</c> is an outstanding
+/// BALANCE ("what do I currently owe") — a time filter must never make a
+/// farmer who still owes money see a smaller figure, or ₹0, just because he
+/// is looking at आज. Every mention of "this week" below therefore reads as
+/// "the window in force", whose default is आजपर्यंत (all time).
 /// </summary>
 public sealed record LabourDashboardDto(
     // The window's START date as a bare ISO date, or empty when the window is
@@ -85,10 +89,12 @@ public sealed record LabourDashboardDto(
     int ManDaysTrend,
     decimal Wages,
     decimal Advances,
-    // Task 1 — `null` when zero job-card evidence exists farm-wide (see
-    // LabourMoneyDto.Owed below); never a fabricated ₹0 or a balance derived
-    // from one. Task 9 — "farm-wide" now means "inside the window", and every
-    // term of the subtraction is scoped to that same window.
+    // Task 1 — `null` when zero job-card evidence exists farm-wide, ALL TIME
+    // (see LabourMoneyDto.Owed below); never a fabricated ₹0 or a balance
+    // derived from one. R13 (Task 10, corrects Task 9) — this is an
+    // outstanding BALANCE, not a flow: unlike ManDays/Wages/Recorded/Logs, it
+    // does NOT move with the window. Every term of its subtraction is
+    // ALL-TIME, regardless of which window the caller requested.
     decimal? Owed,
     // Task 9 — the number of daily logs INSIDE the window. A genuine `0` when
     // there are none: this is a count of records, not a quantity estimated from
@@ -107,10 +113,17 @@ public sealed record LabourPlotBarDto(
 
 /// <summary>
 /// Task 1 (P4) — <c>Recorded</c> is `null` when the farm has ZERO
-/// Completed/VerifiedForPayout/PaidOut job cards anywhere (absence of
-/// evidence, not evidence of zero). <c>Owed</c> is DERIVED from
-/// <c>Recorded</c>, so it is `null` under the exact same condition — never a
-/// balance computed against an unknown.
+/// Completed/VerifiedForPayout/PaidOut job cards INSIDE THE WINDOW (absence
+/// of evidence, not evidence of zero) — it is a FLOW and legitimately narrows
+/// with <c>GetLabourDataQuery.Window</c>. <c>Owed</c> is DERIVED as
+/// <c>Recorded − Paid − Advance</c> in principle, but R13 (Task 10, corrects
+/// Task 9) requires it to be a BALANCE — "what do I currently owe" — so it is
+/// actually computed from the ALL-TIME versions of those three terms, NOT
+/// from this record's own (possibly windowed) <c>Recorded</c>/<c>Paid</c>.
+/// It is `null` exactly when zero job-card evidence exists ALL TIME, never a
+/// fabricated ₹0 or a balance computed against an unknown — but that
+/// nullability is independent of whether <c>Recorded</c> above happens to be
+/// null for the requested window.
 /// </summary>
 public sealed record LabourMoneyDto(
     decimal? Recorded,

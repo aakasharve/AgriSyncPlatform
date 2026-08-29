@@ -8,6 +8,7 @@ using ShramSafal.Application.Services;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Dfes;
 using ShramSafal.Domain.Farms;
+using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Work;
 
@@ -46,14 +47,15 @@ namespace ShramSafal.Application.UseCases.Labour.GetLabourData;
 /// <c>Pending</c> and the recorded/owed pair were lifetime figures rendered
 /// under a "या आठवड्यात" ("this week") heading. Four of the five numbers were
 /// therefore false against their own label. <see cref="GetLabourDataQuery.Window"/>
-/// now selects one of <see cref="LabourTimeWindow"/>'s four ranges and FOUR
-/// figures move with it: <c>ManDays</c>, <c>Wages</c>/<c>Money.Paid</c>,
-/// <c>Money.Recorded</c>/<c>Owed</c>, and <c>Logs</c> — per-person as well as
-/// farm-wide, so the rows and the tiles above them cannot disagree. Omitting
-/// the window means आजपर्यंत (all time), the founder-chosen default, which is
-/// what lets a client that predates the parameter keep working. Note the one
-/// deliberate consequence: <c>ManDays</c> under the DEFAULT window is now
-/// all-time rather than this-week — it stopped being the odd one out.
+/// now selects one of <see cref="LabourTimeWindow"/>'s four ranges and THREE
+/// figures move with it: <c>ManDays</c>, <c>Wages</c>/<c>Money.Paid</c>
+/// (per-person as well as farm-wide), and <c>Money.Recorded</c>/per-person
+/// <c>RecordedWages</c>, and <c>Logs</c> — so the rows and the tiles above
+/// them cannot disagree. Omitting the window means आजपर्यंत (all time), the
+/// founder-chosen default, which is what lets a client that predates the
+/// parameter keep working. Note the one deliberate consequence: <c>ManDays</c>
+/// under the DEFAULT window is now all-time rather than this-week — it
+/// stopped being the odd one out.
 /// </para>
 /// <para>
 /// <b><c>Pending</c> is NEVER window-scoped</b> (founder ruling, Task 9). It is
@@ -62,6 +64,22 @@ namespace ShramSafal.Application.UseCases.Labour.GetLabourData;
 /// view, it would be a lost obligation. It is computed from the UNFILTERED
 /// log set whatever window is in force, and so is the <c>Review</c> list it
 /// summarises. Do not "fix" this to match the other tiles.
+/// </para>
+/// <para>
+/// <b><c>Owed</c>/<c>Money.Owed</c> is ALSO NEVER window-scoped</b> (R13
+/// ruling, Task 10, spec: 2026-08-28-labour-v2-release-1 — corrects Task 9,
+/// which windowed it). बाकी देणं ("still to give") reads to a farmer as an
+/// OUTSTANDING POSITION — what he currently owes — not "of this window's
+/// work, how much is unpaid". Windowing it made those two different
+/// questions share identical words: a farmer who owes ₹5,000 overall but has
+/// paid off everything billed today would have seen बाकी देणं ₹0 under आज,
+/// which is the app lying to him about money he owes. <c>Owed</c> is
+/// therefore always <c>RecordedWages − Paid − Advance</c> computed from
+/// ALL-TIME inputs (<c>recordedWagesByWorkerAllTime</c> /
+/// <c>paidByWorkerAllTime</c> in §2/§3b below), never the windowed figures
+/// that drive the <c>Recorded</c>/<c>Wages</c> tiles — those two ARE flows
+/// and may legitimately narrow; Owed/Pending are the two balances on this
+/// screen and neither may.
 /// </para>
 /// <para>
 /// <b>The window is IST-anchored</b> via <see cref="FarmLocalDay"/>. The old
@@ -83,7 +101,10 @@ namespace ShramSafal.Application.UseCases.Labour.GetLabourData;
 /// <c>Owed</c> CAN legitimately go negative (paid more than what job cards
 /// have recorded) — that is a correct, honest number, not a bug; the client
 /// is responsible for presenting a negative Owed honestly rather than
-/// mislabeling it as an "उचल" advance (see labourMock.ts netBalance).
+/// mislabeling it as an "उचल" advance (see labourMock.ts netBalance). R13
+/// (Task 10) — the <c>RecordedWages</c>/<c>Paid</c> this subtraction actually
+/// uses are the ALL-TIME dictionaries, not the (possibly windowed) values a
+/// person's row or the <c>Recorded</c>/<c>Wages</c> tiles display; see §2/§3b.
 /// </para>
 /// <para>
 /// <see cref="LabourAssignment.TotalCost"/> / <see cref="LabourAssignment.WagePerPerson"/>
@@ -185,6 +206,28 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // day had no work worth recording.
         var hasJobCardEvidence = recordedWagesByWorker.Count > 0;
 
+        // ── 2b. The SAME grouping, unwindowed — R13 (ruling, Task 10, spec:
+        //       2026-08-28-labour-v2-release-1). `Owed` is a BALANCE ("what do
+        //       I currently owe"), not a flow, so it may never be derived from
+        //       a windowed `RecordedWages`/`Paid` pair the way Task 9 did —
+        //       see the class doc above. `jobCards` is already the farm's
+        //       full, unfiltered read (§2's own comment), so this costs no
+        //       extra query: it is the identical grouping minus the window
+        //       predicate.
+        var recordedWagesByWorkerAllTime = jobCards
+            .Where(jc => jc.AssignedWorkerUserId is not null
+                && jc.Status is JobCardStatus.Completed or JobCardStatus.VerifiedForPayout or JobCardStatus.PaidOut)
+            .GroupBy(jc => jc.AssignedWorkerUserId!.Value.Value)
+            .ToDictionary(
+                g => g.Key,
+                g => decimal.Round(g.Sum(jc => jc.EstimatedTotal.Amount), 2, MidpointRounding.AwayFromZero));
+
+        // Same R6/Task 1 polarity as `hasJobCardEvidence` above, but asking it
+        // of the WHOLE farm history rather than the window: zero job-card
+        // evidence ANYWHERE means the all-time balance is unknown, never a
+        // fabricated ₹0 or one derived from a windowed slice.
+        var hasJobCardEvidenceAllTime = recordedWagesByWorkerAllTime.Count > 0;
+
         // ── 3. Labour CostEntries — labour_payout + labour_misc (finance-consistent Paid — दिलं). ──
         // Decision 3a (2026-07-19): दिलं = ALL labour money paid out, not just
         // job-card settlements — labour_misc (generic voice/manual labour
@@ -212,12 +255,9 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // row IS no payment.
         var payoutRows = await repository.GetLabourPayoutCostEntriesWithJobCardAsync(
             query.FarmId, window.FromDate, window.ToDateInclusive, ct);
-        var corrections = await repository.GetCorrectionsForEntriesAsync(payoutRows.Select(r => r.CostEntry.Id), ct);
-        var latestCorrections = corrections
-            .GroupBy(c => c.CostEntryId)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.CorrectedAtUtc).First());
+        var latestCorrections = BuildLatestCorrections(
+            await repository.GetCorrectionsForEntriesAsync(payoutRows.Select(r => r.CostEntry.Id), ct));
 
-        var paidByWorker = new Dictionary<Guid, decimal>();
         // Farm-wide money paid that CANNOT be attributed to a specific person
         // (labour_misc has no JobCard link, so AssignedWorkerUserId is always
         // null for it — a job-card-settled payout whose worker has since LEFT
@@ -226,28 +266,35 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // requires it in the farm-wide दिलं total even with no person to
         // attach it to; per-person Paid stays untouched (residual: per-person
         // attribution stays partial until job cards are in real use).
-        decimal unattributedPaid = 0m;
-        foreach (var (entry, assignedWorkerUserId) in payoutRows)
+        var (paidByWorker, unattributedPaid) = AggregatePayouts(payoutRows, latestCorrections);
+
+        // ── 3b. The SAME payout aggregation, unwindowed — R13 (ruling, Task
+        //       10). `Owed`'s other input (`Paid`) must be all-time for the
+        //       identical reason §2b's `RecordedWages` is: a balance answers
+        //       "what do I currently owe", and mixing a windowed numerator
+        //       with an all-time denominator (or the reverse) manufactures a
+        //       figure no evidence supports. `payoutRows`/`paidByWorker` above
+        //       stay windowed and untouched — they still drive `Wages`/
+        //       `Money.Paid`/per-person `Paid`, which ARE flows.
+        //
+        //       When the requested window IS आजपर्यंत already, `window.FromDate`/
+        //       `ToDateInclusive` are both null and re-querying would return
+        //       the IDENTICAL rows fetched above — reuse them rather than
+        //       hitting Postgres twice for one request.
+        List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)> payoutRowsAllTime;
+        Dictionary<Guid, FinanceCorrection> latestCorrectionsAllTime;
+        if (window.FromDate is null && window.ToDateInclusive is null)
         {
-            var hasCorrection = latestCorrections.TryGetValue(entry.Id, out var latestCorrection);
-            var effectiveAmount = decimal.Round(
-                hasCorrection ? latestCorrection!.CorrectedAmount : entry.Amount,
-                2, MidpointRounding.AwayFromZero);
-
-            if (assignedWorkerUserId is not { } workerId)
-            {
-                unattributedPaid += effectiveAmount; // orphaned payout (no linked JobCard/worker) — not attributable to a person.
-                continue;
-            }
-
-            paidByWorker[workerId] = paidByWorker.GetValueOrDefault(workerId) + effectiveAmount;
+            payoutRowsAllTime = payoutRows;
+            latestCorrectionsAllTime = latestCorrections;
         }
-
-        unattributedPaid = decimal.Round(unattributedPaid, 2, MidpointRounding.AwayFromZero);
-        foreach (var workerId in paidByWorker.Keys.ToList())
+        else
         {
-            paidByWorker[workerId] = decimal.Round(paidByWorker[workerId], 2, MidpointRounding.AwayFromZero);
+            payoutRowsAllTime = await repository.GetLabourPayoutCostEntriesWithJobCardAsync(query.FarmId, null, null, ct);
+            latestCorrectionsAllTime = BuildLatestCorrections(
+                await repository.GetCorrectionsForEntriesAsync(payoutRowsAllTime.Select(r => r.CostEntry.Id), ct));
         }
+        var (paidByWorkerAllTime, unattributedPaidAllTime) = AggregatePayouts(payoutRowsAllTime, latestCorrectionsAllTime);
 
         // ── 4. Display names (cross-context, safe — mirrors sync-pull operators). ──
         // Task 9 — this read stays UNFILTERED on purpose. It feeds three
@@ -348,32 +395,51 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // the finance page. Per-person Paid is untouched (still attribution-
         // only); only this farm-wide total absorbs the unattributed slice.
         // Task 1 (P4) — `totalRecorded` is null when the farm carries zero
-        // job-card evidence (`hasJobCardEvidence` false), exactly mirroring the
-        // per-person rule above. Do NOT gate this on "every person's
-        // RecordedWages happens to be null" — an active roster with zero
-        // members would then vacuously read as "unknown" even when real
-        // evidence exists elsewhere (e.g. for a departed worker), which is a
-        // different and legitimate `0m` case handled below. `totalOwed` is
-        // NEVER derived from a null `totalRecorded` — the balance is absent
-        // too, not zero, not negative.
+        // job-card evidence INSIDE THE WINDOW (`hasJobCardEvidence` false),
+        // exactly mirroring the per-person rule above. Do NOT gate this on
+        // "every person's RecordedWages happens to be null" — an active
+        // roster with zero members would then vacuously read as "unknown"
+        // even when real evidence exists elsewhere (e.g. for a departed
+        // worker), which is a different and legitimate `0m` case handled
+        // below. (`totalOwed` below is a separate, ALL-TIME computation and
+        // does not read `totalRecorded` at all — see R13.)
         //
-        // Task 9 — every term below is scoped to the SAME window, so बाकी is
-        // the balance ARISING FROM that window, not a running ledger balance.
-        // Under आजपर्यंत (the default) the two coincide and it is the true
-        // outstanding amount. Under a narrower window it answers "what did this
-        // week's recorded work leave unpaid" — a real question, and the only
-        // one that can be answered honestly when the numerator and denominator
-        // both move. Mixing scopes (window-scoped Recorded against lifetime
-        // Paid, or the reverse) would manufacture a balance no evidence
-        // supports, which is precisely the defect Task 1 removed.
+        // `totalRecorded`/`totalPaid` below stay scoped to the REQUESTED
+        // window — they are what feeds the `Recorded`/`Wages` tiles, and
+        // those two are genuine FLOWS that may legitimately narrow to a
+        // period. `totalOwed` is NOT derived from them (see R13 below).
         var totalRecorded = hasJobCardEvidence
             ? decimal.Round(people.Sum(p => p.RecordedWages ?? 0m), 2, MidpointRounding.AwayFromZero)
             : (decimal?)null;
         var totalPaid = decimal.Round(people.Sum(p => p.Paid) + unattributedPaid, 2, MidpointRounding.AwayFromZero);
         var totalAdvance = decimal.Round(people.Sum(p => p.Advance), 2, MidpointRounding.AwayFromZero);
-        var totalOwed = totalRecorded is null
+
+        // R13 (ruling, Task 10, spec: 2026-08-28-labour-v2-release-1) —
+        // `Owed` is a BALANCE ("what do I currently owe"), never a flow, so it
+        // is deliberately NOT `totalRecorded − totalPaid − totalAdvance`
+        // (Task 9's mistake — see the class doc's R13 paragraph). It is
+        // computed from the ALL-TIME §2b/§3b dictionaries instead, restricted
+        // to the SAME active roster `totalRecorded`/`totalPaid` use above —
+        // for the identical reason given there: a paid-then-departed worker's
+        // historical pay must not drag the balance negative either, all-time
+        // or windowed. `totalAdvance` needs no all-time counterpart: Advance
+        // is hard-coded 0m for everyone regardless of window (Stage 4 —
+        // LabourAdvance — is not built yet), so it already IS the all-time
+        // figure. `totalOwed` is `null` exactly when `hasJobCardEvidenceAllTime`
+        // is false — never derived from an all-time unknown, mirroring Task
+        // 1's rule one level up from where it used to apply.
+        var activeWorkerIds = labourMemberships.Select(m => m.UserId.Value).Distinct().ToList();
+        var totalRecordedAllTime = hasJobCardEvidenceAllTime
+            ? decimal.Round(
+                activeWorkerIds.Sum(id => recordedWagesByWorkerAllTime.GetValueOrDefault(id)),
+                2, MidpointRounding.AwayFromZero)
+            : (decimal?)null;
+        var totalPaidAllTime = decimal.Round(
+            activeWorkerIds.Sum(id => paidByWorkerAllTime.GetValueOrDefault(id)) + unattributedPaidAllTime,
+            2, MidpointRounding.AwayFromZero);
+        var totalOwed = totalRecordedAllTime is null
             ? (decimal?)null
-            : decimal.Round(totalRecorded.Value - totalPaid - totalAdvance, 2, MidpointRounding.AwayFromZero);
+            : decimal.Round(totalRecordedAllTime.Value - totalPaidAllTime - totalAdvance, 2, MidpointRounding.AwayFromZero);
 
         // ── 7. Man-days for the WINDOW (interim, from LabourAssignment.WorkerCount
         //       — NO-MULTIPLY descriptive only). ─────────────────────────────
@@ -496,5 +562,52 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         var topLevelIds = people.Select(p => p.Id).ToList();
 
         return Result.Success(new LabourDataDto(topLevelIds, people, dashboard, ledger, review, attendance));
+    }
+
+    /// <summary>Latest <see cref="FinanceCorrection"/> per <c>CostEntryId</c>, by <c>CorrectedAtUtc</c>.</summary>
+    private static Dictionary<Guid, FinanceCorrection> BuildLatestCorrections(IEnumerable<FinanceCorrection> corrections)
+        => corrections
+            .GroupBy(c => c.CostEntryId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.CorrectedAtUtc).First());
+
+    /// <summary>
+    /// §3's payout-aggregation loop, factored out so the WINDOWED pass (feeds
+    /// <c>Wages</c>/<c>Money.Paid</c>/per-person <c>Paid</c> — genuine flows)
+    /// and the ALL-TIME pass added by R13/Task 10 (feeds <c>Owed</c>'s balance
+    /// — see §3b) share one implementation instead of two that could silently
+    /// drift apart. Same rounding shape either way: per-entry rounding is a
+    /// defensive no-op (amounts are already 2dp at domain construction — see
+    /// the MONEY-CONSISTENCY INVARIANT above), and each running sum is rounded
+    /// once at the end, not per-addition.
+    /// </summary>
+    private static (Dictionary<Guid, decimal> ByWorker, decimal Unattributed) AggregatePayouts(
+        IEnumerable<(CostEntry CostEntry, Guid? AssignedWorkerUserId)> rows,
+        IReadOnlyDictionary<Guid, FinanceCorrection> latestCorrections)
+    {
+        var byWorker = new Dictionary<Guid, decimal>();
+        decimal unattributed = 0m;
+        foreach (var (entry, assignedWorkerUserId) in rows)
+        {
+            var hasCorrection = latestCorrections.TryGetValue(entry.Id, out var latestCorrection);
+            var effectiveAmount = decimal.Round(
+                hasCorrection ? latestCorrection!.CorrectedAmount : entry.Amount,
+                2, MidpointRounding.AwayFromZero);
+
+            if (assignedWorkerUserId is not { } workerId)
+            {
+                unattributed += effectiveAmount; // orphaned payout (no linked JobCard/worker) — not attributable to a person.
+                continue;
+            }
+
+            byWorker[workerId] = byWorker.GetValueOrDefault(workerId) + effectiveAmount;
+        }
+
+        unattributed = decimal.Round(unattributed, 2, MidpointRounding.AwayFromZero);
+        foreach (var workerId in byWorker.Keys.ToList())
+        {
+            byWorker[workerId] = decimal.Round(byWorker[workerId], 2, MidpointRounding.AwayFromZero);
+        }
+
+        return (byWorker, unattributed);
     }
 }

@@ -125,9 +125,47 @@ public sealed class LabourWindowScopingTests
         d.Money.Recorded.Should().Be(expectedRecorded, "काम झालं sums only job cards planned inside the window");
         d.Money.Paid.Should().Be(expectedWages);
         d.Logs.Should().Be(expectedLogs, "the log count is the number of daily logs dated inside the window");
-        d.Owed.Should().Be(expectedRecorded - expectedWages,
-            "बाकी stays DERIVED — recorded minus paid minus advance — for whatever window is in force");
-        d.Money.Owed.Should().Be(expectedRecorded - expectedWages);
+        // `Owed`/`Money.Owed` deliberately does NOT appear in this theory (R13,
+        // Task 10) — it is a BALANCE, not a flow, and does not move with the
+        // window the way the five figures above correctly do. See
+        // `Owed_is_the_alltime_balance_under_every_window_not_the_windows_own_flow`
+        // below for its own, separate contract.
+    }
+
+    /// <summary>
+    /// R13 (ruling, spec: 2026-08-28-labour-v2-release-1, Task 10) — Owed/बाकी
+    /// is a BALANCE ("what do I currently owe"), never a flow, so unlike
+    /// ManDays/Wages/Recorded/Logs it must NOT move with the window. Before
+    /// this fix Task 9 windowed Owed's own inputs (Recorded/Paid) alongside
+    /// the real flows, so a farmer viewing आज who owed ₹13,500 lifetime but
+    /// had nothing left outstanding from TODAY's work specifically would see
+    /// बाकी देणं far below his true balance — same words, a different
+    /// question. <c>FullScenario()</c> seeds four days each with a different
+    /// recorded/paid magnitude (see its own doc); the all-time balance is
+    /// 15000 − 1500 = 13500, and every window below must report exactly that
+    /// — never the window-local figure (`expectedRecorded - expectedWages`
+    /// from the table above, e.g. ₹900 under "today").
+    /// </summary>
+    [Theory]
+    [InlineData("today")]
+    [InlineData("week")]
+    [InlineData("month")]
+    [InlineData("alltime")]
+    public async Task Owed_is_the_alltime_balance_under_every_window_not_the_windows_own_flow(string window)
+    {
+        var repo = FullScenario();
+
+        var result = await BuildHandler(repo).HandleAsync(
+            new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(OwnerGuid), window));
+
+        result.IsSuccess.Should().BeTrue();
+        var d = result.Value!.Dashboard;
+
+        d.Owed.Should().Be(13500m,
+            "बाकी देणं is an outstanding POSITION as of now, not 'of this window's work, what's unpaid' — "
+            + "narrowing it to a period would let a farmer who still owes money see a smaller figure "
+            + "(or ₹0) while looking at आज, which is exactly the danger R13 exists to remove");
+        d.Money.Owed.Should().Be(13500m);
     }
 
     [Theory]
@@ -398,11 +436,16 @@ public sealed class LabourWindowScopingTests
     }
 
     /// <summary>
-    /// R6, narrowed to a window. No job card inside it ⇒ काम झालं is unknown,
-    /// and बाकी must NOT be derived from that unknown — not zero, not negative.
+    /// R6, narrowed to a window, for <c>Money.Recorded</c> (a FLOW — it still
+    /// windows correctly): no job card inside "today" ⇒ काम झालं is unknown
+    /// for today specifically. <c>Owed</c> is a different story under R13
+    /// (Task 10) — it is the ALL-TIME balance, and real all-time job-card
+    /// evidence DOES exist here (last month), so it must report that balance,
+    /// not null. A window with no evidence of its own must never suppress a
+    /// balance the farm's full history can answer.
     /// </summary>
     [Fact]
-    public async Task A_window_with_no_job_card_evidence_reports_unknown_recorded_and_unknown_owed()
+    public async Task A_window_with_no_job_card_evidence_still_reports_the_alltime_owed_balance()
     {
         var repo = new FakeRepo();
         repo.SetRole(FarmGuid, OwnerGuid, AppRole.PrimaryOwner);
@@ -418,8 +461,10 @@ public sealed class LabourWindowScopingTests
         var d = result.Value!.Dashboard;
         d.Wages.Should().Be(900m, "money actually paid today is evidenced by a real CostEntry row");
         d.Money.Recorded.Should().BeNull("no job card falls inside today — absence of evidence (R6)");
-        d.Owed.Should().BeNull("never derive a balance from an unknown");
-        d.Money.Owed.Should().BeNull();
+        d.Owed.Should().Be(7100m,
+            "बाकी is the all-time balance (8000 recorded last month − 900 paid today = 7100), never "
+            + "derived from the windowed (null) Recorded above — R13");
+        d.Money.Owed.Should().Be(7100m);
     }
 
     /// <summary>
@@ -461,7 +506,14 @@ public sealed class LabourWindowScopingTests
         var d = result.Value!.Dashboard;
         d.Wages.Should().Be(0m, "no labour cost row inside the window means no labour money moved inside it");
         d.Money.Recorded.Should().Be(1000m);
-        d.Owed.Should().Be(1000m, "काम झालं minus a real ₹0 paid is a real ₹1000 outstanding");
+        // R13 (Task 10) — Owed is the ALL-TIME balance, not this window's own
+        // (Recorded − Wages) subtraction: all-time recorded is 1000 (today's
+        // card, the only one), all-time paid is 800 (last month's payout, the
+        // only one) — 1000 − 800 = 200, not the windowed 1000 − 0 = 1000 the
+        // pre-R13 code computed.
+        d.Owed.Should().Be(200m,
+            "बाकी is the all-time balance (1000 recorded − 800 paid lifetime), not this window's own "
+            + "recorded-minus-wages subtraction, which would ignore last month's payout entirely");
     }
 
     /// <summary>
