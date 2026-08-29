@@ -119,12 +119,24 @@ describe('LabourFeature — Task 12: the window belongs to आढावा, it m
     /**
      * A STATEFUL fake of `useLabourState` — real enough to reproduce the
      * actual leak, not just assert a call happened. The real hook re-fetches
-     * `data` (dashboard AND every person's balance) keyed on `timeWindow`;
-     * this mirrors that coupling so रमेश's hub row genuinely reads a
-     * different ₹ figure per window, exactly like a real narrowed fetch
-     * would. `paid`/`advance` are held fixed so both windows resolve to the
-     * SAME "द्यायचे" wording — narrowing changes the AMOUNT only, matching
-     * what a real narrower period does; it never flips the category.
+     * `data` keyed on `timeWindow`; this mirrors that coupling so रमेश's hub
+     * row genuinely reads a different ₹ figure per window. `paid`/`advance`
+     * are held fixed so both windows resolve to the SAME "द्यायचे" wording —
+     * narrowing changes the AMOUNT only; it never flips the category.
+     *
+     * TASK 13 / R15 — this fixture is now a DELIBERATE COUNTERFACTUAL, and
+     * saying so is the point. It used to claim it behaved "exactly like a real
+     * narrowed fetch would"; that is no longer true. A person's balance is
+     * all-time server-side as of R15, precisely because presenting it as a
+     * windowed figure was the same defect the money card had, one level down.
+     * So no real fetch can produce the per-window rows below any more.
+     *
+     * The test is kept, and kept in this shape, because what it pins is the
+     * RESET MECHANISM (Task 12) — that leaving आढावा puts the window back —
+     * and a fixture that varies with the window is the only way to observe
+     * that mechanism firing. R15 removed the one payload that could have
+     * exploited a missing reset; it did not remove the reset's job, and the
+     * next windowed figure added to a shared screen would need it again.
      */
     const dataForWindow = (window: LabourWindow): LabourData => ({
         ...LABOUR_MOCK,

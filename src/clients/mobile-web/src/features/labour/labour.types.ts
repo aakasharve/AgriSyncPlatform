@@ -48,12 +48,22 @@ export type PresenceStatus = 'present' | 'half' | 'absent';
 export type LabourRole = 'mukadam' | 'submukadam' | 'worker';
 export type AvatarTone = 'or' | 'em' | 'bl' | 'vi' | 'rs' | 'am';
 
+/**
+ * A person's settlement POSITION — R15 (Task 13, spec:
+ * 2026-08-28-labour-v2-release-1). All three members are ALL-TIME and never
+ * follow the आढावा time window, because `netBalance` subtracts them to state
+ * this worker's बाकी/देय and a balance is true as of now, not "of this
+ * window". Presented windowed, a man still owed ₹8,000 read as owed nothing
+ * under आज — the same defect the farm-wide money card carried, one level
+ * down. The server sends them all-time (`LabourPersonDto`); nothing here
+ * re-scopes them.
+ */
 export interface LabourBalance {
-    /** काम झालं — recorded/agreed wage value of completed work. `null` = unknown (no job-card evidence yet). */
+    /** काम झालं — recorded/agreed wage value of completed work, all-time. `null` = unknown (no job-card evidence yet). */
     recorded: number | null;
-    /** दिलं — actually paid out so far (finance-consistent). */
+    /** दिलं — actually paid out so far, all-time (finance-consistent). */
     paid: number;
-    /** उचल — advance money given out. */
+    /** उचल — advance money given out. Always 0 from the server (no advance system exists). */
     advance: number;
 }
 
@@ -159,10 +169,20 @@ export interface DashboardData {
     pending: number;
     plots: PlotBar[];
     /**
-     * Option-3 wage-book split — recorded = paid + advance + owed
-     * (server-derived, never re-computed here). Task 1 (P4) — `recorded` and
-     * `owed` are `null` under the exact same zero-job-card-evidence condition
-     * as `LabourBalance.recorded` above.
+     * THE MONEY CARD — Option-3 wage-book split, `recorded = paid + advance +
+     * owed` (server-derived, never re-computed here). Task 1 (P4) —
+     * `recorded` and `owed` are `null` under the exact same
+     * zero-job-card-evidence condition as `LabourBalance.recorded` above, and
+     * they are null together.
+     *
+     * R15 (Task 13) — ALL FOUR are ALL-TIME and none follows the time window,
+     * unlike `manDays`/`wages`/`logs` above. `WeeklyDashboard` draws them as
+     * ONE stacked bar under a header of `recorded`, so they are the four terms
+     * of one identity: split across two time bases (Task 9 windowed
+     * `recorded`/`paid` while R13 made `owed` all-time) the segments stopped
+     * being parts of the header, and under आज the bar drew ₹100 + ₹13,500
+     * inside ₹1,000. `wages` above is the windowed "money that moved in this
+     * period" figure, and deliberately the only one.
      */
     money: { recorded: number | null; paid: number; advance: number; owed: number | null };
 }

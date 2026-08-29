@@ -123,4 +123,61 @@ describe('PersonDetail — screen honesty (Decision 4b)', () => {
             expect(screen.getByText('द्यायचे')).toBeInTheDocument();
         });
     });
+
+    /*
+     * TASK 13 (spec: 2026-08-28-labour-v2-release-1) — the balance
+     * explanation used to end `− उचल ₹0 · आपोआप वजा`: "minus advance ₹0,
+     * automatically deducted".
+     *
+     * THERE IS NO ADVANCE SYSTEM. `GetLabourDataHandler` hardcodes
+     * `advance = 0m` for every worker with no write path anywhere that could
+     * ever change it (Stage 4 / LabourAdvance is not built), so the clause
+     * asserted a mechanism the app does not have. `MukadamDetail` had the
+     * same claim removed in Task 7b; this was the last one left.
+     *
+     * IT IS ALSO LEGALLY SENSITIVE, which is why deletion (not rewording) is
+     * the fix: `docs/DECISIONS-BEFORE-FIRST-FARMERS-2026-08-23.md:278-280`
+     * flags advance-worked-off-against-days as a bonded-labour pattern under
+     * the Bonded Labour System (Abolition) Act, 1976. Promising automatic
+     * deduction of advances from earnings is exactly the shape that decision
+     * says the app must not assert. Removing it is subtractive and reduces
+     * exposure; no replacement copy was invented.
+     */
+    describe('Task 13 — the app never claims advances are deducted, for a feature it does not have', () => {
+        const everyPersonId = Object.keys(LABOUR_MOCK.people);
+
+        it.each(everyPersonId)('renders no "आपोआप वजा" claim for %s', (personId) => {
+            render(<PersonDetail {...baseProps()} personId={personId} />);
+            expect(screen.queryByText(/आपोआप वजा/)).toBeNull();
+        });
+
+        it.each(everyPersonId)('renders no "उचल ₹0" for %s — a confident zero for an unobservable thing', (personId) => {
+            render(<PersonDetail {...baseProps()} personId={personId} />);
+            expect(screen.queryByText(/उचल ₹0/)).toBeNull();
+        });
+
+        /*
+         * The reflow uses ONLY words already in that template — काम झालं,
+         * −, दिलं and the two figures. Pinned as an exact string so a later
+         * edit cannot quietly reintroduce a third term.
+         */
+        it('keeps the surviving explanation to काम झालं − दिलं (सुनीता: ₹2,000 − ₹500)', () => {
+            render(<PersonDetail {...baseProps()} personId="sunita" />);
+            expect(screen.getByText('काम झालं ₹2,000 − दिलं ₹500')).toBeInTheDocument();
+        });
+
+        /*
+         * रमेश carries a mock उचल of ₹2,000, so his बाकी tile subtracts a
+         * third term the two-term line above cannot account for. The line
+         * explains the balance; when it cannot, it is omitted outright —
+         * the same "leave the gap" treatment `recorded === null` already
+         * gets, and again no new copy. (Unreachable from the real server,
+         * which sends advance 0m for everyone; reachable from this mock.)
+         */
+        it('omits the explanation entirely rather than under-explaining a balance that has an उचल term (रमेश)', () => {
+            expect(LABOUR_MOCK.people.ramesh.balance.advance).toBeGreaterThan(0);
+            render(<PersonDetail {...baseProps()} personId="ramesh" />);
+            expect(screen.queryByText(/काम झालं ₹/)).toBeNull();
+        });
+    });
 });

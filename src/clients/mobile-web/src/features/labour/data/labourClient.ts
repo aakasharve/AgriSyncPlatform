@@ -64,6 +64,9 @@ export interface LabourPersonDto {
     // Task 1 (spec: 2026-08-28-labour-v2-release-1, P4) — `null` when the
     // server has zero job-card evidence for this worker. Never coerced to 0
     // here; passed straight through by `mapPerson` below.
+    //
+    // R15 (Task 13) — `recordedWages`/`paid` are ALL-TIME, never the window's
+    // slice: they are the two terms this worker's बाकी/देय is struck from.
     recordedWages: number | null;
     paid: number;
     advance: number;
@@ -85,6 +88,10 @@ export interface LabourPlotBarDto {
 export interface LabourMoneyDto {
     // Task 1 (P4) — `recorded`/`owed` are `null` when zero job-card evidence
     // exists farm-wide. Never coerced to 0.
+    //
+    // R15 (Task 13) — all four members are ALL-TIME and satisfy
+    // `recorded = paid + advance + owed`. The screen draws them as one stacked
+    // bar, so they must share a time basis; see `labour.types.ts` DashboardData.
     recorded: number | null;
     paid: number;
     advance: number;
@@ -265,9 +272,12 @@ const mapReview = (r: LabourReviewItemDto): ReviewItem => ({
  * an omitted value as all-time too. The difference is not cosmetic: silence is
  * also what a client that predates the parameter sends, so an omitted window
  * says "I do not know this question exists" where a stated one says which
- * question was asked. `ManDays`/`Wages`/`Recorded`/`Logs` move with it;
- * `Pending` deliberately does NOT (`GetLabourDataHandler` §8) — it is the
- * owner's approval backlog, not a statistic about a period.
+ * question was asked. As of R15 (Task 13) exactly `ManDays`/`Wages`/`Logs`
+ * move with it. `Pending` deliberately does NOT (`GetLabourDataHandler` §8) —
+ * it is the owner's approval backlog, not a statistic about a period — and
+ * neither does anything on the money card (`money.*`, `owed`) or any
+ * per-person `recordedWages`/`paid`: those are settlement POSITIONS as of now,
+ * so they are all-time whatever window this call asks for.
  *
  * A 401 is handled BEFORE this function's caller ever sees it: the shared
  * client refreshes the session once and replays this exact request (see the

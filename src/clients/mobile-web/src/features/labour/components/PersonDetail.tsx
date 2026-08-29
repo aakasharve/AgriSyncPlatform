@@ -124,9 +124,32 @@ const PersonDetail: React.FC<Props> = ({ data, personId, onAdvance, onSettle, on
                 // to caveat) when that figure is unknown. `undefined` lets
                 // `BalanceCard` skip the line entirely — the same "leave the
                 // gap" treatment as the balance tile it explains.
-                why={w.balance.recorded === null
+                //
+                // TASK 13 — the line used to end `− उचल ₹0 · आपोआप वजा`
+                // ("minus advance ₹0, automatically deducted"). THERE IS NO
+                // ADVANCE SYSTEM: `GetLabourDataHandler` hardcodes
+                // `advance = 0m` for every worker and no write path anywhere
+                // can change it (Stage 4 / LabourAdvance is not built), so the
+                // clause promised a mechanism the app does not have.
+                // `MukadamDetail` lost the same claim in Task 7b; this was the
+                // last one. It is also legally sensitive, which is why the fix
+                // is deletion and not rewording:
+                // `docs/DECISIONS-BEFORE-FIRST-FARMERS-2026-08-23.md:278-280`
+                // flags advance-worked-off-against-days as a bonded-labour
+                // pattern under the Bonded Labour System (Abolition) Act,
+                // 1976 — removing the promise is subtractive and reduces
+                // exposure. The reflow reuses only words already in this
+                // template; nothing new was written.
+                //
+                // The `advance === 0` guard is the same "leave the gap" rule
+                // applied to the reflow itself: a two-term line cannot explain
+                // a बाकी that subtracts a third term, so when an उचल exists the
+                // line is omitted rather than under-explaining the number above
+                // it. Unreachable from the real server (advance is always 0m);
+                // reachable from `labourMock`, whose people carry demo उचल.
+                why={w.balance.recorded === null || w.balance.advance !== 0
                     ? undefined
-                    : `काम झालं ${inr(w.balance.recorded)} − दिलं ${inr(w.balance.paid)} − उचल ${inr(w.balance.advance)} · आपोआप वजा`}
+                    : `काम झालं ${inr(w.balance.recorded)} − दिलं ${inr(w.balance.paid)}`}
             />
 
             {SHOW_TRUST_GRADUATION && (

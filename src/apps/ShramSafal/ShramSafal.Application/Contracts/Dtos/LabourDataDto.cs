@@ -34,6 +34,9 @@ public sealed record LabourPersonDto(
     // invariant — see GetLabourDataHandler), but Dashboard.Money.Paid (the
     // farm-wide दिलं, Decision 3a 2026-07-19) additionally includes
     // unattributable labour_misc spend that no single person's Paid carries.
+    // NB the money-consistency invariant is now carried by Dashboard.Wages —
+    // the windowed दिलं — since R15 made Money.Paid all-time; both read the
+    // identical rows and correction resolution, only the date range differs.
     // Advance (उचल) = 0 until Stage 4 (LabourAdvance). Owed/बाकी =
     // RecordedWages − Paid − Advance is DERIVED by the client/handler, never
     // stored here (no stale copy).
@@ -45,6 +48,15 @@ public sealed record LabourPersonDto(
     // made a farmer who was genuinely paid look "overpaid" against nothing.
     // Never derive Owed/बाकी from a null RecordedWages — the balance must be
     // absent too, not zero, not negative.
+    //
+    // R15 (Task 13) — RecordedWages and Paid are ALL-TIME, never windowed.
+    // They are the two terms the client subtracts to state this worker's
+    // बाकी/देय beside his name (`labour.types.ts` netBalance), so they are a
+    // settlement POSITION for the same reason LabourMoneyDto is one, and the
+    // BalanceCard that shows all three together would otherwise mix bases.
+    // Task 9 windowed them; that defect was unreachable only because leaving
+    // आढावा resets the window, and persisting the window would have armed it —
+    // a man still owed ₹8,000 reading as owed nothing under आज.
     decimal? RecordedWages,
     decimal Paid,
     decimal Advance,
@@ -57,17 +69,32 @@ public sealed record LabourPersonDto(
     bool? CleanRecord);
 
 /// <summary>
-/// Task 9 (spec: 2026-08-28-labour-v2-release-1) — THREE of these figures
-/// move with <c>GetLabourDataQuery.Window</c> (<c>ManDays</c>, <c>Wages</c>,
-/// <c>Logs</c>, and <c>Money.Recorded</c>); <c>Pending</c> and <c>Owed</c>/
-/// <c>Money.Owed</c> deliberately do NOT (R13 ruling, Task 10, corrects Task
-/// 9's original mistake of windowing Owed alongside the real flows).
-/// <c>Pending</c> is an approval inbox, not a statistic — a time filter must
-/// never hide work still waiting on the owner. <c>Owed</c> is an outstanding
-/// BALANCE ("what do I currently owe") — a time filter must never make a
-/// farmer who still owes money see a smaller figure, or ₹0, just because he
-/// is looking at आज. Every mention of "this week" below therefore reads as
-/// "the window in force", whose default is आजपर्यंत (all time).
+/// Task 9 (spec: 2026-08-28-labour-v2-release-1), as corrected by R13 (Task
+/// 10) and R15 (Task 13) — EXACTLY THREE of these figures move with
+/// <c>GetLabourDataQuery.Window</c>: <c>ManDays</c>, <c>Wages</c> and
+/// <c>Logs</c>. Nothing else on this record does.
+///
+/// <para>(The list and the count above were out of step for two releases:
+/// this comment said "THREE" and then named four, having been written when
+/// <c>Money.Recorded</c> was windowed and not corrected when R13 removed
+/// <c>Owed</c>. Both defects this task fixes were of that family, so the rule
+/// is: change the list, re-read the sentence.)</para>
+///
+/// <para><c>Pending</c> is an approval INBOX, not a statistic — a time filter
+/// must never hide work still waiting on the owner.</para>
+///
+/// <para>Every member of <see cref="LabourMoneyDto"/> — <c>Recorded</c>,
+/// <c>Paid</c>, <c>Advance</c>, <c>Owed</c> — and <c>Owed</c> here is a
+/// POSITION as of now (R15). They are the four terms of ONE identity the
+/// client draws as a single stacked bar (काम झालं = दिलं + उचल + बाकी), so
+/// they must share one time basis or the bar's segments stop being parts of
+/// its header. A time filter must also never make a farmer who still owes
+/// money see a smaller figure, or ₹0, just because he is looking at आज
+/// (R13).</para>
+///
+/// <para>Every mention of "this week" below therefore reads as "the window in
+/// force", whose default is आजपर्यंत (all time), and applies ONLY to the three
+/// figures named above.</para>
 /// </summary>
 public sealed record LabourDashboardDto(
     // The window's START date as a bare ISO date, or empty when the window is
@@ -92,9 +119,10 @@ public sealed record LabourDashboardDto(
     // Task 1 — `null` when zero job-card evidence exists farm-wide, ALL TIME
     // (see LabourMoneyDto.Owed below); never a fabricated ₹0 or a balance
     // derived from one. R13 (Task 10, corrects Task 9) — this is an
-    // outstanding BALANCE, not a flow: unlike ManDays/Wages/Recorded/Logs, it
-    // does NOT move with the window. Every term of its subtraction is
-    // ALL-TIME, regardless of which window the caller requested.
+    // outstanding BALANCE, not a flow: unlike ManDays/Wages/Logs, it does NOT
+    // move with the window. Every term of its subtraction is ALL-TIME,
+    // regardless of which window the caller requested. Always identical to
+    // Money.Owed below — one computation, reported twice.
     decimal? Owed,
     // Task 9 — the number of daily logs INSIDE the window. A genuine `0` when
     // there are none: this is a count of records, not a quantity estimated from
@@ -112,18 +140,32 @@ public sealed record LabourPlotBarDto(
     int Pct);
 
 /// <summary>
-/// Task 1 (P4) — <c>Recorded</c> is `null` when the farm has ZERO
-/// Completed/VerifiedForPayout/PaidOut job cards INSIDE THE WINDOW (absence
-/// of evidence, not evidence of zero) — it is a FLOW and legitimately narrows
-/// with <c>GetLabourDataQuery.Window</c>. <c>Owed</c> is DERIVED as
-/// <c>Recorded − Paid − Advance</c> in principle, but R13 (Task 10, corrects
-/// Task 9) requires it to be a BALANCE — "what do I currently owe" — so it is
-/// actually computed from the ALL-TIME versions of those three terms, NOT
-/// from this record's own (possibly windowed) <c>Recorded</c>/<c>Paid</c>.
-/// It is `null` exactly when zero job-card evidence exists ALL TIME, never a
-/// fabricated ₹0 or a balance computed against an unknown — but that
-/// nullability is independent of whether <c>Recorded</c> above happens to be
-/// null for the requested window.
+/// THE MONEY CARD — R15 (ruling, Task 13, spec: 2026-08-28-labour-v2-release-1).
+/// All four members are ALL-TIME, and the record satisfies
+/// <c>Recorded = Paid + Advance + Owed</c> BY CONSTRUCTION.
+///
+/// <para>That identity is not decoration: the client draws this record as ONE
+/// stacked bar under a header of <c>Recorded</c> — काम झालं = दिलं + उचल +
+/// बाकी. Task 9 windowed <c>Recorded</c>/<c>Paid</c> as "flows" while R13
+/// (correctly) made <c>Owed</c> an all-time balance, which left the four terms
+/// of one identity on two different time bases: the bar's segments were no
+/// longer parts of its header, and on the release fixture under आज it drew
+/// ₹100 + ₹13,500 inside a header of ₹1,000. Every figure here exists to
+/// explain ONE settlement position — what the farmer has recorded, paid,
+/// advanced and still owes TO DATE — so they share one basis. The windowed
+/// "money that moved in this period" figure is
+/// <see cref="LabourDashboardDto.Wages"/>, and it is deliberately the only
+/// one.</para>
+///
+/// <para>Task 1 (P4) — <c>Recorded</c> and <c>Owed</c> are both `null` exactly
+/// when the farm has ZERO Completed/VerifiedForPayout/PaidOut job cards ALL
+/// TIME (absence of evidence, not evidence of zero); never a fabricated ₹0,
+/// and never a balance computed against an unknown. They are null together,
+/// never one without the other.</para>
+///
+/// <para>If a windowed काम झालं is ever needed again, it must be a NEW field
+/// with its own label — never these, and never one of these without the other
+/// three.</para>
 /// </summary>
 public sealed record LabourMoneyDto(
     decimal? Recorded,

@@ -254,10 +254,13 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
         it('omits the बाकी देणं/जास्त दिलं stat tile entirely for the real EMPTY_LABOUR_DATA fallback, never a fabricated ₹0/overpayment', () => {
             render(<WeeklyDashboard {...baseProps()} data={EMPTY_LABOUR_DATA} />);
             // The stat tile itself (label text) is gone outright — not present
-            // with a clamped ₹0. NB: `paid` stays non-nullable `0` (a real,
-            // known "nothing paid yet" fact, unaffected by this task) and
-            // legitimately renders its own "₹0" in the money bar's दिलं
-            // segment, so this test does not assert on "₹0" globally.
+            // with a clamped ₹0. (This note used to add that `paid`'s own real
+            // "₹0" still rendered in the money bar's दिलं segment, so the test
+            // could not assert on "₹0" globally. As of Task 13 / R15 that bar
+            // is not drawn at all when काम झालं is unknown — a bar cannot show
+            // the parts of an unknown whole — so the segment no longer exists
+            // here. The assertions below are unchanged and still correct; only
+            // the reason for their narrowness has.)
             expect(screen.queryByText('बाकी देणं')).toBeNull();
             expect(screen.queryByText('जास्त दिलं')).toBeNull();
         });

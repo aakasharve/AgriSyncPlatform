@@ -47,15 +47,31 @@ namespace ShramSafal.Application.UseCases.Labour.GetLabourData;
 /// <c>Pending</c> and the recorded/owed pair were lifetime figures rendered
 /// under a "या आठवड्यात" ("this week") heading. Four of the five numbers were
 /// therefore false against their own label. <see cref="GetLabourDataQuery.Window"/>
-/// now selects one of <see cref="LabourTimeWindow"/>'s four ranges and THREE
-/// figures move with it: <c>ManDays</c>, <c>Wages</c>/<c>Money.Paid</c>
-/// (per-person as well as farm-wide), and <c>Money.Recorded</c>/per-person
-/// <c>RecordedWages</c>, and <c>Logs</c> — so the rows and the tiles above
-/// them cannot disagree. Omitting the window means आजपर्यंत (all time), the
-/// founder-chosen default, which is what lets a client that predates the
-/// parameter keep working. Note the one deliberate consequence: <c>ManDays</c>
-/// under the DEFAULT window is now all-time rather than this-week — it
-/// stopped being the odd one out.
+/// now selects one of <see cref="LabourTimeWindow"/>'s four ranges. As of R15
+/// (Task 13) EXACTLY THREE figures move with it — <c>ManDays</c>,
+/// <c>Wages</c> and <c>Logs</c> — and nothing else does. Omitting the window
+/// means आजपर्यंत (all time), the founder-chosen default, which is what lets a
+/// client that predates the parameter keep working. Note the one deliberate
+/// consequence: <c>ManDays</c> under the DEFAULT window is now all-time rather
+/// than this-week — it stopped being the odd one out.
+/// </para>
+/// <para>
+/// <b>R15 (ruling, Task 13, spec: 2026-08-28-labour-v2-release-1) — THE MONEY
+/// CARD IS A POSITION CARD, ALL-TIME THROUGHOUT.</b> R13 below was right that
+/// <c>Owed</c> is a balance, but it was applied at the wrong GRANULARITY:
+/// <c>Owed</c> alone left the window while <c>Recorded</c> and <c>Paid</c> —
+/// the other two terms of the SAME card — stayed windowed. That card draws ONE
+/// stacked bar whose entire grammar is the identity <c>काम झालं = दिलं + उचल +
+/// बाकी</c>, so the mix drew incommensurable quantities as parts of one whole:
+/// on the release fixture under आज the header read ₹1,000 above a bar of ₹100
+/// + ₹13,500. Every member of <see cref="LabourMoneyDto"/> is therefore now
+/// computed from the ALL-TIME §2b/§3b dictionaries and the identity holds by
+/// construction. The same reasoning applies ONE LEVEL DOWN: per-person
+/// <c>RecordedWages</c>/<c>Paid</c> are the two terms a worker's बाकी/देय is
+/// struck from, so they are a settlement position too and are also all-time.
+/// The <c>Wages</c> tile (दिलं for the period) is what remains windowed, and
+/// it is still the figure that must reconcile with the finance page for the
+/// same window.
 /// </para>
 /// <para>
 /// <b><c>Pending</c> is NEVER window-scoped</b> (founder ruling, Task 9). It is
@@ -76,10 +92,12 @@ namespace ShramSafal.Application.UseCases.Labour.GetLabourData;
 /// which is the app lying to him about money he owes. <c>Owed</c> is
 /// therefore always <c>RecordedWages − Paid − Advance</c> computed from
 /// ALL-TIME inputs (<c>recordedWagesByWorkerAllTime</c> /
-/// <c>paidByWorkerAllTime</c> in §2/§3b below), never the windowed figures
-/// that drive the <c>Recorded</c>/<c>Wages</c> tiles — those two ARE flows
-/// and may legitimately narrow; Owed/Pending are the two balances on this
-/// screen and neither may.
+/// <c>paidByWorkerAllTime</c> in §2b/§3b below). R15 (Task 13) — this
+/// paragraph used to end "never the windowed figures that drive the
+/// <c>Recorded</c>/<c>Wages</c> tiles, those two ARE flows". Half of that was
+/// the defect: <c>Recorded</c> is not a flow, it is the HEADER this balance is
+/// struck against, and the two had to share a basis. <c>Wages</c> is the flow,
+/// and it is now the only windowed money figure on the screen.
 /// </para>
 /// <para>
 /// <b>The window is IST-anchored</b> via <see cref="FarmLocalDay"/>. The old
@@ -102,9 +120,11 @@ namespace ShramSafal.Application.UseCases.Labour.GetLabourData;
 /// have recorded) — that is a correct, honest number, not a bug; the client
 /// is responsible for presenting a negative Owed honestly rather than
 /// mislabeling it as an "उचल" advance (see labourMock.ts netBalance). R13
-/// (Task 10) — the <c>RecordedWages</c>/<c>Paid</c> this subtraction actually
-/// uses are the ALL-TIME dictionaries, not the (possibly windowed) values a
-/// person's row or the <c>Recorded</c>/<c>Wages</c> tiles display; see §2/§3b.
+/// (Task 10) + R15 (Task 13) — the <c>RecordedWages</c>/<c>Paid</c> this
+/// subtraction uses are the ALL-TIME dictionaries (§2b/§3b), and so are the
+/// values a person's row and the money card display, so the subtraction and
+/// the figures shown beside it are now on one basis. The only windowed money
+/// figure left on the screen is the <c>Wages</c> tile.
 /// </para>
 /// <para>
 /// <see cref="LabourAssignment.TotalCost"/> / <see cref="LabourAssignment.WagePerPerson"/>
@@ -166,54 +186,38 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             .ToList();
 
         // ── 2. JobCards for the farm → per-worker RecordedWages (काम झालं). ──
-        // Task 9 — windowed on JobCard.PlannedDate: the day the work was FOR.
-        // It is the only farm-local calendar date the aggregate carries;
-        // CompletedAtUtc/CreatedAtUtc are UTC instants recording when a STATUS
-        // changed, and keying a farmer-facing "this week" off them would both
-        // re-introduce the IST skew this task removes and credit last week's
-        // work to whenever someone got round to marking it done.
+        // Read farm-scoped and UNFILTERED. Task 9 additionally grouped these
+        // by `window.Contains(jc.PlannedDate)` to drive a windowed काम झालं;
+        // R15 (Task 13) deleted that grouping outright rather than leaving it
+        // computed-and-unread. काम झालं is one term of a settlement position —
+        // both farm-wide (`Money.Recorded`) and per person — and every term of
+        // a position is all-time, so §2b below is now the ONLY grouping this
+        // handler makes of job cards. Nothing on the screen asks "how much
+        // work was recorded in this window" any more; the windowed money
+        // question that remains is `Wages` (दिलं for the period), which comes
+        // off CostEntry rows in §3, not off job cards.
         //
-        // Filtered HERE rather than in SQL — unlike the two reads below —
-        // because GetJobCardsForFarmAsync is shared with GetJobCardsForFarmHandler;
-        // this feature does not get to re-shape another use case's port. The
-        // read is farm-scoped and already returned every row before this task,
-        // so the predicate costs nothing extra.
+        // Filtered/grouped HERE rather than in SQL — unlike the two reads
+        // below — because GetJobCardsForFarmAsync is shared with
+        // GetJobCardsForFarmHandler; this feature does not get to re-shape
+        // another use case's port.
         var jobCards = await repository.GetJobCardsForFarmAsync(query.FarmId, statusFilter: null, ct);
-        var recordedWagesByWorker = jobCards
-            .Where(jc => window.Contains(jc.PlannedDate))
-            .Where(jc => jc.AssignedWorkerUserId is not null
-                && jc.Status is JobCardStatus.Completed or JobCardStatus.VerifiedForPayout or JobCardStatus.PaidOut)
-            .GroupBy(jc => jc.AssignedWorkerUserId!.Value.Value)
-            .ToDictionary(
-                g => g.Key,
-                g => decimal.Round(g.Sum(jc => jc.EstimatedTotal.Amount), 2, MidpointRounding.AwayFromZero));
 
-        // Task 1 (spec: 2026-08-28-labour-v2-release-1, P4) — whether ANY
-        // job-card evidence exists on this farm at all. Production holds ZERO
-        // job cards, so `recordedWagesByWorker` is always empty there — that is
-        // an ABSENCE of evidence, not evidence of zero, and must not be
-        // conflated with "nobody earned anything". Gates both the per-person
-        // and the farm-wide RecordedWages/Owed figures below: null, never `0m`,
-        // whenever this is false.
+        // ── 2b. Per-worker काम झालं, ALL TIME — R13 (ruling, Task 10) for the
+        //       balance, widened to the whole card by R15 (ruling, Task 13).
+        //       `Owed` is a BALANCE ("what do I currently owe") and
+        //       `Recorded`/per-person `RecordedWages` are the header that
+        //       balance is struck against, so none of them may be derived from
+        //       a windowed slice — see the class doc above.
         //
-        // Task 9 — this is now "any evidence INSIDE THE WINDOW", and R6's
-        // polarity is unchanged by that narrowing: a window containing no job
-        // card is a window we know nothing about काम झालं in, so both it and
-        // the बाकी derived from it stay unknown. Note the shape this differs
-        // from — ManDays below, where a logged day with no labour on it IS a
-        // real zero — because a JobCard has no "the day was recorded and it
-        // held no job card" counterpart: nothing else in the model asserts a
-        // day had no work worth recording.
-        var hasJobCardEvidence = recordedWagesByWorker.Count > 0;
-
-        // ── 2b. The SAME grouping, unwindowed — R13 (ruling, Task 10, spec:
-        //       2026-08-28-labour-v2-release-1). `Owed` is a BALANCE ("what do
-        //       I currently owe"), not a flow, so it may never be derived from
-        //       a windowed `RecordedWages`/`Paid` pair the way Task 9 did —
-        //       see the class doc above. `jobCards` is already the farm's
-        //       full, unfiltered read (§2's own comment), so this costs no
-        //       extra query: it is the identical grouping minus the window
-        //       predicate.
+        //       PlannedDate (the day the work was FOR) is still the only
+        //       farm-local calendar date the aggregate carries; it no longer
+        //       has anything to be compared against here, but keep it in mind
+        //       before ever re-introducing a windowed job-card figure:
+        //       CompletedAtUtc/CreatedAtUtc are UTC instants recording when a
+        //       STATUS changed, and keying a farmer-facing period off them
+        //       would both re-introduce IST skew and credit last week's work
+        //       to whenever someone got round to marking it done.
         var recordedWagesByWorkerAllTime = jobCards
             .Where(jc => jc.AssignedWorkerUserId is not null
                 && jc.Status is JobCardStatus.Completed or JobCardStatus.VerifiedForPayout or JobCardStatus.PaidOut)
@@ -222,10 +226,19 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                 g => g.Key,
                 g => decimal.Round(g.Sum(jc => jc.EstimatedTotal.Amount), 2, MidpointRounding.AwayFromZero));
 
-        // Same R6/Task 1 polarity as `hasJobCardEvidence` above, but asking it
-        // of the WHOLE farm history rather than the window: zero job-card
-        // evidence ANYWHERE means the all-time balance is unknown, never a
-        // fabricated ₹0 or one derived from a windowed slice.
+        // Task 1 (spec: 2026-08-28-labour-v2-release-1, P4) / R6 polarity —
+        // whether ANY job-card evidence exists on this farm at all. Production
+        // holds ZERO job cards, so this dictionary is always empty there; that
+        // is an ABSENCE of evidence, not evidence of zero, and must not be
+        // conflated with "nobody earned anything". Gates the per-person and
+        // farm-wide काम झालं/बाकी figures below: null, never a fabricated ₹0,
+        // whenever it is false. R15 (Task 13) — asked of the WHOLE farm
+        // history, which is now the only basis any of those figures uses.
+        //
+        // Note the shape this differs from — ManDays below, where a logged day
+        // with no labour on it IS a real zero — because a JobCard has no "the
+        // day was recorded and it held no job card" counterpart: nothing else
+        // in the model asserts a day had no work worth recording.
         var hasJobCardEvidenceAllTime = recordedWagesByWorkerAllTime.Count > 0;
 
         // ── 3. Labour CostEntries — labour_payout + labour_misc (finance-consistent Paid — दिलं). ──
@@ -269,13 +282,16 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         var (paidByWorker, unattributedPaid) = AggregatePayouts(payoutRows, latestCorrections);
 
         // ── 3b. The SAME payout aggregation, unwindowed — R13 (ruling, Task
-        //       10). `Owed`'s other input (`Paid`) must be all-time for the
-        //       identical reason §2b's `RecordedWages` is: a balance answers
-        //       "what do I currently owe", and mixing a windowed numerator
-        //       with an all-time denominator (or the reverse) manufactures a
-        //       figure no evidence supports. `payoutRows`/`paidByWorker` above
-        //       stay windowed and untouched — they still drive `Wages`/
-        //       `Money.Paid`/per-person `Paid`, which ARE flows.
+        //       10), widened by R15 (ruling, Task 13). `Owed`'s other input
+        //       (`Paid`) must be all-time for the identical reason §2b's
+        //       `RecordedWages` is: a balance answers "what do I currently
+        //       owe", and mixing a windowed numerator with an all-time
+        //       denominator (or the reverse) manufactures a figure no evidence
+        //       supports. Under R15 this pass also feeds the money card's own
+        //       दिलं (`Money.Paid`) and every per-person `Paid`, because those
+        //       sit beside a बाकी struck from them and must share its basis.
+        //       `payoutRows`/`paidByWorker` above stay windowed and drive the
+        //       ONE money figure that is still a flow: the `Wages` tile.
         //
         //       When the requested window IS आजपर्यंत already, `window.FromDate`/
         //       `ToDateInclusive` are both null and re-querying would return
@@ -338,10 +354,20 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             // ₹0. `TryGetValue` in place of `GetValueOrDefault`: the latter
             // silently substitutes decimal's default (0m) for "not found",
             // which is exactly the conflation this task removes.
-            var recordedWages = recordedWagesByWorker.TryGetValue(workerId, out var recordedWagesValue)
+            //
+            // R15 (Task 13) — read from the ALL-TIME dictionaries. These two
+            // numbers are not this window's flows; they are the two terms the
+            // client subtracts to state this worker's बाकी/देय next to his name
+            // (`labour.types.ts` netBalance), and a balance is true as of now.
+            // Windowed, they made the same defect the money card had, one level
+            // down: a man still owed ₹8,000 read as owed nothing under आज. It
+            // was unreachable only because leaving आढावा resets the window
+            // (Task 12) — persisting the window would have armed it, so it is
+            // fixed at the source rather than left as a landmine.
+            var recordedWages = recordedWagesByWorkerAllTime.TryGetValue(workerId, out var recordedWagesValue)
                 ? recordedWagesValue
                 : (decimal?)null;
-            var paid = paidByWorker.GetValueOrDefault(workerId);
+            var paid = paidByWorkerAllTime.GetValueOrDefault(workerId);
             const decimal advance = 0m; // Stage 4 (LabourAdvance) — not yet built.
 
             var displayName = displayNameByUserId.GetValueOrDefault(workerId, $"Worker {personId[..8]}");
@@ -377,58 +403,62 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
 
         // ── 6. Dashboard rollups — SAME population as the People rows below,
         //       PLUS farm-wide unattributed labour spend (Decision 3a). ──────
-        // RecordedWages/Advance are summed over `people` (the Active-roster
-        // list assembled in step 5), NOT over the raw `recordedWagesByWorker`
-        // dictionary. That dictionary can hold a worker who was paid and then
-        // suspended/exited — summing it directly would let totalPaid include
-        // money for someone totalRecorded no longer counts, driving Owed
-        // negative even though every row shown on screen reconciles. This
-        // dashboard reflects the ACTIVE roster for THAT reason; a
-        // paid-then-departed worker's historical pay is out of Stage-1 scope
-        // (a former-workers view is a later stage).
+        // Every rollup here is summed over the ACTIVE ROSTER — `people` (the
+        // list assembled in step 5) or the `activeWorkerIds` that produced it —
+        // never over a raw by-worker dictionary. Those dictionaries can hold a
+        // worker who was paid and then suspended/exited; summing one directly
+        // would let a paid total include money for someone the recorded total
+        // no longer counts, driving Owed negative even though every row shown
+        // on screen reconciles. A paid-then-departed worker's historical pay is
+        // out of Stage-1 scope (a former-workers view is a later stage).
         //
-        // Dashboard Paid (दिलं) is DIFFERENT: `people.Sum(p => p.Paid)` PLUS
-        // `unattributedPaid` — labour_misc entries (and any orphaned
+        // The paid totals are DIFFERENT in one respect: each adds its own
+        // `unattributed…` slice — labour_misc entries (and any orphaned
         // labour_payout with no JobCard link) that were never attributable to
         // an active person still ARE real money the farmer paid out, and
         // Decision 3a requires दिलं to equal ALL labour money paid, matching
-        // the finance page. Per-person Paid is untouched (still attribution-
-        // only); only this farm-wide total absorbs the unattributed slice.
-        // Task 1 (P4) — `totalRecorded` is null when the farm carries zero
-        // job-card evidence INSIDE THE WINDOW (`hasJobCardEvidence` false),
-        // exactly mirroring the per-person rule above. Do NOT gate this on
-        // "every person's RecordedWages happens to be null" — an active
-        // roster with zero members would then vacuously read as "unknown"
-        // even when real evidence exists elsewhere (e.g. for a departed
-        // worker), which is a different and legitimate `0m` case handled
-        // below. (`totalOwed` below is a separate, ALL-TIME computation and
-        // does not read `totalRecorded` at all — see R13.)
+        // the finance page. Per-person Paid stays attribution-only; only these
+        // farm-wide totals absorb the unattributed slice.
         //
-        // `totalRecorded`/`totalPaid` below stay scoped to the REQUESTED
-        // window — they are what feeds the `Recorded`/`Wages` tiles, and
-        // those two are genuine FLOWS that may legitimately narrow to a
-        // period. `totalOwed` is NOT derived from them (see R13 below).
-        var totalRecorded = hasJobCardEvidence
-            ? decimal.Round(people.Sum(p => p.RecordedWages ?? 0m), 2, MidpointRounding.AwayFromZero)
-            : (decimal?)null;
-        var totalPaid = decimal.Round(people.Sum(p => p.Paid) + unattributedPaid, 2, MidpointRounding.AwayFromZero);
+        // R15 (Task 13) — `totalPaid` here is the WINDOWED figure and it now
+        // has exactly ONE consumer left: the `Wages` (मजुरी) tile. It is
+        // summed straight from the windowed §3 dictionary rather than from
+        // `people.Sum(p => p.Paid)`, because a person's `Paid` is all-time as
+        // of R15 and summing it would silently turn the one remaining windowed
+        // money figure all-time too. `activeWorkerIds` is the same population
+        // `people` was built from, so the roster rule above still holds.
+        var activeWorkerIds = labourMemberships.Select(m => m.UserId.Value).Distinct().ToList();
+        var totalPaid = decimal.Round(
+            activeWorkerIds.Sum(id => paidByWorker.GetValueOrDefault(id)) + unattributedPaid,
+            2, MidpointRounding.AwayFromZero);
         var totalAdvance = decimal.Round(people.Sum(p => p.Advance), 2, MidpointRounding.AwayFromZero);
 
-        // R13 (ruling, Task 10, spec: 2026-08-28-labour-v2-release-1) —
-        // `Owed` is a BALANCE ("what do I currently owe"), never a flow, so it
-        // is deliberately NOT `totalRecorded − totalPaid − totalAdvance`
-        // (Task 9's mistake — see the class doc's R13 paragraph). It is
-        // computed from the ALL-TIME §2b/§3b dictionaries instead, restricted
-        // to the SAME active roster `totalRecorded`/`totalPaid` use above —
-        // for the identical reason given there: a paid-then-departed worker's
-        // historical pay must not drag the balance negative either, all-time
-        // or windowed. `totalAdvance` needs no all-time counterpart: Advance
-        // is hard-coded 0m for everyone regardless of window (Stage 4 —
-        // LabourAdvance — is not built yet), so it already IS the all-time
-        // figure. `totalOwed` is `null` exactly when `hasJobCardEvidenceAllTime`
-        // is false — never derived from an all-time unknown, mirroring Task
-        // 1's rule one level up from where it used to apply.
-        var activeWorkerIds = labourMemberships.Select(m => m.UserId.Value).Distinct().ToList();
+        // THE MONEY CARD, in full — R13 (ruling, Task 10) for `Owed`, widened
+        // to all four of its figures by R15 (ruling, Task 13). Every one of
+        // them is a POSITION as of now, so all three inputs come from the
+        // ALL-TIME §2b/§3b dictionaries, restricted to the SAME active roster
+        // the windowed `totalPaid` above uses — a paid-then-departed worker's
+        // historical pay must not drag the balance negative, on any basis.
+        //
+        // Deriving all four here, from one basis, is what makes the card's own
+        // identity — काम झालं = दिलं + उचल + बाकी — true BY CONSTRUCTION rather
+        // than by coincidence. Task 9 computed `Recorded`/`Paid` from the
+        // window and `Owed` from all time, and the bar drawn from that mix put
+        // ₹100 + ₹13,500 inside a ₹1,000 header. If a future task ever needs a
+        // windowed काम झालं again, it must be a SEPARATE field with its own
+        // label — not these.
+        //
+        // `totalAdvance` needs no all-time counterpart: Advance is hard-coded
+        // 0m for everyone regardless of window (Stage 4 — LabourAdvance — is
+        // not built yet), so it already IS the all-time figure.
+        //
+        // `totalRecordedAllTime`/`totalOwed` are `null` exactly when
+        // `hasJobCardEvidenceAllTime` is false — never a fabricated ₹0, and
+        // never a balance derived from an unknown. Do NOT gate this on "every
+        // person's RecordedWages happens to be null": an active roster with
+        // zero members would then vacuously read as "unknown" even when real
+        // evidence exists elsewhere (e.g. for a departed worker), which is a
+        // different and legitimate `0m` case.
         var totalRecordedAllTime = hasJobCardEvidenceAllTime
             ? decimal.Round(
                 activeWorkerIds.Sum(id => recordedWagesByWorkerAllTime.GetValueOrDefault(id)),
@@ -545,7 +575,11 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             // ...and `Pending` deliberately does NOT move with the window. See §8.
             Pending: reviewLogs.Count,
             Plots: [],
-            Money: new LabourMoneyDto(totalRecorded, totalPaid, totalAdvance, totalOwed));
+            // R15 (Task 13) — all four all-time, from §2b/§3b. `Recorded` and
+            // `Paid` used to be the windowed `totalRecorded`/`totalPaid` here
+            // while `Owed` was already all-time; that mix is the defect. The
+            // windowed `totalPaid` is still reported, once, as `Wages` above.
+            Money: new LabourMoneyDto(totalRecordedAllTime, totalPaidAllTime, totalAdvance, totalOwed));
 
         var ledger = new LabourLedgerDto(
             WeekLabel: weekLabel,

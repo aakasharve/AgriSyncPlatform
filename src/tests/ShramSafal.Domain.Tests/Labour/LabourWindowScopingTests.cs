@@ -38,6 +38,16 @@ namespace ShramSafal.Domain.Tests.Labour;
 /// still waiting on the owner, so it is asserted IDENTICAL across all four
 /// windows.</para>
 ///
+/// <para><b>R15 (Task 13) — and neither is anything on the money card.</b>
+/// R13 made <c>Owed</c> a balance but left <c>Recorded</c>/<c>Paid</c>
+/// windowed, which split ONE card across two time bases: its stacked bar draws
+/// <c>काम झालं = दिलं + उचल + बाकी</c>, so the segments stopped being parts of
+/// the header they sit under (under आज this file's own fixture produced ₹100 +
+/// ₹13,500 inside a ₹1,000 header). Every member of <c>Money</c>, and every
+/// per-person figure the बाकी beside a worker's name is struck from, is now a
+/// POSITION as of now. The list that still moves with the window is exactly
+/// <c>ManDays</c>, <c>Wages</c> and <c>Logs</c>.</para>
+///
 /// <para><b>The honesty rule this file pins</b> (release-governing, progress.md
 /// R6/R8): absence of any record ⇒ unknown (<c>null</c>, an em-dash on screen);
 /// a record that exists and contains nothing ⇒ a genuine zero. Applied per
@@ -104,13 +114,13 @@ public sealed class LabourWindowScopingTests
     }
 
     [Theory]
-    // window,   man-days, wages, recorded, logs
-    [InlineData("today", 1, 100, 1000, 1)]
-    [InlineData("week", 3, 300, 3000, 2)]
-    [InlineData("month", 7, 700, 7000, 3)]
-    [InlineData("alltime", 15, 1500, 15000, 4)]
+    // window,   man-days, wages, logs
+    [InlineData("today", 1, 100, 1)]
+    [InlineData("week", 3, 300, 2)]
+    [InlineData("month", 7, 700, 3)]
+    [InlineData("alltime", 15, 1500, 4)]
     public async Task Every_windowed_figure_is_scoped_to_the_requested_window(
-        string window, int expectedManDays, decimal expectedWages, decimal expectedRecorded, int expectedLogs)
+        string window, int expectedManDays, decimal expectedWages, int expectedLogs)
     {
         var repo = FullScenario();
 
@@ -122,14 +132,83 @@ public sealed class LabourWindowScopingTests
 
         d.ManDays.Should().Be(expectedManDays, "मजूर-दिवस counts only assignments on days inside the window");
         d.Wages.Should().Be(expectedWages, "दिलं sums only labour CostEntry rows dated inside the window");
-        d.Money.Recorded.Should().Be(expectedRecorded, "काम झालं sums only job cards planned inside the window");
-        d.Money.Paid.Should().Be(expectedWages);
         d.Logs.Should().Be(expectedLogs, "the log count is the number of daily logs dated inside the window");
-        // `Owed`/`Money.Owed` deliberately does NOT appear in this theory (R13,
-        // Task 10) — it is a BALANCE, not a flow, and does not move with the
-        // window the way the five figures above correctly do. See
-        // `Owed_is_the_alltime_balance_under_every_window_not_the_windows_own_flow`
-        // below for its own, separate contract.
+
+        // THESE THREE ARE THE WHOLE LIST. `Pending` is the approval inbox
+        // (founder ruling) and every member of `Money` is a POSITION as of now
+        // (R15, Task 13) — `Money.Recorded` and `Money.Paid` used to appear in
+        // this theory as windowed flows, which is exactly what broke the money
+        // card: they are two terms of an identity whose third term (`Owed`) R13
+        // had already, correctly, made all-time. Their contract is now
+        // `The_money_card_is_one_alltime_position_under_every_window` below.
+    }
+
+    /// <summary>
+    /// R15 (ruling, spec: 2026-08-28-labour-v2-release-1, Task 13) — the money
+    /// card is a POSITION card, all-time throughout.
+    ///
+    /// <para>R13 was right that <c>Owed</c> is a balance, but it was applied at
+    /// the wrong granularity: <c>Owed</c> alone left the window while
+    /// <c>Recorded</c> and <c>Paid</c> — the other two terms of the SAME card —
+    /// stayed windowed. The card draws ONE stacked bar whose entire grammar is
+    /// <c>काम झालं = दिलं + उचल + बाकी</c>, so the mix drew incommensurable
+    /// quantities as parts of one whole: under आज this very fixture produced a
+    /// header of ₹1,000 above a bar of ₹100 + ₹13,500.</para>
+    ///
+    /// <para>Every figure in <c>Money</c> therefore answers ONE question — what
+    /// he has recorded, paid, advanced and still owes TO DATE — and none of
+    /// them moves. The <c>Wages</c>/<c>ManDays</c>/<c>Logs</c> tiles above the
+    /// card are untouched and still window (theory above).</para>
+    /// </summary>
+    [Theory]
+    [InlineData("today")]
+    [InlineData("week")]
+    [InlineData("month")]
+    [InlineData("alltime")]
+    public async Task The_money_card_is_one_alltime_position_under_every_window(string window)
+    {
+        var repo = FullScenario();
+
+        var result = await BuildHandler(repo).HandleAsync(
+            new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(OwnerGuid), window));
+
+        result.IsSuccess.Should().BeTrue();
+        var money = result.Value!.Dashboard.Money;
+
+        money.Recorded.Should().Be(15000m,
+            "काम झालं on this card is the all-time recorded position (1000+2000+4000+8000), not the "
+            + "window's own slice — it is the header the bar's segments are drawn as parts of");
+        money.Paid.Should().Be(1500m,
+            "दिलं on this card is the all-time paid position (100+200+400+800); the WINDOWED figure "
+            + "is Dashboard.Wages, which the मजुरी tile above the card reads");
+        money.Advance.Should().Be(0m);
+        money.Owed.Should().Be(13500m);
+    }
+
+    /// <summary>
+    /// The identity the card's bar IS: <c>Recorded = Paid + Advance + Owed</c>.
+    /// Asserted per window because a per-figure assertion is precisely what the
+    /// five suites that missed this defect all had — each number was right on
+    /// its own, and no test ever added them up.
+    /// </summary>
+    [Theory]
+    [InlineData("today")]
+    [InlineData("week")]
+    [InlineData("month")]
+    [InlineData("alltime")]
+    public async Task The_money_cards_segments_sum_to_its_header_under_every_window(string window)
+    {
+        var repo = FullScenario();
+
+        var result = await BuildHandler(repo).HandleAsync(
+            new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(OwnerGuid), window));
+
+        var money = result.Value!.Dashboard.Money;
+
+        money.Recorded.Should().NotBeNull("this fixture carries real job-card evidence all-time");
+        (money.Paid + money.Advance + money.Owed).Should().Be(money.Recorded,
+            "काम झालं = दिलं + उचल + बाकी is the card's whole grammar; if the three terms are not on "
+            + "one time basis they are incommensurable quantities drawn as parts of one whole");
     }
 
     /// <summary>
@@ -168,12 +247,27 @@ public sealed class LabourWindowScopingTests
         d.Money.Owed.Should().Be(13500m);
     }
 
+    /// <summary>
+    /// R15 (Task 13) applied ONE LEVEL DOWN. A person's <c>RecordedWages</c>/
+    /// <c>Paid</c> are the two terms `netBalance` subtracts to present his
+    /// बाकी/देय — so they are a settlement POSITION for exactly the reason the
+    /// farm-wide money card is, and windowing them was the same defect with a
+    /// smaller blast radius. It was unreachable only because leaving आढावा
+    /// resets the window (Task 12); persisting the window — an option already
+    /// put to the founder — would have armed it. Fixed at the source rather
+    /// than left as a landmine.
+    ///
+    /// <para>The rows still reconcile with the card above them, which is what
+    /// the previous version of this test was really protecting: both are now
+    /// all-time, so they agree under every window instead of only under
+    /// आजपर्यंत.</para>
+    /// </summary>
     [Theory]
     [InlineData("today")]
     [InlineData("week")]
     [InlineData("month")]
     [InlineData("alltime")]
-    public async Task Per_person_figures_move_with_the_window_so_the_rows_reconcile_with_the_tiles(string window)
+    public async Task Per_person_balance_is_identical_under_every_window(string window)
     {
         var repo = FullScenario();
 
@@ -183,20 +277,69 @@ public sealed class LabourWindowScopingTests
         var person = result.Value!.People.Should().ContainSingle().Which;
         var dashboard = result.Value!.Dashboard;
 
+        person.RecordedWages.Should().Be(15000m,
+            "काम झालं for a person is his all-time recorded work, not the window's slice — it is one "
+            + "term of the बाकी this screen states next to his name");
+        person.Paid.Should().Be(0m, "every payout in this fixture is unattributed (no JobCard link)");
+        person.Advance.Should().Be(0m);
+        (person.RecordedWages - person.Paid - person.Advance).Should().Be(15000m,
+            "the derived per-person बाकी must be the same figure whichever window the owner happens "
+            + "to be looking at — a balance is true as of now, never 'of this window'");
+
         // The dashboard rollup is documented as the SAME population as the
-        // rows below it. If the tiles were windowed and the rows were not, the
-        // two would visibly disagree on one screen.
+        // rows below it, and both are now on the same (all-time) basis, so
+        // they agree under every window rather than only the default one.
         person.RecordedWages.Should().Be(dashboard.Money.Recorded);
     }
 
     /// <summary>
-    /// The roster is not a statistic either: a worker on the farm still appears
-    /// in a window he did no recorded work in. His RecordedWages is `null`
-    /// there (no job-card evidence inside the window — absence, not zero), and
-    /// he is NOT dropped from the list.
+    /// THE SPLIT R15 CREATES, on money that is attributable to a person: his
+    /// <c>Paid</c> is all-time (one term of his balance) while the farm-wide
+    /// <c>Wages</c> tile stays windowed (money that moved in the period). One
+    /// set of CostEntry rows, two questions, two answers — and they must not
+    /// be confused for each other.
+    ///
+    /// <para>Written after a mutation survived: swapping <c>Wages</c> back to a
+    /// sum over the (now all-time) people rows changed nothing, because every
+    /// payout in <c>FullScenario</c> is UNATTRIBUTED and so bypasses the
+    /// by-worker dictionaries entirely. A test that cannot tell the two
+    /// figures apart cannot protect either.</para>
     /// </summary>
     [Fact]
-    public async Task A_worker_with_no_activity_in_the_window_still_appears_with_an_unknown_not_a_zero()
+    public async Task An_attributed_payout_is_all_time_on_the_person_and_windowed_on_the_wages_tile()
+    {
+        var repo = new FakeRepo();
+        repo.SetRole(FarmGuid, OwnerGuid, AppRole.PrimaryOwner);
+        repo.SeedMembership(FarmMembership.Create(
+            Guid.NewGuid(), new FarmId(FarmGuid), new UserId(WorkerGuid), AppRole.Worker, Now));
+        repo.SeedDailyLog(BuildLog(Guid.NewGuid(), TodayDate));
+        repo.SeedJobCard(BuildCompletedJobCard(TodayDate, 3000m));
+        repo.SeedPayoutAttributedTo(BuildCostEntry(TodayDate, 500m), WorkerGuid);
+        repo.SeedPayoutAttributedTo(BuildCostEntry(LastMonth, 800m), WorkerGuid);
+
+        var result = await BuildHandler(repo).HandleAsync(
+            new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(OwnerGuid), "today"));
+
+        var d = result.Value!.Dashboard;
+        var person = result.Value!.People.Should().ContainSingle().Which;
+
+        d.Wages.Should().Be(500m,
+            "मजुरी is the money that moved INSIDE the window — last month's ₹800 is not this window's");
+        person.Paid.Should().Be(1300m,
+            "दिलं beside his name is everything he has been paid, because it is one term of the "
+            + "बाकी shown next to it — ₹500 there would say ₹2,500 is still owed when ₹1,700 is");
+        d.Money.Paid.Should().Be(1300m, "the money card's दिलं shares its basis with its own बाकी");
+        d.Money.Owed.Should().Be(1700m);
+        (d.Money.Paid + d.Money.Advance + d.Money.Owed).Should().Be(d.Money.Recorded);
+    }
+
+    /// <summary>
+    /// The roster is not a statistic: a worker on the farm still appears in a
+    /// window he did no recorded work in, and — R15 — the balance shown beside
+    /// his name is his real all-time one, not a ₹0 manufactured by the window.
+    /// </summary>
+    [Fact]
+    public async Task A_worker_with_no_activity_in_the_window_still_appears_with_his_alltime_balance()
     {
         var repo = new FakeRepo();
         repo.SetRole(FarmGuid, OwnerGuid, AppRole.PrimaryOwner);
@@ -208,8 +351,34 @@ public sealed class LabourWindowScopingTests
             new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(OwnerGuid), "today"));
 
         var person = result.Value!.People.Should().ContainSingle().Which;
+        person.Should().NotBeNull("a worker is a member of the farm, not an event inside a period");
+        person.RecordedWages.Should().Be(8000m,
+            "his job card is last month's, but what he is owed is true as of now — narrowing it to "
+            + "today would tell the owner a man he still owes ₹8,000 has no balance at all");
+    }
+
+    /// <summary>
+    /// The R6 polarity survives R15 unchanged, now asked of the whole history:
+    /// a worker with NO job-card evidence anywhere carries `null`, never a ₹0
+    /// he "earned". (Production is exactly this case — it holds zero job cards
+    /// farm-wide.)
+    /// </summary>
+    [Fact]
+    public async Task A_worker_with_no_job_card_evidence_at_all_still_carries_an_unknown_not_a_zero()
+    {
+        var repo = new FakeRepo();
+        repo.SetRole(FarmGuid, OwnerGuid, AppRole.PrimaryOwner);
+        repo.SeedMembership(FarmMembership.Create(
+            Guid.NewGuid(), new FarmId(FarmGuid), new UserId(WorkerGuid), AppRole.Worker, Now));
+        repo.SeedDailyLog(BuildLog(Guid.NewGuid(), TodayDate));
+        repo.SeedUnattributedPayout(BuildCostEntry(TodayDate, 800m)); // real money paid, no job card.
+
+        var result = await BuildHandler(repo).HandleAsync(
+            new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(OwnerGuid), "alltime"));
+
+        var person = result.Value!.People.Should().ContainSingle().Which;
         person.RecordedWages.Should().BeNull(
-            "no job card of his falls inside today — that is an absence of evidence, never a ₹0 he earned");
+            "no job card of his exists at all — that is an absence of evidence, never a ₹0 he earned");
     }
 
     // ─── Pending is NEVER window-scoped (founder ruling) ─────────────────────
@@ -436,16 +605,20 @@ public sealed class LabourWindowScopingTests
     }
 
     /// <summary>
-    /// R6, narrowed to a window, for <c>Money.Recorded</c> (a FLOW — it still
-    /// windows correctly): no job card inside "today" ⇒ काम झालं is unknown
-    /// for today specifically. <c>Owed</c> is a different story under R13
-    /// (Task 10) — it is the ALL-TIME balance, and real all-time job-card
-    /// evidence DOES exist here (last month), so it must report that balance,
-    /// not null. A window with no evidence of its own must never suppress a
-    /// balance the farm's full history can answer.
+    /// THE STATE THIS RELEASE SHIPPED AND R15 REMOVES. Under R13 alone this
+    /// scenario produced a money card whose HEADER was an em-dash
+    /// (<c>Money.Recorded</c> null — no job card inside "today") with a real
+    /// ₹7,100 <c>बाकी</c> segment drawn INSIDE it: parts of an unknown whole.
+    ///
+    /// <para>The two figures were never in conflict about the farm — they were
+    /// answering different questions and being drawn as one picture. R15 puts
+    /// the whole card on one basis: real all-time job-card evidence DOES exist
+    /// here (last month), so काम झालं is ₹8,000, दिलं is ₹900, and बाकी is the
+    /// ₹7,100 that was always correct. <c>Wages</c> — the tile, a real flow —
+    /// still reports only today's ₹900.</para>
     /// </summary>
     [Fact]
-    public async Task A_window_with_no_job_card_evidence_still_reports_the_alltime_owed_balance()
+    public async Task A_window_with_no_job_card_evidence_of_its_own_still_shows_the_whole_alltime_position()
     {
         var repo = new FakeRepo();
         repo.SetRole(FarmGuid, OwnerGuid, AppRole.PrimaryOwner);
@@ -460,11 +633,15 @@ public sealed class LabourWindowScopingTests
 
         var d = result.Value!.Dashboard;
         d.Wages.Should().Be(900m, "money actually paid today is evidenced by a real CostEntry row");
-        d.Money.Recorded.Should().BeNull("no job card falls inside today — absence of evidence (R6)");
+        d.Money.Recorded.Should().Be(8000m,
+            "the card's header is the all-time recorded position — an em-dash here is what let a "
+            + "₹7,100 segment be drawn inside an unknown total (R15)");
+        d.Money.Paid.Should().Be(900m);
         d.Owed.Should().Be(7100m,
-            "बाकी is the all-time balance (8000 recorded last month − 900 paid today = 7100), never "
-            + "derived from the windowed (null) Recorded above — R13");
+            "बाकी is the all-time balance (8000 recorded last month − 900 paid today = 7100)");
         d.Money.Owed.Should().Be(7100m);
+        (d.Money.Paid + d.Money.Advance + d.Money.Owed).Should().Be(d.Money.Recorded,
+            "and now the segments sum to the header they are drawn inside");
     }
 
     /// <summary>
@@ -514,6 +691,12 @@ public sealed class LabourWindowScopingTests
         d.Owed.Should().Be(200m,
             "बाकी is the all-time balance (1000 recorded − 800 paid lifetime), not this window's own "
             + "recorded-minus-wages subtraction, which would ignore last month's payout entirely");
+        // R15 (Task 13) — the CARD's दिलं is the all-time ₹800 that balance was
+        // actually struck against, while the मजुरी TILE above it stays the
+        // window's genuine ₹0. Two different questions, two different figures,
+        // and neither is now drawn as part of the other.
+        d.Money.Paid.Should().Be(800m);
+        (d.Money.Paid + d.Money.Advance + d.Money.Owed).Should().Be(d.Money.Recorded);
     }
 
     /// <summary>
@@ -621,6 +804,18 @@ public sealed class LabourWindowScopingTests
         public void SeedMembership(FarmMembership m) => _memberships.Add(m);
         public void SeedDailyLog(DailyLog l) => _dailyLogs.Add(l);
         public void SeedUnattributedPayout(CostEntry e) => _payouts.Add((e, null));
+
+        /// <summary>
+        /// A payout production WOULD attribute to a worker (its CostEntry has a
+        /// JobCard link, so the join yields an AssignedWorkerUserId). The
+        /// unattributed seeder above cannot exercise the split R15 draws
+        /// between per-person <c>Paid</c> (all-time) and <c>Wages</c>
+        /// (windowed): an unattributed row lands in neither by-worker
+        /// dictionary, so both figures come out of the same
+        /// <c>unattributed…</c> slice and any confusion between them is
+        /// invisible. Added after mutation testing showed exactly that hole.
+        /// </summary>
+        public void SeedPayoutAttributedTo(CostEntry e, Guid workerUserId) => _payouts.Add((e, workerUserId));
         public void SeedJobCard(JobCard j) => _jobCards.Add(j);
 
         public void SeedAssignment(LabourAssignment a)
