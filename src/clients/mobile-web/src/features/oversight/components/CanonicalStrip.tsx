@@ -615,10 +615,20 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
     // FOUNDER DECISION 2026-08-26 — THE FRESHNESS CHIP. See `lastSyncAt`'s
     // prop doc for the founder's own wording and why this bar needed it.
     //
-    // ALWAYS RENDERED, in all four states above. It is not a state of the
-    // strip — it is the timestamp the other four states should be read
-    // against, and it is least dispensable in exactly the state that looks
-    // most reassuring (`restState`'s green tick).
+    // MOVED INSIDE THE DRAWER, founder ruling 2026-08-29. It used to render
+    // as a grey chip on the strip itself, which made the bar three lines tall
+    // and put a timestamp at the same visual level as the ask. He ruled the
+    // strip is TWO LINES — title + subtitle — and *"the grey part must go
+    // inside it"*.
+    //
+    // NOT DELETED, and the 2026-08-26 reasoning is intact: it is still the
+    // timestamp the strip's four states must be read against, and still least
+    // dispensable in the state that looks most reassuring (`restState`'s green
+    // tick). So it survives in two places that cost the strip no height —
+    // this button's `aria-label` below (unchanged, so a screen-reader owner is
+    // still told), and `OversightOverlay`'s header, which is what opens when
+    // the farmer taps this bar. `freshnessText` is therefore still computed
+    // here; only its visible chip is gone.
     //
     // TWO FORMS, NEVER A THIRD. `formatUpToWhen` returns `null` for a `null`
     // cursor AND for an unparseable one, and both land on
@@ -738,25 +748,6 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
                         {englishCaption}
                     </span>
                 )}
-                {/* The chip itself. STONE in every state, deliberately: it
-                    reports a time, it is not an alert, and amber here would
-                    say "this needs you" (§P-G) about something the farmer
-                    can only respond to by checking his connection.
-                    NOT a control — a `<span>` inside the strip's existing
-                    button, so it adds no second tap target to a bar the
-                    founder asked to keep simple, and taps fall through to
-                    the drawer this button already opens.
-                    WRAPS, never truncates, for the same reason
-                    `waitingSubtitle` above does: a clipped freshness
-                    sentence ending in "…" would hide the connectivity hint,
-                    which is the only actionable half of the line. */}
-                <span
-                    data-testid="canonical-strip-freshness-chip"
-                    className="mt-1 inline-block rounded-md bg-stone-100 px-1.5 py-[1.5px] text-[9.5px] font-semibold leading-[1.5] text-stone-500"
-                    style={fontStyleFor(freshnessText)}
-                >
-                    {freshnessText}
-                </span>
             </span>
 
             {/* 2026-08-27 — the right-hand count pill is GONE, not hidden:

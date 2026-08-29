@@ -49,13 +49,11 @@ import {
     // the full video-character screen. Different components, one name.
     ShramSathiUnderstanding as ShramSathiUnderstandingLine,
 } from './mainViewComponents';
-import { getCarriedTasks } from '../../shared/utils/dayState';
 import { LedgerRecognitionPanel } from '../../features/logs/components/LedgerRecognitionPanel';
 import {
     stashPendingQuestionAnswer, abandonPendingQuestionAnswer, readPendingQuestionAnswer,
 } from '../../features/logs/services/pendingQuestionAnswer';
 import VoiceSavedReassurance from '../../features/logs/components/shramsathi/VoiceSavedReassurance';
-import DailyLoopHero from '../../features/logs/components/shramsathi/DailyLoopHero';
 import DailyLoopClarity from '../../features/logs/components/shramsathi/DailyLoopClarity';
 import DailyLoopInsight from '../../features/logs/components/shramsathi/DailyLoopInsight';
 import DayUnderstandingCard from '../../features/logs/components/shramsathi/DayUnderstandingCard';
@@ -184,9 +182,10 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         setMainView,
         // Read by dfes-companion surfaces only: `weatherData` by
         // LedgerRecognitionPanel (Task 4A weather questions), `todayDayState` by
-        // DailyLoopHero and DailyLoopClarity. main dropped both from this list
-        // when owner-oversight-loop deleted the weather + closure cards; the
-        // fields themselves never left AppRouterContext.
+        // DailyLoopClarity and by the done/left counters further down. It was
+        // ALSO read by `DailyLoopHero` until the founder's 2026-08-29 ruling
+        // removed that component (see its former render site below); the field
+        // itself stays because those two other readers still need it.
         weatherData, todayDayState,
         crops, logScope, setLogScope, setMode, setStatus,
         hasActiveLogContext, isContextReady, error, errorTranscript,
@@ -218,52 +217,27 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         }
     };
 
-    // Daily Clarity Loop v1 — Fix 1 coherence. Derive the carried element from
-    // the SAME today-pending set the hero's N comes from (its overdue subset),
-    // using the same tasks + scope todayDayState uses, so carriedCount ≤ N
-    // ALWAYS — never a second, divergent count. Computed only when the loop is
-    // on so the flag-off home stays a pure no-op.
-    const carriedTasks = FEATURE_FLAGS.dailyLoop
-        ? getCarriedTasks({
-            tasks: plannedTasks ?? [],
-            date: getDateKey(),
-            selectedCropIds: logScope.selectedCropIds,
-            selectedPlotIds: logScope.selectedPlotIds,
-        })
-        : [];
-
-
     return (
         <>
             {/* IDLE / RECORDING STATE */}
             {status !== 'confirming' && status !== 'success' && status !== 'processing' && (
                 <>
-                    {/* Daily Clarity Loop v1 (spec: dfes-companion-2026-07-11) — the
-                        morning trigger: "आज {N} कामं बाकी" (or the empty-day invite)
-                        with the carried "काल राहिलं" signal folded in beside it.
-                        Flag-gated OFF by default, so production renders exactly the
-                        oversight-loop layout below and nothing else.
+                    {/* FOUNDER RULING 2026-08-29 — `DailyLoopHero` is GONE from
+                        this screen, not flag-gated off. He read the home screen
+                        and found two blocks asking the same thing: this hero's
+                        "आज काहीच सांगितलं नाही…" and `SathiGuideCard`'s "आज कोणत्या
+                        प्लॉटवर काम केलं?". He had already ruled once on this exact
+                        duplication (2026-08-27, *"there are two line only keep
+                        which is on the oversight bar"*) — that pass deleted only
+                        the SETTLED line and left the "nothing told" one, so the
+                        pair survived. This removes the whole surface.
 
-                        The weather card, Daily Closure card and "Daily Log" heading +
-                        owner chip that used to sit around this hero are NOT restored:
-                        owner-oversight-loop Task 7/11 deliberately removed them and
-                        moved weather into AppHeader (`CompactWeatherChip`). Re-adding
-                        them here would render weather twice. */}
-                    {/* Founder review 2026-08-26, ruling A2 — the hero now owns
-                        its own `mb-4`/entrance wrapper (see its render), because
-                        it has a state in which it renders NOTHING: it will not
-                        say "काही बाकी नाही" while the oversight strip above is
-                        reporting a positive waiting count. A wrapper left here
-                        would survive that as a 16px ghost gap. */}
-                    {!recordingSegment && FEATURE_FLAGS.dailyLoop && (
-                        <DailyLoopHero
-                            pendingCount={todayDayState.pendingCount}
-                            carriedCount={carriedTasks.length}
-                            carriedTitle={carriedTasks.length === 1 ? carriedTasks[0].title : undefined}
-                            closurePercent={todayDayState.closurePercent}
-                            onFocusRecorder={focusRecorder}
-                        />
-                    )}
+                        WHAT NOW OWNS EACH FACT — no fact was dropped with it:
+                          • the waiting COUNT  → the oversight strip's ring above
+                          • "what did you do" → `SathiGuideCard`, now the hero
+                        The hero's third input, the carried "काल राहिलं" signal,
+                        had no second home and is not restated anywhere; it was
+                        only ever a decoration on a line the strip already made. */}
 
                     {/* spec: owner-oversight-loop (Task 7, design doc §4.2, §5) —
                         the large gradient weather card, the Daily Closure
