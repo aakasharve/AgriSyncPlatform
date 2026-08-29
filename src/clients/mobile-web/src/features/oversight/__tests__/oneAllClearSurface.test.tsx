@@ -36,15 +36,19 @@
  *      सांगितलं नाही" are not all-clears; a waiting strip must not silence
  *      them, or the fix becomes hiding true lines to manufacture agreement.
  *
- * WHY THIS TEST MOUNTS BOTH REAL COMPONENTS IN ONE TREE
- * -----------------------------------------------------
- * A unit test of either component proves it obeys the props it is given; it
- * does NOT prove what a farmer reads when both are on screen, and "two
- * individually-true surfaces composing one false impression" is the entire
- * defect class here. So the real `AppHeader` (real `buildOversightModel`, real
- * `CanonicalStrip`) and the real `DailyLoopHero` are rendered as siblings —
- * the same relationship they have in `AppContent.tsx` — and the assertions
- * read the rendered DOM of both.
+ * WHY THIS TEST MOUNTS THE REAL HEADER
+ * ------------------------------------
+ * A unit test of a component proves it obeys the props it is given; it does
+ * NOT prove what a farmer reads on the assembled screen, and "individually
+ * true surfaces composing one false impression" is the entire defect class
+ * here. So the real `AppHeader` (real `buildOversightModel`, real
+ * `CanonicalStrip`) is mounted and the assertions read its rendered DOM.
+ *
+ * It used to mount `DailyLoopHero` beside it, because the defect needed two
+ * surfaces to exist. The founder's 2026-08-29 ruling deleted that component
+ * outright — so the second surface is now held absent STRUCTURALLY, by
+ * `the_second_surface_does_not_exist_at_all` below, which is a stronger
+ * guarantee than any render-time assertion could be.
  *
  * Only `useLanguage` and the `../../sync` barrel are mocked, exactly as
  * `AppHeader.oversight.test.tsx` mocks them and for the same reasons (a
@@ -54,6 +58,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, screen, cleanup, act } from '@testing-library/react';
+import fs from 'node:fs';
+import path from 'node:path';
 import React from 'react';
 
 import { t as translate, type Language } from '../../../i18n/translations';
@@ -97,7 +103,6 @@ vi.mock('../../sync', () => ({
 
 import AppHeader from '../../context/components/AppHeader';
 import CanonicalStrip from '../components/CanonicalStrip';
-import DailyLoopHero from '../../logs/components/shramsathi/DailyLoopHero';
 
 /** The exact settled sentence the founder saw, and had removed. Read from the
  * table, never retyped — the key survives in `dfesTranslations.ts` (approved
@@ -170,12 +175,6 @@ function renderHomeScreen(oversightData: React.ComponentProps<typeof AppHeader>[
                 farmContext={makeFarmContext(farms)}
                 oversightData={oversightData}
             />
-            <DailyLoopHero
-                pendingCount={0}
-                carriedCount={0}
-                closurePercent={100}
-                onFocusRecorder={vi.fn()}
-            />
         </>,
     );
 }
@@ -214,7 +213,7 @@ afterEach(() => {
     unqueueableRef.current = 0;
 });
 
-describe('the home screen carries exactly ONE all-clear claim (founder ruling 2026-08-27)', () => {
+describe('the home screen carries exactly ONE all-clear claim (founder rulings 2026-08-27 and 2026-08-29)', () => {
     it('the_settled_line_cannot_render_while_the_strip_shows_a_positive_count', async () => {
         await act(async () => {
             renderHomeScreen(FOUR_WAITING);
@@ -283,40 +282,34 @@ describe('the home screen carries exactly ONE all-clear claim (founder ruling 20
         expect(screen.queryByText(SETTLED_LINE)).toBeNull();
     });
 
-    it('a_positive_waiting_count_does_not_silence_the_states_that_do_not_contradict_it', async () => {
-        // The ruling removed ONE sentence. "आज N कामं बाकी" agrees with a
-        // waiting strip (work outstanding AND records outstanding are both
-        // true), so removing it too would be hiding a true line to fake
-        // agreement — which the ruling did not ask for and P4 does not permit.
-        await act(async () => {
-            render(
-                <>
-                    <AppHeader
-                        currentRoute="main"
-                        currentView="log"
-                        onNavigate={vi.fn()}
-                        onViewChange={vi.fn()}
-                        farmContext={makeFarmContext()}
-                        oversightData={FOUR_WAITING}
-                    />
-                    <DailyLoopHero
-                        pendingCount={3}
-                        carriedCount={0}
-                        closurePercent={40}
-                        onFocusRecorder={vi.fn()}
-                    />
-                </>,
-            );
-        });
+    it('the_second_surface_does_not_exist_at_all', () => {
+        // FOUNDER RULING 2026-08-29 — the strongest form of property 1. The
+        // 2026-08-27 pass deleted the SETTLED line but left `DailyLoopHero`
+        // rendering "आज काहीच सांगितलं नाही…", so the home screen still carried
+        // two blocks asking the farmer the same thing. He read it again and had
+        // the whole surface removed, keeping `SathiGuideCard` as the hero.
+        //
+        // A DOM assertion cannot hold this — an absent component and a
+        // not-rendered one look identical in the tree — so this reads the source
+        // instead: no module may IMPORT it, and the file itself must be gone.
+        // Prose mentions are deliberately allowed; several files still explain
+        // the removal in comments, and they should.
+        const srcRoot = path.resolve(__dirname, '../../..');
+        const offenders: string[] = [];
+        const walk = (dir: string) => {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) { walk(full); continue; }
+                if (!/\.(ts|tsx)$/.test(entry.name)) continue;
+                if (/from\s+['"][^'"]*shramsathi\/DailyLoopHero['"]/.test(fs.readFileSync(full, 'utf8'))) {
+                    offenders.push(path.relative(srcRoot, full));
+                }
+            }
+        };
+        walk(srcRoot);
 
-        expect(screen.getByTestId('canonical-strip-waiting-count')).toHaveTextContent('4');
-        expect(screen.getByTestId('daily-loop-hero-line')).toHaveTextContent('आज 3 कामं बाकी');
-        // The two rings on that screen are different facts and are allowed to
-        // differ — what is forbidden is one control stating both. The hero's
-        // ring reads `todayDayState.closurePercent`; the strip's reads its own
-        // waiting count. Asserted so the day someone "harmonises" them, this
-        // test says why they must not be.
-        expect(screen.getByTestId('daily-loop-hero-ring')).toHaveTextContent('40%');
+        expect(offenders).toEqual([]);
+        expect(fs.existsSync(path.join(srcRoot, 'features/logs/components/shramsathi/DailyLoopHero.tsx'))).toBe(false);
     });
 });
 

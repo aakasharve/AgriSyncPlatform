@@ -47,6 +47,9 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { Language } from '../../../i18n/language';
 import { resolveOversightString } from '../../../i18n/oversightTranslations';
+import { resolveDataFreshnessString } from '../../../i18n/dataFreshnessTranslations';
+import { formatOversightTemplate } from '../formatOversightTemplate';
+import { formatUpToWhen } from '../formatUpToWhen';
 import WaitingDrawer from './WaitingDrawer';
 import type { OversightAcknowledgementStatus } from '../useOversightAcknowledgement';
 import type { OversightDecision, OversightModel } from '../oversightSelectors';
@@ -76,6 +79,15 @@ export interface OversightOverlayProps {
     onOpenDecision?: (decision: OversightDecision) => void;
     /** The one back control — always the top-right `X`, plus the backdrop. */
     onClose: () => void;
+    /** ISO cursor for the freshness line under the title — the same
+     * `queueStatus.lastSyncAt` `CanonicalStrip` gets. It USED to render as a
+     * grey chip on the strip; the founder's 2026-08-29 ruling capped that bar
+     * at two lines and sent this line *inside* — here. `null`/unparseable is
+     * NOT an error and is not hidden: `formatUpToWhen` returns `null` for
+     * both and the copy falls to `showingWorkUpToUnknown`, which says the
+     * app cannot state how recent the picture is. Two forms, never a third —
+     * this component never renders a time it was not given. */
+    lastSyncAt?: string | null;
 }
 
 const OversightOverlay: React.FC<OversightOverlayProps> = ({
@@ -86,10 +98,23 @@ const OversightOverlay: React.FC<OversightOverlayProps> = ({
     onAcknowledge,
     onOpenDecision,
     onClose,
+    lastSyncAt = null,
 }) => {
     if (!isOpen || typeof document === 'undefined') return null;
 
     const titleText = resolveOversightString(language, 'waitingLabel');
+
+    // See `lastSyncAt`'s prop doc. Derived exactly as `CanonicalStrip` derives
+    // it — same helper, same two forms — so the sentence a farmer reads here
+    // can never disagree with the one the strip still announces to a screen
+    // reader through its `aria-label`.
+    const upToWhenText = formatUpToWhen(lastSyncAt, language);
+    const freshnessText = upToWhenText === null
+        ? resolveDataFreshnessString(language, 'showingWorkUpToUnknown')
+        : formatOversightTemplate(
+            resolveDataFreshnessString(language, 'showingWorkUpTo'),
+            { when: upToWhenText },
+        );
 
     return createPortal(
         <div
@@ -101,12 +126,27 @@ const OversightOverlay: React.FC<OversightOverlayProps> = ({
                 className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-stone-50 shadow-2xl sm:rounded-3xl"
                 onClick={(e) => e.stopPropagation()}
             >
-                <div className="flex items-center justify-between border-b border-stone-200 bg-white px-3.5 py-3">
-                    <span
-                        className="text-[15px] font-extrabold text-stone-800"
-                        style={fontStyleFor(titleText)}
-                    >
-                        {titleText}
+                <div className="flex items-start justify-between border-b border-stone-200 bg-white px-3.5 py-3">
+                    <span className="min-w-0 flex-1">
+                        <span
+                            className="block text-[15px] font-extrabold text-stone-800"
+                            style={fontStyleFor(titleText)}
+                        >
+                            {titleText}
+                        </span>
+                        {/* The freshness line, relocated off the strip. STONE, not
+                            amber, for the reason it always was: it reports a time,
+                            it is not an alert, and amber here would say "this needs
+                            you" (§P-G) about something the farmer can only answer by
+                            checking his connection. Wraps, never truncates — the
+                            connectivity hint is the only actionable half. */}
+                        <span
+                            data-testid="oversight-overlay-freshness"
+                            className="mt-0.5 block text-[10px] font-semibold leading-[1.5] text-stone-500"
+                            style={fontStyleFor(freshnessText)}
+                        >
+                            {freshnessText}
+                        </span>
                     </span>
                     <button
                         type="button"

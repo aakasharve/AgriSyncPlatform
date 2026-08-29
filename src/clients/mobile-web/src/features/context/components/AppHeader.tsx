@@ -588,6 +588,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         onAcknowledge={() => { void acknowledge(); }}
         onOpenDecision={handleOpenDecision}
         onClose={() => setIsWaitingDrawerOpen(false)}
+        // The freshness sentence moved OFF the strip and into this overlay
+        // (founder ruling 2026-08-29 — the bar is two lines). Same source the
+        // strip was fed, so the two can never disagree.
+        lastSyncAt={queueStatus.lastSyncAt}
       />
 
       <SyncStatusDrawer
