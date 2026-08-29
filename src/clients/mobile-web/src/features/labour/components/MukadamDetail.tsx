@@ -53,7 +53,15 @@ const MukadamDetail: React.FC<Props> = ({ data, personId, onOpenPerson, onOpenMu
                 onAdvance={onAdvance}
                 onSettle={onSettle}
                 showActions={SHOW_MONEY_ACTIONS}
-                why={sub ? 'फक्त छाटणीसाठी · काम संपलं की बंद' : `तुम्ही ${'₹'}${m.balance.advance.toLocaleString('en-IN')} उचल दिली`}
+                // Task 7b (labour-v2-release-1) — उचल (advance) does not
+                // exist as a system: no table, no write path, no engine
+                // (GetLabourDataHandler.cs:205 hardcodes `advance = 0m`
+                // server-side). This branch asserted "तुम्ही ₹0 उचल दिली"
+                // (you gave ₹0 advance) as a narrative fact about a real
+                // farmer action. Same treatment as `PersonDetail.tsx`'s
+                // `recorded === null` branch: `undefined` lets `BalanceCard`
+                // skip the line entirely, rather than inventing new copy.
+                why={sub ? 'फक्त छाटणीसाठी · काम संपलं की बंद' : undefined}
             />
 
             <GroupLabel>याची माणसं · his team ({members.length})</GroupLabel>

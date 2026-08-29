@@ -267,3 +267,27 @@ describe('LabourHub — no attendance-capture claims (Task 7)', () => {
         expect(screen.getByText(/नोंदी तपासा/)).toBeInTheDocument();
     });
 });
+
+// ---------------------------------------------------------------------------
+// Task 7b (labour-v2-release-1) — उचल (advance) does not exist as a system:
+// no table, no write path, no engine (GetLabourDataHandler.cs:205 hardcodes
+// `advance = 0m` server-side). Task 7 above deleted a different false claim
+// (हजेरी) from this exact `what=` string and left उचल standing beside it —
+// this closes that gap.
+// ---------------------------------------------------------------------------
+describe('LabourHub — no उचल (advance) capability claim (Task 7b)', () => {
+    afterEach(() => cleanup());
+
+    it('the "how to use" help note no longer claims उचल (advance) anywhere in its text', () => {
+        render(<LabourHub {...baseProps()} />);
+        fireEvent.click(screen.getByText('कामगार व्यवस्थापन कसं वापरायचं?'));
+        expect(screen.queryByText(/उचल/)).toBeNull();
+    });
+
+    it('keeps its true neighbouring words after the surgical deletion (मजुरी / नोंदींची तपासणी)', () => {
+        render(<LabourHub {...baseProps()} />);
+        fireEvent.click(screen.getByText('कामगार व्यवस्थापन कसं वापरायचं?'));
+        expect(screen.getByText(/मजुरी/)).toBeInTheDocument();
+        expect(screen.getByText(/नोंदींची तपासणी/)).toBeInTheDocument();
+    });
+});

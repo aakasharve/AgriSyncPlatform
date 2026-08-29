@@ -259,9 +259,17 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
           * removed above. Neither claim has a feature behind it. Every word
           * remaining is pre-existing text with the false fragment deleted,
           * not reworded.
+          *
+          * Task 7b (labour-v2-release-1) — `what` also DELETED ", उचल" (the
+          * middle list item): उचल (advance) does not exist as a system
+          * either — no table, no write path, no engine
+          * (GetLabourDataHandler.cs:205 hardcodes `advance = 0m`
+          * server-side). The remaining two items (मजुरी, नोंदींची तपासणी)
+          * are joined by the "व" already present in the string — no new
+          * copy introduced.
           */}
         <HelpNote
-            what="टीमची मजुरी, उचल व नोंदींची तपासणी — सगळं एका जागी."
+            what="टीमची मजुरी व नोंदींची तपासणी — सगळं एका जागी."
             act="नोंदी तपासा · विश्वासू कामगाराच्या नोंदी आपोआप मंजूर करा."
             why="'टीम सेटअप'मध्ये कोण नोंद करू शकतो ते ठरतं; इथे त्यांनी काय केलं आणि त्यावर किती विश्वास — ते दिसतं व ठरतं."
             label="कामगार व्यवस्थापन कसं वापरायचं?"

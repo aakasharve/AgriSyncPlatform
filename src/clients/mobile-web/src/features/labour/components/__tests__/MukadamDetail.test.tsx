@@ -37,4 +37,15 @@ describe('MukadamDetail — screen honesty (Decision 4b)', () => {
         expect(screen.getByText('काम झालं')).toBeInTheDocument();
         expect(screen.getByText('दिलं')).toBeInTheDocument();
     });
+
+    // Task 7b (labour-v2-release-1) — उचल (advance) does not exist as a
+    // system: no table, no write path, no engine
+    // (GetLabourDataHandler.cs:205 hardcodes `advance = 0m` server-side).
+    // This line asserted "तुम्ही ₹0 उचल दिली" (you gave ₹0 advance) as a
+    // narrative fact about a real farmer action — false not because the
+    // figure is wrong, but because no such tracked fact exists at all.
+    it('does not claim a specific उचल amount was given — no advance system exists', () => {
+        render(<MukadamDetail {...baseProps()} personId="rokade" />);
+        expect(screen.queryByText(/उचल दिली/)).toBeNull();
+    });
 });

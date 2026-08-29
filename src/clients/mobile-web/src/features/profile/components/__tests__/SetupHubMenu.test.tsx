@@ -38,4 +38,15 @@ describe('SetupHubMenu — Labour row honesty (Task 7)', () => {
         render(<SetupHubMenu {...baseProps()} onOpenLabour={vi.fn()} />);
         expect(screen.getByText(/मजुरी/)).toBeInTheDocument();
     });
+
+    // Task 7b (labour-v2-release-1) — उचल (advance) does not exist as a
+    // system: no table, no write path, no engine (GetLabourDataHandler.cs:205
+    // hardcodes `advance = 0m` server-side). This subtitle promised it as a
+    // headline capability of Labour Management, standing beside the हजेरी
+    // claim Task 7 already removed from this same string.
+    it('does not claim उचल (advance) in the Labour row subtitle', () => {
+        render(<SetupHubMenu {...baseProps()} onOpenLabour={vi.fn()} />);
+        expect(screen.getByText('कामगार व्यवस्थापन · Labour')).toBeInTheDocument();
+        expect(screen.queryByText(/उचल/)).toBeNull();
+    });
 });
