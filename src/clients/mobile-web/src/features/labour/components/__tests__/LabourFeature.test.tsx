@@ -23,6 +23,14 @@
  * `useLabourState` and `useOptionalFarmContext` are both mocked so this test
  * can control `loading`/`error` directly across re-renders, independent of
  * the real fetch hook's own (separately-tested) behaviour.
+ *
+ * Task 12 (spec: 2026-08-28-labour-v2-release-1) — every mock below now also
+ * returns `timeWindow`/`setTimeWindow`. `LabourFeature` unconditionally calls
+ * `setTimeWindow` from a `useEffect` the instant the visible screen is not
+ * आढावा (the window-leak fix), and mounting here always starts on the hub —
+ * an incomplete mock (missing `setTimeWindow`) now throws on mount, not just
+ * on a dashboard visit these tests never make. `timeWindow`/`setTimeWindow`
+ * are otherwise irrelevant to this file's loading/error assertions.
  */
 import React from 'react';
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -62,7 +70,7 @@ describe('LabourFeature — loading gate (Decision 4b; extended Task 6d)', () =>
     });
 
     it('shows a loading state instead of the hub while the FIRST fetch is in flight', () => {
-        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: true, error: false, refresh: vi.fn() });
+        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: true, error: false, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn() });
 
         render(<LabourFeature onExit={() => {}} />);
 
@@ -72,7 +80,7 @@ describe('LabourFeature — loading gate (Decision 4b; extended Task 6d)', () =>
     });
 
     it('shows the real hub once the first fetch settles', () => {
-        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: false, error: false, refresh: vi.fn() });
+        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: false, error: false, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn() });
 
         render(<LabourFeature onExit={() => {}} />);
 
@@ -90,12 +98,12 @@ describe('LabourFeature — loading gate (Decision 4b; extended Task 6d)', () =>
     // `loading` alone: a later refresh shows the SAME honest spinner the
     // first load does, never the hub over data it just discarded.
     it('a later background refresh (loading true again) re-shows the loading state — never the hub over fabricated zeros', () => {
-        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: false, error: false, refresh: vi.fn() });
+        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: false, error: false, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn() });
         const { rerender } = render(<LabourFeature onExit={() => {}} />);
         expect(screen.getByText(EMPTY_PEOPLE_LABEL)).toBeInTheDocument();
 
         // Simulate ReviewSheet's onApproved -> refresh() cycle.
-        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: true, error: false, refresh: vi.fn() });
+        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: true, error: false, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn() });
         rerender(<LabourFeature onExit={() => {}} />);
 
         expect(screen.getByText(LOADING_LABEL)).toBeInTheDocument();
@@ -118,7 +126,7 @@ describe('LabourFeature — error state asserts nothing (Task 6d)', () => {
     });
 
     it('on a failed fetch: shows ONLY the error banner — no "no workers" sentence, no नोंदी tile, no hub content at all', () => {
-        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: false, error: true, refresh: vi.fn() });
+        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: false, error: true, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn() });
 
         render(<LabourFeature onExit={() => {}} />);
 
@@ -142,7 +150,7 @@ describe('LabourFeature — error state asserts nothing (Task 6d)', () => {
     // `error: false` here is exactly what a REAL successful fetch for a
     // farm with zero workers returns — the message must still be true.
     it('on a SUCCESSFUL fetch for a genuinely empty farm: still shows the true empty-state message, never the error banner', () => {
-        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: false, error: false, refresh: vi.fn() });
+        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: false, error: false, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn() });
 
         render(<LabourFeature onExit={() => {}} />);
 
