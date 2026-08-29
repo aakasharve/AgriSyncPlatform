@@ -172,7 +172,7 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
     // overridable) empty default — the exact "money paid, zero job cards"
     // shape production is in today.
     public virtual Task<List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)>> GetLabourPayoutCostEntriesWithJobCardAsync(
-        FarmId farmId, CancellationToken ct = default)
+        FarmId farmId, DateOnly? fromDate, DateOnly? toDateInclusive, CancellationToken ct = default)
         => Task.FromResult(new List<(CostEntry, Guid?)>());
 
     // Task 6 (spec: 2026-08-28-labour-v2-release-1) — restated `virtual` for the
@@ -183,8 +183,11 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
     // needs this overridable to seed a LabourAssignment whose headcount was
     // never stated (all three of WorkerCount/MaleCount/FemaleCount null) — the
     // exact row shape that used to sum to a fabricated 0 man-days.
-    public virtual Task<List<LabourAssignment>> GetLabourAssignmentsForFarmSinceAsync(
-        FarmId farmId, DateOnly weekStart, CancellationToken ct = default)
+    // Task 9 (spec: 2026-08-28-labour-v2-release-1) — renamed from
+    // ...ForFarmSinceAsync and given an optional, two-sided date window. Same
+    // default (empty), same `virtual` reason as above.
+    public virtual Task<List<LabourAssignment>> GetLabourAssignmentsForFarmInWindowAsync(
+        FarmId farmId, DateOnly? fromDate, DateOnly? toDateInclusive, CancellationToken ct = default)
         => Task.FromResult(new List<LabourAssignment>());
 
     // Task 6 fix round 1/5 (spec: 2026-08-28-labour-v2-release-1) — restated

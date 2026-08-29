@@ -6,6 +6,7 @@ using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Dfes;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Work;
@@ -36,9 +37,41 @@ namespace ShramSafal.Application.UseCases.Labour.GetLabourData;
 /// source of truth — <c>GetFinanceSummaryHandler</c> itself only rounds the
 /// per-category group sum and the grand total, never per-entry, so "mirrors
 /// finance" here refers to the ROWS and correction resolution, not the
-/// rounding step. This labour <c>Paid</c> is also all-time: unlike
-/// <c>GetFinanceSummaryHandler</c>, which accepts an optional date-range
-/// filter, there is no period scoping here (Stage-1 scope).
+/// rounding step.
+/// </para>
+/// <para>
+/// <b>TASK 9 (spec: 2026-08-28-labour-v2-release-1) — THE TIME WINDOW.</b>
+/// Until now exactly ONE of the five dashboard tiles was period-scoped
+/// (<c>ManDays</c>, hard-coded to the current week); <c>Wages</c>, <c>Logs</c>,
+/// <c>Pending</c> and the recorded/owed pair were lifetime figures rendered
+/// under a "या आठवड्यात" ("this week") heading. Four of the five numbers were
+/// therefore false against their own label. <see cref="GetLabourDataQuery.Window"/>
+/// now selects one of <see cref="LabourTimeWindow"/>'s four ranges and FOUR
+/// figures move with it: <c>ManDays</c>, <c>Wages</c>/<c>Money.Paid</c>,
+/// <c>Money.Recorded</c>/<c>Owed</c>, and <c>Logs</c> — per-person as well as
+/// farm-wide, so the rows and the tiles above them cannot disagree. Omitting
+/// the window means आजपर्यंत (all time), the founder-chosen default, which is
+/// what lets a client that predates the parameter keep working. Note the one
+/// deliberate consequence: <c>ManDays</c> under the DEFAULT window is now
+/// all-time rather than this-week — it stopped being the odd one out.
+/// </para>
+/// <para>
+/// <b><c>Pending</c> is NEVER window-scoped</b> (founder ruling, Task 9). It is
+/// an approval INBOX — work still waiting on the owner — not a statistic. A
+/// time filter that hid a log awaiting his approval would not be a narrower
+/// view, it would be a lost obligation. It is computed from the UNFILTERED
+/// log set whatever window is in force, and so is the <c>Review</c> list it
+/// summarises. Do not "fix" this to match the other tiles.
+/// </para>
+/// <para>
+/// <b>The window is IST-anchored</b> via <see cref="FarmLocalDay"/>. The old
+/// week boundary came off <c>clock.UtcNow.Date</c>, which is a day behind the
+/// farmer's between 00:00 and 05:30 IST — and early morning is when farm work
+/// happens, so this was not a rare edge. The analytics side hit the identical
+/// defect and fixed it the same way (<c>20260817150453_WvfdWeekBoundaryToIst</c>).
+/// One rule, one owner: the single <c>FarmLocalDay.From(clock.UtcNow)</c> call
+/// below is the only timezone arithmetic in this read-model — every column the
+/// window is compared against is already a farm-local <c>DateOnly</c>.
 /// </para>
 /// <para>
 /// <c>RecordedWages</c> ("काम झालं") is a DISTINCT number: the sum of
@@ -72,6 +105,22 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             return Result.Failure<LabourDataDto>(ShramSafalErrors.InvalidCommand);
         }
 
+        // ── 0. The requested time window (Task 9), resolved in the FARMER'S
+        //       timezone. This is the only place an instant becomes a date in
+        //       this handler; everything downstream compares farm-local
+        //       DateOnly columns (DailyLog.LogDate, CostEntry.EntryDate,
+        //       JobCard.PlannedDate) against it. An unrecognised value is
+        //       REJECTED rather than quietly widened to all-time — answering a
+        //       question the caller did not ask, under a heading that says
+        //       otherwise, is the defect this task exists to remove (same
+        //       stance as GetFinanceSummaryHandler.NormalizeGroupBy).
+        var farmLocalToday = FarmLocalDay.From(clock.UtcNow);
+        var window = LabourTimeWindow.Resolve(query.Window, farmLocalToday);
+        if (window is null)
+        {
+            return Result.Failure<LabourDataDto>(ShramSafalErrors.InvalidCommand);
+        }
+
         var callerRole = await repository.GetUserRoleForFarmAsync(query.FarmId.Value, query.CallerUserId.Value, ct);
         if (callerRole is null)
         {
@@ -96,8 +145,21 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             .ToList();
 
         // ── 2. JobCards for the farm → per-worker RecordedWages (काम झालं). ──
+        // Task 9 — windowed on JobCard.PlannedDate: the day the work was FOR.
+        // It is the only farm-local calendar date the aggregate carries;
+        // CompletedAtUtc/CreatedAtUtc are UTC instants recording when a STATUS
+        // changed, and keying a farmer-facing "this week" off them would both
+        // re-introduce the IST skew this task removes and credit last week's
+        // work to whenever someone got round to marking it done.
+        //
+        // Filtered HERE rather than in SQL — unlike the two reads below —
+        // because GetJobCardsForFarmAsync is shared with GetJobCardsForFarmHandler;
+        // this feature does not get to re-shape another use case's port. The
+        // read is farm-scoped and already returned every row before this task,
+        // so the predicate costs nothing extra.
         var jobCards = await repository.GetJobCardsForFarmAsync(query.FarmId, statusFilter: null, ct);
         var recordedWagesByWorker = jobCards
+            .Where(jc => window.Contains(jc.PlannedDate))
             .Where(jc => jc.AssignedWorkerUserId is not null
                 && jc.Status is JobCardStatus.Completed or JobCardStatus.VerifiedForPayout or JobCardStatus.PaidOut)
             .GroupBy(jc => jc.AssignedWorkerUserId!.Value.Value)
@@ -112,6 +174,15 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // conflated with "nobody earned anything". Gates both the per-person
         // and the farm-wide RecordedWages/Owed figures below: null, never `0m`,
         // whenever this is false.
+        //
+        // Task 9 — this is now "any evidence INSIDE THE WINDOW", and R6's
+        // polarity is unchanged by that narrowing: a window containing no job
+        // card is a window we know nothing about काम झालं in, so both it and
+        // the बाकी derived from it stay unknown. Note the shape this differs
+        // from — ManDays below, where a logged day with no labour on it IS a
+        // real zero — because a JobCard has no "the day was recorded and it
+        // held no job card" counterpart: nothing else in the model asserts a
+        // day had no work worth recording.
         var hasJobCardEvidence = recordedWagesByWorker.Count > 0;
 
         // ── 3. Labour CostEntries — labour_payout + labour_misc (finance-consistent Paid — दिलं). ──
@@ -126,10 +197,21 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // already 2dp at domain construction (CostEntry.Amount /
         // FinanceCorrection.CorrectedAmount), so the decimal.Round calls
         // below are a defensive no-op. GetFinanceSummaryHandler itself only
-        // rounds its group sum + grand total, never per-entry. This labour
-        // Paid is also all-time — no date-range filter, unlike the finance
-        // summary's optional period scoping.
-        var payoutRows = await repository.GetLabourPayoutCostEntriesWithJobCardAsync(query.FarmId, ct);
+        // rounds its group sum + grand total, never per-entry.
+        //
+        // Task 9 — दिलं is now scoped to the window by CostEntry.EntryDate,
+        // which is the SAME date column GetFinanceSummaryHandler's own
+        // fromDate/toDate filter uses. That is what keeps the money-consistency
+        // invariant true per PERIOD and not merely per lifetime: labour "दिलं"
+        // for a window equals the finance page's "Labour" bucket for the same
+        // window. It is also why an empty window reports ₹0 rather than "—":
+        // finance sums an empty range to 0, and two screens showing the same
+        // rows must not contradict each other about whether the answer is
+        // knowable. Unlike a daily log, a payment made through the app cannot
+        // exist without leaving a row here — within the ledger the app owns, no
+        // row IS no payment.
+        var payoutRows = await repository.GetLabourPayoutCostEntriesWithJobCardAsync(
+            query.FarmId, window.FromDate, window.ToDateInclusive, ct);
         var corrections = await repository.GetCorrectionsForEntriesAsync(payoutRows.Select(r => r.CostEntry.Id), ct);
         var latestCorrections = corrections
             .GroupBy(c => c.CostEntryId)
@@ -168,8 +250,19 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         }
 
         // ── 4. Display names (cross-context, safe — mirrors sync-pull operators). ──
-        var reviewOperatorIds = new List<Guid>();
+        // Task 9 — this read stays UNFILTERED on purpose. It feeds three
+        // different things with two different scoping rules, and collapsing
+        // them into one windowed query would silently window the wrong ones:
+        //   * `farmLogs`   — the review inbox (§8) and its Pending count, which
+        //                    the founder ruled must NEVER be time-filtered, plus
+        //                    the operator display names those rows need.
+        //   * `windowLogs` — the `Logs` tile, and the "did we hear anything
+        //                    about these days at all" test the man-days rule
+        //                    turns on (§7).
         var farmLogs = await repository.GetDailyLogsByFarmAsync(query.FarmId, ct);
+        var windowLogs = farmLogs.Where(l => window.Contains(l.LogDate)).ToList();
+
+        var reviewOperatorIds = new List<Guid>();
         reviewOperatorIds.AddRange(farmLogs.Select(l => l.OperatorUserId.Value));
 
         var operatorIds = labourMemberships.Select(m => m.UserId.Value)
@@ -206,7 +299,12 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
 
             var displayName = displayNameByUserId.GetValueOrDefault(workerId, $"Worker {personId[..8]}");
             var role = membership.Role == AppRole.Mukadam ? "mukadam" : "worker";
-            var daysActive = (int)Math.Max(0, (clock.UtcNow.Date - membership.GrantedAtUtc.Date).TotalDays);
+            // Task 9 — both ends read in the FARMER's timezone. Mixing a UTC
+            // day-boundary into a figure a farmer reads as "days on my farm" is
+            // the same defect as the UTC week; one rule (FarmLocalDay), applied
+            // to both sides of the subtraction.
+            var daysActive = Math.Max(
+                0, farmLocalToday.DayNumber - FarmLocalDay.From(membership.GrantedAtUtc).DayNumber);
 
             people.Add(new LabourPersonDto(
                 Id: personId,
@@ -258,6 +356,16 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // different and legitimate `0m` case handled below. `totalOwed` is
         // NEVER derived from a null `totalRecorded` — the balance is absent
         // too, not zero, not negative.
+        //
+        // Task 9 — every term below is scoped to the SAME window, so बाकी is
+        // the balance ARISING FROM that window, not a running ledger balance.
+        // Under आजपर्यंत (the default) the two coincide and it is the true
+        // outstanding amount. Under a narrower window it answers "what did this
+        // week's recorded work leave unpaid" — a real question, and the only
+        // one that can be answered honestly when the numerator and denominator
+        // both move. Mixing scopes (window-scoped Recorded against lifetime
+        // Paid, or the reverse) would manufacture a balance no evidence
+        // supports, which is precisely the defect Task 1 removed.
         var totalRecorded = hasJobCardEvidence
             ? decimal.Round(people.Sum(p => p.RecordedWages ?? 0m), 2, MidpointRounding.AwayFromZero)
             : (decimal?)null;
@@ -267,11 +375,15 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             ? (decimal?)null
             : decimal.Round(totalRecorded.Value - totalPaid - totalAdvance, 2, MidpointRounding.AwayFromZero);
 
-        // ── 7. This-week man-days (interim, from LabourAssignment.WorkerCount — NO-MULTIPLY descriptive only). ──
-        var today = DateOnly.FromDateTime(clock.UtcNow.Date);
-        var daysSinceMonday = ((int)today.DayOfWeek + 6) % 7; // Sunday=0..Saturday=6 -> Monday-anchored offset.
-        var weekStart = today.AddDays(-daysSinceMonday);
-        var weekAssignments = await repository.GetLabourAssignmentsForFarmSinceAsync(query.FarmId, weekStart, ct);
+        // ── 7. Man-days for the WINDOW (interim, from LabourAssignment.WorkerCount
+        //       — NO-MULTIPLY descriptive only). ─────────────────────────────
+        // Task 9 — the week is no longer computed here at all: the window
+        // (§0) owns both bounds, IST-anchored, and this read simply asks for
+        // the assignments whose parent log falls inside it. The upper bound is
+        // new — the old query was `LogDate >= weekStart` with nothing on the
+        // other side, so a day dated ahead of today counted inside "this week".
+        var windowAssignments = await repository.GetLabourAssignmentsForFarmInWindowAsync(
+            query.FarmId, window.FromDate, window.ToDateInclusive, ct);
 
         // Task 6 (spec: 2026-08-28-labour-v2-release-1, P4) — LabourHeadcount.Resolve
         // now returns null for an assignment whose headcount was never stated
@@ -283,24 +395,25 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // deliberately not used here.
         //
         // Fix round 1/5 — THREE cases, not two, mirroring Task 1's `hasJobCardEvidence`
-        // ruling (R6) correctly instead of inverting it:
-        //   1. NO daily log at all this week (`farmLogs`, already fetched in step 4,
-        //      filtered to this week) — we have no record of the week whatsoever.
+        // ruling (R6) correctly instead of inverting it. Task 9 narrows "this
+        // week" to "the window" throughout; the rule itself is untouched:
+        //   1. NO daily log at all inside the window (`windowLogs`, from the
+        //      unfiltered §4 read) — we have no record of those days whatsoever.
         //      Silence is not a statement: UNKNOWN, same polarity as R6.
-        //   2. Logs exist this week, but NONE of them carries a LabourAssignment —
-        //      the farmer told us about those days and none involved hired labour.
-        //      That IS a real fact: a genuine 0.
+        //   2. Logs exist inside the window, but NONE of them carries a
+        //      LabourAssignment — the farmer told us about those days and none
+        //      involved hired labour. That IS a real fact: a genuine 0.
         //   3. Logs carry labour, but no assignment in it ever stated a headcount —
         //      UNKNOWN (unchanged from the first pass at this task).
         // "Assignment contributes nothing to the sum" (not a fabricated 0) still
         // holds inside case 3's mixed sub-case: a known figure among unknowns is
         // never poisoned to null, and an unknown one never drags a known sum down.
-        var hasLogsThisWeek = farmLogs.Any(l => l.LogDate >= weekStart);
-        var resolvedHeadcounts = weekAssignments
+        var hasLogsInWindow = windowLogs.Count > 0;
+        var resolvedHeadcounts = windowAssignments
             .Select(a => LabourHeadcount.Resolve(a.WorkerCount, a.MaleCount, a.FemaleCount))
             .ToList();
-        var manDays = !hasLogsThisWeek
-            ? (decimal?)null                                          // case 1: no record of the week at all.
+        var manDays = !hasLogsInWindow
+            ? (decimal?)null                                          // case 1: no record of the window at all.
             : resolvedHeadcounts.Count == 0
                 ? 0m                                                  // case 2: logged days, none involved labour.
                 : resolvedHeadcounts.All(h => h is null)
@@ -308,6 +421,15 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                     : (decimal?)resolvedHeadcounts.Sum(h => h ?? 0);   // real evidence — sum the known ones.
 
         // ── 8. Review — Draft/Confirmed logs still awaiting the owner. ─────
+        // Task 9, FOUNDER RULING — this reads `farmLogs`, the UNFILTERED set,
+        // and must keep doing so under every window. The review inbox is an
+        // obligation, not a statistic: a day still waiting on the owner's
+        // approval does not stop waiting because he switched the dashboard to
+        // "आज". Narrowing it would not show him less, it would hide work he
+        // owes an answer on, with no signal that anything was hidden. The
+        // `Pending` count below is the same list's size for the same reason —
+        // if one were windowed and the other not, the tile and the list under
+        // it would disagree on one screen.
         var reviewLogs = farmLogs
             .Where(l => l.CurrentVerificationStatus is VerificationStatus.Draft or VerificationStatus.Confirmed
                 && VerificationStateMachine.GetAvailableTransitions(
@@ -330,7 +452,15 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             })
             .ToList();
 
-        var weekLabel = $"{weekStart:yyyy-MM-dd}";
+        // Task 9 — the window's START date, or empty when the window is
+        // unbounded (आजपर्यंत has no first day). The field is still named
+        // `WeekLabel` on the wire and that name is now too narrow — renaming it
+        // is a client-visible contract change and out of this server-side
+        // task's scope. It is safe either way: the client suppresses any label
+        // that is not a readable range (`features/labour/weekLabel.ts`,
+        // `isReadableWeekRange`), and a bare ISO date and an empty string are
+        // both suppressed. This never invents a label.
+        var weekLabel = window.FromDate is { } windowStart ? $"{windowStart:yyyy-MM-dd}" : string.Empty;
 
         var dashboard = new LabourDashboardDto(
             WeekLabel: weekLabel,
@@ -340,7 +470,13 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             Wages: totalPaid,
             Advances: totalAdvance,
             Owed: totalOwed,
-            Logs: farmLogs.Count,
+            // Task 9 — `Logs` counts records INSIDE the window and is a genuine
+            // 0 when there are none. It is not a quantity estimated from
+            // evidence (the way मजूर-दिवस is); it IS the evidence count, and
+            // the absence of a row is exactly observable. "How many days did I
+            // log this week" has an honest answer of zero.
+            Logs: windowLogs.Count,
+            // ...and `Pending` deliberately does NOT move with the window. See §8.
             Pending: reviewLogs.Count,
             Plots: [],
             Money: new LabourMoneyDto(totalRecorded, totalPaid, totalAdvance, totalOwed));

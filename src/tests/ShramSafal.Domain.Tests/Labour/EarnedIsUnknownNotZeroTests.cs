@@ -134,9 +134,17 @@ public sealed class EarnedIsUnknownNotZeroTests
             IEnumerable<Guid> userIds, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<SyncOperatorDto>>([]);
 
+        // Task 9 (spec: 2026-08-28-labour-v2-release-1) — the date window. These
+        // tests send no window, so both bounds arrive null (आजपर्यंत / all time)
+        // and the predicate is a no-op; it is honoured anyway so the double
+        // cannot silently disagree with production about what the bounds mean.
         public override Task<List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)>> GetLabourPayoutCostEntriesWithJobCardAsync(
-            FarmId farmId, CancellationToken ct = default)
-            => Task.FromResult(_payouts.Where(p => p.CostEntry.FarmId == farmId).ToList());
+            FarmId farmId, DateOnly? fromDate, DateOnly? toDateInclusive, CancellationToken ct = default)
+            => Task.FromResult(_payouts
+                .Where(p => p.CostEntry.FarmId == farmId
+                    && (fromDate is null || p.CostEntry.EntryDate >= fromDate.Value)
+                    && (toDateInclusive is null || p.CostEntry.EntryDate <= toDateInclusive.Value))
+                .ToList());
 
         public override Task<List<FinanceCorrection>> GetCorrectionsForEntriesAsync(
             IEnumerable<Guid> costEntryIds, CancellationToken ct = default)

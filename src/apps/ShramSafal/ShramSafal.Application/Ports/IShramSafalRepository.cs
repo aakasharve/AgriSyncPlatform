@@ -790,23 +790,37 @@ public interface IShramSafalRepository
     /// </para>
     /// Default impl returns empty so in-tree test doubles keep compiling;
     /// production <c>ShramSafalRepository</c> overrides.
+    /// <para>
+    /// Task 9 (spec: 2026-08-28-labour-v2-release-1) — bounded by
+    /// <c>CostEntry.EntryDate</c>, the farm-local calendar date the money is
+    /// booked against. Both bounds are INCLUSIVE and either may be
+    /// <c>null</c> for unbounded, so the all-time window (the default) reads
+    /// exactly what this method read before the window existed.
+    /// </para>
     /// </summary>
     Task<List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)>> GetLabourPayoutCostEntriesWithJobCardAsync(
-        FarmId farmId, CancellationToken ct = default)
+        FarmId farmId, DateOnly? fromDate, DateOnly? toDateInclusive, CancellationToken ct = default)
         => Task.FromResult(new List<(CostEntry, Guid?)>());
 
     /// <summary>
     /// <see cref="LabourAssignment"/> rows (voice-derived, NO-MULTIPLY
     /// descriptive attendance — count/shift/task/names only) for daily logs
-    /// on this farm dated on/after <paramref name="weekStart"/>. Interim
-    /// source for <c>Dashboard.ManDays</c> (sum of
+    /// on this farm whose <c>LogDate</c> falls inside the given window.
+    /// Interim source for <c>Dashboard.ManDays</c> (sum of
     /// <see cref="LabourAssignment.WorkerCount"/>) until the Stage 5
     /// per-worker attendance ledger lands — <c>Ledger.Rows</c> stays empty
     /// until then. Default impl returns empty so in-tree test doubles keep
     /// compiling; production <c>ShramSafalRepository</c> overrides.
+    /// <para>
+    /// Task 9 (spec: 2026-08-28-labour-v2-release-1) — replaces
+    /// <c>GetLabourAssignmentsForFarmSinceAsync</c>, which had a lower bound
+    /// only. Both bounds are INCLUSIVE and either may be <c>null</c> for
+    /// unbounded. The upper bound is the substantive addition: without it a
+    /// day dated ahead of today counted inside "this week".
+    /// </para>
     /// </summary>
-    Task<List<LabourAssignment>> GetLabourAssignmentsForFarmSinceAsync(
-        FarmId farmId, DateOnly weekStart, CancellationToken ct = default)
+    Task<List<LabourAssignment>> GetLabourAssignmentsForFarmInWindowAsync(
+        FarmId farmId, DateOnly? fromDate, DateOnly? toDateInclusive, CancellationToken ct = default)
         => Task.FromResult(new List<LabourAssignment>());
 
     // --- Field Operator identity (Task 11, spec: 2026-07-13-labour-attendance-approval-design) ---

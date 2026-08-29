@@ -1412,7 +1412,7 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     }
 
     public async Task<List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)>> GetLabourPayoutCostEntriesWithJobCardAsync(
-        FarmId farmId, CancellationToken ct = default)
+        FarmId farmId, DateOnly? fromDate, DateOnly? toDateInclusive, CancellationToken ct = default)
     {
         // Decision 3a (2026-07-19, spec: 2026-07-13-labour-attendance-approval-design):
         // दिलं = ALL labour money paid out, not just job-card settlements.
@@ -1421,8 +1421,22 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         // same pair the frontend's mapCategory() buckets into "Labour" for the
         // finance page. Widening this filter (rather than adding a second
         // query) keeps ONE derivation for both categories.
+        //
+        // Task 9 (spec: 2026-08-28-labour-v2-release-1) — the date window. Both
+        // bounds are INCLUSIVE and either may be null (unbounded), so the
+        // all-time window emits exactly the predicate this method carried
+        // before the window existed. Pushed to SQL rather than filtered in the
+        // handler because (farm_id, entry_date) is already indexed and a
+        // "today" view must not drag years of rows into memory to discard them.
+        // RLS is unchanged and still the outer gate: the ambient per-request
+        // transaction's agrisync.farm_id GUC scopes ss.cost_entries exactly as
+        // it does for every sibling read here — the farm_id predicate below is
+        // the same defence-in-depth filter the original carried, not the
+        // tenant boundary.
         var entries = await db.CostEntries
             .Where(c => c.FarmId == farmId && (c.CategoryId == "labour_payout" || c.CategoryId == "labour_misc"))
+            .Where(c => (fromDate == null || c.EntryDate >= fromDate.Value)
+                && (toDateInclusive == null || c.EntryDate <= toDateInclusive.Value))
             .OrderBy(c => c.EntryDate)
             .ToListAsync(ct);
 
@@ -1454,13 +1468,25 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToList();
     }
 
-    public async Task<List<LabourAssignment>> GetLabourAssignmentsForFarmSinceAsync(
-        FarmId farmId, DateOnly weekStart, CancellationToken ct = default)
+    /// <summary>
+    /// Task 9 (spec: 2026-08-28-labour-v2-release-1) — replaces
+    /// <c>GetLabourAssignmentsForFarmSinceAsync</c>. Same join, same tenant
+    /// scoping (the ambient transaction's <c>agrisync.farm_id</c> GUC gates
+    /// BOTH <c>ss.labour_assignments</c> and <c>ss.daily_logs</c>; the
+    /// <c>log.FarmId</c> predicate is the same defence-in-depth filter the
+    /// original carried). The only change is that the date bound is now a
+    /// two-sided, optional window instead of an open-ended
+    /// <c>&gt;= weekStart</c>.
+    /// </summary>
+    public async Task<List<LabourAssignment>> GetLabourAssignmentsForFarmInWindowAsync(
+        FarmId farmId, DateOnly? fromDate, DateOnly? toDateInclusive, CancellationToken ct = default)
     {
         return await (
             from la in db.LabourAssignments
             join log in db.DailyLogs on la.DailyLogId equals log.Id
-            where log.FarmId == farmId && log.LogDate >= weekStart
+            where log.FarmId == farmId
+                && (fromDate == null || log.LogDate >= fromDate.Value)
+                && (toDateInclusive == null || log.LogDate <= toDateInclusive.Value)
             select la)
             .ToListAsync(ct);
     }

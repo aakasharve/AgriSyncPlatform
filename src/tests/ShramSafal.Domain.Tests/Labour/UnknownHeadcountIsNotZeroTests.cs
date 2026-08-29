@@ -38,6 +38,13 @@ namespace ShramSafal.Domain.Tests.Labour;
 /// assignment with a KNOWN headcount alongside unknown ones still contributes its real number —
 /// mirrors Task 1's per-item-absence-contributes-nothing pattern.</description></item>
 /// </list>
+///
+/// <para><b>Note on the test names below (Task 9).</b> These say "this week" because when they
+/// were written the man-days figure was hard-coded to the current week. Task 9 made the window an
+/// argument whose DEFAULT is आजपर्यंत (all time), and these tests send no window — so "this week"
+/// in the names now reads as "the default window". The three-case rule they pin is unchanged, and
+/// every log they seed is dated today, so it is inside every window either way. Window-by-window
+/// scoping is proved separately in <c>LabourWindowScopingTests</c>.</para>
 /// </summary>
 public sealed class UnknownHeadcountIsNotZeroTests
 {
@@ -178,15 +185,15 @@ public sealed class UnknownHeadcountIsNotZeroTests
             => Task.FromResult<IReadOnlyList<SyncOperatorDto>>([]);
 
         public override Task<List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)>> GetLabourPayoutCostEntriesWithJobCardAsync(
-            FarmId farmId, CancellationToken ct = default)
+            FarmId farmId, DateOnly? fromDate, DateOnly? toDateInclusive, CancellationToken ct = default)
             => Task.FromResult(new List<(CostEntry, Guid?)>());
 
         public override Task<List<FinanceCorrection>> GetCorrectionsForEntriesAsync(
             IEnumerable<Guid> costEntryIds, CancellationToken ct = default)
             => Task.FromResult(new List<FinanceCorrection>());
 
-        public override Task<List<LabourAssignment>> GetLabourAssignmentsForFarmSinceAsync(
-            FarmId farmId, DateOnly weekStart, CancellationToken ct = default)
+        public override Task<List<LabourAssignment>> GetLabourAssignmentsForFarmInWindowAsync(
+            FarmId farmId, DateOnly? fromDate, DateOnly? toDateInclusive, CancellationToken ct = default)
             => Task.FromResult(_assignments.ToList());
 
         public override Task<List<DailyLog>> GetDailyLogsByFarmAsync(FarmId farmId, CancellationToken ct = default)

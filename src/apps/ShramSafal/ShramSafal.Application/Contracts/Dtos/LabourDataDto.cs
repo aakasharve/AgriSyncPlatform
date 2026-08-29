@@ -56,7 +56,20 @@ public sealed record LabourPersonDto(
     int? DaysActive,
     bool? CleanRecord);
 
+/// <summary>
+/// Task 9 (spec: 2026-08-28-labour-v2-release-1) — FOUR of these figures move
+/// with <c>GetLabourDataQuery.Window</c> (<c>ManDays</c>, <c>Wages</c>,
+/// <c>Owed</c>/<c>Money</c>, <c>Logs</c>); <c>Pending</c> deliberately does
+/// NOT. It is an approval inbox, not a statistic — a time filter must never
+/// hide work still waiting on the owner (founder ruling). Every mention of
+/// "this week" below therefore reads as "the window in force", whose default
+/// is आजपर्यंत (all time).
+/// </summary>
 public sealed record LabourDashboardDto(
+    // The window's START date as a bare ISO date, or empty when the window is
+    // unbounded. Still named for a week and no longer only a week's — renaming
+    // it is a client-visible contract change, deferred. The client suppresses
+    // any label that is not a readable range, so neither form is ever shown.
     string WeekLabel,
     string Insight,
     // Task 6 (spec: 2026-08-28-labour-v2-release-1, P4) — `decimal?`, not `int`.
@@ -74,9 +87,15 @@ public sealed record LabourDashboardDto(
     decimal Advances,
     // Task 1 — `null` when zero job-card evidence exists farm-wide (see
     // LabourMoneyDto.Owed below); never a fabricated ₹0 or a balance derived
-    // from one.
+    // from one. Task 9 — "farm-wide" now means "inside the window", and every
+    // term of the subtraction is scoped to that same window.
     decimal? Owed,
+    // Task 9 — the number of daily logs INSIDE the window. A genuine `0` when
+    // there are none: this is a count of records, not a quantity estimated from
+    // them, so the absence of a row IS the answer.
     int Logs,
+    // Task 9 — NOT window-scoped, by founder ruling. Always the full count of
+    // logs awaiting this caller's approval.
     int Pending,
     IReadOnlyList<LabourPlotBarDto> Plots,
     LabourMoneyDto Money);
