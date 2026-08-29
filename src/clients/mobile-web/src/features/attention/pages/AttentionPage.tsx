@@ -4,9 +4,11 @@ import AttentionCard from '../components/AttentionCard';
 import { useAppNavigationState } from '../../../app/context/AppFeatureContexts';
 import type { AttentionCardCacheRecord } from '../../../infrastructure/storage/DexieDatabase';
 import { formatDisplayTime } from '../../../shared/utils/displayTime';
+// TASK 8 — reused as-is, no new copy. See the note in `JobCardsPage.tsx`.
+import { LoadErrorBanner } from '../../labour/components/LabourUiKit';
 
 const AttentionPage: React.FC = () => {
-    const { cards, asOf, isLoading } = useAttentionBoard();
+    const { cards, asOf, isLoading, loadFailed, refresh } = useAttentionBoard();
     const { setCurrentRoute } = useAppNavigationState();
 
     /**
@@ -44,6 +46,32 @@ const AttentionPage: React.FC = () => {
                 <p style={{ fontFamily: "'DM Sans', sans-serif" }} className="text-stone-400 text-sm">
                     Loading...
                 </p>
+            </div>
+        );
+    }
+
+    /*
+     * TASK 8 (spec: 2026-08-28-labour-v2-release-1, P4/P5, Ruling R8) — the
+     * worst of the four sites, because this screen is on the bottom nav and
+     * because the sentence below is a REASSURANCE, not a count.
+     *
+     * `db.attentionCards` is filled by exactly one thing: a SUCCESSFUL sync
+     * pull. On a device whose sync has never succeeded — a fresh install on
+     * weak rural signal, the pilot's ordinary first hour — the table is empty
+     * for the same reason a blank page is blank, and the branch below read
+     * that as an answer and told the farmer his farms were fine. A farmer who
+     * is told that does not go and look.
+     *
+     * This gate is on `loadFailed` (no sync cursor: nothing has ever
+     * populated the board) and NEVER on `cards.length`. Once a pull HAS
+     * landed, zero cards is a real answer and the all-clear below is true —
+     * it still renders, unchanged, which is what stops this fix from
+     * replacing one falsehood with its opposite.
+     */
+    if (loadFailed) {
+        return (
+            <div className="flex h-full flex-col items-center justify-center px-4">
+                <LoadErrorBanner onRetry={refresh} compact />
             </div>
         );
     }

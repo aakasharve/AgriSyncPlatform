@@ -54,7 +54,15 @@ export async function getSignals(farmId: string, options?: {
     const url = `${resolveBaseUrl()}/farms/${farmId}/compliance${qs ? `?${qs}` : ''}`;
 
     const res = await fetch(url, { headers: authHeaders() });
-    if (!res.ok) return [];
+    // TASK 8 (spec: 2026-08-28-labour-v2-release-1, P4/P5, Ruling R8) — this
+    // was `return []`. It turned every non-OK response into a resolved empty
+    // list, so `useComplianceSignals`'s `try/catch` never fired and the
+    // warnings screen answered an HTTP error with "कोणत्याही चेतावण्या नाहीत"
+    // — and, underneath, "your farms are on track". A reassurance a farmer
+    // acts on must not be manufactured out of a failed request. A genuine
+    // "none" still arrives as a 200 with an empty body, and still reads as
+    // empty.
+    if (!res.ok) throw new Error(`getSignals failed: ${res.status}`);
     return res.json() as Promise<ComplianceSignalDto[]>;
 }
 

@@ -14,8 +14,9 @@ import { useFarmContext } from '../../../core/session/FarmContext';
 import { useWorkerProfile } from '../hooks/useWorkerProfile';
 import ReliabilityScoreCard from '../components/ReliabilityScoreCard';
 import JobCardRow from '../components/JobCardRow';
-import type { JobCard } from '../../../domain/work/JobCard';
 import { getRoleLabel } from '../../../shared/roles/roleLabels';
+// TASK 8 — reused as-is, no new copy. See the note in `JobCardsPage.tsx`.
+import { LoadErrorBanner } from '../../labour/components/LabourUiKit';
 
 interface WorkerProfilePageProps {
     userId: string;
@@ -42,7 +43,7 @@ const WorkerProfilePage: React.FC<WorkerProfilePageProps> = ({
     role,
 }) => {
     const { currentFarmId } = useFarmContext();
-    const { profile, recentCards, isLoading } = useWorkerProfile(userId, currentFarmId);
+    const { profile, recentCards, isLoading, loadFailed, refresh } = useWorkerProfile(userId, currentFarmId);
 
     const resolvedName = profile?.displayName ?? displayName ?? 'Worker';
     const roleLabel = role ? getRoleLabel(role) : null;
@@ -196,7 +197,27 @@ const WorkerProfilePage: React.FC<WorkerProfilePageProps> = ({
                     </div>
                 )}
 
-                {!isLoading && !profile && (
+                {/*
+                 * TASK 8 (spec: 2026-08-28-labour-v2-release-1, P5) — the
+                 * mildest of the four sites. This screen was already HONEST on
+                 * a failed load ("प्रोफाइल उपलब्ध नाही"), so nothing false is
+                 * being removed here; what it lacked was a way out. An
+                 * accurate dead end is not a resolved state — the farmer
+                 * reached this screen by tapping a worker's name and had
+                 * nothing to press. The banner carries both the same honest
+                 * statement and the retry, so it REPLACES the block below on
+                 * the failure path rather than stacking a second message
+                 * beside it.
+                 */}
+                {loadFailed && <LoadErrorBanner onRetry={refresh} compact />}
+
+                {/*
+                 * Unchanged for the NON-failure case, and that is deliberate:
+                 * with no `userId`/`farmId` nothing was ever asked of the
+                 * server, so there is no retry to offer and this plain
+                 * sentence is the whole truth.
+                 */}
+                {!isLoading && !loadFailed && !profile && (
                     <div className="text-center py-8">
                         <p
                             style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
