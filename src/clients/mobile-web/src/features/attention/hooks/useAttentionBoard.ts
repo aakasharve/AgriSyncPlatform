@@ -13,6 +13,14 @@ const SYNC_SCOPE = 'shramsafal';
 
 interface UseAttentionBoardResult {
     cards: AttentionCardCacheRecord[];
+    /**
+     * TASK 8b — the latest `computedAtUtc` across `cards`, falling back to
+     * `syncCursors.lastSyncAt` when `cards` is empty (there is then nothing
+     * to derive a timestamp from). `null` only when neither is known, e.g.
+     * `loadFailed` is also true. This is what lets the empty-board branch
+     * say truthfully WHEN "on track" was last known, instead of asserting it
+     * of today by default.
+     */
     asOf: string | null;
     isLoading: boolean;
     /**
@@ -55,7 +63,20 @@ export function useAttentionBoard(): UseAttentionBoardResult {
                 if (!max) return c.computedAtUtc;
                 return c.computedAtUtc > max ? c.computedAtUtc : max;
             }, null);
-            setAsOf(latest);
+            /*
+             * TASK 8b — with zero cards there is nothing to derive a
+             * timestamp FROM, so `latest` above is unconditionally `null`
+             * whenever the board is genuinely empty. Without this fallback
+             * the page's "as of <time>" stamp could never render on that
+             * branch at all, which would leave today's bug exactly as it
+             * was: a bare "on track" with no indication of when that was
+             * last known true. `cursor.lastSyncAt` is the one other
+             * timestamp on the device that genuinely answers "when do we
+             * know this from" — the same field `loadFailed` above already
+             * reads — so it is used only when there is no card to answer
+             * the question instead.
+             */
+            setAsOf(latest ?? cursor?.lastSyncAt ?? null);
         } catch {
             // The store we ask the question of is unreadable, so we have no
             // answer to give. Previously this threw out of the hook with no

@@ -26,7 +26,17 @@ export function useComplianceSignals(farmId: string | null): UseComplianceSignal
     const [allSignals, setAllSignals] = useState<ComplianceSignalDto[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadFailed, setLoadFailed] = useState(false);
-    const [filter, setFilter] = useState<Filter>('Open');
+    /*
+     * TASK 8b — was 'Open'. A farm whose signals are all Acknowledged (or
+     * Resolved) then showed zero rows under that filter and fell through to
+     * "कोणत्याही चेतावण्या नाहीत" over a load that had fully succeeded — the
+     * same defect as `JobCardsPage`'s "Assigned" default, reached through
+     * this hook instead of the page. No new copy: opening unfiltered means
+     * that sentence is reachable only when the farm genuinely has zero
+     * signals. The "Open" chip itself is unchanged; only which one starts
+     * selected.
+     */
+    const [filter, setFilter] = useState<Filter>('All');
     const [tick, setTick] = useState(0);
 
     const refresh = useCallback(() => setTick(t => t + 1), []);

@@ -40,6 +40,13 @@ const AttentionPage: React.FC = () => {
     const needsAttention = cards.filter(c => c.rank === 'NeedsAttention');
     const watch = cards.filter(c => c.rank === 'Watch');
 
+    // TASK 8b — computed once, above every return, so both the card-list
+    // branch and the all-clear branch below can render the same "as of
+    // <time>" stamp instead of each having its own copy of this logic.
+    const asOfLabel = asOf
+        ? formatDisplayTime(asOf)
+        : '';
+
     if (isLoading && cards.length === 0) {
         return (
             <div className="flex h-full items-center justify-center">
@@ -92,13 +99,28 @@ const AttentionPage: React.FC = () => {
                 >
                     All your farms are on track today
                 </p>
+                {/*
+                 * TASK 8b — this all-clear was previously a bare claim of
+                 * "today" even when `cards` reflects the last sync that
+                 * SUCCEEDED, not necessarily today's. The same "as of <time>"
+                 * stamp the card-list branch below already renders makes the
+                 * sentence true regardless of which day it is from: reused
+                 * verbatim, not new copy. When `asOf` cannot be known (see
+                 * `useAttentionBoard`), `asOfLabel` is empty and this simply
+                 * does not render — the bare sentence stays unqualified
+                 * rather than showing an invented time.
+                 */}
+                {asOfLabel && (
+                    <span
+                        style={{ fontFamily: "'DM Sans', sans-serif" }}
+                        className="text-xs text-stone-400"
+                    >
+                        as of {asOfLabel}
+                    </span>
+                )}
             </div>
         );
     }
-
-    const asOfLabel = asOf
-        ? formatDisplayTime(asOf)
-        : '';
 
     return (
         <div className="flex flex-col min-h-full bg-stone-50">

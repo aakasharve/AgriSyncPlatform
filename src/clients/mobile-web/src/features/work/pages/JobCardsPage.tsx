@@ -12,7 +12,15 @@
  *   Cancelled     — rose, collapsed
  *
  * Filter chips: Draft / Assigned / In progress / Completed / Verified / Paid / All
- * Default active: Assigned
+ * Default active: All
+ *
+ * TASK 8b — was "Assigned". A farm whose cards are all Draft (or all
+ * Completed, etc.) then showed zero rows under that filter and fell through
+ * to "कोणते काम कार्ड नाही" over a load that had fully succeeded. The founder
+ * ruled that sentence stays as-is (no new Marathi) — the only honest fix is
+ * making the empty state reachable only when it is genuinely true, which
+ * means opening unfiltered. The filter chips themselves are unchanged; only
+ * which one starts selected.
  */
 
 import React, { useState, useCallback } from 'react';
@@ -71,7 +79,7 @@ const JobCardsPage: React.FC<JobCardsPageProps> = ({ onNavigateToDetail }) => {
     // repo's pre-commit lint runs at zero warnings on staged files.
     const { jobCards, isLoading, loadFailed, assignJobCard, startJobCard, settleJobCard, refresh } = useJobCards({ farmId: currentFarmId });
 
-    const [activeFilter, setActiveFilter] = useState<FilterChip>('Assigned');
+    const [activeFilter, setActiveFilter] = useState<FilterChip>('All');
     const [expandedBands, setExpandedBands] = useState<Record<string, boolean>>(
         Object.fromEntries(BANDS.map(b => [b.labelEn, b.defaultExpanded]))
     );
