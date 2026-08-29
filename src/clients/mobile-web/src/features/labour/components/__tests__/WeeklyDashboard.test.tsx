@@ -19,11 +19,12 @@
  */
 import React from 'react';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, within, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import WeeklyDashboard from '../WeeklyDashboard';
 import type { LabourData } from '../../labourMock';
 import { EMPTY_LABOUR_DATA, LABOUR_MOCK, inr } from '../../labourMock';
+import { LABOUR_WINDOW_ORDER, type LabourWindow } from '../../labourWindow';
 
 const noop = () => {};
 // Task 11 (spec: 2026-08-28-labour-v2-release-1) — the screen now takes the
@@ -154,9 +155,17 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
             expect(screen.queryByText('जास्त दिलं')).toBeNull();
         });
 
-        it('still shows the stat tile for a real, evidenced Owed figure (LABOUR_MOCK: 5400, owed)', () => {
+        // TASK 14 / RULING R16 (spec: 2026-08-28-labour-v2-release-1) —
+        // SUPERSEDES this test's original claim. This used to assert the tile
+        // SHOWS for a real, evidenced Owed figure; R16 ruled बाकी देणं is a
+        // POSITION, not a flow, so it no longer belongs in the windowed stat
+        // grid AT ALL, evidenced or not. It is not lost — see the dedicated
+        // "Task 14 (R16)" describe block below, which confirms both its
+        // removal from every window and its continued, readable presence in
+        // the पैसे · money card.
+        it('no longer shows the stat tile even for a real, evidenced Owed figure (LABOUR_MOCK: 5400) — moved to the money card (R16)', () => {
             render(<WeeklyDashboard {...baseProps()} data={LABOUR_MOCK} />);
-            expect(screen.getByText('बाकी देणं')).toBeInTheDocument();
+            expect(screen.queryByText('बाकी देणं')).toBeNull();
         });
 
         it('never renders a negative or zero ₹ figure for the overpayment tile as a substitute for null', () => {
@@ -261,6 +270,66 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
             // the parts of an unknown whole — so the segment no longer exists
             // here. The assertions below are unchanged and still correct; only
             // the reason for their narrowness has.)
+            expect(screen.queryByText('बाकी देणं')).toBeNull();
+            expect(screen.queryByText('जास्त दिलं')).toBeNull();
+        });
+    });
+
+    // TASK 14 / RULING R16 (spec: 2026-08-28-labour-v2-release-1) — ONE CLEAN
+    // MENTAL MODEL: the stat grid holds FLOWS that accrue over the selected
+    // window (मजूर-दिवस · मजुरी · नोंदी); the पैसे · money card holds
+    // POSITIONS — where the farmer stands as of now, already labelled
+    // आजपर्यंत (R15, Task 13). `बाकी देणं`/`जास्त दिलं` is a position (R13,
+    // Task 10 already ruled this), so leaving it inside the WINDOWED grid was
+    // the one tile a farmer saw sit frozen when he slid to आज while every
+    // neighbour changed, with nothing on screen explaining why. Removed from
+    // the grid outright, in every window, for both polarities of Owed — it is
+    // not lost, the money card already renders it as a labelled बाकी segment.
+    describe('Task 14 (R16) — बाकी देणं/जास्त दिलं is a position, never in the windowed stat grid', () => {
+        afterEach(() => cleanup());
+
+        const withOwed = (owed: number | null): LabourData => ({
+            ...LABOUR_MOCK,
+            dashboard: {
+                ...LABOUR_MOCK.dashboard,
+                owed,
+                money: { ...LABOUR_MOCK.dashboard.money, owed },
+            },
+        });
+
+        it.each(LABOUR_WINDOW_ORDER)(
+            'the stat grid carries no बाकी देणं tile under %s, even with a real owed figure (LABOUR_MOCK)',
+            (window: LabourWindow) => {
+                render(<WeeklyDashboard {...baseProps()} timeWindow={window} data={LABOUR_MOCK} />);
+                const grid = screen.getByTestId('labour-stat-grid');
+                expect(within(grid).queryByText('बाकी देणं')).toBeNull();
+                expect(within(grid).queryByText('जास्त दिलं')).toBeNull();
+            },
+        );
+
+        it.each(LABOUR_WINDOW_ORDER)(
+            'the stat grid carries no जास्त दिलं tile under %s either — the overpaid case',
+            (window: LabourWindow) => {
+                render(<WeeklyDashboard {...baseProps()} timeWindow={window} data={withOwed(-500)} />);
+                const grid = screen.getByTestId('labour-stat-grid');
+                expect(within(grid).queryByText('जास्त दिलं')).toBeNull();
+                expect(within(grid).queryByText('बाकी देणं')).toBeNull();
+            },
+        );
+
+        it('the figure is not lost — it is still readable in the पैसे · money card as a labelled बाकी segment (LABOUR_MOCK)', () => {
+            render(<WeeklyDashboard {...baseProps()} data={LABOUR_MOCK} />);
+            const card = screen.getByTestId('labour-money-card');
+            // The legend names the colour...
+            expect(within(card).getByText('बाकी')).toBeInTheDocument();
+            // ...and the bar segment itself carries the readable ₹ figure —
+            // not merely an unlabelled block of colour.
+            expect(within(card).getByText(inr(LABOUR_MOCK.dashboard.money.owed as number))).toBeInTheDocument();
+        });
+
+        it('absence stays absence — owed: null still renders no fabricated ₹0 anywhere, grid or card (Task 1 invariant preserved)', () => {
+            render(<WeeklyDashboard {...baseProps()} data={withOwed(null)} />);
+            expect(screen.queryByText('₹0')).toBeNull();
             expect(screen.queryByText('बाकी देणं')).toBeNull();
             expect(screen.queryByText('जास्त दिलं')).toBeNull();
         });

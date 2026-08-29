@@ -45,7 +45,7 @@
  * reasoning is at the card itself, at the bottom of this file.
  */
 import React from 'react';
-import { ChevronRight, Users, Wallet, ArrowUpRight, Scale, ClipboardList, BookText, Star, MapPin } from 'lucide-react';
+import { ChevronRight, Users, Wallet, ArrowUpRight, ClipboardList, BookText, Star, MapPin } from 'lucide-react';
 import type { LabourData } from '../labourMock';
 import { inr } from '../labourMock';
 import { StatTile, GroupLabel, EmptyState } from './LabourUiKit';
@@ -182,17 +182,27 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
                     <StatTile icon={<ArrowUpRight size={17} />} tone="am" value={inr(d.advances)} label="उचल दिली" />
                 )}
                 {/*
-                  * TASK 1 (P4) — `d.owed` is `null` whenever the farm carries
-                  * zero job-card evidence (production holds zero today). That
-                  * is an ABSENCE of evidence, not evidence of zero, so this
-                  * tile — बाकी देणं / जास्त दिलं — is omitted OUTRIGHT rather
-                  * than rendering a fabricated ₹0 or a fabricated overpayment.
-                  * This leaves a visible gap in the grid below; new wording to
-                  * fill it needs founder approval and is out of scope here.
+                  * TASK 14 / RULING R16 (spec: 2026-08-28-labour-v2-release-1)
+                  * — बाकी देणं / जास्त दिलं REMOVED from this grid outright.
+                  *
+                  * WHY. This grid holds FLOWS — things that accrue over the
+                  * selected window (मजूर-दिवस, मजुरी, नोंदी). `d.owed` is a
+                  * POSITION — where the farmer stands as of now — and R13
+                  * (Task 10) already ruled it must never be windowed. Sitting
+                  * a never-windowed balance inside a windowed grid meant a
+                  * farmer who slid to आज saw every neighbouring tile change
+                  * while this one alone sat frozen, with nothing on screen
+                  * explaining why.
+                  *
+                  * It is not lost: R15 (Task 13) made the पैसे · money card
+                  * below an all-time POSITION card labelled आजपर्यंत, and it
+                  * already draws `owed` as a labelled बाकी segment of its bar
+                  * (see that card's own note). That is this figure's correct
+                  * home now. Absence stays absence there exactly as it did
+                  * here — `d.money.owed !== null` still gates the segment, so
+                  * a farm with no job-card evidence still gets nothing
+                  * fabricated, never a ₹0.
                   */}
-                {d.owed !== null && (
-                    <StatTile icon={<Scale size={17} />} tone="or" value={inr(Math.abs(d.owed))} label={d.owed >= 0 ? 'बाकी देणं' : 'जास्त दिलं'} />
-                )}
                 <StatTile icon={<ClipboardList size={17} />} tone="bl" value={String(d.logs)} label="नोंदी" />
             </div>
 

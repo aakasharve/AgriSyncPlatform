@@ -140,10 +140,12 @@ describe('money card — the bar always adds up to its own header', () => {
         expect(headerText()).toBe('—');
         expect(segments()).toHaveLength(0);
         expect(screen.queryByTestId('labour-money-bar')).toBeNull();
-        // Scoped to the CARD on purpose. ₹7,100 still renders on screen — as
-        // the बाकी देणं stat tile, which is a figure in its own right and is
-        // out of R15's scope (R13 governs it). What must not exist is that
-        // figure drawn as a SLICE of an unknown total.
+        // Scoped to the CARD on purpose. (Task 14 / R16 note: ₹7,100 used to
+        // also be reachable outside the card, as the बाकी देणं stat tile —
+        // that tile is gone now, folded into this same card as R15's बाकी
+        // segment. Scoping this assertion to the card still isolates exactly
+        // what R15 governs: a figure must never be drawn as a SLICE of an
+        // unknown total, regardless of where else on screen it also appears.)
         const card = screen.getByTestId('labour-money-card');
         expect(card.textContent).not.toContain(inr(7100));
         expect(card.textContent).not.toContain(inr(900));
