@@ -1070,41 +1070,51 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
                 .ToList();
         }
 
-        var operators = new List<SyncOperatorDto>(ids.Count);
-        foreach (var id in ids)
-        {
-            var row = await db.Database
-                .SqlQueryRaw<OperatorDirectoryRow>(
-                    """
-                    select
-                        u."Id" as "UserId",
-                        u.display_name as "DisplayName",
-                        case lower(coalesce(m.role, 'worker'))
-                            when 'primaryowner' then 'PRIMARY_OWNER'
-                            when 'secondaryowner' then 'SECONDARY_OWNER'
-                            when 'mukadam' then 'MUKADAM'
-                            else 'WORKER'
-                        end as "Role"
-                    from public.users u
-                    left join public.memberships m
-                        on m.user_id = u."Id"
-                        and m.app_id = 'shramsafal'
-                        and m.is_revoked = false
-                    where u."Id" = {0}
-                    limit 1
-                    """,
-                    id)
-                .FirstOrDefaultAsync(ct);
+        // Task 24 (spec: 2026-08-28-labour-v2-release-1) — ONE batched round
+        // trip for all ids, not one SqlQueryRaw per id. This method's own
+        // SIGNATURE already looked batched (a list of ids in, one list out);
+        // the per-id `foreach` below it was the audit's "one separate
+        // database round trip per person simply to resolve display names" —
+        // hidden a layer under GetLabourDataHandler (whose own per-person
+        // loop makes zero repository calls) and under PullSyncChangesHandler,
+        // which calls this SAME method on every sync pull. `= ANY(@ids)`
+        // mirrors UserDirectoryService.GetDisplayNamesAsync's established
+        // pattern for a batched cross-schema (public.*) read from this
+        // DbContext.
+        //
+        // RLS is unaffected: public.users carries no policy (global
+        // directory), and public.memberships' `p_user_memberships` policy
+        // (`user_id = current_setting('agrisync.user_id')`) is evaluated PER
+        // ROW by Postgres regardless of whether the driving id list has one
+        // id or many — batching the ids does not change which rows the LEFT
+        // JOIN (or the policy guarding it) can see. No `limit 1` is needed
+        // here (unlike the old per-id query): `IX_memberships_user_id_app_id`
+        // is a UNIQUE index on (user_id, app_id) WHERE is_revoked = false, so
+        // the join can never produce more than one membership row per user.
+        var rows = await db.Database
+            .SqlQueryRaw<OperatorDirectoryRow>(
+                """
+                select
+                    u."Id" as "UserId",
+                    u.display_name as "DisplayName",
+                    case lower(coalesce(m.role, 'worker'))
+                        when 'primaryowner' then 'PRIMARY_OWNER'
+                        when 'secondaryowner' then 'SECONDARY_OWNER'
+                        when 'mukadam' then 'MUKADAM'
+                        else 'WORKER'
+                    end as "Role"
+                from public.users u
+                left join public.memberships m
+                    on m.user_id = u."Id"
+                    and m.app_id = 'shramsafal'
+                    and m.is_revoked = false
+                where u."Id" = ANY(@ids)
+                """,
+                new Npgsql.NpgsqlParameter("ids", ids.ToArray()))
+            .ToListAsync(ct);
 
-            if (row is null)
-            {
-                continue;
-            }
-
-            operators.Add(new SyncOperatorDto(row.UserId, row.DisplayName, row.Role));
-        }
-
-        return operators
+        return rows
+            .Select(row => new SyncOperatorDto(row.UserId, row.DisplayName, row.Role))
             .OrderBy(op => op.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
