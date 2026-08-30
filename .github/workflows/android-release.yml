@@ -1,12 +1,11 @@
 name: android-release
 
 on:
+  # NOTE: there is deliberately no `version_bump` input. One used to be declared
+  # here and no step ever read it, so choosing "patch" in the Run-workflow dialog
+  # silently did nothing. The version is a COMMIT: edit versionCode / versionName
+  # in src/clients/mobile-web/android/app/build.gradle and push that.
   workflow_dispatch:
-    inputs:
-      version_bump:
-        description: 'Version bump type (none | patch | minor)'
-        required: false
-        default: 'none'
   push:
     tags:
       - 'v*'
@@ -86,22 +85,54 @@ jobs:
         working-directory: src/clients/mobile-web
         run: npx cap sync android
 
+      # The signing key is NOT in the repo — it is this secret plus the founder's
+      # offline backup. Everything below is a guard, because every failure mode
+      # here used to surface hundreds of Gradle tasks later as a misleading
+      # "keystore password was incorrect", or not at all.
       - name: Decode keystore from secret
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d \
-            > src/clients/mobile-web/android/app/shramsafal-release.keystore
-          echo "Keystore decoded: $(wc -c < src/clients/mobile-web/android/app/shramsafal-release.keystore) bytes"
+          KS=src/clients/mobile-web/android/app/shramsafal-release.keystore
+          echo "$KEYSTORE_BASE64" | base64 -d > "$KS"
+          SZ=$(wc -c < "$KS")
+          echo "Keystore decoded: ${SZ} bytes"
+          # `base64 -d` exits 0 on an empty or unset secret and writes a 0-byte
+          # file. Without this check that becomes a Gradle error 500 tasks later.
+          if [ "$SZ" -lt 1000 ]; then
+            echo "::error title=KEYSTORE_BASE64 empty or truncated::Decoded keystore is ${SZ} bytes. Regenerate with 'base64 -w0 <keystore>' and reset the KEYSTORE_BASE64 secret."
+            exit 1
+          fi
+          # app/build.gradle defaults these to "" when unset, which produces the
+          # same misleading downstream error as a wrong password.
+          if [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error title=Signing password secret missing::KEYSTORE_PASSWORD and/or KEY_PASSWORD is unset."
+            exit 1
+          fi
+          # Catches a half-finished key rotation (new keystore, old password) in
+          # seconds rather than at the end of a 20-minute build. The alias is
+          # fixed by app/build.gradle.
+          keytool -list -keystore "$KS" -storepass "$KEYSTORE_PASSWORD" -alias shramsafal > /dev/null
+          echo "Keystore opens with the supplied password, and contains alias 'shramsafal'."
 
       - name: Grant Gradle execute permission
         working-directory: src/clients/mobile-web/android
         run: chmod +x gradlew
 
-      - name: Build signed release APK
+      # Both artifacts come from ONE Gradle invocation so they share the compile
+      # and R8 passes — and so the APK a farmer sideloads and the AAB uploaded to
+      # Play are built from byte-identical inputs. `-q` is deliberately not used:
+      # it hides which task failed.
+      #   APK — what the pilot installs from shramsafal.in/download
+      #   AAB — what Google Play requires for a new app
+      - name: Build signed release APK + AAB
         working-directory: src/clients/mobile-web/android
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease --no-daemon -q
+        run: ./gradlew assembleRelease bundleRelease --no-daemon
 
       - name: Verify APK
         run: |
@@ -147,4 +178,30 @@ jobs:
         with:
           name: shramsafal-release-apk
           path: src/clients/mobile-web/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+
+      # --- Google Play bundle -------------------------------------------------
+      # Deliberately AFTER every APK step. The APK is what a pilot farmer
+      # installs; a problem with the Play bundle must never block publishing it.
+      #
+      # The AAB is NOT uploaded to S3. Those are public download URLs served as
+      # application/vnd.android.package-archive, and an .aab is not installable
+      # on a phone — publishing one there would hand farmers a file that cannot
+      # open. It goes to Play Console, by hand, from the workflow artifact.
+      - name: Verify AAB
+        run: |
+          AAB=src/clients/mobile-web/android/app/build/outputs/bundle/release/app-release.aab
+          ls -lh "$AAB"
+          SZ=$(wc -c < "$AAB")
+          if [ "$SZ" -lt 500000 ]; then
+            echo "::error title=AAB looks wrong::app-release.aab is only ${SZ} bytes"
+            exit 1
+          fi
+          echo "AAB ready for Play Console upload."
+
+      - name: Upload AAB as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shramsafal-release-aab
+          path: src/clients/mobile-web/android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30
