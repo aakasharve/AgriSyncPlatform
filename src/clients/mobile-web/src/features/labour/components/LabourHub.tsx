@@ -27,11 +27,13 @@ import { toMr } from './LabourDataPoints';
  * just the save button) rather than let a farmer fill in a form that goes
  * nowhere. Flip to `true` once attendance actually persists.
  */
-// TEMPORARILY true (2026-08-10) so the founder can review the attendance screen
-// during the "make it real" pass. This MUST return to false — or stay true only
-// once जतन करा actually persists to the server — before this branch ships. As of
-// this commit the screen is still a dead end: onSave writes nothing, and its
-// crop/plot picker is fed hardcoded MOCK_CROPS, not the farm's real plots.
+// STAYS false for every real farm (Task 18, spec: 2026-08-28-labour-v2-
+// release-1). This is NOT the founder-review switch — see `isPreview` in the
+// render below, which is the one declared exception: it reveals this tile
+// only inside the `import.meta.env.DEV`-gated `?preview=labour` mount
+// (App.tsx), never for a real farmer. The screen itself is unchanged and
+// still a dead end: onSave writes nothing, and its crop/plot picker is fed
+// hardcoded MOCK_CROPS, not the farm's real plots.
 const SHOW_ATTENDANCE_TILE = false;
 
 /**
@@ -41,10 +43,11 @@ const SHOW_ATTENDANCE_TILE = false;
  * so the screen is structurally empty regardless of real data. Hidden until
  * Stage 5 ships; flip to `true` then.
  */
-// TEMPORARILY true (2026-08-10) so the founder can review हजेरी वही during the
-// "make it real" pass. MUST return to false until the Stage-5 attendance ledger
-// exists server-side — GetLabourDataHandler still returns Rows: [] / Days: []
-// unconditionally, so on a REAL farm this screen is structurally empty.
+// STAYS false for every real farm (Task 18). `isPreview` (see
+// SHOW_ATTENDANCE_TILE's comment above) is the one declared exception,
+// revealing this tile only inside `?preview=labour` for founder review — the
+// Stage-5 backend gap is unchanged: GetLabourDataHandler still returns
+// Rows: [] / Days: [] unconditionally on a real farm.
 const SHOW_LEDGER_TILE = false;
 
 interface Props {
@@ -76,6 +79,16 @@ interface Props {
     history?: DailyLog[];
     ledgerDefaults?: LedgerDefaults;
     lastLabourLogIds?: string[];
+    /**
+     * Task 18 (spec: 2026-08-28-labour-v2-release-1) — true only inside the
+     * `?preview=labour` dev preview (threaded from `useLabourState`'s
+     * `isPreview`, itself `farmCtx === null`). Reveals `SHOW_ATTENDANCE_TILE`
+     * / `SHOW_LEDGER_TILE` below for founder review WITHOUT flipping either
+     * constant for a real farm. Defaults to `false` so every existing
+     * real-app caller (and this component's own pre-Task-18 tests) is
+     * unaffected.
+     */
+    isPreview?: boolean;
 }
 
 /**
@@ -202,7 +215,7 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
     );
 };
 
-const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onDashboard, onLedger, onReview, onGoToLog, onInviteWorker, history, ledgerDefaults, lastLabourLogIds }) => {
+const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onDashboard, onLedger, onReview, onGoToLog, onInviteWorker, history, ledgerDefaults, lastLabourLogIds, isPreview = false }) => {
     const justLoggedLogs = (history && ledgerDefaults && lastLabourLogIds && lastLabourLogIds.length > 0)
         ? lastLabourLogIds
             .map((id) => history.find((log) => log.id === id))
@@ -240,10 +253,12 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
         </button>
 
         <div className="grid grid-cols-2 gap-2.5">
-            {SHOW_ATTENDANCE_TILE && (
+            {/* Task 18 — `isPreview` is the one declared exception to the
+                hard-`false` constants above; see their own comments. */}
+            {(SHOW_ATTENDANCE_TILE || isPreview) && (
                 <QuickTile icon={<ClipboardCheck size={20} />} chip="bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100" label="हजेरी घ्या" sub="आज कोण आलं" onClick={onAttendance} />
             )}
-            {SHOW_LEDGER_TILE && (
+            {(SHOW_LEDGER_TILE || isPreview) && (
                 <QuickTile icon={<BookText size={20} />} chip="bg-blue-100 text-blue-600" label="हजेरी वही" sub="सर्व दिवस" onClick={onLedger} />
             )}
             <QuickTile icon={<Inbox size={20} />} chip="bg-amber-100 text-amber-700" label="तपासा" sub="मंजूर करा" badge={data.dashboard.pending} onClick={onReview} />

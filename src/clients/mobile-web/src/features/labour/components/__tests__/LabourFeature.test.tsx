@@ -159,3 +159,36 @@ describe('LabourFeature — error state asserts nothing (Task 6d)', () => {
         expect(screen.queryByText(ERROR_LABEL)).toBeNull();
     });
 });
+
+// ---------------------------------------------------------------------------
+// Task 18 (spec: 2026-08-28-labour-v2-release-1) — `useLabourState`'s
+// `isPreview` must reach `LabourHub` unchanged, so the founder-review
+// exception for हजेरी घ्या / हजेरी वही (LabourHub's SHOW_ATTENDANCE_TILE /
+// SHOW_LEDGER_TILE) actually works end-to-end through THIS component's own
+// wiring, not just inside LabourHub's isolated tests.
+// ---------------------------------------------------------------------------
+
+describe('LabourFeature — threads isPreview to LabourHub (Task 18)', () => {
+    afterEach(() => {
+        cleanup();
+        mockUseLabourState.mockReset();
+    });
+
+    it('reveals हजेरी घ्या / हजेरी वही when the hook reports isPreview: true', () => {
+        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: false, error: false, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn(), isPreview: true });
+
+        render(<LabourFeature onExit={() => {}} />);
+
+        expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
+        expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
+    });
+
+    it('keeps हजेरी घ्या / हजेरी वही hidden when the hook reports isPreview: false (the real app)', () => {
+        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: false, error: false, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn(), isPreview: false });
+
+        render(<LabourFeature onExit={() => {}} />);
+
+        expect(screen.queryByText('हजेरी घ्या')).toBeNull();
+        expect(screen.queryByText('हजेरी वही')).toBeNull();
+    });
+});

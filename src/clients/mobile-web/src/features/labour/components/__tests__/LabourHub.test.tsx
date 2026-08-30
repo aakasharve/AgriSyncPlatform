@@ -291,3 +291,41 @@ describe('LabourHub — no उचल (advance) capability claim (Task 7b)', () =
         expect(screen.getByText(/नोंदींची तपासणी/)).toBeInTheDocument();
     });
 });
+
+// ---------------------------------------------------------------------------
+// Task 18 (spec: 2026-08-28-labour-v2-release-1) — dev-preview review
+// exception. SHOW_ATTENDANCE_TILE / SHOW_LEDGER_TILE stay hard `false` for
+// every real farm (Decision 4b, above) — the founder still cannot review
+// either screen with the flags themselves flipped, because that would ship
+// the same dead ends to a real farmer. `isPreview` (threaded from
+// `useLabourState`'s `farmCtx === null`, itself only true inside the
+// `import.meta.env.DEV`-gated `?preview=labour` mount — see App.tsx) is the
+// ONE declared exception. The real-app case (isPreview false/absent) MUST
+// render byte-identical to Decision 4b's own test above — that is the test
+// that matters most here, more than the one proving preview reveals them.
+// ---------------------------------------------------------------------------
+
+describe('LabourHub — preview-only review exception (Task 18)', () => {
+    afterEach(() => cleanup());
+
+    it('reveals हजेरी घ्या and हजेरी वही when isPreview is true (founder review only)', () => {
+        render(<LabourHub {...baseProps()} data={LABOUR_MOCK} isPreview />);
+        expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
+        expect(screen.getByText('आज कोण आलं')).toBeInTheDocument();
+        expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
+        expect(screen.getByText('सर्व दिवस')).toBeInTheDocument();
+    });
+
+    it('keeps both tiles hidden when isPreview is explicitly false — the real app must be unchanged', () => {
+        render(<LabourHub {...baseProps()} data={LABOUR_MOCK} isPreview={false} />);
+        expect(screen.queryByText('हजेरी घ्या')).toBeNull();
+        expect(screen.queryByText('हजेरी वही')).toBeNull();
+        expect(screen.getByText('आढावा')).toBeInTheDocument();
+    });
+
+    it('keeps both tiles hidden when isPreview is omitted entirely (every existing real-app caller)', () => {
+        render(<LabourHub {...baseProps()} data={LABOUR_MOCK} />);
+        expect(screen.queryByText('हजेरी घ्या')).toBeNull();
+        expect(screen.queryByText('हजेरी वही')).toBeNull();
+    });
+});

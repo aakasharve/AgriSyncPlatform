@@ -114,6 +114,17 @@ export interface UseLabourStateResult {
      * else here lives long enough to remember the choice otherwise.
      */
     setTimeWindow: (window: LabourWindow) => void;
+    /**
+     * Task 18 (spec: 2026-08-28-labour-v2-release-1) — `farmCtx === null`
+     * verbatim (see the field below this hook returns from). Exposed so a
+     * screen can distinguish the `?preview=labour` dev mount from a real
+     * farm WITHOUT re-deriving the check itself or reaching for
+     * `useOptionalFarmContext()` a second time. `LabourHub` uses this to
+     * reveal `SHOW_ATTENDANCE_TILE` / `SHOW_LEDGER_TILE` for founder review
+     * only inside preview — never a relaxation of that decision for a real
+     * farm, which always receives `false` here.
+     */
+    isPreview: boolean;
 }
 
 export const useLabourState = (): UseLabourStateResult => {
@@ -299,5 +310,5 @@ export const useLabourState = (): UseLabourStateResult => {
         setRetryToken((t) => t + 1);
     }, [farmId, farmCtxRefresh]);
 
-    return { data, loading, error, refresh, timeWindow, setTimeWindow };
+    return { data, loading, error, refresh, timeWindow, setTimeWindow, isPreview };
 };

@@ -64,7 +64,7 @@ export const LabourFeature: React.FC<{
     ledgerDefaults?: LedgerDefaults;
     lastLabourLogIds?: string[];
 }> = ({ onExit, onGoToLog, history, ledgerDefaults, lastLabourLogIds }) => {
-    const { data, loading, error, refresh, timeWindow, setTimeWindow } = useLabourState();
+    const { data, loading, error, refresh, timeWindow, setTimeWindow, isPreview } = useLabourState();
     // Safe (non-throwing) outside a provider (`?preview=labour` mounts with
     // none) — `farm` stays `null` there, and the QR-invite CTA below hides
     // itself accordingly.
@@ -170,6 +170,7 @@ export const LabourFeature: React.FC<{
                                 history={history}
                                 ledgerDefaults={ledgerDefaults}
                                 lastLabourLogIds={lastLabourLogIds}
+                                isPreview={isPreview}
                             />
                         )}
                         {cur.name === 'mukadam' && cur.id && (
