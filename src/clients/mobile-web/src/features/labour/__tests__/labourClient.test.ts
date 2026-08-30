@@ -114,6 +114,11 @@ function buildDto(): LabourDataDto {
                 detail: 'द्राक्ष-२ · आज',
                 status: 'Draft',
                 points: { count: 4, shift: 'full', task: 'फवारणी', amount: null, names: ['रमेश'] },
+                // Task 20 (spec: 2026-08-28-labour-v2-release-1) — the approval
+                // card's "which plot", carried as its own pair so a farm-wide log
+                // stays distinguishable from one whose plot we cannot name.
+                plot: 'द्राक्ष-२',
+                plotScope: 'Plot',
             },
         ],
         attendance: { plot: '', headcount: 0, rows: [] },

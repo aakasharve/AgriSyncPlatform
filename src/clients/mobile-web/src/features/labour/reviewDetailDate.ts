@@ -5,14 +5,23 @@
  * reviewDetailDate — Decision 4b (2026-07-19, screen honesty) helpers for
  * `ReviewSheet`'s तपासणी queue.
  *
- * `GetLabourDataHandler` currently sends a bare ISO date (`yyyy-MM-dd`, e.g.
- * "2026-07-19") as `ReviewItem.detail` for real farm data — there is no
- * plot/task context wired into this field yet (a separate, tracked gap).
- * Rendering that verbatim leaks a raw, English-formatted date onto an
- * otherwise Marathi-only screen. Both helpers below detect that ONE specific
- * shape and act on it; anything else (e.g. the mock/preview's
- * "द्राक्ष-२ · आज") passes through untouched — neither function invents
- * content, they only recognise a date that's already there.
+ * `GetLabourDataHandler` sends a bare ISO date (`yyyy-MM-dd`, e.g.
+ * "2026-07-19") as `ReviewItem.detail` for real farm data. Rendering that
+ * verbatim leaks a raw, English-formatted date onto an otherwise Marathi-only
+ * screen. The helpers below detect that ONE specific shape and act on it;
+ * anything else (e.g. the mock/preview's "द्राक्ष-२ · आज") passes through
+ * untouched — neither function invents content, they only recognise a date
+ * that's already there.
+ *
+ * Task 20 (spec: 2026-08-28-labour-v2-release-1) — `isReviewDetailWithinDays`
+ * used to live here too, and `ReviewSheet` used it to drop anything older than
+ * 14 days from the तपासणी queue while the तपासा badge went on counting the
+ * unbounded server total. The two disagreed on screen and work older than a
+ * fortnight became unreachable from every screen in the app. Deleted rather
+ * than left unused: a ready-made "hide the old ones" helper sitting in this
+ * module is an invitation to reintroduce exactly that. The card's own
+ * plot/task context, whose absence this file's header used to note as a
+ * tracked gap, now ships on `ReviewItem` (`plot`/`plotScope`/`points`).
  */
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -49,17 +58,4 @@ export function formatReviewDetail(detail: string, now: Date = new Date()): stri
     if (diff === 0) return 'आज';
     if (diff === 1) return 'काल';
     return `${toMarathiDigits(parsed.getDate())} ${MARATHI_MONTHS[parsed.getMonth()]}`;
-}
-
-/**
- * 14-day bound (Decision 4b) — the तपासणी queue must not grow forever (the
- * dev farm already had 76 unresolved items sitting in it). Only bounds items
- * whose `detail` is a parseable ISO date (today's real-data shape); anything
- * else (mock/preview) is kept, matching `formatReviewDetail`'s pass-through
- * so preview behaviour is unaffected.
- */
-export function isReviewDetailWithinDays(detail: string, days: number, now: Date = new Date()): boolean {
-    const parsed = parseReviewDetailDate(detail);
-    if (!parsed) return true;
-    return daysBetween(parsed, now) <= days;
 }

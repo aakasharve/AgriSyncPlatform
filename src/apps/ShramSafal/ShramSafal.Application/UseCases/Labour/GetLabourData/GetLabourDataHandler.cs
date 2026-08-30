@@ -139,6 +139,13 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
 {
     private static readonly string[] AvatarTones = ["or", "em", "bl", "vi", "rs", "am"];
 
+    /// <summary>
+    /// Task 20 - joins the several plots (or several tasks) one log can carry.
+    /// A middle dot, not a comma: it is the separator the labour screens
+    /// already read as "and also", and it carries no language.
+    /// </summary>
+    private const string SeparatorMiddot = " · ";
+
     public async Task<Result<LabourDataDto>> HandleAsync(GetLabourDataQuery query, CancellationToken ct = default)
     {
         if (query.FarmId.IsEmpty || query.CallerUserId.IsEmpty)
@@ -526,17 +533,116 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // `Pending` count below is the same list's size for the same reason —
         // if one were windowed and the other not, the tile and the list under
         // it would disagree on one screen.
+        //
+        // Task 20 (spec: 2026-08-28-labour-v2-release-1) - ordered newest-first
+        // by LogDate, the date the card itself SHOWS. It was ModifiedAtUtc,
+        // which is when a row was last touched: a three-week-old day re-synced
+        // this morning sorted above yesterday's, so the visible date column ran
+        // in no order the farmer could see. ModifiedAtUtc stays as the
+        // tiebreak, so two logs for the same day still order deterministically.
         var reviewLogs = farmLogs
             .Where(l => l.CurrentVerificationStatus is VerificationStatus.Draft or VerificationStatus.Confirmed
                 && VerificationStateMachine.GetAvailableTransitions(
                     l.CurrentVerificationStatus, resolvedCallerRole, hasLabourManagementGrant).Length > 0)
-            .OrderByDescending(l => l.ModifiedAtUtc)
+            .OrderByDescending(l => l.LogDate)
+            .ThenByDescending(l => l.ModifiedAtUtc)
             .ToList();
+
+        // -- 8a. Task 20 - THE FACTS THE APPROVAL CARD IS JUDGED ON. ---------
+        // Every review row used to ship a hard-coded
+        // `new LabourPointsDto(null, null, null, null, [])`. The client renders
+        // points faithfully, so a mukadam's eight-worker cane-cutting day with
+        // a stated total reached the owner as a coloured circle, a name and a
+        // relative date - nothing to judge. An owner with a backlog then taps
+        // the bulk-approve button and approves work he never saw, after which
+        // the record says he checked it. That is worse than having no approval
+        // step at all, so the facts are resolved here.
+        //
+        // The review list reads the UNFILTERED `farmLogs` under every window
+        // (founder ruling, above), so its engagements must be read unfiltered
+        // too: asking the windowed set would blank the points of every card
+        // outside the current window while still showing the card, which is the
+        // same defect wearing a different mask. When the window IS alltime the
+        // §7 read already returned exactly this set - reuse it rather than
+        // hitting Postgres twice for one request (same reasoning as §3b).
+        var allAssignments = window.FromDate is null && window.ToDateInclusive is null
+            ? windowAssignments
+            : await repository.GetLabourAssignmentsForFarmInWindowAsync(query.FarmId, null, null, ct);
+        var assignmentsByLogId = allAssignments
+            .GroupBy(a => a.DailyLogId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Plot NAMES, and only when some row in the queue actually names a plot
+        // - a farm whose logs are all farm-wide has nothing to resolve and
+        // should not pay for a query to learn that.
+        var plotNameById = reviewLogs.Any(l => l.PlotIds.Count > 0)
+            ? (await repository.GetPlotsByFarmIdAsync(query.FarmId.Value, ct))
+                .ToDictionary(p => p.Id, p => p.Name)
+            : [];
 
         var review = reviewLogs
             .Select(l =>
             {
                 var who = displayNameByUserId.GetValueOrDefault(l.OperatorUserId.Value, "Worker");
+                var engagements = assignmentsByLogId.GetValueOrDefault(l.Id) ?? [];
+
+                // Headcount - the SAME rule §7 applies to man-days, one log
+                // wide: a known figure among unknowns is never poisoned to null,
+                // and an unknown one never counts as a 0. A log carrying no
+                // engagement at all (a spraying log, say) is UNKNOWN, not zero -
+                // "nobody worked" is a claim nothing in the record makes.
+                var headcounts = engagements
+                    .Select(a => LabourHeadcount.Resolve(a.WorkerCount, a.MaleCount, a.FemaleCount))
+                    .ToList();
+                var count = headcounts.All(h => h is null)
+                    ? (int?)null
+                    : headcounts.Sum(h => h ?? 0);
+
+                // Shift is reported ONLY when the whole log agrees on one. Two
+                // gangs on different shifts have no single shift, and naming the
+                // first would state one gang's shift as the day's.
+                var shifts = engagements
+                    .Where(a => a.Shift is not null)
+                    .Select(a => a.Shift!.Value)
+                    .Distinct()
+                    .ToList();
+                var shift = shifts.Count == 1
+                    ? shifts[0].ToString().ToLowerInvariant() // the wire union the client's SHIFT_LABEL is keyed by
+                    : null;
+
+                var tasks = engagements
+                    .Select(a => a.Task)
+                    .Where(t => !string.IsNullOrWhiteSpace(t))
+                    .Select(t => t!.Trim())
+                    .Distinct()
+                    .ToList();
+
+                // MONEY - stated totals only. NO-MULTIPLY: WagePerPerson times a
+                // headcount is a number the farmer never said, and this is the
+                // screen where he commits money. Null when nothing stated a
+                // cost - never a fabricated 0, which reads as "this costs you
+                // nothing".
+                var statedCosts = engagements
+                    .Where(a => a.TotalCost is not null)
+                    .Select(a => a.TotalCost!.Value)
+                    .ToList();
+
+                var names = engagements
+                    .SelectMany(a => a.ToDto([]).WorkerNames)
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .Distinct()
+                    .ToList();
+
+                // WHERE. Only plots this farm still lists are named; an
+                // unresolvable id contributes nothing rather than a placeholder.
+                // `PlotScope` is what keeps "the farmer said the whole farm" (a
+                // stated fact) distinguishable from "we cannot name the plot"
+                // (an absence) - the client renders the two differently.
+                var plotNames = l.PlotIds
+                    .Select(id => plotNameById.GetValueOrDefault(id))
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .ToList();
+
                 return new LabourReviewItemDto(
                     Id: l.Id.ToString(),
                     Who: who,
@@ -544,7 +650,14 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                     Tone: AvatarTones[0],
                     Detail: l.LogDate.ToString("yyyy-MM-dd"),
                     Status: l.CurrentVerificationStatus.ToString(),
-                    Points: new LabourPointsDto(null, null, null, null, []));
+                    Points: new LabourPointsDto(
+                        Count: count,
+                        Shift: shift,
+                        Task: tasks.Count > 0 ? string.Join(SeparatorMiddot, tasks) : null,
+                        Amount: statedCosts.Count > 0 ? statedCosts.Sum() : null,
+                        Names: names),
+                    Plot: plotNames.Count > 0 ? string.Join(SeparatorMiddot, plotNames) : null,
+                    PlotScope: l.Scope.ToString());
             })
             .ToList();
 

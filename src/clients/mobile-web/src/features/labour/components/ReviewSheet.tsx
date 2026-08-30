@@ -20,20 +20,19 @@
  * — see `flushAllPending`.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Check, MessageSquare, Undo2 } from 'lucide-react';
+import { X, Check, MessageSquare, Undo2, Users, Sprout, MapPin, Wallet } from 'lucide-react';
 import type { LabourData, ReviewItem, ReviewVerificationStatus } from '../labourMock';
+import { inr } from '../labourMock';
 import type { DailyLog } from '../../../types';
 import { Avatar, HelpNote } from './LabourUiKit';
-import LabourDataPoints from './LabourDataPoints';
+import LabourDataPoints, { toMr } from './LabourDataPoints';
 import FieldOperatorPicker from './FieldOperatorPicker';
 import { VerifyLogCommand } from '../../../application/usecases/sync/VerifyLogCommand';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
-import { formatReviewDetail, isReviewDetailWithinDays } from '../reviewDetailDate';
+import { formatReviewDetail } from '../reviewDetailDate';
 import { t as translate } from '../../../i18n/translations';
+import { resolveOversightString } from '../../../i18n/oversightTranslations';
 import { SYNC_HONESTY_I18N_KEYS } from '../../sync/status/syncHonestyState';
-
-/** Decision 4b (2026-07-19) — bounds the तपासणी queue so it cannot grow forever. */
-const REVIEW_QUEUE_MAX_AGE_DAYS = 14;
 
 interface Props {
     open: boolean;
@@ -263,6 +262,83 @@ const ConfirmOverlay: React.FC<{ kind: ConfirmKind }> = ({ kind }) => (
     </div>
 );
 
+/**
+ * Task 20 (spec: 2026-08-28-labour-v2-release-1) — THE FOUR FACTS AN APPROVAL
+ * IS JUDGED ON: how many people, what work, which plot, how much money.
+ *
+ * Every slot is ALWAYS rendered. `LabourDataPoints` (still used just below
+ * this grid) omits what it does not have, which is right for a voice preview
+ * — the farmer just said it, so a missing chip is a thing he did not say. It
+ * is wrong here: on an approval card an omitted slot reads as "there was
+ * none", so a day with no stated cost would look like a day that cost nothing.
+ * An unknown slot therefore shows `—`, the codebase's one mark for "we were
+ * not told" (P4/R6). A `0` / `₹0` is reserved for a figure the farmer
+ * actually stated.
+ *
+ * The plot slot is the one with three states rather than two: `Farm` scope is
+ * the farmer's own संपूर्ण शेत assertion — a fact, so it is stated, not
+ * blanked. Only a log we cannot place at all gets the em-dash.
+ *
+ * No new Marathi is introduced here. `मजूर` is the noun `LabourDataPoints`
+ * already puts after this count, and `संपूर्ण शेत` is the founder-approved
+ * `oversightTranslations.entireFarmLabel` the plot-picker screens already use.
+ */
+const UNKNOWN = '—';
+
+const Fact: React.FC<{
+    testId: string;
+    icon: React.ReactNode;
+    value: string;
+    known: boolean;
+}> = ({ testId, icon, value, known }) => (
+    <div
+        data-testid={testId}
+        className={`flex min-w-0 items-center gap-2 rounded-xl px-2.5 py-2 ${known ? 'bg-stone-100 text-stone-800' : 'bg-stone-50 text-stone-400'}`}
+    >
+        <span className={`flex-shrink-0 ${known ? 'text-stone-500' : 'text-stone-300'}`}>{icon}</span>
+        <span className={`truncate text-[16px] ${known ? 'font-bold' : 'font-semibold'}`}>{value}</span>
+    </div>
+);
+
+const ReviewFacts: React.FC<{ item: ReviewItem }> = ({ item }) => {
+    const { count, task, amount } = item.points;
+    // `संपूर्ण शेत` is a stated scope; a plot NAME is a stated place. Anything
+    // else — including a plot-scoped log whose plot no longer resolves — is an
+    // absence, and absence is the em-dash.
+    const plotLabel = item.plotScope === 'Farm'
+        ? resolveOversightString('mr', 'entireFarmLabel')
+        : (item.plot || null);
+
+    return (
+        <div className="grid grid-cols-2 gap-1.5">
+            <Fact
+                testId={`review-fact-count-${item.id}`}
+                icon={<Users size={16} />}
+                known={count != null}
+                value={`${count != null ? toMr(count) : UNKNOWN} मजूर`}
+            />
+            <Fact
+                testId={`review-fact-task-${item.id}`}
+                icon={<Sprout size={16} />}
+                known={!!task}
+                value={task || UNKNOWN}
+            />
+            <Fact
+                testId={`review-fact-plot-${item.id}`}
+                icon={<MapPin size={16} />}
+                known={plotLabel != null}
+                value={plotLabel ?? UNKNOWN}
+            />
+            <Fact
+                testId={`review-fact-amount-${item.id}`}
+                icon={<Wallet size={16} />}
+                known={amount != null}
+                value={amount != null ? inr(amount) : UNKNOWN}
+            />
+        </div>
+    );
+};
+
 const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved, farmId, history }) => {
     const [gone, setGone] = useState<Record<string, boolean>>({});
     const [confirming, setConfirming] = useState<Record<string, ConfirmKind>>({});
@@ -275,10 +351,28 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
     const batchSeqRef = useRef(0);
     const mountedRef = useRef(true);
 
-    // Decision 4b (2026-07-19) 14-day bound — a real farm's `detail` is a
-    // bare ISO date; anything unparseable (mock/preview) passes through.
-    const boundedReview = data.review.filter((i) => isReviewDetailWithinDays(i.detail, REVIEW_QUEUE_MAX_AGE_DAYS));
-    const items = boundedReview.filter((i) => !gone[i.id]);
+    /**
+     * Task 20 (spec: 2026-08-28-labour-v2-release-1) — THE WHOLE QUEUE, minus
+     * only what this session has just acted on.
+     *
+     * Decision 4b (2026-07-19) filtered `data.review` to the last 14 days here
+     * while the तपासा badge (`LabourHub`, `WeeklyDashboard`) kept showing the
+     * server's unbounded `dashboard.pending`. Two numbers, one queue, shown as
+     * if they were the same: the tile said 60, this sheet listed 12, the badge
+     * could never reach zero however much the owner approved, and a log older
+     * than a fortnight was unreachable from every screen in the app — no
+     * search, no archive, no "older" affordance anywhere.
+     *
+     * Which failure is worse decides the fix. An unusable list is a usability
+     * cost the farmer can see and work around; a record that silently vanishes
+     * is the failure this product exists to prevent, and he cannot even know it
+     * happened. So nothing is hidden. The server orders newest-first, and the
+     * badge and this header now count the same rows by construction.
+     *
+     * `gone` is not a filter on the record — it is this session's own
+     * just-approved set, already collapsed on screen and pending its send.
+     */
+    const items = data.review.filter((i) => !gone[i.id]);
     /**
      * Labour V1 Task 13 — `dailyLogId -> labourAssignmentId`, and ONLY for a
      * log that carries EXACTLY ONE labour engagement.
@@ -577,7 +671,16 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                                             <div className="truncate text-[16px] text-stone-500">{formatReviewDetail(it.detail)}</div>
                                         </div>
                                     </div>
-                                    <div className="mt-2"><LabourDataPoints entry={it.points} /></div>
+                                    {/* The four facts the approval is judged on — always all four. */}
+                                    <div className="mt-2.5"><ReviewFacts item={it} /></div>
+                                    {/*
+                                      * Shift and names are EXTRAS, not judgement facts, so they
+                                      * keep `LabourDataPoints`' show-what-exists contract: an
+                                      * unnamed worker list is a complete record (P9), not a gap,
+                                      * and rendering an em-dash for it would invent an obligation
+                                      * the farmer does not have.
+                                      */}
+                                    <div className="mt-1.5"><LabourDataPoints entry={{ shift: it.points.shift, names: it.points.names }} /></div>
                                     {/*
                                       * These two decide money, and they sat 32-36px tall
                                       * immediately beside each other — the highest-cost

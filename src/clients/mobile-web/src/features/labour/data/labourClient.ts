@@ -157,6 +157,10 @@ export interface LabourReviewItemDto {
     /** `ShramSafal.Domain.Logs.VerificationStatus.ToString()` — "Draft" | "Confirmed" | "Verified" | "Disputed" | "CorrectionPending". */
     status: string;
     points: LabourPointsDto;
+    /** Task 20 — the named plot(s), or `null` when the log named none. */
+    plot: string | null;
+    /** Task 20 — `ShramSafal.Domain.Logs.DailyLogScope.ToString()`: "Plot" | "MultiPlot" | "Farm". */
+    plotScope: string;
 }
 
 export interface LabourAttendanceRowDto {
@@ -246,6 +250,29 @@ const mapLedgerRow = (r: LabourLedgerRowDto): LedgerRow => ({
     total: r.total,
 });
 
+/**
+ * Task 20 — the shift union is the ONE point field the card turns into a
+ * Marathi label by key lookup (`SHIFT_LABEL[shift]`). A value outside the
+ * union would index to `undefined` and render the literal string "undefined"
+ * on an approval card, so an unrecognised wire value becomes "we were not
+ * told" instead. This is a guard, not a translation: the server sends the
+ * lower-cased union already.
+ */
+const SHIFT_WIRE_VALUES = ['full', 'half', 'night'] as const;
+
+const mapShift = (raw: string | null): ReviewItem['points']['shift'] =>
+    (SHIFT_WIRE_VALUES as readonly string[]).includes(raw ?? '')
+        ? (raw as ReviewItem['points']['shift'])
+        : undefined;
+
+/** Task 20 — same guard, for the scope the plot slot branches on. */
+const PLOT_SCOPE_WIRE_VALUES = ['Plot', 'MultiPlot', 'Farm'] as const;
+
+const mapPlotScope = (raw: string): ReviewItem['plotScope'] =>
+    (PLOT_SCOPE_WIRE_VALUES as readonly string[]).includes(raw)
+        ? (raw as ReviewItem['plotScope'])
+        : undefined;
+
 const mapReview = (r: LabourReviewItemDto): ReviewItem => ({
     id: r.id,
     who: r.who,
@@ -255,11 +282,16 @@ const mapReview = (r: LabourReviewItemDto): ReviewItem => ({
     status: r.status as ReviewItem['status'],
     points: {
         count: r.points.count ?? undefined,
-        shift: (r.points.shift as ReviewItem['points']['shift']) ?? undefined,
+        shift: mapShift(r.points.shift),
         task: r.points.task ?? undefined,
         amount: r.points.amount ?? undefined,
         names: r.points.names,
     },
+    // Task 20 — `?? null` (not `?? undefined`): a server that predates these
+    // two fields sends neither, and the card treats both the same way anyway
+    // (nothing to name → em-dash). Kept as written rather than coerced.
+    plot: r.plot ?? null,
+    plotScope: mapPlotScope(r.plotScope),
 });
 
 /**

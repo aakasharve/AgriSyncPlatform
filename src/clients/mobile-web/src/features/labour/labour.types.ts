@@ -145,7 +145,24 @@ export interface ReviewItem {
     status: ReviewVerificationStatus;
     /** The canonical labour data points (shown consistently everywhere). */
     points: Partial<LabourEntry>;
+    /**
+     * Task 20 (spec: 2026-08-28-labour-v2-release-1) — WHERE the work happened.
+     * A log-level fact, so it sits beside `points` rather than inside it:
+     * `points` is `Partial<LabourEntry>`, the shape the VOICE PARSER produces,
+     * and a plot is not something the labour parse ever states.
+     *
+     * `plot` is the named plot (or several, joined) and `plotScope` is the
+     * farmer's own spatial assertion. Two fields, because "he said संपूर्ण शेत"
+     * and "we cannot name the plot" are different facts and the card must not
+     * render them the same way: the first is stated, the second is an em-dash.
+     * Both optional — `LABOUR_MOCK`/preview fixtures predate them.
+     */
+    plot?: string | null;
+    plotScope?: DailyLogScopeWire;
 }
+
+/** `ShramSafal.Domain.Logs.DailyLogScope.ToString()` — the wire spelling, PascalCase. */
+export type DailyLogScopeWire = 'Plot' | 'MultiPlot' | 'Farm';
 
 export interface PlotBar { name: string; days: number; pct: number }
 

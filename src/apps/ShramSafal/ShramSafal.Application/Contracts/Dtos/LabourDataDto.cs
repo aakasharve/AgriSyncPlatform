@@ -236,8 +236,43 @@ public sealed record LabourReviewItemDto(
     string Tone,
     string Detail,
     string Status,
-    LabourPointsDto Points);
+    LabourPointsDto Points,
 
+    // ── Task 20 (spec: 2026-08-28-labour-v2-release-1) — WHERE the work
+    //    happened. Two members, not one, because "no plot was named" and "a
+    //    plot was named and we could not resolve it" are different facts and
+    //    the card renders them differently (संपूर्ण शेत vs an em-dash). A
+    //    single nullable string would have collapsed them into one sentinel,
+    //    which `DailyLog.PlotIds` explicitly refuses to do one layer down.
+    //
+    //    `Plot` is the plot name, or several joined by " · " for a multi-plot
+    //    log; null when the log names none, or names only plots this farm's
+    //    plot list no longer resolves. NEVER a placeholder name.
+
+    /// <summary>The named plot(s), or <c>null</c> when the log names none.</summary>
+    string? Plot,
+
+    /// <summary>
+    /// <see cref="ShramSafal.Domain.Logs.DailyLogScope"/>'s <c>ToString()</c> —
+    /// <c>"Plot"</c> / <c>"MultiPlot"</c> / <c>"Farm"</c>. <c>"Farm"</c> is the
+    /// farmer's own संपूर्ण शेत assertion, which the card states rather than
+    /// blanking.
+    /// </summary>
+    string PlotScope);
+
+/// <summary>
+/// The labour facts the approval card is judged on. Task 20 (spec:
+/// 2026-08-28-labour-v2-release-1) — every member was hard-coded null for
+/// review rows until this release, so a मुकादम's "८ मजूर, ऊस तोडणी, ₹2400"
+/// reached the owner as a name and a date with nothing to check.
+///
+/// <para><b>Every member is nullable and null means UNKNOWN</b> (P4/R6) — the
+/// client renders an em-dash. A <c>0</c> here is a fact the farmer stated
+/// ("nobody came", "it cost nothing"), never the absence of one.
+/// <c>Amount</c> is the STATED <c>LabourAssignment.TotalCost</c> only; it is
+/// never a wage multiplied by a headcount (NO-MULTIPLY), because this is the
+/// screen where the owner commits money.</para>
+/// </summary>
 public sealed record LabourPointsDto(
     int? Count,
     string? Shift,

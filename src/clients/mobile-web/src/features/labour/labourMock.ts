@@ -151,7 +151,12 @@ export const LABOUR_MOCK: LabourData = {
     // real backend id has — a non-GUID id would fail client-side wire
     // validation and always show the honest failure toast in preview too.
     review: [
-        { id: 'aaaaaaaa-0000-4000-8000-000000000001', who: 'रमेश', initial: 'र', tone: 'or', detail: 'द्राक्ष-२ · आज', status: 'Confirmed', points: { count: 4, shift: 'full', task: 'फवारणी', names: ['रमेश'] } },
+        // Task 20 (spec: 2026-08-28-labour-v2-release-1) — the ONLY fixture row
+        // that names a plot, and it says so through `plot`/`plotScope` rather
+        // than only inside the free-text `detail`. The other two state no plot,
+        // so their card renders the em-dash — which is the honest preview of
+        // the rule, not a gap in the fixture.
+        { id: 'aaaaaaaa-0000-4000-8000-000000000001', who: 'रमेश', initial: 'र', tone: 'or', detail: 'द्राक्ष-२ · आज', status: 'Confirmed', plot: 'द्राक्ष-२', plotScope: 'Plot', points: { count: 4, shift: 'full', task: 'फवारणी', names: ['रमेश'] } },
         { id: 'aaaaaaaa-0000-4000-8000-000000000002', who: 'धनाजी (मुकादम)', initial: 'ध', tone: 'bl', detail: 'छाटणी टीम · आज', status: 'Draft', points: { count: 4, shift: 'full', task: 'छाटणी' } },
         { id: 'aaaaaaaa-0000-4000-8000-000000000003', who: 'रोकडे', initial: 'रो', tone: 'vi', detail: 'शेतात होता ✓ · आज', status: 'Draft', points: { count: 1, shift: 'night', amount: 200 } },
     ],

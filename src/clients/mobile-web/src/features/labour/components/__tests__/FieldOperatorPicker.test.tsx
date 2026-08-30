@@ -91,18 +91,20 @@ describe('Task 13.3 — headcount-only logging is untouched (P9, Scenario 1)', (
     const LOG_ID = 'bbbbbbbb-0000-4000-8000-000000000001';
 
     /*
-     * The तपासणी queue is bounded to the last 14 days
-     * (`REVIEW_QUEUE_MAX_AGE_DAYS`, ReviewSheet.tsx:36), so a LITERAL date in this
-     * fixture is a fuse, not a constant: the log stops rendering on the day it ages
-     * out and every assertion below then passes/fails for a reason that has nothing
-     * to do with P9. This block was written on 2026-08-11 carrying
-     * `detail: '2026-08-11'` (that day's date) and went red on 2026-08-26 — the
-     * first morning it was 15 days old — taking the P9 guard silently offline.
+     * The तपासणी queue USED to be bounded to the last 14 days
+     * (`REVIEW_QUEUE_MAX_AGE_DAYS`, ReviewSheet.tsx), which made a LITERAL date in
+     * this fixture a fuse rather than a constant: the log stopped rendering on the
+     * day it aged out and every assertion below then passed/failed for a reason
+     * that had nothing to do with P9. This block was written on 2026-08-11
+     * carrying `detail: '2026-08-11'` (that day's date) and went red on 2026-08-26
+     * — the first morning it was 15 days old — taking the P9 guard silently
+     * offline.
      *
-     * The date was never the thing under test; "a headcount-only log that is
-     * CURRENTLY in the review queue" is. So the fixture states that directly.
-     * The bound itself keeps its own dedicated coverage in
-     * reviewApprove.test.ts:313.
+     * Task 20 (spec: 2026-08-28-labour-v2-release-1) DELETED that bound: it hid
+     * old work from every screen while the तपासा badge went on counting it. The
+     * fuse is therefore defused at the source. Today's date is kept here anyway,
+     * because the date was never the thing under test — "a headcount-only log that
+     * is CURRENTLY in the review queue" is, and the fixture should say so.
      *
      * Built from local date parts, NOT `toISOString()` (UTC), because
      * `parseReviewDetailDate` reads `detail` as a LOCAL `yyyy-MM-dd`
