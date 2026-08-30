@@ -64,7 +64,21 @@ const MukadamDetail: React.FC<Props> = ({ data, personId, onOpenPerson, onOpenMu
                 why={sub ? 'फक्त छाटणीसाठी · काम संपलं की बंद' : undefined}
             />
 
-            <GroupLabel>याची माणसं · his team ({members.length})</GroupLabel>
+            {/*
+              * TASK 22 (spec: 2026-08-28-labour-v2-release-1) — this used to
+              * read `his team ({members.length})` unconditionally, with
+              * `members = m.memberIds ?? []` coalescing an UNKNOWN team into
+              * a confident "(0)". `GetLabourDataHandler.cs` hardcodes
+              * `MemberIds: null` for every worker today, so on a real farm
+              * this is never a genuine zero — it is an absent record, same
+              * as every other "no evidence yet" field this release fixed.
+              * `LabourUiKit.tsx`'s own `PersonRow` already gets this right
+              * for the exact same field (`teamCount != null`) two lines
+              * away in `LabourHub.tsx` — this header just hadn't matched
+              * it. The parenthetical count is now shown only when the value
+              * is actually known; no new word is introduced.
+              */}
+            <GroupLabel>याची माणसं · his team{m.memberIds != null ? ` (${members.length})` : ''}</GroupLabel>
             {members.map((id) => {
                 const person = data.people[id];
                 const isMukadam = person.role !== 'worker';

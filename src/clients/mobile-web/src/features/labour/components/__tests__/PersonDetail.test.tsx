@@ -180,4 +180,40 @@ describe('PersonDetail — screen honesty (Decision 4b)', () => {
             expect(screen.queryByText(/काम झालं ₹/)).toBeNull();
         });
     });
+
+    /*
+     * TASK 22 (spec: 2026-08-28-labour-v2-release-1) — "X दिवस काम" is not
+     * days worked. `daysActive` is computed server-side
+     * (GetLabourDataHandler.cs) as
+     * `farmLocalToday.DayNumber - FarmLocalDay.From(membership.GrantedAtUtc).DayNumber`
+     * — days since the worker was ADDED to the farm — never days he actually
+     * worked. It rendered right above the worker's money, where a farmer
+     * reads it as "days he worked for me". No honest relabel word ("since
+     * added"/"जोडल्यापासून" or similar) exists anywhere in this template or
+     * the labour feature's other strings, so the fix is deletion, not a
+     * reword — reported to the founder rather than inventing new copy.
+     *
+     * The same edit also closes a second, adjacent landmine: the bare
+     * `{w.trust ? ' · विश्वासार्ह' : ''}` fragment on the same line asserted
+     * a trust label completely ungated — unlike the dedicated विश्वास card
+     * lower in this file, which Rule 6 (2026-08-10) already gates behind
+     * `SHOW_TRUST_SCORE` because the backing ReliabilityScore is fabricated
+     * (always 100). `Trust` is hardcoded `null` server-side today so this
+     * never reaches a real farmer, but the mock (सुनीता: trust=76, used by
+     * the dev preview) would have rendered it. Same doctrine, same flag.
+     */
+    describe('PersonDetail — no "X दिवस काम" claim, and no ungated trust label (Task 22)', () => {
+        afterEach(() => cleanup());
+
+        it('never renders "दिवस काम" next to a worker\'s name — daysActive is days since added, not days worked (रमेश: daysActive=27)', () => {
+            render(<PersonDetail {...baseProps()} personId="ramesh" />);
+            expect(screen.queryByText(/दिवस काम/)).toBeNull();
+        });
+
+        it('does not render a bare "विश्वासार्ह" trust label next to the name — SHOW_TRUST_SCORE governs any trust claim (सुनीता: trust=76)', () => {
+            expect(LABOUR_MOCK.people.sunita.trust).toBe(76);
+            render(<PersonDetail {...baseProps()} personId="sunita" />);
+            expect(screen.queryByText(/विश्वासार्ह/)).toBeNull();
+        });
+    });
 });

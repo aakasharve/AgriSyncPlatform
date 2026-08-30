@@ -49,3 +49,39 @@ describe('MukadamDetail — screen honesty (Decision 4b)', () => {
         expect(screen.queryByText(/उचल दिली/)).toBeNull();
     });
 });
+
+/*
+ * TASK 22 (spec: 2026-08-28-labour-v2-release-1) — "his team (0)" is a
+ * confident zero for a field the server never populates. `GetLabourDataHandler.cs`
+ * hardcodes `MemberIds: null` for every worker today, so on a real farm
+ * `m.memberIds` is always unknown, not genuinely empty. Elsewhere in this
+ * same codebase (`LabourHub.tsx`'s people list, `LabourUiKit.tsx`'s
+ * `PersonRow`) this is already handled correctly: `teamCount` is only shown
+ * `!= null`. `MukadamDetail`'s own header broke that rule by coalescing
+ * `m.memberIds ?? []` BEFORE the count, turning an unknown into "(0)" — a
+ * real मुकादम with actual team members would still read "his team (0)"
+ * until Stage 5/whatever populates this field ships. The fix withholds the
+ * parenthetical count entirely when the value is unknown, and keeps showing
+ * it when it is genuinely known (मॉक: रोकडे has 3 real members).
+ */
+describe('MukadamDetail — "his team" count is honest about unknown vs. genuinely zero (Task 22)', () => {
+    afterEach(() => cleanup());
+
+    it('shows the real count when memberIds is a known list (रोकडे: 3 real members)', () => {
+        render(<MukadamDetail {...baseProps()} personId="rokade" />);
+        expect(screen.getByText(/his team \(3\)/)).toBeInTheDocument();
+    });
+
+    it('does not claim "his team (0)" when memberIds is unknown — the server always sends null, this is not a genuine zero', () => {
+        const dataWithUnknownTeam = {
+            ...LABOUR_MOCK,
+            people: {
+                ...LABOUR_MOCK.people,
+                rokade: { ...LABOUR_MOCK.people.rokade, memberIds: undefined },
+            },
+        };
+        render(<MukadamDetail {...baseProps()} data={dataWithUnknownTeam} personId="rokade" />);
+        expect(screen.queryByText(/his team \(0\)/)).toBeNull();
+        expect(screen.getByText(/his team/)).toBeInTheDocument();
+    });
+});

@@ -293,6 +293,34 @@ describe('LabourHub — no उचल (advance) capability claim (Task 7b)', () =
 });
 
 // ---------------------------------------------------------------------------
+// TASK 22 (spec: 2026-08-28-labour-v2-release-1) — the help note's `act`
+// field promised "विश्वासू कामगाराच्या नोंदी आपोआप मंजूर करा" (auto-approve a
+// trusted worker's entries). No auto-approval mechanism exists anywhere:
+// `GetLabourDataHandler.cs` hardcodes `Access: "review"` for every worker
+// ("trust-graduation not yet built — every worker defaults to owner-review"),
+// and `PersonDetail.tsx`'s own विश्वास-graduation UI that would grant this is
+// itself hidden behind `SHOW_TRUST_GRADUATION = false` because granting it
+// there is local `useState` only and never changes server behaviour. The
+// clause is DELETED, not reworded — the surviving "नोंदी तपासा." was already
+// present in the same string.
+// ---------------------------------------------------------------------------
+describe('LabourHub — no auto-approve capability claim (Task 22)', () => {
+    afterEach(() => cleanup());
+
+    it('the "how to use" help note no longer claims a trusted worker\'s entries auto-approve', () => {
+        render(<LabourHub {...baseProps()} />);
+        fireEvent.click(screen.getByText('कामगार व्यवस्थापन कसं वापरायचं?'));
+        expect(screen.queryByText(/आपोआप मंजूर/)).toBeNull();
+    });
+
+    it('keeps its true neighbouring words after the surgical deletion (नोंदी तपासा)', () => {
+        render(<LabourHub {...baseProps()} />);
+        fireEvent.click(screen.getByText('कामगार व्यवस्थापन कसं वापरायचं?'));
+        expect(screen.getByText(/नोंदी तपासा/)).toBeInTheDocument();
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Task 18 (spec: 2026-08-28-labour-v2-release-1) — dev-preview review
 // exception. SHOW_ATTENDANCE_TILE / SHOW_LEDGER_TILE stay hard `false` for
 // every real farm (Decision 4b, above) — the founder still cannot review

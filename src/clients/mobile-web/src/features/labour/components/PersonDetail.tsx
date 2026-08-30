@@ -107,9 +107,35 @@ const PersonDetail: React.FC<Props> = ({ data, personId, onAdvance, onSettle, on
                 <Avatar tone={w.tone} initial={w.initial} size="lg" />
                 <div className="min-w-0">
                     <div className="flex items-center gap-2 text-[19px] font-black leading-tight text-slate-800">{w.name} {!w.verified && <NameOnlyBadge />}</div>
-                    <div className="mt-1 text-[11px] text-slate-500">
-                        {w.daysActive != null && `${w.daysActive} दिवस काम`}{w.trust ? ' · विश्वासार्ह' : ''}
-                    </div>
+                    {/*
+                      * TASK 22 (spec: 2026-08-28-labour-v2-release-1) —
+                      * this used to read `{daysActive} दिवस काम`
+                      * ("N days work"). `daysActive` is computed server-side
+                      * (GetLabourDataHandler.cs) as
+                      * `farmLocalToday − FarmLocalDay.From(membership.GrantedAtUtc)`
+                      * — days since the worker was ADDED to the farm, never
+                      * days he actually worked — yet it sat right above his
+                      * money as if it were a work record. The number is
+                      * real; only the काम label was false, and no honest
+                      * relabel word ("since added") exists anywhere in this
+                      * template, so this is deletion, not a reword —
+                      * reported to the founder rather than inventing copy.
+                      *
+                      * The bare `{w.trust ? ' · विश्वासार्ह' : ''}` fragment
+                      * that lived on the same line is gone too: it asserted
+                      * a trust label with no gate at all, unlike the
+                      * dedicated विश्वास card below this component, which
+                      * Rule 6 (2026-08-10) already hides behind
+                      * `SHOW_TRUST_SCORE` because the backing
+                      * ReliabilityScore is fabricated (always 100). `Trust`
+                      * is hardcoded `null` server-side today, so this never
+                      * reached a real farmer — but the mock (used by the dev
+                      * preview) would have shown it ungated. Same doctrine,
+                      * same flag.
+                      */}
+                    {SHOW_TRUST_SCORE && w.trust != null && (
+                        <div className="mt-1 text-[11px] text-slate-500">विश्वासार्ह</div>
+                    )}
                 </div>
             </div>
 

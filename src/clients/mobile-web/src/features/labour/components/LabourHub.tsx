@@ -295,10 +295,22 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
           * server-side). The remaining two items (मजुरी, नोंदींची तपासणी)
           * are joined by the "व" already present in the string — no new
           * copy introduced.
+          *
+          * Task 22 (labour-v2-release-1) — `act` DELETED "· विश्वासू
+          * कामगाराच्या नोंदी आपोआप मंजूर करा" (auto-approve a trusted
+          * worker's entries). No auto-approval mechanism exists:
+          * `GetLabourDataHandler.cs` hardcodes `Access: "review"` for every
+          * worker ("trust-graduation not yet built — every worker defaults
+          * to owner-review"), and `PersonDetail.tsx`'s own विश्वास-
+          * graduation UI that would grant this is itself hidden behind
+          * `SHOW_TRUST_GRADUATION = false` because granting it there is
+          * local `useState` only and never reaches the server. The
+          * surviving "नोंदी तपासा." was already present in the string —
+          * no new copy introduced.
           */}
         <HelpNote
             what="टीमची मजुरी व नोंदींची तपासणी — सगळं एका जागी."
-            act="नोंदी तपासा · विश्वासू कामगाराच्या नोंदी आपोआप मंजूर करा."
+            act="नोंदी तपासा."
             why="'टीम सेटअप'मध्ये कोण नोंद करू शकतो ते ठरतं; इथे त्यांनी काय केलं आणि त्यावर किती विश्वास — ते दिसतं व ठरतं."
             label="कामगार व्यवस्थापन कसं वापरायचं?"
         />
