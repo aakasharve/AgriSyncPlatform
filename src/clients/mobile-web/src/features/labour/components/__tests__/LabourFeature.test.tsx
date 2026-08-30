@@ -24,13 +24,14 @@
  * can control `loading`/`error` directly across re-renders, independent of
  * the real fetch hook's own (separately-tested) behaviour.
  *
- * Task 12 (spec: 2026-08-28-labour-v2-release-1) — every mock below now also
- * returns `timeWindow`/`setTimeWindow`. `LabourFeature` unconditionally calls
- * `setTimeWindow` from a `useEffect` the instant the visible screen is not
- * आढावा (the window-leak fix), and mounting here always starts on the hub —
- * an incomplete mock (missing `setTimeWindow`) now throws on mount, not just
- * on a dashboard visit these tests never make. `timeWindow`/`setTimeWindow`
- * are otherwise irrelevant to this file's loading/error assertions.
+ * Task 12 (spec: 2026-08-28-labour-v2-release-1) — every mock below also
+ * returns `timeWindow`/`setTimeWindow`, added when Task 12's now-superseded
+ * reset effect called `setTimeWindow` unconditionally on every mount (an
+ * incomplete mock threw). TASK 17 (R14 superseded) removed that effect —
+ * `LabourFeature` no longer calls `setTimeWindow` on mount at all — but the
+ * fields stay: they match `useLabourState`'s real return shape, and these
+ * tests never open आढावा (the only screen that reads them), so they remain
+ * otherwise irrelevant to this file's loading/error assertions.
  */
 import React from 'react';
 import { describe, it, expect, afterEach, vi } from 'vitest';

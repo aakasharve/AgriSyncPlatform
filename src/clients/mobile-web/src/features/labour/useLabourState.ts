@@ -46,9 +46,29 @@
 import { useCallback, useEffect, useState } from 'react';
 import { LABOUR_MOCK, EMPTY_LABOUR_DATA, type LabourData } from './labourMock';
 import { fetchLabourData } from './data/labourClient';
-import { DEFAULT_LABOUR_WINDOW, type LabourWindow } from './labourWindow';
+import { DEFAULT_LABOUR_WINDOW, isLabourWindow, type LabourWindow } from './labourWindow';
 import { useOptionalFarmContext } from '../../core/session/FarmContext';
 import { useOptionalAuth } from '../../app/providers/AuthProvider';
+import { SessionStore } from '../../infrastructure/storage/SessionStore';
+
+/**
+ * TASK 17 (spec: 2026-08-28-labour-v2-release-1) — R14 SUPERSEDED. Reads the
+ * founder's last-chosen window for this hook's lazy `useState` initializer.
+ * Mirrors `SessionStore.getCurrentFarmId`'s own contract at every edge this
+ * app runs on:
+ *   - absent (first run, cleared storage) -> `null` -> falls back below;
+ *   - corrupt/unrecognised (an old build's retired value, a hand-edited
+ *     store) -> rejected by `isLabourWindow` -> falls back below, and is
+ *     therefore never the value handed to `fetchLabourData`;
+ *   - a throwing storage access -> already caught inside `SessionStore`
+ *     itself, surfaces here as `null` -> falls back below.
+ * All three collapse to the SAME one fallback, `DEFAULT_LABOUR_WINDOW`
+ * (आजपर्यंत) — never a fabricated or guessed window.
+ */
+function readPersistedLabourWindow(): LabourWindow {
+    const stored = SessionStore.getLabourWindow();
+    return isLabourWindow(stored) ? stored : DEFAULT_LABOUR_WINDOW;
+}
 
 export interface UseLabourStateResult {
     data: LabourData;
@@ -69,10 +89,16 @@ export interface UseLabourStateResult {
     refresh: () => void;
     /**
      * TASK 11 (spec: 2026-08-28-labour-v2-release-1) — the time window the
-     * data currently on screen ANSWERS FOR. It opens on
-     * `DEFAULT_LABOUR_WINDOW` (आजपर्यंत, the founder's choice) and lives here,
-     * not in a screen, because it is a property of the question asked of the
-     * server and this hook is the only thing that asks.
+     * data currently on screen ANSWERS FOR. It lives here, not in a screen,
+     * because it is a property of the question asked of the server and this
+     * hook is the only thing that asks.
+     *
+     * TASK 17 — R14 SUPERSEDED. It used to always open on
+     * `DEFAULT_LABOUR_WINDOW`; it now opens on whatever `SessionStore`
+     * remembers from the farmer's last visit (`readPersistedLabourWindow`
+     * above), falling back to `DEFAULT_LABOUR_WINDOW` (आजपर्यंत) only when
+     * nothing valid was stored — see that function's own doc-comment for the
+     * three cases that count as "nothing valid".
      */
     timeWindow: LabourWindow;
     /**
@@ -81,6 +107,11 @@ export interface UseLabourStateResult {
      * Selecting the window already in force is a no-op: `useState` bails out
      * on an identical value, so the effect below does not re-run and no
      * request is issued.
+     *
+     * TASK 17 — also PERSISTS the choice (`SessionStore.setLabourWindow`)
+     * before updating state, so it survives this hook's own unmount —
+     * leaving आढावा unmounts `LabourFeature`, and with it this hook; nothing
+     * else here lives long enough to remember the choice otherwise.
      */
     setTimeWindow: (window: LabourWindow) => void;
 }
@@ -128,14 +159,28 @@ export const useLabourState = (): UseLabourStateResult => {
     const [error, setError] = useState(false);
     const [retryToken, setRetryToken] = useState(0);
     /**
-     * TASK 11 — the window every fetch below is scoped to. NOT persisted
-     * across visits (no storage read/write anywhere in this file): a farmer
-     * returning to the screen gets आजपर्यंत, the widest and least
-     * misreadable answer, rather than a narrow period he selected days ago
-     * and has no reason to remember. Persisting it is a founder call, not a
-     * default.
+     * TASK 11 — the window every fetch below is scoped to.
+     *
+     * TASK 17 (R14 superseded) — PERSISTED across visits, per the founder's
+     * reversal: "returning to आढावा shows the window he last picked." The
+     * lazy initializer reads `SessionStore` (via `readPersistedLabourWindow`
+     * above) exactly once, on this hook's first mount for a farmer opening
+     * आढावा; the wrapped `setTimeWindow` below is the only way this value
+     * ever changes afterwards, and it writes through to storage every time.
      */
-    const [timeWindow, setTimeWindow] = useState<LabourWindow>(DEFAULT_LABOUR_WINDOW);
+    const [timeWindow, setTimeWindowState] = useState<LabourWindow>(readPersistedLabourWindow);
+
+    /**
+     * TASK 17 — wraps the raw `useState` setter so every explicit choice is
+     * written to `SessionStore` BEFORE state updates, not after: the write is
+     * synchronous and cheap, and ordering it first means even an unmount
+     * triggered by the very same interaction (e.g. a screen change bundled
+     * with the selection) can never race ahead of the save.
+     */
+    const setTimeWindow = useCallback((nextWindow: LabourWindow) => {
+        SessionStore.setLabourWindow(nextWindow);
+        setTimeWindowState(nextWindow);
+    }, []);
 
     useEffect(() => {
         if (isPreview) {

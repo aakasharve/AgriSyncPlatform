@@ -61,3 +61,17 @@ export const LABOUR_WINDOW_LABELS: Record<LabourWindow, string> = {
     week: 'हा आठवडा',
     month: 'हा महिना',
 };
+
+/**
+ * TASK 17 (spec: 2026-08-28-labour-v2-release-1) — the window is now
+ * persisted (see `useLabourState.ts`), which means a value can come back
+ * from storage that this build never wrote: an older build's since-removed
+ * window, a hand-edited store, or plain corruption. This is the ONE gate
+ * a stored value passes through before it can reach `setTimeWindow` (and
+ * from there, the server) — narrower than a bare `typeof === 'string'`
+ * check, and deliberately re-checked against `LABOUR_WINDOW_ORDER` rather
+ * than duplicating its four literals, so the two can never drift apart.
+ */
+export function isLabourWindow(value: unknown): value is LabourWindow {
+    return typeof value === 'string' && (LABOUR_WINDOW_ORDER as readonly string[]).includes(value);
+}

@@ -11,6 +11,15 @@
  * lock: the opening window, that changing it re-asks the server with the new
  * value, and that a change goes through the SAME honest loading path every
  * other fetch does (spinner, never stale numbers under a new heading).
+ *
+ * TASK 17 (spec: 2026-08-28-labour-v2-release-1) — R14 SUPERSEDED. R14 reset
+ * the window to `DEFAULT_LABOUR_WINDOW` on every mount so a farmer's choice
+ * never survived leaving आढावा. The founder reversed that: his choice is now
+ * REMEMBERED. The describe block at the bottom of this file locks the
+ * persistence half of that reversal, against the REAL `SessionStore` (not
+ * mocked here — it is the thing under test), matching `getCurrentFarmId`'s
+ * own pattern: absent -> default, corrupt/unrecognised -> default, and never
+ * a raw stored string reaching the server unvalidated.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderHook, waitFor, act, cleanup } from '@testing-library/react';
@@ -35,6 +44,7 @@ vi.mock('../../../app/providers/AuthProvider', () => ({
 import { useLabourState } from '../useLabourState';
 import { EMPTY_LABOUR_DATA } from '../labourMock';
 import { LABOUR_WINDOW_ORDER, DEFAULT_LABOUR_WINDOW } from '../labourWindow';
+import { SessionStore } from '../../../infrastructure/storage/SessionStore';
 
 afterEach(() => {
     cleanup();
@@ -42,6 +52,13 @@ afterEach(() => {
     mockFetchLabourData.mockReset();
     mockUseOptionalAuth.mockReset();
     mockUseOptionalAuth.mockReturnValue(null);
+    // TASK 17 — the persistence describe block below writes through the
+    // REAL SessionStore (jsdom's real localStorage). Without this, a value
+    // written by one test would leak into the next test's "fresh" hook
+    // mount within this same file — including the pre-existing tests above,
+    // whose `it.each` walks every non-default window and would otherwise
+    // leave 'month' sitting in storage for whatever runs next.
+    window.localStorage.clear();
 });
 
 describe('useLabourState — adjustable time window', () => {
@@ -159,5 +176,79 @@ describe('useLabourState — adjustable time window', () => {
 
         expect(result.current.timeWindow).toBe('alltime');
         expect(mockFetchLabourData).not.toHaveBeenCalled();
+    });
+});
+
+/**
+ * TASK 17 (spec: 2026-08-28-labour-v2-release-1) — R14 superseded: the
+ * founder's choice on आढावा is now REMEMBERED across visits, because leaving
+ * आढावा unmounts `LabourFeature` (and this hook with it) — `SessionStore` is
+ * the only thing still standing on the next mount. Offline-first, cheap-
+ * handset constraints apply exactly as they do to `getCurrentFarmId`:
+ * absent -> the founder-chosen default; corrupt/unrecognised -> the same
+ * default, never forwarded to the server; a throwing storage access ->
+ * degrades to the default rather than crashing the screen (proven for
+ * `SessionStore` itself, not re-proven here).
+ */
+describe('useLabourState — the window is remembered across visits (Task 17, R14 superseded)', () => {
+    it('a window picked in one visit is still selected the next time the hook mounts (leaving and returning to आढावा)', async () => {
+        mockUseOptionalFarmContext.mockReturnValue({ currentFarmId: 'farm-1' });
+        mockFetchLabourData.mockResolvedValue(EMPTY_LABOUR_DATA);
+
+        const first = renderHook(() => useLabourState());
+        await waitFor(() => expect(mockFetchLabourData).toHaveBeenCalledTimes(1));
+        act(() => first.result.current.setTimeWindow('week'));
+        await waitFor(() => expect(mockFetchLabourData).toHaveBeenCalledTimes(2));
+
+        // Leaving आढावा unmounts LabourFeature, and this hook with it — a
+        // fresh farm-navigation, not a re-render, is what a real visit ends
+        // with. `first.unmount()` is the closest this test level gets to that.
+        first.unmount();
+        mockFetchLabourData.mockClear();
+
+        // Returning re-mounts the hook from nothing — no props, no context,
+        // carries the choice forward. Only SessionStore can have remembered it.
+        const second = renderHook(() => useLabourState());
+
+        expect(second.result.current.timeWindow).toBe('week');
+        await waitFor(() => expect(mockFetchLabourData).toHaveBeenCalledWith('farm-1', 'week'));
+    });
+
+    it('a fresh install (nothing ever stored) still opens on आजपर्यंत — absence is never treated as a chosen window', () => {
+        mockUseOptionalFarmContext.mockReturnValue({ currentFarmId: 'farm-1' });
+        mockFetchLabourData.mockResolvedValue(EMPTY_LABOUR_DATA);
+        expect(SessionStore.getLabourWindow()).toBeNull(); // sanity: truly nothing stored
+
+        const { result } = renderHook(() => useLabourState());
+
+        expect(result.current.timeWindow).toBe(DEFAULT_LABOUR_WINDOW);
+    });
+
+    it('a corrupt/unrecognised stored value falls back to आजपर्यंत — never reaches the server unvalidated', async () => {
+        mockUseOptionalFarmContext.mockReturnValue({ currentFarmId: 'farm-1' });
+        mockFetchLabourData.mockResolvedValue(EMPTY_LABOUR_DATA);
+        // Simulates an old build's stale value, or a hand-edited store — a
+        // string that was never one of the four windows this build knows.
+        SessionStore.setLabourWindow('this-week-actually');
+
+        const { result } = renderHook(() => useLabourState());
+
+        expect(result.current.timeWindow).toBe(DEFAULT_LABOUR_WINDOW);
+        await waitFor(() => expect(mockFetchLabourData).toHaveBeenCalledTimes(1));
+        expect(mockFetchLabourData).toHaveBeenCalledWith('farm-1', 'alltime');
+        expect(mockFetchLabourData).not.toHaveBeenCalledWith('farm-1', 'this-week-actually');
+    });
+
+    it('selecting a window persists it through SessionStore, not just in component state', async () => {
+        mockUseOptionalFarmContext.mockReturnValue({ currentFarmId: 'farm-1' });
+        mockFetchLabourData.mockResolvedValue(EMPTY_LABOUR_DATA);
+
+        const { result } = renderHook(() => useLabourState());
+        await waitFor(() => expect(mockFetchLabourData).toHaveBeenCalledTimes(1));
+
+        act(() => result.current.setTimeWindow('month'));
+        await waitFor(() => expect(mockFetchLabourData).toHaveBeenCalledTimes(2));
+
+        expect(SessionStore.getLabourWindow()).toBe('month');
     });
 });

@@ -110,33 +110,40 @@ describe('LabourFeature — the window is wired hook <-> screen', () => {
     });
 });
 
-describe('LabourFeature — Task 12: the window belongs to आढावा, it must not leak to the hub', () => {
+describe('LabourFeature — Task 17 (R14 superseded): the window is remembered, not reset', () => {
     afterEach(() => {
         cleanup();
         mockUseLabourState.mockReset();
     });
 
     /**
-     * A STATEFUL fake of `useLabourState` — real enough to reproduce the
-     * actual leak, not just assert a call happened. The real hook re-fetches
-     * `data` keyed on `timeWindow`; this mirrors that coupling so रमेश's hub
-     * row genuinely reads a different ₹ figure per window. `paid`/`advance`
-     * are held fixed so both windows resolve to the SAME "द्यायचे" wording —
-     * narrowing changes the AMOUNT only; it never flips the category.
+     * A STATEFUL fake of `useLabourState` — real enough to observe the window
+     * value actually surviving navigation, not just assert a call happened.
+     * The real hook re-fetches `data` keyed on `timeWindow`; this mirrors
+     * that coupling so रमेश's hub row genuinely reads a different ₹ figure
+     * per window. `paid`/`advance` are held fixed so both windows resolve to
+     * the SAME "द्यायचे" wording — narrowing changes the AMOUNT only; it
+     * never flips the category.
      *
-     * TASK 13 / R15 — this fixture is now a DELIBERATE COUNTERFACTUAL, and
-     * saying so is the point. It used to claim it behaved "exactly like a real
-     * narrowed fetch would"; that is no longer true. A person's balance is
-     * all-time server-side as of R15, precisely because presenting it as a
-     * windowed figure was the same defect the money card had, one level down.
-     * So no real fetch can produce the per-window rows below any more.
+     * TASK 13 / R15 — this fixture is a DELIBERATE COUNTERFACTUAL, and saying
+     * so is the point. A person's balance is all-time server-side as of R15,
+     * precisely because presenting it as a windowed figure was the same
+     * defect the money card had, one level down. So no real fetch can
+     * produce the per-window rows below any more — a real farmer's hub never
+     * shows a different figure per window, regardless of what आढावा is set
+     * to.
      *
-     * The test is kept, and kept in this shape, because what it pins is the
-     * RESET MECHANISM (Task 12) — that leaving आढावा puts the window back —
-     * and a fixture that varies with the window is the only way to observe
-     * that mechanism firing. R15 removed the one payload that could have
-     * exploited a missing reset; it did not remove the reset's job, and the
-     * next windowed figure added to a shared screen would need it again.
+     * TASK 17 (R14 superseded) — what this fixture now pins is different:
+     * Task 12 added a reset so leaving आढावा put the window back to
+     * आजपर्यंत, precisely BECAUSE a windowed figure could leak to the hub at
+     * the time. R15 already closed that door at the source (see above); the
+     * founder has since ruled the window itself should be REMEMBERED, not
+     * reset. `LabourFeature` no longer contains any reset effect at all. This
+     * fixture is reused, unchanged in shape, because varying `data` with the
+     * window is still the most direct way to observe — from outside, via
+     * rendered text — whether the window value visible to a screen actually
+     * changed underneath. It now proves the opposite of what it proved
+     * before: that leaving आढावा does NOT put the window back.
      */
     const dataForWindow = (window: LabourWindow): LabourData => ({
         ...LABOUR_MOCK,
@@ -177,7 +184,7 @@ describe('LabourFeature — Task 12: the window belongs to आढावा, it m
     // path in this repo to diverge from it — both would have to go through
     // the same `back()`/`stack`, verified by grep: no popstate/BackHandler
     // wiring touches this component at all).
-    it('narrowing to आज on आढावा, then leaving via the back arrow, shows the hub the ALL-TIME figure again — and आढावा itself reopens on आजपर्यंत', () => {
+    it('narrowing to आज on आढावा, then leaving via the back arrow, the window is REMEMBERED — no reset, and आढावा itself reopens on आज', () => {
         const { rr } = renderStateful();
 
         // Baseline: the hub opens on आजपर्यंत.
@@ -193,21 +200,27 @@ describe('LabourFeature — Task 12: the window belongs to आढावा, it m
         fireEvent.click(screen.getByText('मागे'));
         rr();
 
-        // THE LEAK: रमेश's hub figure must be all-time again, never आज's.
-        expect(screen.getByText(ALLTIME_LINE)).toBeInTheDocument();
-        expect(screen.queryByText(TODAY_LINE)).toBeNull();
+        // TASK 17 (R14 superseded) — NO reset: the window the farmer picked
+        // is still in force (this fixture's per-window figure is the
+        // deliberate counterfactual described above, kept only because it is
+        // the most direct external signal that the value did not change).
+        expect(screen.getByText(TODAY_LINE)).toBeInTheDocument();
+        expect(screen.queryByText(ALLTIME_LINE)).toBeNull();
 
-        // "Returning to आढावा starts at the default again" — one consistent
-        // rule, not two (not-persisted, matching Task 11).
+        // "Returning to आढावा shows the window he last picked" — the
+        // founder's own framing for this reversal, not "back at the default".
         openDashboard();
         rr();
-        expect(screen.getByTestId('labour-window-alltime')).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByTestId('labour-window-today')).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByTestId('labour-window-alltime')).toHaveAttribute('aria-selected', 'false');
     });
 
-    // Guards against an over-eager alternate fix (e.g. a reset tied to any
-    // window tap, or to an unconditional interval) that would also revert
-    // the farmer's OWN in-progress selection while he is still looking at
-    // the very screen that owns the control.
+    // Guards against ANY reset firing while आढावा itself is still the
+    // visible screen — the farmer's own in-progress tap must never be
+    // reverted while he is still looking at the very screen that owns the
+    // control. Trivially true now that no reset effect exists at all, but
+    // kept as a regression guard: a future change that reintroduces one
+    // (tied to a tap, an interval, anything) would be caught here.
     it('does NOT reset while आढावा itself is still the visible screen', () => {
         const setTimeWindow = vi.fn();
         mockUseLabourState.mockReturnValue(hookState('alltime', setTimeWindow));
@@ -225,12 +238,13 @@ describe('LabourFeature — Task 12: the window belongs to आढावा, it m
     // आढावा). आढावा can only ever be on the stack with hub beneath it
     // (`push({name:'dashboard'})` only fires from hub), so `handleBack` can
     // never reach the `onExit` branch directly FROM आढावा — it always pops
-    // to hub first. This test locks that invariant down: the FIRST back-tap
-    // (off आढावा) resets and pops, never exits; only a SECOND back-tap (now
-    // at hub) reaches `onExit`. If a future change ever let `onExit` fire
-    // straight from आढावा, this is the test that would catch it silently
-    // skipping the reset.
-    it('the back arrow resets-and-pops off आढावा; onExit is reachable only from hub afterwards, never in place of the reset', () => {
+    // to hub first. TASK 17 (R14 superseded) inverts this test's own
+    // assertion: Task 12's back arrow used to reset-and-pop; now it must
+    // pop WITHOUT touching the window at all, on either tap — leaving the
+    // whole feature (`onExit`, second tap) carries the choice forward the
+    // same as popping to hub does, because persistence lives one layer
+    // down in `SessionStore`, untouched by anything in this component.
+    it('the back arrow pops off आढावा WITHOUT touching the window; onExit is reachable only from hub afterwards, and the window is never written to on the way out', () => {
         const onExit = vi.fn();
         const setTimeWindow = vi.fn();
         mockUseLabourState.mockReturnValue(hookState('today', setTimeWindow));
@@ -239,10 +253,11 @@ describe('LabourFeature — Task 12: the window belongs to आढावा, it m
         setTimeWindow.mockClear();
 
         fireEvent.click(screen.getByText('मागे'));
-        expect(setTimeWindow).toHaveBeenCalledWith('alltime');
+        expect(setTimeWindow).not.toHaveBeenCalled();
         expect(onExit).not.toHaveBeenCalled();
 
         fireEvent.click(screen.getByText('मागे'));
         expect(onExit).toHaveBeenCalledTimes(1);
+        expect(setTimeWindow).not.toHaveBeenCalled();
     });
 });

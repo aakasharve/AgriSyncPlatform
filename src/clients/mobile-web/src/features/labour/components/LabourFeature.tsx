@@ -15,10 +15,9 @@
  * omits the prop on purpose — the fallback below surfaces the feature's own
  * existing toast instead of crashing or attempting to navigate.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { useLabourState } from '../useLabourState';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
-import { DEFAULT_LABOUR_WINDOW } from '../labourWindow';
 import type { DailyLog, LedgerDefaults } from '../../../types';
 import { BackHeader, LoadErrorBanner, LoadingState } from './LabourUiKit';
 import LabourHub from './LabourHub';
@@ -94,49 +93,27 @@ export const LabourFeature: React.FC<{
     const cur = stack[stack.length - 1];
 
     /**
-     * TASK 12 (spec: 2026-08-28-labour-v2-release-1) — the window belongs to
-     * आढावा, not to the feature. Task 11's own report flagged this exactly:
-     * `useLabourState`'s `data` — the dashboard aggregate AND every person's
-     * `RecordedWages` — is fetched from ONE hook shared by every screen here,
-     * keyed to ONE `timeWindow`, but आढावा is the only screen carrying the
-     * control that changes it. Narrow to आज there, tap "मागे" back to the
-     * hub, and every worker's काम झालं figure on the hub silently reads
-     * today's — with no control on that screen saying so.
+     * TASK 17 (spec: 2026-08-28-labour-v2-release-1) — R14 SUPERSEDED.
+     * Task 12 reset `timeWindow` to `DEFAULT_LABOUR_WINDOW` here the instant
+     * the visible screen stopped being आढावा, because at the time a narrowed
+     * window leaking to the hub would silently shrink every worker's काम
+     * झालं figure with no control on that screen explaining why. The founder
+     * has since ruled the opposite: his window choice should be REMEMBERED
+     * across visits, not reset.
      *
-     * Fix: the instant the visible screen STOPS being आढावा, the window
-     * resets to `DEFAULT_LABOUR_WINDOW` (आजपर्यंत) so every OTHER screen is
-     * guaranteed all-time. This is keyed on `cur.name` — the resolved top of
-     * the stack — not on any one button's `onClick`, deliberately: a
-     * back-gesture, a hardware back button (neither has a code path in this
-     * repo separate from `back()`/`stack` — grepped for `popstate` /
-     * `BackHandler`; none touches this component), or any future doorway off
-     * this screen (e.g. a push to हजेरी वही while आढावा stays underneath it
-     * on the stack) all change `cur.name` the same way, and none of them can
-     * forget to call this because none of them call it directly.
-     *
-     * It is also, by the same logic, why "returning to आढावा starts at the
-     * default again" needs no separate handling: leaving already reset it,
-     * so the NEXT time it is opened it is already आजपर्यंत — one rule, not
-     * two.
-     *
-     * `setTimeWindow` is a `useState` setter one layer down
-     * (`useLabourState.ts`); asking for the window already in force is a
-     * documented no-op, so this costs nothing extra while the farmer stays
-     * on the hub or drills into a person/mukadam.
-     *
-     * `onExit` needs no separate call here: it always unmounts this
-     * component (`simpleRoutes.tsx` swaps `currentRoute` away from
-     * `'labour'`), and a fresh mount's `useLabourState()` already opens on
-     * `DEFAULT_LABOUR_WINDOW`. It also cannot fire FROM आढावा in the first
-     * place — see `handleBack` below: it only reaches `onExit` when
-     * `stack.length === 1`, and आढावा can only be on the stack with hub
-     * beneath it.
+     * That reversal is safe because R14's own hazard is independently gone:
+     * per-person `recordedWages`/`paid` now read from the ALL-TIME
+     * dictionaries and `daysActive` from the membership grant date, not the
+     * window (`GetLabourDataHandler.cs`, R15/Task 13) — so nothing per-person
+     * moves with `timeWindow` any more, on any screen, regardless of what
+     * आढावा is set to. There is therefore nothing left for a reset to
+     * protect against, and no effect here at all: `timeWindow` and
+     * `setTimeWindow` pass straight through to `WeeklyDashboard` below, and
+     * persistence across this component's own unmount/remount (leaving and
+     * re-entering the whole Labour feature, not just आढावा) is
+     * `useLabourState.ts`'s job via `SessionStore` — this component holds no
+     * state of its own to reset or preserve.
      */
-    useEffect(() => {
-        if (cur.name !== 'dashboard') {
-            setTimeWindow(DEFAULT_LABOUR_WINDOW);
-        }
-    }, [cur.name, setTimeWindow]);
 
     const push = useCallback((s: ScreenState) => setStack((st) => [...st, s]), []);
     const back = useCallback(() => setStack((st) => (st.length > 1 ? st.slice(0, -1) : st)), []);
