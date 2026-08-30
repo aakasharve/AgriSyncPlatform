@@ -184,14 +184,48 @@ describe('CropSelector default path — layout and copy are untouched', () => {
         expect(screen.queryByTestId('crop-selector-entire-farm-row')).not.toBeInTheDocument();
     });
 
-    it('keeps the original English header copy and never renders the founder Marathi', () => {
+    it('with no LanguageProvider, renders the i18n English fallback — never the old hard-coded literal, never the founder Marathi', () => {
+        // TASK 15 (Labour V2 R1) — the header/hint now route through
+        // `resolveOversightString` UNCONDITIONALLY (see CropSelector.tsx's
+        // `hideGlobalCard` JSDoc). With no provider, `language` defaults to
+        // `'en'` (the app's own default — see that same JSDoc), so this
+        // renders `oversightTranslations.en.plotSectionHeader/Hint`, NOT the
+        // old hand-typed dev literal that used to live in this component
+        // (which is now gone from the codebase entirely) and NOT the
+        // founder's Marathi.
         renderDefaultPath();
 
-        expect(screen.getByText('Select the plots you worked on today')).toBeInTheDocument();
+        expect(screen.getByText(oversightTranslations.en.plotSectionHeader)).toBeInTheDocument();
+        expect(screen.getByText(oversightTranslations.en.plotSectionHint)).toBeInTheDocument();
+        expect(screen.queryByText('Select the plots you worked on today')).not.toBeInTheDocument();
         expect(
-            screen.getByText('You can select multiple crops or multiple plots where same work was executed'),
-        ).toBeInTheDocument();
+            screen.queryByText('You can select multiple crops or multiple plots where same work was executed'),
+        ).not.toBeInTheDocument();
         expect(screen.queryByText(oversightTranslations.mr.plotSectionHeader)).not.toBeInTheDocument();
         expect(screen.queryByText(oversightTranslations.mr.plotSectionHint)).not.toBeInTheDocument();
+    });
+
+    it('with no LanguageProvider, the unselected multi-plot count pill still reads "2 PLOTS" — ASCII, byte-identical to before Task 15', () => {
+        renderDefaultPath();
+
+        const pill = screen.getByTestId('crop-count-pill-grapes');
+        expect(pill).toHaveTextContent('2 PLOTS');
+        expect(pill).not.toHaveTextContent('२');
+    });
+
+    it('with no LanguageProvider, a selected plot in the tray still reads "Ready to Log" — byte-identical to before Task 15', () => {
+        render(
+            <CropSelector
+                mode="log"
+                crops={CROPS}
+                selectedCrops={['grapes']}
+                selectedPlots={{ grapes: ['g1'] }}
+                onSelectionChange={vi.fn()}
+                disabled={false}
+            />,
+        );
+
+        expect(screen.getByText('Ready to Log')).toBeInTheDocument();
+        expect(screen.queryByText('कामे सांगण्यासाठी तयार')).not.toBeInTheDocument();
     });
 });

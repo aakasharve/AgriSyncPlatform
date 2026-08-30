@@ -364,6 +364,46 @@
  * `false` renders the founder's exact tail unmodified, for the day a real
  * server-received timestamp makes the boundary exact. Giving that flag its
  * first consumer is the whole point of this change.
+ *
+ * TASK 15 (Labour V2 R1) — SIX NEW (d) KEYS, `CropSelector.tsx`'s remaining
+ * English dev copy
+ * ----------------------------------------------------------------------------
+ * `CropSelector.tsx` still hard-coded five English strings unconditionally
+ * (never gated on `hideGlobalCard`, so `Attendance.tsx` renders them too),
+ * plus two more (`plotSectionHeader`/`plotSectionHint`/`entireFarmLabel`,
+ * already declared above) that were gated and are now made unconditional at
+ * the call site — see that file's own header comment for the consumer-side
+ * change. The six new keys below are transcribed verbatim from the founder-
+ * approved table supplied for this task, same (d) provenance rule as Task
+ * 13/17 and the 2026-08-23/24/26 graduations above:
+ *
+ *   `readyToLogLabel`         — 'कामे सांगण्यासाठी तयार' (was "Ready to Log",
+ *                               the plot-tray row shown once a plot is
+ *                               picked).
+ *   `entireFarmOverviewLabel` — 'एकूण' (was "Overview", the carousel card's
+ *                               subtitle under "Entire Farm" — NOT the same
+ *                               string as `entireFarmHint`, which labels the
+ *                               demoted list row instead).
+ *   `plotCountUnitSingular` / `plotCountUnitPlural` — both 'प्लॉट' (was
+ *                               "PLOT" / "PLOTS"). The founder's table is
+ *                               explicit that the Marathi noun does NOT
+ *                               change for plural — only the Devanagari
+ *                               numeral in front of it does.
+ *   `selectedCountUnitSingular` / `selectedCountUnitPlural` — 'निवडला' /
+ *                               'निवडले' (was "SELECTED" for both). Unlike
+ *                               the plot-count noun, THIS word does inflect:
+ *                               singular for count === 1, plural for 0 or
+ *                               2+.
+ *
+ * `en` VALUES ARE THE OLD LITERALS, NOT NEW TRANSLATIONS. Every other (d)
+ * key's `en` value is an ordinary translation of the Marathi (translating
+ * INTO English is not the Hard Rule's concern). These six instead keep the
+ * EXACT casing/wording `CropSelector.tsx` already had ('SELECTED', 'PLOT',
+ * 'PLOTS', 'Ready to Log', 'Overview') so a viewer with no language
+ * preference set (`useOptionalLanguage`'s own `'en'` default — see that
+ * file's header) sees byte-identical English to before this task; only the
+ * Marathi path is new. `__tests__/CropSelectorDefaultPath.test.tsx` pins
+ * this no-provider English path.
  */
 import type { Language } from './language';
 
@@ -578,6 +618,28 @@ export interface OversightTranslations {
     helpSubtitle: string;
     /** Help bar — the emerald pill button's label. */
     helpButtonLabel: string;
+
+    // ── Task 15 (Labour V2 R1), category (d) — verbatim from the founder-
+    // approved replacement table for `CropSelector.tsx`'s remaining English
+    // dev copy. `en` values keep the OLD LITERAL text, not a fresh
+    // translation — see this file's header, "TASK 15 (Labour V2 R1)". ──────
+
+    /** Plot-tray row shown once a plot is picked (replaces "Ready to Log"). */
+    readyToLogLabel: string;
+    /** Carousel "Entire Farm" card's subtitle (replaces "Overview"). NOT
+     * `entireFarmHint`, which labels the demoted list row instead. */
+    entireFarmOverviewLabel: string;
+    /** Per-crop count pill's plot-count noun, singular (replaces "PLOT").
+     * Identical `mr` value to the plural — the noun does not inflect. */
+    plotCountUnitSingular: string;
+    /** Per-crop count pill's plot-count noun, plural (replaces "PLOTS"). */
+    plotCountUnitPlural: string;
+    /** Per-crop count pill's "N selected" word, count === 1 (replaces
+     * "SELECTED"). */
+    selectedCountUnitSingular: string;
+    /** Per-crop count pill's "N selected" word, count 0 or 2+ (replaces
+     * "SELECTED"). */
+    selectedCountUnitPlural: string;
 }
 
 export const oversightTranslations: Record<Language, OversightTranslations> = {
@@ -645,6 +707,16 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         helpTitle: 'Having trouble?',
         helpSubtitle: 'I can help.',
         helpButtonLabel: 'Talk to Shram Sathi',
+
+        // Task 15 — `en` keeps CropSelector.tsx's OLD LITERAL casing/wording
+        // (not a fresh translation) so the no-provider default path stays
+        // byte-identical English. See this file's header, "TASK 15".
+        readyToLogLabel: 'Ready to Log',
+        entireFarmOverviewLabel: 'Overview',
+        plotCountUnitSingular: 'PLOT',
+        plotCountUnitPlural: 'PLOTS',
+        selectedCountUnitSingular: 'SELECTED',
+        selectedCountUnitPlural: 'SELECTED',
     },
     mr: {
         welcomeBack: 'पुन्हा स्वागत! शेतात काय चाललं?',
@@ -717,6 +789,17 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         helpTitle: 'काही अडचण आहे का?',
         helpSubtitle: 'मी मदत करतो.',
         helpButtonLabel: 'श्रम साथीशी बोला',
+
+        // Task 15 (Labour V2 R1), category (d) — verbatim from the founder-
+        // approved replacement table. See this file's header, "TASK 15".
+        readyToLogLabel: 'कामे सांगण्यासाठी तयार',
+        entireFarmOverviewLabel: 'एकूण',
+        // Same Marathi noun for both — the founder's table is explicit that
+        // it does not inflect for plural; only the numeral in front does.
+        plotCountUnitSingular: 'प्लॉट',
+        plotCountUnitPlural: 'प्लॉट',
+        selectedCountUnitSingular: 'निवडला',
+        selectedCountUnitPlural: 'निवडले',
     },
 };
 

@@ -7,17 +7,20 @@
  *
  * Pins the `hideGlobalCard` opt-in (change 4 — "संपूर्ण शेत is DEMOTED out
  * of the crop carousel"):
- *   - default (omitted) behaviour is BYTE-IDENTICAL to before this task —
- *     the "Entire Farm" card still renders first in the carousel, and the
- *     new quiet row never appears. This is the regression guard for
- *     `Attendance.tsx`, the one other consumer of this component, which
- *     never passes the new prop.
+ *   - default (omitted) behaviour keeps the LAYOUT byte-identical to before
+ *     this task — the "Entire Farm" card still renders first in the
+ *     carousel, and the new quiet row never appears. This is the regression
+ *     guard for `Attendance.tsx`, the one other consumer of this component,
+ *     which never passes the new prop.
  *   - `hideGlobalCard` suppresses the carousel card and renders the quiet
  *     row instead, calling the SAME `onSelectionChange(['FARM_GLOBAL'], {})`
  *     shape the carousel card always has — "select FARM_GLOBAL with exactly
  *     the existing behaviour" per the task brief.
- *   - the `mode === 'log'` header/hint swap to founder-approved Marathi is
- *     gated on the same prop.
+ *   - Task 15 (Labour V2 R1) — the `mode === 'log'` header/hint swap to
+ *     founder-approved Marathi is now UNCONDITIONAL, not gated on
+ *     `hideGlobalCard` any more (this file mocks `language: 'mr'`, so both
+ *     paths below now render the founder's Marathi, never the old English
+ *     dev literal).
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -91,10 +94,13 @@ describe('CropSelector — hideGlobalCard opt-in (Task 13, change 4)', () => {
             />,
         );
 
-        expect(screen.getByText('Entire Farm')).toBeInTheDocument();
+        expect(screen.getByText(oversightTranslations.mr.entireFarmLabel)).toBeInTheDocument();
         expect(screen.queryByTestId('crop-selector-entire-farm-row')).not.toBeInTheDocument();
-        // Legacy English header copy is unchanged when the prop is omitted.
-        expect(screen.getByText('Select the plots you worked on today')).toBeInTheDocument();
+        // Task 15 — the header is now founder-approved Marathi
+        // UNCONDITIONALLY; the old English dev literal is no longer
+        // reachable on this (omitted) path either.
+        expect(screen.getByText(oversightTranslations.mr.plotSectionHeader)).toBeInTheDocument();
+        expect(screen.queryByText('Select the plots you worked on today')).not.toBeInTheDocument();
     });
 
     it('hideGlobalCard suppresses the carousel card and renders the quiet row instead', () => {
@@ -153,7 +159,7 @@ describe('CropSelector — hideGlobalCard opt-in (Task 13, change 4)', () => {
         expect(onSelectionChange).toHaveBeenCalledExactlyOnceWith([], {});
     });
 
-    it('the section header and hint swap to founder-approved Marathi only when hideGlobalCard is set', () => {
+    it('the section header and hint are founder-approved Marathi with hideGlobalCard set too (Task 15 — unconditional either way)', () => {
         render(
             <CropSelector
                 mode="log"
@@ -342,5 +348,114 @@ describe('CropSelector — crop card vividness on the OPTED-IN path (Task 16, Pr
         const selected = screen.getByTestId('crop-card-grapes');
         expect(selected.className).toContain('bg-purple-100'); // strongFill for the purple theme
         expect(selected.className).toContain('ring-[4px]');
+    });
+});
+
+describe('CropSelector — Task 15 (Labour V2 R1): remaining English literals replaced', () => {
+    // Every case below renders on the DEFAULT (omitted `hideGlobalCard`)
+    // path — the one `Attendance.tsx` actually uses — because these five
+    // strings were never gated in the first place; they were plain English
+    // literals reachable unconditionally. `language: 'mr'` is mocked at the
+    // top of this file.
+    it('the carousel "Entire Farm" card renders the founder Marathi label and एकूण, never the English literals', () => {
+        render(
+            <CropSelector
+                mode="log"
+                crops={CROPS}
+                selectedCrops={[]}
+                selectedPlots={{}}
+                onSelectionChange={vi.fn()}
+                disabled={false}
+            />,
+        );
+
+        expect(screen.getByText(oversightTranslations.mr.entireFarmLabel)).toBeInTheDocument();
+        expect(screen.getByText('एकूण')).toBeInTheDocument();
+        expect(screen.queryByText('Entire Farm')).not.toBeInTheDocument();
+        expect(screen.queryByText('Overview')).not.toBeInTheDocument();
+    });
+
+    it('a selected plot in the tray shows "कामे सांगण्यासाठी तयार", never "Ready to Log"', () => {
+        render(
+            <CropSelector
+                mode="log"
+                crops={CROPS}
+                selectedCrops={['grapes']}
+                selectedPlots={{ grapes: ['g1'] }}
+                onSelectionChange={vi.fn()}
+                disabled={false}
+            />,
+        );
+
+        expect(screen.getByText('कामे सांगण्यासाठी तयार')).toBeInTheDocument();
+        expect(screen.queryByText('Ready to Log')).not.toBeInTheDocument();
+    });
+
+    it('the per-crop count pill reads १ निवडला (Devanagari, singular) for exactly one selected plot', () => {
+        render(
+            <CropSelector
+                mode="log"
+                crops={CROPS}
+                selectedCrops={['grapes']}
+                selectedPlots={{ grapes: ['g1'] }}
+                onSelectionChange={vi.fn()}
+                disabled={false}
+            />,
+        );
+
+        const pill = screen.getByTestId('crop-count-pill-grapes');
+        expect(pill).toHaveTextContent('१ निवडला');
+        expect(pill).not.toHaveTextContent('SELECTED');
+    });
+
+    it('the per-crop count pill reads २ निवडले (plural) for two selected plots — grammar, not just a number swap', () => {
+        render(
+            <CropSelector
+                mode="log"
+                crops={CROPS}
+                selectedCrops={['grapes']}
+                selectedPlots={{ grapes: ['g1', 'g2'] }}
+                onSelectionChange={vi.fn()}
+                disabled={false}
+            />,
+        );
+
+        const pill = screen.getByTestId('crop-count-pill-grapes');
+        expect(pill).toHaveTextContent('२ निवडले');
+        expect(pill).not.toHaveTextContent('निवडला');
+    });
+
+    it('an unselected multi-plot crop shows the Devanagari plot count with an unchanged noun: २ प्लॉट', () => {
+        render(
+            <CropSelector
+                mode="reflect"
+                crops={CROPS}
+                selectedCrops={[]}
+                selectedPlots={{}}
+                onSelectionChange={vi.fn()}
+                disabled={false}
+            />,
+        );
+
+        const pill = screen.getByTestId('crop-count-pill-grapes');
+        expect(pill).toHaveTextContent('२ प्लॉट');
+        expect(pill).not.toHaveTextContent('PLOTS');
+    });
+
+    it('a single-plot crop shows १ प्लॉट — Devanagari singular, same noun as the plural', () => {
+        render(
+            <CropSelector
+                mode="reflect"
+                crops={TWO_CROPS}
+                selectedCrops={[]}
+                selectedPlots={{}}
+                onSelectionChange={vi.fn()}
+                disabled={false}
+            />,
+        );
+
+        const pill = screen.getByTestId('crop-count-pill-sugarcane');
+        expect(pill).toHaveTextContent('१ प्लॉट');
+        expect(pill).not.toHaveTextContent('PLOT');
     });
 });
