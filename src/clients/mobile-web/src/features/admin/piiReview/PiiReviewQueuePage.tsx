@@ -15,6 +15,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../../i18n/LanguageContext';
+import { apiFetch } from '../../../infrastructure/api/apiFetch';
 import { tPiiReview, toPiiReviewLocale } from '../../../i18n/piiReviewTranslations';
 import { PiiReviewDecisionPanel } from './PiiReviewDecisionPanel';
 
@@ -36,9 +37,17 @@ export interface PiiReviewQueuePageProps {
     fetchQueue?: () => Promise<PiiReviewQueueEntryDto[]>;
 }
 
-/** Default fetcher hits the backend endpoint defined in PiiReviewEndpoints.cs. */
+/**
+ * Default fetcher hits the backend endpoint defined in PiiReviewEndpoints.cs.
+ *
+ * `apiFetch`, not `fetch`. A bare relative path reached the WebView instead of
+ * the API once a release build baked in VITE_AGRISYNC_API_URL. `credentials:
+ * 'include'` was also not authentication here — the endpoint is guarded by
+ * PiiReviewerRequirement, which reads the JWT, and the only cookie this app sets
+ * is the refresh cookie scoped to /user/auth/refresh. It needs the bearer token.
+ */
 async function defaultFetchQueue(): Promise<PiiReviewQueueEntryDto[]> {
-    const response = await fetch('/shramsafal/admin/pii-review/queue?status=Pending', {
+    const response = await apiFetch('/shramsafal/admin/pii-review/queue?status=Pending', {
         credentials: 'include',
     });
     if (!response.ok) {

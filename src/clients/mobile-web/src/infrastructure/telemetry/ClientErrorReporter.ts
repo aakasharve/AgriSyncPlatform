@@ -1,3 +1,4 @@
+import { apiUrl } from '../api/apiFetch';
 /**
  * ClientErrorReporter — Ops Observability Phase 3
  *
@@ -65,7 +66,12 @@ export function reportClientError(payload: ClientErrorPayload): void {
 
     // Use queueMicrotask so this doesn't block the current call stack
     queueMicrotask(() => {
-        void fetch('/telemetry/client-error', {
+        // `apiUrl`, and deliberately NOT `apiFetch`. The path was relative, so in
+        // the APK every client-error report went to the WebView and vanished —
+        // the crash reporting meant to show why farmers were failing reported
+        // nothing, from any phone, ever. It stays unauthenticated on purpose:
+        // the errors most worth seeing are the ones where auth itself is broken.
+        void fetch(apiUrl('/telemetry/client-error'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
