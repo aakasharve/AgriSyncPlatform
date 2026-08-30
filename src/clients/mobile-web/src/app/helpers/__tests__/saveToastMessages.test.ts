@@ -259,3 +259,68 @@ describe('buildEditSavedMessage — the half no server call carried (final revie
         }
     });
 });
+
+describe('buildEditSavedMessage — the phone claim is evidence, not a courtesy (V2 R1, Task 23)', () => {
+    // THE DEFECT. Every branch above leads with `sync.onPhone` ("लक्षात ठेवलं ✓"),
+    // and that claim is made on one thing: `repo.save` resolved. For an edit that
+    // ADDED or REMOVED a labour engagement on an already-saved day, nothing in
+    // this system can carry that to a server — so the next pull rebuilds the
+    // day's labour from the server's own answer and the change is deleted from
+    // the handset too (`UpdateLog.savedDayWorkerEdit.test.ts` proves the
+    // deletion through real Dexie). Saying "remembered ✓" over it is a success
+    // message for an operation that did not happen.
+    //
+    // NO NEW WORDS. The fix removes a false claim; it does not invent a
+    // replacement sentence. `sync.unsentEditTail` is already approved copy and
+    // already renders on this exact branch.
+
+    it('drops the phone claim when the phone will not keep the edit', () => {
+        for (const language of LANGUAGES) {
+            const message = buildEditSavedMessage(0, language, true, false);
+
+            expect(message).not.toContain(onPhoneClaim(language));
+            expect(message).toContain(t('sync.unsentEditTail', language));
+        }
+    });
+
+    it('still names the corrections that DID land, beside what did not', () => {
+        // A submit can correct a headcount AND add an engagement. The headcount
+        // reached the server and comes back down; the added engagement does not.
+        // Dropping the phone claim must not also swallow the true half.
+        for (const language of LANGUAGES) {
+            const message = buildEditSavedMessage(1, language, true, false);
+
+            expect(message).not.toContain(onPhoneClaim(language));
+            expect(message).toContain(tf('sync.correctionsFiledTailOne', language, { count: 1 }));
+            expect(message).toContain(t('sync.unsentEditTail', language));
+        }
+    });
+
+    it('never returns an empty toast, whatever the caller passes', () => {
+        // A silent confirmation is its own dishonesty: the farmer taps जतन and
+        // learns nothing. `!phoneClaimHolds` therefore implies the unsent tail
+        // rather than merely permitting it.
+        for (const language of LANGUAGES) {
+            expect(buildEditSavedMessage(0, language, false, false).trim()).not.toBe('');
+        }
+    });
+
+    it('keeps the phone claim by default, so the happy path is byte-identical', () => {
+        // The reassurance exists to stop a farmer re-recording a day the app
+        // really does hold (see the module header). It is removed ONLY where the
+        // app knows it is false — never widened by accident.
+        for (const language of LANGUAGES) {
+            expect(buildEditSavedMessage(0, language, true, true))
+                .toBe(buildEditSavedMessage(0, language, true));
+            expect(buildEditSavedMessage(2, language, false, true))
+                .toBe(buildEditSavedMessage(2, language));
+            expect(buildEditSavedMessage(1, language, true).startsWith(onPhoneClaim(language)))
+                .toBe(true);
+        }
+    });
+
+    it('keeps the whole sentence in one script', () => {
+        expect(/[A-Za-z]{2,}/.test(buildEditSavedMessage(1, 'mr', true, false))).toBe(false);
+        expect(/[ऀ-ॿ]/.test(buildEditSavedMessage(1, 'en', true, false))).toBe(false);
+    });
+});

@@ -69,6 +69,39 @@ export interface UpdateLogResponse {
      * the server — the record's untouched parts make no claim either way.
      */
     hasUnsentChanges?: boolean;
+    /**
+     * LABOUR V2 R1, Task 23 — DID THIS EDIT ADD OR REMOVE A WHOLE ENGAGEMENT,
+     * i.e. is even the LOCAL half of the save about to be undone?
+     *
+     * `hasUnsentChanges` and this field answer two different questions and the
+     * gap between them is where a farmer was misled:
+     *
+     *   `hasUnsentChanges`            no server was told.
+     *   `labourEngagementSetChanged`  no server was told AND the handset does
+     *                                 not keep it either.
+     *
+     * An irrigation figure the server never heard about still sits in `db.logs`
+     * and still shows on every screen; the caveat is enough for it. A newly
+     * added engagement does NOT: `resolveLabour` (`logsReconciler.ts:478-492`)
+     * adopts the server's engagement list whole whenever it is non-empty, so
+     * the next delta pull deletes the addition and restores a removal. Nothing
+     * in this system can prevent that — `buildLabourCorrections` skips both
+     * shapes by design, `PushSyncBatchHandler` has no add/remove-engagement
+     * mutation, and `CorrectLabourCommand` corrects an EXISTING assignment and
+     * can neither create nor delete one.
+     *
+     * So this is the evidence the CONFIRMATION needs. `sync.onPhone`
+     * ("लक्षात ठेवलं ✓") is a claim about the handset and it is made on nothing
+     * more than `repo.save` having resolved; when this field is `true` that
+     * claim is false at the moment it is made, and `buildEditSavedMessage`
+     * drops it.
+     *
+     * WHEN THIS BECOMES WRONG: the day a route exists that can add or remove an
+     * engagement on a saved day, this edit genuinely sends and the field must
+     * stop being set — do not soften the sentence, remove the signal, exactly as
+     * `hasUnsentChanges` documents for its own tail.
+     */
+    labourEngagementSetChanged?: boolean;
 }
 
 /** One engagement's worth of correction, ready to POST. */
@@ -249,6 +282,44 @@ function keyEngagements(events: readonly LabourEvent[] | undefined): Map<string,
         byKey.set(event.labourAssignmentId || event.id, event);
     }
     return byKey;
+}
+
+/**
+ * LABOUR V2 R1, Task 23 — DID THIS EDIT CHANGE **WHICH** ENGAGEMENTS THE DAY
+ * HAS, rather than what one of them says?
+ *
+ * The distinction is the whole point. A headcount corrected from 8 to 6 travels
+ * on the correction route, lands on the server and comes back down — the phone
+ * and the server agree, and the confirmation over it is true. An engagement
+ * ADDED or REMOVED travels nowhere at all, and `resolveLabour` then replaces
+ * the handset's list with the server's on the next pull. Both are "unsent";
+ * only this one is also un-kept.
+ *
+ * Keyed exactly as `hasUnsentChanges` keys them (`labourAssignmentId`, falling
+ * back to the local `id`), so a newly added engagement — which has no
+ * assignment id, because only the server mints one for an engagement it knows
+ * about — cannot collide with an existing one and be read as a mere edit of it.
+ *
+ * SUBSET, NOT SIBLING: every input that makes this `true` also makes
+ * `hasUnsentChanges` `true`. That is relied on downstream — the wording layer
+ * needs a tail to say once the phone claim is gone — so the two must not drift.
+ */
+export function changesLabourEngagementSet(
+    existingLog: DailyLog,
+    finalLog: DailyLog,
+): boolean {
+    const before = keyEngagements(existingLog.labour);
+    const after = keyEngagements(finalLog.labour);
+
+    if (before.size !== after.size) {
+        return true;
+    }
+    for (const key of after.keys()) {
+        if (!before.has(key)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**
@@ -522,6 +593,11 @@ export const updateLog = async (
             log: finalLog,
             persistedLabourCorrections: corrections.length,
             hasUnsentChanges: hasUnsentChanges(existingLog, finalLog, corrections),
+            // Task 23 — the sharper half of the same question. Computed from the
+            // same two records, on the same line, after the correction loop
+            // returned: it describes what this submit did, never what a later
+            // sync might do about it.
+            labourEngagementSetChanged: changesLabourEngagementSet(existingLog, finalLog),
         };
 
     } catch (e: unknown) {
