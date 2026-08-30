@@ -203,7 +203,35 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
                   * a farm with no job-card evidence still gets nothing
                   * fabricated, never a ₹0.
                   */}
-                <StatTile icon={<ClipboardList size={17} />} tone="bl" value={String(d.logs)} label="नोंदी" />
+                {/*
+                  * TASK 16 (spec: 2026-08-28-labour-v2-release-1, founder
+                  * option c) — three tiles in a 2-column grid left नोंदी
+                  * alone beside a blank cell. मजूर-दिवस and मजुरी stay a
+                  * plain top-row pair; नोंदी now spans both columns as a
+                  * full-width bar underneath, so no cell is ever empty and
+                  * no tile shrinks to make room.
+                  *
+                  * The wrapper (not `StatTile` itself) carries `col-span-2`:
+                  * `StatTile` takes no `className` prop, and this task is
+                  * confined to this file (a sibling task is mid-edit on
+                  * `LabourFeature.tsx`/`useLabourState.ts`, and `StatTile`
+                  * lives in the shared `LabourUiKit.tsx` those don't touch
+                  * either — safest not to widen the blast radius). The
+                  * `[&>button]:w-full` makes the tile's own button — same
+                  * border, same icon chip, same number typography as its two
+                  * neighbours — fill that full width rather than hugging its
+                  * content.
+                  *
+                  * MUST NOT gain तपासायचं's affordances: no chevron, no count
+                  * pill, no onClick. It stays what it always was — a stat
+                  * tile with no `onClick`, which `StatTile` already renders
+                  * `disabled` — just wider. तपासायचं (below, unchanged) keeps
+                  * its amber strip, its pill and its chevron, and stays the
+                  * only tappable thing between the two.
+                  */}
+                <div className="col-span-2 [&>button]:w-full">
+                    <StatTile icon={<ClipboardList size={17} />} tone="bl" value={String(d.logs)} label="नोंदी" />
+                </div>
             </div>
 
             {/*

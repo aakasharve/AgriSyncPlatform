@@ -334,4 +334,67 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
             expect(screen.queryByText('जास्त दिलं')).toBeNull();
         });
     });
+
+    // TASK 16 (spec: 2026-08-28-labour-v2-release-1, founder option c) — the
+    // stat grid held exactly three tiles (मजूर-दिवस · मजुरी · नोंदी) in a
+    // 2-column grid, so the third sat alone beside a blank cell. Founder chose
+    // c: मजूर-दिवस and मजुरी stay side by side on the top row; नोंदी becomes a
+    // full-width bar underneath them — no tile shrinks, nothing else moves.
+    describe('Task 16 — नोंदी becomes a full-width bar, not a lone tile beside an empty cell', () => {
+        afterEach(() => cleanup());
+
+        it('मजूर-दिवस and मजुरी stay plain top-row tiles; नोंदी is the only one spanning full width; no filler node fakes the old empty cell', () => {
+            render(<WeeklyDashboard {...baseProps()} data={LABOUR_MOCK} />);
+
+            const grid = screen.getByTestId('labour-stat-grid');
+            // Exactly the three real tiles as direct grid items — no fourth
+            // node was added to paper over the old empty cell.
+            expect(grid.children).toHaveLength(3);
+
+            const manDaysItem = screen.getByText('मजूर-दिवस').closest('button');
+            const wagesItem = screen.getByText('मजुरी').closest('button');
+            const logsLabel = screen.getByText('नोंदी');
+            const logsItem = Array.from(grid.children).find((el) => el.contains(logsLabel));
+
+            expect(manDaysItem).not.toBeNull();
+            expect(wagesItem).not.toBeNull();
+            expect(logsItem).not.toBeUndefined();
+            // The two top-row tiles keep their plain single-column footprint...
+            expect(manDaysItem!.className).not.toMatch(/col-span/);
+            expect(wagesItem!.className).not.toMatch(/col-span/);
+            // ...while नोंदी's own grid item is the one made full-width.
+            expect(logsItem!.className).toMatch(/col-span-2/);
+        });
+
+        // THE CONFUSION GUARD — the one thing that must not go wrong. नोंदी
+        // sits directly above तपासायचं, and both are full-width once this
+        // ships. तपासायचं is a tappable approval inbox (chevron + count pill +
+        // real onClick); नोंदी is a stat about the selected window, styled
+        // exactly like its two neighbours above it. Blurring the two would
+        // read as the number itself inviting a tap it does nothing for.
+        it('नोंदी carries no chevron, no count pill, no tap target — तपासायचं keeps all three', () => {
+            render(<WeeklyDashboard {...baseProps()} data={LABOUR_MOCK} />);
+
+            const grid = screen.getByTestId('labour-stat-grid');
+            const logsLabel = within(grid).getByText('नोंदी');
+            const logsButton = logsLabel.closest('button');
+            expect(logsButton).not.toBeNull();
+            // Same inert treatment as मजूर-दिवस/मजुरी — a StatTile with no
+            // onClick renders `disabled`, so it is not a real tap target.
+            expect(logsButton).toBeDisabled();
+            // Scoped to नोंदी's WHOLE grid item (wrapper + button), not just
+            // the button — a chevron/pill slipped in beside the button
+            // rather than inside it must be caught just as surely.
+            const logsItem = Array.from(grid.children).find((el) => el.contains(logsLabel));
+            expect(logsItem).not.toBeUndefined();
+            expect(logsItem!.querySelector('svg.lucide-chevron-right')).toBeNull();
+            expect(within(grid).queryByTestId('labour-review-strip-count')).toBeNull();
+
+            const strip = screen.getByTestId('labour-review-strip');
+            expect(strip.tagName).toBe('BUTTON');
+            expect(strip).not.toBeDisabled();
+            expect(strip.querySelector('svg.lucide-chevron-right')).not.toBeNull();
+            expect(within(strip).getByTestId('labour-review-strip-count')).toBeInTheDocument();
+        });
+    });
 });
