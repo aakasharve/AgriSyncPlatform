@@ -541,7 +541,11 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
             // reshuffles when the data lands (spec §2.2).
             const button = screen.getByTestId('canonical-strip-waiting-button');
             expect(button, label).toBeInTheDocument();
-            expect(button, label).toHaveStyle({ minHeight: '52px' });
+            // The 52px floor this used to pin was removed by the founder's
+            // 2026-08-30 ruling — height is content now. What the test is
+            // actually about, the rest state never appearing before the data
+            // resolves, is asserted below and is untouched.
+            expect(button.getAttribute('style') ?? '', label).not.toContain('min-height');
 
             cleanup();
         }

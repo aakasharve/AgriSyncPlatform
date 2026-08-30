@@ -171,7 +171,19 @@ function fontStyleFor(text: string): React.CSSProperties {
 // makes the real box ~68px in ALL FOUR states, so what spec §2.2 locks — one
 // node, one floor, no reflow across the branch — is untouched, and is asserted
 // by `the_rest_state_keeps_its_exact_place_and_height`.
-const STRIP_MIN_HEIGHT = '52px';
+// FOUNDER RULING 2026-08-30 — THE FLOOR IS GONE, AND SO IS SPEC 2.2's
+// "one node, one floor, no reflow across the branch".
+//
+// His words on the built screen: it "must not occupy that much space... it is a
+// banner that pops out when there is something to give attention to, not a
+// default thing. If there is nothing it must show only one line."
+//
+// A fixed floor is exactly what made a rest state cost the same vertical space
+// as a four-row alert. The two readings cannot both be honoured, and he has now
+// seen the fixed one on his own phone and ruled against it. Height is content
+// now: two lines while work waits, one line when none does. The node itself is
+// still single and still canonical, so nothing about WHICH element speaks has
+// changed — only how much room it takes when it has little to say.
 
 /**
  * CHANGE 2 — HOW LONG THE STRIP MAY SAY "CHECKING…" BEFORE IT ADMITS IT
@@ -657,12 +669,19 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
             // label — that one was untrue and had to go, this one is true and
             // has to be there.
             aria-label={`${primaryLabelText} — ${freshnessText}`}
-            className={`relative flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-colors ${
+            // Waiting is an amber BANNER and carries a subtitle, so it earns two
+            // lines. Rest is a single green line: green because the founder
+            // asked for "green UI, all works are done", and one line because a
+            // completion notice that shouts is a completion notice nobody
+            // believes. Checking and unknown stay neutral and share the compact
+            // height — neither is an alert and neither is an all-clear.
+            className={`relative flex w-full items-center gap-2.5 rounded-2xl border text-left transition-colors ${
                 isWaiting
-                    ? 'border-amber-200 bg-amber-50'
-                    : 'border-stone-200 bg-white'
+                    ? 'border-amber-200 bg-amber-50 px-3 py-2.5'
+                    : (isChecking || isUnknown
+                        ? 'border-stone-200 bg-white px-3 py-2'
+                        : 'border-emerald-200 bg-emerald-50 px-3 py-2')
             }`}
-            style={{ minHeight: STRIP_MIN_HEIGHT }}
         >
             {/* The grab handle — "This is what makes it look openable — do
                 not omit it." Same position/size in both states; only the
@@ -670,8 +689,10 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
             <span
                 aria-hidden="true"
                 data-testid="canonical-strip-tray-handle"
-                className={`absolute left-1/2 top-[5px] h-[3px] w-[26px] -translate-x-1/2 rounded-full ${
-                    isWaiting ? 'bg-amber-200' : 'bg-stone-200'
+                className={`absolute left-1/2 top-[4px] h-[3px] w-[26px] -translate-x-1/2 rounded-full ${
+                    isWaiting
+                        ? 'bg-amber-200'
+                        : (isChecking || isUnknown ? 'bg-stone-200' : 'bg-emerald-200')
                 }`}
             />
 
@@ -692,12 +713,12 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
                 waitingCount={waitingCount}
             />
 
-            <span className="min-w-0 flex-1 pt-1">
+            <span className="min-w-0 flex-1">
                 <span
                     className={`block truncate text-[13px] font-extrabold leading-tight ${
                         isWaiting
                             ? 'text-amber-900'
-                            : (isChecking || isUnknown ? 'text-stone-500' : 'text-stone-800')
+                            : (isChecking || isUnknown ? 'text-stone-500' : 'text-emerald-900')
                     }`}
                     style={fontStyleFor(primaryLabelText)}
                 >
@@ -756,7 +777,14 @@ const CanonicalStrip: React.FC<CanonicalStripProps> = ({
                 this screen, one level smaller — and the pill was the widest
                 thing competing with a title slot already too narrow for his
                 `unknownState`. The `data-testid` moved WITH the number. */}
-            <ChevronDown size={14} className={`shrink-0 ${isWaiting ? 'text-amber-700' : 'text-stone-400'}`} />
+            <ChevronDown
+                size={14}
+                className={`shrink-0 ${
+                    isWaiting
+                        ? 'text-amber-700'
+                        : (isChecking || isUnknown ? 'text-stone-400' : 'text-emerald-600')
+                }`}
+            />
         </button>
     );
 };

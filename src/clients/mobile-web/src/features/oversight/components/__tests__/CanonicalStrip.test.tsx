@@ -70,26 +70,36 @@ function baseFarmChipProps(overrides: Partial<FarmIdentityElementProps> = {}): F
 }
 
 describe('CanonicalStrip — row 2, the waiting button alone, full width', () => {
-    it('waiting_button_keeps_its_height_in_both_states', () => {
-        // Spec §2.2: "Rest state keeps its exact place and size ... The
-        // layout never reshuffles, so the strip is a fixed landmark." The
-        // scenario this protects against is `waitingCount` changing on a
-        // LIVE header instance (0 -> 6 as records arrive), not two
-        // isolated mounts — so this uses `rerender()` on one instance, not
-        // two separate `render()` calls.
+    it('the_waiting_button_is_ONE_node_across_states_and_changes_only_its_dress', () => {
+        // FOUNDER RULING 2026-08-30 supersedes spec §2.2's "rest state keeps
+        // its exact place and SIZE". He saw the fixed 52px floor on his own
+        // phone and ruled that the strip "must not occupy that much space...
+        // it is a banner that pops out when there is something to give
+        // attention to", and that an empty state "must show only one line".
+        // A locked height and a one-line rest state cannot both be true.
+        //
+        // What SURVIVES the ruling is the half that was actually protecting
+        // the farmer: ONE node across the branch. A conditional
+        // unmount/remount is a flicker he can see, and it is what this
+        // rerender (rather than two isolated mounts) exists to catch.
         const { rerender } = render(<CanonicalStrip {...baseStripProps({ waitingCount: 0 })} />);
         const restButton = screen.getByTestId('canonical-strip-waiting-button');
-        expect(restButton).toHaveStyle({ minHeight: '52px' });
+        // Rest is the compact green line he asked for.
+        expect(restButton.className).toContain('bg-emerald-50');
+        expect(restButton.className).toContain('py-2');
+        expect(restButton.className).not.toContain('amber');
 
         rerender(<CanonicalStrip {...baseStripProps({ waitingCount: 6 })} />);
         const waitingButton = screen.getByTestId('canonical-strip-waiting-button');
 
-        // The identity assertion is the one that actually catches a
-        // conditional unmount/remount across the branch — a node that
-        // merely happens to carry the same height, but is a NEW node, would
-        // still be a reflow a farmer can see.
+        // Same node — no remount, no flicker.
         expect(waitingButton).toBe(restButton);
-        expect(waitingButton).toHaveStyle({ minHeight: '52px' });
+        // ...wearing the amber banner dress, with room for its subtitle.
+        expect(waitingButton.className).toContain('bg-amber-50');
+        expect(waitingButton.className).toContain('py-2.5');
+        expect(waitingButton.className).not.toContain('emerald');
+        // And no fixed floor survives to re-inflate the quiet state.
+        expect(waitingButton.getAttribute('style') ?? '').not.toContain('min-height');
     });
 
     it('the_count_comes_from_props', () => {
@@ -292,21 +302,25 @@ describe('CanonicalStrip — the rest state is a claim, and a claim needs eviden
         expect(screen.getByTestId('canonical-strip-waiting-button').className).not.toContain('amber');
     });
 
-    it('the_checking_state_keeps_the_strip_a_fixed_landmark_and_shows_no_count', () => {
-        // Spec §2.2 — same place, same size, no reshuffle when the data
-        // lands. `rerender` on ONE instance is what catches a remount.
+    it('the_checking_state_is_one_node_with_the_rest_state_and_shows_no_count', () => {
+        // The height half of spec §2.2 is overruled (see the rerender test at
+        // the top of this file). The no-remount half and the no-count half are
+        // untouched and are what this still holds.
         const { rerender } = render(
             <CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: false })} />,
         );
         const checkingButton = screen.getByTestId('canonical-strip-waiting-button');
-        expect(checkingButton).toHaveStyle({ minHeight: '52px' });
+        // Checking is neutral: it is neither an alert nor an all-clear, so it
+        // must not borrow the amber banner or the green completion colour.
+        expect(checkingButton.className).not.toContain('amber');
+        expect(checkingButton.className).not.toContain('emerald');
         // No badge: there is no measured number to show.
         expect(screen.queryByTestId('canonical-strip-waiting-count')).not.toBeInTheDocument();
 
         rerender(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: true })} />);
         const restButton = screen.getByTestId('canonical-strip-waiting-button');
         expect(restButton).toBe(checkingButton);
-        expect(restButton).toHaveStyle({ minHeight: '52px' });
+        expect(restButton.className).toContain('bg-emerald-50');
         expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
     });
 
@@ -583,7 +597,17 @@ describe('CanonicalStrip — a multi-farm account gets no completion claim (chan
         for (const props of cases) {
             const label = JSON.stringify(props);
             const { container } = render(<CanonicalStrip {...baseStripProps(props)} />);
-            const ring = container.querySelector('[data-testid^="canonical-strip-waiting-"][class*="h-11"]');
+            // Selected by the ring's own four testids, NOT by `h-11`: the
+            // 2026-08-30 ruling shrank the disc to 24px in the three states
+            // that hold a glyph rather than a number, so a size-based selector
+            // would silently match only the waiting case and pass the other
+            // five by never asserting them.
+            const ring = container.querySelector(
+                '[data-testid="canonical-strip-waiting-icon"],'
+                + '[data-testid="canonical-strip-waiting-checking-icon"],'
+                + '[data-testid="canonical-strip-waiting-unknown-icon"],'
+                + '[data-testid="canonical-strip-waiting-rest-tick"]',
+            );
             expect(ring, label).not.toBeNull();
 
             const glyphs = ring!.querySelectorAll('svg').length;
