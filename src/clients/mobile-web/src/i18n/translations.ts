@@ -609,7 +609,7 @@ export const translations: Record<Language, Translations> = {
             setup: 'सेटअप',
         },
         profile: {
-            setupHub: 'सेटअप केंद्र',
+            setupHub: 'सेट-अप केंद्र',
             farmerIdentity: 'शेतकरी ओळख',
             cropsAndPlots: 'पिके आणि प्लॉट',
             waterAndPower: 'पाणी आणि वीज',
