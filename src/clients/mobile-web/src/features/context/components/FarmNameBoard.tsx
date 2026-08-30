@@ -72,23 +72,40 @@ const MAX_NAME_PX = 25;
 const MIN_NAME_PX = 12;
 
 /**
- * Steps the font size down until the text fits its slot on one line, then
- * allows a wrap as the last resort. Re-runs when the name, the slot width or
- * the webfonts change — Devanagari metrics shift once Noto loads, and a fit
- * measured against the fallback would be wrong by several pixels.
+ * Steps the font size down until the text fits on one line, then allows a wrap
+ * as the last resort.
+ *
+ * MEASURES THE ROW, NOT A SLOT. The name used to live in a `flex-1` slot and
+ * centre itself inside it, which left a short name floating a long way from the
+ * shield — the founder read "Arve Farm" and said the mark felt disconnected from
+ * it. The mark and the name are now ONE centred group, so the group's width
+ * follows the name and the gap between them never grows.
+ *
+ * That makes the available width a computed quantity rather than a measurable
+ * one: the group no longer fills the row, so the row is what has to be measured
+ * and the mark's own width subtracted from it.
+ *
+ * Re-runs when the name, the row width or the webfonts change — Devanagari
+ * metrics shift once Noto loads, and a fit measured against the fallback face
+ * would be wrong by several pixels.
  */
 function useFitText(
-    slotRef: React.RefObject<HTMLElement | null>,
+    rowRef: React.RefObject<HTMLElement | null>,
+    markRef: React.RefObject<HTMLElement | null>,
     textRef: React.RefObject<HTMLElement | null>,
     text: string,
 ): void {
     React.useLayoutEffect(() => {
-        const slot = slotRef.current;
+        const row = rowRef.current;
         const el = textRef.current;
-        if (!slot || !el) return;
+        if (!row || !el) return;
 
         const fit = () => {
-            const available = slot.clientWidth - 2;
+            const style = window.getComputedStyle(row);
+            const padding = parseFloat(style.paddingLeft || '0') + parseFloat(style.paddingRight || '0');
+            const gap = parseFloat(style.columnGap || style.gap || '0') || 0;
+            const mark = markRef.current?.offsetWidth ?? 0;
+            const available = row.clientWidth - padding - mark - gap - 2;
             if (available <= 0) return;
             el.style.whiteSpace = 'nowrap';
             el.style.display = 'inline-block';
@@ -107,13 +124,13 @@ function useFitText(
         fit();
 
         const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(fit) : null;
-        ro?.observe(slot);
+        ro?.observe(row);
         // Devanagari metrics change when Noto lands; refit rather than ship a
         // size measured against the fallback face.
         const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;
         void fonts?.ready.then(fit);
         return () => ro?.disconnect();
-    }, [slotRef, textRef, text]);
+    }, [rowRef, markRef, textRef, text]);
 }
 
 export interface FarmNameBoardProps {
@@ -157,9 +174,10 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
     disabled = false,
     canSwitch = false,
 }) => {
-    const slotRef = React.useRef<HTMLSpanElement>(null);
+    const rowRef = React.useRef<HTMLSpanElement>(null);
+    const markRef = React.useRef<HTMLSpanElement>(null);
     const nameRef = React.useRef<HTMLSpanElement>(null);
-    useFitText(slotRef, nameRef, farmName);
+    useFitText(rowRef, markRef, nameRef, farmName);
 
     // See `canSwitch`. A one-farm account gets identity, not a control — and
     // it must not be a `<button>` either, or a screen reader announces a
@@ -222,7 +240,12 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
                     >
                         {/* layer 4 — the face the content sits on */}
                         <span
-                            className="relative flex items-center gap-2.5 px-3 py-[7px]"
+                            ref={rowRef}
+                            // justify-CENTER, not a flex-1 name slot: the mark and
+                            // the name travel together as one group, so the space
+                            // between them is fixed by `gap` and cannot open up
+                            // when the name is short.
+                            className="relative flex items-center justify-center gap-2 px-3 py-[7px]"
                             style={{
                                 background: 'linear-gradient(180deg,#17603F 0%,#14532D 48%,#0F3D22 100%)',
                                 clipPath: chamfer(CORNER - 3),
@@ -242,6 +265,7 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
                                 The disc is what makes the logo legible; it is
                                 not decoration and must not be dropped. */}
                             <span
+                                ref={markRef}
                                 className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full"
                                 style={{
                                     background: '#FBF5EC',
@@ -258,8 +282,8 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
                                     className="h-[25px] w-[25px] object-contain"
                                 />
                             </span>
-                            <span className="flex min-w-0 flex-1 flex-col items-center justify-center">
-                                <span ref={slotRef} className="flex w-full items-center justify-center">
+                            <span className="flex min-w-0 flex-col items-center justify-center">
+                                <span className="flex items-center justify-center">
                                     <span
                                         ref={nameRef}
                                         data-testid="farm-nameboard-name"

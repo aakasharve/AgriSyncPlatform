@@ -282,6 +282,10 @@ describe('the home screen carries exactly ONE all-clear claim (founder rulings 2
         expect(screen.queryByText(SETTLED_LINE)).toBeNull();
     });
 
+    // 20s, not the 5s default: this walks every .ts/.tsx under src and reads
+    // each one. That is real IO — ~1000 files — and it is the point of the test,
+    // but under a full parallel run it exceeded the render-tuned default and
+    // flaked. A slow honest test beats a fast one that only checks the DOM.
     it('the_second_surface_does_not_exist_at_all', () => {
         // FOUNDER RULING 2026-08-29 — the strongest form of property 1. The
         // 2026-08-27 pass deleted the SETTLED line but left `DailyLoopHero`
@@ -310,7 +314,7 @@ describe('the home screen carries exactly ONE all-clear claim (founder rulings 2
 
         expect(offenders).toEqual([]);
         expect(fs.existsSync(path.join(srcRoot, 'features/logs/components/shramsathi/DailyLoopHero.tsx'))).toBe(false);
-    });
+    }, 20000);
 });
 
 describe('the strip\'s ring and the strip\'s words are ONE fact (founder ruling 2026-08-27)', () => {
