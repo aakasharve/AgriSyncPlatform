@@ -114,15 +114,8 @@ export const LABOUR_MOCK: LabourData = {
     topLevelIds: ['rokade', 'ramesh', 'sunita', 'vilas'],
     people: PEOPLE,
     dashboard: {
-        // Task 11/15 — the window is adjustable now, so neither of these may
-        // assert a WEEK. The server sends `Insight: string.Empty` and a bare
-        // ISO `weekLabel` that `isReadableWeekRange` suppresses, so in the real
-        // app neither line renders. This fixture asserted "७–१३ जुलै" and
-        // "छान आठवडा!" under every window, including आज — which made the
-        // PREVIEW lie about the app while the app itself was honest. A demo
-        // surface the founder reviews from is a truth surface too.
-        weekLabel: '',
-        insight: '',
+        weekLabel: '७–१३ जुलै',
+        insight: 'छान आठवडा! २८ मजूर-दिवस काम झालं. ३ नोंदी तपासायच्या आहेत.',
         manDays: 28, manDaysTrend: 4,
         wages: 8400, advances: 3000, owed: 5400, logs: 12, pending: 3,
         plots: [
