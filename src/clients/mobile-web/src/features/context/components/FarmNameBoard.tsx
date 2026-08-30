@@ -228,15 +228,36 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
                                 clipPath: chamfer(CORNER - 3),
                             }}
                         >
-                            <img
-                                src="/brand/logo-mark.webp"
-                                alt=""
-                                aria-hidden="true"
-                                width={32}
-                                height={32}
-                                loading="eager"
-                                className="h-8 w-8 shrink-0 object-contain"
-                            />
+                            {/* THE SHIELD NEEDS ITS OWN GROUND.
+                                `logo-mark.webp` is a GREEN shield with a dark
+                                green outline. Placed straight onto this board
+                                it was green-on-green: the outline vanished into
+                                the gradient and the farmer saw a smudge where
+                                the mark should be. The founder caught it on the
+                                built screen.
+                                So the mark sits on a cream disc with a brass
+                                ring — the same treatment the reference image
+                                used, and the same two colours already framing
+                                the board, so nothing new enters the palette.
+                                The disc is what makes the logo legible; it is
+                                not decoration and must not be dropped. */}
+                            <span
+                                className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full"
+                                style={{
+                                    background: '#FBF5EC',
+                                    boxShadow: '0 0 0 1.5px #D9B45B, 0 1px 3px rgba(4,24,12,.45)',
+                                }}
+                            >
+                                <img
+                                    src="/brand/logo-mark.webp"
+                                    alt=""
+                                    aria-hidden="true"
+                                    width={25}
+                                    height={25}
+                                    loading="eager"
+                                    className="h-[25px] w-[25px] object-contain"
+                                />
+                            </span>
                             <span className="flex min-w-0 flex-1 flex-col items-center justify-center">
                                 <span ref={slotRef} className="flex w-full items-center justify-center">
                                     <span
