@@ -644,6 +644,36 @@ public sealed class ParseVoiceInputHandler(
 
         root["fullTranscript"] = cleanTranscript;
 
+        // spec: 2026-08-28-labour-v2-release-1 — the heuristic below may only
+        // FILL A GAP in labour[]; it may never REPLACE what the model returned.
+        //
+        // Both labour writers underneath used to ASSIGN root["labour"], so a
+        // correct model answer — including a correct EMPTY one — was discarded
+        // and replaced by a transcript guess stamped "type":"HIRED".  On the
+        // record that determines wages, that is the app inventing a hired
+        // worker.  An empty array is an ANSWER ("nobody was hired"), not an
+        // absence: doctrine says absence of a record means unknown, and a model
+        // that answered "none" has answered.  So the ONLY state that counts as
+        // a gap is: the key is missing, or it is present but not an array.
+        //
+        // Captured ONCE, here, before either writer runs — so the two writers
+        // keep their original precedence relative to each other (the gender
+        // split still wins over the compound-segment guess) while neither can
+        // overrule the model.
+        //
+        // KNOWN CONSEQUENCE, stated plainly: AiResponseNormalizer.NormalizeVoiceJson
+        // calls EnsureArray(root, "labour") on every provider response, so on the
+        // live parse path labour[] is ALWAYS an array by the time this method
+        // runs.  The pipeline therefore cannot tell "the model omitted labour"
+        // from "the model answered labour: []" — the distinction is erased
+        // upstream — and under that gap rule these two writers are dormant in
+        // production.  That is the correct outcome: a writer that cannot tell
+        // whether the model answered must not answer over it.  The code is kept
+        // (not deleted) because it still fires for callers that hand this method
+        // un-normalized JSON, and because restoring it is a normalizer change,
+        // not a rewrite here.
+        var modelAnsweredLabour = root["labour"] is JsonArray;
+
         var labourSegments = ExtractCompoundLabourSegments(cleanTranscript);
         if (labourSegments.Count > 0)
         {
@@ -660,7 +690,11 @@ public sealed class ParseVoiceInputHandler(
                 });
             }
 
-            root["labour"] = labour;
+            // Gap-fill only — see modelAnsweredLabour above.
+            if (!modelAnsweredLabour)
+            {
+                root["labour"] = labour;
+            }
 
             if (labourSegments.Any(segment => segment.Activity == "fertilizer_application"))
             {
@@ -695,7 +729,10 @@ public sealed class ParseVoiceInputHandler(
             }
         }
 
-        if (TryExtractGenderSplit(cleanTranscript, out var maleCount, out var femaleCount))
+        // Gap-fill only — see modelAnsweredLabour above.  The gap is measured
+        // against the ORIGINAL root, so this writer still takes precedence over
+        // the compound-segment writer exactly as it did before.
+        if (!modelAnsweredLabour && TryExtractGenderSplit(cleanTranscript, out var maleCount, out var femaleCount))
         {
             root["labour"] = new JsonArray
             {
@@ -938,13 +975,82 @@ public sealed class ParseVoiceInputHandler(
         return results;
     }
 
-    private static int? TryExtractCount(string value)
+    /// <summary>
+    /// Splits <paramref name="value"/> into whole words, breaking on whitespace,
+    /// punctuation and symbols.
+    /// </summary>
+    /// <remarks>
+    /// spec: 2026-08-28-labour-v2-release-1.
+    /// Deliberately NOT a regex word boundary.  In Devanagari the vowel signs,
+    /// the virama and the nukta are Unicode <em>marks</em> (Mn/Mc), and
+    /// <c>char.IsLetter</c> returns false for them — so both <c>\b</c>-style
+    /// reasoning and any "split on non-letter" shortcut tear a Marathi word
+    /// apart at its own matras (छाटणी → छ,ट,ण).  Splitting on
+    /// whitespace/punctuation/symbol keeps every mark attached to the letter it
+    /// belongs to, which is what makes whole-word equality safe here.
+    /// </remarks>
+    private static List<string> SplitIntoWords(string value)
     {
+        var words = new List<string>();
+        var start = -1;
+
+        for (var i = 0; i < value.Length; i++)
+        {
+            var c = value[i];
+            if (char.IsWhiteSpace(c) || char.IsPunctuation(c) || char.IsSymbol(c))
+            {
+                if (start >= 0)
+                {
+                    words.Add(value[start..i]);
+                    start = -1;
+                }
+            }
+            else if (start < 0)
+            {
+                start = i;
+            }
+        }
+
+        if (start >= 0)
+        {
+            words.Add(value[start..]);
+        }
+
+        return words;
+    }
+
+    // internal (not private) so ShramSafal.Domain.Tests can assert the
+    // word-boundary behaviour directly, in BOTH directions — the same
+    // access-widening precedent as ApplyTranscriptIntegrityCorrections above.
+    // Guarded by InternalsVisibleTo in ShramSafal.Application.csproj.
+    internal static int? TryExtractCount(string value)
+    {
+        // spec: 2026-08-28-labour-v2-release-1 — WHOLE WORDS ONLY.
+        //
+        // This used to be value.Contains(token.Key), a substring test with no
+        // word boundary.  एक ("one") is a substring of एकटाच ("by myself"),
+        // एकरभर ("an acre") and एकूण ("total"), so "मी एकटाच छाटणी केली" —
+        // "I pruned by myself" — yielded a count of 1 and the caller wrote down
+        // one HIRED worker the farmer never mentioned.  The digit branch below
+        // was already word-bounded; the Marathi branch simply was not.
+        //
+        // The table intentionally holds inflected and compound forms
+        // (दोघांनी, तिघे, चौघांनी, पाचजण, पाचजणांनी).  Those are whole words a
+        // farmer actually says and they still match: the fix restricts matching
+        // to word boundaries, it does not stem or truncate.  Longest-key-first
+        // ordering is preserved so a compound is considered before its shorter
+        // stem, keeping the original precedence when a segment carries more
+        // than one number word.
+        var words = SplitIntoWords(value);
+
         foreach (var token in MarathiNumberTokens.OrderByDescending(item => item.Key.Length))
         {
-            if (value.Contains(token.Key, StringComparison.OrdinalIgnoreCase))
+            foreach (var word in words)
             {
-                return token.Value;
+                if (string.Equals(word, token.Key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return token.Value;
+                }
             }
         }
 
