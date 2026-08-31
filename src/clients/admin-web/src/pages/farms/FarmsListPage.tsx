@@ -339,7 +339,7 @@ export default function FarmsListPage() {
             All Farms
           </h1>
           <p className="mt-1 text-[15px] text-text-2">
-            Every farm in this organisation, with the figures this console actually measures — and
+            Every farm this feed returns, with the figures this console actually measures — and
             a grey em dash wherever it does not measure one.
           </p>
         </div>
@@ -451,8 +451,8 @@ export default function FarmsListPage() {
           onRetry: () => void refetch(),
           measuredZero: {
             what: tier
-              ? `No farm in this organisation is in tier ${tier}`
-              : 'No farms in this organisation',
+              ? `No farm this feed returns is in tier ${tier}`
+              : 'No farms returned by this feed',
             checkedAt,
           },
         }}

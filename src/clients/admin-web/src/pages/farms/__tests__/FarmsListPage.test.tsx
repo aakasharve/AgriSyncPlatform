@@ -384,7 +384,14 @@ describe('an absence names its cause (D9)', () => {
     serve([], 0);
     renderFarms(`/farms?org=${ORG}&tier=D`);
 
-    await screen.findByText('No farm in this organisation is in tier D');
+    // COPY CORRECTED 2026-09-01: this said "in this organisation", which was FALSE.
+    // GetFarmsListAsync(page, pageSize, search, tier, ct) takes no org parameter —
+    // verified in IAdminMisRepository.cs. Neither do GetSilentChurnAsync nor
+    // GetSufferingAsync. The org is in the query KEY (T12), which separates the
+    // client cache; it is not in the QUERY, so the server returns the same rows
+    // whichever org is active. Claiming a scope the feed does not apply is the
+    // exact defect class this redesign exists to remove.
+    await screen.findByText('No farm this feed returns is in tier D');
     expect(stateBlock()).toHaveAttribute('data-state', 'measured-zero');
     /* The window is the SERVER's `meta.lastRefreshed`, never a `new Date()`
        computed at render — that is the D5 fabricated-freshness defect. */

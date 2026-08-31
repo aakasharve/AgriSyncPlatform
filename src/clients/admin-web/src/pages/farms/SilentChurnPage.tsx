@@ -446,7 +446,7 @@ export default function SilentChurnPage() {
           error: isError ? error : null,
           onRetry: () => void refetch(),
           measuredZero: {
-            what: 'No farm in this organisation has stopped logging',
+            what: 'No farm this feed returns has stopped logging',
             checkedAt,
           },
         }}

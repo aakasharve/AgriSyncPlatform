@@ -315,7 +315,10 @@ describe('an absence names its cause (D9, Step 2)', () => {
     serve([]);
     renderChurn();
 
-    await screen.findByText('No farm in this organisation has stopped logging');
+    // COPY CORRECTED 2026-09-01 — see FarmsListPage.test.tsx. The endpoint takes
+    // no org parameter, so "in this organisation" was a scope claim the feed
+    // does not honour.
+    await screen.findByText('No farm this feed returns has stopped logging');
     expect(stateBlock()).toHaveAttribute('data-state', 'measured-zero');
     /* The window is the SERVER's `meta.lastRefreshed`, never a `new Date()`
        computed at render — that is the D5 fabricated-freshness defect. */
