@@ -1,4 +1,4 @@
-import { apiUrl } from '../api/apiFetch';
+import { apiUrl } from '../api/transport';
 /**
  * ClientErrorReporter — Ops Observability Phase 3
  *
