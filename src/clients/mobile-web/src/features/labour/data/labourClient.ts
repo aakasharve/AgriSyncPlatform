@@ -180,6 +180,10 @@ export interface LabourAttendanceDraftDto {
     // believes nobody came. 0 is reserved for a day with no labour at all.
     headcount: number | null;
     rows: LabourAttendanceRowDto[];
+    // Optional on the wire so fixtures predating it still typecheck; the
+    // server always sends it, empty when today has no single unambiguous
+    // engagement to attach a mark to.
+    todaysLabourAssignmentId?: string;
 }
 
 export interface LabourDataDto {
@@ -353,6 +357,7 @@ export async function fetchLabourData(
         attendance: {
             plot: dto.attendance.plot,
             headcount: dto.attendance.headcount,
+            todaysLabourAssignmentId: dto.attendance.todaysLabourAssignmentId ?? '',
             rows: dto.attendance.rows.map((r) => ({
                 personId: r.personId,
                 status: r.status as PresenceStatus,

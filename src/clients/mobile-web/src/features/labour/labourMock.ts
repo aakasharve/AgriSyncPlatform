@@ -107,7 +107,7 @@ export const EMPTY_LABOUR_DATA: LabourData = {
     },
     ledger: { weekLabel: '', days: [], rows: [], dailyTotals: [], weekTotal: null },
     review: [],
-    attendance: { plot: '', headcount: 0, rows: [] },
+    attendance: { plot: '', headcount: 0, rows: [], todaysLabourAssignmentId: '' },
 };
 
 export const LABOUR_MOCK: LabourData = {
@@ -167,5 +167,8 @@ export const LABOUR_MOCK: LabourData = {
             { personId: 'ramesh', status: 'present' },
             { personId: 'vilas', status: 'half' },
         ],
+        // Preview fixture: no real engagement exists behind a mock, and an
+        // invented id here would let the preview appear to attach to one.
+        todaysLabourAssignmentId: '',
     },
 };

@@ -146,7 +146,7 @@ describe('Attendance render — 5 workers, zero marks: no attendance facts are p
         people: FIVE_WORKERS,
         // Global Constraint 6 — untouched = no row. headcount reflects the
         // spoken/expected gang size; rows stays empty until a real tap.
-        attendance: { plot: '', headcount: 5, rows: [] },
+        attendance: { plot: '', headcount: 5, rows: [], todaysLabourAssignmentId: '' },
     });
 
     const baseProps = () => ({

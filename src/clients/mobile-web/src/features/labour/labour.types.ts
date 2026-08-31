@@ -240,7 +240,20 @@ export interface LabourData {
      * taps, so an empty list means nobody has been marked — not that everyone
      * was absent.
      */
-    attendance: { plot: string; headcount: number | null; rows: { personId: string; status: PresenceStatus }[] };
+    attendance: {
+        plot: string;
+        headcount: number | null;
+        rows: { personId: string; status: PresenceStatus }[];
+        /**
+         * The engagement a mark made today attaches to. EMPTY when today has
+         * none (nothing to attach to — one must be created first) and also
+         * when today has more than one (two engagements is two meanings for
+         * "he was here"; choosing silently would attribute a worker to work
+         * nobody said he did). Both cases are the caller’s to resolve, never
+         * to guess.
+         */
+        todaysLabourAssignmentId: string;
+    };
 }
 
 /**
