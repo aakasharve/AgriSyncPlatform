@@ -116,14 +116,19 @@ describe('the org param — the bug this hook exists to make unreachable', () =>
   });
 
   it('the active org survives a filter change across a reload', async () => {
-    // The teeth are here. `ActiveOrgProvider` reads the URL only on mount and
-    // then holds the value in React state, so within one session an org
-    // dropped from the URL still LOOKS fine. The damage lands on the next
-    // reload, or on whoever the link was shared with. Unmounting and
-    // remounting the provider is that reload.
+    // The teeth are here. An org dropped from the URL still LOOKS fine inside
+    // the session that dropped it. The damage lands on the next reload, or on
+    // whoever the link was shared with. Unmounting and remounting the provider
+    // over the same browser url is that reload.
     //
     // localStorage is cleared first ON PURPOSE: a stored org would rescue the
     // missing URL param and this test would pass while proving nothing.
+    //
+    // CHANGED IN TASK 12: the remount is now wrapped in a BrowserRouter.
+    // `ActiveOrgProvider` reads the org through `useSearchParams` (Step 2),
+    // so it requires a router — and a BrowserRouter reads the same jsdom url
+    // this test has been asserting on all along, which is why the assertion
+    // itself does not move.
     localStorage.clear();
     const user = userEvent.setup();
 
@@ -132,9 +137,11 @@ describe('the org param — the bug this hook exists to make unreachable', () =>
     unmount();
 
     render(
-      <ActiveOrgProvider>
-        <ShowOrg />
-      </ActiveOrgProvider>,
+      <BrowserRouter>
+        <ActiveOrgProvider>
+          <ShowOrg />
+        </ActiveOrgProvider>
+      </BrowserRouter>,
     );
 
     expect(screen.getByTestId('active-org').textContent).toBe(ORG);

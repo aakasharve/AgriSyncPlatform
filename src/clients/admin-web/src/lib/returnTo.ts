@@ -12,7 +12,7 @@
  * Every piece of state this console keeps in a url lives in the query string:
  * `page`, `search`, `tier`, `endpoint`, `weeks`, `days` — and `org`, which
  * decides WHOSE DATA the page shows. Storing `location.pathname` alone, which
- * is what App.tsx did before this task, silently downgrades
+ * is what App.tsx did before Task 11, silently downgrades
  * `/farms?page=7&tier=B&org=<uuid>` to `/farms` and lands the user on page 1
  * of a different organisation. Nothing goes red; the link just quietly means
  * something else. A mockup cannot show this, because the v3 prototype's login
@@ -28,17 +28,26 @@ export interface PathAndQuery {
 /**
  * The full url the user is on, as a router-navigable string.
  *
- * `routerLocation` (from `useLocation()`) is preferred for the path because it
- * is what re-renders a component when navigation happens. The query string is
- * then RECONCILED against `window.location`, and that is not belt-and-braces:
- * `ActiveOrgProvider` writes `?org=<uuid>` with a raw
- * `window.history.replaceState` (ActiveOrgProvider.tsx:102-108) that React
- * Router never observes, so the router's own `search` can be missing the one
- * parameter that decides which tenant's rows the restored link will show.
- * Task 12 moves that write onto the router; until it lands, reading the
- * router alone would drop the org out of every deep link this module exists
- * to protect. Reading the browser as well costs one loop and is correct
- * either way — after Task 12 the two agree and the loop adds nothing.
+ * ── SIMPLIFIED IN TASK 12, BECAUSE THE REASON FOR THE COMPLEXITY IS GONE ──
+ * This used to take the path from the router and then RECONCILE the query
+ * string against `window.location`, merging in any parameter the router could
+ * not see. That loop existed for exactly one parameter: `ActiveOrgProvider`
+ * wrote `?org=<uuid>` with a raw `window.history.replaceState`, which React
+ * Router never observed, so the router's own `search` could be missing the
+ * value that decides WHICH TENANT'S ROWS the restored link would show. The
+ * comment here said Task 12 would make the loop redundant.
+ *
+ * It did. `ActiveOrgProvider` now writes through `useSearchParams`
+ * (Task 12 Step 2), and a grep of `src/` outside tests finds no remaining
+ * `history.replaceState` or `pushState` anywhere: every url write in this
+ * console goes through the router. The router's `search` and the address bar
+ * cannot disagree, so merging them was reconciling a value with itself.
+ *
+ * Keeping it would have been the defect this repo keeps catching — a
+ * defensive line whose stated reason has stopped being true, which the next
+ * reader then preserves BECAUSE it looks deliberate. The `window.location`
+ * fallback stays: the 401 interceptor has no hooks and no router location,
+ * only the address bar.
  */
 export function currentPathWithQuery(routerLocation?: PathAndQuery): string {
   const browser: PathAndQuery | null =
@@ -49,15 +58,10 @@ export function currentPathWithQuery(routerLocation?: PathAndQuery): string {
   const source = routerLocation ?? browser;
   if (!source) return '/';
 
-  const params = new URLSearchParams(source.search);
-  if (routerLocation && browser) {
-    for (const [key, value] of new URLSearchParams(browser.search)) {
-      if (!params.has(key)) params.append(key, value);
-    }
-  }
-
-  const search = params.toString();
-  return search ? `${source.pathname}?${search}` : source.pathname;
+  // Both react-router and `window.location` include the leading '?'. A lone
+  // '?' is an empty query string, not a query string.
+  const search = source.search && source.search !== '?' ? source.search : '';
+  return `${source.pathname}${search}`;
 }
 
 /**

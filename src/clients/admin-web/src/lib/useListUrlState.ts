@@ -38,14 +38,19 @@ import { useSearchParams } from 'react-router-dom';
  * It does not re-point the six pages. They move onto it screen by screen in
  * Tasks 14-26, so a mechanical change can never hide a behavioural one.
  *
- * It also does not repair `ActiveOrgProvider.syncUrl`, which writes `?org=`
- * with a raw `window.history.replaceState` (`ActiveOrgProvider.tsx:102-108`).
- * React Router does not observe that write, so its `location.search` — the
- * value `prev` below is built from — can be one org behind the address bar.
- * The functional form cannot preserve a param the router never saw. Task 12
- * Step 2 owns that fix (move the org onto router-managed search params); it
- * is called out here so nobody reads this file and concludes the hole is
- * already closed.
+ * ── The other half of the hole, CLOSED IN TASK 12 ────────────────────────
+ * The functional form cannot preserve a parameter the router never saw, and
+ * until Task 12 the org was exactly that: `ActiveOrgProvider` wrote `?org=`
+ * with a raw `window.history.replaceState`, so the router's `location.search`
+ * — the value `prev` below is built from — could be one org behind the address
+ * bar. Step 2 moved that write onto `useSearchParams`. `prev` now always
+ * contains the org, and preserving it is the same rule as preserving anything
+ * else, not a special case.
+ *
+ * `tenancyRouting.contract.test.tsx` proves it end to end: switch organisation
+ * in the topbar, then change a filter on a real list screen, and the url still
+ * names the organisation. That is the assertion no unit test on this hook can
+ * make, because the writer was never the bug.
  */
 
 /** `?page` — 1-based, server-side pagination on Farms (40), Users (50), API Errors (50). */

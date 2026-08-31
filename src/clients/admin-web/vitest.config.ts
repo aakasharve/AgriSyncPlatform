@@ -29,5 +29,29 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    /**
+     * RAISED FROM VITEST'S 5s DEFAULT IN TASK 12, and this is a measurement
+     * rather than a preference.
+     *
+     * This suite is not a unit suite. `deepLink.contract.test.tsx`,
+     * `tenancyRouting.contract.test.tsx` and `AdminShell.test.tsx` mount the
+     * WHOLE console — router, guards, lazy routes, axios interceptors — and
+     * several of them then walk a sign-in or an organisation switch across
+     * three sequential round trips. Vitest runs files in parallel processes,
+     * so those mounts compete for the same cores as twenty-five other files.
+     *
+     * Measured on this machine: with file parallelism the suite completes in
+     * ~25s and two or three whole-console tests time out at exactly 5000ms,
+     * differing run to run; with `--no-file-parallelism` it is green every
+     * time and takes 110-260s. Every failure was the TEST timeout expiring,
+     * never an assertion — and `deepLink.contract.test.tsx` already asks for
+     * `{ timeout: 5_000 }` on individual `findBy` calls, which under the 5s
+     * default can never be honoured because the test itself dies first.
+     *
+     * A required CI job that is 90% reliable is worse than no job: it teaches
+     * everyone to re-run it. Raising the ceiling weakens no assertion — a
+     * genuinely hung test still fails, fifteen seconds later.
+     */
+    testTimeout: 20_000,
   },
 });

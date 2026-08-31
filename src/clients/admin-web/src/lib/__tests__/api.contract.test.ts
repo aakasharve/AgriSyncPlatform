@@ -62,17 +62,21 @@ afterEach(() => {
 
 describe('adminApi request contract (A1)', () => {
   it('stamps the active org under the exact header name X-Active-Org-Id', async () => {
-    // The header name is coupled to the backend CORS allowlist and to
-    // AdminScopeHelper's read (lib/api.ts:17-20). Renaming it silently breaks
+    // The header name is coupled to the backend CORS allowlist
+    // (Program.cs:151), to AdminScopeHelper's read (AdminScopeHelper.cs:25),
+    // and to an architecture test that fails the build if the CORS entry
+    // disappears (AdminAuthGateTests.cs:169-170). Renaming it silently breaks
     // every request in the console — the browser drops the header at preflight
     // and the server falls back to "no org", which looks like an empty console
     // rather than like a bug.
     //
-    // The org must be set on the REAL jsdom URL before the provider mounts:
-    // ActiveOrgProvider reads window.location.href (ActiveOrgProvider.tsx:41),
-    // not the router. See the note in renderWithProviders.tsx.
-    window.history.replaceState({}, '', '/?org=' + ORG);
-    renderWithProviders(null);
+    // CHANGED IN TASK 12, WITH THE BEHAVIOUR IT DESCRIBES: the org used to be
+    // set on the REAL jsdom url, because ActiveOrgProvider read
+    // window.location.href and could not see the router. Step 2 moved that
+    // read onto the router's search params, so `route` is now how a test says
+    // "an org is selected". The assertion — the exact header name, the exact
+    // value — is untouched.
+    renderWithProviders(null, { route: '/?org=' + ORG });
 
     stub = ok();
     await adminApi.get('/shramsafal/admin/me/scope');
@@ -84,8 +88,7 @@ describe('adminApi request contract (A1)', () => {
   it('omits the org header entirely when no org is selected', async () => {
     // `if (orgId)` at lib/api.ts:20 — absent, not empty-string. A missing header
     // and an empty one are different requests to the server.
-    window.history.replaceState({}, '', '/');
-    renderWithProviders(null);
+    renderWithProviders(null, { route: '/' });
 
     stub = ok();
     await adminApi.get('/shramsafal/admin/me/scope');

@@ -24,7 +24,19 @@ import { installAdapter, type CapturedRequest, type StubbedAdapter } from '@/tes
  *
  * None of it is visible in a screenshot, and the v3 prototype has no auth at
  * all, so a design-led port rebuilds every line of it from imagination.
+ *
+ * ── WAIT, and why it is not 5 seconds any more (Task 12) ──────────────────
+ * Every waiter in this file asked for `{ timeout: 5_000 }` while the TEST it
+ * ran inside also had five seconds — Vitest's default. A waiter that is
+ * allowed exactly as long as the whole test can never be honoured: the test
+ * dies first, reporting a timeout instead of the element it could not find.
+ * It passed only because this machine was fast enough, and it stopped passing
+ * the moment Task 12 added two more whole-console files to run alongside it.
+ *
+ * `vitest.config.ts` now allows a test twenty seconds and explains why; these
+ * waiters take fifteen of them, so the waiter is the thing that reports.
  */
+const WAIT = 15_000;
 
 const SESSION = {
   accessToken: 'token-123',
@@ -133,7 +145,7 @@ describe('a deep link survives the sign-in it triggered (A9, B2, Step 6)', () =>
 
     await signIn();
 
-    await waitFor(() => expect(at()).toBe('/farms?page=7&tier=B'), { timeout: 5_000 });
+    await waitFor(() => expect(at()).toBe('/farms?page=7&tier=B'), { timeout: WAIT });
     expect(await screen.findByRole('heading', { name: 'All Farms' })).toBeInTheDocument();
   });
 
@@ -149,7 +161,7 @@ describe('a deep link survives the sign-in it triggered (A9, B2, Step 6)', () =>
     render(<App />);
     await signIn();
 
-    await waitFor(() => expect(at()).toBe(`/users?page=2&org=${org}`), { timeout: 5_000 });
+    await waitFor(() => expect(at()).toBe(`/users?page=2&org=${org}`), { timeout: WAIT });
   });
 
   it('sends someone who asked for nothing in particular to the home page', async () => {
@@ -159,7 +171,7 @@ describe('a deep link survives the sign-in it triggered (A9, B2, Step 6)', () =>
     render(<App />);
     await signIn();
 
-    await waitFor(() => expect(at()).toBe('/'), { timeout: 5_000 });
+    await waitFor(() => expect(at()).toBe('/'), { timeout: WAIT });
   });
 });
 
@@ -177,7 +189,7 @@ describe('a token that expires mid-session keeps the deep link (A11, Step 7)', (
 
     // The users query 401s; the interceptor clears the session and the bridge
     // navigates — no reload.
-    await screen.findByRole('button', { name: /Sign in/ }, { timeout: 5_000 });
+    await screen.findByRole('button', { name: /Sign in/ }, { timeout: WAIT });
     expect(at()).toBe('/login');
     expect(localStorage.getItem('admin.session.v1')).toBeNull();
 
@@ -185,7 +197,7 @@ describe('a token that expires mid-session keeps the deep link (A11, Step 7)', (
     stub = server({ modules: readOnly(ModuleKeys.AdminUsers) });
     await signIn();
 
-    await waitFor(() => expect(at()).toBe('/users?page=4&search=ram'), { timeout: 5_000 });
+    await waitFor(() => expect(at()).toBe('/users?page=4&search=ram'), { timeout: WAIT });
   });
 });
 
@@ -211,7 +223,7 @@ describe('the three deliberately ungated routes really do open (A4, Step 4)', ()
 
     render(<App />);
 
-    expect(await screen.findByText(heading, { selector: 'h1, h3' }, { timeout: 5_000 })).toBeInTheDocument();
+    expect(await screen.findByText(heading, { selector: 'h1, h3' }, { timeout: WAIT })).toBeInTheDocument();
     expect(at()).toBe(route);
   });
 
@@ -224,7 +236,7 @@ describe('the three deliberately ungated routes really do open (A4, Step 4)', ()
 
     render(<App />);
 
-    expect(await screen.findByText('403 · Access denied', undefined, { timeout: 5_000 })).toBeInTheDocument();
+    expect(await screen.findByText('403 · Access denied', undefined, { timeout: WAIT })).toBeInTheDocument();
   });
 });
 
@@ -244,7 +256,7 @@ describe('RequireScope tells a broken CHECK apart from a denial (Step 3)', () =>
       await screen.findByRole(
         'heading',
         { name: 'We could not check your access' },
-        { timeout: 5_000 },
+        { timeout: WAIT },
       ),
     ).toBeInTheDocument();
     expect(at()).toBe('/403');
@@ -269,7 +281,7 @@ describe('a server 403 corrects a stale client scope (Step 8)', () => {
 
     const scopeCalls = () => stub!.requests.filter((r) => r.url.includes('/admin/me/scope')).length;
 
-    await waitFor(() => expect(scopeCalls()).toBeGreaterThan(1), { timeout: 5_000 });
+    await waitFor(() => expect(scopeCalls()).toBeGreaterThan(1), { timeout: WAIT });
   });
 
   it('does NOT re-ask when the failure is a plain 500 — that is not a denial', async () => {
@@ -279,7 +291,7 @@ describe('a server 403 corrects a stale client scope (Step 8)', () => {
 
     render(<App />);
 
-    await screen.findByRole('heading', { name: 'Users' }, { timeout: 5_000 });
+    await screen.findByRole('heading', { name: 'Users' }, { timeout: WAIT });
     // Let the query's single retry land, so this is a real observation rather
     // than a race the assertion happened to win.
     await new Promise((r) => setTimeout(r, 1_500));

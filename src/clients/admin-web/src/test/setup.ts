@@ -14,12 +14,13 @@ import { cleanup } from '@testing-library/react';
  *     third until Task 3 deleted ThemeProvider with dark mode (D1); the
  *     clear() below is blanket, so nothing needed changing but this list.
  *
- *  2. The document URL — `ActiveOrgProvider.setActiveOrgId` calls
- *     `window.history.replaceState` to write `?org=<id>` (ActiveOrgProvider.tsx:102-108),
- *     and the provider reads that param back on mount (line 41). That is the
- *     same leak as localStorage wearing different clothes, so it is reset the
- *     same way. Note this is the REAL jsdom URL, not the MemoryRouter's —
- *     see the comment in renderWithProviders.tsx.
+ *  2. The document URL. Task 12 moved `?org=` onto the ROUTER's search params,
+ *     so the provider no longer reads or writes the jsdom url directly — but a
+ *     BrowserRouter still starts from it, and `deepLink.contract.test.tsx` and
+ *     `tenancyRouting.contract.test.tsx` both drive whole-console tests by
+ *     setting it. Leaving one test's url in place would start the next one on
+ *     a different screen, and possibly a different organisation, so it is reset
+ *     the same way localStorage is.
  *
  *  3. The DOM itself — RTL's `cleanup()`.
  */

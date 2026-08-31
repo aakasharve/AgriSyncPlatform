@@ -59,23 +59,40 @@ describe('currentPathWithQuery keeps the whole url (Step 6)', () => {
     expect(currentPathWithQuery()).toBe('/ops/errors?since=2026-08-01');
   });
 
-  it('recovers ?org= even though React Router cannot see it', () => {
-    // ActiveOrgProvider writes the org with a raw history.replaceState
-    // (ActiveOrgProvider.tsx:102-108), which the router never observes. Read
-    // the router alone and the restored deep link points at a DIFFERENT
-    // TENANT'S data than the one the user was looking at.
+  it('carries ?org= because the ROUTER carries it now (Task 12)', () => {
+    // CHANGED IN TASK 12, WITH THE BEHAVIOUR IT DESCRIBES.
+    //
+    // This test used to assert the opposite mechanism: it handed in a router
+    // location DELIBERATELY MISSING the org and proved the value was recovered
+    // from `window.location`. That recovery existed because
+    // `ActiveOrgProvider` wrote the org with a raw `history.replaceState` the
+    // router never saw. Step 2 moved the write onto `useSearchParams`, so the
+    // router now carries the org itself and the merge has nothing left to
+    // merge. The capability being protected — a restored deep link still names
+    // its tenant — is unchanged; the mechanism under it is one layer simpler.
     const org = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
-    window.history.replaceState({}, '', `/farms?page=3&org=${org}`);
 
-    // What the router believes: the org is missing from its own search.
-    const routerBlindToOrg = { pathname: '/farms', search: '?page=3' };
-
-    expect(currentPathWithQuery(routerBlindToOrg)).toBe(`/farms?page=3&org=${org}`);
+    expect(currentPathWithQuery({ pathname: '/farms', search: `?page=3&org=${org}` })).toBe(
+      `/farms?page=3&org=${org}`,
+    );
   });
 
-  it('lets the router win on a parameter both of them have', () => {
-    window.history.replaceState({}, '', '/farms?page=1');
+  it('the router is the single source — the browser url does not get merged in', () => {
+    // The other half of the same decision, and the reason the old merge could
+    // not simply be left in place "just in case": it made the browser url an
+    // invisible second input to a value the router owns.
+    window.history.replaceState({}, '', '/farms?page=1&stale=yes');
+
     expect(currentPathWithQuery({ pathname: '/farms', search: '?page=9' })).toBe('/farms?page=9');
+  });
+
+  it('preserves the query string EXACTLY, order and encoding included', () => {
+    // Rebuilding through URLSearchParams re-encoded and could reorder. A
+    // returnTo is compared, logged and shared; it should be the url the user
+    // was on, character for character.
+    expect(currentPathWithQuery({ pathname: '/farms', search: '?b=2&a=1&q=%C3%A0' })).toBe(
+      '/farms?b=2&a=1&q=%C3%A0',
+    );
   });
 });
 

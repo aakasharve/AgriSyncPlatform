@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Calendar, CheckCircle, XCircle } from 'lucide-react';
 import { adminApi } from '@/lib/api';
+import { useOrgKey } from '@/lib/orgQuery';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 
@@ -10,8 +11,24 @@ interface ScheduleTemplate {
 }
 
 export default function ScheduleTemplatesPage() {
+  /*
+   * The eleventh key of Task 12 Step 3 — and the plan calls it
+   * `useScheduleTemplates`, a hook that does not exist. It is an inline
+   * useQuery here; Task 24 extracts it. Only the key changes in this task, so
+   * that a mechanical change cannot hide a behavioural one.
+   *
+   * The org is in the key. Whether this endpoint is org-scoped at all cannot
+   * be settled from the repo today: the console asks for
+   * `/shramsafal/reference-data/crop-schedule-templates` and the backend
+   * publishes `/shramsafal/reference/schedule-templates`
+   * (`ReferenceDataEndpoints.cs:14,16`), so this screen has been calling a
+   * route that does not exist. Task 24 owns that. Until it is resolved the org
+   * stays in the key: a redundant refetch on an org switch costs one request,
+   * and the other way round costs a tenant boundary.
+   */
+  const org = useOrgKey();
   const { data: templates, isLoading } = useQuery<ScheduleTemplate[]>({
-    queryKey: ['schedules', 'templates'],
+    queryKey: ['schedules', 'templates', org],
     queryFn: async () => {
       const { data } = await adminApi.get<ScheduleTemplate[]>('/shramsafal/reference-data/crop-schedule-templates');
       return data;

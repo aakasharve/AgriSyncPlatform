@@ -1,8 +1,8 @@
-import { lazy, Suspense, useEffect, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AdminAuthProvider, useAdminAuth } from '@/app/AdminAuthProvider';
-import { ActiveOrgProvider } from '@/app/ActiveOrgProvider';
+import { ActiveOrgProvider, useActiveOrg } from '@/app/ActiveOrgProvider';
 import { AdminShell } from '@/app/AdminShell';
 import { CommandPalette } from '@/app/CommandPalette';
 import { useAdminScope } from '@/hooks/useAdminScope';
@@ -148,14 +148,55 @@ function LoginRedirectBridge() {
  * which is a lie in the most alarming possible direction: it tells an admin
  * their access was taken away when the truth is that the question could not be
  * asked. The route is unchanged — only what /403 is allowed to claim.
+ *
+ * TASK 12 STEP 5 — THE NotInOrg SENTENCE IS NOW TRUE.
+ *
+ * `clear()` was declared on ActiveOrgProvider and called from nowhere, so
+ * "The previous selection has been cleared." was simply false: the rejected
+ * org id stayed in localStorage AND in the url, and it was sent again on the
+ * next request and on every reload after that. A console that tells an
+ * operator it has done something and has not is worse than one that says
+ * nothing. It is called below.
+ *
+ * Clearing has a consequence the copy must survive: the scope refetches
+ * without an org header, and the server's next answer is usually `Ambiguous`
+ * — which would replace "that organization is not yours" with the generic
+ * "choose one" and lose the only explanation of what went wrong. So the
+ * rejected id is latched for this mount, and the NotInOrg wording outranks
+ * `Ambiguous` until a new organisation is actually selected.
  */
 export function RequireScope({ children }: { children: ReactNode }) {
   const { isLoading, isError, outcome, memberships } = useAdminScope();
+  const { activeOrgId, clear } = useActiveOrg();
+  const [rejectedOrg, setRejectedOrg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (outcome !== 'NotInOrg' || !activeOrgId) return;
+    setRejectedOrg(activeOrgId);
+    clear();
+  }, [outcome, activeOrgId, clear]);
 
   if (isLoading) return <Fallback />;
   if (isError) return <Navigate to="/403" state={{ scopeUnavailable: true }} replace />;
 
   if (outcome === 'Unauthorized') return <Navigate to="/403" replace />;
+
+  // Checked BEFORE Ambiguous: after the clear above, the server answers
+  // Ambiguous, and the generic headline would bury the reason.
+  const rejected =
+    outcome === 'NotInOrg' ||
+    (rejectedOrg !== null && activeOrgId === null && outcome !== 'Resolved');
+
+  if (rejected) {
+    return (
+      <OrgSwitcher
+        memberships={memberships}
+        fullPage
+        headline="That organization is not in your memberships"
+        subline="Pick an organization you actually belong to. The previous selection has been cleared."
+      />
+    );
+  }
 
   if (outcome === 'Ambiguous') {
     return (
@@ -164,17 +205,6 @@ export function RequireScope({ children }: { children: ReactNode }) {
         fullPage
         headline="Choose your active organization"
         subline={`You have ${memberships.length} admin memberships. Pick one to continue — you can switch later from the topbar.`}
-      />
-    );
-  }
-
-  if (outcome === 'NotInOrg') {
-    return (
-      <OrgSwitcher
-        memberships={memberships}
-        fullPage
-        headline="That organization is not in your memberships"
-        subline="Pick an organization you actually belong to. The previous selection has been cleared."
       />
     );
   }

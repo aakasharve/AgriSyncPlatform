@@ -32,7 +32,22 @@ import { installAdapter, neverSettles, type StubbedAdapter } from '@/test/stubAd
  * Cadences are read off the live query observer, not off the source text, so a
  * refactor that moves a literal into a constant stays green while a change to
  * the actual number goes red.
+ *
+ * ── CHANGED IN TASK 12, WITH THE BEHAVIOUR IT DESCRIBES ───────────────────
+ * Every key asserted here gained an ORG SEGMENT (Preservation Register A7).
+ * The cadences, the prefixes, the envelope shapes, the abort signal and the
+ * enabled gate are all untouched — only the key each of them is filed under.
+ * The org sits immediately after the resource prefix and before the variables,
+ * so `['farms']` still works as an invalidation prefix.
+ *
+ * `'none'` is the org segment when nothing is selected, which is the state
+ * every test here mounts in: they render bare hooks with no `?org=`, and that
+ * is deliberate — a test that supplied an org would stop proving that the key
+ * carries the segment at all.
  */
+
+/** No `?org=` is set anywhere in this file, so every key ends up under 'none'. */
+const NO_ORG = 'none';
 
 interface ObserverOptions {
   staleTime?: number;
@@ -169,9 +184,9 @@ describe('endpoint prefixes (A26)', () => {
     expect(stub.requests[0].url).toBe('/shramsafal/reference-data/crop-schedule-templates');
 
     await waitFor(() =>
-      expect(queryClient.getQueryData(['schedules', 'templates'])).toBeDefined(),
+      expect(queryClient.getQueryData(['schedules', 'templates', NO_ORG])).toBeDefined(),
     );
-    const cached = queryClient.getQueryData(['schedules', 'templates']);
+    const cached = queryClient.getQueryData(['schedules', 'templates', NO_ORG]);
     expect(Array.isArray(cached)).toBe(true);
     expect(cached).not.toHaveProperty('meta');
     expect(cached).not.toHaveProperty('data');
@@ -192,8 +207,10 @@ describe('/ops/health is the one unwrapped endpoint (A27)', () => {
 
     const { queryClient } = mountHook(() => useOpsHealth());
 
-    await waitFor(() => expect(queryClient.getQueryData(['ops', 'health'])).toBeDefined());
-    const cached = queryClient.getQueryData(['ops', 'health']);
+    await waitFor(() =>
+      expect(queryClient.getQueryData(['ops', 'health', NO_ORG])).toBeDefined(),
+    );
+    const cached = queryClient.getQueryData(['ops', 'health', NO_ORG]);
     expect(cached).toEqual(healthPayload);
     expect(cached).not.toHaveProperty('meta');
     expect(cached).toHaveProperty('computedAtUtc', '2026-08-30T11:41:00Z');
@@ -213,9 +230,11 @@ describe('/ops/health is the one unwrapped endpoint (A27)', () => {
 
     await waitFor(() => expect(onlyQuery(queryClient).observers).toHaveLength(1));
     await waitFor(() =>
-      expect(queryClient.getQueryData(['ops', 'errors', { page: 1, pageSize: 50 }])).toBeDefined(),
+      expect(
+        queryClient.getQueryData(['ops', 'errors', NO_ORG, { page: 1, pageSize: 50 }]),
+      ).toBeDefined(),
     );
-    expect(queryClient.getQueryData(['ops', 'errors', { page: 1, pageSize: 50 }]))
+    expect(queryClient.getQueryData(['ops', 'errors', NO_ORG, { page: 1, pageSize: 50 }]))
       .toHaveProperty('meta.lastRefreshed');
   });
 });
@@ -256,8 +275,9 @@ describe('abort signal, retry and the enabled gate (A28)', () => {
     expect(onlyQuery(queryClient).observers[0].options.retry).toBe(0);
 
     await waitFor(() =>
-      expect(queryClient.getQueryState(['farmer-health', 'drilldown', 'missing-farm'])?.status)
-        .toBe('error'),
+      expect(
+        queryClient.getQueryState(['farmer-health', 'drilldown', NO_ORG, 'missing-farm'])?.status,
+      ).toBe('error'),
     );
     expect(stub.requests).toHaveLength(1);
   });
@@ -275,10 +295,11 @@ describe('abort signal, retry and the enabled gate (A28)', () => {
     const { queryClient } = mountHook(use);
 
     const query = onlyQuery(queryClient);
-    expect(query.queryKey).toEqual(['farmer-health', 'drilldown', expectedKeySegment]);
+    expect(query.queryKey).toEqual(['farmer-health', 'drilldown', NO_ORG, expectedKeySegment]);
     expect(query.observers[0].options.enabled).toBe(false);
     expect(
-      queryClient.getQueryState(['farmer-health', 'drilldown', expectedKeySegment])?.fetchStatus,
+      queryClient.getQueryState(['farmer-health', 'drilldown', NO_ORG, expectedKeySegment])
+        ?.fetchStatus,
     ).toBe('idle');
     expect(stub.requests).toHaveLength(0);
   });
@@ -289,7 +310,9 @@ describe('abort signal, retry and the enabled gate (A28)', () => {
     const { queryClient } = mountHook(() => useFarmerHealth('  farm-1  '));
 
     await waitFor(() => expect(stub?.requests.length).toBeGreaterThan(0));
-    expect(onlyQuery(queryClient).queryKey).toEqual(['farmer-health', 'drilldown', 'farm-1']);
+    expect(onlyQuery(queryClient).queryKey).toEqual([
+      'farmer-health', 'drilldown', NO_ORG, 'farm-1',
+    ]);
     expect(stub.requests[0].url).toBe('/admin/farmer-health/farm-1');
   });
 });

@@ -41,14 +41,18 @@ export function makeTestQueryClient() {
  * ONE substitution, and it is the only difference from App.tsx: BrowserRouter
  * becomes MemoryRouter, because jsdom has no navigable history stack.
  *
- * CONSEQUENCE WORTH KNOWING BEFORE YOU WRITE A TEST: `route` below drives the
- * ROUTER only. ActiveOrgProvider does not read the router — it reads
- * `window.location.href` directly (ActiveOrgProvider.tsx:41) so that the axios
- * interceptor can see the value without a React subscription. A test that
- * needs `?org=<id>` to be picked up on mount must therefore set the real jsdom
- * URL (`window.history.replaceState({}, '', '/?org=<uuid>')`) BEFORE rendering.
- * Passing `route: '/?org=<uuid>'` here will not do it, and will silently
- * resolve to "no org" rather than fail.
+ * `route` SETS THE ORG. Say it that way round, because until Task 12 it did
+ * not, and the warning that used to stand here is the thing that changed.
+ *
+ * `ActiveOrgProvider` read `window.location.href` directly, so `route` drove
+ * the router and nothing else: a test passing `route: '/?org=<uuid>'` got "no
+ * org", silently, and had to write the real jsdom url instead. Task 12 Step 2
+ * moved the read onto `useSearchParams`, and `route` is now the single way a
+ * test says which organisation is active — the same single way the app has.
+ *
+ * A stale warning is worse than no warning: it teaches the next author to
+ * reach for `window.history.replaceState`, which under a MemoryRouter now sets
+ * an org that nothing reads. If you need `?org=` in a test, pass it in `route`.
  */
 export function renderWithProviders(
   ui: ReactNode,

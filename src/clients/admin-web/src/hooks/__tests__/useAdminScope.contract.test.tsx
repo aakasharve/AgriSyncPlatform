@@ -71,10 +71,29 @@ function Probe() {
   return null;
 }
 
-function mount(queryClient: QueryClient = makeTestQueryClient()) {
-  renderWithProviders(<Probe />, { queryClient });
+/**
+ * CHANGED IN TASK 12, WITH THE BEHAVIOUR IT DESCRIBES.
+ *
+ * These tests used to set the org by writing the REAL jsdom url
+ * (`window.history.replaceState({}, '', '/?org=...')`) because
+ * `ActiveOrgProvider` read `window.location.href` directly and could not see
+ * the MemoryRouter at all. Task 12 Step 2 moved the read onto the router's own
+ * search params, so the org now arrives the way `renderWithProviders`
+ * documents: through `route`. The property under test — the key ends with the
+ * active org — is unchanged; only how a test says "an org is selected".
+ *
+ * This is a strict improvement in what the harness can prove. `route` and the
+ * app now agree, so a test can no longer set an org that the provider silently
+ * ignores — which is exactly the trap Task 1 had to warn about in
+ * renderWithProviders.tsx.
+ */
+function mount(queryClient: QueryClient = makeTestQueryClient(), route = '/') {
+  renderWithProviders(<Probe />, { queryClient, route });
   return queryClient;
 }
+
+/** The url a test uses to say "this admin has org A selected". */
+const AT_ORG_A = '/?org=' + ORG_A;
 
 /**
  * The harness client uses `gcTime: 0`, which collects a query the instant it
@@ -104,7 +123,6 @@ afterEach(() => {
 
 describe('scope query key carries the active org (A7)', () => {
   it('ends the key with the literal "none" when no org is selected', async () => {
-    window.history.replaceState({}, '', '/');
     stub = installAdapter(async () => ({ status: 200, data: scopeResponse([readOnly]) }));
 
     const queryClient = mount();
@@ -114,12 +132,11 @@ describe('scope query key carries the active org (A7)', () => {
   });
 
   it('ends the key with the active org id when one is selected', async () => {
-    // ActiveOrgProvider reads the REAL jsdom URL, not the router — the URL has
-    // to be set before the provider mounts. See renderWithProviders.tsx.
-    window.history.replaceState({}, '', '/?org=' + ORG_A);
+    // The org arrives through the ROUTER now (Task 12 Step 2): `route` is what
+    // the provider reads. See renderWithProviders.tsx.
     stub = installAdapter(async () => ({ status: 200, data: scopeResponse([readOnly]) }));
 
-    const queryClient = mount();
+    const queryClient = mount(makeTestQueryClient(), AT_ORG_A);
 
     await waitFor(() => expect(keysIn(queryClient)).toHaveLength(1));
     expect(keysIn(queryClient)[0]).toEqual(['admin', 'me', 'scope', ORG_A]);
@@ -129,10 +146,9 @@ describe('scope query key carries the active org (A7)', () => {
     // The key and the header have to agree from the first request. A key that
     // says org A over a request that carried no org caches the WRONG answer
     // under the right name — the worst of both.
-    window.history.replaceState({}, '', '/?org=' + ORG_A);
     stub = installAdapter(async () => ({ status: 200, data: scopeResponse([readOnly]) }));
 
-    mount();
+    mount(makeTestQueryClient(), AT_ORG_A);
 
     await waitFor(() => expect(stub?.requests.length).toBeGreaterThan(0));
     expect(stub.requests[0].url).toBe('/shramsafal/admin/me/scope');
@@ -143,7 +159,6 @@ describe('scope query key carries the active org (A7)', () => {
     // This is the whole reason the org is in the key. Org A grants ops.live;
     // org B grants nothing. If the key omitted the org, org B would read org A's
     // cached "yes" and the console would open a gate the server would refuse.
-    window.history.replaceState({}, '', '/?org=' + ORG_A);
     stub = installAdapter(async (req) => ({
       status: 200,
       data:
@@ -153,7 +168,7 @@ describe('scope query key carries the active org (A7)', () => {
     }));
 
     const queryClient = cacheRetainingClient();
-    mount(queryClient);
+    mount(queryClient, AT_ORG_A);
 
     await waitFor(() => expect(captured.scope?.canRead(ModuleKeys.OpsLive)).toBe(true));
 
@@ -174,12 +189,11 @@ describe('scope query key carries the active org (A7)', () => {
     // Same property from the other side, and deterministic: org A's answer is
     // already in the cache, org B's request never returns. The predicates must
     // fall back to false rather than reading the neighbour's entry.
-    window.history.replaceState({}, '', '/?org=' + ORG_A);
     const queryClient = cacheRetainingClient();
     queryClient.setQueryData(['admin', 'me', 'scope', ORG_A], scopeResponse([fullAccess], ORG_A));
     stub = installAdapter(neverSettles);
 
-    mount(queryClient);
+    mount(queryClient, AT_ORG_A);
 
     // Served straight from cache — no answered request yet.
     await waitFor(() => expect(captured.scope?.canRead(ModuleKeys.OpsLive)).toBe(true));
@@ -194,7 +208,6 @@ describe('scope query key carries the active org (A7)', () => {
   });
 
   it('declares its own staleTime 60000 and retry 1, independent of the client defaults', async () => {
-    window.history.replaceState({}, '', '/');
     stub = installAdapter(async () => ({ status: 200, data: scopeResponse([readOnly]) }));
 
     const queryClient = mount();
@@ -212,10 +225,9 @@ describe('permission predicates fail closed (A6)', () => {
   it.each(['canRead', 'canWrite', 'canExport'] as const)(
     '%s is false while the scope query is still in flight',
     async (predicate) => {
-      window.history.replaceState({}, '', '/?org=' + ORG_A);
       stub = installAdapter(neverSettles);
 
-      mount();
+      mount(makeTestQueryClient(), AT_ORG_A);
 
       await waitFor(() => expect(captured.scope?.isLoading).toBe(true));
       expect(captured.scope?.[predicate](ModuleKeys.OpsLive)).toBe(false);
@@ -225,10 +237,9 @@ describe('permission predicates fail closed (A6)', () => {
   it.each(['canRead', 'canWrite', 'canExport'] as const)(
     '%s is false after the scope query fails',
     async (predicate) => {
-      window.history.replaceState({}, '', '/?org=' + ORG_A);
       stub = installAdapter(async () => ({ status: 500, data: {} }));
 
-      mount();
+      mount(makeTestQueryClient(), AT_ORG_A);
 
       // The hook declares `retry: 1` (useAdminScope.ts:78), so the failure is
       // only final after a second attempt and React Query's backoff — hence the
@@ -242,13 +253,12 @@ describe('permission predicates fail closed (A6)', () => {
   it.each(['Unauthorized', 'Ambiguous', 'NotInOrg'] as const)(
     'all three predicates are false on the %s outcome',
     async (outcome) => {
-      window.history.replaceState({}, '', '/?org=' + ORG_A);
       stub = installAdapter(async () => ({
         status: 200,
         data: { outcome, scope: null, memberships: [] },
       }));
 
-      mount();
+      mount(makeTestQueryClient(), AT_ORG_A);
 
       await waitFor(() => expect(captured.scope?.outcome).toBe(outcome));
       expect(captured.scope?.isResolved).toBe(false);
@@ -259,10 +269,9 @@ describe('permission predicates fail closed (A6)', () => {
   );
 
   it('is false for a module the resolved scope does not list at all', async () => {
-    window.history.replaceState({}, '', '/?org=' + ORG_A);
     stub = installAdapter(async () => ({ status: 200, data: scopeResponse([fullAccess]) }));
 
-    mount();
+    mount(makeTestQueryClient(), AT_ORG_A);
 
     await waitFor(() => expect(captured.scope?.isResolved).toBe(true));
     expect(captured.scope?.canRead(ModuleKeys.OpsErrors)).toBe(false);
@@ -271,10 +280,9 @@ describe('permission predicates fail closed (A6)', () => {
   });
 
   it('honours the three levels separately — read granted does not imply write or export', async () => {
-    window.history.replaceState({}, '', '/?org=' + ORG_A);
     stub = installAdapter(async () => ({ status: 200, data: scopeResponse([readOnly]) }));
 
-    mount();
+    mount(makeTestQueryClient(), AT_ORG_A);
 
     await waitFor(() => expect(captured.scope?.isResolved).toBe(true));
     expect(captured.scope?.canRead(ModuleKeys.OpsLive)).toBe(true);
@@ -285,10 +293,9 @@ describe('permission predicates fail closed (A6)', () => {
   it('returns true on every level when the module grants all three', async () => {
     // The positive case exists so the fail-closed assertions above cannot pass
     // by accident on a predicate that always returns false.
-    window.history.replaceState({}, '', '/?org=' + ORG_A);
     stub = installAdapter(async () => ({ status: 200, data: scopeResponse([fullAccess]) }));
 
-    mount();
+    mount(makeTestQueryClient(), AT_ORG_A);
 
     await waitFor(() => expect(captured.scope?.isResolved).toBe(true));
     expect(captured.scope?.canRead(ModuleKeys.OpsLive)).toBe(true);
@@ -299,7 +306,6 @@ describe('permission predicates fail closed (A6)', () => {
 
 describe('four-outcome surface (A2 support — pinned here because A6/A7 read it)', () => {
   it('exposes memberships as an empty array and outcome as null before any data arrives', async () => {
-    window.history.replaceState({}, '', '/');
     stub = installAdapter(neverSettles);
 
     mount();
@@ -312,7 +318,6 @@ describe('four-outcome surface (A2 support — pinned here because A6/A7 read it
   });
 
   it('carries memberships through on an Ambiguous outcome', async () => {
-    window.history.replaceState({}, '', '/');
     stub = installAdapter(async () => ({
       status: 200,
       data: {

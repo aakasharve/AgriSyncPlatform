@@ -243,11 +243,11 @@ export function AdminShell() {
  * `FarmerHealthPage.tsx:33` does today — prints "No active organization" to
  * an admin who plainly has one.
  *
- * WHAT THIS DOES NOT FIX. `ActiveOrgProvider.syncUrl` still writes `?org=`
- * with a raw `window.history.replaceState` (ActiveOrgProvider.tsx:102-108),
- * which React Router does not see, so the router's search params and the
- * address bar can disagree. Task 12 closes that. Nothing here reads the URL —
- * it reads the provider — so the hole is untouched, not closed.
+ * WHERE THE URL COMES INTO IT. Nothing here reads the address bar; it reads
+ * the provider. Task 12 moved the provider's own `?org=` write onto the
+ * router's search params, so switching organisation here updates the url the
+ * router can see, and a filter change on the screen underneath no longer
+ * strips it back out.
  */
 function OrgScope() {
   const { scope, memberships } = useAdminScope();
@@ -288,10 +288,10 @@ function OrgScope() {
     setActiveOrgId(orgId);
 
     /*
-     * RESET — not invalidate, and not remove. All three were MEASURED against
-     * a data query whose key omits the org, which is every data query in this
-     * console today (verified across all eleven hooks). The results are not
-     * interchangeable:
+     * RESET — kept after Task 12, for a DIFFERENT reason than it was chosen for.
+     *
+     * Task 10 measured three primitives against a data query whose key omitted
+     * the org, which was every data query in this console at the time:
      *
      *   removeQueries()     no refetch at all. A mounted observer keeps its
      *                       last result and never asks again, so the previous
@@ -301,15 +301,22 @@ function OrgScope() {
      *                       flight. That is another org's farmers, on screen,
      *                       under this org's name.
      *   resetQueries()      refetches under the new org header AND clears the
-     *                       data first, so the screen shows a loading state
-     *                       rather than a neighbour's rows.
+     *                       data first, so the screen shows a loading state.
      *
-     * A loading state is the honest answer to "what does this org have?" while
-     * we do not yet know. `AdminShell.test.tsx` pins all three properties.
+     * Task 12 then put the org into all twelve data keys, which raised the
+     * obvious question: is this line now redundant? MEASURED, and no — it
+     * changed job:
      *
-     * Task 12 puts the org into every data key, at which point a switch simply
-     * changes the key and none of this is needed. This is a stop-gap, and the
-     * only reason it is safe to ship before T12.
+     *   the key       stops the previous org's rows being SHOWN. A switch
+     *                 changes every key, so nothing on screen can be answered
+     *                 from the previous organisation's cache entry.
+     *   resetQueries  stops them being HELD. The previous org's entries stay
+     *                 in this tab's memory for gcTime after the switch —
+     *                 unreachable, and still there. This empties them.
+     *
+     * That is the same property, and the same reason, as `qc.clear()` on sign
+     * out below. `tenancy.contract.test.tsx` pins BOTH halves separately, so
+     * neither can be deleted as "already covered by the other".
      */
     qc.resetQueries();
   };

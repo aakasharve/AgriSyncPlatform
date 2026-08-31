@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { adminApi, type AdminResponse } from '@/lib/api';
+import { useOrgKey } from '@/lib/orgQuery';
 
 export interface WvfdWeek {
   weekStart: string;
@@ -20,9 +21,11 @@ export interface WvfdHistory {
   topFarms: WvfdFarmRow[];
 }
 
+/** Org in the key (A7, T12 S3) — see the note in `useFarms.ts`. */
 export function useWvfd(weeks = 12) {
+  const org = useOrgKey();
   return useQuery<AdminResponse<WvfdHistory>>({
-    queryKey: ['metrics', 'wvfd', weeks],
+    queryKey: ['metrics', 'wvfd', org, weeks],
     queryFn: async () => {
       const { data } = await adminApi.get<AdminResponse<WvfdHistory>>(
         `/shramsafal/admin/metrics/wvfd?weeks=${weeks}`
