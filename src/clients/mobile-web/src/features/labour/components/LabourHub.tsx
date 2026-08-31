@@ -153,15 +153,24 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
                                     <Users size={20} className="text-orange-700" strokeWidth={2.5} />
                                 </span>
                                 {/*
-                                  * Task 7 (labour-v2-release-1) — DELETED the
-                                  * header label here: "बोलून नोंदवलेली हजेरी"
-                                  * ("attendance recorded by voice"). This card
-                                  * shows real labour cost/headcount data, but
-                                  * calling it हजेरी (attendance) claims a
-                                  * dedicated attendance capture that doesn't
-                                  * exist. The money and breakdown below are
-                                  * untouched — only the false framing is gone.
+                                  * FOUNDER RULING 2026-08-31 — restored, and
+                                  * this card needed it back: Task 7 deleted the
+                                  * label and left an icon beside a ₹ figure with
+                                  * no name on it at all — a headless card, the
+                                  * same defect fix round 1/5 flagged on the hero.
+                                  *
+                                  * What it shows is the headcount and cost of
+                                  * what the farmer JUST spoke. Under the ruling
+                                  * that governs the hero — हजेरी घेणे is the act
+                                  * of recording who came — that IS the हजेरी he
+                                  * just took, shown with its money.
+                                  *
+                                  * उचल and auto-approve do NOT come back with it.
+                                  * Those are still unbacked (advance hardcoded 0m,
+                                  * Access hardcoded "review") — Tasks 7b and 22
+                                  * stand, and their tests still guard them.
                                   */}
+                                <span className="text-[17px] font-bold text-stone-800">बोलून नोंदवलेली हजेरी</span>
                             </div>
                             {/* "किती दिलं" — a bare ₹ figure never says whose money or which way it moved. */}
                             <span className="text-right">
@@ -332,8 +341,8 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
           * no new copy introduced.
           */}
         <HelpNote
-            what="टीमची मजुरी व नोंदींची तपासणी — सगळं एका जागी."
-            act="नोंदी तपासा."
+            what="टीमची हजेरी, मजुरी व नोंदींची तपासणी — सगळं एका जागी."
+            act="बोलून हजेरी घ्या · नोंदी तपासा."
             why="'टीम सेटअप'मध्ये कोण नोंद करू शकतो ते ठरतं; इथे त्यांनी काय केलं आणि त्यावर किती विश्वास — ते दिसतं व ठरतं."
             label="कामगार व्यवस्थापन कसं वापरायचं?"
         />

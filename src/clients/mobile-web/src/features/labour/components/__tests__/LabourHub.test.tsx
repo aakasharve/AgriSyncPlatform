@@ -315,7 +315,10 @@ describe('LabourHub — no attendance-capture claims (Task 7)', () => {
         expect(cta.textContent?.trim().length ?? 0).toBeGreaterThan(0);
     });
 
-    it('the "just logged" card is not labelled बोलून नोंदवलेली हजेरी — it is a labour-cost summary, not attendance', () => {
+    // FOUNDER RULING 2026-08-31 — restored. The card carries the headcount
+    // and cost of what was just spoken; that is the हजेरी just taken. Task 7
+    // had left this card with NO heading, which was its own defect.
+    it('the "just logged" card is labelled बोलून नोंदवलेली हजेरी (founder ruling)', () => {
         render(
             <LabourHub
                 {...baseProps()}
@@ -325,22 +328,26 @@ describe('LabourHub — no attendance-capture claims (Task 7)', () => {
             />
         );
         expect(screen.getByTestId('labour-just-logged-card')).toBeInTheDocument();
-        expect(screen.queryByText('बोलून नोंदवलेली हजेरी')).toBeNull();
+        expect(screen.getByText('बोलून नोंदवलेली हजेरी')).toBeInTheDocument();
         // The real data (cost, breakdown) is untouched by this fix.
         expect(screen.getByText('₹1,600')).toBeInTheDocument();
     });
 
-    // SCOPED to the note (2026-08-31). This asserted across the whole hub,
-    // which passed only because nothing on the hub said हजेरी at all — so it
-    // silently doubled as a hub-wide ban and broke when the founder made the
-    // hero "बोलून हजेरी घ्या". The finding it was written for is about THIS
-    // note's text, which describes मजुरी and नोंदी and must not claim an
-    // attendance capture; that is what it now checks.
-    it('the "how to use" help note no longer claims हजेरी (attendance) capture anywhere in its text', () => {
+    // SUPERSEDED by the founder ruling of 2026-08-31, twice over. This first
+    // asserted across the whole hub — passing only because nothing on the hub
+    // said हजेरी at all — and was then scoped to the note. The ruling now says
+    // हजेरी घेणे IS what speaking does, so the note may name it. What the note
+    // must never claim are the two things that genuinely do not exist, and
+    // those are guarded by Tasks 7b and 22 below. This keeps the third half of
+    // the original finding: the note may not promise a SEPARATE attendance
+    // capture screen, only the speaking that really records the crew.
+    it('the help note names हजेरी as something you SPEAK, never a separate capture screen', () => {
         render(<LabourHub {...baseProps()} />);
         fireEvent.click(screen.getByText('कामगार व्यवस्थापन कसं वापरायचं?'));
-        const body = screen.getByTestId('help-note-body');
-        expect(body.textContent ?? '').not.toContain('हजेरी');
+        const body = screen.getByTestId('help-note-body').textContent ?? '';
+        expect(body).toContain('बोलून हजेरी घ्या');
+        // the capture screen the app does not have
+        expect(body).not.toMatch(/हजेरीs*(स्क्रीन|पान)/);
     });
 
     it('the help note keeps its true neighbouring words after the surgical deletion (मजुरी / नोंदी तपासा)', () => {
