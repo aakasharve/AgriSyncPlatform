@@ -992,6 +992,45 @@ here rather than carrying it into the next task.
 
 ### Task 7: One URL-state hook — the easiest thing to get wrong in a rewrite
 
+> **Executed 2026-08-31 (`263a8f4c`). Three things this task discovered that outrank its own text.**
+>
+> **1. 🛑 The functional updater CANNOT preserve a param the router never saw — so this task does not
+> close the org hole on its own.** `ActiveOrgProvider.syncUrl` writes `?org=` with a raw
+> `window.history.replaceState` (`ActiveOrgProvider.tsx:102-108`), behind React Router's back. In
+> `react-router@7.15.1`, `setSearchParams` builds its `prev` from the router's `location.search`, so
+> after an OrgSwitcher selection **the router is one org behind the address bar**, and the next filter
+> write — even a perfectly correct functional one — strips `org` back out of the shareable URL.
+> **Task 12 Step 2 is what actually closes this.** Written into the hook's header so nobody reads that
+> file and concludes the hole is shut.
+>
+> **2. `setMany` is not ergonomics — it is the only correct way to write two keys.** `setSearchParams`
+> is a `useCallback` closing over the current render's `searchParams`, so **two `set()` calls in one
+> handler both build from the same pre-first-call snapshot and the second silently clobbers the
+> first.** The plan named `setMany` without saying why; the reason is measured and now cited in the
+> file.
+>
+> **3. Step 4 overstates v3's poverty, and the nuance belongs to Task 13.** v3 reads exactly one
+> param, `?q`, and the Ctrl+K palette *generates* those links (`app.js:726,729`). It is a one-way
+> contract — the palette writes a link, the page seeds its box once (`app.js:705-707`), and nothing
+> typed afterwards reaches the URL. `if (A.param('q')) opened = true;` is the prototype's **own**
+> summary-first open flag. The core claim (no writes, no history API — grepped, zero hits) stands.
+> **Task 13 has a deep-link shape to port, not to invent.**
+>
+> **Citation drift (seventh):** `OpsErrorsPage.tsx:82-85` is **81-86** — the cited range covers the
+> inner lines of two different functions and excludes both signatures.
+>
+> **DECIDED 2026-08-31, all three of execution's questions:**
+> - **Sort key, direction and the open flag DO go in the URL.** A link becomes reproducible and Back
+>   undoes a sort. Nothing that works today stops working. This is what every serious admin console
+>   does, and sort currently dies on every refresh.
+> - **Trim on all three search screens** (Task 14). Today API Errors trims and Farms/Users do not, so
+>   pasting a name with a trailing space into Farms returns "no results" for a farm that exists. A
+>   leading space is never a thing a person meant to search for.
+> - **The stale search box is fixed in Tasks 14/17/18, not here.** After Back or Clear the filter
+>   really clears but the box still shows the old text — the console stating something untrue about
+>   its own state, which is the defect class this redesign exists to remove. The naive fix steals
+>   focus on every Enter, so it belongs with the screens, not in a shared hook.
+
 **Files:**
 - Create: `src/clients/admin-web/src/lib/useListUrlState.ts`
 - Create: `src/clients/admin-web/src/lib/__tests__/useListUrlState.test.tsx`
@@ -1002,14 +1041,14 @@ here rather than carrying it into the next task.
 
 **Why:** all six URL-writing pages today use the FUNCTIONAL updater form so that page, search, tier and org coexist (A20). The failure mode of getting this wrong — a filter change silently clearing the org — is invisible until someone reports wrong data.
 
-- [ ] **Step 1: Make the functional updater the only way to write**
+- [x] **Step 1: Make the functional updater the only way to write**
 
 ```ts
 /**
  * ALWAYS the functional form. Passing a plain object REPLACES the whole
  * query string and would silently drop the org param, which is how a filter
  * change turns into a cross-tenant data bug that no visual review can catch.
- * See FarmsListPage.tsx:26-28, UsersPage.tsx:22-23, OpsErrorsPage.tsx:82-85.
+ * See FarmsListPage.tsx:26-28, UsersPage.tsx:22-23, OpsErrorsPage.tsx:81-86.
  */
 function set(key: string, value: string | null, opts?: { resetPage?: boolean }) {
   setSearchParams((prev) => {
@@ -1020,17 +1059,17 @@ function set(key: string, value: string | null, opts?: { resetPage?: boolean }) 
 }
 ```
 
-- [ ] **Step 2: Keep the reset-page-to-1 rule (A20).** Every filter change resets page to 1. Without it a user filters to 3 results, stays on page 5, and sees nothing.
+- [x] **Step 2: Keep the reset-page-to-1 rule (A20).** Every filter change resets page to 1. Without it a user filters to 3 results, stays on page 5, and sees nothing.
 
-- [ ] **Step 3: Support both commit contracts (A21).** Two DELIBERATE, OPPOSITE interaction contracts that look identical in a screenshot:
+- [x] **Step 3: Support both commit contracts (A21).** Two DELIBERATE, OPPOSITE interaction contracts that look identical in a screenshot:
   - **Draft plus explicit commit** (Farms, Users): local state, URL written only on Enter or the Search button. Live-syncing per keystroke floods browser history and refetches per character.
   - **Blur OR Enter, trimmed** (API Errors): an UNCONTROLLED input using defaultValue, committing on blur AND on Enter, with a trim, plus a Clear filter button that appears only when a filter is applied. Converting it to a controlled input silently changes WHEN a filter applies.
 
   Both must be reachable from this hook; neither is the default that the other collapses into.
 
-- [ ] **Step 4: Own the sort key too — this is an improvement over both sides.** v3 writes NO URL state at all (verified: no pushState, no replaceState, no history API anywhere in app.js), so in the prototype no filter, no sort column, no sort direction and no list-open state is shareable, bookmarkable or refresh-surviving, and the back button does not undo a filter. Live URL-syncs filters but keeps sort in component state (`InterventionQueueTable.tsx:44-45`), so sort dies on refresh. The port exceeds both: sort key, sort direction and the summary-first open flag all go in the URL.
+- [x] **Step 4: Own the sort key too — this is an improvement over both sides.** v3 writes NO URL state at all (verified: no pushState, no replaceState, no history API anywhere in app.js), so in the prototype no filter, no sort column, no sort direction and no list-open state is shareable, bookmarkable or refresh-surviving, and the back button does not undo a filter. Live URL-syncs filters but keeps sort in component state (`InterventionQueueTable.tsx:44-45`), so sort dies on refresh. The port exceeds both: sort key, sort direction and the summary-first open flag all go in the URL.
 
-- [ ] **Step 5: Test the preservation property directly**
+- [x] **Step 5: Test the preservation property directly**
 
 ```tsx
 it('preserves the org param when a filter changes', () => {
@@ -1042,7 +1081,7 @@ it('commits the endpoint filter on blur as well as Enter', () => { /* … */ });
 it('round-trips sort key and direction through the URL', () => { /* … */ });
 ```
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and enforced almost
 nowhere — Tasks 4, 5, 6, 7, 9, 10, 12 and 13 originally ended at "run and commit". An invariant
@@ -1055,7 +1094,7 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 6: Commit** — `feat(admin-web): one URL-state hook; functional updater, page reset, both commit contracts`
+- [x] **Step 6: Commit** — `feat(admin-web): one URL-state hook; functional updater, page reset, both commit contracts`
 
 ---
 
