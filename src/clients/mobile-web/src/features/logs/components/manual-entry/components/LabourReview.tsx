@@ -29,6 +29,30 @@ const LabourReview: React.FC<LabourReviewProps> = ({ labourEntries, totalWorkerC
     const formatCount = (value: number): string =>
         language === 'mr' ? toMarathiNumber(value) : String(value);
 
+    // Task 27 (spec: 2026-08-28-labour-v2-release-1) — mirrors the server's
+    // `LabourHeadcount.Resolve` (ShramSafal.Domain/Farms/LabourHeadcount.cs):
+    // `undefined` ONLY when count/maleCount/femaleCount are ALL unstated —
+    // "we were not told" (P4), never a fabricated 0. A genuinely stated 0
+    // passes through unchanged; a stated count > 0 wins outright over the
+    // gender split (the parser emits count=5 AND femaleCount=5 for "५ बायका" —
+    // adding them would double-count). The old
+    // `entry.count || ((entry.maleCount || 0) + (entry.femaleCount || 0))`
+    // could not distinguish "farmer said 0" / "farmer said nothing" from
+    // each other, so an unstated headcount rendered as "० मजूर".
+    const resolveCount = (entry: LabourEvent): number | undefined => {
+        if (entry.count == null && entry.maleCount == null && entry.femaleCount == null) {
+            return undefined;
+        }
+        return typeof entry.count === 'number' && entry.count > 0
+            ? entry.count
+            : (entry.maleCount || 0) + (entry.femaleCount || 0);
+    };
+
+    // The codebase's one mark for "we were not told" (P4/R6) — the same
+    // literal `ReviewSheet.tsx`'s `ReviewFacts` already renders for an
+    // unknown fact. Reused verbatim, not invented a second time.
+    const UNKNOWN = '—';
+
     return (
         <div className="mb-6 rounded-2xl border border-orange-200 bg-orange-50/60 p-4">
             <div className="flex items-center justify-between gap-3">
@@ -42,14 +66,17 @@ const LabourReview: React.FC<LabourReviewProps> = ({ labourEntries, totalWorkerC
                         task report's PENDING list for the proposed Marathi. */}
                     <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700">Labour Review</p>
                     <p className="mt-1 text-sm font-semibold text-stone-700">
-                        Total workers: {totalWorkerCount} ({labourEntries.map(entry => entry.count || ((entry.maleCount || 0) + (entry.femaleCount || 0))).join(' + ')})
+                        Total workers: {totalWorkerCount} ({labourEntries.map(entry => {
+                            const c = resolveCount(entry);
+                            return c != null ? formatCount(c) : UNKNOWN;
+                        }).join(' + ')})
                     </p>
                 </div>
             </div>
 
             <div className="mt-3 space-y-2">
                 {labourEntries.map((entry, index) => {
-                    const count = entry.count || ((entry.maleCount || 0) + (entry.femaleCount || 0));
+                    const count = resolveCount(entry);
                     return (
                     <div key={`${entry.id}-${index}`} className="rounded-xl border border-orange-100 bg-white/90 px-3 py-3">
                         <div className="flex flex-wrap items-center gap-2">
@@ -63,7 +90,9 @@ const LabourReview: React.FC<LabourReviewProps> = ({ labourEntries, totalWorkerC
                                 for a worker-count line (see `toMr(labour.headcount)} मजूर`) —
                                 reused as-is, not invented. */}
                             <span className="text-sm font-bold text-stone-800">
-                                {language === 'mr' ? `${formatCount(count)} मजूर` : `${count} workers`}
+                                {language === 'mr'
+                                    ? `${count != null ? formatCount(count) : UNKNOWN} मजूर`
+                                    : `${count != null ? count : UNKNOWN} workers`}
                             </span>
                         </div>
                         {entry.provenanceVerified === false && (entry.sourceText || entry.systemInterpretation) && (

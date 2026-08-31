@@ -241,7 +241,14 @@ export function useManualEntryHydration(params: HydrationParams): void {
                         // is not "Field Work 1". Both are left blank for the farmer to fill.
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- AI payload type is open string; narrowed downstream
                         type: (aiLabour.type as any),
-                        count: aiLabour.count || 0,
+                        // Task 27 (spec: 2026-08-28-labour-v2-release-1) — the `|| 0` here
+                        // violated the doctrine stated one line above it: an unstated
+                        // headcount was being coerced into a fabricated "0 मजूर" on the
+                        // pre-save panel (LabourReview.tsx). `count` is optional on both
+                        // `LabourEvent` and the AI response Zod schema — pass it through
+                        // unchanged so a genuinely stated 0 still reads as 0, and an
+                        // unstated count stays undefined (rendered as the em-dash).
+                        count: aiLabour.count,
                         maleCount: aiLabour.maleCount,
                         femaleCount: aiLabour.femaleCount,
                         activity: aiLabour.activity,

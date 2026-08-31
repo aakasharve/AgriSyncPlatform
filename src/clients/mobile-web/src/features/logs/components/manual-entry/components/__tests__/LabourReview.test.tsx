@@ -104,3 +104,38 @@ describe('LabourReview — Marathi copy (reuse only, no invented strings)', () =
         expect(screen.getByText('२ मजूर')).toBeInTheDocument();
     });
 });
+
+/**
+ * Task 27 (spec: 2026-08-28-labour-v2-release-1) — this is the pre-save
+ * panel a farmer sees before his day is recorded. `entry.count` is optional
+ * (both `LabourEvent` and the Zod schema) — a farmer who says "मजुरांनी
+ * छाटणी केली" ("the workers did the pruning") without a headcount left it
+ * unstated. The old `entry.count || ((entry.maleCount || 0) + (entry.femaleCount || 0))`
+ * coerced that silence into a fabricated "० मजूर" (zero workers). Governing
+ * rule: absence of any record means unknown (em-dash); a record that exists
+ * containing nothing (a genuinely stated 0) is a real zero and must still
+ * render as one — mirrors the server's `LabourHeadcount.Resolve`
+ * (ShramSafal.Domain/Farms/LabourHeadcount.cs) and the client's own
+ * `ReviewFacts` (ReviewSheet.tsx: `count != null ? toMr(count) : '—'`).
+ */
+describe('LabourReview — unstated headcount is unknown, not a fabricated 0 (Task 27, spec: 2026-08-28-labour-v2-release-1)', () => {
+    it('renders an em-dash, never "० मजूर", when count/maleCount/femaleCount are ALL unstated', () => {
+        const entry = makeEntry({ count: undefined, maleCount: undefined, femaleCount: undefined, activity: 'छाटणी' });
+        render(<LabourReview labourEntries={[entry]} totalWorkerCount={0} />);
+        expect(screen.queryByText('० मजूर')).not.toBeInTheDocument();
+        expect(screen.getByText('— मजूर')).toBeInTheDocument();
+    });
+
+    it('still renders a genuinely stated 0 as "० मजूर" — a real fact, not collapsed into the em-dash', () => {
+        const entry = makeEntry({ count: 0, maleCount: undefined, femaleCount: undefined, activity: 'छाटणी' });
+        render(<LabourReview labourEntries={[entry]} totalWorkerCount={0} />);
+        expect(screen.getByText('० मजूर')).toBeInTheDocument();
+        expect(screen.queryByText('— मजूर')).not.toBeInTheDocument();
+    });
+
+    it('sums a stated gender split when the bare count is unstated (no em-dash when SOME evidence exists)', () => {
+        const entry = makeEntry({ count: undefined, maleCount: 2, femaleCount: 1, activity: 'छाटणी' });
+        render(<LabourReview labourEntries={[entry]} totalWorkerCount={3} />);
+        expect(screen.getByText('३ मजूर')).toBeInTheDocument();
+    });
+});
