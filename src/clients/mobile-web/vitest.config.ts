@@ -8,6 +8,16 @@ import { defineConfig } from 'vitest/config';
 // setup files, snapshot config, and coverage gates.
 export default defineConfig({
   test: {
+    // 15s, not the 5s default. The heaviest suites here render the WHOLE log
+    // view — mainView.savedBack, mainView.dayUnderstandingOrder,
+    // oneAllClearSurface (which reads every file under src) — and they land at
+    // 2.5-5s in isolation on a developer machine. Under a full parallel run
+    // that is close enough to the default that they flake, and a suite that
+    // fails at random teaches everyone to re-run rather than to read.
+    // They are slow because they assert on real composition rather than mocks;
+    // that is worth paying for, so the budget moves instead of the tests.
+    testTimeout: 15_000,
+    hookTimeout: 15_000,
     environment: 'node',
     include: [
       'src/**/__tests__/**/*.test.ts',
