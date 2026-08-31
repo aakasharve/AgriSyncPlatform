@@ -66,18 +66,32 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
 
     const plotTodayLogs = getPlotTodayLogs();
 
+    // Task 29 (spec: 2026-08-28-labour-v2-release-1) — `totalWorkers` is
+    // `number | undefined`, the same three cases the shared derivation now
+    // keeps distinct (domain/logs/labourHeadcount.ts, mirroring the server's
+    // GetLabourDataHandler):
+    //   - no labour events across today's logs → 0 (real: no labour happened)
+    //   - events exist, none stated a headcount → undefined (UNKNOWN)
+    //   - some stated, some not → the sum of the known ones
+    // It previously summed a fabricated 0 per unstated event, so a day whose
+    // labour was logged without numbers read as "no workers".
     const getDailyLabourTotal = () => {
-        let totalWorkers = 0;
+        const headcounts: (number | undefined)[] = [];
         let totalCost = 0;
         plotTodayLogs.forEach(l => {
             l.labour.forEach(lab => {
                 // Decision 3a (2026-07-19): real headcount — count when a bare
                 // total was stated, else maleCount+femaleCount — not just
                 // 'count' alone (which under-counts a gender-split-only entry).
-                totalWorkers += resolveLabourHeadcount(lab);
+                headcounts.push(resolveLabourHeadcount(lab));
                 totalCost += (lab.totalCost || 0);
             });
         });
+        const totalWorkers = headcounts.length === 0
+            ? 0
+            : headcounts.every(headcount => headcount == null)
+                ? undefined
+                : headcounts.reduce<number>((total, headcount) => total + (headcount ?? 0), 0);
         return { totalWorkers, totalCost };
     };
 
@@ -143,7 +157,10 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
     const dailyExpenseTotal = getDailyExpenseTotal();
     const dailyIrrigation = getDailyIrrigationTotal();
 
-    const isLabourFilled = !!linkedData.labour || dailyLabour.totalWorkers > 0;
+    // Task 29 — an UNKNOWN headcount (undefined) still means labour events
+    // exist for today, so the bucket is filled. Only a genuine 0 (no labour
+    // events at all) leaves it unfilled, exactly as before.
+    const isLabourFilled = !!linkedData.labour || dailyLabour.totalWorkers == null || dailyLabour.totalWorkers > 0;
     const isLabourIssue = !!linkedData.labour?.issue;
 
     const isLinkedIrrigationCompleted = linkedData.irrigation
@@ -406,6 +423,9 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     sublabel={(() => {
                         const daily = getDailyLabourTotal();
                         if (isLabourFilled) return getLabourLabel();
+                        // Task 29 — em-dash when today's labour was logged with
+                        // no headcount stated, rather than a fabricated count.
+                        if (daily.totalWorkers == null) return `Today: — Staff (Logged)`;
                         if (daily.totalWorkers > 0) return `Today: ${daily.totalWorkers} Staff (Logged)`;
                         return undefined;
                     })()}

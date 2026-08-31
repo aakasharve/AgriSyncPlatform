@@ -69,6 +69,38 @@ const countOnlyLabourLog = (): DailyLog => ({
     financialSummary: { totalLabourCost: 1800, totalInputCost: 0, totalMachineryCost: 0, grandTotal: 1800 },
 } as unknown as DailyLog);
 
+// Task 29 (spec: 2026-08-28-labour-v2-release-1): the farmer said
+// "मजुरांनी छाटणी केली" ("the workers did the pruning") and never stated a
+// number. The parser leaves count/maleCount/femaleCount ALL unset — the
+// shape `sumLabourHeadcount` used to fold into a fabricated `0`.
+const unstatedHeadcountLabourLog = (): DailyLog => ({
+    id: 'log-4',
+    date: '2026-07-19',
+    context: { selection: [{ cropId: 'c1', selectedPlotIds: ['p1'] }] },
+    dayOutcome: 'WORK_RECORDED',
+    cropActivities: [],
+    irrigation: [],
+    labour: [{ id: 'l4', type: 'HIRED', activity: 'छाटणी', totalCost: 1800 }],
+    inputs: [],
+    machinery: [],
+    financialSummary: { totalLabourCost: 1800, totalInputCost: 0, totalMachineryCost: 0, grandTotal: 1800 },
+} as unknown as DailyLog);
+
+// A record that EXISTS and states zero — "nobody came". A real fact, and the
+// opposite failure mode: the fix must not sweep this into the em-dash.
+const statedZeroLabourLog = (): DailyLog => ({
+    id: 'log-5',
+    date: '2026-07-19',
+    context: { selection: [{ cropId: 'c1', selectedPlotIds: ['p1'] }] },
+    dayOutcome: 'WORK_RECORDED',
+    cropActivities: [],
+    irrigation: [],
+    labour: [{ id: 'l5', type: 'HIRED', count: 0, activity: 'छाटणी', totalCost: 0 }],
+    inputs: [],
+    machinery: [],
+    financialSummary: { totalLabourCost: 0, totalInputCost: 0, totalMachineryCost: 0, grandTotal: 0 },
+} as unknown as DailyLog);
+
 const nonLabourLog = (): DailyLog => ({
     id: 'log-2',
     date: '2026-07-19',
@@ -157,6 +189,47 @@ describe('LabourHub — "just logged" labour summary (Task 3.5)', () => {
             />
         );
         expect(screen.queryByTestId('labour-just-logged-card')).toBeNull();
+    });
+
+    /**
+     * Task 29 (spec: 2026-08-28-labour-v2-release-1) — `sumLabourHeadcount`
+     * returned `0` for a labour event that stated no headcount at all, so
+     * this card rendered "० मजूर": zero workers, with ₹1,800 paid to them.
+     * Same defect BUG 2 fixed for the count-only shape, one shape further
+     * out. Unknown renders as the em-dash — the existing "we were not told"
+     * mark this codebase already uses (ReviewSheet's ReviewFacts,
+     * LabourReview.tsx @ 0a401294) — reusing the SAME `N मजूर` line, no new
+     * Marathi string.
+     */
+    it('renders "— मजूर", never "० मजूर", when the log states no headcount at all', () => {
+        render(
+            <LabourHub
+                {...baseProps()}
+                history={[unstatedHeadcountLabourLog()]}
+                ledgerDefaults={ledgerDefaults}
+                lastLabourLogIds={['log-4']}
+            />
+        );
+
+        expect(screen.getByTestId('labour-just-logged-card')).toBeInTheDocument();
+        expect(screen.queryByText('० मजूर')).toBeNull();
+        expect(screen.getByText('— मजूर')).toBeInTheDocument();
+        // The money is real and still shown — the headcount is what we lack.
+        expect(screen.getByText('₹1,800')).toBeInTheDocument();
+    });
+
+    it('does NOT turn a genuinely stated 0 into the em-dash (the opposite failure mode)', () => {
+        render(
+            <LabourHub
+                {...baseProps()}
+                history={[statedZeroLabourLog()]}
+                ledgerDefaults={ledgerDefaults}
+                lastLabourLogIds={['log-5']}
+            />
+        );
+
+        expect(screen.getByTestId('labour-just-logged-card')).toBeInTheDocument();
+        expect(screen.queryByText('— मजूर')).toBeNull();
     });
 });
 

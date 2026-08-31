@@ -192,8 +192,21 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
                               * (domain/logs/labourHeadcount.ts via generateDayWorkSummary)
                               * — never a second hand-rolled count here.
                               */}
-                            {labour.maleCount === 0 && labour.femaleCount === 0 && labour.headcount > 0 && (
-                                <div className="text-[16px] font-semibold text-stone-700">{toMr(labour.headcount)} मजूर</div>
+                            {/*
+                              * Task 29 (spec: 2026-08-28-labour-v2-release-1) —
+                              * `headcount` is now `number | undefined`, and
+                              * `undefined` means the farmer never stated a
+                              * number at all ("मजुरांनी छाटणी केली"). That used
+                              * to arrive here as 0, so this row was skipped and
+                              * the card again showed money with no people line —
+                              * the exact BUG 2 symptom, from the other
+                              * direction. It now renders the em-dash: the same
+                              * "we were not told" mark LabourReview.tsx and
+                              * ReviewSheet's ReviewFacts already use, inside the
+                              * SAME `N मजूर` line. No new Marathi string.
+                              */}
+                            {labour.maleCount === 0 && labour.femaleCount === 0 && (labour.headcount == null || labour.headcount > 0) && (
+                                <div className="text-[16px] font-semibold text-stone-700">{labour.headcount != null ? toMr(labour.headcount) : '—'} मजूर</div>
                             )}
                             {/*
                               * Labour V1 Task 8.4 — "तास: ८ तास" was DELETED. It read

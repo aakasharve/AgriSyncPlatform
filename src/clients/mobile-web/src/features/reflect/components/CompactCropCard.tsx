@@ -39,7 +39,11 @@ const CompactCropCard: React.FC<CompactCropCardProps> = ({ crop, plot, plotIndex
     const counts = {
         activity: log?.cropActivities?.length || 0,
         irrigation: countCompletedIrrigationEvents(log?.irrigation || []),
-        labour: sumLabourHeadcount(log?.labour), // Decision 3a: real headcount, not just 'count'
+        // Decision 3a: real headcount, not just 'count'. Task 29
+        // (spec: 2026-08-28-labour-v2-release-1): `undefined` when labour was
+        // logged with no headcount stated — passed through as unknown, NOT
+        // flattened to 0 here (see BucketIcon).
+        labour: sumLabourHeadcount(log?.labour),
         inputs: log?.inputs?.length || 0,
         machinery: log?.machinery?.length || 0,
         expenses: log?.activityExpenses?.length || 0,
@@ -96,13 +100,21 @@ const CompactCropCard: React.FC<CompactCropCardProps> = ({ crop, plot, plotIndex
     }, [log?.id]);
 
     // Helper for bucket icons
-    const BucketIcon = ({ icon, count, activeColor, label: _label }: { icon: React.ReactNode, count: number, activeColor: string, label: string }) => {
-        const isActive = count > 0;
+    //
+    // Task 29 (spec: 2026-08-28-labour-v2-release-1) — `count` accepts
+    // `undefined` for the labour bucket, whose headcount is unknown when
+    // labour was logged but nobody stated a number ("मजुरांनी छाटणी केली").
+    // That case used to arrive as a fabricated 0. It now renders the em-dash
+    // ("we were not told"), kept distinct from the plain '-' this grid
+    // already shows for a bucket that is genuinely empty. The other seven
+    // buckets pass real counts and are unaffected.
+    const BucketIcon = ({ icon, count, activeColor, label: _label }: { icon: React.ReactNode, count: number | undefined, activeColor: string, label: string }) => {
+        const isActive = (count ?? 0) > 0;
         return (
             <div className={`flex flex-col items-center justify-center p-1 rounded-lg border flex-1 transition-all min-w-[30px] ${isActive ? activeColor : 'bg-slate-50 border-slate-100 text-slate-300'}`}>
                 <div className="mb-0.5">{icon}</div>
                 {/* <span className="text-[9px] font-bold uppercase leading-none mb-0.5">{label}</span> */}
-                <span className={`text-[10px] font-bold leading-none ${isActive ? '' : 'text-slate-300'}`}>{isActive ? count : '-'}</span>
+                <span className={`text-[10px] font-bold leading-none ${isActive ? '' : 'text-slate-300'}`}>{count == null ? '—' : (isActive ? count : '-')}</span>
             </div>
         );
     };

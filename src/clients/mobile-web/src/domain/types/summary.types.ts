@@ -48,8 +48,17 @@ export interface LabourSummary {
      * `maleCount + femaleCount`. Use THIS for "how many people worked"
      * displays — `maleCount + femaleCount` alone is 0 for a count-only
      * entry and under-counts.
+     *
+     * Task 29 (spec: 2026-08-28-labour-v2-release-1) — `undefined` means
+     * UNKNOWN: labour events exist but not one of them stated a headcount
+     * ("मजुरांनी छाटणी केली" — the workers pruned, no number given). It used
+     * to be `0`, which claimed zero workers for a job workers did. A day with
+     * NO labour events at all is still a real `0`. Render `undefined` as the
+     * em-dash — the codebase's "we were not told" mark — never as a number.
+     * Deliberately a required property with `| undefined`, not optional, so
+     * every construction site must state which case it is.
      */
-    headcount: number;
+    headcount: number | undefined;
     maleRate: number;
     femaleRate: number;
     /**
