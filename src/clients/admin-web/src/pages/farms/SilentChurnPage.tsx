@@ -18,13 +18,14 @@ import type { SilentChurnItem } from '@/hooks/useFarms';
  * richer sample rows.
  *
  * The rows come from `mis.silent_churn_watchlist`
- * (`AdminMisRepository.cs:179-222`), and three properties of that query
+ * (`AdminMisRepository.cs:179-221`), and three properties of that query
  * decide most of this file:
  *
- *   1. `LIMIT 50`. The server sends AT MOST fifty rows, longest silence
- *      first. There is no pager and no `page` parameter — asking for page 2
- *      is not a thing this endpoint can answer — so the whole answer is in
- *      hand and every filter, sort and count below is client-side and exact.
+ *   1. `LIMIT 50` (`AdminMisRepository.cs:206`). The server sends AT MOST
+ *      fifty rows, longest silence first. There is no pager and no `page`
+ *      parameter — asking for page 2 is not a thing this endpoint can answer
+ *      — so the whole answer is in hand, and every filter, sort and count
+ *      below is client-side and exact.
  *      Fifty rows is nowhere near the 3,000-row set where Task 8 measured a
  *      keystroke at ~70 ms, so no virtualisation and no debounce.
  *
@@ -35,7 +36,7 @@ import type { SilentChurnItem } from '@/hooks/useFarms';
  *      logged cannot appear in this result at all.** See THE HOLD-OUT below —
  *      this is the single most important fact on the screen.
  *
- *   3. `GREATEST(1, days_since_last_log / 7)` — integer division, so weeks
+ *   3. `GREATEST(1, days_since_last_log / 7)` (`:198`) — integer division, so weeks
  *      are FLOORED. A farm quiet for twenty days reads "2w", not three. That
  *      is why every sentence here says "N full weeks": floor is exactly the
  *      claim the arithmetic supports. (The C# doc-comment above the query
@@ -92,7 +93,7 @@ import type { SilentChurnItem } from '@/hooks/useFarms';
  *
  * ── WHAT IS DELIBERATELY NOT PORTED FROM v3 ──────────────────────────────
  *  · The "call today" flag and its red row edge. v3 fires them at
- *    `silentChurnCallWeeks` (`silent-churn.html:191-193`), a threshold that
+ *    `silentChurnCallWeeks` (`silent-churn.html:189-190`), a threshold that
  *    lives in the prototype's own `data.js` and has no counterpart anywhere
  *    in this product. Shipping it would put a red "call today" beside a
  *    farmer's name on a rule nobody has agreed. Founder decision, raised in
@@ -104,7 +105,7 @@ import type { SilentChurnItem } from '@/hooks/useFarms';
  */
 
 /** The em dash the query COALESCEs a missing owner phone to
- *  (`AdminMisRepository.cs:206`), turned back into the absence it stands for
+ *  (`AdminMisRepository.cs:196`), turned back into the absence it stands for
  *  so `Masked` can say "not measured" instead of printing a bare character
  *  whose meaning the reader has to supply. Same sentinel as All Farms. */
 const NO_PHONE_SENTINEL = '—';
@@ -114,7 +115,10 @@ function ownerPhoneOf(row: SilentChurnItem): string | null {
 }
 
 /** Digits only, so a phone typed without spaces still finds a row stored with
- *  them. v3 `digits()` (`silent-churn.html:206`). */
+ *  them. v3's `digits()` (`silent-churn.html:205`) strips WHITESPACE only;
+ *  this strips every non-digit, so a phone stored as `+91 98765-43210` is
+ *  also found by `9876543210`. A deliberate widening — the founder's standing
+ *  preference on this index is to match MORE spellings, not fewer. */
 function digitsOf(value: string | null): string | null {
   return value === null ? null : value.replace(/\D/g, '');
 }
@@ -240,7 +244,7 @@ const COLUMNS: DataListColumn<SilentChurnItem>[] = [
  * operator reads a watchlist in. `facetOptionsFrom` orders by count and is
  * therefore wrong here: a band row that reshuffled as the counts moved would
  * be unusable, and v3 fixes the same order for the same reason
- * (`silent-churn.html:265`, `BAND_ORDER`).
+ * (`silent-churn.html:266`, `BAND_ORDER`).
  *
  * The four bands cover the whole number line, so no row can fall outside all
  * of them and vanish from every count. `under-2` cannot occur today — the
