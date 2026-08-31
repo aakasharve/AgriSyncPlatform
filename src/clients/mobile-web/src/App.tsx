@@ -10,7 +10,7 @@ import { CropProfile } from './types';
 import { LogProvider } from './app/context/LogContext';
 import { AppErrorBoundary } from './app/components/common/AppErrorBoundary';
 import AppContent from './AppContent';
-import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
+import { LanguageProvider } from './i18n/LanguageContext';
 import SplashScreen from './shared/components/ui/SplashScreen';
 import { DataSourceProvider } from './app/providers/DataSourceProvider';
 import { SelectionProvider } from './app/context/SelectionContext';
@@ -22,7 +22,6 @@ import { setAiTestModeEnabled, clearAiTestMode } from './infrastructure/storage/
 import AppShell from './app/components/AppShell';
 import LoginPage from './pages/LoginPage';
 import JoinFarmLandingPage from './pages/JoinFarmLandingPage';
-import { useMorningNotificationWiring } from './app/hooks/useMorningNotificationWiring';
 import ConsentGateScreen from './features/consent/gate/ConsentGateScreen';
 import { useConsentGate } from './features/consent/gate/useConsentGate';
 import { recordConsentGateAcceptance } from './features/consent/gate/consentGateApi';
@@ -50,17 +49,11 @@ const AppFrame: React.FC<{
     // shell during 'checking' and never flash LoginPage before boot validation.
     const { isAuthenticated, authStatus, session } = useAuth();
     const [joinActive, setJoinActive] = useState<boolean>(hasJoinDeepLink);
-    const { t } = useLanguage();
 
     // spec: dfes-companion-2026-07-11 (wave-4.1) — first-open Terms + DPDP consent gate.
     // Read here, at the top of AppFrame, because the gate is PRE-LOGIN: it stands in
     // front of LoginPage, not behind it.
     const consentGate = useConsentGate();
-
-    // Task 7 (spec: dfes-companion-2026-07-11) — daily 7am "आजची कामे पाहा"
-    // native local notification. Flag-off / non-native no-op is guaranteed
-    // inside the hook — see useMorningNotificationWiring.ts.
-    useMorningNotificationWiring(isAuthenticated, t('dfes.morningNotificationTitle'));
 
     // spec: 2026-08-25-prod-cutover-waves (B1) — the gate runs pre-login, so its two legal
     // records land with no user attached and are readable by nobody. This attaches them to

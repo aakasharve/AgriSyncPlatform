@@ -78,7 +78,6 @@ jobs:
           VITE_UNLOCK_COUNTER_PAUSED: "1"
           # Dev/test-only switches — must ship OFF in the release build.
           VITE_SIMULATE_UNLOCK: "0"
-          VITE_INTELLIGENCE_INSIGHTS: "0"
         run: npm run build
 
       - name: Cap sync android

@@ -274,8 +274,6 @@ export interface DfesTranslations {
     // notification title ("see today's tasks"). Static text only, no
     // dynamic count (pendingCount isn't persisted; a stale number in a
     // scheduled notification would be worse than none). Flag-gated by
-    // VITE_MORNING_NOTIFICATION, default OFF.
-    morningNotificationTitle: string;
 
     // Task 8 (spec: dfes-companion-2026-07-11) — "Sathi talks back":
     // the one warm celebration line spoken (web speechSynthesis) once
@@ -431,7 +429,6 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
         dailyLoopClarity: '{done} done, {left} left',
 
         // Task 7 (spec: dfes-companion-2026-07-11) — morning notification title
-        morningNotificationTitle: 'See today\'s tasks',
 
         // Task 8 (spec: dfes-companion-2026-07-11) — reference translation
         // only; the spoken utterance always uses the `mr` value below.
@@ -622,7 +619,6 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
 
         // Task 7 (spec: dfes-companion-2026-07-11) — morning notification title.
         // Static Marathi copy: "see today's tasks".
-        morningNotificationTitle: 'आजची कामे पाहा',
 
         // Task 8 (spec: dfes-companion-2026-07-11) — the line Sathi
         // actually SPEAKS (web speechSynthesis, lang='mr-IN') once ever
