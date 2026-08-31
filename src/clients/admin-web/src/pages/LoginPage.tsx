@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Leaf, Wheat, BarChart3, Shield } from 'lucide-react';
 import { adminApi } from '@/lib/api';
 import { type AdminSession } from '@/lib/auth';
+import { safeReturnTo } from '@/lib/returnTo';
 import { useAdminAuth } from '@/app/AdminAuthProvider';
 
 // Matches User.Application.Contracts.Dtos.AuthResponse exactly
@@ -38,7 +39,11 @@ export default function LoginPage() {
       // (W0-B pivot — tokens are identity, not authorization). If the user has
       // no memberships, RequireScope will send them to /403.
       auth.login(session);
-      const returnTo = (location.state as { from?: string } | null)?.from ?? '/';
+      // `from` is now the whole url — path AND query — because that is where
+      // page, search, tier, weeks, days and org all live (App.tsx RequireAuth,
+      // lib/returnTo.ts). `safeReturnTo` refuses anything that would leave
+      // this console; `navigate` parses the query string for us.
+      const returnTo = safeReturnTo((location.state as { from?: unknown } | null)?.from);
       navigate(returnTo, { replace: true });
     } catch (err) {
       const msg =

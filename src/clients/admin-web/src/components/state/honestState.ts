@@ -31,6 +31,12 @@
  * `KpiState`, which is the type the honesty override in `KpiCard` is built on.
  */
 
+// `@/lib/adminErrors` is a pure module — no axios, no React — precisely so
+// that this file can name a permission denial without dragging the transport
+// into every chunk that only wanted the words. See the import-depth note in
+// `./index.ts`.
+import { describeAdminDenial } from '@/lib/adminErrors';
+
 /** The four causes a single value can be absent for (CONTRACT.md §9.2). */
 export type HonestState = 'unmeasured' | 'feed-down' | 'never' | 'unattributed';
 
@@ -57,16 +63,33 @@ export function stateWord(state: HonestState | null | undefined): string {
 }
 
 /**
- * The unwrapping ladder, lifted UNCHANGED from
+ * The unwrapping ladder, lifted from
  * `features/farmer-health/components/EmptyAndErrorStates.tsx:95-104`:
  *
- *   falsy → string → Error.message → object with a string `message` → fallback
+ *   denial → falsy → string → Error.message → object with a string `message`
+ *   → fallback
  *
  * It lives here rather than inside one component because `ErrorState` and
  * `LoadFailed` both need it, and a second copy is how the two drift into
  * disagreeing about what an axios error says.
+ *
+ * ── The first rung is new in Task 11, and it is the only change ────────────
+ * A PERMISSION DENIAL IS NOT A BROKEN REQUEST. The server distinguishes five
+ * denial codes on purpose (AdminScopeHelper.cs:62,70,85,118,148), the axios
+ * layer types two errors to carry that distinction — and nothing caught either
+ * of them, so `error.message` was the raw code and a panel that hit
+ * `admin_platform_only` printed exactly that string at a non-technical
+ * operator. Naming the denial here reaches every panel in the console at once,
+ * because every one of them renders its failure through `LoadFailed` or
+ * `ErrorState`, and both render through this function.
+ *
+ * `describeAdminDenial` returns null for everything else, so a 500 stays a
+ * 500. Telling someone their access is missing when the server is simply down
+ * is the same lie pointing the other way.
  */
 export function formatError(error: unknown): string {
+  const denial = describeAdminDenial(error);
+  if (denial) return denial.message;
   if (!error) return 'Unknown error.';
   if (typeof error === 'string') return error;
   if (error instanceof Error) return error.message;
