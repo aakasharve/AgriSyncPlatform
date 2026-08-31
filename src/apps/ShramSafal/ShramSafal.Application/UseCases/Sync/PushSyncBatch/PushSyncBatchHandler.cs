@@ -823,17 +823,24 @@ public sealed class PushSyncBatchHandler(
         }
 
         var result = await createCropCycleHandler.HandleAsync(
+            // Stage A0 Task 3 — named arguments, deliberately. This call was fully
+            // positional, with ActorRole sitting between two same-typed neighbours.
+            // Removing that parameter would have slid actorRole into ClientCommandId
+            // and clientRequestId into ClientAppVersion — string into string, so the
+            // compiler would have stayed silent while the audit ledger recorded the
+            // role as a command id. Naming them makes any future removal a build error.
+            // Behaviour-neutral: every argument binds exactly as it did before.
             new CreateCropCycleCommand(
-                request.FarmId,
-                request.PlotId,
-                request.CropName,
-                request.Stage,
-                request.StartDate,
-                request.EndDate,
-                actorUserId,
-                request.CropCycleId,
-                actorRole,
-                clientRequestId),
+                FarmId: request.FarmId,
+                PlotId: request.PlotId,
+                CropName: request.CropName,
+                Stage: request.Stage,
+                StartDate: request.StartDate,
+                EndDate: request.EndDate,
+                ActorUserId: actorUserId,
+                CropCycleId: request.CropCycleId,
+                ActorRole: actorRole,
+                ClientCommandId: clientRequestId),
             ct);
 
         return ToOutcome(result);
@@ -1841,16 +1848,22 @@ public sealed class PushSyncBatchHandler(
         }
 
         var result = await createAttachmentHandler.HandleAsync(
+            // Stage A0 Task 3 — named arguments; see HandleCreateCropCycleAsync for why.
+            // Note CreatedByUserId, NOT ActorUserId: this record names its actor
+            // differently from CreateCropCycleCommand. It is deliberately the
+            // token-derived actorUserId and never request.CreatedByUserId — trusting
+            // the client's claim of who created an attachment would be an attribution
+            // regression. Behaviour-neutral: every argument binds exactly as before.
             new CreateAttachmentCommand(
-                request.FarmId,
-                request.LinkedEntityId,
-                request.LinkedEntityType,
-                request.FileName,
-                request.MimeType,
-                actorUserId,
-                attachmentId,
-                actorRole,
-                clientRequestId),
+                FarmId: request.FarmId,
+                LinkedEntityId: request.LinkedEntityId,
+                LinkedEntityType: request.LinkedEntityType,
+                FileName: request.FileName,
+                MimeType: request.MimeType,
+                CreatedByUserId: actorUserId,
+                AttachmentId: attachmentId,
+                ActorRole: actorRole,
+                ClientCommandId: clientRequestId),
             ct);
 
         return ToOutcome(result);
