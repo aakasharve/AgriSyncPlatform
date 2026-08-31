@@ -724,6 +724,32 @@ here rather than carrying it into the next task.
 
 ### Task 5: The honest-state vocabulary — four causes, not one
 
+> **Executed 2026-08-31 (`e0fb322e`). The shim line above was INCOMPLETE and is now corrected.**
+> It listed three names; `FarmerHealthPage.tsx:14` also imports **`ScoringActiveBanner`** from that
+> path. Following it literally would have broken the build **in the same commit whose whole purpose
+> is to protect the build.** The shim re-exports four names. Ten importers confirmed by measurement
+> at `faecb7db` — the plan was right about the count.
+>
+> **Redaction turned out to be a FIFTH kind of absence, and it does not belong in the four.** The
+> four causes answer *"why is there no measurement"*. A hidden farmer name is a **fully-measured
+> value you are not permitted to see** — a permission fact, not a measurement fact. The four words
+> stay intact; masking got its own axis (`redaction.ts`, `Masked.tsx`).
+>
+> Also worth recording: **the prototype could only teach three of the four causes.** v3 does no
+> fetching, so *"the request broke"* has no design in it at all — and that is precisely the cause the
+> seven silent-failure screens are actually hitting.
+>
+> **Citation drift (a fourth and fifth instance):** `FarmerHealthDrilldown.tsx:52` is **:55**.
+> `app.js:341-350` is `AS.none` at **341–348**, and the `STATE_WORD` map it depends on is at
+> **333–338** — outside the cited range, so the plan cited the function without the vocabulary that
+> gives it its words. Both ported.
+>
+> **Task 5's text never mentions `KpiCard`**, but `KpiCard.tsx:19-38` (Task 3) declared the same four
+> state words locally with an explicit note to lift them here. Done — one word list, not two.
+>
+> **D9 is NOT closed by this task.** This builds the vocabulary; it does not apply it. The seven
+> screens still say *"No errors found. The system is healthy."* until Tasks 14–26 rewire them.
+
 > **🛑 SEQUENCING — read before moving any file.** `features/farmer-health/components/EmptyAndErrorStates.tsx`
 > has **ten importers**, and its consumers are not migrated until Tasks 22–23 — seventeen tasks
 > later. Moving `EmptyState` / `LoadingState` / `ErrorState` out of it without a shim leaves the
@@ -731,7 +757,7 @@ here rather than carrying it into the next task.
 > invariant outright.
 >
 > **Do this instead:** create the new module, and leave the old file in place as a thin re-export
-> (`export { EmptyState, LoadingState, ErrorState } from '<new path>'`). Delete the old file in
+> (`export { EmptyState, LoadingState, ErrorState, ScoringActiveBanner } from '<new path>'`). Delete the old file in
 > **Task 27**, once its last importer is migrated — and only after `npm run build` is clean.
 
 **Files:**
@@ -742,9 +768,9 @@ here rather than carrying it into the next task.
 - Consumes CONTRACT.md sections 6.1 to 6.4 and section 9, plus the existing EmptyAndErrorStates.tsx, which is the only place in the console that already does this properly.
 - Produces the vocabulary every panel on every screen uses. NotMeasured is the ONLY component allowed to print a missing value — the v3 AS.none rule (`app.js:341-350`).
 
-- [ ] **Step 1: Promote the three good primitives out of the feature folder (A41, A32).** Move EmptyState, LoadingState and ErrorState into components/state, KEEPING: the LoadingState role status plus aria-busy plus named aria-label plus sr-only label, so a screen-reader user is told WHICH block is loading; and the ErrorState working Retry wired to refetch() with its formatError unwrapping ladder (error, then string, then Error.message, then an object with a message, then a fallback).
+- [x] **Step 1: Promote the three good primitives out of the feature folder (A41, A32).** Move EmptyState, LoadingState and ErrorState into components/state, KEEPING: the LoadingState role status plus aria-busy plus named aria-label plus sr-only label, so a screen-reader user is told WHICH block is loading; and the ErrorState working Retry wired to refetch() with its formatError unwrapping ladder (error, then string, then Error.message, then an object with a message, then a fallback).
 
-- [ ] **Step 2: Build the four distinct empty causes (D9)**
+- [x] **Step 2: Build the four distinct empty causes (D9)**
 
 ```tsx
 /**
@@ -770,9 +796,9 @@ export function LoadFailed({ error, onRetry }: { error: unknown; onRetry: () => 
 }
 ```
 
-- [ ] **Step 3: Carry the mandatory copy byte-for-byte, with its red-line comments (A35).** ScoringActiveBanner keeps its exact string — "Scoring active from {date}; data accumulating." — and its role status with aria-live polite. Carry the source comment "MANDATORY copy per C5 — do not paraphrase" into the new file. The WorkerSummaryList disclaimer and its red-line comment travel with that component in T23.
+- [x] **Step 3: Carry the mandatory copy byte-for-byte, with its red-line comments (A35).** ScoringActiveBanner keeps its exact string — "Scoring active from {date}; data accumulating." — and its role status with aria-live polite. Carry the source comment "MANDATORY copy per C5 — do not paraphrase" into the new file. The WorkerSummaryList disclaimer and its red-line comment travel with that component in T23.
 
-- [ ] **Step 4: Keep the two-variant empty on the intervention queue (A36)**
+- [x] **Step 4: Keep the two-variant empty on the intervention queue (A36)**
 
 ```tsx
 /**
@@ -786,7 +812,7 @@ export function LoadFailed({ error, onRetry }: { error: unknown; onRetry: () => 
  */
 ```
 
-- [ ] **Step 5: Make a masked value a first-class state, not text (A14, B16)**
+- [x] **Step 5: Make a masked value a first-class state, not text (A14, B16)**
 
 ```tsx
 /**
@@ -801,7 +827,7 @@ export function isRedacted(v: string | null | undefined): boolean { return v ===
 export function Masked({ value, fallback }: { value: string | null; fallback?: string }) { /* … */ }
 ```
 
-- [ ] **Step 6: Test the honesty rules**
+- [x] **Step 6: Test the honesty rules**
 
 ```tsx
 it('never renders a zero for an unmeasured value', () => { /* em dash plus caption */ });
@@ -813,7 +839,7 @@ it('the scoring banner copy is byte-identical', () => {
 });
 ```
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and was originally enforced
 almost nowhere. An invariant nothing checks is a hope. Before committing:
@@ -825,7 +851,7 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 7: Run and commit** — `feat(admin-web): four honest states, one vocabulary, mandatory copy preserved`
+- [x] **Step 7: Run and commit** — `feat(admin-web): four honest states, one vocabulary, mandatory copy preserved`
 
 ---
 
