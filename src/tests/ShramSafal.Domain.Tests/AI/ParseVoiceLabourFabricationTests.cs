@@ -291,4 +291,176 @@ public sealed class ParseVoiceLabourFabricationTests
         inputs!.Count.Should().Be(1, "the inputs key was genuinely absent, so the gap-fill write is legitimate here");
         inputs[0]!["productName"]!.GetValue<string>().Should().Be("खत");
     }
+
+    // -------------------------------------------------------------------------
+    // (E) The last two siblings: ContainsIssueSignal (writes an "issue" note
+    //     into observations[]) and ContainsFutureIntent (writes a "reminder"
+    //     note into observations[] AND a row into plannedTasks[]). Both were
+    //     gated on CONTENT — whether a matching noteType already existed, or
+    //     whether plannedTasks was non-empty — never on whether the model
+    //     answered at all. A model that deliberately returned
+    //     "observations: []" / "plannedTasks: []" (nothing wrong, nothing
+    //     planned) was overridden exactly like the labour/inputs/irrigation
+    //     writers were, just one layer further from the wage number. Same
+    //     gap-fill-only guard, same shape: modelAnsweredObservations /
+    //     modelAnsweredPlannedTasks captured once before either writer runs.
+    // -------------------------------------------------------------------------
+
+    private static int ObservationsRowCount(JsonObject root) => (root["observations"] as JsonArray)?.Count ?? 0;
+
+    private static int PlannedTasksRowCount(JsonObject root) => (root["plannedTasks"] as JsonArray)?.Count ?? 0;
+
+    [Fact]
+    public void An_issue_note_does_not_overwrite_a_real_empty_observations_answer()
+    {
+        // An empty observations array is an ANSWER — "nothing to flag" — not
+        // an absence.
+        const string modelAnsweredNothingToFlag = """{ "observations": [] }""";
+        const string transcript = "पाने पिवळी पडत आहेत.";
+
+        var root = Correct(modelAnsweredNothingToFlag, transcript);
+
+        root["observations"].Should().BeOfType<JsonArray>();
+        ObservationsRowCount(root).Should().Be(0,
+            "the model answered 'nothing to flag'; a keyword match on पिवळी must not overrule that");
+    }
+
+    [Fact]
+    public void Real_observations_from_the_model_are_left_untouched_by_the_issue_writer()
+    {
+        const string modelAnswered = """
+            { "observations": [ { "noteType": "reminder", "textRaw": "काहीतरी", "textCleaned": "काहीतरी" } ] }
+            """;
+        const string transcript = "पाने पिवळी पडत आहेत.";
+
+        var root = Correct(modelAnswered, transcript);
+
+        var observations = root["observations"] as JsonArray;
+        observations.Should().NotBeNull();
+        observations!.Count.Should().Be(1,
+            "the model already answered observations; the heuristic must not append its own issue row onto it");
+        observations[0]!["noteType"]!.GetValue<string>().Should().Be("reminder");
+    }
+
+    [Fact]
+    public void An_issue_signal_still_fills_a_genuinely_absent_observations_key()
+    {
+        // Proof the gate did not over-tighten: with observations truly
+        // ABSENT (not answered at all), the gap-fill write must still fire.
+        const string modelDidNotAnswerObservations = "{}";
+        const string transcript = "पाने पिवळी पडत आहेत.";
+
+        var root = Correct(modelDidNotAnswerObservations, transcript);
+
+        var observations = root["observations"] as JsonArray;
+        observations.Should().NotBeNull();
+        observations!.Count.Should().Be(1, "observations was genuinely absent, so the gap-fill write is legitimate here");
+        observations[0]!["noteType"]!.GetValue<string>().Should().Be("issue");
+    }
+
+    [Fact]
+    public void Gap_filled_issue_note_does_not_assert_a_severity_the_farmer_never_gave()
+    {
+        // The farmer named a symptom, not a severity. "important" was a
+        // hardcoded assertion the transcript never supported — decided to
+        // omit the field rather than invent a value, since severity is
+        // already optional downstream (ObservationSeverity defaults to
+        // Normal; the frontend's ObservationSeveritySchema is optional too).
+        const string modelDidNotAnswerObservations = "{}";
+        const string transcript = "पाने पिवळी पडत आहेत.";
+
+        var root = Correct(modelDidNotAnswerObservations, transcript);
+
+        var observations = root["observations"] as JsonArray;
+        observations![0]!.AsObject().ContainsKey("severity").Should().BeFalse(
+            "the farmer stated a symptom, not a severity level — asserting one he never gave is its own fabrication");
+    }
+
+    [Fact]
+    public void A_reminder_note_does_not_overwrite_a_real_empty_observations_answer()
+    {
+        const string modelAnsweredNothingToFlag = """{ "observations": [] }""";
+        const string transcript = "उद्या फवारणी करायचं आहे.";
+
+        var root = Correct(modelAnsweredNothingToFlag, transcript);
+
+        ObservationsRowCount(root).Should().Be(0,
+            "the model answered 'nothing to flag'; a future-intent keyword match must not overrule that");
+    }
+
+    [Fact]
+    public void A_reminder_does_not_overwrite_a_real_empty_plannedTasks_answer()
+    {
+        const string modelAnsweredNothingPlanned = """{ "plannedTasks": [] }""";
+        const string transcript = "उद्या फवारणी करायचं आहे.";
+
+        var root = Correct(modelAnsweredNothingPlanned, transcript);
+
+        root["plannedTasks"].Should().BeOfType<JsonArray>();
+        PlannedTasksRowCount(root).Should().Be(0,
+            "the model answered 'nothing planned'; उद्या/करायचं alone must not overrule that");
+    }
+
+    [Fact]
+    public void Real_plannedTasks_from_the_model_are_left_untouched_by_the_reminder_writer()
+    {
+        const string modelAnswered = """{ "plannedTasks": [ { "title": "आधीच ठरलेलं काम" } ] }""";
+        const string transcript = "उद्या फवारणी करायचं आहे.";
+
+        var root = Correct(modelAnswered, transcript);
+
+        var plannedTasks = root["plannedTasks"] as JsonArray;
+        plannedTasks.Should().NotBeNull();
+        plannedTasks!.Count.Should().Be(1,
+            "the model already answered plannedTasks; the heuristic must not append its own guess onto it");
+        plannedTasks[0]!["title"]!.GetValue<string>().Should().Be("आधीच ठरलेलं काम");
+    }
+
+    [Fact]
+    public void A_future_intent_sentence_still_fills_a_genuinely_absent_plannedTasks_key()
+    {
+        const string modelDidNotAnswerPlannedTasks = "{}";
+        const string transcript = "उद्या फवारणी करायचं आहे.";
+
+        var root = Correct(modelDidNotAnswerPlannedTasks, transcript);
+
+        var plannedTasks = root["plannedTasks"] as JsonArray;
+        plannedTasks.Should().NotBeNull();
+        plannedTasks!.Count.Should().Be(1, "plannedTasks was genuinely absent, so the gap-fill write is legitimate here");
+        plannedTasks[0]!["title"]!.GetValue<string>().Should().Be("फवारणी करणे");
+    }
+
+    [Fact]
+    public void Gap_filled_planned_task_does_not_assert_a_dueHint_the_farmer_never_gave()
+    {
+        // The farmer said उद्या in a DIFFERENT context ("करायचं") but the
+        // hardcoded "उद्या" dueHint used to fire even when the transcript's
+        // temporal cue is not actually "tomorrow". Decided to omit dueHint
+        // entirely rather than assert a date — it is optional/nullable in
+        // the frontend's PlannedTaskDraftSchema and dueDateResolver already
+        // treats a missing dueHint as "no due-date guess".
+        const string modelDidNotAnswerPlannedTasks = "{}";
+        const string transcript = "फवारणी करायचं आहे.";
+
+        var root = Correct(modelDidNotAnswerPlannedTasks, transcript);
+
+        var plannedTasks = root["plannedTasks"] as JsonArray;
+        plannedTasks![0]!.AsObject().ContainsKey("dueHint").Should().BeFalse(
+            "the heuristic never determined an actual due date — asserting उद्या here is a fabricated deadline");
+    }
+
+    [Fact]
+    public void The_observations_and_plannedTasks_gates_are_independent()
+    {
+        // Model answered observations (nothing to flag) but never touched
+        // plannedTasks at all. Each array's gap-fill gate must be judged on
+        // its OWN key, not on whether some other array was answered.
+        const string modelAnsweredObservationsOnly = """{ "observations": [] }""";
+        const string transcript = "उद्या फवारणी करायचं आहे.";
+
+        var root = Correct(modelAnsweredObservationsOnly, transcript);
+
+        ObservationsRowCount(root).Should().Be(0, "observations was answered — must stay empty");
+        PlannedTasksRowCount(root).Should().Be(1, "plannedTasks was genuinely absent — must still be gap-filled");
+    }
 }

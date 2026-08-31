@@ -813,7 +813,31 @@ public sealed class ParseVoiceInputHandler(
             }
         }
 
-        if (ContainsIssueSignal(cleanTranscript))
+        // spec: 2026-08-28-labour-v2-release-1 — same gap-fill-only rule as
+        // modelAnsweredLabour/Inputs/Irrigation above, extended to the last
+        // two writers: the issue-note and reminder-note/planned-task safety
+        // nets below. observations[] and plannedTasks[] are EnsureArray'd by
+        // AiResponseNormalizer just like labour/inputs/irrigation, so a model
+        // that answered "observations: []" — nothing worth flagging — or
+        // "plannedTasks: []" — nothing planned — has answered, not left a
+        // gap. Both writers below used to gate on CONTENT (whether a
+        // matching noteType already existed, or whether plannedTasks was
+        // non-empty) instead of on whether the model answered, so any
+        // transcript containing पिवळी/उद्या/करायचं etc. always got an issue
+        // note or a reminder appended — even over a deliberate empty answer.
+        // Captured here, before either writer below can mutate
+        // root["observations"] / root["plannedTasks"], for the same reason
+        // modelAnsweredInputs is captured above the fertilizer/irrigation
+        // writers.
+        //
+        // KNOWN CONSEQUENCE (same as modelAnsweredLabour/Inputs/Irrigation):
+        // on the live parse path these two writers are dormant once the
+        // normalizer EnsureArray()s observations/plannedTasks. That is the
+        // correct outcome — see the note above modelAnsweredLabour.
+        var modelAnsweredObservations = root["observations"] is JsonArray;
+        var modelAnsweredPlannedTasks = root["plannedTasks"] is JsonArray;
+
+        if (!modelAnsweredObservations && ContainsIssueSignal(cleanTranscript))
         {
             var observations = root["observations"] as JsonArray ?? new JsonArray();
             if (!observations.Any(node => node?["noteType"]?.GetValue<string>() == "issue"))
@@ -823,8 +847,19 @@ public sealed class ParseVoiceInputHandler(
                     ["noteType"] = "issue",
                     ["textRaw"] = cleanTranscript,
                     ["textCleaned"] = cleanTranscript,
-                    ["severity"] = "important",
                     ["sourceText"] = cleanTranscript
+                    // spec: 2026-08-28-labour-v2-release-1 — deliberately NO
+                    // "severity" key here. The farmer named a symptom
+                    // (पिवळी/किडे/रोग/...), not a severity; "important" was a
+                    // hardcoded assertion the transcript never supported.
+                    // Omitting it is not a fabrication risk: severity is
+                    // already optional on both sides — LedgerDerivationService
+                    // .MapObservationSeverity defaults an absent/unmapped
+                    // severity to ObservationSeverity.Normal, and the
+                    // frontend's ObservationSeveritySchema marks severity
+                    // optional — so this path now takes the SAME safe
+                    // default every other unspecified severity already
+                    // takes, instead of asserting a level nobody stated.
                 });
             }
             root["observations"] = observations;
@@ -832,31 +867,50 @@ public sealed class ParseVoiceInputHandler(
 
         if (ContainsFutureIntent(cleanTranscript))
         {
-            var observations = root["observations"] as JsonArray ?? new JsonArray();
-            var plannedTasks = root["plannedTasks"] as JsonArray ?? new JsonArray();
-            if (!plannedTasks.Any())
+            // Gap-fill only — see modelAnsweredPlannedTasks above.
+            if (!modelAnsweredPlannedTasks)
             {
-                plannedTasks.Add(new JsonObject
+                var plannedTasks = root["plannedTasks"] as JsonArray ?? new JsonArray();
+                if (!plannedTasks.Any())
                 {
-                    ["title"] = InferReminderTitle(cleanTranscript),
-                    ["dueHint"] = "उद्या",
-                    ["sourceText"] = cleanTranscript
-                });
+                    plannedTasks.Add(new JsonObject
+                    {
+                        ["title"] = InferReminderTitle(cleanTranscript),
+                        ["sourceText"] = cleanTranscript
+                        // spec: 2026-08-28-labour-v2-release-1 — deliberately
+                        // NO "dueHint" key here. The future-intent words
+                        // (उद्या/करायचं/करणार/आणायचं/द्यायचं/घ्यायचं) do not
+                        // reliably name "tomorrow" — करायचं alone triggers
+                        // this net with no date mentioned at all — so the
+                        // hardcoded "उद्या" was a guessed deadline the farmer
+                        // never stated. dueHint is optional/nullable in the
+                        // frontend's PlannedTaskDraftSchema, and
+                        // dueDateResolver.resolveDueDate already treats a
+                        // missing dueHint as "no due-date guess" (dueDate
+                        // stays unset) — the same honest default an
+                        // unspecified date already gets, instead of
+                        // asserting a day nobody said.
+                    });
+                }
+                root["plannedTasks"] = plannedTasks;
             }
 
-            if (!observations.Any(node => node?["noteType"]?.GetValue<string>() == "reminder"))
+            // Gap-fill only — see modelAnsweredObservations above.
+            if (!modelAnsweredObservations)
             {
-                observations.Add(new JsonObject
+                var observations = root["observations"] as JsonArray ?? new JsonArray();
+                if (!observations.Any(node => node?["noteType"]?.GetValue<string>() == "reminder"))
                 {
-                    ["noteType"] = "reminder",
-                    ["textRaw"] = cleanTranscript,
-                    ["textCleaned"] = cleanTranscript,
-                    ["sourceText"] = cleanTranscript
-                });
+                    observations.Add(new JsonObject
+                    {
+                        ["noteType"] = "reminder",
+                        ["textRaw"] = cleanTranscript,
+                        ["textCleaned"] = cleanTranscript,
+                        ["sourceText"] = cleanTranscript
+                    });
+                }
+                root["observations"] = observations;
             }
-
-            root["observations"] = observations;
-            root["plannedTasks"] = plannedTasks;
         }
 
         // W1.P0 Batch A — flag-guarded domain-knowledge pipeline.
