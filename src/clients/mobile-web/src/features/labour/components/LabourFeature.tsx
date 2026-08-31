@@ -193,7 +193,7 @@ export const LabourFeature: React.FC<{
                             />
                         )}
                         {cur.name === 'attendance' && (
-                            <Attendance data={data} onSave={() => { back(); showToast('जतन झाले → मंजुरीसाठी'); }} onToast={showToast} onGoToLog={goToLog} />
+                            <Attendance data={data} onSave={() => { back(); showToast('जतन झाले → मंजुरीसाठी'); }} onToast={showToast} />
                         )}
                         {cur.name === 'dashboard' && (
                             <WeeklyDashboard

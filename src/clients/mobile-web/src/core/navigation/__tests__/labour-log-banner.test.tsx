@@ -71,7 +71,8 @@ describe('LabourLogBanner (component)', () => {
     // "मजूर · हजेरी · मजुरी बोला" ("Worker · Attendance · Wages — speak"),
     // live on the main log screen whenever logIntent is 'labour'. There is
     // no attendance capture anywhere in the Labour feature — this banner is
-    // not `LabourMic.tsx` (Task 11, untouched) but makes the same claim.
+    // not `LabourMic.tsx` (deleted 2026-08-31 with the rebuilt Attendance mic)
+    // but makes the same claim.
     it('does not promise हजेरी (attendance) capture anywhere in its text', () => {
         const el = LabourLogBanner({ onBackToLabour: vi.fn() }) as React.ReactElement;
         const collectText = (node: React.ReactNode): string => {

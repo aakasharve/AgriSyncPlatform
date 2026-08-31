@@ -168,6 +168,13 @@ export interface PlotBar { name: string; days: number; pct: number }
 
 export interface DashboardData {
     weekLabel: string;
+    /**
+     * The window boundaries the server actually filtered on, ISO or empty.
+     * Optional so preview/mock fixtures need not carry them; absent means
+     * the dashboard shows no date range, never a guessed one.
+     */
+    windowFrom?: string;
+    windowTo?: string;
     insight: string;
     /**
      * Task 6 (spec: 2026-08-28-labour-v2-release-1, P4) — `null` when labour

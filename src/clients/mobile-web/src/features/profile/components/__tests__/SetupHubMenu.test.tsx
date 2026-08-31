@@ -8,7 +8,7 @@
  * reachable from every account with a farm (not behind any SHOW_* flag).
  * "हजेरी" (attendance) is one of three headline words the row uses to
  * describe the feature it opens, but there is no attendance capture
- * anywhere in the Labour feature — LabourMic is a doorway to the generic
+ * anywhere in the Labour feature — the hub hero is a doorway to the generic
  * log mic, not a recorder. P4/P5.
  */
 import '@testing-library/jest-dom/vitest';

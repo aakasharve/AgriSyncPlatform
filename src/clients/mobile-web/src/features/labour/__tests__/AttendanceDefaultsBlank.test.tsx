@@ -153,7 +153,6 @@ describe('Attendance render — 5 workers, zero marks: no attendance facts are p
         data: draftData(),
         onSave: vi.fn(),
         onToast: vi.fn(),
-        onGoToLog: vi.fn(),
     });
 
     it('renders zero present/half/absent facts for any of the 5 workers', () => {

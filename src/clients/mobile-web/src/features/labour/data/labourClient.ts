@@ -100,6 +100,11 @@ export interface LabourMoneyDto {
 
 export interface LabourDashboardDto {
     weekLabel: string;
+    // The window boundaries the server filtered on, ISO or empty. Optional
+    // on the wire so fixtures predating them still typecheck; the server
+    // always sends both.
+    windowFrom?: string;
+    windowTo?: string;
     insight: string;
     // Task 6 (spec: 2026-08-28-labour-v2-release-1, P4) — `null` when labour
     // was logged this week but no log in it stated a headcount. Never coerced
@@ -219,6 +224,8 @@ const mapPerson = (p: LabourPersonDto): LabourPerson => ({
 
 const mapDashboard = (d: LabourDashboardDto): DashboardData => ({
     weekLabel: d.weekLabel,
+    windowFrom: d.windowFrom ?? '',
+    windowTo: d.windowTo ?? '',
     insight: d.insight,
     manDays: d.manDays,
     manDaysTrend: d.manDaysTrend,

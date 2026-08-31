@@ -671,8 +671,16 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // both suppressed. This never invents a label.
         var weekLabel = window.FromDate is { } windowStart ? $"{windowStart:yyyy-MM-dd}" : string.Empty;
 
+        // Both boundaries of the window that produced every figure below.
+        // Empty means unbounded at that end, which the client renders as no
+        // range at all rather than inventing one.
+        var windowFrom = weekLabel;
+        var windowTo = window.ToDateInclusive is { } windowEnd ? $"{windowEnd:yyyy-MM-dd}" : string.Empty;
+
         var dashboard = new LabourDashboardDto(
             WeekLabel: weekLabel,
+            WindowFrom: windowFrom,
+            WindowTo: windowTo,
             Insight: string.Empty,
             ManDays: manDays,
             ManDaysTrend: 0,

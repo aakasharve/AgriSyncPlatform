@@ -245,21 +245,31 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
           * lose what he said. The ring is gone and the words say where the tap
           * takes him.
           *
-          * Task 7 (labour-v2-release-1), fix round 1 — the headline used to say
-          * "बोलून हजेरी घ्या" ("take attendance by voice"), which this button
-          * cannot back (it opens the generic log mic, not a dedicated
-          * attendance capture). Reusing `LabourMic.tsx`'s own headline,
-          * "बोलून नोंद करा" ("record by speaking") verbatim: it is already
-          * founder-approved, already on a screen in this same feature, for
-          * this exact doorway pattern (navigate-to-log-and-speak), and makes
-          * no attendance claim. Reuse, not new copy.
+          * FOUNDER RULING 2026-08-31 — the headline is "बोलून हजेरी घ्या", and
+          * this is the hub's hero action: taking हजेरी IS what the farmer is
+          * doing when he speaks his crew, and this button is the way in.
+          *
+          * It overrides Task 7 fix round 1, which had replaced exactly this
+          * string with "बोलून नोंद करा" on the reasoning that a doorway to the
+          * generic log mic "cannot back" an attendance claim. That reasoning
+          * measured the wrong thing. What the tap produces IS a हजेरी record:
+          * the log captures the crew — count, and names when stated — onto
+          * LabourAssignment, which is what the हजेरी वही reads back. The
+          * founder owns the Marathi, and in farm usage हजेरी घेणे is the act
+          * of recording who came, not a screen name.
+          *
+          * The claim this button must keep backing is therefore: speak here
+          * and the crew is recorded. It does. The one thing that would make
+          * it a lie is shipping with the हजेरी वही unreachable, so a farmer
+          * takes हजेरी and has nowhere to see it — tracked against
+          * SHOW_ATTENDANCE_TILE, not against this headline.
           */}
         <button type="button" onClick={onGoToLog} className="relative flex w-full items-center gap-4 overflow-hidden rounded-[24px] bg-gradient-to-br from-emerald-500 to-emerald-700 p-5 text-left shadow-[0_16px_32px_-12px_rgba(5,150,105,0.65)] transition-transform active:scale-[0.99]">
             <span className="relative flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white">
                 <Mic size={32} strokeWidth={2.4} />
             </span>
             <span className="min-w-0 flex-1">
-                <span className="block text-[23px] font-black leading-tight text-white">बोलून नोंद करा</span>
+                <span className="block text-[23px] font-black leading-tight text-white">बोलून हजेरी घ्या</span>
                 <span className="mt-1 block text-[16px] font-medium leading-snug text-emerald-50">“रोकडेचे दहा लोक आले” — असं बोला</span>
             </span>
             <span className="flex-shrink-0 rounded-full bg-white/25 px-4 py-3 text-[17px] font-extrabold text-white">उघडा</span>

@@ -313,7 +313,7 @@ export const HelpNote: React.FC<{ what: string; act: string; why: string; label?
                 <ChevronDown size={24} className={`flex-shrink-0 text-stone-400 transition-transform ${open ? 'rotate-180' : ''}`} />
             </button>
             {open && (
-                <div className="mt-1.5 rounded-[13px] border border-emerald-100 bg-emerald-50 p-4">
+                <div data-testid="help-note-body" className="mt-1.5 rounded-[13px] border border-emerald-100 bg-emerald-50 p-4">
                     {([['काय आहे', what], ['काय करायचं', act], ['का?', why]] as [string, string][]).map(([k, v], i) => (
                         // Stacked, not a 76px side column: at 17px the Marathi
                         // heading no longer fits a narrow gutter, and stacking

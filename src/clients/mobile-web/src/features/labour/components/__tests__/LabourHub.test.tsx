@@ -286,15 +286,19 @@ describe('LabourHub — screen honesty (Decision 4b)', () => {
 // Task 7 (labour-v2-release-1) — the two REACHABLE false attendance claims on
 // this hub. Neither is behind a SHOW_* flag (unlike हजेरी घ्या / हजेरी वही
 // above, which already ARE hidden and already covered by the test above).
-// LabourMic is a 52-line doorway to the generic log mic — there is no
-// dedicated attendance capture anywhere in this feature.
+// The hub hero is the ONE way in to speaking; the duplicate mic that used to
+// sit on the Attendance screen (LabourMic) was deleted 2026-08-31.
 // ---------------------------------------------------------------------------
 describe('LabourHub — no attendance-capture claims (Task 7)', () => {
     afterEach(() => cleanup());
 
-    it('the primary voice CTA no longer claims "बोलून हजेरी घ्या" (take attendance by voice)', () => {
+    // FOUNDER RULING 2026-08-31 — reinstated as the hub's hero headline,
+    // overriding Task 7 fix round 1. हजेरी घेणे is the act of recording who
+    // came; speaking here does record the crew onto LabourAssignment, which
+    // is what the हजेरी वही reads back. See the component comment.
+    it('the hero voice CTA is headed "बोलून हजेरी घ्या" (founder ruling)', () => {
         render(<LabourHub {...baseProps()} />);
-        expect(screen.queryByText('बोलून हजेरी घ्या')).toBeNull();
+        expect(screen.getByText('बोलून हजेरी घ्या')).toBeInTheDocument();
     });
 
     it('keeps the honest example line under the voice CTA — it is truthful (the generic mic really does parse it)', () => {
@@ -302,14 +306,13 @@ describe('LabourHub — no attendance-capture claims (Task 7)', () => {
         expect(screen.getByText(/रोकडेचे दहा लोक आले/)).toBeInTheDocument();
     });
 
-    // Fix round 1/5 — a primary CTA with no headline was flagged as a
-    // degraded control. Resolution (coordinator ruling): reuse
-    // `LabourMic.tsx`'s own headline, "बोलून नोंद करा", verbatim — it is
-    // already founder-approved, already on a screen in this feature, and
-    // makes no attendance claim (unlike the deleted headline).
-    it('the voice CTA headline is reused, truthful copy — "बोलून नोंद करा" (record by speaking), not invented', () => {
+    // The hero must never be a headless control — that was fix round 1/5's
+    // finding, and it still binds. Only the wording changed.
+    it('the hero CTA has a headline at all — never a bare mic with an example line', () => {
         render(<LabourHub {...baseProps()} />);
-        expect(screen.getByText('बोलून नोंद करा')).toBeInTheDocument();
+        const cta = screen.getByText('बोलून हजेरी घ्या');
+        expect(cta).toBeInTheDocument();
+        expect(cta.textContent?.trim().length ?? 0).toBeGreaterThan(0);
     });
 
     it('the "just logged" card is not labelled बोलून नोंदवलेली हजेरी — it is a labour-cost summary, not attendance', () => {
@@ -327,10 +330,17 @@ describe('LabourHub — no attendance-capture claims (Task 7)', () => {
         expect(screen.getByText('₹1,600')).toBeInTheDocument();
     });
 
+    // SCOPED to the note (2026-08-31). This asserted across the whole hub,
+    // which passed only because nothing on the hub said हजेरी at all — so it
+    // silently doubled as a hub-wide ban and broke when the founder made the
+    // hero "बोलून हजेरी घ्या". The finding it was written for is about THIS
+    // note's text, which describes मजुरी and नोंदी and must not claim an
+    // attendance capture; that is what it now checks.
     it('the "how to use" help note no longer claims हजेरी (attendance) capture anywhere in its text', () => {
         render(<LabourHub {...baseProps()} />);
         fireEvent.click(screen.getByText('कामगार व्यवस्थापन कसं वापरायचं?'));
-        expect(screen.queryByText(/हजेरी/)).toBeNull();
+        const body = screen.getByTestId('help-note-body');
+        expect(body.textContent ?? '').not.toContain('हजेरी');
     });
 
     it('the help note keeps its true neighbouring words after the surgical deletion (मजुरी / नोंदी तपासा)', () => {

@@ -24,21 +24,15 @@
  * tracked gap, now ships on `ReviewItem` (`plot`/`plotScope`/`points`).
  */
 
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+import { MARATHI_MONTHS, parseIsoDate, toMarathiDigits } from './marathiDate';
 
-const MARATHI_MONTHS = [
-    'जाने', 'फेब्रु', 'मार्च', 'एप्रिल', 'मे', 'जून',
-    'जुलै', 'ऑग', 'सप्टें', 'ऑक्टो', 'नोव्हें', 'डिसें',
-];
-
-const toMarathiDigits = (n: number): string => String(n).replace(/\d/g, (d) => '०१२३४५६७८९'[Number(d)]);
-
-/** Parses `detail` as a `yyyy-MM-dd` date ONLY if it is exactly that shape — never a loose/partial match. */
-export function parseReviewDetailDate(detail: string): Date | null {
-    if (!ISO_DATE_RE.test(detail)) return null;
-    const parsed = new Date(`${detail}T00:00:00`);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
+/**
+ * Parses `detail` as a `yyyy-MM-dd` date ONLY if it is exactly that shape —
+ * never a loose/partial match. The month names and digits this module formats
+ * with now come from `marathiDate.ts`, shared with the dashboard window range
+ * so two screens cannot spell the same month differently.
+ */
+export const parseReviewDetailDate = parseIsoDate;
 
 const daysBetween = (earlier: Date, later: Date): number => {
     const startOfDay = (d: Date) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());

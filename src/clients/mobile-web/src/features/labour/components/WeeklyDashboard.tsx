@@ -50,6 +50,7 @@ import type { LabourData } from '../labourMock';
 import { inr } from '../labourMock';
 import { StatTile, GroupLabel, EmptyState } from './LabourUiKit';
 import { isReadableWeekRange } from '../weekLabel';
+import { formatWindowRange } from '../marathiDate';
 import LabourWindowSlider from './LabourWindowSlider';
 // `LABOUR_WINDOW_LABELS` is read for TWO different jobs here: the stat-grid
 // heading names the window in force, and the money card names the ONE basis it
@@ -123,6 +124,14 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
         && d.money.owed !== null
         && d.money.owed >= 0
         && Math.abs(d.money.recorded - (d.money.paid + d.money.advance + d.money.owed)) < MONEY_EPSILON;
+    // The window's real boundaries, read back from the response that produced
+    // these figures. Falls back to `weekLabel`, which only survives
+    // `isReadableWeekRange` for preview/mock data, so previews keep their
+    // "७–१३ जुलै" while live data shows the range actually filtered on.
+    // Empty when the window is unbounded (आजपर्यंत) — nothing renders, which
+    // is correct: all-time has no range to state.
+    const windowRange = formatWindowRange(d.windowFrom ?? '', d.windowTo ?? '')
+        || (isReadableWeekRange(d.weekLabel) ? d.weekLabel : '');
     return (
         <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2">
             {/* TASK 11 — the window control sits ABOVE everything it governs,
@@ -133,13 +142,13 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
                 basis (R15, Task 13). Both say so where they are rendered. */}
             <LabourWindowSlider value={timeWindow} onChange={onTimeWindowChange} />
 
-            {/* Renders only for a real week range — see `isReadableWeekRange`. */}
-            {isReadableWeekRange(d.weekLabel) && (
+            {/* The period every figure below covers. See `windowRange`. */}
+            {windowRange !== '' && (
                 <div
                     data-testid="weekly-dashboard-week-label"
                     className="flex items-center justify-center rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_1px_3px_rgba(20,40,30,0.05)]"
                 >
-                    <span className="text-[14px] font-extrabold text-slate-800">{d.weekLabel}</span>
+                    <span className="text-[14px] font-extrabold text-slate-800">{windowRange}</span>
                 </div>
             )}
 

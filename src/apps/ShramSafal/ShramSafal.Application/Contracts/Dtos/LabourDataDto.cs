@@ -102,6 +102,14 @@ public sealed record LabourDashboardDto(
     // it is a client-visible contract change, deferred. The client suppresses
     // any label that is not a readable range, so neither form is ever shown.
     string WeekLabel,
+    // The window boundaries the server ACTUALLY filtered on, as bare ISO
+    // dates, or empty when that end is unbounded (आजपर्यंत has neither).
+    // The client formats these into the Marathi range shown above the
+    // figures. They are emitted here rather than computed on the client
+    // from its own selection, so the range a farmer reads can never
+    // disagree with the numbers it sits above.
+    string WindowFrom,
+    string WindowTo,
     string Insight,
     // Task 6 (spec: 2026-08-28-labour-v2-release-1, P4) — `decimal?`, not `int`.
     // `null` when labour WAS logged this week but no assignment in it ever
