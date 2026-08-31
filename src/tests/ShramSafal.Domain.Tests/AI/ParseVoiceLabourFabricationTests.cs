@@ -234,4 +234,61 @@ public sealed class ParseVoiceLabourFabricationTests
         inputs!.Count.Should().Be(1, "the inputs key was genuinely absent, so the gap-fill write is legitimate here");
         inputs[0]!["productName"]!.GetValue<string>().Should().Be("खत");
     }
+
+    // -------------------------------------------------------------------------
+    // (D) The last sibling: the STANDALONE ContainsFertilizerApplication safety
+    //     net (no compound labour segment involved — it fires on खत + a
+    //     past-tense verb alone). Same shape as (C): gated only on
+    //     inputs.Count == 0, not on whether the model already answered, so it
+    //     overrides a real "no inputs" answer exactly like the writers above.
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void A_standalone_fertiliser_verb_sentence_does_not_overwrite_a_real_empty_inputs_answer()
+    {
+        // No worker count in this transcript at all, so no compound labour
+        // segment forms — only the standalone ContainsFertilizerApplication
+        // net (खत + दिलं/दिले/घातले/टाकले) can fire here.
+        const string modelAnsweredNoInputs = """{ "inputs": [] }""";
+        const string transcript = "आज खत टाकले.";
+
+        var root = Correct(modelAnsweredNoInputs, transcript);
+
+        root["inputs"].Should().BeOfType<JsonArray>();
+        InputsRowCount(root).Should().Be(0,
+            "the model answered 'no inputs'; खत + टाकले alone must not overrule that");
+    }
+
+    [Fact]
+    public void Real_inputs_from_the_model_are_left_untouched_by_the_standalone_fertiliser_net()
+    {
+        const string modelAnswered = """
+            { "inputs": [ { "productName": "युरिया", "method": "Soil", "type": "fertilizer", "sourceText": "युरिया" } ] }
+            """;
+        const string transcript = "आज खत टाकले.";
+
+        var root = Correct(modelAnswered, transcript);
+
+        var inputs = root["inputs"] as JsonArray;
+        inputs.Should().NotBeNull();
+        inputs!.Count.Should().Be(1, "the standalone net must not append its own generic खत row onto the model's answer");
+        inputs[0]!["productName"]!.GetValue<string>().Should().Be("युरिया",
+            "the model already named the real product; the heuristic guess must not replace or dilute it");
+    }
+
+    [Fact]
+    public void A_standalone_fertiliser_verb_sentence_still_fills_a_genuinely_absent_inputs_key()
+    {
+        // Proof the gate did not over-tighten: with the inputs key truly
+        // ABSENT, the standalone net's gap-fill write must still fire.
+        const string modelDidNotAnswerInputs = "{}";
+        const string transcript = "आज खत टाकले.";
+
+        var root = Correct(modelDidNotAnswerInputs, transcript);
+
+        var inputs = root["inputs"] as JsonArray;
+        inputs.Should().NotBeNull();
+        inputs!.Count.Should().Be(1, "the inputs key was genuinely absent, so the gap-fill write is legitimate here");
+        inputs[0]!["productName"]!.GetValue<string>().Should().Be("खत");
+    }
 }

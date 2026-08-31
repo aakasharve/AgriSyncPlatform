@@ -789,7 +789,14 @@ public sealed class ParseVoiceInputHandler(
         //     DomainKnowledgePipeline.ApplyGuardedFertilizerSafetyNet (which runs
         //     AFTER GrapeInputLexicon and only when inputs[] is empty AND no row
         //     carries rawProductName) is the ONLY खत injection.
-        if (!domainKnowledgeLayerEnabled && ContainsFertilizerApplication(cleanTranscript))
+        //
+        // spec: 2026-08-28-labour-v2-release-1 — same gap-fill-only rule as
+        // modelAnsweredInputs above: this net used to be gated only on
+        // inputs.Count == 0, so खत + a past-tense verb alone would override a
+        // real "no inputs" answer from the model. Gated on modelAnsweredInputs
+        // (captured before any writer touches root["inputs"]) so it can only
+        // fill a genuine gap, never overrule an answer.
+        if (!domainKnowledgeLayerEnabled && !modelAnsweredInputs && ContainsFertilizerApplication(cleanTranscript))
         {
             var inputs = root["inputs"] as JsonArray ?? new JsonArray();
             if (inputs.Count == 0)
