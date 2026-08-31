@@ -182,6 +182,55 @@ public sealed class BuildAttendanceDraftTests
     }
 
     /// <summary>
+    /// A mark attaches to an ENGAGEMENT. Exactly one today means there is one
+    /// unambiguous thing to attach to.
+    /// </summary>
+    [Fact]
+    public void OneEngagementTodayIsOfferedToAttachTo()
+    {
+        var logId = Guid.NewGuid();
+        var logs = new List<DailyLog> { FarmLog(logId, Today) };
+        var only = Assignment(logId, workerCount: 4);
+
+        var draft = GetLabourDataHandler.BuildAttendanceDraft(logs, [only], PlotNames, Today, []);
+
+        Assert.Equal(only.Id.ToString(), draft.TodaysLabourAssignmentId);
+    }
+
+    /// <summary>
+    /// TWO engagements is two possible meanings for "he was here". Picking one
+    /// silently would attribute a worker to work nobody said he did, so the
+    /// server offers NONE and the client must ask.
+    /// </summary>
+    [Fact]
+    public void TwoEngagementsTodayOffersNeither()
+    {
+        var logId = Guid.NewGuid();
+        var logs = new List<DailyLog> { FarmLog(logId, Today) };
+        var morning = Assignment(logId, workerCount: 4);
+        var evening = Assignment(logId, workerCount: 2);
+
+        var draft = GetLabourDataHandler.BuildAttendanceDraft(
+            logs, [morning, evening], PlotNames, Today, []);
+
+        Assert.Equal(string.Empty, draft.TodaysLabourAssignmentId);
+    }
+
+    /// <summary>
+    /// No engagement today means nothing to attach to. The client creates one
+    /// before it may mark anybody.
+    /// </summary>
+    [Fact]
+    public void NoEngagementTodayOffersNothing()
+    {
+        var logs = new List<DailyLog> { FarmLog(Guid.NewGuid(), Today) };
+
+        var draft = GetLabourDataHandler.BuildAttendanceDraft(logs, [], PlotNames, Today, []);
+
+        Assert.Equal(string.Empty, draft.TodaysLabourAssignmentId);
+    }
+
+    /// <summary>
     /// Four people worked and NOBODY was attached: no rows. An unattached
     /// worker has no row at all — that is how "not yet said" is expressed here.
     /// Deriving rows from the spoken NAMES would put marks in the register the

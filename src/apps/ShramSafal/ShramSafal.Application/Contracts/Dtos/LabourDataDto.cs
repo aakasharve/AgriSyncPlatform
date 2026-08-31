@@ -303,7 +303,16 @@ public sealed record LabourPointsDto(
 public sealed record LabourAttendanceDraftDto(
     string Plot,
     int? Headcount,
-    IReadOnlyList<LabourAttendanceRowDto> Rows);
+    IReadOnlyList<LabourAttendanceRowDto> Rows,
+    // The engagement a mark made TODAY attaches to, or empty when today has
+    // none yet. Attribution is an overlay on an engagement (Constraint 3 —
+    // attaching never changes a headcount), so without one there is nothing
+    // for a mark to hang off and the client must create the engagement first.
+    //
+    // Empty ALSO when today has more than one: two engagements is two possible
+    // meanings for "he was here", and picking one silently would attribute a
+    // worker to work he was never said to have done.
+    string TodaysLabourAssignmentId);
 
 /// <summary>
 /// `Status` is `"present"|"half"|"absent"` — never null. Task 5 (founder

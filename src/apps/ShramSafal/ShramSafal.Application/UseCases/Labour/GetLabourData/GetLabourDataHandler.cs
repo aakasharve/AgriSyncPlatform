@@ -974,7 +974,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         {
             // Nothing logged today. NOT a zero headcount — nobody has said
             // anything about today yet, and 0 would claim they had.
-            return new LabourAttendanceDraftDto(string.Empty, null, []);
+            return new LabourAttendanceDraftDto(string.Empty, null, [], string.Empty);
         }
 
         var todaysLogIds = todaysLogs.Select(l => l.Id).ToHashSet();
@@ -1018,6 +1018,11 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             .Select(id => new LabourAttendanceRowDto(id.ToString(), "present"))
             .ToList();
 
-        return new LabourAttendanceDraftDto(plot, headcount, rows);
+        // Exactly one engagement today, or none named. See the DTO member.
+        var soleAssignmentId = todaysAssignments.Count == 1
+            ? todaysAssignments[0].Id.ToString()
+            : string.Empty;
+
+        return new LabourAttendanceDraftDto(plot, headcount, rows, soleAssignmentId);
     }
 }
