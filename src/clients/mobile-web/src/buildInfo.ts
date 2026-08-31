@@ -9,5 +9,5 @@
  * (index.tsx) so the Chrome DevTools agent can read it, and (Android side) via
  * the OS app-version which the founder can check in Settings → Apps.
  */
-export const APP_VERSION = '1.0.10';
-export const BUILD_TAG = `ShramSafal v${APP_VERSION} · farm nameboard + oversight banner 2026-08-31`;
+export const APP_VERSION = '1.0.11';
+export const BUILD_TAG = `ShramSafal v${APP_VERSION} · nameboard subtitle no longer truncates 2026-08-31`;
