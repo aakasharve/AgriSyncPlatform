@@ -1313,9 +1313,9 @@ here rather than carrying it into the next task.
 **Interfaces:**
 - Produces ChartShell, where `dataTable` is a REQUIRED prop.
 
-- [ ] **Step 1: Make the accessible data table impossible to omit (A32).** Five charts carry a details/summary "Show data table" today — `ScoreDistributionChart.tsx:71`, `EngagementTierBreakdown.tsx:95` (sr-only by construction, so invisible in any screenshot), `PillarHeatmap.tsx:77`, `WeeklyTrendChart.tsx:91`, `FarmerTimeline.tsx:138`. Making it a required prop of the shared shell is what stops a rewrite dropping it silently.
+- [x] **Step 1: Make the accessible data table impossible to omit (A32).** Five charts carry a details/summary "Show data table" today — `ScoreDistributionChart.tsx:71`, `EngagementTierBreakdown.tsx:95` (sr-only by construction, so invisible in any screenshot), `PillarHeatmap.tsx:77`, `WeeklyTrendChart.tsx:91`, `FarmerTimeline.tsx:138`. Making it a required prop of the shared shell is what stops a rewrite dropping it silently.
 
-- [ ] **Step 2: Carry the fixed-axis fill as a shell responsibility (A33)**
+- [x] **Step 2: Carry the fixed-axis fill as a shell responsibility (A33)**
 
 ```ts
 /**
@@ -1328,7 +1328,7 @@ here rather than carrying it into the next task.
  */
 ```
 
-- [ ] **Step 3: Add the v3 hatched gap — and reconcile it with the zero fill**
+- [x] **Step 3: Add the v3 hatched gap — and reconcile it with the zero fill**
 
 > **These two rules collide and the collision must be decided, not averaged.** Live zero-fills an absent bin to 0 so the axis cannot reshuffle. v3 requires a never-measured period to render as a HATCHED 45-degree full-height stub, never a zero-height bar, because a gap must not be readable as a bad day.
 >
@@ -1336,7 +1336,7 @@ here rather than carrying it into the next task.
 >
 > The recency-opacity ramp is deliberately NOT applied to a gap — an absence has no recency. The hatch is the only gradient in the v3 stylesheet and is documented there as data encoding, not decoration (CONTRACT.md section 8); do not add a second one.
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and enforced almost
 nowhere — Tasks 4, 5, 6, 7, 9, 10, 12 and 13 originally ended at "run and commit". An invariant
@@ -1349,7 +1349,54 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 4: Commit** — `feat(admin-web): one chart shell — data table required, gaps are gaps not zeros`
+- [x] **Step 4: Commit** — `feat(admin-web): one chart shell — data table required, gaps are gaps not zeros`
+
+---
+
+> **Executed 2026-08-31 (`f398e414`). 492 tests. All eight citations correct — the first clean sweep.**
+>
+> **🛑 A defect the Preservation Register never carried: the live charts collapse gap and zero at
+> PANEL level, not merely at slot level.** `ScoreDistributionChart.tsx:36` reads `if (total === 0)` —
+> and because it zero-fills first, that is true both when the API returned **nothing** and when it
+> returned ten bins each genuinely measured at zero. Both print *"Not enough data yet — check back in
+> 7 days."* One of those is a broken pipeline; the other is a cohort of farms that all scored in one
+> place. Same defect at `EngagementTierBreakdown.tsx:34`. A33 only ever described the slot-level `?? 0`.
+>
+> **🛑 HAND-OFF for Tasks 21–23: recharts cannot draw this hatch through `<Bar>`.** A `Cell` takes a
+> `fill`, and a `repeating-linear-gradient` is not a paint server it accepts; a full-height stub over
+> a value axis is not something `<Bar>` expresses either. Whoever re-points `ScoreDistributionChart`
+> and `WeeklyTrendChart` must render gap slots through `GapBar`/`Sparkline` outside recharts, or
+> overlay them. Recorded now rather than discovered there.
+>
+> **`dataTable` is enforced at the TYPE level, not by a runtime test** — and the guard survives a
+> determined workaround: someone who made the prop optional *and* added `?.` at all five use sites is
+> still stopped by `TS2578` on the `@ts-expect-error` directive. The same device now guards
+> `states.measuredZero` on a chart, matching Task 8's list rule.
+>
+> **A plain `<table>` was chosen over `DataList` for the accessible table, and the deciding reason is
+> not cost: a chart's table MUST NOT be sortable.** Its order *is* the fixed axis — the exact property
+> A33 exists to protect. A reader who re-sorts it holds a second, disagreeing view of the same
+> numbers. (Also: `DataList` writes the un-namespaced `?sort`/`?dir`/`?open`, and Farmer Health draws
+> **four** charts on one page — the Ops Live collision arriving four times over.)
+>
+> **`dataTable` describes columns, never rows.** The rows *are* the chart's `slots`, and the gap cell
+> is rendered by the shell — so there is no code path by which the accessible table can print `0` for
+> a period nobody measured.
+>
+> **`theme.css` has TWO hatch frequencies**, 4px/8px (`:814`) and 5px/10px (`:838`); §8 names only the
+> latter as its exception. **One step carried deliberately** — two frequencies on one screen read as
+> two different states, which is the legend this console does not have.
+>
+> **A33's `PillarHeatmap.tsx:25,48` is imprecise:** 48 is the iteration; the `?? 0` fallbacks are at
+> **51** and **53**.
+>
+> **DECIDED:** a chart with nothing in it no longer says *"check back in 7 days"* — that is a fact
+> about the future with no source, and if the pipeline is broken it says it forever. It now states
+> the absence plainly. And a chart still draws when most slots are missing, with coverage stated in
+> words, rather than hiding the one real reading there is.
+>
+> **Pre-existing §8 violation found, not fixed:** `LoadingState.tsx:47` (Task 5) uses a Tailwind
+> gradient for a white-on-white shimmer. Decoration, not data encoding. **Task 29 or a founder call.**
 
 ---
 
