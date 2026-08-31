@@ -12,9 +12,14 @@ vi.mock('../../../i18n/LanguageContext', () => ({
 }));
 
 // Pin the API host and a session so the default request path is observable.
+// `apiUrl` must be mocked, NOT `resolveApiBaseUrl`. apiUrl calls it inside its
+// own module, so overriding only resolveApiBaseUrl leaves apiUrl using the real
+// one — the mock looks applied and does nothing. The real join logic is covered
+// unmocked by `joinApiUrl` tests in infrastructure/api/__tests__/apiFetch.test.ts.
 vi.mock('../../../infrastructure/api/transport', async (orig) => ({
     ...(await orig()),
     resolveApiBaseUrl: () => 'https://api.test.invalid',
+    apiUrl: (p: string) => `https://api.test.invalid${p.startsWith('/') ? p : `/${p}`}`,
 }));
 vi.mock('../../../infrastructure/storage/AuthTokenStore', () => ({
     getAuthSession: () => ({ userId: 'u-1', accessToken: 'tok-test', expiresAtUtc: '2099-01-01T00:00:00Z' }),
