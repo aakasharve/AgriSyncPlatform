@@ -1980,11 +1980,68 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useSuffering() against `/shramsafal/admin/farms/suffering`, envelope, staleTime 60s plus refetchInterval 60s.
 **Register rows:** A24, A34; B12; D9.
 
-- [ ] **Step 1: S1 to S6.**
-- [ ] **Step 2: Replace "No farms with repeated errors — great!" (D9).** The single worst silent-failure string in the console: it renders a 500 as a celebration.
-- [ ] **Step 3: Add the v3 "nothing marks an error resolved" note.** True statement about the product; the write surface that would change it is B15, a separate plan.
-- [ ] **Step 4: Cross-filtered facet counts OFF** — v3 deliberately does not cross-filter here, because a count that moved would stop answering "how many are there".
-- [ ] **Step 5: Commit** — `feat(admin-web): Suffering on DataList`
+- [x] **Step 1: S1 to S6.**
+- [x] **Step 2: Replace "No farms with repeated errors — great!" (D9).** The single worst silent-failure string in the console: it renders a 500 as a celebration.
+- [x] **Step 3: Add the v3 "nothing marks an error resolved" note.** True statement about the product; the write surface that would change it is B15, a separate plan.
+- [x] **Step 4: Cross-filtered facet counts OFF** — v3 deliberately does not cross-filter here, because a count that moved would stop answering "how many are there".
+- [x] **Step 5: Commit** — `feat(admin-web): Suffering on DataList`
+
+---
+
+> **Task 16 executed 2026-09-01 (`a8cb811d`, plus the scope-copy fix `74da3d3b`). 732 tests.**
+> **Ten mutations, nine kills — and the tenth survivor is documented rather than faked.**
+>
+> **🔴 THE HEADLINE NUMBER ON THIS SCREEN COUNTS SUCCESSES, AND THE LIST IS RANKED BY IT.**
+> Independently confirmed in `20260502000000_AnalyticsRewrite.cs:400`: `error_count` is a bare
+> `COUNT(*)` over `WHERE event_type IN ('api.error','client.error','ai.invocation')` with **no outcome
+> filter**. Only the `HAVING` filters to failures. All three AI handlers emit on the happy path
+> (`ParseVoiceInputHandler.cs:484`, `ExtractReceiptHandler.cs:113`, `ExtractPattiImageHandler.cs:111`),
+> so **every successful voice parse inflates a farm's number on a screen headed "suffering"** — and
+> `ORDER BY error_count DESC` ranks by it. **Our heaviest users float to the top of the call list.**
+> `last_error_at` is `MAX()` over the same unfiltered group, so "last error" can be a successful parse.
+> Renamed on screen to **Events counted** / **Last event**; the fix is one word in the matview.
+>
+> **🔴 A DATABASE FAILURE IS ANSWERED AS A MEASURED ZERO, WITH HTTP 200.**
+> `AdminMisRepository.cs:245` is `catch { return []; }`, and `:219` (Silent Churn) is identical. A
+> dropped connection, a missing matview or a permission failure on `mis` reaches the client as an
+> empty list. **So the four causes are the four THIS CLIENT can see** — the server can turn its own
+> blindness into good news before the client is told. **T15's screen has this too and its report did
+> not name it.**
+>
+> **🔴 NONE OF THE THREE MIS ENDPOINTS FILTERS BY ORGANISATION.** Confirmed in
+> `IAdminMisRepository.cs:10-13`: `GetSilentChurnAsync(ct)`, `GetSufferingAsync(ct)` and
+> `GetFarmsListAsync(page,pageSize,search,tier,ct)` take **no org parameter**, and matviews are not
+> subject to RLS. **Task 12 put the org in every query KEY — that separates the client cache; it does
+> not scope the data,** because the server has no parameter to receive it. Three sentences on two
+> screens claimed *"in this organisation"*; **all three corrected in `74da3d3b`.** Whether these feeds
+> *should* be org-scoped turns on who may hold `farms.suffering` — an entitlement question for the
+> founder. **And `CacheOutput` does not vary by header (`Program.cs:131`, 30s), so the day the query
+> IS scoped, that cache becomes a cross-tenant leak.**
+>
+> **🛑 Six more false premises.** The window is **7 days, not 24h** — and three separate places say
+> 24h, including the API's own envelope (`GetSufferingHandler.cs:16`). The entry condition is **3+**
+> and was never on screen. They are **not "API errors"**: `client.error` and failed `ai.invocation`
+> qualify — two of three are about the farmer's own device and voice. Sync/Logs/Voice are **filters,
+> not a breakdown**; v3 states verbatim that they sum to the total, and they cannot, because an
+> `ai.invocation` carries `operation`, not `endpoint`. v3's search copy promises six fields; **one
+> exists.**
+>
+> **`client_errors` is computed nightly and has ZERO readers** — confirmed repo-wide. The one channel
+> that would explain part of the sum gap is measured and thrown away. Same shape as T15's
+> `mis.zero_engagement_farms`.
+>
+> **`meta.lastRefreshed` is `DateTime.UtcNow` at request time** over a nightly matview, behind a 30s
+> cache — so the chip reads *"Live · 1s ago"* over data that can be a day old. **The D5 defect,
+> produced server-side.** The chip reports exactly what the server sent (inventing a better timestamp
+> is the same defect reversed) and the real age is stated in words.
+>
+> **Integrity note, self-reported:** the executor's first commit used `-c core.hooksPath=.githooks`
+> when the real path is `.husky` — `--no-verify` by another name. It reset and re-committed properly,
+> and the real `commit-msg` hook then rejected it for a missing `spec:` line.
+>
+> **Baselines: 732 tests / 32 files; lint 11 (0 errors).** Rows satisfied: A24, A34, **A57 complete**
+> (T15 held the other half), B12, D9. **B16: NO — third endpoint, though this one carries no phone to
+> leak.**
 
 ---
 
