@@ -1,5 +1,7 @@
+using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.UseCases.Labour.GetLabourData;
 using ShramSafal.Domain.Farms;
+using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Logs;
 using Xunit;
 
@@ -16,7 +18,7 @@ namespace ShramSafal.Domain.Tests.Labour;
 /// </summary>
 public sealed class BuildAttendanceDraftTests
 {
-    private static readonly Guid FarmId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    private static readonly Guid FarmGuid = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid Actor = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly DateTime CreatedAtUtc = new(2026, 8, 31, 6, 0, 0, DateTimeKind.Utc);
     private static readonly DateOnly Today = new(2026, 8, 31);
@@ -31,10 +33,10 @@ public sealed class BuildAttendanceDraftTests
     };
 
     private static DailyLog FarmLog(Guid id, DateOnly date) => DailyLog.CreateForFarm(
-        id, FarmId, Actor, date, idempotencyKey: null, location: null, createdAtUtc: CreatedAtUtc);
+        id, FarmGuid, Actor, date, idempotencyKey: null, location: null, createdAtUtc: CreatedAtUtc);
 
     private static DailyLog PlotLog(Guid id, DateOnly date, Guid plotId) => DailyLog.Create(
-        id, FarmId, plotId, Guid.Parse("cccccccc-0000-0000-0000-00000000000c"), Actor, date,
+        id, FarmGuid, plotId, Guid.Parse("cccccccc-0000-0000-0000-00000000000c"), Actor, date,
         idempotencyKey: null, location: null, createdAtUtc: CreatedAtUtc);
 
     private static LabourAssignment Assignment(Guid logId, int? workerCount) =>
@@ -53,6 +55,17 @@ public sealed class BuildAttendanceDraftTests
             createdAtUtc: CreatedAtUtc,
             time: LabourTime.ServerAssumed());
 
+    private static FieldOperatorWorkRow Attached(Guid assignmentId, Guid operatorId, string name)
+        => FieldOperatorWorkRow.Create(
+            id: Guid.NewGuid(),
+            fieldOperatorId: operatorId,
+            labourAssignmentId: assignmentId,
+            farmId: new FarmId(FarmGuid),
+            workDate: Today,
+            displayNameAtAttach: name,
+            recordedByUserId: new UserId(Actor),
+            createdAtUtc: CreatedAtUtc);
+
     /// <summary>
     /// Nothing logged today is UNKNOWN, not zero. Nobody has said anything about
     /// today yet, and a 0 would claim they had.
@@ -62,7 +75,7 @@ public sealed class BuildAttendanceDraftTests
     {
         var logs = new List<DailyLog> { FarmLog(Guid.NewGuid(), Yesterday) };
 
-        var draft = GetLabourDataHandler.BuildAttendanceDraft(logs, [], PlotNames, Today);
+        var draft = GetLabourDataHandler.BuildAttendanceDraft(logs, [], PlotNames, Today, []);
 
         Assert.Null(draft.Headcount);
         Assert.Equal(string.Empty, draft.Plot);
@@ -78,7 +91,7 @@ public sealed class BuildAttendanceDraftTests
         var logId = Guid.NewGuid();
         var logs = new List<DailyLog> { FarmLog(logId, Today) };
 
-        var draft = GetLabourDataHandler.BuildAttendanceDraft(logs, [], PlotNames, Today);
+        var draft = GetLabourDataHandler.BuildAttendanceDraft(logs, [], PlotNames, Today, []);
 
         Assert.Equal(0, draft.Headcount);
     }
@@ -95,7 +108,7 @@ public sealed class BuildAttendanceDraftTests
         var logs = new List<DailyLog> { FarmLog(logId, Today) };
         var assignments = new List<LabourAssignment> { Assignment(logId, workerCount: null) };
 
-        var draft = GetLabourDataHandler.BuildAttendanceDraft(logs, assignments, PlotNames, Today);
+        var draft = GetLabourDataHandler.BuildAttendanceDraft(logs, assignments, PlotNames, Today, []);
 
         Assert.Null(draft.Headcount);
     }
@@ -116,7 +129,7 @@ public sealed class BuildAttendanceDraftTests
             Assignment(logId, workerCount: 3),
         };
 
-        var draft = GetLabourDataHandler.BuildAttendanceDraft(logs, assignments, PlotNames, Today);
+        var draft = GetLabourDataHandler.BuildAttendanceDraft(logs, assignments, PlotNames, Today, []);
 
         Assert.Equal(7, draft.Headcount);
     }
@@ -134,7 +147,7 @@ public sealed class BuildAttendanceDraftTests
         };
         var assignments = new List<LabourAssignment> { Assignment(yesterdayId, workerCount: 9) };
 
-        var draft = GetLabourDataHandler.BuildAttendanceDraft(logs, assignments, PlotNames, Today);
+        var draft = GetLabourDataHandler.BuildAttendanceDraft(logs, assignments, PlotNames, Today, []);
 
         Assert.Equal(0, draft.Headcount);
     }
@@ -145,7 +158,7 @@ public sealed class BuildAttendanceDraftTests
     {
         var logs = new List<DailyLog> { PlotLog(Guid.NewGuid(), Today, PlotA) };
 
-        var draft = GetLabourDataHandler.BuildAttendanceDraft(logs, [], PlotNames, Today);
+        var draft = GetLabourDataHandler.BuildAttendanceDraft(logs, [], PlotNames, Today, []);
 
         Assert.Equal("द्राक्ष-१", draft.Plot);
     }
@@ -163,25 +176,88 @@ public sealed class BuildAttendanceDraftTests
             PlotLog(Guid.NewGuid(), Today, PlotB),
         };
 
-        var draft = GetLabourDataHandler.BuildAttendanceDraft(logs, [], PlotNames, Today);
+        var draft = GetLabourDataHandler.BuildAttendanceDraft(logs, [], PlotNames, Today, []);
 
         Assert.Equal(string.Empty, draft.Plot);
     }
 
     /// <summary>
-    /// Rows carry ONLY deliberate taps, and no save path carries those yet.
-    /// Deriving them from spoken names would put marks in the register the farmer
-    /// never made — being named present is not the same act as being marked.
+    /// Four people worked and NOBODY was attached: no rows. An unattached
+    /// worker has no row at all — that is how "not yet said" is expressed here.
+    /// Deriving rows from the spoken NAMES would put marks in the register the
+    /// farmer never made: being named present is not the same act as being
+    /// marked, and the names already live in the हजेरी वही.
     /// </summary>
     [Fact]
-    public void RowsStayEmptyEvenWhenLabourExists()
+    public void LabourWithNobodyAttachedHasNoRows()
     {
         var logId = Guid.NewGuid();
         var logs = new List<DailyLog> { FarmLog(logId, Today) };
         var assignments = new List<LabourAssignment> { Assignment(logId, workerCount: 4) };
 
-        var draft = GetLabourDataHandler.BuildAttendanceDraft(logs, assignments, PlotNames, Today);
+        var draft = GetLabourDataHandler.BuildAttendanceDraft(logs, assignments, PlotNames, Today, []);
 
         Assert.Empty(draft.Rows);
+    }
+
+    /// <summary>
+    /// An ATTACH is a deliberate human act (POST .../field-operators/{id}/attach),
+    /// which is exactly what an attendance row records. One attached operator is
+    /// one present row.
+    /// </summary>
+    [Fact]
+    public void AnAttachedOperatorIsAPresentRow()
+    {
+        var logId = Guid.NewGuid();
+        var logs = new List<DailyLog> { FarmLog(logId, Today) };
+        var assignment = Assignment(logId, workerCount: 1);
+        var operatorId = Guid.Parse("dddddddd-0000-0000-0000-00000000000d");
+
+        var draft = GetLabourDataHandler.BuildAttendanceDraft(
+            logs, [assignment], PlotNames, Today,
+            [Attached(assignment.Id, operatorId, "रमेश")]);
+
+        var row = Assert.Single(draft.Rows);
+        Assert.Equal(operatorId.ToString(), row.PersonId);
+        Assert.Equal("present", row.Status);
+    }
+
+    /// <summary>
+    /// The same person on two of today engagements is ONE person present, not
+    /// two. A muster roll that counted him twice would inflate the day.
+    /// </summary>
+    [Fact]
+    public void OneOperatorOnTwoEngagementsIsOneRow()
+    {
+        var logId = Guid.NewGuid();
+        var logs = new List<DailyLog> { FarmLog(logId, Today) };
+        var morning = Assignment(logId, workerCount: 1);
+        var evening = Assignment(logId, workerCount: 1);
+        var operatorId = Guid.Parse("dddddddd-0000-0000-0000-00000000000d");
+
+        var draft = GetLabourDataHandler.BuildAttendanceDraft(
+            logs, [morning, evening], PlotNames, Today,
+            [Attached(morning.Id, operatorId, "रमेश"), Attached(evening.Id, operatorId, "रमेश")]);
+
+        Assert.Single(draft.Rows);
+    }
+
+    /// <summary>
+    /// NOBODY is ever emitted as "absent". A work row records that someone DID
+    /// the work; there is no source for an absence, and inventing one would turn
+    /// a register into an accusation.
+    /// </summary>
+    [Fact]
+    public void NoRowIsEverAbsent()
+    {
+        var logId = Guid.NewGuid();
+        var logs = new List<DailyLog> { FarmLog(logId, Today) };
+        var assignment = Assignment(logId, workerCount: 5);
+
+        var draft = GetLabourDataHandler.BuildAttendanceDraft(
+            logs, [assignment], PlotNames, Today,
+            [Attached(assignment.Id, Guid.NewGuid(), "रमेश")]);
+
+        Assert.DoesNotContain(draft.Rows, r => r.Status == "absent");
     }
 }

@@ -8,6 +8,7 @@ using ShramSafal.Application.Services;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Dfes;
 using ShramSafal.Domain.Farms;
+using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Work;
@@ -711,7 +712,25 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // from the assignments that already exist. No new table.
         var ledger = BuildHajeriLedger(weekLabel, windowLogs, windowAssignments, manDays);
 
-        var attendance = BuildAttendanceDraft(farmLogs, allAssignments, plotNameById, farmLocalToday);
+        // Who has actually been ATTACHED to one of today’s engagements. An
+        // attach is a deliberate human act (POST .../field-operators/{id}/attach
+        // -> FieldOperatorWorkRow), which is exactly what an attendance row is
+        // meant to record. Read per assignment because that is the read the
+        // port exposes, and TODAY only, so the loop is over a handful of rows
+        // rather than the farm’s history.
+        var todaysLogIdSet = farmLogs
+            .Where(l => l.LogDate == farmLocalToday)
+            .Select(l => l.Id)
+            .ToHashSet();
+        var todaysWorkRows = new List<FieldOperatorWorkRow>();
+        foreach (var assignment in allAssignments.Where(a => todaysLogIdSet.Contains(a.DailyLogId)))
+        {
+            todaysWorkRows.AddRange(
+                await repository.GetFieldOperatorWorkRowsForAssignmentAsync(assignment.Id, ct));
+        }
+
+        var attendance = BuildAttendanceDraft(
+            farmLogs, allAssignments, plotNameById, farmLocalToday, todaysWorkRows);
 
         var topLevelIds = people.Select(p => p.Id).ToList();
 
@@ -947,7 +966,8 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         IReadOnlyList<DailyLog> farmLogs,
         IReadOnlyList<LabourAssignment> allAssignments,
         IReadOnlyDictionary<Guid, string> plotNameById,
-        DateOnly farmLocalToday)
+        DateOnly farmLocalToday,
+        IReadOnlyList<FieldOperatorWorkRow> todaysWorkRows)
     {
         var todaysLogs = farmLogs.Where(l => l.LogDate == farmLocalToday).ToList();
         if (todaysLogs.Count == 0)
@@ -980,6 +1000,24 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             ? plotNameById.GetValueOrDefault(todaysPlotIds[0], string.Empty)
             : string.Empty;
 
-        return new LabourAttendanceDraftDto(plot, headcount, []);
+        // One row per operator ATTACHED to today’s work, deduplicated: the same
+        // person on two engagements today is one person present, not two.
+        //
+        // Status is "present" and only "present". A work row records that someone
+        // DID the work; it carries no half-day and no absence, and there is no
+        // other source for either. Emitting "absent" for anyone unattached would
+        // be the fabrication this whole screen guards against — an unattached
+        // worker has no row at all, which is how "not yet said" is expressed
+        // here (see LabourAttendanceRowDto). Half-days remain unrepresentable
+        // until something can record one; that gap is real and stated, not
+        // papered over with a default.
+        var rows = todaysWorkRows
+            .Select(r => r.FieldOperatorId)
+            .Distinct()
+            .OrderBy(id => id)
+            .Select(id => new LabourAttendanceRowDto(id.ToString(), "present"))
+            .ToList();
+
+        return new LabourAttendanceDraftDto(plot, headcount, rows);
     }
 }
