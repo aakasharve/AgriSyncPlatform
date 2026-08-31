@@ -60,12 +60,39 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
                        - a general app question
                        - unrelated to farming
                        - clearly about a different crop than selected context
-                       - vague movement/presence only ("went to farm", "came back", "roamed around")
+                       - vague movement/presence with NOBODY named and NO count
+                         ("went to farm", "came back", "roamed around"). If any PERSON is
+                         named, or any worker count is spoken, this bullet does NOT apply —
+                         see ATTENDANCE IS A RECORD below.
                        Then:
                        - set dayOutcome = "IRRELEVANT_INPUT"
                        - set summary to a polite "no actionable work" message in the same language as transcript
                        - keep fullTranscript exact
                        - keep all operational arrays empty
+
+                       --- ATTENDANCE IS A RECORD (हजेरी) ---
+                       Naming WHO came is itself a record, even when no task is stated. Taking
+                       हजेरी is the act of recording who was present; it does not require the
+                       work to be described.
+                       
+                       If the transcript names one or more PEOPLE who came / were present /
+                       worked today — e.g. "विलास जाधव, संतू रोकडे आणि काका आले होते" — then:
+                       - dayOutcome = "WORK_RECORDED". NEVER IRRELEVANT_INPUT.
+                       - emit exactly ONE labour entry with:
+                           type: "HIRED"
+                           count: how many people were named (three names => 3)
+                           notes: the names exactly as spoken, comma separated
+                           sourceText: the phrase the names came from
+                       - OMIT `activity` entirely when no task was stated. Never invent one,
+                         and never guess from the crop or the season.
+                       - summary states who came, in the transcript language.
+                       
+                       A relationship word used as a name ("काका", "मामा", "दादा") counts as a
+                       named person: the farmer knows who he means. Keep it verbatim in notes.
+                       
+                       If a task IS also stated, follow the normal rules and put the activity
+                       on the labour entry as usual — this section only removes the
+                       requirement that a task exist at all.
 
                        --- CORE PRINCIPLE: TRUTHFUL CAPTURE ---
                        - No silent autofill of events without explicit intent.
@@ -75,7 +102,9 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
                        --- STRICT CLASSIFICATION RULES ---
                        1. IRRIGATION: only if watering/motor/valve/tank/drip hours are explicitly implied.
                        2. INPUTS: only if material usage/purchase intent is explicit.
-                       3. LABOUR: only if worker/wage/man-day/contract signals exist.
+                       3. LABOUR: if worker/wage/man-day/contract signals exist, OR if any
+                          PERSON is named as having come/been present/worked (attendance —
+                          see ATTENDANCE IS A RECORD above).
                        4. DISTURBANCE: only for negative blockers (power failure, motor fault, heavy rain damage, disease burst).
                        5. CROP ACTIVITY: all execution actions not fitting 1-4 (pruning, tying, netting, harvesting, cleaning basin).
                        6. ACTIVITY EXPENSES: support material expenses (rope, crates, tea/snacks, packaging, transport).
@@ -100,6 +129,10 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
                        --- MARATHI WORKER DETECTION ---
                        Worker markers include: {{WORKER_MARKERS}}
                        If pattern [number + worker marker] appears, labour extraction is mandatory.
+                       Labour extraction is ALSO mandatory when PEOPLE ARE NAMED as having come
+                       or worked, with or without a number and with or without a task. Count
+                       the names. Names may be full ("विलास जाधव"), first-only ("संतू"), or a
+                       relationship word standing in for a person ("काका").
 
                        --- COMPOUND LABOUR RULE ---
                        If Marathi sentence uses "आणि" / comma to connect separate worker groups doing different work,
