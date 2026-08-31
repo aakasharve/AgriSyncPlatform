@@ -63,6 +63,19 @@ export interface TargetSelectionGroup {
 }
 
 export interface ManualEntryProps {
+    /**
+     * FOUNDER RULING 2026-08-31 — the farmer reached this confirm screen from
+     * Labour Management (logIntent === 'labour'). He is taking हजेरी, not
+     * recording a day, so the crop-activity ledger and the buckets hanging
+     * off it are not shown: "no mic from labour ui should touch the buckets
+     * of legacy logs".
+     *
+     * The draft is ALSO filtered before it arrives (mainView ->
+     * toAttendanceOnlyDraft), so this flag only decides what is DRAWN. The
+     * guarantee that nothing else is SAVED lives in that filter, not here —
+     * a hidden section that still submitted its data would be the worse bug.
+     */
+    attendanceOnly?: boolean;
     context: FarmContext | null;
     crops: CropProfile[]; // Added dynamic crops
     defaults?: LedgerDefaults;

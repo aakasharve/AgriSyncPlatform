@@ -40,6 +40,7 @@ import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
 // file's render functions are plain functions, not components — see
 // `mainViewComponents.tsx`'s header for why that hook rule forces the split.
 import SathiGuideCard from '../../features/oversight/components/SathiGuideCard';
+import { toAttendanceOnlyDraft } from '../../features/logs/attendanceDraft';
 import HelpBar from '../../features/oversight/components/HelpBar';
 import {
     LabourLogBanner,
@@ -484,7 +485,16 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                         profile={farmerProfile}
                                         onSubmit={handleManualSubmit}
                                         disabled={false}
-                                        initialData={draftLog}
+                                        // FOUNDER RULING 2026-08-31 — the labour
+                                        // door writes only हजेरी. Filtered HERE,
+                                        // at the form's entrance, so the other
+                                        // buckets never enter the draft the
+                                        // farmer edits and therefore can never
+                                        // be saved from this door. Any task he
+                                        // stated survives on the labour row
+                                        // itself — see attendanceDraft.ts.
+                                        initialData={logIntent === 'labour' ? toAttendanceOnlyDraft(draftLog) : draftLog}
+                                        attendanceOnly={logIntent === 'labour'}
                                         provenance={provenance}
                                         onDataConsumed={() => setDraftLog(null)}
                                         todayCountsMap={(() => {
