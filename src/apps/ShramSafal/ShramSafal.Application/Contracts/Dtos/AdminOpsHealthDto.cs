@@ -33,7 +33,21 @@ public sealed record OpsErrorEventDto(
     int? StatusCode,
     int? LatencyMs,
     Guid? FarmId,
-    DateTime OccurredAtUtc);
+    DateTime OccurredAtUtc,
+    // 2026-08-30 — the identity of the failure, not just its status code.
+    // All nullable: rows written before this deploy have none of these keys,
+    // and props->>'errorCode' on an absent key is SQL NULL. A non-nullable
+    // member would force a fabricated default onto every historical row, and
+    // analytics.events is append-only so there is no backfill.
+    string? ErrorCode,
+    string? WorkKept,
+    string? Message,
+    string? AppVersion,
+    // Resolved from ErrorExplanations at READ time, not stored — so improved
+    // wording reaches old rows too. `Message` is what we said at the time;
+    // `Meaning` / `UsualCause` are what we say now.
+    string? Meaning,
+    string? UsualCause);
 
 public sealed record OpsFarmErrorDto(
     Guid FarmId,
