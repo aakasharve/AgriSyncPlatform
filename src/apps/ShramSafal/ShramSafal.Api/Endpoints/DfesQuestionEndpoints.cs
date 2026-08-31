@@ -82,7 +82,10 @@ public static class DfesQuestionEndpoints
         Guid? AnswerObservationId, DateTime? ShownAtUtc, string? TriggerReason, string? WeatherContext,
         string? Response, bool? StageConfirmed, bool? PhotoSubmitted, bool? Skipped);
 
-    private static IResult ToErrorResult(Error error) =>
+    private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
+    private static IResult MapErrorResult(Error error) =>
         error.Code.Contains("NotFound") ? Results.NotFound(error.Description)
         : error.Code.Contains("Forbidden") ? Results.Forbid()
         : Results.BadRequest(error.Description);

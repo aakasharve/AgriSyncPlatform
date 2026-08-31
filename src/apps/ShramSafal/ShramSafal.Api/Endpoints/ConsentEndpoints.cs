@@ -99,11 +99,14 @@ public static class ConsentEndpoints
         return Results.Ok(result.Value);
     }
 
+    private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
     // Mirror of SecurityEndpoints.ToErrorResult / ResolveClientAppVersion
     // (kept local per the SecurityEndpoints precedent — single source of
     // behaviour per endpoint file, refactor to a shared adapter when a
     // third file needs the same mapping).
-    private static IResult ToErrorResult(Error error)
+    private static IResult MapErrorResult(Error error)
     {
         var body = new { error = error.Code, message = error.Description };
         return error.Kind switch

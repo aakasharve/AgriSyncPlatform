@@ -262,12 +262,15 @@ public static class LabourEndpoints
         return group;
     }
 
+    private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
     /// <summary>
     /// Mirrors AiEndpoints.ToErrorResult — Forbidden/Unauthenticated keep the
     /// {error, message} body (off which farmer-facing UI renders the right
     /// Marathi message) rather than Results.Forbid()'s empty body.
     /// </summary>
-    private static IResult ToErrorResult(Error error)
+    private static IResult MapErrorResult(Error error)
     {
         var body = new { error = error.Code, message = error.Description };
         return error.Kind switch

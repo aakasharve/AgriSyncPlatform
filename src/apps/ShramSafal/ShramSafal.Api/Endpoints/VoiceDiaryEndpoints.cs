@@ -159,6 +159,9 @@ public static class VoiceDiaryEndpoints
     }
 
     private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
+    private static IResult MapErrorResult(Error error)
     {
         var body = new { error = error.Code, message = error.Description };
         return error.Kind switch

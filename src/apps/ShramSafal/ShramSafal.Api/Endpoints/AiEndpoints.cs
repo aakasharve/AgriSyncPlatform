@@ -1516,6 +1516,9 @@ public static class AiEndpoints
         };
     }
 
+    private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
     /// <summary>
     /// Sub-plan 03 bridge: route status code through <c>ErrorKind</c>
     /// rather than pattern-matching on <c>Error.Code</c> string suffixes.
@@ -1523,7 +1526,7 @@ public static class AiEndpoints
     /// the AI tests + the mobile-web SDK depend on it; switching to
     /// RFC 7807 is a follow-up contract change.
     /// </summary>
-    private static IResult ToErrorResult(Error error)
+    private static IResult MapErrorResult(Error error)
     {
         var body = new { error = error.Code, message = error.Description };
         return error.Kind switch

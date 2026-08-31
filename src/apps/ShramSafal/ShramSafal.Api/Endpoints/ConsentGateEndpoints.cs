@@ -225,7 +225,10 @@ public static class ConsentGateEndpoints
         string AppVersion,
         string DisplayedNoticeText);
 
-    private static IResult ToErrorResult(Error error) =>
+    private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
+    private static IResult MapErrorResult(Error error) =>
         error.Code.Contains("Forbidden") ? Results.Forbid()
         : Results.BadRequest(error.Description);
 }

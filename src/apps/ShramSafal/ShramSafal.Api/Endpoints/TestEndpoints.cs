@@ -295,6 +295,9 @@ public static class TestEndpoints
     }
 
     private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
+    private static IResult MapErrorResult(Error error)
     {
         if (error.Code.EndsWith("RoleNotAllowed", StringComparison.Ordinal) ||
             error.Code.EndsWith("Forbidden", StringComparison.Ordinal))

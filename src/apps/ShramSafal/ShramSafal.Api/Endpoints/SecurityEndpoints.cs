@@ -119,10 +119,13 @@ public static class SecurityEndpoints
         });
     }
 
+    private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
     // Mirror of AiEndpoints.ToErrorResult / ResolveClientAppVersion (single
     // source of behaviour per endpoint file — refactor to a shared adapter
     // when a third file needs the same mapping).
-    private static IResult ToErrorResult(Error error)
+    private static IResult MapErrorResult(Error error)
     {
         var body = new { error = error.Code, message = error.Description };
         return error.Kind switch

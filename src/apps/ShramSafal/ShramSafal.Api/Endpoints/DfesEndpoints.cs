@@ -95,6 +95,9 @@ public static class DfesEndpoints
     }
 
     private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
+    private static IResult MapErrorResult(Error error)
     {
         if (error.Code.EndsWith("Forbidden", StringComparison.Ordinal))
         {

@@ -309,6 +309,9 @@ public static class MembershipEndpoints
         return group;
     }
 
+    private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
     /// <summary>
     /// Sub-plan 03 bridge: route status code through <c>ErrorKind</c>
     /// rather than pattern-matching on <c>Error.Code</c> string suffixes.
@@ -317,7 +320,7 @@ public static class MembershipEndpoints
     /// would be a breaking contract change tracked in a separate
     /// pending task.
     /// </summary>
-    private static IResult ToErrorResult(Error error)
+    private static IResult MapErrorResult(Error error)
     {
         var body = new { error = error.Code, message = error.Description };
         return error.Kind switch

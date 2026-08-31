@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Audit;
+using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate;
 using ShramSafal.Application.UseCases.Planning.EditScheduleTemplate;
 using ShramSafal.Application.UseCases.Planning.GetScheduleLineage;
@@ -135,6 +136,9 @@ public static class ScheduleTemplateEndpoints
     }
 
     private static IResult ToErrorResult(AgriSync.BuildingBlocks.Results.Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
+    private static IResult MapErrorResult(AgriSync.BuildingBlocks.Results.Error error)
     {
         if (error.Code.EndsWith("NotFound", StringComparison.Ordinal))
             return Results.NotFound(new { error = error.Code, message = error.Description });
