@@ -69,7 +69,7 @@ public static class EventVocabulary
                 RequiredProps: ["farmId", "outcome"],
                 Optional: ["cost_usd", "model"]),
 
-            // 2026-08-30 (founder decision, spec 2026-08-30-error-capture-scope):
+            // 2026-08-30 (founder decision, spec error-capture-engine):
             // an api.error MUST name itself and MUST state whether the farmer's
             // work survived. Before this the row kept only endpoint/status/farmId
             // — so `ShramSafal.CropCycleOverlap` travelled correctly all the way
@@ -88,7 +88,7 @@ public static class EventVocabulary
             // The key is `statusCode`, NOT `status`. This entry listed `status`
             // from the day it was written and nothing ever emitted or read it;
             // the emitter has always written `statusCode`
-            // (RequestObservabilityMiddleware.cs) and three live queries read
+            // (RequestObservabilityProps.cs:69) and three live queries read
             // props->>'statusCode' (AdminOpsRepository.cs:99, :226,
             // AdminFarmerHealthRepository.cs:367). The doc was wrong, not the code.
             ["api.error"] = new(

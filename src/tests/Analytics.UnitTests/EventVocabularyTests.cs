@@ -230,7 +230,7 @@ public sealed class EventVocabularyTests
         // literal "Uncatalogued". Nothing is forced to invent anything.
         //
         // Reversed by founder decision 2026-08-30, spec
-        // 2026-08-30-error-capture-scope D1. ADR-2026-05-02 amended to match.
+        // error-capture-engine, Locked decisions. ADR-2026-05-02 amended to match.
         var sut = new IngestEventsValidator();
         var cmd = new IngestEventsCommand(new[]
         {

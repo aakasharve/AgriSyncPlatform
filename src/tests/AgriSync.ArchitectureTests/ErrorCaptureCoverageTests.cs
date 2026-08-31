@@ -7,7 +7,7 @@ namespace AgriSync.ArchitectureTests;
 
 /// <summary>
 /// The founder constraint behind this test (2026-08-30, spec
-/// 2026-08-30-error-capture-scope D3): a capture mechanism that has to be
+/// error-capture-engine, Locked decisions): a capture mechanism that has to be
 /// applied by hand in many places will be applied incompletely, and the gap
 /// will reappear silently.
 ///

@@ -9,7 +9,7 @@ namespace AgriSync.ArchitectureTests;
 
 /// <summary>
 /// A named error without a plain-language explanation forces the next person to
-/// reverse-engineer it — the exact defect spec 2026-08-30-error-capture-scope
+/// reverse-engineer it — the exact defect spec error-capture-engine
 /// exists to end. This test is the enforcement: adding an error without
 /// explaining it fails the build.
 ///
