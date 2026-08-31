@@ -1061,6 +1061,31 @@ here rather than carrying it into the next task.
 
 ### Task 8: ONE list component — the 2,775 duplicated lines that are not ported
 
+> **🛑 MEASURED CONSTRAINT from Task 6 (`c2b8cf28`) — read before designing the search.**
+>
+> `searchKey` generates up to **48 spellings / ~500 characters** for a three-word Marathi name.
+> Measured over **3,000 farms**, real names, jsdom, single run:
+>
+> | | |
+> |---|---|
+> | Build the index | **~60 ms one-time, ~355 KB in memory** |
+> | Scan the index | **~0.4 ms per keystroke** |
+>
+> **The search is instant. The build is not.** 0.4 ms per keystroke is imperceptible and the index
+> could grow tenfold and still be fine. But **60 ms is a dropped frame**, so the index MUST be
+> memoised on the row data and MUST NEVER be recomputed inside a keystroke handler. Doing that turns
+> a 0.4 ms search into a 60 ms one and the search will *feel broken* — which is worse than the
+> current no-search, because a slow box invites retyping.
+>
+> Ceilings are asserted in `searchKey.test.ts` (≤ 64 spellings, < 1 KB for a three-word name), so a
+> later change to the respelling rules cannot quietly make the build ten times worse.
+>
+> **Caveats stated, not buried:** jsdom, one machine, one run, 3,000 rows. **Not** measured in a real
+> browser, on a low-end device, or at 50,000 rows. If this task targets any of those, measure again.
+>
+> The haystack shape the numbers describe is `` `${raw} ${searchKey(raw)}`.toLowerCase() ``. Task 6
+> deliberately did **not** ship a `searchHaystack` helper — its shape is this task's call.
+
 **Files:**
 - Create: `src/clients/admin-web/src/components/data/DataList.tsx`
 - Create: `src/clients/admin-web/src/components/data/` — SummaryFacets, ExpandableRow, SortHeader, Pager, types
