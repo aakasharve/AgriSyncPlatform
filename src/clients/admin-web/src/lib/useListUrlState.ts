@@ -171,9 +171,16 @@ function applyOne(next: URLSearchParams, key: string, value: ParamValue): void {
  *     filter applies — invisible in review, and it would quietly break the
  *     habit of an on-call engineer who types and tabs away.
  *
- * Two deliberate asymmetries carried over from the live console rather than
- * silently "improved", because both change observable behaviour:
- *  - Contract 1 does NOT trim; contract 2 does. Only API Errors trims today.
+ * BOTH CONTRACTS TRIM. Founder decision 2026-08-31: trim on all three search
+ * screens. This file used to record the opposite as a deliberate asymmetry —
+ * "contract 1 does NOT trim; contract 2 does. Only API Errors trims today" —
+ * which was an accurate description of a defect, not a design. Pasting a name
+ * with a trailing space into the Farms box returned "no results" for a farm
+ * that exists, because the space reached the server's `LIKE '%<term> %'`.
+ * Trimming lives HERE and not on a screen, so it lands on every screen that
+ * uses the draft contract instead of on the one that noticed.
+ *
+ * One asymmetry that IS deliberate and remains:
  *  - Neither input re-syncs from the URL after mount, so Back (or the Clear
  *    filter button) leaves the last typed text in the box while the applied
  *    filter has changed underneath it. That is today's behaviour on all three
@@ -276,8 +283,11 @@ export function useListUrlState(options: UseListUrlStateOptions = {}): ListUrlSt
   }, [write]);
 
   const commitDraft = useCallback(() => {
-    // Deliberately untrimmed — see the asymmetry note above.
-    set(draftKey, draft);
+    // Trimmed on commit, NOT on keystroke: the box still shows exactly what
+    // was typed, and only the applied filter is tidied. Trimming `draft`
+    // itself would eat a space the moment it was pressed, which makes typing
+    // two words impossible.
+    set(draftKey, draft.trim());
   }, [set, draftKey, draft]);
 
   const draftInputProps = useMemo<DraftInputProps>(
@@ -285,7 +295,7 @@ export function useListUrlState(options: UseListUrlStateOptions = {}): ListUrlSt
       value: draft,
       onChange: (e) => setDraft(e.target.value),
       onKeyDown: (e) => {
-        if (e.key === 'Enter') set(draftKey, e.currentTarget.value);
+        if (e.key === 'Enter') set(draftKey, e.currentTarget.value.trim());
       },
     }),
     [draft, set, draftKey],

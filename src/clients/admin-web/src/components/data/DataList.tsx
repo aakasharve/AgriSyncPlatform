@@ -316,8 +316,27 @@ export function DataList<T>(config: DataListConfig<T>) {
      buttons") and solves it the same way. */
 
   const columnCount = columns.length + (actions ? 1 : 0);
+  /**
+   * A TYPED TERM IS A NO-MATCH WHOEVER APPLIED IT (fixed in Task 14, the first
+   * screen port).
+   *
+   * This read `clientSearch && hasQuery`, which is right for a filter this
+   * component applied and wrong for one the SERVER applied. Over a server-side
+   * search the rows in hand ARE the server's answer to the query, so an empty
+   * answer to `?search=भोसले` is "your term matched nothing" — and the old
+   * condition sent it to `MeasuredZero`, which says in as many words: "The
+   * window was checked at 14:02. This is a measured zero, not a missing feed."
+   * That is a fact about the farms, stated over a fact about the box you typed
+   * in, which is the exact collapse §6.1/§6.2 exist to prevent.
+   *
+   * Not simply `hasQuery`: a screen with no `search` config at all can still
+   * carry an unrelated `?search=` in its url (a shared link, the command
+   * palette's deep link landing on the wrong screen), and that must not turn
+   * a genuine empty into a no-match.
+   */
+  const searched = !!search && hasQuery;
   const showNoMatch = !states.isLoading && !states.error && !states.feedDown && sorted.length === 0
-    && (filtered || (clientSearch && hasQuery));
+    && (filtered || searched);
   const showMeasuredZero = !states.isLoading && !states.error && !states.feedDown
     && sorted.length === 0 && !showNoMatch;
 

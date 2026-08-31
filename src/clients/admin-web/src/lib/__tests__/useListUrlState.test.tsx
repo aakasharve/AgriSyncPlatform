@@ -271,6 +271,33 @@ describe('two commit contracts that look identical in a screenshot (A21)', () =>
     expect(qs().get('org')).toBe(ORG);
   });
 
+  it('DRAFT: the committed term is TRIMMED, on Enter and on the button', async () => {
+    /*
+     * FOUNDER DECISION 2026-08-31: trim on all three search screens. This file
+     * used to record the opposite as a deliberate asymmetry, which described a
+     * defect rather than a design — pasting a name with a trailing space into
+     * the Farms box reached the server's `LIKE '%<term> %'` and returned "no
+     * results" for a farm that exists.
+     */
+    const user = userEvent.setup();
+    renderAt(`/farms?org=${ORG}`);
+
+    await user.type(screen.getByLabelText('draft'), '  भोसले  {Enter}');
+    expect(qs().get('search')).toBe('भोसले');
+
+    /* The box still shows exactly what was typed. Trimming the DRAFT rather
+       than the commit would eat a space the moment it was pressed, which makes
+       typing two words impossible. */
+    expect(screen.getByTestId('draft')).toHaveTextContent('भोसले');
+    expect((screen.getByLabelText('draft') as HTMLInputElement).value).toBe('  भोसले  ');
+
+    /* The Search button is the other commit, and it trims too. */
+    await user.clear(screen.getByLabelText('draft'));
+    await user.type(screen.getByLabelText('draft'), '  arve ');
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    expect(qs().get('search')).toBe('arve');
+  });
+
   it('DRAFT: leaving the box does NOT commit — the contracts do not collapse', async () => {
     const user = userEvent.setup();
     renderAt(`/users?org=${ORG}`);

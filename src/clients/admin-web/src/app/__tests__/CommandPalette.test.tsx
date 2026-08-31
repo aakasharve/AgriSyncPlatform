@@ -529,8 +529,12 @@ describe('the destinations the old palette did not have (Step 3)', () => {
     await settle();
 
     expect(at()).toBe(`/farms?search=${encodeURIComponent('कांबळे')}`);
-    /* Working, not merely present: the destination really filtered. */
-    expect(screen.getByPlaceholderText(/Search by name/)).toHaveValue('कांबळे');
+    /* Working, not merely present: the destination really filtered.
+       QUERIED BY ITS ACCESSIBLE LABEL, NOT ITS PLACEHOLDER, since Task 14.
+       The placeholder now reads "Search by farm name" because the endpoint
+       matches `LOWER(f.name)` and nothing else; the property this test is
+       about is that the box is SEEDED from the url, and that is unchanged. */
+    expect(screen.getByRole('textbox', { name: 'Search farms' })).toHaveValue('कांबळे');
   });
 
   it('lands a farm whose NAME was withheld on the farm itself, not on the unfiltered list', async () => {
@@ -636,8 +640,8 @@ describe('the ?search fallback seeds the destination and opens it on the row (St
     await jumpToKamble();
 
     /* v3 writes `all-farms.html?q=<farm>` (app.js:723). `q` is read by nothing
-       in this console; `search` is what `FarmsListPage.tsx:17` reads today and
-       what `useListUrlState` commits its draft into. */
+       in this console; `search` is what the Farms screen reads and what
+       `useListUrlState` commits its draft into. */
     expect(at()).toBe(`/farms?search=${encodeURIComponent('कांबळे')}`);
   });
 
@@ -645,9 +649,13 @@ describe('the ?search fallback seeds the destination and opens it on the row (St
     await jumpToKamble();
 
     /* `app.js:705-707` — `var seed = AS.param('q'); if (seed) input.value =
-       seed;`. `FarmsListPage.tsx:19` already does the same with `search`,
-       which is why that is the param this palette emits. */
-    expect(screen.getByPlaceholderText(/Search by name/)).toHaveValue('कांबळे');
+       seed;`. The console does the same with `search`, which is why that is
+       the param this palette emits. Since Task 14 the seeding lives in
+       `useListUrlState.ts:185` (`useState(() => params.get(draftKey) ?? '')`)
+       rather than in the screen, so it now holds for every ported list at
+       once — and this assertion queries the box by its accessible label
+       rather than by a placeholder string that has since changed. */
+    expect(screen.getByRole('textbox', { name: 'Search farms' })).toHaveValue('कांबळे');
   });
 
   it('hands the term to the SERVER, so the destination lands on the row and not the summary', async () => {

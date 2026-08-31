@@ -828,6 +828,34 @@ describe('the honest states', () => {
     expect(screen.getByText(/checked at 09:12 today/)).toBeInTheDocument();
   });
 
+  it('calls an empty SERVER search a no-match, not a measured zero', () => {
+    /*
+     * ADDED IN TASK 14, the first screen port, because that screen is the
+     * first list whose search runs on the server.
+     *
+     * The rows in hand ARE the server's answer to `?search=`, so an empty
+     * answer is "your term matched nothing". This used to test
+     * `clientSearch && hasQuery` and therefore sent a server miss to
+     * `MeasuredZero`, which says in as many words "The window was checked at
+     * 09:12 today. This is a measured zero, not a missing feed." — a fact
+     * about the farms, printed over a fact about the box you typed in.
+     */
+    renderList(
+      config({ rows: [], search: { mode: 'server', commit: 'submit', placeholder: 'Search…' } }),
+      '/?search=zzz',
+    );
+    expect(screen.getByRole('status')).toHaveAttribute('data-state', 'no-match');
+    expect(screen.getByText(/Nothing matches “zzz”/)).toBeInTheDocument();
+  });
+
+  it('is not fooled by a ?search= belonging to some other screen', () => {
+    /* A shared link or a palette deep link can land an unrelated `?search=` on
+       a list that has no search box. That must not turn a genuine empty into a
+       no-match with a Clear button that clears nothing. */
+    renderList(config({ rows: [] }), '/?search=zzz');
+    expect(screen.getByRole('status')).toHaveAttribute('data-state', 'measured-zero');
+  });
+
   it('renders a filtered-to-nothing list as a NO MATCH, not as a zero', async () => {
     const user = userEvent.setup();
     renderList(
