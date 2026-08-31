@@ -526,9 +526,9 @@ git commit -m "test(admin-web): characterise the invisible machinery before the 
 - Consumes v3 `theme.css` (252 class rules) and CONTRACT.md section 7.7 (colour), section 8 (banned), section 10 (quality floor).
 - Produces the token set every later task styles against. **No component may introduce a raw hex value from here on.**
 
-- [ ] **Step 1: Replace the @theme block with the v3 tokens.** Map the v3 custom properties onto Tailwind v4 @theme names so utilities generate: blue 4F46E5 (interactive and neutral-informational), green 0F8A5F (positive), red E11D48 (needs a person, or a failure), amber B45309 (stale or warning), text-3 8A9990 (EVERY honesty state), plus the vivid fills for bar fills and dots only — never for text — and the tint backgrounds. Keep radius-card and radius-kpi.
+- [x] **Step 1: Replace the @theme block with the v3 tokens.** Map the v3 custom properties onto Tailwind v4 @theme names so utilities generate: blue 4F46E5 (interactive and neutral-informational), green 0F8A5F (positive), red E11D48 (needs a person, or a failure), amber B45309 (stale or warning), text-3 8A9990 (EVERY honesty state), plus the vivid fills for bar fills and dots only — never for text — and the tint backgrounds. Keep radius-card and radius-kpi.
 
-- [ ] **Step 2: Encode the two product colour constraints as named tokens, with their IDs in a comment (A37)**
+- [x] **Step 2: Encode the two product colour constraints as named tokens, with their IDs in a comment (A37)**
 
 ```css
 @theme {
@@ -544,21 +544,42 @@ git commit -m "test(admin-web): characterise the invisible machinery before the 
 
 Then replace the ad-hoc hex literals at `DwcScoreCard.tsx:28-145`, `AiHealthBlock.tsx:27-32` and `SyncStateBlock.tsx:33` with these tokens.
 
-- [ ] **Step 3: Lock light mode.** Set index.html to lang en with data-mode light, and delete data-theme fresh. Delete the dusk rules (D2). For the dark palette do whichever the founder ticked in D1:
+> **Executed 2026-08-31 (`793c16f4`). Step 3's "if dropped" branch was DANGEROUS as written.**
+> It says to *"delete the custom-variant dark declaration"* and separately to strip the `dark:`
+> utilities. **Deleting that line first makes the leftover utilities LIVE, not inert.** Tailwind v4's
+> built-in `dark` variant is `@media (prefers-color-scheme: dark)`; the old file rebound `dark` to
+> `[data-mode='dark']`, an attribute nothing ever set, which is what made them dead. Remove the
+> rebinding and the survivors fall back to the built-in media query — measured in the compiled
+> stylesheet mid-task, producing exactly the `prefers-color-scheme` rule `CONTRACT.md` §8 bans, and
+> repainting the console for any admin on a dark-themed laptop. **Both halves must land together.**
+> Six `dark:` utilities survived in four farmer-health components and `PlaceholderPage.tsx`; all
+> stripped. Built CSS now contains zero `prefers-color-scheme` rules and zero `dark:` classes.
+>
+> Step 2's file list said **three** files carry the ad-hoc hexes. There are **four** —
+> `FarmerHealthDrilldown.tsx:41` holds a second copy of the C7 teal and `:150` a second copy of the
+> C8 inset. A constraint living in two places with its reason attached to only one is precisely what
+> the named token exists to prevent. `AiHealthBlock.tsx` and `SyncStateBlock.tsx` each had a second
+> literal the plan also missed (`:46` and `:61`). All tokenised, with a test that fails if any
+> literal reappears anywhere in `src`.
+>
+> `app.js:360-363` is off by three — the override is at `app.js:363`. `globals.css:101-228` starts
+> right but the block runs to **241**.
+
+- [x] **Step 3: Lock light mode.** Set index.html to lang en with data-mode light, and delete data-theme fresh. Delete the dusk rules (D2). For the dark palette do whichever the founder ticked in D1:
   - **If dropped:** delete the dark-mode block, delete the custom-variant dark declaration, delete ThemeProvider.tsx, remove the toggle from the shell, and STRIP every dark utility from every ported component. Leaving them inert is how a dead capability comes back as a bug.
   - **If kept:** keep the custom-variant dark declaration bound to the data-mode attribute VERBATIM (A47). It is bound to the attribute, not to the Tailwind class strategy and not to prefers-color-scheme; adopting the v3 stylesheet wholesale without it silently neutralises every dark utility in the code being carried over.
 
-- [ ] **Step 4: Rebuild the primitives on cn() (A48).** Keep `lib/utils.ts` exactly as it is. Rebuild Button, Card and KpiCard with CVA variants resolving to the new tokens. Do NOT ship the v3 hand-written as-star classes alongside Tailwind utilities — two parallel styling systems is the failure this task exists to prevent. Map each as-star concept onto the token layer instead.
+- [x] **Step 4: Rebuild the primitives on cn() (A48).** Keep `lib/utils.ts` exactly as it is. Rebuild Button, Card and KpiCard with CVA variants resolving to the new tokens. Do NOT ship the v3 hand-written as-star classes alongside Tailwind utilities — two parallel styling systems is the failure this task exists to prevent. Map each as-star concept onto the token layer instead.
 
   KpiCard gains the v3 honesty behaviour: a state prop, and when state is not ok the tone is FORCED to grey regardless of the caller's tone — the v3 one-line "honesty wins" override (`app.js:360-363`).
 
-- [ ] **Step 5: Add the quality-floor rules from CONTRACT.md section 10.** prefers-reduced-motion kills all animation and scroll-behaviour; a print media block hides chrome with break-inside avoid on panels; focus is 2px indigo at 2px offset everywhere and outlines are never removed; breakpoints at 1280 / 1279 / 1023 with the sidebar collapsing to a horizontal strip below 1024.
+- [x] **Step 5: Add the quality-floor rules from CONTRACT.md section 10.** prefers-reduced-motion kills all animation and scroll-behaviour; a print media block hides chrome with break-inside avoid on panels; focus is 2px indigo at 2px offset everywhere and outlines are never removed; breakpoints at 1280 / 1279 / 1023 with the sidebar collapsing to a horizontal strip below 1024.
 
-- [ ] **Step 6: Remove the desktop-only viewport lock.** `index.html:6` declares a fixed 1280 viewport, which makes the console desktop-only by construction. v3 is responsive to 1023 and below. Change to width=device-width, initial-scale=1.
+- [x] **Step 6: Remove the desktop-only viewport lock.** `index.html:6` declares a fixed 1280 viewport, which makes the console desktop-only by construction. v3 is responsive to 1023 and below. Change to width=device-width, initial-scale=1.
 
-- [ ] **Step 7: Verify nothing regressed.** Run: `npm run build && npm run test && npm run lint`. Expected: all three exit 0. The console still renders old screens on new tokens — visually different, functionally identical.
+- [x] **Step 7: Verify nothing regressed.** Run: `npm run build && npm run test && npm run lint`. Expected: all three exit 0. The console still renders old screens on new tokens — visually different, functionally identical.
 
-- [ ] **Step 8: Commit** — `feat(admin-web): one token layer from v3, light mode locked`
+- [x] **Step 8: Commit** — `feat(admin-web): one token layer from v3, light mode locked`
 
 ---
 
