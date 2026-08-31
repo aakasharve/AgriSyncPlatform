@@ -144,6 +144,9 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     // itself, and never a source of headcount (Constraint 3).
     public DbSet<FieldOperatorWorkRow> FieldOperatorWorkRows => Set<FieldOperatorWorkRow>();
 
+    /// <summary>D-H3 — what somebody RULED about a person on a farm-day.</summary>
+    public DbSet<AttendanceMark> AttendanceMarks => Set<AttendanceMark>();
+
     // spec: 2026-07-13-labour-attendance-approval-design (Labour V1, Task 12b) —
     // APPEND-ONLY correction history. LabourAssignment answers "what is true
     // now"; this answers "what did it say before, who changed it, when".

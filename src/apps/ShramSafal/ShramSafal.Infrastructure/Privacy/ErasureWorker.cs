@@ -193,6 +193,27 @@
 //     founder Decision 5 ("5b — ship names, but do the erasure work FIRST")
 //     gates on. Stating otherwise here would be a knowingly false compliance
 //     claim, which this file holds to be worse than a tracked gap.
+//   - ssf.attendance_marks — ADDED 2026-08-31 (founder decision D-H3: what somebody
+//     RULED about a person on a farm-day; day mark full/half/absent/unmarked plus
+//     night mark worked/not-worked/unmarked).
+//     NO PII COLUMN OF ITS OWN, and that is a deliberate design choice rather than
+//     an accident: farm_id, field_operator_id, work_date, two enums, a recorder id
+//     and two timestamps. The identifying TEXT lives entirely on the referenced
+//     ssf.field_operators row, which AnonymizeFieldOperatorAsync below already
+//     sentinel-replaces.
+//     THE NAME IS DELIBERATELY NOT SNAPSHOTTED HERE, unlike
+//     field_operator_work_rows.display_name_at_attach. That snapshot exists so a
+//     payout approved for "बाळू" still reads "बाळू" after a rename — history that
+//     must stay explainable. A हजेरी mark is not a payout: the register is read
+//     live, and showing the person by their CURRENT name is the correct answer
+//     there. Not copying the name is therefore both the right read semantics and
+//     one fewer place a worker erasure has to reach.
+//     KEEP the row unchanged on creator erasure; do NOT delete it. Same reasoning
+//     as field_operator_work_rows above — CREATOR IS NOT THE DATA SUBJECT, and the
+//     mark is co-owned work history. On an explicit WORKER erasure the person is
+//     anonymized at ssf.field_operators and this row needs no action, because it
+//     names nobody. Anonymize the person, never the work. Conscious gate-4
+//     disposition, no independent scrub action on this table.
 //   - ssf.machinery_usages — Track B daily_logs-child (ADR 0023 §2 / D-T6-ERASURE).
 //     NO user_id/PII column: machine type/ownership, hours/costs, and the structured
 //     equipment config (implement, nozzles_active, fan_state, fuel) are de-identified
