@@ -1505,7 +1505,7 @@ here rather than carrying it into the next task.
 - Modify: `src/clients/admin-web/src/pages/LoginPage.tsx`
 - Modify: `src/clients/admin-web/src/pages/ForbiddenPage.tsx`
 
-- [ ] **Step 1: Reproduce the provider tree in the exact order, with the reason in a comment (A45)**
+- [x] **Step 1: Reproduce the provider tree in the exact order, with the reason in a comment (A45)**
 
 ```tsx
 /**
@@ -1519,11 +1519,11 @@ here rather than carrying it into the next task.
 
 Keep the fail-fast throw in useAdminAuth, useActiveOrg and useTheme when used outside their provider.
 
-- [ ] **Step 2: Keep route-level code splitting (A42).** All 12 pages stay lazy behind one Suspense. v3 is thirteen separate HTML files, which gives the same effect for free and therefore never prompts the question. The recharts-heavy Farmer Health chunk in particular must stay out of the initial payload — and lighthouse.yml asserts a 0.7 perf floor on that route.
+- [x] **Step 2: Keep route-level code splitting (A42).** All 12 pages stay lazy behind one Suspense. v3 is thirteen separate HTML files, which gives the same effect for free and therefore never prompts the question. The recharts-heavy Farmer Health chunk in particular must stay out of the initial payload — and lighthouse.yml asserts a 0.7 perf floor on that route.
 
-- [ ] **Step 3: Rebuild RequireScope with all four branches (A2).** Three of the four outcomes have no URL of their own and appear in no screenshot. Reproduce: isLoading gives the fallback; isError goes to /403; Unauthorized goes to /403; Ambiguous renders the full-page OrgSwitcher headlined "Choose your active organization"; NotInOrg renders the full-page OrgSwitcher headlined "That organization is not in your memberships". It is not a screen in the design; it is a gate above every screen.
+- [x] **Step 3: Rebuild RequireScope with all four branches (A2).** Three of the four outcomes have no URL of their own and appear in no screenshot. Reproduce: isLoading gives the fallback; isError goes to /403; Unauthorized goes to /403; Ambiguous renders the full-page OrgSwitcher headlined "Choose your active organization"; NotInOrg renders the full-page OrgSwitcher headlined "That organization is not in your memberships". It is not a screen in the design; it is a gate above every screen.
 
-- [ ] **Step 4: Reproduce the guard map — including the three deliberate gaps (A3, A4).** Carry both explanatory comments verbatim:
+- [x] **Step 4: Reproduce the guard map — including the three deliberate gaps (A3, A4).** Carry both explanatory comments verbatim:
 
 ```tsx
 {/* HomePage is a KPI collage — individual cards can 403 independently without
@@ -1535,13 +1535,13 @@ Keep the fail-fast throw in useAdminAuth, useActiveOrg and useTheme when used ou
 
 A tidy-minded port adds guards everywhere for consistency and locks every user out of Schedules and Settings, because NO ModuleKey exists for them. Adding a guard to Home, Templates or Settings is a behavioural regression, not a cleanup. The Task 2 ROUTE_GUARDS test enforces this.
 
-- [ ] **Step 5: Keep the guard loading semantics and its access levels (A6, A8).** Render null while loading — not a spinner, not a redirect. Keep the read/write/export levels even though no call site uses write or export yet: canExport is wired end-to-end (server flag, hook, guard) and used by no screen, so a rewrite that reimplements permissions from the design will not know it exists. v3 adds no write surfaces; the founder's brief adds features that will.
+- [x] **Step 5: Keep the guard loading semantics and its access levels (A6, A8).** Render null while loading — not a spinner, not a redirect. Keep the read/write/export levels even though no call site uses write or export yet: canExport is wired end-to-end (server flag, hook, guard) and used by no screen, so a rewrite that reimplements permissions from the design will not know it exists. v3 adds no write surfaces; the founder's brief adds features that will.
 
-- [ ] **Step 6: Fix the deep-link gap while restoring returnTo (A9, B2).** RequireAuth currently stores only location.pathname, dropping the query string — which is where page, search, tier, weeks, days and org all live. Store the full location (pathname plus search) and navigate back to it on success. The v3 login submit handler is literally a redirect to index.html; the whole capability is invisible in a mockup and would be rebuilt as "redirect to home".
+- [x] **Step 6: Fix the deep-link gap while restoring returnTo (A9, B2).** RequireAuth currently stores only location.pathname, dropping the query string — which is where page, search, tier, weeks, days and org all live. Store the full location (pathname plus search) and navigate back to it on success. The v3 login submit handler is literally a redirect to index.html; the whole capability is invisible in a mockup and would be rebuilt as "redirect to home".
 
   Keep everything `LoginPage.tsx:25-50` already does right: the real POST to /user/auth/login, session storage, the server's own error message surfaced, and the "Signing in…" disabled state.
 
-- [ ] **Step 7: Make the 401 interceptor stop destroying the deep link (A11)**
+- [x] **Step 7: Make the 401 interceptor stop destroying the deep link (A11)**
 
 ```ts
 /**
@@ -1553,11 +1553,11 @@ A tidy-minded port adds guards everywhere for consistency and locks every user o
  */
 ```
 
-- [ ] **Step 8: Restore /403 and branch on the typed errors (A12, A13, B1).** /403 stays OUTSIDE RequireScope so a broken scope cannot loop. Keep both message variants (module-specific and no-membership) and both actions. Then do what the console does not do today: CATCH AdminScopeAmbiguousError and AdminModuleForbiddenError at the surfaces that can act on them. They have zero catch sites right now, so a port can observe that nothing uses them and delete them — discarding the backend's deliberate distinction between admin_module_forbidden, admin_platform_only, admin_not_in_org and admin_no_membership permanently. This is the natural home for the v3 honest-state discipline applied to permissions.
+- [x] **Step 8: Restore /403 and branch on the typed errors (A12, A13, B1).** /403 stays OUTSIDE RequireScope so a broken scope cannot loop. Keep both message variants (module-specific and no-membership) and both actions. Then do what the console does not do today: CATCH AdminScopeAmbiguousError and AdminModuleForbiddenError at the surfaces that can act on them. They have zero catch sites right now, so a port can observe that nothing uses them and delete them — discarding the backend's deliberate distinction between admin_module_forbidden, admin_platform_only, admin_not_in_org and admin_no_membership permanently. This is the natural home for the v3 honest-state discipline applied to permissions.
 
-- [ ] **Step 9: Run the Task 2 characterisation suite.** Run: `npm run test`. Expected: PASS, unchanged. If routes.contract.test.ts goes red, a guard moved — that is the regression this task exists to prevent.
+- [x] **Step 9: Run the Task 2 characterisation suite.** Run: `npm run test`. Expected: PASS, unchanged. If routes.contract.test.ts goes red, a guard moved — that is the regression this task exists to prevent.
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and enforced almost
 nowhere — Tasks 4, 5, 6, 7, 9, 10, 12 and 13 originally ended at "run and commit". An invariant
@@ -1570,7 +1570,52 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 10: Commit** — `feat(admin-web): auth plus four-outcome scope gate plus typed denials, deep links preserved`
+- [x] **Step 10: Commit** — `feat(admin-web): auth plus four-outcome scope gate plus typed denials, deep links preserved`
+
+---
+
+> **Executed 2026-08-31 (`0736bd1d`, plus the copy fix `22dd9536`). 582 tests. Eight mutations, eight kills.**
+>
+> **Step 8 asked for a branch with no producer, and the executor deleted its own work rather than
+> ship it.** `/403` has no path that carries a typed error — `EntitlementGuard` sends a `module`,
+> `RequireScope` sends outcomes. The branch was built, then **removed before committing**, and the
+> catch put where the errors actually arrive: `formatError` (which reaches every `LoadFailed` panel)
+> and the query cache. Shipping the dead code Step 8 itself warns about would have been the defect.
+>
+> **🛑 `admin_no_membership` is a 401, not a 403** (`AdminScopeHelper.cs:59-64`), and the 401 branch
+> returns before the 403 mapping — so **that arm of the four-code map is unreachable against this
+> backend.** An authenticated non-admin is signed **out**, not shown `/403`. Left as-is (Task 2 pins
+> it) but recorded: the map documents a server behaviour that does not occur.
+>
+> **`/admin/me/scope` never returns 401/428/403** (`AdminEndpoints.cs:36-40`) — always 200 with an
+> `outcome`. That is *why* `RequireScope` is the wrong place to catch typed errors.
+>
+> **Two mutations proved a Task 2 test would NOT have caught the regression**, which is the useful
+> half: restoring the hard `window.location.assign('/login')` left `api.contract.test.ts` green in
+> both directions. The characterisation suite is necessary and not sufficient.
+>
+> **`/403` no longer says "Access denied" when the check itself failed.** A server outage used to
+> tell an operator their access was revoked — the most alarming way to be wrong. Now: *"We could not
+> check your access… Nothing about your account has changed."*
+>
+> **A revoked permission now bites within one request instead of up to 60s.** The first refusal is
+> treated as proof the cached scope is stale. Safe direction; costs one extra small request.
+>
+> **The API base-URL fallback pointed at dead port 5001** (A54), so any developer without a local
+> env file saw every screen 403 — a setup mistake wearing a permissions bug's clothes. Now defaults
+> to 5048 with a loud warning. **The build-time refusal is NOT added** — `lighthouse.yml` builds this
+> console with no API address on purpose, so closing it needs a matching `.github/` change.
+> **DECIDED: add both in Task 28.**
+>
+> **A self-contradiction fixed after the fact (`22dd9536`):** `adminErrors.ts` states *"never show an
+> operator a machine code"* and then printed `Your admin access does not include ops.live.` Those 36
+> keys have **no human label anywhere** — `moduleKeys.ts` mirrors the C# enum. The key is not deleted
+> (it is what a support person relays to get the grant made); it moves to a separate copyable
+> `detail` line, **following the pattern the founder already chose for the support loop.**
+>
+> **Step 1's provider chain is stale** — it lists five led by `ThemeProvider`, deleted in Task 3 with
+> D1. The chain is four. **Step 2 says "all 12 pages"; there are 15 `lazy()` imports.** A3/A4 line
+> citations drifted ~6 lines; A12's `lib/api.ts:30-53` moved to `lib/adminErrors.ts`.
 
 ---
 
