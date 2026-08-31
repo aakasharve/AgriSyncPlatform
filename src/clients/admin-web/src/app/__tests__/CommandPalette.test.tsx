@@ -214,6 +214,19 @@ function at(): string {
   return window.location.pathname + window.location.search;
 }
 
+/**
+ * The address bar as a HUMAN would read it.
+ *
+ * `at()` returns `%E0%A4%95%E0%A4%BE...`, and an assertion that fails against
+ * that prints percent-encoding — which hides the exact thing the assertion is
+ * about. Decoded, the same failure reads
+ * `expected '/farms?search=कांबळे' not to contain 'कांबळे'`, which names the
+ * leak in the message rather than in the test title only.
+ */
+function readableUrl(): string {
+  return decodeURIComponent(at());
+}
+
 function palette(): HTMLElement {
   return screen.getByRole('dialog', { name: 'Search the console' });
 }
@@ -456,20 +469,85 @@ describe('the destinations the old palette did not have (Step 3)', () => {
     expect(navEntry).toHaveTextContent('Farmer Health');
   });
 
-  it('offers the per-farm drilldown, addressed by farm id so the url carries no name', async () => {
-    await mountConsole('/', { modules: readOnly(ModuleKeys.FarmerHealth), farms: [KAMBLE] });
+  it('sends a farm row to the id-only drilldown, so no farmer name reaches the address bar', async () => {
+    /*
+     * MUTATION-PROVEN. Making farm rows emit `?search=<name>` again — which is
+     * what they did for about an hour, and what the v3 prototype does — makes
+     * this test fail with `/farms?search=कांबळे` printed in the message.
+     *
+     * Founder rule: "other than me no one will ever able to see the actual
+     * farmer sensitive information." A url is the leakiest surface here — it
+     * lands in browser history, in a pasted message, in a screenshot and in a
+     * server access log, and the `canRead` filter covers none of those.
+     */
+    await mountConsole('/', {
+      modules: readOnly(ModuleKeys.FarmsList, ModuleKeys.FarmerHealth),
+      farms: [KAMBLE],
+    });
 
     await openPalette();
-    await indexed('Farmer-health drilldown');
+    await indexed('कांबळे');
     await userEvent.type(box(), 'kamble');
-
-    const drilldown = options().find((o) => o.textContent?.includes('Farmer-health drilldown'));
-    expect(drilldown).toBeDefined();
-
-    await userEvent.click(drilldown as HTMLElement);
+    await userEvent.click(options()[0]);
     await settle();
 
+    /* THE LEAK FIRST, so the red message is the name in the address. */
+    expect(readableUrl()).not.toContain('कांबळे');
+    expect(at()).not.toContain(encodeURIComponent('कांबळे'));
     expect(at()).toBe('/farmer-health/farm-kamble');
+  });
+
+  it('does NOT list a farm twice when the reader can open both destinations', async () => {
+    /* Two useful destinations must not cost a list twice as long to scan.
+       One row per farm; the icon and the group say where Enter goes. */
+    await mountConsole('/', {
+      modules: readOnly(ModuleKeys.FarmsList, ModuleKeys.FarmerHealth),
+      farms: [KAMBLE, ANAND],
+    });
+
+    await openPalette();
+    await indexed('कांबळे');
+
+    const farmRows = options().filter((o) => o.id.startsWith('cmdk-farm:'));
+    expect(farmRows).toHaveLength(2);
+    expect(options().filter((o) => o.id.startsWith('cmdk-health:'))).toHaveLength(0);
+  });
+
+  it('falls back to a working ?search row for a reader without farmer.health', async () => {
+    /*
+     * A link the reader cannot open is worse than a link carrying a name they
+     * are ALREADY permitted to see. This reader has farms.list and not
+     * farmer.health, so the drilldown would bounce them to /403 — the named
+     * route is the honest one for them, and it still lands on the farm.
+     */
+    await mountConsole('/', { modules: readOnly(ModuleKeys.FarmsList), farms: [KAMBLE] });
+
+    await openPalette();
+    await indexed('कांबळे');
+    await userEvent.type(box(), 'kamble');
+    await userEvent.click(options()[0]);
+    await settle();
+
+    expect(at()).toBe(`/farms?search=${encodeURIComponent('कांबळे')}`);
+    /* Working, not merely present: the destination really filtered. */
+    expect(screen.getByPlaceholderText(/Search by name/)).toHaveValue('कांबळे');
+  });
+
+  it('lands a farm whose NAME was withheld on the farm itself, not on the unfiltered list', async () => {
+    /* Under the old `?search=` rule this row had no term to carry — the name
+       was withheld and the phone was masked — so it fell back to /farms, the
+       whole list. The id-only route has nothing to withhold. */
+    await mountConsole('/', {
+      modules: readOnly(ModuleKeys.FarmsList, ModuleKeys.FarmerHealth),
+      farms: [WITHHELD],
+    });
+
+    await openPalette();
+    await indexed('farm-hidden');
+    await userEvent.click(options().at(-1) as HTMLElement);
+    await settle();
+
+    expect(at()).toBe('/farmer-health/farm-hidden');
   });
 });
 
@@ -538,7 +616,13 @@ describe('a Marathi surname is findable by its Latin spelling, through the real 
 
 /* ═══════════════════════════════ the deep link, ported not invented */
 
-describe('the deep link seeds the destination and opens it on the row (Step 1)', () => {
+/*
+ * EVERY TEST BELOW IS THE FALLBACK PATH — the reader has `farms.list` and NOT
+ * `farmer.health`, so the id-only drilldown is not open to them and the named
+ * `?search=` link is the honest destination. That is the only case in which
+ * this palette puts a farmer's name in a url; see §5b of the component.
+ */
+describe('the ?search fallback seeds the destination and opens it on the row (Step 1)', () => {
   async function jumpToKamble() {
     await mountConsole('/', { modules: readOnly(ModuleKeys.FarmsList), farms: [KAMBLE] });
     await openPalette();
@@ -626,7 +710,7 @@ describe('a withheld value is neither printed nor indexed (A14, B16)', () => {
     expect(optionText().some((t) => t.includes('farm-hidden'))).toBe(true);
   });
 
-  it('never sends a masked value to the server as a search term', async () => {
+  it('never sends a masked value to the server as a search term (the fallback path)', async () => {
     await mountConsole('/', { modules: readOnly(ModuleKeys.FarmsList), farms: [WITHHELD] });
 
     await openPalette();

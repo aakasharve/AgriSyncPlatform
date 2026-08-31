@@ -112,6 +112,34 @@ import { DRILLDOWN_MODULE, DRILLDOWN_PATH, NAV } from './nav';
  * the flag as well would be a second mechanism for one behaviour — exactly
  * what Task 8 asked the next task not to add.
  *
+ * ══ 5b. A FARMER'S NAME DOES NOT GO IN THE ADDRESS BAR ═══════════════════
+ *
+ * Founder rule, stated plainly: *"other than me no one will ever able to see
+ * the actual farmer sensitive information."* The reason is company privacy
+ * and stopping anyone selling insight onward.
+ *
+ * A URL is the leakiest surface this console has. It lands in browser
+ * history, in a pasted chat message, in a screenshot, and in a server access
+ * log — and NOT ONE of those is covered by the `canRead` filter in §2. The
+ * permission check protects the screen; it does not follow the link.
+ *
+ * So a farm row goes to `/farmer-health/<farmId>` — the drilldown, whose
+ * address is an opaque id — WHENEVER the reader can open it. `?search=<name>`
+ * is the FALLBACK, taken only when the reader lacks `farmer.health`, because
+ * a link the reader cannot open is worse than a link carrying a name they are
+ * already permitted to see.
+ *
+ * Yes, the same name reaches the same address bar when a person types it into
+ * the All Farms search box today. That is not a reason to keep doing it; it is
+ * the reason this palette must not MANUFACTURE such links by itself. The one
+ * `?search=` link that survives with a person's name in it is the "Search all
+ * farms for …" row, and that carries the operator's OWN typed term — the
+ * palette is passing along a keystroke, not publishing a record it read.
+ *
+ * The rule has a second effect worth stating: a farm whose name the server
+ * withheld used to fall back to `/farms` with no term at all, i.e. the
+ * unfiltered list. Under the id-only preference it lands on the farm.
+ *
  * ══ 6. WHAT IT CAN AND CANNOT SEE, SAID OUT LOUD ═════════════════════════
  *
  * The palette holds the FIRST PAGE of farms and users — the same 40 and 50
@@ -310,35 +338,37 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
     if (entry.module === null || canRead(entry.module)) entries.push(entry);
   }
 
-  if (canReadFarms) {
+  /**
+   * ONE ROW PER FARM, and the destination is chosen by permission (§5b).
+   *
+   * This was two rows per farm for about an hour — one to the farms list, one
+   * to the drilldown — and it was wrong twice over. It doubled the length of
+   * an untyped list, and the row it put FIRST was the one that writes the
+   * farmer's name into the address bar. The id-only route is preferred
+   * wherever the reader can open it; the named route is the fallback.
+   */
+  if (canReadFarms || canReadHealth) {
     for (const row of farmIndex) {
+      /* The drilldown IS this farm's page and its address is the farm id, so
+         it needs no search term and leaks no name. Preferred whenever it can
+         actually be opened — a link the reader cannot open would be worse
+         than a link carrying a name they are already permitted to see. */
+      const idOnly = canReadHealth;
       entries.push({
         id: `farm:${row.farm.farmId}`,
-        group: 'Farms',
-        Icon: Wheat,
+        /* The icon and the group name say WHERE Enter goes; the label and the
+           sub-line say WHICH farm it is. Both facts, no extra row. */
+        group: idOnly ? 'Farmer Health' : 'Farms',
+        Icon: idOnly ? HeartPulse : Wheat,
         /* A farm in this product is named for its farmer and is very often
            written in Devanagari, so it goes through the same script-aware
            renderer a person's name does rather than acquiring a fifth copy
            of the font check (A34). */
         label: <PersonName name={row.farm.name} fallback={row.farm.farmId} />,
         sub: row.phone ? <Masked value={row.phone} /> : undefined,
-        to: deepLink('/farms', linkable(row.name) ?? linkable(row.phone)),
-        haystack: row.haystack,
-      });
-    }
-  }
-
-  if (canReadHealth) {
-    for (const row of farmIndex) {
-      entries.push({
-        id: `health:${row.farm.farmId}`,
-        group: 'Farmer Health',
-        Icon: HeartPulse,
-        label: <PersonName name={row.farm.name} fallback={row.farm.farmId} />,
-        /* The drilldown needs no search term: the farm id IS the address, so
-           this jump carries no name and no phone number in the url. */
-        sub: 'Farmer-health drilldown',
-        to: `${DRILLDOWN_PATH}/${encodeURIComponent(row.farm.farmId)}`,
+        to: idOnly
+          ? `${DRILLDOWN_PATH}/${encodeURIComponent(row.farm.farmId)}`
+          : deepLink('/farms', linkable(row.name) ?? linkable(row.phone)),
         haystack: row.haystack,
       });
     }
