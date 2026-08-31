@@ -7,7 +7,6 @@ import App from '@/App';
 // Vite's ?raw import — the two ungated-route COMMENTS are part of A4 and comments
 // do not survive compilation, so that half has to be read from the source text.
 import appSource from '../App.tsx?raw';
-import { ThemeProvider, useTheme } from '@/app/ThemeProvider';
 import { ActiveOrgProvider, useActiveOrg } from '@/app/ActiveOrgProvider';
 import { AdminAuthProvider, useAdminAuth } from '@/app/AdminAuthProvider';
 import { EntitlementGuard } from '@/components/EntitlementGuard';
@@ -187,21 +186,32 @@ describe('the three deliberately ungated routes (A4)', () => {
 });
 
 describe('provider nesting order is load-bearing (A45)', () => {
-  it('nests Theme, QueryClient, Router, ActiveOrg, AdminAuth in that order', () => {
+  /*
+   * CHANGED IN TASK 3, WITH THE BEHAVIOUR IT DESCRIBES.
+   *
+   * The chain was five deep and began with ThemeProvider. Dark mode was
+   * dropped outright (D1, founder 2026-08-31), ThemeProvider.tsx was deleted,
+   * and the chain is now four. This assertion did not become wrong — the
+   * console changed, and the test changed with it in the same commit.
+   *
+   * The part that still matters is unchanged and is the whole reason A45
+   * exists: AdminAuthProvider calls useQueryClient() and must sit inside
+   * QueryClientProvider; ActiveOrgProvider must wrap AdminAuthProvider
+   * because login() invalidates a scope key whose last segment is the
+   * active org. Flip either and the console breaks quietly.
+   */
+  it('nests QueryClient, Router, ActiveOrg, AdminAuth in that order', () => {
     // Each provider is the single child of the one above it, so the chain can be
-    // walked. AdminAuthProvider calls useQueryClient() and must sit inside
-    // QueryClientProvider; ActiveOrgProvider must wrap AdminAuthProvider because
-    // login() invalidates a scope key whose last segment is the active org.
+    // walked.
     const chain: unknown[] = [];
     let current: ReactElement | null = tree;
-    while (current && chain.length < 5) {
+    while (current && chain.length < 4) {
       chain.push(current.type);
       const children: ReactNode = propsOf(current).children;
       current = isValidElement(children) ? (children as ReactElement) : null;
     }
 
     expect(chain).toEqual([
-      ThemeProvider,
       QueryClientProvider,
       BrowserRouter,
       ActiveOrgProvider,
@@ -209,8 +219,9 @@ describe('provider nesting order is load-bearing (A45)', () => {
     ]);
   });
 
+  // The `useTheme` row is gone with its provider. The two that remain are the
+  // fail-fast property that made the chain assertion above meaningful.
   it.each([
-    ['useTheme', useTheme, 'useTheme must be used within ThemeProvider'],
     ['useActiveOrg', useActiveOrg, 'useActiveOrg must be used inside ActiveOrgProvider'],
     ['useAdminAuth', useAdminAuth, 'useAdminAuth must be used within AdminAuthProvider'],
   ])('%s throws by name when used outside its provider', (_name, hook, message) => {

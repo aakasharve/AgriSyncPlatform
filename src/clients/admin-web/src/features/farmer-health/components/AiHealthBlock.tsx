@@ -24,11 +24,13 @@ function pct(rate?: number): { label: string; tone: 'good' | 'warn' | 'bad' | 'n
   return { label, tone: 'bad' };
 }
 
+/* `none` is an honesty state, so it takes --color-text-3 like every other
+   honesty state on the console — not a muted grey chosen here. */
 const TONE_COLOR: Record<'good' | 'warn' | 'bad' | 'none', string> = {
-  good: '#0e7d7b',  // teal — never bright green per C7
-  warn: '#b45309',
-  bad:  '#dc2626',
-  none: 'var(--color-text-muted, #6b7280)',
+  good: 'var(--color-pillar-good)',  // teal — never bright green per C7
+  warn: 'var(--color-amber)',
+  bad:  'var(--color-red)',
+  none: 'var(--color-text-3)',
 };
 
 export interface AiHealthBlockProps {
@@ -43,7 +45,7 @@ export function AiHealthBlock({ health }: AiHealthBlockProps) {
   return (
     <section
       className="glass-panel p-5"
-      style={{ boxShadow: 'inset 4px 0 0 0 rgba(100, 116, 139, 0.55)' }}
+      style={{ boxShadow: 'inset 4px 0 0 0 var(--color-ops-inset)' }}
       aria-label="AI health (ops:read)"
     >
       <div className="mb-3 flex items-center gap-2">

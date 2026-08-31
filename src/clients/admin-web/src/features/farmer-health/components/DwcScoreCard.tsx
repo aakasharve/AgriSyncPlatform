@@ -56,16 +56,22 @@ const PILLAR_ORDER: PillarKey[] = [
   'triggerFit', 'actionSimplicity', 'proof', 'reward', 'investment', 'repeat',
 ];
 
+/* Tokens, not literals. `--color-pillar-good` is the C7 constraint: a healthy
+   pillar tops out at teal so a good reading can never read as a celebration.
+   Its value lives in globals.css with the reason attached — do not inline it
+   back here, and do not raise it. */
 const BUCKET_TONE: Record<Bucket, { bg: string; fg: string; label: string }> = {
-  intervention: { bg: 'rgba(220,38,38,0.14)', fg: '#dc2626', label: 'Intervention' },
-  watchlist:    { bg: 'rgba(245,158,11,0.18)', fg: '#b45309', label: 'Watchlist' },
-  healthy:      { bg: 'rgba(82,192,190,0.16)', fg: '#0e7d7b', label: 'Healthy' },
+  intervention: { bg: 'var(--color-tint-red)', fg: 'var(--color-red)', label: 'Intervention' },
+  watchlist:    { bg: 'var(--color-tint-amber)', fg: 'var(--color-amber)', label: 'Watchlist' },
+  healthy:      { bg: 'var(--color-tint-green)', fg: 'var(--color-pillar-good)', label: 'Healthy' },
 };
 
+/* Bar fills, so the vivid tokens are in scope here and nowhere near text
+   (CONTRACT.md 7.7). The top of the ramp is C7's teal, never a green. */
 function fillFor(ratio: number): string {
-  if (ratio < 0.5) return '#dc2626';
-  if (ratio < 0.75) return '#f59e0b';
-  return '#52c0be'; // never bright green per C7
+  if (ratio < 0.5) return 'var(--color-red-vivid)';
+  if (ratio < 0.75) return 'var(--color-amber-vivid)';
+  return 'var(--color-pillar-good)'; // never bright green per C7
 }
 
 export interface DwcScoreCardProps {

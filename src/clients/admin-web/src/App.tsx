@@ -1,10 +1,8 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ThemeProvider } from '@/app/ThemeProvider';
 import { AdminAuthProvider, useAdminAuth } from '@/app/AdminAuthProvider';
 import { ActiveOrgProvider } from '@/app/ActiveOrgProvider';
-import { WheatWindShader } from '@/app/WheatWindShader';
 import { AdminShell } from '@/app/AdminShell';
 import { CommandPalette } from '@/app/CommandPalette';
 import { useAdminScope } from '@/hooks/useAdminScope';
@@ -100,76 +98,83 @@ function RequireScope({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Provider chain (Preservation Register A45). ThemeProvider used to sit above
+ * QueryClientProvider; it was deleted with the dark-mode toggle it existed to
+ * serve (D1, founder 2026-08-31). Light mode is now locked in globals.css and
+ * declared on <html data-mode="light">, so there is nothing left for a theme
+ * context to hold. The remaining four are still order-dependent:
+ * AdminAuthProvider calls useQueryClient(), and ActiveOrgProvider must wrap
+ * AdminAuthProvider because login() invalidates a scope key that ends in the
+ * active org.
+ */
 export default function App() {
   return (
-    <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <ActiveOrgProvider>
-            <AdminAuthProvider>
-              <WheatWindShader />
-              <CommandPalette />
-              <Suspense fallback={<Fallback />}>
-                <Routes>
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/403" element={<ForbiddenPage />} />
-                  <Route
-                    element={
-                      <RequireAuth>
-                        <RequireScope>
-                          <AdminShell />
-                        </RequireScope>
-                      </RequireAuth>
-                    }
-                  >
-                    {/* HomePage is a KPI collage — individual cards can 403 independently without
-                        hiding the whole page. No single module gate fits, so no guard here. */}
-                    <Route path="/" element={<HomePage />} />
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <ActiveOrgProvider>
+          <AdminAuthProvider>
+            <CommandPalette />
+            <Suspense fallback={<Fallback />}>
+              <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/403" element={<ForbiddenPage />} />
+                <Route
+                  element={
+                    <RequireAuth>
+                      <RequireScope>
+                        <AdminShell />
+                      </RequireScope>
+                    </RequireAuth>
+                  }
+                >
+                  {/* HomePage is a KPI collage — individual cards can 403 independently without
+                      hiding the whole page. No single module gate fits, so no guard here. */}
+                  <Route path="/" element={<HomePage />} />
 
-                    <Route path="/ops/live" element={
-                      <EntitlementGuard module={ModuleKeys.OpsLive}><OpsLivePage /></EntitlementGuard>
-                    } />
-                    <Route path="/ops/errors" element={
-                      <EntitlementGuard module={ModuleKeys.OpsErrors}><OpsErrorsPage /></EntitlementGuard>
-                    } />
-                    <Route path="/ops/voice" element={
-                      <EntitlementGuard module={ModuleKeys.OpsVoice}><OpsVoicePage /></EntitlementGuard>
-                    } />
-                    <Route path="/metrics/nsm" element={
-                      <EntitlementGuard module={ModuleKeys.MetricsNsm}><NorthStarPage /></EntitlementGuard>
-                    } />
-                    <Route path="/farms" element={
-                      <EntitlementGuard module={ModuleKeys.FarmsList}><FarmsListPage /></EntitlementGuard>
-                    } />
-                    <Route path="/farms/silent-churn" element={
-                      <EntitlementGuard module={ModuleKeys.FarmsSilentChurn}><SilentChurnPage /></EntitlementGuard>
-                    } />
-                    <Route path="/farms/suffering" element={
-                      <EntitlementGuard module={ModuleKeys.FarmsSuffering}><SufferingPage /></EntitlementGuard>
-                    } />
-                    <Route path="/farmer-health" element={
-                      <EntitlementGuard module={ModuleKeys.FarmerHealth}><FarmerHealthPage /></EntitlementGuard>
-                    } />
-                    <Route path="/farmer-health/:farmId" element={
-                      <EntitlementGuard module={ModuleKeys.FarmerHealth}><FarmerHealthDrilldown /></EntitlementGuard>
-                    } />
-                    <Route path="/users" element={
-                      <EntitlementGuard module={ModuleKeys.AdminUsers}><UsersPage /></EntitlementGuard>
-                    } />
-                    {/* Schedules + Settings: no matching module key in W0-A's ModuleKey set yet.
-                        Relying on RequireScope (any resolved scope) for now; specific module
-                        gates land when schedule / admin-management surfaces add their keys. */}
-                    <Route path="/schedules/templates" element={<ScheduleTemplatesPage />} />
-                    <Route path="/settings/admins" element={<SettingsAdminsPage />} />
+                  <Route path="/ops/live" element={
+                    <EntitlementGuard module={ModuleKeys.OpsLive}><OpsLivePage /></EntitlementGuard>
+                  } />
+                  <Route path="/ops/errors" element={
+                    <EntitlementGuard module={ModuleKeys.OpsErrors}><OpsErrorsPage /></EntitlementGuard>
+                  } />
+                  <Route path="/ops/voice" element={
+                    <EntitlementGuard module={ModuleKeys.OpsVoice}><OpsVoicePage /></EntitlementGuard>
+                  } />
+                  <Route path="/metrics/nsm" element={
+                    <EntitlementGuard module={ModuleKeys.MetricsNsm}><NorthStarPage /></EntitlementGuard>
+                  } />
+                  <Route path="/farms" element={
+                    <EntitlementGuard module={ModuleKeys.FarmsList}><FarmsListPage /></EntitlementGuard>
+                  } />
+                  <Route path="/farms/silent-churn" element={
+                    <EntitlementGuard module={ModuleKeys.FarmsSilentChurn}><SilentChurnPage /></EntitlementGuard>
+                  } />
+                  <Route path="/farms/suffering" element={
+                    <EntitlementGuard module={ModuleKeys.FarmsSuffering}><SufferingPage /></EntitlementGuard>
+                  } />
+                  <Route path="/farmer-health" element={
+                    <EntitlementGuard module={ModuleKeys.FarmerHealth}><FarmerHealthPage /></EntitlementGuard>
+                  } />
+                  <Route path="/farmer-health/:farmId" element={
+                    <EntitlementGuard module={ModuleKeys.FarmerHealth}><FarmerHealthDrilldown /></EntitlementGuard>
+                  } />
+                  <Route path="/users" element={
+                    <EntitlementGuard module={ModuleKeys.AdminUsers}><UsersPage /></EntitlementGuard>
+                  } />
+                  {/* Schedules + Settings: no matching module key in W0-A's ModuleKey set yet.
+                      Relying on RequireScope (any resolved scope) for now; specific module
+                      gates land when schedule / admin-management surfaces add their keys. */}
+                  <Route path="/schedules/templates" element={<ScheduleTemplatesPage />} />
+                  <Route path="/settings/admins" element={<SettingsAdminsPage />} />
 
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </Route>
-                </Routes>
-              </Suspense>
-            </AdminAuthProvider>
-          </ActiveOrgProvider>
-        </BrowserRouter>
-      </QueryClientProvider>
-    </ThemeProvider>
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Route>
+              </Routes>
+            </Suspense>
+          </AdminAuthProvider>
+        </ActiveOrgProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }

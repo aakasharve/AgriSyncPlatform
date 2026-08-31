@@ -12,12 +12,9 @@ import {
   Calendar,
   Users as UsersIcon,
   Settings as SettingsIcon,
-  Sun,
-  Moon,
   Search,
   type LucideIcon,
 } from 'lucide-react';
-import { useTheme } from './ThemeProvider';
 import { useAdminAuth } from './AdminAuthProvider';
 import { cn } from '@/lib/utils';
 
@@ -49,7 +46,6 @@ const NAV: NavItem[] = [
 const GROUP_ORDER: NavItem['group'][] = ['Overview', 'Operations', 'Product', 'Farms', 'Schedules', 'Admin'];
 
 export function AdminShell() {
-  const { mode, toggleMode } = useTheme();
   useAdminAuth();
   const location = useLocation();
 
@@ -63,17 +59,9 @@ export function AdminShell() {
             <span className="font-extrabold text-text-primary">{crumb}</span>
           </div>
           <div className="flex items-center gap-3 text-[13px] text-text-secondary">
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-white/60 px-2.5 py-1 text-[11px] font-semibold text-text-primary dark:bg-white/10">
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-white/60 px-2.5 py-1 text-[11px] font-semibold text-text-primary">
               <Search size={12} /> <kbd className="font-mono">⌘K</kbd>
             </span>
-            <button
-              type="button"
-              onClick={toggleMode}
-              aria-label="Toggle dark mode"
-              className="grid h-8 w-8 place-items-center rounded-md border border-surface-border bg-white/60 text-text-primary transition-colors hover:bg-white/90 dark:bg-white/10 dark:hover:bg-white/20"
-            >
-              {mode === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
             <div className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-brand-green to-brand-teal text-[11px] font-bold text-white shadow-[0_3px_10px_rgba(0,200,83,0.4)]">
               {initialsOf(null, null)}
             </div>
@@ -87,7 +75,7 @@ export function AdminShell() {
               if (items.length === 0) return null;
               return (
                 <div key={group} className="mb-1">
-                  <div className="px-2.5 pb-1 pt-3 text-[11px] font-extrabold uppercase tracking-[0.09em] text-brand-leaf dark:text-brand-mint">
+                  <div className="px-2.5 pb-1 pt-3 text-[11px] font-extrabold uppercase tracking-[0.09em] text-brand-leaf">
                     {group}
                   </div>
                   {items.map((n) => (
@@ -109,7 +97,7 @@ export function AdminShell() {
                       </span>
                       <span>{n.label}</span>
                       {n.shortcut && (
-                        <span className="ml-auto rounded border border-surface-border bg-white/70 px-1.5 py-0.5 font-mono text-[11px] font-bold text-text-muted dark:bg-white/10 dark:text-text-secondary">
+                        <span className="ml-auto rounded border border-surface-border bg-white/70 px-1.5 py-0.5 font-mono text-[11px] font-bold text-text-muted">
                           {n.shortcut}
                         </span>
                       )}

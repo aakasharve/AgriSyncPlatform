@@ -13,7 +13,7 @@ export default function PlaceholderPage({ title, phase, bullets = [] }: Placehol
         <Sprout size={28} strokeWidth={2.5} />
       </div>
       <h1 className="text-xl font-extrabold tracking-tight text-text-primary">{title}</h1>
-      <div className="text-xs font-bold uppercase tracking-[0.15em] text-brand-leaf dark:text-brand-mint">
+      <div className="text-xs font-bold uppercase tracking-[0.15em] text-brand-leaf">
         Scheduled for {phase}
       </div>
       {bullets.length > 0 && (

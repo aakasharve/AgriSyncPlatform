@@ -75,7 +75,7 @@ export function LoadingState({ label = 'Loading…', height = 240, className }: 
       className={`relative overflow-hidden rounded-lg bg-surface-sidebar ${className ?? ''}`}
       style={{ height }}
     >
-      <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-white/30 to-transparent dark:via-white/10" />
+      <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-white/30 to-transparent" />
       <span className="sr-only">{label}</span>
       <span className="absolute inset-0 grid place-items-center text-text-muted">
         <Loader2 size={18} className="animate-spin" aria-hidden />
@@ -121,7 +121,7 @@ export function ErrorState({ error, onRetry, className }: ErrorStateProps) {
           <button
             type="button"
             onClick={onRetry}
-            className="rounded-md border border-surface-border bg-white/70 px-2.5 py-1 text-[12px] font-bold text-text-primary hover:bg-white dark:bg-white/10 dark:hover:bg-white/20"
+            className="rounded-md border border-surface-border bg-white/70 px-2.5 py-1 text-[12px] font-bold text-text-primary hover:bg-white"
           >
             Retry
           </button>

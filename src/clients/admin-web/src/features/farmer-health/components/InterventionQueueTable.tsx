@@ -118,7 +118,7 @@ export function InterventionQueueTable({ rows, understatedEmpty }: InterventionQ
               <td className="py-2.5 pr-4 text-right">
                 <Link
                   to={`/farmer-health/${r.farmId}`}
-                  className="inline-flex items-center gap-1 rounded-md border border-surface-border px-2 py-1 text-[11px] font-bold text-text-primary hover:bg-white/60 dark:hover:bg-white/10"
+                  className="inline-flex items-center gap-1 rounded-md border border-surface-border px-2 py-1 text-[11px] font-bold text-text-primary hover:bg-white/60"
                   aria-label={`Open drilldown for ${r.farmerName}`}
                 >
                   Open <ChevronRight size={12} />

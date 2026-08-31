@@ -8,10 +8,11 @@ import { cleanup } from '@testing-library/react';
  * Three things in this console persist OUTSIDE React and therefore leak from
  * one test into the next unless they are reset here:
  *
- *  1. localStorage — `admin.theme.v1` (ThemeProvider.tsx:16,54),
- *     `admin.active-org.v1` (ActiveOrgProvider.tsx:12,57) and
+ *  1. localStorage — `admin.active-org.v1` (ActiveOrgProvider.tsx:12,57) and
  *     `admin.session.v1` (lib/auth.ts:1,39). A test that logs in would
- *     otherwise leave the next test authenticated.
+ *     otherwise leave the next test authenticated. `admin.theme.v1` was the
+ *     third until Task 3 deleted ThemeProvider with dark mode (D1); the
+ *     clear() below is blanket, so nothing needed changing but this list.
  *
  *  2. The document URL — `ActiveOrgProvider.setActiveOrgId` calls
  *     `window.history.replaceState` to write `?org=<id>` (ActiveOrgProvider.tsx:102-108),

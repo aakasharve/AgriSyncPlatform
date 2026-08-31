@@ -76,7 +76,7 @@ export function FarmerSearchBox({ onResolved }: FarmerSearchBoxProps) {
           type="button"
           onClick={submit}
           disabled={!debounced || query.isFetching}
-          className="inline-flex h-9 items-center gap-1.5 rounded-md bg-black px-3 text-[12px] font-bold text-white transition-colors hover:bg-black/85 disabled:opacity-50 dark:bg-brand-green dark:text-[#0b1416]"
+          className="inline-flex h-9 items-center gap-1.5 rounded-md bg-black px-3 text-[12px] font-bold text-white transition-colors hover:bg-black/85 disabled:opacity-50"
         >
           {query.isFetching ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
           Search

@@ -1,17 +1,120 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-@custom-variant dark (&:is([data-mode='dark'] *));
-
 /* =====================================================================
- * AgriSync Admin — Tailwind v4 @theme
- * Light mode = strict-black text. Dark mode = aesthetic, not inverted.
+ * AgriSync Admin — ONE token layer (v3 design system, Tailwind v4 @theme)
+ *
+ * LIGHT MODE IS LOCKED. There is no `prefers-color-scheme` rule in this
+ * file, no dark palette, and no `@custom-variant dark`. CONTRACT.md §8
+ * bans a dark rule that fires from the OS; the dark-mode toggle, the
+ * authored dark token set and the persisted `admin.theme.v1` preference
+ * were removed outright — founder decision D1, 2026-08-31. Nothing here
+ * is "off but present": a capability left inert is a capability that
+ * comes back as a bug.
+ *
+ * NO COMPONENT MAY INTRODUCE A RAW HEX VALUE FROM HERE ON. If a screen
+ * needs a colour that is not below, the colour is wrong or the token is
+ * missing — add the token, with a reason, rather than a literal.
+ *
+ * Two blocks live below and they are NOT peers:
+ *   §A  the v3 token layer   — what every screen is styled against.
+ *   §B  the legacy glass layer — kept alive ONLY because 19 files have
+ *       not been ported yet. Deleted in Task 27. Do not build on it.
  * ===================================================================== */
+
 @theme {
-  --font-sans: 'Inter', system-ui, sans-serif;
+  /* --- §A.1 type ------------------------------------------------------
+   * The charter font rules outrank the prototype. v3's mock is drawn in
+   * IBM Plex; AgriSync's non-negotiable rule is DM Sans for English,
+   * brand and numbers, and Noto Sans Devanagari for Marathi body text.
+   * Devanagari sits second in the stack so a farmer's name in Marathi
+   * resolves to Noto Sans Devanagari without a per-component check —
+   * the console duplicates that check in four places today and Task 6
+   * removes all four in favour of this.
+   *
+   * `--font-mono` survives only because 27 unported files still say
+   * `font-mono`, 92 times. CONTRACT.md §8 bans monospace anywhere; that ban lands
+   * screen by screen in Tasks 14–26, and the token dies with the last
+   * caller in Task 27. */
+  --font-sans: 'DM Sans', 'Noto Sans Devanagari', sans-serif;
+  --font-devanagari: 'Noto Sans Devanagari', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  /* Brand — from AgriSync logo */
+  /* --- §A.2 ink (CONTRACT.md §7.7) ------------------------------------ */
+  --color-text-1: #14201a; /* body copy, table cells, KPI labels        */
+  --color-text-2: #55655c; /* section headings, captions, table headers */
+  --color-text-3: #8a9990; /* EVERY honesty state. Never a semantic hue */
+
+  /* --- §A.3 surfaces --------------------------------------------------- */
+  --color-page: #ffffff; /* panels, sidebar, login card                */
+  --color-ground: #f5f9f6; /* the page itself                           */
+  --color-wash: #edf5f0; /* hover, quiet button hover, zebra           */
+  --color-line: #e2eae5; /* every hairline: dividers, inputs, chips    */
+
+  /* --- §A.4 signal colours (CONTRACT.md §7.7) --------------------------
+   * "If you cannot say what a colour means, remove it." These four are
+   * the only meanings that exist. Text only. */
+  --color-blue: #4f46e5; /* interactive, and neutral-informational     */
+  --color-blue-press: #4338ca; /* the one hover state a button is allowed    */
+  --color-green: #0f8a5f; /* positive                                   */
+  --color-red: #e11d48; /* needs a person, or a failure               */
+  --color-amber: #b45309; /* stale, or a warning                        */
+
+  /* --- §A.5 vivid fills — BAR FILLS AND DOTS ONLY, NEVER TEXT --------- */
+  --color-green-vivid: #10b981;
+  --color-amber-vivid: #f59e0b;
+  --color-red-vivid: #f43f5e;
+  --color-blue-vivid: #6366f1;
+  --color-edge-grey: #c7d2cb; /* the leading edge of a row with no verdict */
+
+  /* --- §A.6 tint backgrounds — KPI tiles and badges ------------------- */
+  --color-tint-blue: #eef0fe;
+  --color-tint-green: #e7f6ef;
+  --color-tint-red: #feecf0;
+  --color-tint-amber: #fdf3e3;
+  --color-tint-grey: #f2f5f3; /* also the honesty tile: grey is not a tone */
+
+  /* --- §A.7 the two product colour constraints (register A37) ---------
+   * These carry their constraint IDs because the reason has to survive
+   * the person who knew it. */
+
+  /* C7 — success never reaches bright green. A healthy pillar tops out at
+     teal by product decision, so a "good" reading can never be mistaken for
+     a celebration. Do not raise this value. */
+  --color-pillar-good: #0e7d7b;
+  /* C8 — privileged ops panels carry a slate inset border so an admin can
+     tell ops data from the core farmer profile at a glance. */
+  --color-ops-inset: rgba(100, 116, 139, 0.55);
+
+  /* --- §A.8 depth: four levels, and there is no fifth ------------------
+   * The other half of the rule: nothing carries a border AND a shadow. An
+   * edge is drawn once, by one means. Panels and tiles are shadow-drawn;
+   * chips, inputs and buttons are border-drawn. Internal dividers are not
+   * edges and do not count. Level one — the ground — has no shadow at all
+   * and therefore has no token; write nothing. */
+  --shadow-surface: 0 1px 2px rgba(20, 32, 26, 0.05);
+  --shadow-raised: 0 2px 4px rgba(20, 32, 26, 0.06), 0 8px 24px rgba(20, 32, 26, 0.05);
+  --shadow-float: 0 8px 16px rgba(20, 32, 26, 0.1), 0 24px 48px rgba(20, 32, 26, 0.08);
+
+  /* --- §A.9 geometry --------------------------------------------------- */
+  --radius-panel: 12px;
+  --radius-chip: 8px;
+  --radius-card: 1rem; /* legacy §B, kept until Task 27 */
+  --radius-kpi: 0.875rem; /* legacy §B, kept until Task 27 */
+
+  /* Layout constants the shell is built from (Task 10 consumes these).
+     1280 is the design width: 236px sidebar, four KPIs across. */
+  --spacing-sidebar: 236px;
+  --spacing-sidebar-narrow: 212px;
+  --spacing-topbar: 60px;
+  --spacing-row: 52px;
+
+  /* --- §B legacy tokens — DELETED IN TASK 27 ---------------------------
+   * The `.glass*`, `.chip-*` and `.nav-active` rules below are still
+   * referenced by 19 unported files (25 references, counted 2026-08-31 —
+   * down from 21 / 27 at HEAD, because Card and KpiCard moved off).
+   * These tokens exist to keep those rules rendering, and for no other
+   * reason. Do not style anything new against them. */
   --color-brand-green: #00c853;
   --color-brand-green-soft: #00f248;
   --color-brand-teal: #52c0be;
@@ -20,7 +123,6 @@
   --color-brand-leaf: #329128;
   --color-brand-deep: #0c174b;
 
-  /* Surface + text (light-mode defaults, dark mode overrides via :root[data-mode='dark']) */
   --color-background: #eefaf3;
   --color-foreground: #000000;
   --color-text-primary: #000000;
@@ -38,65 +140,69 @@
   --color-success: #00c853;
   --color-danger: #dc2626;
   --color-warning: #f59e0b;
-
-  --radius-card: 1rem;
-  --radius-kpi: 0.875rem;
 }
-
-/* Dark mode (aesthetic, not pure-invert) */
-:root[data-mode='dark'] {
-  --color-background: #0b1416;
-  --color-foreground: #ffffff;
-  --color-text-primary: #ffffff;
-  --color-text-secondary: #f0f0f0;
-  --color-text-muted: #c8c8c8;
-
-  --color-surface-glass: color-mix(in oklab, #12181c 76%, transparent);
-  --color-surface-panel: color-mix(in oklab, #141c1e 88%, transparent);
-  --color-surface-kpi: color-mix(in oklab, #161e20 85%, transparent);
-  --color-surface-sidebar: color-mix(in oklab, #0e1416 70%, transparent);
-  --color-surface-border: color-mix(in oklab, #7dd8d6 28%, transparent);
-  --color-surface-border-strong: color-mix(in oklab, #7dd8d6 60%, transparent);
-  --color-row-divider: color-mix(in oklab, #ffffff 8%, transparent);
-
-  --color-brand-green: #00e36a;
-  --color-brand-teal: #7dd8d6;
-  --color-brand-mint: #a3e8d4;
-  --color-brand-sky: #c9e8ea;
-  --color-brand-leaf: #4fb040;
-}
-:root[data-theme='dusk'] { --color-background: #fbe8d9; }
-:root[data-theme='dusk'][data-mode='dark'] { --color-background: #140c08; }
 
 /* =====================================================================
  * Base
  * ===================================================================== */
+
+:root {
+  /* Stops the OS repainting form controls dark on a dark-themed machine.
+     Half of the "dark mode leaked in" bug class is this one line. */
+  color-scheme: light;
+}
+
 *,
 *::before,
 *::after {
   box-sizing: border-box;
 }
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 html,
 body,
 #root {
   min-height: 100%;
 }
+
 body {
   margin: 0;
   padding: 0;
-  background: var(--color-background);
-  color: var(--color-foreground);
+  background: var(--color-ground);
+  color: var(--color-text-1);
   font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 1.5;
-  font-feature-settings: 'cv11', 'ss01';
+  font-size: 15px;
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
-  transition: background 0.3s;
   overflow-x: hidden;
 }
 
+/* One focus ring for the whole console: 2px indigo at 2px offset
+   (CONTRACT.md §10). Outlines are never removed anywhere. */
+:focus-visible {
+  outline: 2px solid var(--color-blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 /* =====================================================================
- * Glass utility classes — used by shell, panels, KPIs.
+ * §B LEGACY — glass utility classes.
+ *
+ * 🛑 DO NOT DELETE THESE HERE. 19 files still reference them (25
+ * references) and they are ported in Tasks 14–26. Task 27 deletes this
+ * whole block plus the §B tokens above, after the last consumer moves.
+ *
+ * CONTRACT.md §8 bans glassmorphism, translucency and gradients, so
+ * nothing new is built on this. It is a bridge, not a foundation.
+ *
+ * The `:root[data-mode='dark']` overrides that used to sit inside this
+ * block are gone with D1, along with the `[data-theme='dusk']` palette
+ * (D2 — `setTheme` had zero callers and was reachable only by hand-
+ * editing localStorage).
  * ===================================================================== */
 .glass {
   background: var(--color-surface-glass);
@@ -212,16 +318,10 @@ body {
   color: color-mix(in oklab, var(--color-success) 80%, #000);
   border-color: color-mix(in oklab, var(--color-success) 50%, transparent);
 }
-:root[data-mode='dark'] .chip-live {
-  color: #9af5be;
-}
 .chip-mat {
   background: color-mix(in oklab, var(--color-brand-teal) 28%, transparent);
   color: color-mix(in oklab, var(--color-brand-teal) 80%, #000);
   border-color: color-mix(in oklab, var(--color-brand-teal) 60%, transparent);
-}
-:root[data-mode='dark'] .chip-mat {
-  color: #b8edec;
 }
 
 /* Sidebar active nav pill (reused in AdminShell) */
@@ -235,7 +335,46 @@ body {
   box-shadow: 0 2px 8px color-mix(in oklab, var(--color-brand-green) 18%, transparent),
     inset 0 1px 0 color-mix(in oklab, #ffffff 60%, transparent);
 }
-:root[data-mode='dark'] .nav-active {
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-brand-green) 18%, transparent),
-    0 6px 22px color-mix(in oklab, var(--color-brand-green) 18%, transparent);
+
+/* =====================================================================
+ * Quality floor (CONTRACT.md §10)
+ * ===================================================================== */
+
+/* An admin who has asked their OS to stop moving things gets a console
+   that does not move. This kills the legacy `.glass-kpi` hover lift too,
+   which is the point — it is one rule, not a per-component opt-in. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* A printed console is evidence. Chrome goes, content stays, and a panel
+   or a tile is never split across a page break.
+   Two selectors, both live: `.glass-sidebar` is today's nav and prints
+   nothing right now; `[data-print="chrome"]` is the attribute Task 10's
+   rebuilt shell puts on its sidebar and top bar, so this rule keeps
+   working across the port instead of going dead the moment the class
+   name changes. */
+@media print {
+  body {
+    background: var(--color-page);
+  }
+  .glass-sidebar,
+  [data-print='chrome'] {
+    display: none !important;
+  }
+  .glass,
+  .glass-panel,
+  .glass-kpi {
+    break-inside: avoid;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }

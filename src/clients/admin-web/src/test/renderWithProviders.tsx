@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ThemeProvider } from '@/app/ThemeProvider';
 import { ActiveOrgProvider } from '@/app/ActiveOrgProvider';
 import { AdminAuthProvider } from '@/app/AdminAuthProvider';
 
@@ -21,9 +20,13 @@ export function makeTestQueryClient() {
 }
 
 /**
- * Mirrors the provider stack in App.tsx:105-109 exactly:
+ * Mirrors the provider stack in App.tsx exactly:
  *
- *   ThemeProvider > QueryClientProvider > Router > ActiveOrgProvider > AdminAuthProvider
+ *   QueryClientProvider > Router > ActiveOrgProvider > AdminAuthProvider
+ *
+ * It was five deep and led with ThemeProvider until Task 3 deleted that
+ * provider with dark mode (D1). Four now, and the two constraints below are
+ * the ones that were ever load-bearing.
  *
  * The order is load-bearing and is itself a preserved capability (Preservation
  * Register A45):
@@ -54,15 +57,13 @@ export function renderWithProviders(
   return {
     queryClient,
     ...render(
-      <ThemeProvider>
-        <QueryClientProvider client={queryClient}>
-          <MemoryRouter initialEntries={[route]}>
-            <ActiveOrgProvider>
-              <AdminAuthProvider>{ui}</AdminAuthProvider>
-            </ActiveOrgProvider>
-          </MemoryRouter>
-        </QueryClientProvider>
-      </ThemeProvider>,
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[route]}>
+          <ActiveOrgProvider>
+            <AdminAuthProvider>{ui}</AdminAuthProvider>
+          </ActiveOrgProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
     ),
   };
 }

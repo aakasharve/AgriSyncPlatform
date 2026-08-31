@@ -30,7 +30,7 @@ export function SyncStateBlock({ state }: SyncStateBlockProps) {
   return (
     <section
       className="glass-panel p-5"
-      style={{ boxShadow: 'inset 4px 0 0 0 rgba(100, 116, 139, 0.55)' }}
+      style={{ boxShadow: 'inset 4px 0 0 0 var(--color-ops-inset)' }}
       aria-label="Sync state (ops:read)"
     >
       <div className="mb-3 flex items-center gap-2">
@@ -58,7 +58,7 @@ export function SyncStateBlock({ state }: SyncStateBlockProps) {
             </div>
             <div>
               <dt className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Pending pushes</dt>
-              <dd className={`mt-0.5 font-mono text-[12px] font-bold tabular-nums ${pending > 0 ? 'text-[#b45309]' : 'text-text-primary'}`}>
+              <dd className={`mt-0.5 font-mono text-[12px] font-bold tabular-nums ${pending > 0 ? 'text-amber' : 'text-text-primary'}`}>
                 {pending}
               </dd>
             </div>

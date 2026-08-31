@@ -35,10 +35,13 @@ function fontFor(name: string): string {
     : "'DM Sans', sans-serif";
 }
 
+/* Second copy of DwcScoreCard's bucket tones, tokenised with it. C7's teal
+   had two homes and only one of them carried the sentence saying why — which
+   is the failure mode the named token exists to close. */
 const BUCKET_TONE: Record<Bucket, { bg: string; fg: string; label: string }> = {
-  intervention: { bg: 'rgba(220,38,38,0.14)',  fg: '#dc2626', label: 'Intervention' },
-  watchlist:    { bg: 'rgba(245,158,11,0.18)', fg: '#b45309', label: 'Watchlist' },
-  healthy:      { bg: 'rgba(82,192,190,0.16)', fg: '#0e7d7b', label: 'Healthy' },
+  intervention: { bg: 'var(--color-tint-red)',   fg: 'var(--color-red)', label: 'Intervention' },
+  watchlist:    { bg: 'var(--color-tint-amber)', fg: 'var(--color-amber)', label: 'Watchlist' },
+  healthy:      { bg: 'var(--color-tint-green)', fg: 'var(--color-pillar-good)', label: 'Healthy' },
 };
 
 export default function FarmerHealthDrilldown() {
@@ -147,7 +150,7 @@ export default function FarmerHealthDrilldown() {
           ) : (
             <section
               className="glass-panel p-5"
-              style={{ boxShadow: 'inset 4px 0 0 0 rgba(100, 116, 139, 0.55)' }}
+              style={{ boxShadow: 'inset 4px 0 0 0 var(--color-ops-inset)' }}
               aria-label="Ops data hidden"
             >
               <div className="flex items-start gap-2.5">

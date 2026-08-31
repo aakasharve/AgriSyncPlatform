@@ -1,14 +1,24 @@
 <!doctype html>
-<html lang="en" data-theme="fresh" data-mode="light">
+<!-- Light mode is locked (CONTRACT.md §8, founder decision D1 2026-08-31).
+     `data-mode="light"` is a declaration of that lock, not a switch: there is
+     no toggle, no persisted preference and no dark palette in globals.css. -->
+<html lang="en" data-mode="light">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=1280, initial-scale=1.0" />
+    <!-- Was `width=1280`, which made the console desktop-only by construction:
+         a laptop at 1024 got a horizontally-scrolled 1280 page it could not
+         reflow. v3 is responsive down to 1023 and below. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="AgriSync Admin · operations console" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- DM Sans = English, brand and numbers. Noto Sans Devanagari = Marathi
+         body text. Both are charter rules, not preferences. JetBrains Mono is
+         still loaded because 20 unported screens say `font-mono`; CONTRACT.md
+         §8 bans monospace and it leaves with the last caller (Task 27). -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <title>AgriSync Admin</title>

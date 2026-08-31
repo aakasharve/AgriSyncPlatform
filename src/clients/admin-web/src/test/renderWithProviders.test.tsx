@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { screen } from '@testing-library/react';
 import { useLocation } from 'react-router-dom';
 import { useIsFetching } from '@tanstack/react-query';
-import { useTheme } from '@/app/ThemeProvider';
 import { useActiveOrg } from '@/app/ActiveOrgProvider';
 import { useAdminAuth } from '@/app/AdminAuthProvider';
 import { makeTestQueryClient, renderWithProviders } from './renderWithProviders';
@@ -12,16 +11,19 @@ import { makeTestQueryClient, renderWithProviders } from './renderWithProviders'
  *
  * Task 2 writes the characterisation tests that lock the console's behaviour.
  * This file exists because those tests are only worth what the harness under
- * them is worth: every one of the five providers has a fail-fast throw or an
+ * them is worth: every one of the four providers has a fail-fast throw or an
  * internal `useQueryClient()` that turns a wrong nesting order into a mount
- * error, so a probe that consumes all five is a direct proof of A45 rather
+ * error, so a probe that consumes all four is a direct proof of A45 rather
  * than a claim about it.
+ *
+ * It probed FIVE until Task 3. ThemeProvider was deleted with dark mode (D1,
+ * founder 2026-08-31), so the `theme` leg of the probe and its assertion went
+ * with it — in the same commit as the deletion, never after.
  *
  * It also means `npm run test` passes because something ran — not because
  * `passWithNoTests` was switched on over an empty suite.
  */
 function Probe() {
-  const { theme } = useTheme();              // throws outside ThemeProvider
   const { activeOrgId } = useActiveOrg();    // throws outside ActiveOrgProvider
   const { status } = useAdminAuth();         // throws outside AdminAuthProvider
   const { pathname } = useLocation();        // throws outside a Router
@@ -29,7 +31,6 @@ function Probe() {
 
   return (
     <dl>
-      <dd data-testid="theme">{theme}</dd>
       <dd data-testid="org">{activeOrgId ?? 'none'}</dd>
       <dd data-testid="auth">{status}</dd>
       <dd data-testid="path">{pathname}</dd>
@@ -39,12 +40,11 @@ function Probe() {
 }
 
 describe('renderWithProviders', () => {
-  it('mounts children inside all five providers, in App.tsx order', () => {
+  it('mounts children inside all four providers, in App.tsx order', () => {
     renderWithProviders(<Probe />);
 
     // Each of these resolving at all is the assertion: the corresponding
     // provider was present and above the consumer.
-    expect(screen.getByTestId('theme')).toHaveTextContent('fresh');
     expect(screen.getByTestId('org')).toHaveTextContent('none');
     expect(screen.getByTestId('path')).toHaveTextContent('/');
     expect(screen.getByTestId('fetching')).toHaveTextContent('0');
