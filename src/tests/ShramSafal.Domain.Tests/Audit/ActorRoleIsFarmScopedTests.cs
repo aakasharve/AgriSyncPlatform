@@ -8,6 +8,7 @@ using FluentAssertions;
 using System.IO;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Application.UseCases.Attachments.CreateAttachment;
+using ShramSafal.Application.UseCases.Memberships.IssueFarmInvite;
 using ShramSafal.Application.UseCases.Attachments.UploadAttachment;
 using ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
 using ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary;
@@ -66,6 +67,42 @@ public sealed class ActorRoleIsFarmScopedTests
 
         public Task<Stream?> OpenReadAsync(string relativePath, CancellationToken ct = default)
             => Task.FromResult<Stream?>(null);
+    }
+
+    [Fact]
+    public async Task Invite_issued_by_a_secondary_owner_is_not_recorded_as_primaryowner()
+    {
+        var farmId = Guid.NewGuid();
+        var callerUserId = Guid.NewGuid();
+        var nowUtc = new DateTime(2026, 8, 31, 12, 0, 0, DateTimeKind.Utc);
+
+        var repository = new RoleRecordingRepositoryStub(
+            AppRole.SecondaryOwner, FarmOwnedBy(farmId, callerUserId));
+        var analytics = new CapturingAnalyticsWriter();
+
+        var handler = new IssueFarmInviteHandler(
+            new StubFarmInvitationRepository(), repository, new FixedClock(nowUtc), analytics);
+
+        var result = await handler.HandleAsync(
+            new IssueFarmInviteCommand(new FarmId(farmId), new UserId(callerUserId)),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        repository.AuditEventCount.Should().Be(1,
+            "a zero here means an early return, not a wrong role");
+
+        // Both sinks were hardcoded to PrimaryOwner. EnsureIsOwner admits SecondaryOwner
+        // too (ShramSafalRepository.cs:94), so the moment a co-owner shares the farm QR
+        // both rows named a role that person does not hold.
+        repository.LastAuditActorRole.Should().Be(
+            "secondaryowner",
+            "the audit ledger takes the resolved role directly - its column is varchar(80)");
+
+        analytics.Events.Should().ContainSingle();
+        analytics.Events[0].ActorRole.Should().Be(
+            "secondaryowner",
+            "analytics takes a BOUNDED mapping, never a raw role - its column is varchar(16) "
+            + "and 'fpctechnicalmanager' is 19 chars");
     }
 
     [Fact]
