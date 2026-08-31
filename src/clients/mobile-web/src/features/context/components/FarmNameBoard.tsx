@@ -35,14 +35,21 @@
  * silhouette is identical at 320px and at 420px — the founder asked for that
  * explicitly and a percentage-based clip would have failed it silently.
  *
- * THE NAME IS FITTED, NEVER CLIPPED
- * ---------------------------------
+ * NOTHING ON THIS BOARD IS CLIPPED -- NAME OR SUBTITLE
+ * ----------------------------------------------------
  * `useFitText` steps the type down from 25px until the name fits one line, and
  * WRAPS rather than truncating if it still will not. An ellipsis here would
  * hide part of who the farmer is, which is the opposite of what a nameboard is
  * for — the same reasoning `CanonicalStrip` uses for its own subtitle. A
  * 48-character formal name lands at ~12px on two lines; that is the honest
  * floor, and it is why the plot count and owner name had to leave this row.
+ *
+ * The same rule governs the subtitle row, and for a while it did not. That row
+ * was built with its two gold rules marked `shrink-0` and its text marked
+ * `truncate` -- the ornament protected, the words expendable -- so a short farm
+ * name produced "Managed by Shram Saf...". Whatever must give way here, it is
+ * never the text. State a rule in this header and it has to hold for every
+ * element under it, or it is decoration too.
  */
 import React from 'react';
 import type { Language } from '../../../i18n/language';
@@ -298,23 +305,43 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
                                     </span>
                                 </span>
                                 {showSubtitle && (
-                                    <span className="mt-0.5 flex max-w-full items-center gap-1.5">
+                                    /* The ornaments yield, the words never do. Previously this was
+                                     * exactly inverted: the two rules were `shrink-0` and the text
+                                     * carried `truncate`, so a short farm name made the column
+                                     * narrow and the SUBTITLE was what gave way -- rendering
+                                     * "Managed by Shram Saf...". `max-w-full` capped this row at the
+                                     * name's width, and `truncate` sets min-content to zero, so the
+                                     * column never even asked to be wide enough for the subtitle.
+                                     *
+                                     * SUBTITLE is a constant, not user data: its width is known and
+                                     * small, so there is nothing here that truncation could protect
+                                     * against. It is the same rule the file header states for the
+                                     * name -- an ellipsis hides meaning that the board exists to
+                                     * show -- simply applied one element down, where it had been
+                                     * written and then not followed. */
+                                    <span className="mt-0.5 flex items-center justify-center gap-1.5">
                                         <i
                                             aria-hidden="true"
-                                            className="h-px w-4 shrink-0"
-                                            style={{ background: 'linear-gradient(90deg,rgba(217,180,91,0),#D9B45B)' }}
+                                            className="h-px min-w-0 flex-1 basis-4"
+                                            style={{
+                                                maxWidth: '1rem',
+                                                background: 'linear-gradient(90deg,rgba(217,180,91,0),#D9B45B)',
+                                            }}
                                         />
                                         <span
                                             data-testid="farm-nameboard-subtitle"
-                                            className="truncate text-[8px] font-semibold tracking-[0.04em]"
+                                            className="shrink-0 whitespace-nowrap text-[8px] font-semibold tracking-[0.04em]"
                                             style={{ color: '#E4D3A6', ...bodyFontFor(SUBTITLE) }}
                                         >
                                             {SUBTITLE}
                                         </span>
                                         <i
                                             aria-hidden="true"
-                                            className="h-px w-4 shrink-0"
-                                            style={{ background: 'linear-gradient(90deg,#D9B45B,rgba(217,180,91,0))' }}
+                                            className="h-px min-w-0 flex-1 basis-4"
+                                            style={{
+                                                maxWidth: '1rem',
+                                                background: 'linear-gradient(90deg,#D9B45B,rgba(217,180,91,0))',
+                                            }}
                                         />
                                     </span>
                                 )}

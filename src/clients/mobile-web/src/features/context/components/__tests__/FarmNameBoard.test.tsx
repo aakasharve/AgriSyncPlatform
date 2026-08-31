@@ -142,4 +142,41 @@ describe('FarmNameBoard — the shield has to be legible', () => {
         const nameCol = screen.getByTestId('farm-nameboard-name').closest('span.flex-col');
         expect(nameCol!.className).not.toContain('flex-1');
     });
+
+    it('never truncates the subtitle, however short the farm name is', () => {
+        // FOUNDER 2026-08-31: "the sub title managed by shram safal is looking
+        // incomplete". It was rendering "Managed by Shram Saf..." because the
+        // subtitle row was capped at the NAME's width (max-w-full) while its two
+        // gold rules were shrink-0 and the text was truncate. The ornament was
+        // protected and the words were expendable -- exactly inverted.
+        //
+        // jsdom performs no layout, so this cannot assert rendered pixels. It
+        // asserts the STRUCTURE that decides who yields, which is where the bug
+        // actually lived: a visual-only check would have passed on the broken
+        // build too, since every width in jsdom is 0.
+        const shortest = 'अ';
+        render(<FarmNameBoard {...props({ farmName: shortest })} />);
+
+        const subtitle = screen.getByTestId('farm-nameboard-subtitle');
+        expect(subtitle).toHaveTextContent('Managed by Shram Safal');
+        expect(subtitle.className, 'the subtitle must never carry an ellipsis')
+            .not.toContain('truncate');
+        expect(subtitle.className, 'the words must not shrink').toContain('shrink-0');
+        expect(subtitle.className).toContain('whitespace-nowrap');
+
+        // The row must not be capped at the name's width, or the column never
+        // asks to be wide enough for the subtitle in the first place.
+        const row = subtitle.parentElement!;
+        expect(row.className, 'the subtitle row must not inherit the name width')
+            .not.toContain('max-w-full');
+
+        // ...and the decorative rules are the things that give way.
+        const rules = Array.from(row.querySelectorAll('i'));
+        expect(rules).toHaveLength(2);
+        for (const rule of rules) {
+            expect(rule.className, 'ornaments must yield before the text does')
+                .not.toContain('shrink-0');
+            expect(rule.className).toContain('min-w-0');
+        }
+    });
 });
