@@ -1406,9 +1406,9 @@ here rather than carrying it into the next task.
 - Rewrite: `src/clients/admin-web/src/app/AdminShell.tsx`
 - Create: `src/clients/admin-web/src/app/ToastHost.tsx`
 
-- [ ] **Step 1: Rebuild the sidebar on the v3 layout, keeping all six groups and twelve items.** 236px at 1280 and above, 212px at 1024 to 1279, a horizontal strip below 1024. Groups stay Overview, Operations, Product, Farms, Schedules, Admin — CONTRACT.md Appendix 1 confirms six, not five, with WVFD alone in Product.
+- [x] **Step 1: Rebuild the sidebar on the v3 layout, keeping all six groups and twelve items.** 236px at 1280 and above, 212px at 1024 to 1279, a horizontal strip below 1024. Groups stay Overview, Operations, Product, Farms, Schedules, Admin — CONTRACT.md Appendix 1 confirms six, not five, with WVFD alone in Product.
 
-- [ ] **Step 2: Keep the nav badge slot (A53)**
+- [x] **Step 2: Keep the nav badge slot (A53)**
 
 ```tsx
 /**
@@ -1420,19 +1420,19 @@ here rather than carrying it into the next task.
 badge?: number;
 ```
 
-- [ ] **Step 3: Resolve the shortcut badges (D4).** The only global key handler binds Cmd-K and Escape. Either implement Cmd-1, Cmd-2 and Cmd-F or drop the three badges. Carrying the chips forward re-ships a lie, which is precisely what the v3 doctrine forbids. Recommendation: implement them in T13 — three lines in an existing handler is cheaper than explaining a removed affordance.
+- [x] **Step 3: Resolve the shortcut badges (D4).** The only global key handler binds Cmd-K and Escape. Either implement Cmd-1, Cmd-2 and Cmd-F or drop the three badges. Carrying the chips forward re-ships a lie, which is precisely what the v3 doctrine forbids. Recommendation: implement them in T13 — three lines in an existing handler is cheaper than explaining a removed affordance.
 
-- [ ] **Step 4: Put the active org in the top bar, on every screen (A39, B11).** Today the org name appears in exactly one subtitle, on one screen (`FarmerHealthPage.tsx:31-33,55-57`). With v3 having no org concept at all, that last visible trace of tenancy would disappear and every screen would show org-scoped numbers with nothing on screen saying which org. Do the opposite of dropping it: the active org name goes in the top bar on every screen, with a real switcher beside it. The v3 doctrine demands that a number states its scope.
+- [x] **Step 4: Put the active org in the top bar, on every screen (A39, B11).** Today the org name appears in exactly one subtitle, on one screen (`FarmerHealthPage.tsx:31-33,55-57`). With v3 having no org concept at all, that last visible trace of tenancy would disappear and every screen would show org-scoped numbers with nothing on screen saying which org. Do the opposite of dropping it: the active org name goes in the top bar on every screen, with a real switcher beside it. The v3 doctrine demands that a number states its scope.
 
-- [ ] **Step 5: Wire the avatar to the real user (D12).** initialsOf is called with literal nulls so every user sees AK, and useAdminAuth() is called and its result discarded (`AdminShell.tsx:53,77-79`). Either wire it to the resolved scope user or drop the avatar. Do not reproduce the constant.
+- [x] **Step 5: Wire the avatar to the real user (D12).** initialsOf is called with literal nulls so every user sees AK, and useAdminAuth() is called and its result discarded (`AdminShell.tsx:53,77-79`). Either wire it to the resolved scope user or drop the avatar. Do not reproduce the constant.
 
-- [ ] **Step 6: Add a sign-out control to the shell (A13, B3).** Today the ONLY sign-out in the entire app is on /403. Put a real one in the top bar. Keep the /403 one as well — a denied user still needs it.
+- [x] **Step 6: Add a sign-out control to the shell (A13, B3).** Today the ONLY sign-out in the entire app is on /403. Put a real one in the top bar. Keep the /403 one as well — a denied user still needs it.
 
-- [ ] **Step 7: Add a manual Refresh affordance (B14).** One control that invalidates the current route query keys, next to a dataUpdatedAt-driven freshness chip. v3 has no slot for this and needs one the moment real fetching returns.
+- [x] **Step 7: Add a manual Refresh affordance (B14).** One control that invalidates the current route query keys, next to a dataUpdatedAt-driven freshness chip. v3 has no slot for this and needs one the moment real fetching returns.
 
-- [ ] **Step 8: Add the toast host (B15 — slot only).** Mount it; register nothing. It exists so the first write surface has somewhere to land.
+- [x] **Step 8: Add the toast host (B15 — slot only).** Mount it; register nothing. It exists so the first write surface has somewhere to land.
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and enforced almost
 nowhere — Tasks 4, 5, 6, 7, 9, 10, 12 and 13 originally ended at "run and commit". An invariant
@@ -1445,7 +1445,55 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 9: Commit** — `feat(admin-web): v3 shell — org named on every screen, real avatar, real sign-out, refresh`
+- [x] **Step 9: Commit** — `feat(admin-web): v3 shell — org named on every screen, real avatar, real sign-out, refresh`
+
+---
+
+> **Executed 2026-08-31 (`ba8f5a1c`). 523 tests. Six mutations, six kills.**
+>
+> **🛑 `decodeJwt` decoded one character per byte**, so a Marathi `display_name` arrived as mojibake —
+> the avatar would have been wrong before the font ever got a chance. Fixed in `lib/auth.ts`, a file
+> this task does not list. Display use only; **D15 (no client-side authorization) is intact** and
+> Task 2's characterisation of `decodeJwt` is unchanged and green.
+>
+> **A measurement changed the design.** Switching org was written as `removeQueries()` behind a
+> `setTimeout` with a comment about an effect-ordering race. Measured against a query keyed the way
+> this console keys them (no org in the key):
+>
+> | | refetches? | on screen during the refetch |
+> |---|---|---|
+> | `removeQueries()` | **never** | the previous org's rows, indefinitely |
+> | `invalidateQueries()` | yes | **the previous org's rows** |
+> | `resetQueries()` | yes | loading |
+>
+> `resetQueries()` shipped. **The `setTimeout` made no measurable difference and was deleted with its
+> explanation** — a defensive line with an unproven reason is the defect this repo keeps catching.
+>
+> **D3 was ALREADY DONE.** The envelope said Task 3 left the shader and its render site; both false —
+> `793c16f4` deleted `WheatWindShader.tsx`, its import and its render site. There was nothing to
+> delete. **Register A45's note "(110 is `<WheatWindShader />`)" is now dead.**
+>
+> **Every `AdminShell.tsx` citation was stale** (Task 3 edited the file): shortcut fields **32,33,37**
+> not 35,36,40; badge render **99–103** not 111–115; `useAdminAuth()` **49** not 53;
+> `initialsOf(null,null)` at **66** with the helper at **134–141**, not 77–79. A53's **25 / 104–108**,
+> not 28 / 116–120.
+>
+> **🛑 B11 is assigned to T12, but Step 4 required it and it was built HERE.** T12 must **not** build a
+> second switcher. Its remaining share: Step 2 (`?org=` through the router), Step 3 (org in every data
+> key), Step 5 (`clear()` on NotInOrg), and the full-page `OrgSwitcher`.
+>
+> **Five per-item nav icon colours dropped** (`#d60000`, `#f59e0b`, `#dc2626`, `#ea580c`, `#7c3aed`).
+> They encode nothing, and §7.7 is explicit: *"if you cannot say what a colour means, remove it."*
+>
+> **DECIDED 2026-08-31:** Live Health **stays under Operations** — the incumbent wins; nav order is
+> muscle memory and is not moved to match a mockup. The top-bar chip is **relabelled "Fetched Nm ago"**
+> (lands in T27 with the chip's own migration): the shell chip means *your browser received this*,
+> while the in-screen chips mean *the server calculated this* — **two different facts wearing one
+> label** is the defect class this redesign exists to remove. The two no-org sentences stand as written.
+>
+> **⚠️ Worktrees carry no `.env.local`** (gitignored), so `npm run dev` silently calls the dead
+> fallback port 5001 (`api.ts:5`, A54) and every screen shows 403. Created locally, uncommitted.
+> **The code-level fix to that fallback is T11's.**
 
 ---
 
