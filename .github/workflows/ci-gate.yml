@@ -182,13 +182,22 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: src/clients/admin-web/package-lock.json
-      # Tolerant install, mirroring admin-web-lint (eslint.yml:110-119) so the
-      # two admin-web jobs can never disagree about whether admin-web installs.
-      # Reason recorded there: the lockfile is generated on developer Windows
-      # machines and `npm ci` validates it BEFORE omitting optional deps, so the
-      # Linux-only @emnapi/lightningcss native fast-paths fail `npm ci` even
-      # with --omit=optional. Same pattern as sync-contract in `frontend` above.
-      - run: npm install --no-audit --no-fund
+      # STRICT install, deliberately NOT mirroring admin-web-lint's tolerant
+      # `npm install` (eslint.yml:110-119). A required gate must be
+      # deterministic: a tolerant install can resolve different versions on
+      # different days, so the gate goes green on Monday and red on Tuesday with
+      # no code change — and a gate people learn to merge past enforces nothing,
+      # which is the exact failure `admin-web-lint` already has on record.
+      #
+      # The tolerant install existed because the Windows-generated lockfile was
+      # missing @emnapi/wasi-threads and `npm ci` rejected it. That cause was
+      # REPAIRED on 2026-08-31 (admin-v3 Task 1); `npm ci --dry-run` on this
+      # lockfile now exits 0, and lighthouse.yml already runs `npm ci` on this
+      # same folder. The workaround was outliving its reason.
+      #
+      # If this ever fails on a lockfile mismatch, that is the check WORKING.
+      # Fix the lockfile; do not loosen the install.
+      - run: npm ci --no-audit --no-fund
       - name: Unit tests (vitest)
         run: npm run test
 
