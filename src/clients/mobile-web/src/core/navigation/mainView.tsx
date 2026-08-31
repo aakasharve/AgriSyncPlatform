@@ -298,7 +298,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                     {/* spec: owner-oversight-loop (Task 13, change 3) — the
                         Sathi guide card, above the plot selector, per the
                         founder's own reference image. */}
-                    {!recordingSegment && <SathiGuideCard />}
+                    {!recordingSegment && <SathiGuideCard forLabour={logIntent === 'labour'} />}
 
                     {!recordingSegment && (
                         <div id="crop-selector-container" className="mb-6 animate-in slide-in-from-top-4 duration-500">

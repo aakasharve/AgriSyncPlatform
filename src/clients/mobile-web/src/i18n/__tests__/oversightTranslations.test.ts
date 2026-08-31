@@ -270,6 +270,13 @@ const EXPECTED_MR: Record<keyof OversightTranslations, string> = {
     guideLine1: 'एक किंवा अनेक प्लॉट निवडा.',
     guideLine2: 'एकाच कामासाठी एकापेक्षा जास्त प्लॉट निवडू शकता.',
     guideLine3: 'काम प्लॉटशी संबंधित नसेल, तरच खाली ‘संपूर्ण शेत’ निवडा.',
+    // FOUNDER RULING 2026-08-31 — the LABOUR arrival variant of the guide
+    // card. His own three sentences, corrected for grammar only. Pinned here
+    // for the same reason as the four above: they are his words, so a silent
+    // reword by anyone else has to fail a test rather than just ship.
+    labourGuideHeadline: 'आज कोणत्या प्लॉटवर कोणी काम केलं, त्यांची हजेरी घ्या किंवा ओळख पटवून द्या.',
+    labourGuideLine1: 'तुमच्या शेतातले रोजचे कामगार असू शकतात, किंवा मुकादमाकडून आलेले सुद्धा असू शकतात.',
+    labourGuideLine2: 'शक्य तेवढ्या सगळ्यांची नावं घ्या — म्हणजे नंतर तुम्हाला माहीत असेल, कोणतं काम कोणी केलं.',
     plotSectionHeader: 'प्लॉट निवडा',
     plotSectionHint: 'एकापेक्षा जास्त प्लॉट निवडू शकता',
     entireFarmLabel: 'संपूर्ण शेत',

@@ -67,13 +67,17 @@ describe('LabourLogBanner (component)', () => {
         expect(el.props['aria-label']).not.toMatch(/dismiss/i);
     });
 
-    // Task 7 (labour-v2-release-1) — this banner's subtitle read
-    // "मजूर · हजेरी · मजुरी बोला" ("Worker · Attendance · Wages — speak"),
-    // live on the main log screen whenever logIntent is 'labour'. There is
-    // no attendance capture anywhere in the Labour feature — this banner is
-    // not `LabourMic.tsx` (deleted 2026-08-31 with the rebuilt Attendance mic)
-    // but makes the same claim.
-    it('does not promise हजेरी (attendance) capture anywhere in its text', () => {
+    // FOUNDER RULING 2026-08-31 — हजेरी is BACK in this subtitle, and the
+    // assertion is inverted with it. Task 7 removed it on the reasoning that
+    // the banner named an attendance capture screen that does not exist. The
+    // ruling is that हजेरी घेणे is the ACT of recording who came, and that is
+    // exactly what speaking on the screen this banner sits on does — the crew
+    // is captured onto LabourAssignment, names included. Same reasoning as
+    // the hub hero, the just-logged card and the help note.
+    //
+    // What the banner still must not do is send him somewhere it cannot: its
+    // tap target is Labour Management, which is asserted above.
+    it('names हजेरी among what you can speak here (founder ruling)', () => {
         const el = LabourLogBanner({ onBackToLabour: vi.fn() }) as React.ReactElement;
         const collectText = (node: React.ReactNode): string => {
             if (node === null || node === undefined || typeof node === 'boolean') return '';
@@ -82,7 +86,7 @@ describe('LabourLogBanner (component)', () => {
             if (React.isValidElement(node)) return collectText((node.props as { children?: React.ReactNode }).children);
             return '';
         };
-        expect(collectText(el)).not.toContain('हजेरी');
+        expect(collectText(el)).toContain('हजेरी');
     });
 });
 

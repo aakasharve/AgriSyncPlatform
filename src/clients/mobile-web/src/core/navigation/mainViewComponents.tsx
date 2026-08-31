@@ -107,7 +107,7 @@ export const LabourLogBanner: React.FC<{ onBackToLabour: () => void }> = ({ onBa
                 subtitle: it named attendance among what you can voice-log
                 here, but no attendance capture exists anywhere in the
                 Labour feature. */}
-            <span className="block truncate text-[11.5px] font-semibold text-emerald-50/90">मजूर · मजुरी बोला</span>
+            <span className="block truncate text-[11.5px] font-semibold text-emerald-50/90">हजेरी · मजूर · मजुरी बोला</span>
         </span>
         <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-white/20 px-3 py-1.5 text-[11px] font-extrabold text-white">
             <ArrowLeft size={13} strokeWidth={2.6} />

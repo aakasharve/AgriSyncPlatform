@@ -603,6 +603,22 @@ export interface OversightTranslations {
      * moved it to this slot (see file header, category (d), "TASK 17").
      */
     guideLine3: string;
+    /**
+     * FOUNDER RULING 2026-08-31 — the guide card LABOUR variant, shown ONLY
+     * when the farmer arrived from Labour Management (logIntent === labour).
+     * The default headline is unchanged and still greets a normal log.
+     * His words, grammar-corrected only: प्लॉट वरती -> प्लॉटवर,
+     * मुकदमा कडून आळलेले -> मुकादमाकडून आलेले, आसू -> असू, नवे -> नावं,
+     * जेणे करून -> म्हणजे, माहीत असले -> माहीत असेल, and the missing noun
+     * after रोजचे supplied as रोजचे कामगार.
+     *
+     * labourGuideHeadline MUST keep EMPHASIS_WORD as a substring in every
+     * language, exactly like guideHeadline — the emerald emphasis fails
+     * SILENTLY otherwise (SathiGuideCard.tsx). Its test covers both.
+     */
+    labourGuideHeadline: string;
+    labourGuideLine1: string;
+    labourGuideLine2: string;
     /** Plot-selector section header (replaces the old English dev copy,
      * gated behind `CropSelector`'s `hideGlobalCard` opt-in). */
     plotSectionHeader: string;
@@ -699,6 +715,9 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         guideHeadline: 'Which plot did you work on today?',
         guideLine1: 'Select one or more plots.',
         guideLine2: 'You can select more than one plot for the same task.',
+        labourGuideHeadline: 'Who worked on which plot today — take their attendance, or identify them.',
+        labourGuideLine1: 'They may be your own regular workers, or people sent by a mukadam.',
+        labourGuideLine2: 'Take as many names as you can, so later you know who did what.',
         guideLine3: 'Only choose "Entire Farm" below if the work isn\'t related to a plot.',
         plotSectionHeader: 'Select plot',
         plotSectionHint: 'You can select more than one plot',
@@ -781,6 +800,9 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         guideHeadline: 'आज कोणत्या प्लॉटवर काम केलं?',
         guideLine1: 'एक किंवा अनेक प्लॉट निवडा.',
         guideLine2: 'एकाच कामासाठी एकापेक्षा जास्त प्लॉट निवडू शकता.',
+        labourGuideHeadline: 'आज कोणत्या प्लॉटवर कोणी काम केलं, त्यांची हजेरी घ्या किंवा ओळख पटवून द्या.',
+        labourGuideLine1: 'तुमच्या शेतातले रोजचे कामगार असू शकतात, किंवा मुकादमाकडून आलेले सुद्धा असू शकतात.',
+        labourGuideLine2: 'शक्य तेवढ्या सगळ्यांची नावं घ्या — म्हणजे नंतर तुम्हाला माहीत असेल, कोणतं काम कोणी केलं.',
         guideLine3: 'काम प्लॉटशी संबंधित नसेल, तरच खाली ‘संपूर्ण शेत’ निवडा.',
         plotSectionHeader: 'प्लॉट निवडा',
         plotSectionHint: 'एकापेक्षा जास्त प्लॉट निवडू शकता',
