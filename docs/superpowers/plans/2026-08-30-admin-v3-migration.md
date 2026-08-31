@@ -1910,12 +1910,68 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useSilentChurn() against `/shramsafal/admin/farms/silent-churn`, envelope, staleTime 300s, NO refetchInterval.
 **Register rows:** A24, A34; B12, B16; D9.
 
-- [ ] **Step 1: S1 to S6.**
-- [ ] **Step 2: Replace "No farms in silent churn" (D9).** An unqualified empty on this screen reads as good news whether the list is genuinely empty or the request 500'd. Four causes.
-- [ ] **Step 3: Add the v3 "Too new to judge" hold-out panel.** Farms with no last log to count back from are held OUT of the watchlist and shown separately with an unmeasured state — that is neither a long silence nor zero weeks. The live screen has no such concept; it renders a formatted date or the literal word Never (`SilentChurnPage.tsx:41`), which calls "never logged" the same thing as "logged and stopped".
-- [ ] **Step 4: Add the v3 "Outreach is not measured" note.** Every expanded row reads "Last contacted — not measured". A new true statement about the product; do not soften it.
-- [ ] **Step 5: Cross-filtered facet counts ON** (v3 applies them here and on All Farms).
-- [ ] **Step 6: Commit** — `feat(admin-web): Silent Churn on DataList, with the too-new hold-out`
+- [x] **Step 1: S1 to S6.**
+- [x] **Step 2: Replace "No farms in silent churn" (D9).** An unqualified empty on this screen reads as good news whether the list is genuinely empty or the request 500'd. Four causes.
+- [x] **Step 3: Add the v3 "Too new to judge" hold-out panel.** Farms with no last log to count back from are held OUT of the watchlist and shown separately with an unmeasured state — that is neither a long silence nor zero weeks. The live screen has no such concept; it renders a formatted date or the literal word Never (`SilentChurnPage.tsx:41`), which calls "never logged" the same thing as "logged and stopped".
+- [x] **Step 4: Add the v3 "Outreach is not measured" note.** Every expanded row reads "Last contacted — not measured". A new true statement about the product; do not soften it.
+- [x] **Step 5: Cross-filtered facet counts ON** (v3 applies them here and on All Farms).
+- [x] **Step 6: Commit** — `feat(admin-web): Silent Churn on DataList, with the too-new hold-out`
+
+---
+
+> **Task 15 executed 2026-09-01 (`e7563bd1`, `f7646a60`). 719 tests. Seven mutations, seven kills.**
+> **Five false premises, all verified in backend code.**
+>
+> **🛑 Step 3 was wrong in the OPPOSITE direction, and the correction is the finding.** Never-logged
+> farms are **not** in the watchlist and never have been. `mis.silent_churn_watchlist` does
+> `FROM sf JOIN last_log ll ... WHERE ll.last_log_at < NOW() - INTERVAL '14 days'` — an INNER JOIN
+> plus a comparison against NULL, so **a farm with no log is dropped before the list is built.**
+> `SilentChurnPage.tsx:41`'s `'Never'` branch was **unreachable dead code documenting a conflation the
+> feed cannot produce.** The hold-out ships as a guard plus an honest panel that **never prints a
+> count** — "0 farms are too new to judge" would be a measurement this console has never taken.
+>
+> **🔴 PRODUCT GAP: the never-activated farmers are computed nightly and NOTHING reads them.**
+> `mis.zero_engagement_farms` is created by `20260502010000_AddSubscriptionFarmsAndChurnMatviews` and
+> refreshed by `MisRefreshJob` — independently confirmed, its **only** repo references are two
+> migrations, the refresh job and a migration test. **No repository method, no endpoint, no hook, no
+> screen.** These are farms on a paid or trial plan that signed up and **never recorded anything** —
+> arguably the most urgent list in the product, and it is invisible.
+>
+> **🔴 A SECOND endpoint does not redact. Do NOT tick B16.** `GetSilentChurnHandler` never takes or
+> calls `IResponseRedactor`. Repo-wide only `GetFarmerHealthHandler` and `GetCohortPatternsHandler`
+> do. So `/admin/farms` **and** `/admin/farms/silent-churn` both return full unmasked phone numbers.
+>
+> **🛑 A57's subtitle was false in THREE of four clauses.** *"Paid farms with WVFD = 0 for 2+
+> consecutive weeks."* The matview takes status `IN (1,2,3)` = Trialing/Active/PastDue — **a trial is
+> not a payment**; the signal is a **missing `log.created` event, never WVFD**; the threshold is **14
+> days**. A57 records this as the only place the rule is stated on screen, so it is preserved —
+> restated true, and now naming the `LIMIT 50` cap the old screen never mentioned.
+>
+> **`plan` IS a real column here**, unlike `/admin/farms`: `COALESCE(s.plan_code,'trial')` from
+> `accounts.subscriptions` (`AdminMisRepository.cs:197`) vs the hardcoded `'trial'` at `:108`. So this
+> screen ships **two** real facets — silence band and plan — where Task 14 could ship none.
+>
+> **A backend doc-comment contradicts its own SQL:** `AdminMisRepository.cs:192` says weeks are
+> *"ceil(days/7)"*; the SQL is `GREATEST(1, (days/7))` — integer division, i.e. **floor**. 20 days
+> reads "2w", not 3. The screen says "N **full** weeks", which is what floor supports.
+>
+> **🛑 TWO `DataList` BUGS FOUND HERE, both inherited by Tasks 16–17 if unfixed.** (1) Every summary
+> figure is computed from `rows`, and `rows` is `[]` when the request breaks — so a 500 rendered a
+> collapsed watchlist headlined **"0 farms"** while the block naming the 500 sat inside a `hidden`
+> container. On this screen "0 farms silent" is the **best possible news**, which makes it the worst
+> possible thing to print over a broken endpoint. (2) A genuinely empty watchlist sealed its own
+> `MeasuredZero` block — the only thing naming the window — behind a *"Show all 0 farms"* button.
+> Both fixed; the first kills a mutation with a named message. **All Farms could not reach either,
+> because it is not summary-first.**
+>
+> **Row cap is 50** — a hard `LIMIT 50` in the SQL (`:206`), two orders of magnitude below Task 8's
+> 3,000-row cliff. No virtualisation needed; none built.
+>
+> **The timing cliff is PRE-EXISTING, measured on both sides:** 3 failures in 24 runs with the new
+> file, **1 in 10 with it moved aside**. It fires without it. **Task 29 owns it.**
+>
+> **Baselines: 719 tests / 31 files; lint 11 (0 errors).** Rows satisfied: A24, A34, A57 (half — T16
+> owns the Suffering twin), B12, D9. **B16: NO.**
 
 ---
 
