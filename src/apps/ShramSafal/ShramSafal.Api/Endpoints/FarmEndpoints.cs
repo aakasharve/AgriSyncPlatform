@@ -295,7 +295,9 @@ public static class FarmEndpoints
                 request.EndDate,
                 actorUserId,
                 CropCycleId: null,
-                ActorRole: EndpointActorContext.GetActorRole(user),
+                // Stage A0 / A3 — ActorRole no longer travels on the command. The JWT
+                // membership claim GetActorRole reads is one role per ACCOUNT; the handler
+                // now resolves the role on the target farm instead.
                 ClientCommandId: null,
                 ClientAppVersion: clientAppVersion,
                 AuditDeviceId: auditDeviceId,

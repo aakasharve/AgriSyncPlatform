@@ -839,7 +839,9 @@ public sealed class PushSyncBatchHandler(
                 EndDate: request.EndDate,
                 ActorUserId: actorUserId,
                 CropCycleId: request.CropCycleId,
-                ActorRole: actorRole,
+                // Stage A0 / A3 — ActorRole no longer travels on the command; the handler
+                // resolves the role on the target farm. This argument's removal was caught
+                // by the compiler ONLY because Task 3 made this call named first.
                 ClientCommandId: clientRequestId),
             ct);
 

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using FluentAssertions;
+using ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
 using ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Tests.Analytics;
@@ -46,6 +47,44 @@ public sealed class ActorRoleIsFarmScopedTests
         // UpdateFarmBoundaryHandler refuses a farm with an empty OwnerAccountId.
         farm.AttachToOwnerAccount(OwnerAccountId.New(), nowUtc);
         return farm;
+    }
+
+    [Fact]
+    public async Task Crop_cycle_creation_records_the_role_on_this_farm()
+    {
+        var farmId = Guid.NewGuid();
+        var plotId = Guid.NewGuid();
+        var actorUserId = Guid.NewGuid();
+        var nowUtc = DateTime.UtcNow;
+
+        var plot = Plot.Create(plotId, new FarmId(farmId), "Plot A", 1.0m, nowUtc);
+        var repository = new RoleRecordingRepositoryStub(
+            AppRole.Mukadam, FarmOwnedBy(farmId, actorUserId), plot);
+
+        var handler = new CreateCropCycleHandler(
+            repository,
+            new SequentialIdGenerator(),
+            new FixedClock(nowUtc),
+            new AllowEntitlementPolicy());
+
+        var result = await handler.HandleAsync(
+            new CreateCropCycleCommand(
+                FarmId: farmId,
+                PlotId: plotId,
+                CropName: "Pomegranate",
+                Stage: "Vegetative",
+                StartDate: new DateOnly(2026, 8, 30),
+                EndDate: null,
+                ActorUserId: actorUserId),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(
+            "the handler must complete for there to be an audit row to inspect");
+        repository.AuditEventCount.Should().Be(1,
+            "a zero here means an early return, not a wrong role");
+        repository.LastAuditActorRole.Should().Be(
+            "mukadam",
+            "a Mukadam on THIS farm must not be recorded as whatever their token's global role says");
     }
 
     [Fact]

@@ -4,6 +4,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Domain.Audit;
+using System.Collections.Generic;
+using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Tests.Work.Handlers;
 
@@ -29,11 +31,13 @@ internal sealed class RoleRecordingRepositoryStub : StubShramSafalRepository
 {
     private readonly AppRole? _role;
     private readonly Farm? _farm;
+    private readonly Plot? _plot;
 
-    public RoleRecordingRepositoryStub(AppRole? role, Farm? farm = null)
+    public RoleRecordingRepositoryStub(AppRole? role, Farm? farm = null, Plot? plot = null)
     {
         _role = role;
         _farm = farm;
+        _plot = plot;
     }
 
     /// <summary>The ActorRole string as it was handed to the audit ledger.</summary>
@@ -59,6 +63,17 @@ internal sealed class RoleRecordingRepositoryStub : StubShramSafalRepository
 
     public override Task<Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default)
         => Task.FromResult(_farm);
+
+    public override Task<Plot?> GetPlotByIdAsync(Guid plotId, CancellationToken ct = default)
+        => Task.FromResult(_plot);
+
+    /// <summary>Empty, so the crop-cycle overlap check never blocks a test.</summary>
+    public override Task<List<CropCycle>> GetCropCyclesByPlotIdAsync(
+        Guid plotId, CancellationToken ct = default)
+        => Task.FromResult(new List<CropCycle>());
+
+    public override Task AddCropCycleAsync(CropCycle cropCycle, CancellationToken ct = default)
+        => Task.CompletedTask;
 
     public override Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken ct = default)
     {
