@@ -4,7 +4,14 @@
     "target": "es2023",
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
-    "types": ["vite/client"],
+    // vitest.config.ts sets `globals: true`, so test files use bare
+    // describe/it/expect. tsconfig.app.json includes "src", which means
+    // `tsc -b` (the first half of `npm run build`) type-checks those files —
+    // without this entry the first test written breaks the production build,
+    // not the test run. `@testing-library/jest-dom/vitest` (imported in
+    // src/test/setup.ts) augments the same Assertion interface, so the
+    // DOM matchers resolve through it too.
+    "types": ["vite/client", "vitest/globals"],
     "skipLibCheck": true,
 
     /* Bundler mode */
