@@ -1847,13 +1847,61 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useFarmsList(page, 40, search, tier) against `/shramsafal/admin/farms`, envelope, keepPreviousData.
 **Register rows:** A17, A18, A20, A21, A24, A25, A34, A51; B4, B9, B12, B13, B16; D11.
 
-- [ ] **Step 1: S1 to S6.**
-- [ ] **Step 2: Keep server pagination at 40 per page.** v3 renders all 16 farms at once and its Show all button is a promise it can only keep at n=16. At real volumes a client-side port either loads everything (fatal on a 2-vCPU box, measured ceiling about 32 concurrent requests) or quietly drops the ability to reach page 2.
-- [ ] **Step 3: Keep the tier A/B/C/D filter (B9).** The v3 facets are crop, village, plan and land-record, and tier is a column only; the live tier filter is a working server-side capability with a UI control (`FarmsListPage.tsx:46-54`). Keep both — the v3 facets are additive.
-- [ ] **Step 4: Fix the Owner column (v3 Appendix 6).** Today the header reads Owner and the cell renders the owner's phone (`FarmsListPage.tsx:80`). The v3 version — name with the phone as a sub-line — makes the header true. Render the name through PersonName and the phone through Masked.
-- [ ] **Step 5: Resolve the dead row-click (D11).** The onClick navigates to an unregistered route, so every click falls through the catch-all and bounces to Home while the whole table is styled cursor-pointer. Replace with the v3 expandable row. Do NOT port the silent bounce, and do not leave a pointer cursor on a row that does nothing.
-- [ ] **Step 6: Keep the draft-not-URL-synced search (A21)** and the Refreshing swap (A25).
-- [ ] **Step 7: Commit** — `feat(admin-web): All Farms on DataList`
+- [x] **Step 1: S1 to S6.**
+- [x] **Step 2: Keep server pagination at 40 per page.** v3 renders all 16 farms at once and its Show all button is a promise it can only keep at n=16. At real volumes a client-side port either loads everything (fatal on a 2-vCPU box, measured ceiling about 32 concurrent requests) or quietly drops the ability to reach page 2.
+- [x] **Step 3: Keep the tier A/B/C/D filter (B9).** The v3 facets are crop, village, plan and land-record, and tier is a column only; the live tier filter is a working server-side capability with a UI control (`FarmsListPage.tsx:46-54`). Keep both — the v3 facets are additive.
+- [x] **Step 4: Fix the Owner column (v3 Appendix 6).** Today the header reads Owner and the cell renders the owner's phone (`FarmsListPage.tsx:80`). The v3 version — name with the phone as a sub-line — makes the header true. Render the name through PersonName and the phone through Masked.
+- [x] **Step 5: Resolve the dead row-click (D11).** The onClick navigates to an unregistered route, so every click falls through the catch-all and bounces to Home while the whole table is styled cursor-pointer. Replace with the v3 expandable row. Do NOT port the silent bounce, and do not leave a pointer cursor on a row that does nothing.
+- [x] **Step 6: Keep the draft-not-URL-synced search (A21)** and the Refreshing swap (A25).
+- [x] **Step 7: Commit** — `feat(admin-web): All Farms on DataList`
+
+---
+
+> **Task 14 executed 2026-09-01 (`d51c1477`). 702 tests. Five mutations, five kills. Every Task 14
+> citation was CORRECT — the first screen task with no line drift.** But four of its *premises* are
+> false, all verified in backend code:
+>
+> **🔴 B16 IS NOT SATISFIED, AND NO FRONTEND CHANGE CAN SATISFY IT.** `/shramsafal/admin/farms`
+> returns **full, unmasked phone numbers to every admin who can open the screen.**
+> `GetFarmsListHandler.cs` never calls `IResponseRedactor` — independently confirmed: the redactor
+> exists (`ShramSafal.Infrastructure/Admin/ResponseRedactor.cs`) and `GetFarmerHealthHandler` and
+> `GetCohortPatternsHandler` both use it. **The farms list does not.** This contradicts the founder's
+> standing rule that farmer-sensitive information is not for general internal eyes. **Backend task,
+> outside this plan. Do NOT tick B16.** The frontend half is done: a `98******10` renders partly
+> hidden, a `**redacted**` renders the farm id, and neither can leak as literal text the day the
+> server switches masking on.
+>
+> **🛑 Step 4's premise is FALSE — the owner's name is not in the data.** `FarmsAdminDto.cs:9-18` has
+> no owner-name field and `AdminMisRepository.cs:105-118` selects `u.phone` and no other column from
+> `public.users`. v3's name-over-phone cell **is not buildable**, and CONTRACT.md Appendix 6 makes the
+> same wrong assumption. The header now reads **"Owner phone"** — exactly as informative as before,
+> and it stops implying otherwise. Showing a name needs a backend change.
+>
+> **🛑 Step 3's "v3's facets are additive" does not hold.** Crop, village and land-record area are not
+> on this endpoint at all, and `plan` is the SQL **literal `'trial'`** on every row
+> (`AdminMisRepository.cs:108`) — a plan filter would offer one button that selects everything. Only
+> the tier filter ships, with a standing note naming what the feed does not carry.
+>
+> **🛑 v3's own search copy is false for this endpoint.** §6.1 claims *"Search runs over farm name,
+> owner and phone."* The query is `LOWER(f.name) LIKE LOWER(@s)` and nothing else
+> (`AdminMisRepository.cs:95,103`). **Live consequence:** Task 13's palette deep-links
+> `/farms?search=<phone>` when a farm's name is withheld (`CommandPalette.tsx:371`) — **that jump has
+> always landed on nothing**, and now at least says why.
+>
+> **The v3 "Show all" gate was deliberately dropped on THIS screen only** — with no facets to read
+> first, it would hide the table for no reason and add a click to every visit. Silent Churn (T15)
+> genuinely needs it and keeps it.
+>
+> **🛑 FORWARD RISK for T29 — the suite is approaching a timing cliff, measured not guessed.** Adding
+> the first screen-test file made an unrelated whole-console test go intermittently red (3 failures
+> in 12 runs); it waits up to **15 s** and a 30th parallel file on 11 workers pushes it past that.
+> Fixed here by merging three tests that shared one fixture — no assertion removed. **Twelve more
+> screen-test files are coming, one worker each.** Either the two whole-console files get faster or
+> the ceiling/parallelism is tuned. **Route to Task 29.**
+>
+> **Baselines: 702 tests / 30 files; lint 11 (0 errors)** — two warnings left with the rewrite.
+> The trim went into `useListUrlState`, not the screen, so **Task 17 gets it for free.**
+> Rows satisfied: A17, A18, A20, A21, A24, A25, A34, A51, B4, B9, B12, B13, D11. **B16: half only.**
 
 ---
 
