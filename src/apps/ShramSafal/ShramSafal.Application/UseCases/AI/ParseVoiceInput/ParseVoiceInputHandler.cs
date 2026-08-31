@@ -674,6 +674,24 @@ public sealed class ParseVoiceInputHandler(
         // not a rewrite here.
         var modelAnsweredLabour = root["labour"] is JsonArray;
 
+        // spec: 2026-08-28-labour-v2-release-1 — same gap-fill-only rule as
+        // modelAnsweredLabour above, for the fertilizer/irrigation writers a
+        // few lines below that ride on a compound labour segment. inputs: []
+        // and irrigation: [] are real answers too — "no inputs were used" /
+        // "no irrigation happened" — not an absence, and a regex that merely
+        // noticed खत/पाणी in the same sentence that named the workers has no
+        // business overruling a model that read the whole sentence and said
+        // none. Captured here, before either writer below can mutate
+        // root["inputs"]/root["irrigation"], for the same reason
+        // modelAnsweredLabour is captured above the labour writers.
+        //
+        // KNOWN CONSEQUENCE (same as modelAnsweredLabour): AiResponseNormalizer
+        // EnsureArray()s inputs/irrigation too, so on the live parse path these
+        // two writers are dormant in production. That is the correct outcome —
+        // see the note above modelAnsweredLabour.
+        var modelAnsweredInputs = root["inputs"] is JsonArray;
+        var modelAnsweredIrrigation = root["irrigation"] is JsonArray;
+
         var labourSegments = ExtractCompoundLabourSegments(cleanTranscript);
         if (labourSegments.Count > 0)
         {
@@ -698,34 +716,42 @@ public sealed class ParseVoiceInputHandler(
 
             if (labourSegments.Any(segment => segment.Activity == "fertilizer_application"))
             {
-                var inputs = root["inputs"] as JsonArray ?? new JsonArray();
-                if (inputs.Count == 0)
+                // Gap-fill only — see modelAnsweredInputs above.
+                if (!modelAnsweredInputs)
                 {
-                    inputs.Add(new JsonObject
+                    var inputs = root["inputs"] as JsonArray ?? new JsonArray();
+                    if (inputs.Count == 0)
                     {
-                        ["productName"] = "खत",
-                        ["method"] = "Soil",
-                        ["type"] = "fertilizer",
-                        ["sourceText"] = labourSegments.First(segment => segment.Activity == "fertilizer_application").SourceText,
-                        ["systemInterpretation"] = "खत टाकण्याचे काम नोंदवले"
-                    });
+                        inputs.Add(new JsonObject
+                        {
+                            ["productName"] = "खत",
+                            ["method"] = "Soil",
+                            ["type"] = "fertilizer",
+                            ["sourceText"] = labourSegments.First(segment => segment.Activity == "fertilizer_application").SourceText,
+                            ["systemInterpretation"] = "खत टाकण्याचे काम नोंदवले"
+                        });
+                    }
+                    root["inputs"] = inputs;
                 }
-                root["inputs"] = inputs;
             }
 
             if (labourSegments.Any(segment => segment.Activity == "irrigation"))
             {
-                var irrigation = root["irrigation"] as JsonArray ?? new JsonArray();
-                if (irrigation.Count == 0)
+                // Gap-fill only — see modelAnsweredIrrigation above.
+                if (!modelAnsweredIrrigation)
                 {
-                    irrigation.Add(new JsonObject
+                    var irrigation = root["irrigation"] as JsonArray ?? new JsonArray();
+                    if (irrigation.Count == 0)
                     {
-                        ["method"] = "Flood",
-                        ["sourceText"] = labourSegments.First(segment => segment.Activity == "irrigation").SourceText,
-                        ["systemInterpretation"] = "पाणी सोडण्याचे काम नोंदवले"
-                    });
+                        irrigation.Add(new JsonObject
+                        {
+                            ["method"] = "Flood",
+                            ["sourceText"] = labourSegments.First(segment => segment.Activity == "irrigation").SourceText,
+                            ["systemInterpretation"] = "पाणी सोडण्याचे काम नोंदवले"
+                        });
+                    }
+                    root["irrigation"] = irrigation;
                 }
-                root["irrigation"] = irrigation;
             }
         }
 

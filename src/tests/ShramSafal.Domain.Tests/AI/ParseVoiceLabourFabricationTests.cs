@@ -159,4 +159,79 @@ public sealed class ParseVoiceLabourFabricationTests
         LabourRowCount(root).Should().Be(0,
             "the gender-split writer must fill a gap only, exactly like the compound-segment writer");
     }
+
+    // -------------------------------------------------------------------------
+    // (C) The remaining sibling: the fertilizer/irrigation writers riding on a
+    //     compound labour segment. The farmer genuinely said खत or पाणी, so
+    //     this is imprecise (no product/quantity) rather than invented — but it
+    //     still overrides a real "none" answer from the model, so it needs the
+    //     same gap-fill-only guard as (B) above.
+    // -------------------------------------------------------------------------
+
+    private static int InputsRowCount(JsonObject root) => (root["inputs"] as JsonArray)?.Count ?? 0;
+
+    private static int IrrigationRowCount(JsonObject root) => (root["irrigation"] as JsonArray)?.Count ?? 0;
+
+    [Fact]
+    public void A_labour_sentence_mentioning_fertiliser_does_not_overwrite_a_real_empty_inputs_answer()
+    {
+        // An empty inputs array is an ANSWER — "no inputs were used" — not an
+        // absence. The transcript names workers AND खत in the same sentence,
+        // so the fertilizer writer would fire on the labour segment alone if
+        // it were not gated on the model's own answer.
+        const string modelAnsweredNoInputs = """{ "labour": [], "inputs": [] }""";
+        const string transcript = "चार माणसांनी खत आणले.";
+
+        var root = Correct(modelAnsweredNoInputs, transcript);
+
+        root["inputs"].Should().BeOfType<JsonArray>();
+        InputsRowCount(root).Should().Be(0,
+            "the model answered 'no inputs'; a regex that merely saw खत in the sentence must not overrule that");
+    }
+
+    [Fact]
+    public void A_labour_sentence_mentioning_irrigation_does_not_overwrite_a_real_empty_irrigation_answer()
+    {
+        const string modelAnsweredNoIrrigation = """{ "labour": [], "irrigation": [] }""";
+        const string transcript = "चार माणसांनी पाणी सोडले.";
+
+        var root = Correct(modelAnsweredNoIrrigation, transcript);
+
+        root["irrigation"].Should().BeOfType<JsonArray>();
+        IrrigationRowCount(root).Should().Be(0,
+            "the model answered 'no irrigation'; a regex that merely saw पाणी in the sentence must not overrule that");
+    }
+
+    [Fact]
+    public void Real_inputs_from_the_model_are_left_untouched_by_the_fertiliser_writer()
+    {
+        const string modelAnswered = """
+            { "labour": [], "inputs": [ { "productName": "युरिया", "method": "Soil", "type": "fertilizer", "sourceText": "युरिया" } ] }
+            """;
+        const string transcript = "चार माणसांनी खत आणले.";
+
+        var root = Correct(modelAnswered, transcript);
+
+        var inputs = root["inputs"] as JsonArray;
+        inputs.Should().NotBeNull();
+        inputs!.Count.Should().Be(1, "the heuristic must not append its own generic खत row onto the model's answer");
+        inputs[0]!["productName"]!.GetValue<string>().Should().Be("युरिया",
+            "the model already named the real product; the heuristic guess must not replace or dilute it");
+    }
+
+    [Fact]
+    public void A_fertiliser_labour_sentence_still_fills_a_genuinely_absent_inputs_key()
+    {
+        // Proof the gate did not over-tighten: with the inputs key truly
+        // ABSENT (not answered at all), the gap-fill write must still fire.
+        const string modelDidNotAnswerInputs = """{ "labour": [] }""";
+        const string transcript = "चार माणसांनी खत आणले.";
+
+        var root = Correct(modelDidNotAnswerInputs, transcript);
+
+        var inputs = root["inputs"] as JsonArray;
+        inputs.Should().NotBeNull();
+        inputs!.Count.Should().Be(1, "the inputs key was genuinely absent, so the gap-fill write is legitimate here");
+        inputs[0]!["productName"]!.GetValue<string>().Should().Be("खत");
+    }
 }
