@@ -1,3 +1,4 @@
+import { fmt } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 export type FreshnessSource = 'live' | 'live-aggregated' | 'materialized';
@@ -9,20 +10,28 @@ export interface FreshnessChipProps {
   className?: string;
 }
 
-function fmtAge(iso: string | undefined): string {
-  if (!iso) return '';
-  const age = Date.now() - new Date(iso).getTime();
-  if (age < 60_000) return `${Math.max(1, Math.floor(age / 1000))}s ago`;
-  if (age < 3_600_000) return `${Math.floor(age / 60_000)}m ago`;
-  if (age < 86_400_000) return `${Math.floor(age / 3_600_000)}h ago`;
-  return `${Math.floor(age / 86_400_000)}d ago`;
-}
+/**
+ * BUG FIX 2026-08-31, standalone and deliberately NOT part of a screen port.
+ *
+ * The local copy computed `Date.now() - new Date(iso).getTime()`. For an
+ * unparseable timestamp that is NaN, every comparison below it is false, and
+ * the last branch rendered the literal string "NaNd ago" — a freshness age the
+ * chip does not have. That is the D5 fabricated-freshness class the redesign
+ * exists to delete, wearing a broken face.
+ *
+ * Now delegates to `fmt.age`, which returns null for both a missing and an
+ * unparseable input. The `|| 'recent'` / `|| 'now'` fallbacks below are
+ * unchanged and still wrong for a DIFFERENT reason (D13: a chip with no
+ * timestamp at all still claims freshness). That one is a visible change to
+ * Schedule Templates and belongs to Task 24, which ports that screen — fixing
+ * it here would alter a live screen from outside any task.
+ */
 
 export function FreshnessChip({ source, lastRefreshed, className }: FreshnessChipProps) {
   const label =
     source === 'materialized'
-      ? `Nightly · ${fmtAge(lastRefreshed) || 'recent'}`
-      : `Live · ${fmtAge(lastRefreshed) || 'now'}`;
+      ? `Nightly · ${fmt.age(lastRefreshed) || 'recent'}`
+      : `Live · ${fmt.age(lastRefreshed) || 'now'}`;
   const cls = source === 'materialized' ? 'chip-mat' : 'chip-live';
   return (
     <span className={cn('chip-fresh', cls, className)}>
