@@ -585,6 +585,49 @@ Then replace the ad-hoc hex literals at `DwcScoreCard.tsx:28-145`, `AiHealthBloc
 
 ### Task 4: One formatter module — the thing that does not exist today
 
+> **Executed 2026-08-31 (`168f4874`), plus the standalone bug fix `319c8aba`. Four plan errors.**
+>
+> 1. **`rate01` does not exist in the repo.** Step 2 says "lifted verbatim from
+>    `AiHealthBlock.tsx:16-32`". There is no function by that name anywhere in `admin-web`; the
+>    sanitisation lives *inside* `pct()`, which also builds a label and picks a tone. The cited range
+>    also overshoots — `pct` is 16–25 and 27–32 is `TONE_COLOR`, a colour map unrelated to rates.
+>    The three sanitisation lines were extracted exactly; `pct()` left alone.
+> 2. **Step 4's "move `fmtAge` unchanged" contradicts this task's own central rule.** The original
+>    returns `''` for a missing input, not `null`, and renders **`"NaNd ago"`** for an unparseable
+>    one — a fabricated freshness age, the D5 class. Deviated on both, and **fixed the live chip in
+>    its own commit** (`319c8aba`) rather than folding a behavioural fix into a mechanical task.
+> 3. **Three of the eleven date citations are off by one:** `OpsLivePage.tsx:109 → 108`,
+>    `OpsLivePage.tsx:167 → 166`, `WorkerSummaryList.tsx:28 → 29`. Wrong in `b69e6fa7`, the commit
+>    that added this plan — plan error, not drift. All eleven format **strings** are correct.
+> 4. **`fmt.ratePct` added beyond the plan, and it closes a real trap.** Without it the natural call
+>    is `fmt.pct(rate01(x) * 100)` — and in JavaScript `null * 100` is **`0`**, resurrecting the
+>    exact fabricated zero this module exists to prevent.
+>
+> **Confirmed as stated:** A51's "14 files import date-fns with no shared module" — measured, exactly 14.
+>
+> **`DATE_FORMATS` covers 11 of the 22 `format(...)` call sites.** The other eleven are recharts
+> axis/tooltip formats this table never mentioned — `FarmerTimeline:90`, `SyncStateBlock:17`,
+> `WatchlistTable:26`, `WeeklyTrendChart:33,58`, `NorthStarPage:174,201`, `OpsVoicePage:114,135,172,189`.
+> Not added; they belong to **Tasks 19, 21 and 22**. Recorded here so they are not lost.
+>
+> **DECIDED 2026-08-31 — an out-of-range rate must render "not measured", not a clamped 0% / 100%.**
+> `rate01` today pulls an impossible value (`-0.2`, `1.4`) to the nearest bound, so a broken server
+> reading prints **"0%"** — which reads as *the AI failed every single time*. That is a fabricated
+> number, which `P4` forbids; a value outside the definition of the measure is not a noisy edge, it
+> is an unbelievable reading. **Task 23 makes this change** when it ports the AI-health panel: one
+> line plus one test, and the existing clamp test changes in the same commit. Preserved as-is until
+> then because changing it now would alter a live screen from outside any task.
+>
+> **Not ported, deliberately:** v3's `AS.fmt.duration` has **zero callers** across all thirteen
+> prototype HTML files — v3 renders latency as `withUnit(latencyMs,'ms')`, so `fmt.ms` follows that.
+> `dec` is subsumed by `num(v, decimals)`. `unit`/`withUnit` emit HTML strings; that is a component's
+> job in React.
+>
+> **No call site was re-pointed.** All 14 date-fns files still hold their own literals; `AiHealthBlock`
+> still has its own `pct()`. Tasks 14–26 move them screen by screen. The `DATE_FORMATS` test passes
+> if the literal is still inline **or** the file now imports `@/lib/format`, so it goes red only on
+> genuine drift.
+
 **Files:**
 - Create: `src/clients/admin-web/src/lib/format.ts`
 - Create: `src/clients/admin-web/src/lib/__tests__/format.test.ts`
@@ -593,7 +636,7 @@ Then replace the ad-hoc hex literals at `DwcScoreCard.tsx:28-145`, `AiHealthBloc
 - Produces fmt.num, fmt.pct, fmt.ms, fmt.money, fmt.acres, fmt.date, fmt.dateTime, fmt.time, fmt.age, rate01, and the per-surface format constants. Every one returns null for a null input.
 - Consumes date-fns, currently imported independently in 14 files with no shared module (A51).
 
-- [ ] **Step 1: Port the v3 AS.fmt contract — null in, null out**
+- [x] **Step 1: Port the v3 AS.fmt contract — null in, null out**
 
 ```ts
 /**
@@ -613,7 +656,7 @@ export const fmt = {
 };
 ```
 
-- [ ] **Step 2: Carry the AiHealth sanitisation rule into the module (A38)**
+- [x] **Step 2: Carry the AiHealth sanitisation rule into the module (A38)**
 
 ```ts
 /**
@@ -628,7 +671,7 @@ export function rate01(v: number | null | undefined): number | null {
 }
 ```
 
-- [ ] **Step 3: Encode the per-surface date choices explicitly — they are deliberate, not drift (A51)**
+- [x] **Step 3: Encode the per-surface date choices explicitly — they are deliberate, not drift (A51)**
 
 ```ts
 /**
@@ -638,8 +681,8 @@ export function rate01(v: number | null | undefined): number | null {
  */
 export const DATE_FORMATS = {
   opsErrorsRow:   'yyyy-MM-dd HH:mm:ss', // OpsErrorsPage.tsx:21
-  opsLiveRow:     'HH:mm:ss',            // OpsLivePage.tsx:109
-  opsLiveLastErr: 'HH:mm',               // OpsLivePage.tsx:167
+  opsLiveRow:     'HH:mm:ss',            // OpsLivePage.tsx:108
+  opsLiveLastErr: 'HH:mm',               // OpsLivePage.tsx:166
   farmsLastLog:   'dd MMM',              // FarmsListPage.tsx:90
   farmsCreated:   'dd MMM yy',           // FarmsListPage.tsx:91
   usersCreated:   'dd MMM yy',           // UsersPage.tsx:66
@@ -647,13 +690,13 @@ export const DATE_FORMATS = {
   churnLastLog:   'dd MMM yyyy',         // SilentChurnPage.tsx:41
   sufferLastErr:  'HH:mm, dd MMM',       // SufferingPage.tsx:42
   cohortRow:      'dd MMM, HH:mm',       // InterventionQueueTable.tsx:37
-  workerSince:    'dd MMM yyyy',         // WorkerSummaryList.tsx:28
+  workerSince:    'dd MMM yyyy',         // WorkerSummaryList.tsx:29
 } as const;
 ```
 
-- [ ] **Step 4: Port the 4-tier freshness age ramp (A24).** Move fmtAge out of `FreshnessChip.tsx:12-19` into format.ts unchanged: under 60s gives seconds, under 1h gives minutes, under 24h gives hours, otherwise days.
+- [x] **Step 4: Port the 4-tier freshness age ramp (A24).** Move fmtAge out of `FreshnessChip.tsx:12-19` into format.ts unchanged: under 60s gives seconds, under 1h gives minutes, under 24h gives hours, otherwise days.
 
-- [ ] **Step 5: Test every null path**
+- [x] **Step 5: Test every null path**
 
 ```ts
 it.each([null, undefined, NaN])('returns null for %s so nothing renders a fabricated zero', (v) => {
@@ -663,7 +706,7 @@ it.each([null, undefined, NaN])('returns null for %s so nothing renders a fabric
 it('groups Indian-style', () => expect(fmt.num(2477000)).toBe('24,77,000'));
 ```
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and was originally enforced
 almost nowhere. An invariant nothing checks is a hope. Before committing:
@@ -675,7 +718,7 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 6: Run and commit** — `feat(admin-web): one formatter module, null in / null out`
+- [x] **Step 6: Run and commit** — `feat(admin-web): one formatter module, null in / null out`
 
 ---
 
