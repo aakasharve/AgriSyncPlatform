@@ -175,7 +175,10 @@ export interface LabourAttendanceRowDto {
 
 export interface LabourAttendanceDraftDto {
     plot: string;
-    headcount: number;
+    // STAGE 5 — nullable, for the same reason manDays is. Labour today with
+    // nobody saying HOW MANY is unknown; a 0 would tell the farmer the app
+    // believes nobody came. 0 is reserved for a day with no labour at all.
+    headcount: number | null;
     rows: LabourAttendanceRowDto[];
 }
 

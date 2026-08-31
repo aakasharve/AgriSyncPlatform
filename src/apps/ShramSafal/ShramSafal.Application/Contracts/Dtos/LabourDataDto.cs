@@ -288,9 +288,21 @@ public sealed record LabourPointsDto(
     decimal? Amount,
     IReadOnlyList<string> Names);
 
+/// <summary>
+/// STAGE 5 — no longer hardcoded. <c>Headcount</c> is <c>int?</c>, not
+/// <c>int</c>, for the same reason <c>ManDays</c> is <c>decimal?</c>: labour
+/// today with nobody saying HOW MANY is unknown, and a 0 there would tell the
+/// farmer the app believes nobody came. <c>0</c> is reserved for the genuine
+/// case — a day with no labour on it at all.
+///
+/// <para><c>Rows</c> stays empty, and that is correct rather than pending: a
+/// row is created ONLY by a deliberate tap (see LabourAttendanceRowDto), and
+/// no save path exists for those taps yet. Deriving rows from spoken names
+/// here would put marks in the register the farmer never made.</para>
+/// </summary>
 public sealed record LabourAttendanceDraftDto(
     string Plot,
-    int Headcount,
+    int? Headcount,
     IReadOnlyList<LabourAttendanceRowDto> Rows);
 
 /// <summary>

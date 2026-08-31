@@ -35,7 +35,11 @@ const toMr = (n: number) => String(n).replace(/\d/g, (d) => '०१२३४५�
 const SHIFTS: LabourShift[] = ['full', 'half', 'night'];
 
 const Attendance: React.FC<Props> = ({ data, onSave, onToast }) => {
-    const [count, setCount] = useState(data.attendance.headcount);
+    // `headcount` is null when labour was logged today but nobody said how
+    // many. The counter needs a number to start from, and 0 is the honest
+    // starting point for a field he is about to fill in himself — it is his
+    // own tap that will make it a claim, not this default.
+    const [count, setCount] = useState(data.attendance.headcount ?? 0);
     const [shift, setShift] = useState<LabourShift>('full');
     const [status, setStatus] = useState<Record<string, PresenceStatus>>(() => {
         const init: Record<string, PresenceStatus> = {};

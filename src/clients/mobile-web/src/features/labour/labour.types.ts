@@ -234,7 +234,13 @@ export interface LabourData {
      * let a person appear "on the sheet" before any real tap, which is a
      * different (Phase 1) feature.
      */
-    attendance: { plot: string; headcount: number; rows: { personId: string; status: PresenceStatus }[] };
+    /**
+     * STAGE 5 — `headcount` is nullable: labour today with no stated count is
+     * unknown, never 0. `rows` carries ONLY deliberate present/half/absent
+     * taps, so an empty list means nobody has been marked — not that everyone
+     * was absent.
+     */
+    attendance: { plot: string; headcount: number | null; rows: { personId: string; status: PresenceStatus }[] };
 }
 
 /**

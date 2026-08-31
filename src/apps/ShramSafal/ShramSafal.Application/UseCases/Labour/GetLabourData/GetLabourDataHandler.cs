@@ -711,10 +711,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // from the assignments that already exist. No new table.
         var ledger = BuildHajeriLedger(weekLabel, windowLogs, windowAssignments, manDays);
 
-        var attendance = new LabourAttendanceDraftDto(
-            Plot: string.Empty,
-            Headcount: 0,
-            Rows: []);
+        var attendance = BuildAttendanceDraft(farmLogs, allAssignments, plotNameById, farmLocalToday);
 
         var topLevelIds = people.Select(p => p.Id).ToList();
 
@@ -921,5 +918,68 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         }
 
         return tones[Math.Abs(hash % tones.Length)];
+    }
+
+    /// <summary>
+    /// STAGE 5 — today's attendance draft, no longer hardcoded to an empty plot
+    /// and a zero headcount.
+    ///
+    /// <para><b>Headcount follows the same four cases as मजूर-दिवस</b>, using the
+    /// SAME resolver (<c>LabourHeadcount.Resolve</c>) so the two can never
+    /// disagree about what a crew size was: no log today at all is <c>null</c>;
+    /// a logged day with no labour on it is a genuine <c>0</c>; labour with
+    /// nobody saying how many is <c>null</c>, never 0; otherwise the sum of the
+    /// counts actually stated.</para>
+    ///
+    /// <para><b>Rows stays empty, and that is the correct answer rather than an
+    /// unfinished one.</b> A row exists only where the farmer deliberately
+    /// tapped present/half/absent, and no save path carries those taps yet.
+    /// Deriving rows from spoken NAMES would be the tempting shortcut and the
+    /// wrong one: being named as present is not the same act as being marked,
+    /// and filling the register with marks he never made is how a screen starts
+    /// asserting things on his behalf. The names are already visible in the
+    /// हजेरी वही, which is a record of what was said, not of what was ruled.</para>
+    /// </summary>
+    // internal for the same reason BuildHajeriLedger is: the four headcount
+    // cases (and the rule that Rows stays empty) are the value here, and they
+    // are pinned directly rather than through a handler round-trip.
+    internal static LabourAttendanceDraftDto BuildAttendanceDraft(
+        IReadOnlyList<DailyLog> farmLogs,
+        IReadOnlyList<LabourAssignment> allAssignments,
+        IReadOnlyDictionary<Guid, string> plotNameById,
+        DateOnly farmLocalToday)
+    {
+        var todaysLogs = farmLogs.Where(l => l.LogDate == farmLocalToday).ToList();
+        if (todaysLogs.Count == 0)
+        {
+            // Nothing logged today. NOT a zero headcount — nobody has said
+            // anything about today yet, and 0 would claim they had.
+            return new LabourAttendanceDraftDto(string.Empty, null, []);
+        }
+
+        var todaysLogIds = todaysLogs.Select(l => l.Id).ToHashSet();
+        var todaysAssignments = allAssignments
+            .Where(a => todaysLogIds.Contains(a.DailyLogId))
+            .ToList();
+
+        var resolved = todaysAssignments
+            .Select(a => LabourHeadcount.Resolve(a.WorkerCount, a.MaleCount, a.FemaleCount))
+            .ToList();
+
+        var headcount = resolved.Count == 0
+            ? 0                                        // logged today, no labour on it — a real zero.
+            : resolved.All(h => h is null)
+                ? (int?)null                           // labour today, headcount never stated.
+                : resolved.Sum(h => h ?? 0);           // sum only what was actually stated.
+
+        // The plot only when today speaks with ONE voice. Two plots worked today
+        // is not one plot to name, and picking the first would put a plot on the
+        // screen the farmer never singled out.
+        var todaysPlotIds = todaysLogs.SelectMany(l => l.PlotIds).Distinct().ToList();
+        var plot = todaysPlotIds.Count == 1
+            ? plotNameById.GetValueOrDefault(todaysPlotIds[0], string.Empty)
+            : string.Empty;
+
+        return new LabourAttendanceDraftDto(plot, headcount, []);
     }
 }
