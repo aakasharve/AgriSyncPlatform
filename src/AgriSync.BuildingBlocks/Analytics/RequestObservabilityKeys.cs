@@ -42,4 +42,29 @@ public static class RequestObservabilityKeys
     /// <c>sync.mutation_rejected</c>). Codes only; never farmer content.
     /// </summary>
     public const string RejectedWorkReason = "observability.rejected_work_reason";
+
+    /// <summary>
+    /// <c>string</c> — the <c>Error.Code</c> of the catalogued failure that
+    /// produced this response, e.g. <c>ShramSafal.CropCycleOverlap</c>. Stamped
+    /// by <see cref="AgriSync.BuildingBlocks.Results.ErrorCapture"/> when the
+    /// result executes; read by <c>RequestObservabilityMiddleware</c>. Its
+    /// absence on a 4xx/5xx means the response was not produced from a
+    /// catalogued Error, which is recorded honestly as "Uncatalogued" rather
+    /// than guessed at.
+    /// </summary>
+    public const string ErrorCode = "observability.error_code";
+
+    /// <summary>
+    /// <c>string</c> — the runtime type NAME of an exception that escaped the
+    /// endpoint, e.g. <c>NullReferenceException</c>. Set by
+    /// <c>RequestObservabilityMiddleware</c> itself on the catch path.
+    ///
+    /// A type name is a code, so it passes the props privacy rule. The
+    /// exception MESSAGE is deliberately NOT captured and must never be added
+    /// here: a Postgres error text, a serializer message or a validation
+    /// message can carry the request payload, and analytics.events is
+    /// append-only (DO INSTEAD NOTHING on UPDATE/DELETE), so a farmer's words
+    /// written there could never be scrubbed.
+    /// </summary>
+    public const string UnhandledExceptionType = "observability.unhandled_exception_type";
 }

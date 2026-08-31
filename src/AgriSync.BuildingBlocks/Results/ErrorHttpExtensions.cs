@@ -20,10 +20,16 @@ public static class ErrorHttpExtensions
         // Fully qualified — local namespace is also "Results" so the
         // unqualified `Results.Problem(...)` resolves to this namespace
         // (CS0234) without it.
-        return Microsoft.AspNetCore.Http.Results.Problem(
+        var response = Microsoft.AspNetCore.Http.Results.Problem(
             detail: problem.Detail,
             statusCode: problem.Status,
             title: problem.Title,
             type: problem.Type);
+
+        // Same RFC 7807 response as before, now carrying its own identity to
+        // the observability middleware. One production caller today
+        // (Accounts SubscriptionWebhookEndpoints.cs:122) — the farmer-facing
+        // surface is covered by Task 2.
+        return ErrorCapture.Stamp(error, response);
     }
 }
