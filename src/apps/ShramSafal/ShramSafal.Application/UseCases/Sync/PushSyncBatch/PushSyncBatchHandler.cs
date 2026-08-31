@@ -1864,7 +1864,9 @@ public sealed class PushSyncBatchHandler(
                 MimeType: request.MimeType,
                 CreatedByUserId: actorUserId,
                 AttachmentId: attachmentId,
-                ActorRole: actorRole,
+                // Stage A0 / A3 — ActorRole no longer travels on the command; the handler
+                // resolves the role on the target farm. Caught by the compiler ONLY because
+                // Task 3 made this call named first.
                 ClientCommandId: clientRequestId),
             ct);
 

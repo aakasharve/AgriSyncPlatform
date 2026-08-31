@@ -51,6 +51,12 @@ public sealed class CreateAttachmentHandler(
             new UserId(command.CreatedByUserId),
             clock.UtcNow);
 
+        // Stage A0 / A3 — the ledger records the actor's role ON THIS FARM; see
+        // UpdateFarmBoundaryHandler for the full reasoning. Null is unreachable:
+        // IsUserMemberOfFarmAsync above shares this resolver's predicate exactly.
+        var resolvedActorRole = await repository.GetUserRoleForFarmAsync(
+            command.FarmId, command.CreatedByUserId, ct);
+
         await repository.AddAttachmentAsync(attachment, ct);
         // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
         // (sentinel provenance) to AuditEventFactory.Create with the real
@@ -62,7 +68,7 @@ public sealed class CreateAttachmentHandler(
                 entityId: attachment.Id,
                 action: "Created",
                 actorUserId: command.CreatedByUserId,
-                actorRole: command.ActorRole ?? "unknown",
+                actorRole: resolvedActorRole?.ToString().ToLowerInvariant() ?? "unknown",
                 payload: new
                 {
                     attachment.Id,

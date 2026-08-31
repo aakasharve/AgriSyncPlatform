@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Domain.Audit;
 using System.Collections.Generic;
+using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Tests.Work.Handlers;
@@ -32,12 +33,15 @@ internal sealed class RoleRecordingRepositoryStub : StubShramSafalRepository
     private readonly AppRole? _role;
     private readonly Farm? _farm;
     private readonly Plot? _plot;
+    private readonly Attachment? _attachment;
 
-    public RoleRecordingRepositoryStub(AppRole? role, Farm? farm = null, Plot? plot = null)
+    public RoleRecordingRepositoryStub(
+        AppRole? role, Farm? farm = null, Plot? plot = null, Attachment? attachment = null)
     {
         _role = role;
         _farm = farm;
         _plot = plot;
+        _attachment = attachment;
     }
 
     /// <summary>The ActorRole string as it was handed to the audit ledger.</summary>
@@ -73,6 +77,13 @@ internal sealed class RoleRecordingRepositoryStub : StubShramSafalRepository
         => Task.FromResult(new List<CropCycle>());
 
     public override Task AddCropCycleAsync(CropCycle cropCycle, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    public override Task<Attachment?> GetAttachmentByIdAsync(
+        Guid attachmentId, CancellationToken ct = default)
+        => Task.FromResult(_attachment);
+
+    public override Task AddAttachmentAsync(Attachment attachment, CancellationToken ct = default)
         => Task.CompletedTask;
 
     public override Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken ct = default)

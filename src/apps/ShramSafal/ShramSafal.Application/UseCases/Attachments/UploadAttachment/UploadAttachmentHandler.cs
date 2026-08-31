@@ -50,6 +50,14 @@ public sealed class UploadAttachmentHandler(
             return Result.Failure<AttachmentDto>(ShramSafalErrors.InvalidCommand);
         }
 
+        // Stage A0 / A3 — the ledger records the actor's role ON THIS FARM; see
+        // UpdateFarmBoundaryHandler for the full reasoning. The farm comes from the
+        // STORED attachment, never from the command: an uploader must not be able to
+        // name a farm they are not acting on. Null is unreachable — the
+        // IsUserMemberOfFarmAsync gate above used the same predicate on the same farm.
+        var resolvedActorRole = await repository.GetUserRoleForFarmAsync(
+            attachment.FarmId, command.UploadedByUserId, ct);
+
         var nowUtc = clock.UtcNow;
         var relativePath = BuildRelativePath(attachment, nowUtc, command.ClientFileName);
         var bytesWritten = await storageService.SaveAsync(relativePath, command.FileStream, attachment.MimeType, ct);
@@ -66,7 +74,7 @@ public sealed class UploadAttachmentHandler(
                 entityId: attachment.Id,
                 action: "UploadedAndFinalized",
                 actorUserId: command.UploadedByUserId,
-                actorRole: command.ActorRole ?? "unknown",
+                actorRole: resolvedActorRole?.ToString().ToLowerInvariant() ?? "unknown",
                 payload: new
                 {
                     attachment.Id,

@@ -6,7 +6,8 @@ public sealed record UploadAttachmentCommand(
     Guid UploadedByUserId,
     string? UploadedMimeType = null,
     string? ClientFileName = null,
-    string? ActorRole = null,
+    // Stage A0 / A3 - ActorRole removed. The server resolves the actor role on the
+    // target farm at write time (GetUserRoleForFarmAsync).
     string? ClientCommandId = null,
     // DATA_PRINCIPLE_SPINE sub-phase 04.3b — forensic provenance for the
     // emitted AuditEvent row. Sourced from HttpContext.AuditClaims() at the

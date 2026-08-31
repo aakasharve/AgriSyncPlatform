@@ -5,8 +5,13 @@ using System.Threading.Tasks;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using FluentAssertions;
+using System.IO;
+using ShramSafal.Application.Ports.External;
+using ShramSafal.Application.UseCases.Attachments.CreateAttachment;
+using ShramSafal.Application.UseCases.Attachments.UploadAttachment;
 using ShramSafal.Application.UseCases.CropCycles.CreateCropCycle;
 using ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary;
+using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Tests.Analytics;
 using Xunit;
@@ -47,6 +52,89 @@ public sealed class ActorRoleIsFarmScopedTests
         // UpdateFarmBoundaryHandler refuses a farm with an empty OwnerAccountId.
         farm.AttachToOwnerAccount(OwnerAccountId.New(), nowUtc);
         return farm;
+    }
+
+    /// <summary>
+    /// Minimal <see cref="IAttachmentStorageService"/> fake. None exists in the repo —
+    /// this is the only collaborator in the A3 family without a ready-made double.
+    /// </summary>
+    private sealed class NoOpAttachmentStorage : IAttachmentStorageService
+    {
+        public Task<long> SaveAsync(
+            string relativePath, Stream content, string? contentType = null, CancellationToken ct = default)
+            => Task.FromResult(content?.Length ?? 0L);
+
+        public Task<Stream?> OpenReadAsync(string relativePath, CancellationToken ct = default)
+            => Task.FromResult<Stream?>(null);
+    }
+
+    [Fact]
+    public async Task Attachment_creation_records_the_role_on_this_farm()
+    {
+        var farmId = Guid.NewGuid();
+        var actorUserId = Guid.NewGuid();
+
+        var repository = new RoleRecordingRepositoryStub(
+            AppRole.Worker, FarmOwnedBy(farmId, actorUserId));
+
+        var handler = new CreateAttachmentHandler(
+            repository, new SequentialIdGenerator(), new FixedClock(DateTime.UtcNow));
+
+        var result = await handler.HandleAsync(
+            new CreateAttachmentCommand(
+                FarmId: farmId,
+                // "farm" routes link validation through GetFarmByIdAsync, which the stub answers.
+                LinkedEntityId: farmId,
+                LinkedEntityType: "farm",
+                FileName: "spray.jpg",
+                MimeType: "image/jpeg",
+                CreatedByUserId: actorUserId),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(
+            "the handler must complete for there to be an audit row to inspect");
+        repository.AuditEventCount.Should().Be(1,
+            "a zero here means an early return, not a wrong role");
+        repository.LastAuditActorRole.Should().Be(
+            "worker",
+            "a Worker on THIS farm must not inherit whatever role their token carries elsewhere");
+    }
+
+    [Fact]
+    public async Task Attachment_upload_records_the_role_on_this_farm()
+    {
+        var farmId = Guid.NewGuid();
+        var actorUserId = Guid.NewGuid();
+        var attachmentId = Guid.NewGuid();
+        var nowUtc = DateTime.UtcNow;
+
+        // Upload sources the farm from the STORED attachment, never from the command -
+        // an uploader must not be able to name a farm they are not acting on.
+        var attachment = Attachment.Create(
+            attachmentId, new FarmId(farmId), farmId, "farm",
+            "spray.jpg", "image/jpeg", new UserId(actorUserId), nowUtc);
+
+        var repository = new RoleRecordingRepositoryStub(
+            AppRole.PrimaryOwner, FarmOwnedBy(farmId, actorUserId), plot: null, attachment: attachment);
+
+        var handler = new UploadAttachmentHandler(
+            repository, new NoOpAttachmentStorage(), new FixedClock(nowUtc));
+
+        using var content = new MemoryStream(new byte[] { 1, 2, 3, 4 });
+
+        var result = await handler.HandleAsync(
+            new UploadAttachmentCommand(
+                AttachmentId: attachmentId,
+                FileStream: content,
+                UploadedByUserId: actorUserId,
+                UploadedMimeType: "image/jpeg"),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(
+            "the handler must complete for there to be an audit row to inspect");
+        repository.AuditEventCount.Should().Be(1,
+            "a zero here means an early return, not a wrong role");
+        repository.LastAuditActorRole.Should().Be("primaryowner");
     }
 
     [Fact]
