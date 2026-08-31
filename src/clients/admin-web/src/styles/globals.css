@@ -190,6 +190,49 @@ body {
 }
 
 /* =====================================================================
+ * §A.10 THE ONE GRADIENT IN THIS STYLESHEET — a gap in a chart.
+ *
+ * CONTRACT.md §8 bans gradients outright, with a single named exception:
+ * the hard-stop 45° hatch that marks a period with NO MEASUREMENT. It is
+ * a DATA ENCODING, not decoration — it exists so a gap can never be read
+ * as a trough — and the ban's own words are "Do not add a second one".
+ *
+ * 🛑 WHY A HATCH AND NOT A ZERO-HEIGHT BAR.
+ * A bar of height zero and a period that was never measured are drawn the
+ * same way by every charting default in existence: a flat line on the
+ * axis. One of those is a fact about the farm, the other is a fact about
+ * our pipeline, and an operator reading a flat February cannot tell which
+ * they are looking at. The hatch is full height on purpose: it occupies
+ * the slot, it cannot be mistaken for a low reading, and it reads as
+ * "nothing here" rather than "nothing happened".
+ *
+ * Three tokens, no literals. `--color-tint-grey` is already the honesty
+ * tile (§A.6 — "grey is not a tone"), `--color-page` is the gap between
+ * the stripes, and the dashed edge is `--color-edge-grey`. A hatch drawn
+ * in a semantic hue would break §9.4: an honesty state outranks any
+ * semantic colour.
+ *
+ * Ported from the prototype's `.as-col-gap` / `.as-spark-bar[data-state=
+ * "gap"]` (`theme.css:809-817,825-840`). The 4px/8px step is v3's
+ * sparkline value; the column chart there uses 5px/10px. ONE step is
+ * carried, not two: two hatches at two frequencies on one screen read as
+ * two different states, which is the legend this console does not have.
+ *
+ * `.chart-gap-hatch` carries ONLY the fill. The border, the radius and
+ * the height belong to the component (`GapBar.tsx`), so the fill stays
+ * one rule with one reason rather than a family of near-copies.
+ * ===================================================================== */
+.chart-gap-hatch {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--color-tint-grey) 0,
+    var(--color-tint-grey) 4px,
+    var(--color-page) 4px,
+    var(--color-page) 8px
+  );
+}
+
+/* =====================================================================
  * §B LEGACY — glass utility classes.
  *
  * 🛑 DO NOT DELETE THESE HERE. 19 files still reference them (25

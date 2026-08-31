@@ -209,6 +209,46 @@ describe('no raw hex from here on', () => {
   });
 });
 
+describe('the ONE gradient: the chart gap hatch (CONTRACT.md §8, added Task 9)', () => {
+  /*
+   * §8 bans gradients outright with a single named exception: the hard-stop
+   * 45° hatch that marks a period with no measurement. Its own words are "Do
+   * not add a second one", which is a rule about every task that follows —
+   * so it is asserted here, in the file that owns the stylesheet, rather than
+   * left as a comment in a component.
+   *
+   * These assertions run against the stylesheet READ FROM DISK at the top of
+   * this file, for the reason stated there: `css: false` would otherwise hand
+   * every one of them an empty string to pass against.
+   */
+  it('exists, and is the only repeating gradient in the stylesheet', () => {
+    const hatches = cssRules.match(/repeating-linear-gradient/g) ?? [];
+    expect(hatches).toHaveLength(1);
+    expect(cssRules).toContain('.chart-gap-hatch {');
+  });
+
+  it('is drawn from tokens — the honesty grey, never a literal', () => {
+    const rule = cssRules.match(/\.chart-gap-hatch\s*\{[\s\S]*?\}/)?.[0] ?? '';
+    expect(rule).toContain('var(--color-tint-grey)');
+    expect(rule).toContain('var(--color-page)');
+    expect(rule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+
+  it('carries its reason in the file, not in someone’s memory', () => {
+    // Anyone deleting the exception has to first delete the sentence saying
+    // what it encodes — the same device the C7 and C8 assertions use.
+    expect(css).toMatch(/§A\.10[\s\S]{0,1200}data encoding/i);
+    expect(css).toMatch(/§A\.10[\s\S]{0,1600}Do not add a second one/i);
+  });
+
+  it('no component hand-rolls its own hatch', () => {
+    const offenders = Object.keys(SOURCES).filter((path) =>
+      code(path).includes('repeating-linear-gradient')
+    );
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe('no dark: utility survives anywhere (D1)', () => {
   /*
    * THIS IS NOT COSMETIC AND IT IS NOT DEFERRABLE.

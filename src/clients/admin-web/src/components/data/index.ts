@@ -10,6 +10,33 @@
 
 export { DataList } from './DataList';
 
+/* THE chart shell. Every chart from here on is drawn inside it, and its
+   accessible data table is a REQUIRED prop — five charts carry one today and
+   one of those five is screen-reader-only, so a rewrite that dropped it would
+   be invisible in review (A32). */
+export { ChartShell } from './ChartShell';
+export type {
+  ChartDataTable,
+  ChartShellProps,
+  ChartShellStates,
+  ChartTableColumn,
+} from './ChartShell';
+
+/* The fixed axis, and the line between a measured zero and a gap (A33).
+   `fillAxis` REPLACES the `?? 0` zero-fill in the three live charts: an
+   absent slot comes back as a gap marker, never as a substituted number. */
+export { fillAxis, gapCount, isGap, measuredSlots, ramp } from './fillAxis';
+export { PILLAR_ORDER, SCORE_BINS, TIER_ORDER } from './fillAxis';
+export type { AxisPoint, AxisSlot, FillAxisOptions } from './fillAxis';
+
+/* How an absence is drawn: a full-height hatched stub, never a zero-height
+   bar. `GapBar` is exported on its own because Tasks 21-23 need it inside
+   chart types this shell does not draw. */
+export { GapBar } from './GapBar';
+export type { GapBarProps } from './GapBar';
+export { Sparkline } from './Sparkline';
+export type { SparklineProps, SparkTone } from './Sparkline';
+
 /* Describing a column's order. `byMostRecent` is the tiebreak that lives in
    `InterventionQueueTable` today, lifted so it stops living in one file. */
 export { byMostRecent, isSortable, sortRows } from './sortRows';
