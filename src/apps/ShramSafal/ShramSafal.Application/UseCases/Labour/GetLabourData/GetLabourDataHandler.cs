@@ -702,12 +702,14 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             // windowed `totalPaid` is still reported, once, as `Wages` above.
             Money: new LabourMoneyDto(totalRecordedAllTime, totalPaidAllTime, totalAdvance, totalOwed));
 
-        var ledger = new LabourLedgerDto(
-            WeekLabel: weekLabel,
-            Days: [],
-            Rows: [], // Stage 5 per-worker attendance ledger — empty by design until then.
-            DailyTotals: [],
-            WeekTotal: manDays);
+        // STAGE 5 — the हजेरी वही is no longer hardcoded empty.
+        //
+        // It became buildable the moment worker names actually persisted. The
+        // names reader in LedgerDerivationService had been pointed at a key the
+        // prompt never emitted, so WorkerNamesJson was "[]" on every row ever
+        // written; with that fixed, a per-worker-per-day register can be derived
+        // from the assignments that already exist. No new table.
+        var ledger = BuildHajeriLedger(weekLabel, windowLogs, windowAssignments, manDays);
 
         var attendance = new LabourAttendanceDraftDto(
             Plot: string.Empty,
@@ -764,5 +766,160 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         }
 
         return (byWorker, unattributed);
+    }
+
+    /// <summary>
+    /// The हजेरी वही: one row per person NAMED as present, one cell per day the
+    /// farm has a named labour record inside the window.
+    ///
+    /// <para><b>What a cell means, and it is the whole integrity of this screen.</b>
+    /// <c>"present"</c> — named on that day. <c>"half"</c> — named on a day whose
+    /// assignment was recorded as a half shift. <c>null</c> — NO FACT: nobody has
+    /// said this person did not come, they simply were not named. Rendering that
+    /// as absence would invent the one fact a muster roll must never invent, and
+    /// it is the difference between a register and an accusation.</para>
+    ///
+    /// <para><b>These names carry no identity.</b> A spoken name resolves to no
+    /// worker id (see <c>LabourEngagementDto.WorkerNames</c>). <c>PersonId</c> is a
+    /// stable key derived from the name so the client can key a row and fold
+    /// repeats of the same spoken name together. It is NOT a user id and must
+    /// never be read as one.</para>
+    /// </summary>
+    // internal, not private: the honesty rules in this method (null is never
+    // absence, half is 0.5, present outranks half) are the whole value of the
+    // register and are pinned directly by BuildHajeriLedgerTests rather than
+    // through a full handler round-trip. InternalsVisibleTo is already granted
+    // to ShramSafal.Domain.Tests in the csproj.
+    internal static LabourLedgerDto BuildHajeriLedger(
+        string weekLabel,
+        IReadOnlyList<DailyLog> windowLogs,
+        IReadOnlyList<LabourAssignment> windowAssignments,
+        decimal? manDays)
+    {
+        var logDateById = windowLogs.ToDictionary(l => l.Id, l => l.LogDate);
+
+        // Only assignments whose log sits inside this window, and only those that
+        // actually named somebody — a bare headcount has nothing to put in a
+        // muster roll, and inventing a row for it is exactly the fabrication
+        // this screen exists to avoid.
+        var named = windowAssignments
+            .Where(a => logDateById.ContainsKey(a.DailyLogId))
+            .Select(a => new
+            {
+                Date = logDateById[a.DailyLogId],
+                Names = a.ToDto([]).WorkerNames,
+                IsHalf = a.Shift == LabourShift.Half,
+            })
+            .Where(x => x.Names.Count > 0)
+            .ToList();
+
+        if (named.Count == 0)
+        {
+            // Nobody named anywhere in the window. An EMPTY register, never a
+            // zeroed one: the client shows its own empty state rather than a
+            // grid of dashes that would read as everyone being absent.
+            return new LabourLedgerDto(weekLabel, [], [], [], manDays);
+        }
+
+        var days = named.Select(x => x.Date).Distinct().OrderBy(d => d).ToList();
+        var dayIndex = days
+            .Select((date, index) => (date, index))
+            .ToDictionary(pair => pair.date, pair => pair.index);
+
+        var cellsByName = new Dictionary<string, string?[]>(StringComparer.Ordinal);
+        foreach (var entry in named)
+        {
+            foreach (var workerName in entry.Names)
+            {
+                if (!cellsByName.TryGetValue(workerName, out var cells))
+                {
+                    cells = new string?[days.Count];
+                    cellsByName[workerName] = cells;
+                }
+
+                var index = dayIndex[entry.Date];
+                // "present" outranks "half". If the farmer stated a full shift
+                // anywhere on that day, the person was there for a full day by
+                // his own word; a later half-shift row must not shrink it.
+                if (cells[index] == "present")
+                {
+                    continue;
+                }
+
+                cells[index] = entry.IsHalf ? "half" : "present";
+            }
+        }
+
+        var rows = cellsByName
+            .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+            .Select(pair => new LabourLedgerRowDto(
+                PersonId: $"name:{pair.Key}",
+                Name: pair.Key,
+                Initial: FirstLetterOf(pair.Key),
+                Tone: ToneFor(pair.Key),
+                Cells: pair.Value,
+                Total: pair.Value.Sum(MarkValue)))
+            .ToList();
+
+        var dailyTotals = Enumerable.Range(0, days.Count)
+            .Select(index => rows.Sum(row => MarkValue(row.Cells[index])))
+            .ToList();
+
+        return new LabourLedgerDto(
+            WeekLabel: weekLabel,
+            // ISO dates. The weekday letters a farmer reads are Marathi UI copy
+            // and belong to the client, which already formats the window range
+            // the same way (marathiDate.ts).
+            Days: days.Select(date => date.ToString("yyyy-MM-dd")).ToList(),
+            Rows: rows,
+            DailyTotals: dailyTotals,
+            // The REGISTER own sum — the days actually marked in it. Deliberately
+            // NOT manDays, which counts every stated headcount including crews
+            // nobody named. Two different questions answered with one number is
+            // how a screen starts lying quietly, and this DTO own doc already
+            // said WeekTotal would become this once Stage 5 landed.
+            WeekTotal: rows.Sum(row => row.Total));
+    }
+
+    /// <summary>A mark worth in days: a half shift is 0.5, no fact is 0.</summary>
+    private static decimal MarkValue(string? mark) => mark switch
+    {
+        "present" => 1m,
+        "half" => 0.5m,
+        _ => 0m,
+    };
+
+    /// <summary>
+    /// First visible character of a spoken name, for the avatar. Uses a text
+    /// element, not an index: Devanagari letters carry combining matras, and
+    /// slicing one UTF-16 unit off "कांतीलाल" yields a broken glyph.
+    /// </summary>
+    private static string FirstLetterOf(string name)
+    {
+        var trimmed = name.Trim();
+        if (trimmed.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var enumerator = System.Globalization.StringInfo.GetTextElementEnumerator(trimmed);
+        return enumerator.MoveNext() ? (string)enumerator.Current : trimmed[..1];
+    }
+
+    /// <summary>
+    /// Avatar tint, chosen deterministically from the name so the same person
+    /// keeps the same colour across days and requests. Cosmetic only — it encodes
+    /// no fact about the worker.
+    /// </summary>
+    private static string ToneFor(string name)
+    {
+        string[] tones = ["em", "or", "bl", "am", "vi"];
+        var hash = 0;
+        foreach (var ch in name)
+        {
+            hash = unchecked((hash * 31) + ch);
+        }
+
+        return tones[Math.Abs(hash % tones.Length)];
     }
 }
