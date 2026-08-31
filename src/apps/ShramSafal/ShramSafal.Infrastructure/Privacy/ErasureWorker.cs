@@ -214,6 +214,27 @@
 //     anonymized at ssf.field_operators and this row needs no action, because it
 //     names nobody. Anonymize the person, never the work. Conscious gate-4
 //     disposition, no independent scrub action on this table.
+//   - ssf.attendance_mark_corrections — ADDED 2026-08-31 alongside
+//     ssf.attendance_marks. The append-only record of what a mark used to say,
+//     who changed it and when (founder ruling: corrections are fine, silent ones
+//     are not).
+//     NO PII COLUMN OF ITS OWN: a mark id, a farm id, which half changed, and the
+//     enum NAMES either side of the change ("Half" -> "Full"). It names nobody —
+//     the person is reachable only through the mark it points at, and from there
+//     ssf.field_operators, which AnonymizeFieldOperatorAsync already scrubs.
+//     corrected_by_user_id identifies the FARMER who made the change, and on
+//     creator erasure that farmer is the data subject — but see below.
+//     KEEP, AND IT CANNOT BE OTHERWISE. The table is append-only enforced at the
+//     GRANT: agrisync_app holds SELECT and INSERT and no UPDATE or DELETE, so
+//     neither a scrub nor a delete is executable by the application at all. That
+//     is deliberate and it is the point of the table — a history that can be
+//     edited answers nothing. An erasure that could rewrite the audit of its own
+//     corrections would defeat the ruling this table exists to satisfy.
+//     DISCLOSED LIMIT: that makes corrected_by_user_id a farmer identifier which
+//     account deletion does not reach. It is a bare uuid with no name, phone or
+//     free text beside it, and it is load-bearing for provenance. Flagged here
+//     rather than quietly scrubbed, and it needs the same founder + counsel
+//     sign-off the field_operators retention policy is already gated on.
 //   - ssf.machinery_usages — Track B daily_logs-child (ADR 0023 §2 / D-T6-ERASURE).
 //     NO user_id/PII column: machine type/ownership, hours/costs, and the structured
 //     equipment config (implement, nozzles_active, fan_state, fuel) are de-identified
