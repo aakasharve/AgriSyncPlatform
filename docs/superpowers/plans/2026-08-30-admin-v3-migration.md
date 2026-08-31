@@ -1136,7 +1136,7 @@ here rather than carrying it into the next task.
 
 **This is the founder-approved consolidation task.** The live console hand-rolls table markup in sixteen places; the prototype duplicates 2,775 lines of filtering across five screens. Neither travels.
 
-- [ ] **Step 1: Define the configuration surface**
+- [x] **Step 1: Define the configuration surface**
 
 ```ts
 export interface DataListConfig<T> {
@@ -1184,7 +1184,7 @@ export interface DataListConfig<T> {
 }
 ```
 
-- [ ] **Step 2: Implement the sorter with all four semantics that exist today**
+- [x] **Step 2: Implement the sorter with all four semantics that exist today**
 
 ```ts
 /**
@@ -1201,11 +1201,11 @@ export interface DataListConfig<T> {
  */
 ```
 
-- [ ] **Step 3: Implement summary-first opening.** Computed totals; per-option counts AND per-option acreage where the screen has acreage; three ways to open the list; a chip stating the applied filter IN WORDS whose close control returns to the SUMMARY, not to a longer list; Show all as a true three-state toggle with truthful aria-expanded.
+- [x] **Step 3: Implement summary-first opening.** Computed totals; per-option counts AND per-option acreage where the screen has acreage; three ways to open the list; a chip stating the applied filter IN WORDS whose close control returns to the SUMMARY, not to a longer list; Show all as a true three-state toggle with truthful aria-expanded.
 
   Cross-filtered counts are OPT-IN PER SCREEN, because v3 deliberately applies them on All Farms and Silent Churn but NOT on Users, Suffering and API Errors — where a count that moved would stop answering "how many are there". A zero-yield option keeps its position and shows 0.
 
-- [ ] **Step 4: Resolve the collision between summary-first and server pagination**
+- [x] **Step 4: Resolve the collision between summary-first and server pagination**
 
 > **This is the one real design conflict in the whole port.** The v3 summary-first pattern claims every filter option can state its exact count and exact acreage. That is only computable over a FULLY LOADED set — trivially true at n=16, false at real volumes. Server pagination (A17) means the client holds 40 rows, not all of them.
 >
@@ -1216,13 +1216,13 @@ export interface DataListConfig<T> {
 >
 > Build (2) now. Record (1) as the follow-up. Do not ship an unqualified count.
 
-- [ ] **Step 5: Implement expandable rows.** Generated prose plus a definition list of context, keyboard-operable on Enter AND Space, aria-expanded and aria-controls, auto-collapsing when a search hides the row, and the detail row moving WITH ITS PARENT AS A GROUP when the table sorts.
+- [x] **Step 5: Implement expandable rows.** Generated prose plus a definition list of context, keyboard-operable on Enter AND Space, aria-expanded and aria-controls, auto-collapsing when a search hides the row, and the detail row moving WITH ITS PARENT AS A GROUP when the table sorts.
 
-- [ ] **Step 6: Implement keepPreviousData behaviour and the Refreshing swap (A25, B13).** The row count is replaced by "Refreshing…" while isFetching and not isLoading — the stricter Farmer Health variant (`FarmerHealthPage.tsx:87`) becomes the shared rule, so a first load shows the skeleton and only a background poll shows the indicator. Without placeholderData keepPreviousData every page change flashes a skeleton; without the indicator a background 30s poll changes the table under the user with no explanation.
+- [x] **Step 6: Implement keepPreviousData behaviour and the Refreshing swap (A25, B13).** The row count is replaced by "Refreshing…" while isFetching and not isLoading — the stricter Farmer Health variant (`FarmerHealthPage.tsx:87`) becomes the shared rule, so a first load shows the skeleton and only a background poll shows the indicator. Without placeholderData keepPreviousData every page change flashes a skeleton; without the indicator a background 30s poll changes the table under the user with no explanation.
 
-- [ ] **Step 7: Implement the pager (A17, B4).** Prev, "Page N of M", Next; bounds-disabled; HIDDEN ENTIRELY when there is one page; driving the page param through useListUrlState. For the API Errors case back it with tanstack react-table manualPagination plus server-driven pageCount (A50), so the one screen that already has server pagination does not lose it to a client-side sorter.
+- [x] **Step 7: Implement the pager (A17, B4).** Prev, "Page N of M", Next; bounds-disabled; HIDDEN ENTIRELY when there is one page; driving the page param through useListUrlState. For the API Errors case back it with tanstack react-table manualPagination plus server-driven pageCount (A50), so the one screen that already has server pagination does not lose it to a client-side sorter.
 
-- [ ] **Step 8: Test the twelve behaviours a rewrite loses**
+- [x] **Step 8: Test the twelve behaviours a rewrite loses**
 
 ```tsx
 it('parks missing values at the bottom in both sort directions', () => {});
@@ -1239,7 +1239,7 @@ it('swaps the row count for Refreshing only on a background fetch', () => {});
 it('returns a filter chip close control to the summary, not to a longer list', () => {});
 ```
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and enforced almost
 nowhere — Tasks 4, 5, 6, 7, 9, 10, 12 and 13 originally ended at "run and commit". An invariant
@@ -1252,7 +1252,55 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 9: Commit** — `feat(admin-web): one DataList — sixteen hand-rolled tables and 2,775 duplicated lines retired`
+- [x] **Step 9: Commit** — `feat(admin-web): one DataList — sixteen hand-rolled tables and 2,775 duplicated lines retired`
+
+---
+
+> **Executed 2026-08-31 (`1955f461`). 440 tests. Findings that outrank the plan's own text:**
+>
+> **The measurement disagrees with Task 6's, and the pessimistic number is the one to design against.**
+> Build the index **97–112 ms** (Task 6 said ~60), scan **0.73 ms/keystroke** (said ~0.4), memory
+> **3,458 KB** (said ~355). Not a contradiction — Task 8 indexed three fields of the most
+> respelling-rich surnames (85 spellings for one row) where Task 6 measured one field of ordinary
+> names. **Both agree on the shape: the build costs ~130× a scan, so it MUST be memoised.** Proved by
+> call count, not a clock: 6 keystrokes over 3,000 rows → `keys() 3000 -> 3000`, zero rebuilds.
+>
+> **🛑 A separate, larger performance problem was found and is NOT search.** At 3,000 rows a keystroke
+> costs ~70 ms, of which the search is 0.73 ms. The rest is React re-rendering 3,000 rows because the
+> draft text lives inside `DataList`. Irrelevant at 40–50 rows a page — **but Silent Churn (T15) and
+> Suffering (T16) fetch their WHOLE list today.** Those two tasks must paginate or virtualise; they
+> should not discover this.
+>
+> **The tiebreak's comment lies about its own code.** `InterventionQueueTable.tsx` comments
+> "Tiebreak score-asc"; the code is `if (sortKey === 'score')` and runs in **both** directions. The
+> code was carried, not the comment. It also returns `-1` when two timestamps are equal — the same
+> answer for `(a,b)` and `(b,a)`, an inconsistent comparator with **no defined result under V8**. Now
+> returns 0 and falls to a stable index. The only behaviour change in the task, and it had no defined
+> behaviour to preserve.
+>
+> **Citation drift (eighth):** `InterventionQueueTable.tsx:60-69` spans two separate facts, includes
+> four unrelated lines and cuts line 70. Correct: **60-62** (tiebreak) and **67-70** (per-column
+> default direction).
+>
+> **The 2,775 figure is right, with a caveat:** that counts `<script>` through `</script>`
+> inclusive. The JavaScript itself is **2,765**; the whole files are **3,555**.
+>
+> **Cross-filtering verified, not trusted:** `pass(` appears only in `all-farms.html:322` and
+> `silent-churn.html:322`. The other three bake counts into markup at build time. Opt-in, default OFF.
+>
+> **Three plan-sketch defects fixed:** the `search` server variant had no `placeholder` and no
+> `commit`, so it would have shipped an unlabelled input; `states.measuredZero` was optional and is
+> now **required**, so TypeScript forbids an empty list that does not say what it looked for and when;
+> and `tiebreak` hung off `defaultSort`, which would have silently stopped applying the moment a
+> reader clicked that column twice — it hangs off the column.
+>
+> **TanStack Table was NOT used for the pager** — arithmetic instead. The protected behaviour (server
+> decides the page count, client never slices) is preserved and tested. **If Task 18 also drops it,
+> register row A50 needs the founder's tick in the Deliberately-Dropped table.**
+>
+> **🛑 URL params are NOT namespaced.** Every screen in Tasks 14–18 has one list, so nothing collides.
+> **Ops Live (T20) has two tables (A52)** and needs namespaced params — a small addition to T7, not a
+> second list component.
 
 ---
 
