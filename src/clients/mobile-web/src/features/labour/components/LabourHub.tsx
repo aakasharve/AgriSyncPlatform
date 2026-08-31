@@ -175,7 +175,22 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
                             {/* "किती दिलं" — a bare ₹ figure never says whose money or which way it moved. */}
                             <span className="text-right">
                                 <span className="block text-[12px] font-bold uppercase tracking-wide text-stone-400">मजुरी</span>
-                                <span className="block font-mono text-[20px] font-extrabold text-orange-700">{formatCurrency(labour.totalCost)}</span>
+                                {/* A hearing of "चार जण आले होते" states WHO worked and
+                                    nothing about money. `totalCost` sums `?? 0` across
+                                    the events, so an unpriced हजेरी rendered a confident
+                                    ₹0 — the app telling the farmer it believes he paid
+                                    nothing. The em-dash is this screen’s own convention
+                                    for a figure nobody has stated (मजूर-दिवस and the
+                                    money total already use it).
+
+                                    A REAL ₹0 is still printable: it needs an event that
+                                    actually stated a cost of zero, which is a fact, not
+                                    an absence. */}
+                                <span className="block font-mono text-[20px] font-extrabold text-orange-700">
+                                    {labour.events.some((event) => event.totalCost != null)
+                                        ? formatCurrency(labour.totalCost)
+                                        : '—'}
+                                </span>
                             </span>
                         </div>
                         {/* FOUNDER RULING 2026-08-31 — the card showed "४ मजूर"
