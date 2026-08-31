@@ -1628,7 +1628,7 @@ here rather than carrying it into the next task.
 
 **Port this before any screen.** Nothing about tenancy is on screen: a grep of the entire prototype returns ZERO hits for org, tenant or scope (verified). v3 is implicitly single-tenant, so a design-led port produces a console where every list silently returns the wrong org's rows or 428s.
 
-- [ ] **Step 1: Keep the module-scoped snapshot bridge and the exact header name (A1)**
+- [x] **Step 1: Keep the module-scoped snapshot bridge and the exact header name (A1)**
 
 ```ts
 /**
@@ -1639,11 +1639,11 @@ here rather than carrying it into the next task.
  */
 ```
 
-- [ ] **Step 2: Move the org param into router-managed search params (A15).** syncUrl currently uses window.history.replaceState (`ActiveOrgProvider.tsx:102-108`), which React Router DOES NOT SEE — so the next setSearchParams on any page strips the org straight back out of the shareable URL. Use useSearchParams with the functional updater from T7. Keep the UUID validation on BOTH the URL read and the storage read, and keep the precedence: URL, then localStorage, then null.
+- [x] **Step 2: Move the org param into router-managed search params (A15).** syncUrl currently uses window.history.replaceState (`ActiveOrgProvider.tsx:102-108`), which React Router DOES NOT SEE — so the next setSearchParams on any page strips the org straight back out of the shareable URL. Use useSearchParams with the functional updater from T7. Keep the UUID validation on BOTH the URL read and the storage read, and keep the precedence: URL, then localStorage, then null.
 
   The org param is the ONLY way a multi-org admin can switch org mid-session today, because the promised topbar switcher does not exist. It also makes an org-scoped view shareable. v3 reads only a q param and writes no URL state at all.
 
-- [ ] **Step 3: Put the org in every DATA query key — and then delete the reload (A7, D17).** The scope key already includes the org (`useAdminScope.ts:72`). EVERY DATA KEY OMITS IT, which is the only reason the OrgSwitcher window.location.reload() exists: without a full reload, switching orgs serves cached rows from the previous tenant.
+- [x] **Step 3: Put the org in every DATA query key — and then delete the reload (A7, D17).** The scope key already includes the org (`useAdminScope.ts:72`). EVERY DATA KEY OMITS IT, which is the only reason the OrgSwitcher window.location.reload() exists: without a full reload, switching orgs serves cached rows from the previous tenant.
 
 ```ts
 // Before: queryKey: ['farms', 'list', page, pageSize, search, tier]
@@ -1652,11 +1652,11 @@ here rather than carrying it into the next task.
 
   Apply to useFarmsList, useSilentChurn, useSuffering, useUsersList, useOpsErrors, useOpsHealth, useOpsVoice, useWvfd, useCohortPatterns, useFarmerHealth and useScheduleTemplates. Then replace the reload with setActiveOrgId plus invalidateQueries.
 
-- [ ] **Step 4: Build the topbar switcher (B11).** `App.tsx:84` already tells the user "you can switch later from the topbar" and `OrgSwitcher.tsx:24-26` documents a compact popover variant. Neither exists. Build it: the compact non-full-page variant in the top bar, next to the org name from T10.
+- [x] **Step 4: Build the topbar switcher (B11).** `App.tsx:84` already tells the user "you can switch later from the topbar" and `OrgSwitcher.tsx:24-26` documents a compact popover variant. Neither exists. Build it: the compact non-full-page variant in the top bar, next to the org name from T10.
 
-- [ ] **Step 5: Make the NotInOrg sentence true (D16).** clear() is declared and never called, so "The previous selection has been cleared" is false — the bad org id stays in localStorage AND in the URL. Call clear() when the resolver returns NotInOrg. Either call it or drop the sentence; do not port the false claim.
+- [x] **Step 5: Make the NotInOrg sentence true (D16).** clear() is declared and never called, so "The previous selection has been cleared" is false — the bad org id stays in localStorage AND in the URL. Call clear() when the resolver returns NotInOrg. Either call it or drop the sentence; do not port the false claim.
 
-- [ ] **Step 6: Test the cross-tenant property**
+- [x] **Step 6: Test the cross-tenant property**
 
 ```tsx
 it('sends the active-org header on every admin request', () => {});
@@ -1669,7 +1669,7 @@ it('rejects a non-UUID org param and a non-UUID stored value', () => {});
 it('clears the stored org when the resolver says NotInOrg', () => {});
 ```
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and enforced almost
 nowhere — Tasks 4, 5, 6, 7, 9, 10, 12 and 13 originally ended at "run and commit". An invariant
@@ -1682,7 +1682,52 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 7: Commit** — `feat(admin-web): org in the URL, the top bar and every query key; reload removed`
+- [x] **Step 7: Commit** — `feat(admin-web): org in the URL, the top bar and every query key; reload removed`
+
+---
+
+> **Executed 2026-08-31 (`ae8460ef`). 636 tests. Five mutations, five kills.**
+>
+> **🛑 THE KEY ALONE WAS NOT ENOUGH — there is a SECOND leak this plan never described.** Farms, Users
+> and API Errors carry `placeholderData: keepPreviousData` (A25). Its job is to hold the **previous
+> key's** rows on screen while the next key loads. Put the org in the key and it holds the previous
+> **ORGANISATION's** rows — one tenant's farmer names and phone numbers rendered under another
+> tenant's name, with *"Refreshing…"* beside them. `lib/orgQuery.ts` narrows it: keep across a page
+> change, **never** across an org change. Both halves pinned separately so neither can be deleted as
+> "covered by the other".
+>
+> **The count is TWELVE, not eleven.** `useScheduleTemplates` **does not exist** — it is an inline
+> `useQuery` in `ScheduleTemplatesPage.tsx` (T24 extracts it). And `useOpsHealthWrapped` is a twelfth
+> data key the plan never names — dead, zero callers, deleted in T20 — **which got the org anyway,
+> because an org-less key in a file the next hook gets copied from is how the defect returns.**
+>
+> **Step 4 was ALREADY DELIVERED by Task 10.** No second switcher was built; `OrgSwitcher.tsx`'s
+> header, which promised a topbar variant that did not exist, was corrected in place.
+>
+> **`resetQueries()` is NOT redundant — its job changed, measured not assumed.** The *key* stops the
+> previous org's rows being **shown**; `resetQueries()` stops them being **held** in this tab's memory
+> for `gcTime` after a switch. Same property, same reason, as `qc.clear()` on sign-out. Both kept,
+> pinned as separate tests.
+>
+> **Task 11's `returnTo` loop is now genuinely redundant and was deleted.** A grep of `src/` outside
+> tests finds **no `history.replaceState` or `pushState` anywhere** — every URL write goes through the
+> router, so the loop was reconciling a value with itself.
+>
+> **Five Task 2 characterisation tests changed, all in the same commit with reasons** — each because
+> its *premise* moved (the org is now set through the router), never its property. **Task 1's
+> `renderWithProviders` warning was rewritten, not left**: a stale warning teaches the next author to
+> reach for `replaceState`, which now sets an org nothing reads.
+>
+> **🛑 PRE-EXISTING BUG FOR T24: Schedule Templates calls an endpoint that does not exist.** The
+> console requests `/shramsafal/reference-data/crop-schedule-templates`; the backend publishes
+> `/shramsafal/reference/schedule-templates` (`ReferenceDataEndpoints.cs:14,16`). **Both** the group
+> and the route name differ, so that screen has always 404'd against a live API.
+>
+> **Baselines moved:** tests **636 / 28 files**; lint **14 problems (0 errors, 14 warnings)** — the two
+> new ones are the same advisory `set-state-in-effect` class as four already in the tree.
+> `vitest.config.ts` `testTimeout` 5s → 20s, measured: two or three tests hit the 5s ceiling on every
+> other run, and `deepLink.contract.test.tsx` waited 5s inside a 5s test so it could never report what
+> it was waiting for. Every failure was the clock, never an assertion.
 
 ---
 
