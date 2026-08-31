@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { STATE_WORD, type HonestState } from '@/components/state/honestState';
 
 /**
  * KpiCard — v3 `.as-kpi`, on the token layer.
@@ -20,22 +21,20 @@ import { cn } from '@/lib/utils';
  * The four causes a number can be absent for. One grey dash, four different
  * reasons — collapsing them into "no data" is the defect this replaces.
  *
- * Task 5 lifts this vocabulary into `components/state/` as the single source
- * for tiles, table cells and whole panels; this file imports it from there
- * once it exists. It is declared locally for now rather than guessed at in
- * advance, because Task 5 owns its shape.
+ * Task 3 declared the vocabulary locally here with a note that Task 5 would
+ * lift it into `components/state/` as the single source for tiles, table
+ * cells and whole panels. Task 5 did, and this file now imports it — one
+ * word list, not two that agree until someone edits one.
+ *
+ * The import is DEEP (`@/components/state/honestState`) rather than through
+ * the barrel on purpose: `honestState.ts` has no JSX and no dependencies, so
+ * a tile does not drag lucide, Button and the five state blocks into every
+ * chunk that only needed four words.
  */
-export type KpiState = 'ok' | 'unmeasured' | 'feed-down' | 'never' | 'unattributed';
+export type KpiState = 'ok' | HonestState;
 
 /** CONTRACT.md §7.7. Grey is not a tone you choose — it is what you get. */
 export type KpiTone = 'blue' | 'green' | 'red' | 'amber' | 'grey';
-
-const STATE_WORD: Record<Exclude<KpiState, 'ok'>, string> = {
-  unmeasured: 'not measured',
-  'feed-down': 'feed down',
-  never: 'never',
-  unattributed: 'not attributable',
-};
 
 const TONE_TILE: Record<KpiTone, string> = {
   blue: 'bg-tint-blue',

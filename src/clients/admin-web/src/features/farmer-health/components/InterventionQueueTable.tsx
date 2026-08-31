@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronRight } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import type { CohortBucketDto } from '../farmer-health.types';
-import { EmptyState } from './EmptyAndErrorStates';
+import { InterventionQueueEmpty } from '@/components/state';
 
 /**
  * Mode B intervention queue (DWC v2 §4.4 component #1).
@@ -70,14 +70,11 @@ export function InterventionQueueTable({ rows, understatedEmpty }: InterventionQ
   }
 
   if (rows.length === 0) {
-    return (
-      <EmptyState
-        message={understatedEmpty
-          ? 'No farms in intervention bucket yet.'
-          : 'No farms in intervention bucket.'}
-        hint={understatedEmpty ? undefined : 'All scored farms are above the 40-pt intervention threshold.'}
-      />
-    );
+    // Two different truths, one flag. The copy and the reason it splits now
+    // live in @/components/state/InterventionQueueEmpty (register A36), so
+    // the rule is beside the rest of the honest-state vocabulary instead of
+    // buried in a table.
+    return <InterventionQueueEmpty understated={understatedEmpty} />;
   }
 
   return (

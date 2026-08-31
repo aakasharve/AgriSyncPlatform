@@ -1,0 +1,78 @@
+/**
+ * THE HONEST-STATE VOCABULARY — the words this console is allowed to use
+ * when it has no number.
+ *
+ * ── Why this file exists ──────────────────────────────────────────────────
+ * Seven screens render a 500, a timeout and a 403 as good news today:
+ * "No errors found. The system is healthy." `isError` appears in exactly
+ * three files in the whole console (`App.tsx`, `FarmerSearchBox.tsx`,
+ * `useAdminScope.ts`) — everywhere else a failure looks like a clean bill of
+ * health (Preservation Register D9).
+ *
+ * The defect is not that those screens lack an error branch. It is that they
+ * only have ONE word for absence. This module gives them four causes and
+ * makes collapsing them back into one a visible act.
+ *
+ *   MeasuredZero — we looked, and the answer really is none.
+ *   NoMatch      — your filter excluded everything. Not a zero.
+ *   FeedDown     — the feed stopped. Names when, and never shows the last
+ *                  good number as current.
+ *   LoadFailed   — the request broke. Always retryable.
+ *
+ * ── The four state WORDS ──────────────────────────────────────────────────
+ * These are a separate, narrower axis: the reason a single VALUE is absent.
+ * Ported verbatim from the v3 prototype's `STATE_WORD` / `AS.none`
+ * (`app.js:333-348` — the plan cites 341-350; `AS.none` itself is 341-348 and
+ * `STATE_WORD` it depends on is 333-338. Both are carried).
+ *
+ * There are four and there is no fifth. Redaction is deliberately NOT one of
+ * them: a redacted value is a permission fact, not a measurement fact, and
+ * `Masked` renders it. Adding a fifth word here also silently widens
+ * `KpiState`, which is the type the honesty override in `KpiCard` is built on.
+ */
+
+/** The four causes a single value can be absent for (CONTRACT.md §9.2). */
+export type HonestState = 'unmeasured' | 'feed-down' | 'never' | 'unattributed';
+
+/**
+ * One word per cause. A screen-reader user hears the word; a sighted user
+ * sees the em dash and the word beneath it. Neither ever gets a 0.
+ *
+ * Was declared locally in `KpiCard.tsx` at Task 3 with a comment saying
+ * "Task 5 lifts this vocabulary into components/state as the single source
+ * for tiles, table cells and whole panels; this file imports it from there
+ * once it exists." This is that file, and KpiCard now imports it.
+ */
+export const STATE_WORD: Record<HonestState, string> = {
+  unmeasured: 'not measured',
+  'feed-down': 'feed down',
+  never: 'never',
+  unattributed: 'not attributable',
+};
+
+/** v3 `AS.stateWord` — an unrecognised state degrades to "not measured",
+ *  never to a blank and never to a zero. */
+export function stateWord(state: HonestState | null | undefined): string {
+  return (state && STATE_WORD[state]) || STATE_WORD.unmeasured;
+}
+
+/**
+ * The unwrapping ladder, lifted UNCHANGED from
+ * `features/farmer-health/components/EmptyAndErrorStates.tsx:95-104`:
+ *
+ *   falsy → string → Error.message → object with a string `message` → fallback
+ *
+ * It lives here rather than inside one component because `ErrorState` and
+ * `LoadFailed` both need it, and a second copy is how the two drift into
+ * disagreeing about what an axios error says.
+ */
+export function formatError(error: unknown): string {
+  if (!error) return 'Unknown error.';
+  if (typeof error === 'string') return error;
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object' && error && 'message' in error) {
+    const msg = (error as { message?: unknown }).message;
+    if (typeof msg === 'string') return msg;
+  }
+  return 'Unexpected error — see console.';
+}
