@@ -46,12 +46,31 @@ describe('describeAdminDenial (Step 8)', () => {
     expect(denial?.message).toContain('which organisation');
   });
 
-  it('names the module in the sentence when the server named one', () => {
+  it('keeps the module key OUT of the sentence and in a copyable detail line', () => {
+    // CHANGED 2026-08-31 with the code it describes. This previously asserted
+    // the key appeared IN the sentence — which contradicted this module's own
+    // stated rule, "never show an operator a machine code". `ops.live` has no
+    // human label anywhere; moduleKeys.ts mirrors the C# enum and carries none.
+    //
+    // The key is not deleted, because it is precisely what a support person
+    // relays to get the grant made. It moves to `detail`, following the pattern
+    // already chosen for the support loop: the person's words next to the
+    // technical truth, the technical truth separately copyable — never the two
+    // collapsed into one sentence.
     const denial = describeAdminDenial(
       new AdminModuleForbiddenError('admin_module_forbidden', 'ops.live'),
     );
     expect(denial?.moduleKey).toBe('ops.live');
-    expect(denial?.message).toContain('ops.live');
+    expect(denial?.message).not.toContain('ops.live');
+    expect(denial?.message).toBe('Your admin access does not include this screen.');
+    expect(denial?.detail).toBe('Permission needed: ops.live');
+  });
+
+  it('omits the detail line entirely when the server named no module', () => {
+    const denial = describeAdminDenial(
+      new AdminModuleForbiddenError('admin_module_forbidden', null),
+    );
+    expect(denial?.detail).toBeUndefined();
   });
 
   it('still says something useful when the 403 carried no module key', () => {

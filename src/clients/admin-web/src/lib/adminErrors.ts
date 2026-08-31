@@ -80,6 +80,13 @@ export interface AdminDenial {
   message: string;
   /** What this person can actually do next. Never "contact support". */
   remedy: string;
+  /**
+   * The machine fact, kept OUT of `message` and `remedy` so no operator is
+   * ever shown a code in a sentence — but kept, because it is exactly what a
+   * support person relays to get the grant made. Render it as a separate,
+   * copyable line, never inline in the prose.
+   */
+  detail?: string;
 }
 
 const DENIAL_CODES = new Set<string>([
@@ -98,7 +105,7 @@ function isAdminDenialCode(code: unknown): code is AdminDenialCode {
 function adminDenialCopy(
   code: AdminDenialCode,
   moduleKey?: string | null,
-): { message: string; remedy: string } {
+): { message: string; remedy: string; detail?: string } {
   switch (code) {
     case 'admin_active_org_required':
       return {
@@ -106,11 +113,20 @@ function adminDenialCopy(
         remedy: 'Choose an organisation to continue.',
       };
     case 'admin_module_forbidden':
+      // The module key is a MACHINE key (`ops.live`, `farms.list`) with no
+      // human label anywhere — moduleKeys.ts is a mirror of the C# enum and
+      // carries none. Printing it in the sentence violates the rule this file
+      // exists to enforce: never show an operator a machine code.
+      //
+      // But the key is exactly what a support person must relay to get the
+      // grant made, so deleting it costs a real thing. It follows the pattern
+      // the founder already chose for the support loop: his words next to the
+      // technical truth, the technical truth separately copyable — never the
+      // two collapsed into one sentence.
       return {
-        message: moduleKey
-          ? `Your admin access does not include ${moduleKey}.`
-          : 'Your admin access does not include this screen.',
+        message: 'Your admin access does not include this screen.',
         remedy: 'An owner in your organisation can grant it.',
+        detail: moduleKey ? `Permission needed: ${moduleKey}` : undefined,
       };
     case 'admin_platform_only':
       return {
