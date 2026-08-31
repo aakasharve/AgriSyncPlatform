@@ -1574,6 +1574,41 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<AttendanceMark>> GetAttendanceMarksForFarmInWindowAsync(
+        FarmId farmId, DateOnly? from, DateOnly? toInclusive, CancellationToken ct = default)
+    {
+        // AsNoTracking: the register is a read model. Amending a mark goes
+        // through GetAttendanceMarkAsync below, which tracks.
+        var q = db.AttendanceMarks.AsNoTracking().Where(m => m.FarmId == farmId);
+
+        if (from is { } f)
+        {
+            q = q.Where(m => m.WorkDate >= f);
+        }
+
+        if (toInclusive is { } t)
+        {
+            q = q.Where(m => m.WorkDate <= t);
+        }
+
+        return await q.OrderBy(m => m.WorkDate).ThenBy(m => m.FieldOperatorId).ToListAsync(ct);
+    }
+
+    public async Task<AttendanceMark?> GetAttendanceMarkAsync(
+        FarmId farmId, Guid fieldOperatorId, DateOnly workDate, CancellationToken ct = default)
+    {
+        // TRACKED: the caller amends what it finds, in the same unit of work.
+        return await db.AttendanceMarks.SingleOrDefaultAsync(
+            m => m.FarmId == farmId && m.FieldOperatorId == fieldOperatorId && m.WorkDate == workDate,
+            ct);
+    }
+
+    public async Task AddAttendanceMarkAsync(AttendanceMark mark, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(mark);
+        await db.AttendanceMarks.AddAsync(mark, ct);
+    }
+
     public Task RemoveFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(r);

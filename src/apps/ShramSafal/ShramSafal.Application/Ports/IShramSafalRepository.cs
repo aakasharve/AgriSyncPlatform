@@ -906,6 +906,38 @@ public interface IShramSafalRepository
         => Task.FromResult<IReadOnlyList<FieldOperatorWorkRow>>([]);
 
     /// <summary>
+    /// The हजेरी marks for a farm across a window (D-H3). Both bounds are
+    /// inclusive; <c>null</c> means unbounded at that end.
+    /// </summary>
+    /// <remarks>
+    /// THE DEFAULT THROWS, deliberately, and does not return an empty list like
+    /// its neighbours above. An empty register is a POSITIVE claim — "nobody was
+    /// marked" — and an implementation that simply has not implemented this
+    /// would be making that claim silently. Failing loudly is the only honest
+    /// default for a read whose empty answer is itself a statement.
+    /// </remarks>
+    Task<IReadOnlyList<AttendanceMark>> GetAttendanceMarksForFarmInWindowAsync(
+        FarmId farmId, DateOnly? from, DateOnly? toInclusive, CancellationToken ct = default)
+        => throw new NotSupportedException(
+            "GetAttendanceMarksForFarmInWindowAsync is not implemented by this repository. "
+            + "Returning an empty register would assert that nobody was marked.");
+
+    /// <summary>
+    /// The existing ruling for one person on one farm-day, or <c>null</c> when
+    /// nobody has ruled yet. <c>null</c> is NOT absence — see
+    /// <see cref="AttendanceMark"/>, where unmarked is a fourth state.
+    /// </summary>
+    Task<AttendanceMark?> GetAttendanceMarkAsync(
+        FarmId farmId, Guid fieldOperatorId, DateOnly workDate, CancellationToken ct = default)
+        => throw new NotSupportedException(
+            "GetAttendanceMarkAsync is not implemented by this repository.");
+
+    /// <summary>Adds a new ruling. Amending an existing one goes through the entity.</summary>
+    Task AddAttendanceMarkAsync(AttendanceMark mark, CancellationToken ct = default)
+        => throw new NotSupportedException(
+            "AddAttendanceMarkAsync is not implemented by this repository.");
+
+    /// <summary>
     /// Stage the removal of one attribution row. No SaveChanges — the caller
     /// commits it together with the <see cref="LabourCorrection"/> that records
     /// WHICH operator was removed, so the deletion can never commit without its
