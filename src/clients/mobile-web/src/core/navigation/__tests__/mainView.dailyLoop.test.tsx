@@ -67,7 +67,6 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import type { AppRouterContext } from '../routeContext';
-import type { PlannedTask } from '../../../types';
 import { getDateKey } from '../../domain/services/DateKeyService';
 import { computeDayState } from '../../../shared/utils/dayState';
 
@@ -78,22 +77,6 @@ const stub = (label: string) => ({
 // Real "today" (IST) and helpers to make genuinely-carried past due-dates, so
 // getCarriedTasks (NOT mocked — runs for real) treats them as overdue.
 const TODAY_KEY = getDateKey();
-const daysAgoKey = (n: number): string => {
-    const d = new Date(`${TODAY_KEY}T12:00:00`);
-    d.setDate(d.getDate() - n);
-    return getDateKey(d);
-};
-const makeTask = (id: string, dueDate: string, status: PlannedTask['status']): PlannedTask => ({
-    id,
-    title: `task-${id}`,
-    plotId: 'plot-a',
-    cropId: 'crop-a',
-    priority: 'normal',
-    status,
-    sourceType: 'ai_extracted',
-    createdAt: `${daysAgoKey(3)}T06:00:00.000Z`,
-    dueDate,
-});
 
 async function loadRenderLogView(dailyLoop: boolean) {
     vi.resetModules();
@@ -226,10 +209,14 @@ describe('renderLogView — Daily Clarity Loop v1 gate', () => {
         expect(screen.queryByText('Yesterday not fully closed')).toBeNull();
     });
 
-    it('ON: the "आज N कामं बाकी" hero shows and the separate yesterday banner is folded away', async () => {
+    // FOUNDER RULING 2026-08-29 — this used to assert the hero RENDERS when the
+    // flag is ON. `DailyLoopHero` is deleted, so the flag no longer has a hero to
+    // gate and both states agree. Kept, inverted, rather than dropped: a re-added
+    // hero is exactly the duplicate opener he has now had removed twice.
+    it('ON: still no hero — the surface was deleted, not gated', async () => {
         const renderLogView = await loadRenderLogView(true);
         render(<>{renderLogView(makeCtx())}</>);
-        expect(screen.getByTestId('daily-loop-hero')).toBeInTheDocument();
+        expect(screen.queryByTestId('daily-loop-hero')).toBeNull();
         expect(screen.queryByText('Yesterday not fully closed')).toBeNull();
     });
 
@@ -254,73 +241,15 @@ describe('renderLogView — Daily Clarity Loop v1 gate', () => {
         expect(screen.queryAllByText('40%')).toHaveLength(0);
     });
 
-    it('ON: the old "Tasks: Done/Planned" line is hidden and the DUPLICATE ring is gone (only the hero ring)', async () => {
+    it('ON: no closure ring survives either — the hero that owned it is gone', async () => {
         const renderLogView = await loadRenderLogView(true);
         render(<>{renderLogView(makeCtx())}</>);
-        // The buried English tasks line is suppressed — hero is the single opener.
         expect(screen.queryByText(/Tasks: Done/)).toBeNull();
-        // Exactly one closure ring survives: the hero's. If the card ring were
-        // still shown, "40%" would appear twice (hero + card).
-        expect(screen.getAllByText('40%')).toHaveLength(1);
-        // And that one ring belongs to the hero.
-        expect(screen.getByTestId('daily-loop-hero')).toHaveTextContent('40%');
-    });
-
-    // ---- Fix 1: carry-forward coherence — carried k <= today's N, never divergent ----
-
-    it('ON: hero shows today N=3 and the carried sub-line k=3 (drawn from today\'s pending), never yesterday\'s "5"', async () => {
-        const renderLogView = await loadRenderLogView(true);
-        // Yesterday had 5 pending; 2 have since been closed, 3 genuinely remain.
-        // Old code showed a standalone "काल 5 …" from yesterdayDayState; new code
-        // derives the carried element from TODAY's pending subset ⇒ shows 3.
-        const plannedTasks: PlannedTask[] = [
-            makeTask('t1', daysAgoKey(1), 'pending'),
-            makeTask('t2', daysAgoKey(2), 'pending'),
-            makeTask('t3', daysAgoKey(1), 'in_progress'),
-            makeTask('t4', daysAgoKey(2), 'done'),
-            makeTask('t5', daysAgoKey(1), 'done'),
-        ];
-        const ctx = makeCtx({
-            plannedTasks,
-            todayDayState: {
-                closurePercent: 40, isClosed: false, hasStarted: true,
-                completedCount: 2, plannedCount: 3, pendingCount: 3, unverifiedCount: 0,
-            },
-            // "Yesterday had 5 pending" — proves the hero does NOT surface this number.
-            yesterdayDayState: {
-                closurePercent: 0, isClosed: false, hasStarted: true,
-                completedCount: 0, plannedCount: 5, pendingCount: 5, unverifiedCount: 0,
-            },
-        } as unknown as Partial<AppRouterContext>);
-        render(<>{renderLogView(ctx)}</>);
-
-        const heroLine = screen.getByTestId('daily-loop-hero-line');
-        const carried = screen.getByTestId('daily-loop-hero-carried');
-        // Today's number N = 3.
-        expect(heroLine).toHaveTextContent('3');
-        // Carried qualifier k = 3, drawn from the SAME pending set (k <= N).
-        expect(carried).toHaveTextContent('3');
-        // Crucially: the divergent standalone "5" never appears in the carried line.
-        expect(carried).not.toHaveTextContent('5');
-    });
-
-    it('ON: a SINGLE carried task names itself (no bare count), staying within N', async () => {
-        const renderLogView = await loadRenderLogView(true);
-        const plannedTasks: PlannedTask[] = [makeTask('solo', daysAgoKey(1), 'pending')];
-        const ctx = makeCtx({
-            plannedTasks,
-            todayDayState: {
-                closurePercent: 20, isClosed: false, hasStarted: true,
-                completedCount: 0, plannedCount: 1, pendingCount: 1, unverifiedCount: 0,
-            },
-        } as unknown as Partial<AppRouterContext>);
-        render(<>{renderLogView(ctx)}</>);
-
-        // The carried sub-line renders (names the one task via the "…One" key).
-        const carried = screen.getByTestId('daily-loop-hero-carried');
-        expect(carried).toHaveTextContent('dfes.dailyLoopCarriedOne');
-        // Single carried task ⇒ no "(यातील k …)" many-count form.
-        expect(carried).not.toHaveTextContent('dfes.dailyLoopCarriedMany');
+        // Was `toHaveLength(1)` — the hero's ring. That ring moved to the
+        // oversight strip (carrying the strip's OWN waiting count, not this
+        // closure percent) on 2026-08-27, and the hero itself went on
+        // 2026-08-29. The log view now states no closure percentage at all.
+        expect(screen.queryAllByText('40%')).toHaveLength(0);
     });
 });
 
@@ -464,7 +393,7 @@ describe('renderLogView — a brand-new farmer with no schedule (both flag state
         expect(screen.getByText(/Running Cost/)).toBeInTheDocument();
     });
 
-    it('ON: the hero ring shows a dash and invites him to speak; no yesterday banner', async () => {
+    it('ON: an empty day raises no closure verdict and no yesterday banner', async () => {
         const renderLogView = await loadRenderLogView(true);
         const ctx = makeCtx({
             todayDayState: emptyDay,
@@ -472,17 +401,11 @@ describe('renderLogView — a brand-new farmer with no schedule (both flag state
         } as unknown as Partial<AppRouterContext>);
         render(<>{renderLogView(ctx)}</>);
 
-        expect(screen.getByTestId('daily-loop-hero-ring')).toHaveTextContent('—');
+        // The dash-ring and the 'dayFree' invite were the HERO's, and it is gone
+        // (founder ruling 2026-08-29). What must still hold is the property those
+        // assertions were protecting: day one shows him no verdict he did not earn.
+        expect(screen.queryByTestId('daily-loop-hero')).toBeNull();
         expect(screen.queryByText('0%')).toBeNull();
-        expect(screen.getByTestId('daily-loop-hero-line')).toHaveTextContent('dfes.dailyLoopDayFree');
-
-        // SUPERSEDED LINE: this asserted `daily-closure-label` reads
-        // "Day Not Started" — "the legacy label under the hero must agree
-        // with the hero, not fight it". There is no legacy label under the
-        // hero any more, so the strongest form of "does not fight it" is that
-        // there is nothing left to fight with. Asserted rather than dropped,
-        // because a re-added label is exactly the contradiction wave 2.4 was
-        // guarding against.
         expect(screen.queryByTestId('daily-closure-label')).toBeNull();
         expect(screen.queryByText('Day Not Closed')).toBeNull();
         expect(screen.queryByText('Yesterday not fully closed')).toBeNull();

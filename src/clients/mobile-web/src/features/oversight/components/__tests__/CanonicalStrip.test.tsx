@@ -70,26 +70,36 @@ function baseFarmChipProps(overrides: Partial<FarmIdentityElementProps> = {}): F
 }
 
 describe('CanonicalStrip — row 2, the waiting button alone, full width', () => {
-    it('waiting_button_keeps_its_height_in_both_states', () => {
-        // Spec §2.2: "Rest state keeps its exact place and size ... The
-        // layout never reshuffles, so the strip is a fixed landmark." The
-        // scenario this protects against is `waitingCount` changing on a
-        // LIVE header instance (0 -> 6 as records arrive), not two
-        // isolated mounts — so this uses `rerender()` on one instance, not
-        // two separate `render()` calls.
+    it('the_waiting_button_is_ONE_node_across_states_and_changes_only_its_dress', () => {
+        // FOUNDER RULING 2026-08-30 supersedes spec §2.2's "rest state keeps
+        // its exact place and SIZE". He saw the fixed 52px floor on his own
+        // phone and ruled that the strip "must not occupy that much space...
+        // it is a banner that pops out when there is something to give
+        // attention to", and that an empty state "must show only one line".
+        // A locked height and a one-line rest state cannot both be true.
+        //
+        // What SURVIVES the ruling is the half that was actually protecting
+        // the farmer: ONE node across the branch. A conditional
+        // unmount/remount is a flicker he can see, and it is what this
+        // rerender (rather than two isolated mounts) exists to catch.
         const { rerender } = render(<CanonicalStrip {...baseStripProps({ waitingCount: 0 })} />);
         const restButton = screen.getByTestId('canonical-strip-waiting-button');
-        expect(restButton).toHaveStyle({ minHeight: '52px' });
+        // Rest is the compact green line he asked for.
+        expect(restButton.className).toContain('bg-emerald-50');
+        expect(restButton.className).toContain('py-2');
+        expect(restButton.className).not.toContain('amber');
 
         rerender(<CanonicalStrip {...baseStripProps({ waitingCount: 6 })} />);
         const waitingButton = screen.getByTestId('canonical-strip-waiting-button');
 
-        // The identity assertion is the one that actually catches a
-        // conditional unmount/remount across the branch — a node that
-        // merely happens to carry the same height, but is a NEW node, would
-        // still be a reflow a farmer can see.
+        // Same node — no remount, no flicker.
         expect(waitingButton).toBe(restButton);
-        expect(waitingButton).toHaveStyle({ minHeight: '52px' });
+        // ...wearing the amber banner dress, with room for its subtitle.
+        expect(waitingButton.className).toContain('bg-amber-50');
+        expect(waitingButton.className).toContain('py-2.5');
+        expect(waitingButton.className).not.toContain('emerald');
+        // And no fixed floor survives to re-inflate the quiet state.
+        expect(waitingButton.getAttribute('style') ?? '').not.toContain('min-height');
     });
 
     it('the_count_comes_from_props', () => {
@@ -292,21 +302,25 @@ describe('CanonicalStrip — the rest state is a claim, and a claim needs eviden
         expect(screen.getByTestId('canonical-strip-waiting-button').className).not.toContain('amber');
     });
 
-    it('the_checking_state_keeps_the_strip_a_fixed_landmark_and_shows_no_count', () => {
-        // Spec §2.2 — same place, same size, no reshuffle when the data
-        // lands. `rerender` on ONE instance is what catches a remount.
+    it('the_checking_state_is_one_node_with_the_rest_state_and_shows_no_count', () => {
+        // The height half of spec §2.2 is overruled (see the rerender test at
+        // the top of this file). The no-remount half and the no-count half are
+        // untouched and are what this still holds.
         const { rerender } = render(
             <CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: false })} />,
         );
         const checkingButton = screen.getByTestId('canonical-strip-waiting-button');
-        expect(checkingButton).toHaveStyle({ minHeight: '52px' });
+        // Checking is neutral: it is neither an alert nor an all-clear, so it
+        // must not borrow the amber banner or the green completion colour.
+        expect(checkingButton.className).not.toContain('amber');
+        expect(checkingButton.className).not.toContain('emerald');
         // No badge: there is no measured number to show.
         expect(screen.queryByTestId('canonical-strip-waiting-count')).not.toBeInTheDocument();
 
         rerender(<CanonicalStrip {...baseStripProps({ waitingCount: 0, dataResolved: true })} />);
         const restButton = screen.getByTestId('canonical-strip-waiting-button');
         expect(restButton).toBe(checkingButton);
-        expect(restButton).toHaveStyle({ minHeight: '52px' });
+        expect(restButton.className).toContain('bg-emerald-50');
         expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
     });
 
@@ -583,7 +597,17 @@ describe('CanonicalStrip — a multi-farm account gets no completion claim (chan
         for (const props of cases) {
             const label = JSON.stringify(props);
             const { container } = render(<CanonicalStrip {...baseStripProps(props)} />);
-            const ring = container.querySelector('[data-testid^="canonical-strip-waiting-"][class*="h-11"]');
+            // Selected by the ring's own four testids, NOT by `h-11`: the
+            // 2026-08-30 ruling shrank the disc to 24px in the three states
+            // that hold a glyph rather than a number, so a size-based selector
+            // would silently match only the waiting case and pass the other
+            // five by never asserting them.
+            const ring = container.querySelector(
+                '[data-testid="canonical-strip-waiting-icon"],'
+                + '[data-testid="canonical-strip-waiting-checking-icon"],'
+                + '[data-testid="canonical-strip-waiting-unknown-icon"],'
+                + '[data-testid="canonical-strip-waiting-rest-tick"]',
+            );
             expect(ring, label).not.toBeNull();
 
             const glyphs = ring!.querySelectorAll('svg').length;
@@ -742,135 +766,60 @@ describe('FarmIdentityElement — row 1 farm-identity element (Task 12)', () => 
     });
 });
 
-describe('CanonicalStrip — the freshness chip (founder decision 2026-08-26)', () => {
-    // His words: "one small chip inside the oversight bar, last timing of the
-    // sync — not to mention sync as a word — but in layman language it must
-    // show the app is up to date till, let's say, 12am Tuesday. Please make
-    // sure you are connected to the internet or something like that."
+describe('CanonicalStrip — the bar is TWO LINES (founder ruling 2026-08-29)', () => {
+    // His words, on the built screen: *"for oversight strip as well then size is
+    // becoming bigger. Only Two lines must be there and the grey part must go
+    // inside it not as visible as it is now."*
     //
-    // A FIXED CLOCK. The chip's day label is relative (आज / काल), so without
-    // pinning "now" these assertions would pass or fail depending on the day
-    // the suite runs — and the failure would look like a copy bug.
+    // The grey part is the freshness sentence added on 2026-08-26. It is NOT
+    // deleted — that decision's reasoning still stands (it is the timestamp the
+    // strip's four states must be read against). It MOVED into the overlay this
+    // bar opens; `OversightOverlay.test.tsx` now owns the properties that used
+    // to live in this file (the two honest forms, the no-"sync" rule, the
+    // locked Devanagari font). What is asserted here is only what leaving does
+    // to the bar.
     beforeEach(() => {
         vi.useFakeTimers();
-        vi.setSystemTime(new Date('2026-08-26T06:30:00Z')); // 12:00 IST, 26 Aug
+        vi.setSystemTime(new Date('2026-08-26T06:30:00Z'));
     });
 
     afterEach(() => {
         vi.useRealTimers();
     });
 
-    it('renders the known form from a real lastSyncAt — never a literal time', () => {
-        // 05:30Z = 11:00 IST the same IST day, so the chip should read
-        // "आज सकाळी 11:00". The instant is the ONLY source of those digits:
-        // nothing in `CanonicalStrip` may synthesise a time.
-        render(<CanonicalStrip {...baseStripProps({ lastSyncAt: '2026-08-26T05:30:00Z' })} />);
-
-        const chip = screen.getByTestId('canonical-strip-freshness-chip');
-        expect(chip).toHaveTextContent('11:00');
-        expect(chip).toHaveTextContent(dataFreshnessTranslations.mr.dayToday);
-        // The sentence comes from the table, not from this component.
-        const clause = dataFreshnessTranslations.mr.showingWorkUpTo.split('{when}')[1].split('.')[0].trim();
-        expect(chip).toHaveTextContent(clause);
-        // And it is NOT the unknown form.
-        expect(chip.textContent).not.toContain('कधीपर्यन्तची');
-    });
-
-    it('English renders the same fact through the same table', () => {
-        render(
-            <CanonicalStrip
-                {...baseStripProps({ language: 'en', lastSyncAt: '2026-08-25T18:25:00Z' })}
-            />,
-        );
-        // 18:25Z on 25 Aug = 23:55 IST on 25 Aug — yesterday, by the calendar.
-        const chip = screen.getByTestId('canonical-strip-freshness-chip');
-        expect(chip).toHaveTextContent('Showing work up to Yesterday 11:55 PM');
-    });
-
-    it('says so when there is no last-sync instant — never falls back to now', () => {
-        // THE LOAD-BEARING ONE. `lastSyncAt` is null both before the first
-        // Dexie read and on a device that has never completed a pull. A
-        // fabricated freshness claim here would be worse than the staleness
-        // the chip was added to expose (doctrine P4).
-        render(<CanonicalStrip {...baseStripProps({ lastSyncAt: null })} />);
-
-        const chip = screen.getByTestId('canonical-strip-freshness-chip');
-        expect(chip).toHaveTextContent(dataFreshnessTranslations.mr.showingWorkUpToUnknown);
-        // Nothing from the device clock leaked in: no time, no date, no digits
-        // at all.
-        expect(chip.textContent).not.toMatch(/[0-9]/);
-        expect(chip.textContent).not.toContain(dataFreshnessTranslations.mr.dayToday);
-    });
-
-    it('an unparseable cursor lands on the same honest unknown, not on today', () => {
-        // `DateKeyService.getDateKey()` falls back to the CURRENT TIME on an
-        // invalid date, so a corrupt cursor is a live route to printing
-        // today's date as the app's freshness. `formatUpToWhen` refuses first.
-        render(<CanonicalStrip {...baseStripProps({ lastSyncAt: 'not-a-date' })} />);
-
-        const chip = screen.getByTestId('canonical-strip-freshness-chip');
-        expect(chip).toHaveTextContent(dataFreshnessTranslations.mr.showingWorkUpToUnknown);
-        expect(chip.textContent).not.toMatch(/[0-9]/);
-    });
-
-    it('never contains the word "sync", in either language or either state', () => {
-        // The founder's explicit constraint. Asserted at the RENDERED level,
-        // not only in the translations table, because the component composes
-        // strings and a composition is where an English word sneaks back in.
-        for (const language of ['mr', 'en'] as const) {
-            for (const cursor of [null, '2026-08-26T05:30:00Z']) {
-                cleanup();
-                render(<CanonicalStrip {...baseStripProps({ language, lastSyncAt: cursor })} />);
-                const text = screen.getByTestId('canonical-strip-freshness-chip').textContent ?? '';
-                expect(text.toLowerCase(), `${language}/${cursor}`).not.toContain('sync');
-                expect(text, `${language}/${cursor}`).not.toContain('सिंक');
-            }
+    it('renders no freshness chip, in any state', () => {
+        for (const props of [
+            baseStripProps({ lastSyncAt: '2026-08-26T05:30:00Z' }),
+            baseStripProps({ lastSyncAt: null }),
+            baseStripProps({ waitingCount: 4, lastSyncAt: '2026-08-26T05:30:00Z' }),
+        ]) {
+            const { unmount } = render(<CanonicalStrip {...props} />);
+            expect(screen.queryByTestId('canonical-strip-freshness-chip')).toBeNull();
+            unmount();
         }
     });
 
-    it('renders in all four strip states, including the reassuring one', () => {
-        // The chip is not a state of the strip — it is the timestamp the other
-        // four states must be read against, and it is LEAST dispensable in the
-        // state that looks most reassuring (`restState`'s green tick over a
-        // device that has not pulled in days).
-        const states = [
-            { label: 'waiting', props: { waitingCount: 6 } },
-            { label: 'rest', props: { waitingCount: 0, dataResolved: true, farmCount: 1 } },
-            { label: 'checking', props: { waitingCount: 0, dataResolved: false } },
-            { label: 'unknown/multi-farm', props: { waitingCount: 0, dataResolved: true, farmCount: 2 } },
-        ];
-        for (const state of states) {
-            cleanup();
-            render(<CanonicalStrip {...baseStripProps({ ...state.props, lastSyncAt: '2026-08-26T05:30:00Z' })} />);
-            expect(
-                screen.getByTestId('canonical-strip-freshness-chip'),
-                state.label,
-            ).toHaveTextContent('11:00');
-        }
+    it('leaves at most two text lines in the slot — the title and its subtitle', () => {
+        render(<CanonicalStrip {...baseStripProps({ waitingCount: 4, lastSyncAt: '2026-08-26T05:30:00Z' })} />);
+
+        // The waiting state is the tallest one: it is the only state carrying a
+        // subtitle, and it was the state the founder measured.
+        expect(screen.getByText(oversightTranslations.mr.waitingLabel)).toBeInTheDocument();
+        expect(screen.getByTestId('canonical-strip-waiting-subtitle')).toBeInTheDocument();
+        // ...and nothing else. A third line here is the regression.
+        expect(screen.queryByTestId('canonical-strip-freshness-chip')).toBeNull();
     });
 
-    it('adds no second tap target, and is carried in the accessible name', () => {
+    it('still tells a screen reader how recent the picture is — the fact is relocated, not dropped', () => {
+        // The chip left the screen; it must not leave the accessible name, or
+        // the one owner who cannot see the overlay's header would be the only
+        // person never told. Same reasoning the 2026-08-26 decision used to put
+        // it in this label in the first place.
         render(<CanonicalStrip {...baseStripProps({ lastSyncAt: '2026-08-26T05:30:00Z' })} />);
-
-        const chip = screen.getByTestId('canonical-strip-freshness-chip');
-        // The founder asked for one line, not a new control. A `<button>` here
-        // would nest an interactive element inside the strip's own button.
-        expect(chip.tagName).toBe('SPAN');
-        expect(chip.closest('button')).toBe(screen.getByTestId('canonical-strip-waiting-button'));
-
-        // An `aria-label` REPLACES a control's inner text, so without this the
-        // screen-reader owner would be the one person never told how recent
-        // the picture is.
         const label = screen.getByTestId('canonical-strip-waiting-button').getAttribute('aria-label') ?? '';
-        expect(label).toContain('11:00');
-        expect(label.toLowerCase()).not.toContain('sync');
-    });
 
-    it('uses the locked Devanagari body font for the Marathi sentence', () => {
-        // Root CLAUDE.md font rules: Marathi body text is Noto Sans
-        // Devanagari. Never system-ui, never a generic fallback.
-        render(<CanonicalStrip {...baseStripProps({ lastSyncAt: '2026-08-26T05:30:00Z' })} />);
-        const chip = screen.getByTestId('canonical-strip-freshness-chip');
-        expect(chip.getAttribute('style')).toContain('Noto Sans Devanagari');
+        expect(label).toContain('11:00');
+        expect(label).toContain(dataFreshnessTranslations.mr.dayToday);
+        expect(label.toLowerCase()).not.toContain('sync');
     });
 });

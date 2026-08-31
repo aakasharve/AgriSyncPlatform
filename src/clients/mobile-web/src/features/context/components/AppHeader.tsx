@@ -25,7 +25,8 @@ import type { WeatherStatus } from '../../weather/useWeatherMonitor';
 // button into an inset tray, and REMOVES the settings gear from row 1
 // entirely (measured — see the row-1 JSX below) — the Setup Hub is the
 // settings surface now, reachable from the profile avatar beside it.
-import CanonicalStrip, { FarmIdentityElement } from '../../oversight/components/CanonicalStrip';
+import CanonicalStrip from '../../oversight/components/CanonicalStrip';
+import FarmNameBoard from './FarmNameBoard';
 import CompactWeatherChip from '../../oversight/components/CompactWeatherChip';
 // Task 14, change 9 — the waiting-drawer sheet's OWN chrome (backdrop,
 // title bar, close button) is now `OversightOverlay`, a distinct component
@@ -205,28 +206,11 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   const currentFarm = farmContext?.farms.find((f) => f.farmId === farmContext.currentFarmId)
     ?? farmContext?.farms[0];
   const farmName = currentFarm?.name ?? '';
-
-  // PLOT COUNT (Ruling 12) — real when `AppContent.tsx` supplies
-  // `oversightData` (it always does in production; see
-  // `app/helpers/appContentOversightInputs.ts`). `farmContext` alone carries
-  // only `MyFarmDto` (farmId/name/role/farmCode/subscription — no plot
-  // count), so a caller that omits `oversightData` (every test but the
-  // "real data" one) gets an honest 0, never a fabricated count (spec §P-F).
-  //
-  // TRUTH FIX (truth audit, question 3) — `?? 0` is only honest while nobody
-  // RENDERS the 0 as a fact, and it was rendered: "० प्लॉट" under the farm
-  // name, from data no one had read yet. And once read, on an account with 2+
-  // farms the number sums EVERY farm's plots under ONE farm's name —
-  // `app/helpers/appContentOversightInputs.ts` states that mis-scoping itself
-  // ("NOT scoped to `currentFarmId` for an account with more than one farm").
-  // `CanonicalStrip` already suppressed the completion SENTENCE for that
-  // reason; the number beside it was not.
-  //
-  // The fallback stays exactly as it was — the fix is that
-  // `FarmIdentityElement` now decides whether the plot line may render at all,
-  // on `dataResolved && farmCount === 1` (both derived below, both real).
-  // Doctrine P4.
-  const plotCount = oversightData?.plotCount ?? 0;
+  // `plotCount` was derived here for `FarmIdentityElement`'s plot line. That
+  // element left row 1 with the founder's 2026-08-30 nameboard ruling — the
+  // count is not a farm IDENTITY, and he removed it from this row. The number
+  // itself is untouched and still reaches the farm switcher, which is the
+  // surface that legitimately compares farms by size.
 
   // `failedSendCount` mirrors exactly what the deleted `SyncIndicator` chip
   // used to sum for its own red badge (`queueStatus.failedCount +
@@ -405,23 +389,20 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     <header className="sticky top-0 z-50 rounded-b-3xl bg-white/95 backdrop-blur" style={{ boxShadow: '0 8px 22px -12px rgba(28,25,23,0.34)' }}>
       <div className="page-content pl-safe-area pr-safe-area flex min-h-[56px] items-center justify-between gap-2.5 py-2">
 
-        {/* LEFT: Profile identity + farm chip. Task 11 (founder header
-            restructure): "The farm switcher moves up beside the profile
-            circle" — immediately right of the avatar, row 1.
-            Task 14, change 6 — founder: "while enhancing the page selector
-            you compromised the weather and profile navigation buttons."
-            Measured cause: `gap-1` (4px) throughout, and the avatar's own
-            name label at `text-[9px]` truncated to `max-w-[60px]` — sized
-            for when this row still fought Task 13's centre toggle for
-            space. `OversightNavCards` has since moved to its own row below
-            (Task 13), so that space is free now; the avatar/farm-chip
-            group and the weather trigger both get it back. */}
+        {/* LEFT — the Setup Hub. Founder ruling 2026-08-30: this button used
+            to be labelled `activeOperator.name.split(' ')[0]` — the FARMER's
+            own first name — sitting 40px from the FARM's name. The same word
+            twice, meaning two different things. It now carries the name of the
+            surface it actually opens (`profile.setupHub`), and the plot count
+            that used to ride beside it is gone from this row entirely: it
+            lives in the farm switcher the board itself opens. */}
         <div className="flex shrink-0 items-center gap-2">
           <button
             onClick={() => onNavigate('profile')}
             disabled={disabled}
+            data-testid="header-setup-hub"
             className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center rounded-2xl px-1 py-1"
-            title={activeOperator ? activeOperator.name : t('header.profile')}
+            title={t('profile.setupHub')}
           >
             <div className={`
                w-9 h-9 flex items-center justify-center rounded-full border-2 transition-all duration-150
@@ -429,120 +410,36 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             `}>
               <User2 size={18} strokeWidth={2.5} />
             </div>
-            {activeOperator && (
-              <span className="text-[11px] font-bold text-stone-600 max-w-[92px] truncate leading-tight mt-0.5">
-                {activeOperator.name.split(' ')[0]}
-              </span>
-            )}
+            <span
+              className="mt-0.5 max-w-[58px] text-center text-[8.5px] font-bold leading-tight text-emerald-900"
+              style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
+            >
+              {t('profile.setupHub')}
+            </span>
           </button>
-
-          {farmContext && (
-            <FarmIdentityElement
-              language={language}
-              farmName={farmName}
-              plotCount={plotCount}
-              farmCount={farmCount}
-              /* Truth audit question 3 — the SAME flag the strip below uses
-                 for its completion claim now also gates the plot line, so the
-                 sentence and the number can never disagree about what this
-                 app is allowed to say. See the prop's doc in
-                 `CanonicalStrip.tsx`. */
-              dataResolved={dataResolved}
-              onOpenFarmSwitcher={() => setIsFarmSwitcherOpen(true)}
-            />
-          )}
         </div>
 
-        {/* CENTER: Task 13 — the Log/Reflect/Compare toggle that used to
-            render here moved OUT of row 1 entirely, into its own row below
-            (`OversightNavCards`, rendered after this row 1 div). On routes
-            where it used to appear, row 1's centre is now empty — matching
-            the founder's reference, whose row 1 carries nothing between the
-            farm identity and the weather chip. Every other route keeps its
-            existing brand/owner-chip centre, unchanged. */}
-        <div className="min-w-0 flex-1 flex items-center justify-center">
-          {/* Founder ruling 2026-08-24: the wordmark is a BRAND ASSET, not a
-              text span — the real lockup sets "Shram" green and "Safal" blue in
-              the brand italic, which `font-bold text-lg` could only
-              approximate. `logo-full.webp` (1100x330) carries the shield and
-              the wordmark as ONE image, so it replaces both the separate mark
-              and the span.
+        {/* CENTRE — the farm's own nameboard, and the whole of row 1's middle.
+            The Shram Safal lockup that used to sit here is NOT restored: the
+            founder ruled the farm is the hero of this screen and the brand
+            already appears on the app icon, the splash and the login. It
+            survives on the board as the shield mark and the subtitle line,
+            which name the tool without claiming a credential for the farm.
+            See `FarmNameBoard.tsx` for why that distinction was load-bearing. */}
+        {farmContext ? (
+          <FarmNameBoard
+            farmName={farmName}
+            language={language}
+            disabled={disabled}
+            /* Task 12's rule, carried over: only a real second farm turns the
+               board into a control. See the prop doc in `FarmNameBoard.tsx`. */
+            canSwitch={farmCount > 1}
+            onOpenFarmSwitcher={() => setIsFarmSwitcherOpen(true)}
+          />
+        ) : (
+          <div className="min-w-0 flex-1" />
+        )}
 
-              It renders on EVERY route, including Log/Reflect/Compare. The
-              earlier `!showNavCards` guard came from the founder's reference
-              design, whose row 1 carried nothing between the farm identity and
-              the weather chip — he has since ruled the brand must be visible
-              top-centre there too. Measured on the log route: the farm chip
-              ends at 144px and the weather chip starts at 309px, so the lockup
-              takes 93px of a 165px gap and still clears 36px each side.
-              Height stays 28px so the header row does not move. */}
-          {/* CHANGE 4 — THE OWNER CHIP IS GONE, AND IT IS THE THING THAT GIVES.
-              MEASURED on the routes that rendered both it and the weather
-              chip (any route outside `PAGE_TOGGLE_ROUTES` — `attention` is
-              the farmer-facing one, reachable from the bottom nav), Marathi,
-              deviceScaleFactor 2:
-
-                390px  owner chip ended at 371.3, weather chip began at 307.8
-                       -> 63.5px of OVERLAP
-                360px  365.3 vs 277.8 -> 87.5px
-                320px  337.1 vs 237.8 -> 99.3px, and at that width the
-                       lockup itself also crossed the weather chip by 1.7px
-                       and the farm chip by 1.8px
-
-              The chip also ran past the viewport's right edge at 360 and 320.
-              This was pre-existing and this file's own comment already
-              admitted it ("the collision with the weather chip that already
-              exists on the other routes") without fixing it.
-
-              WHY THIS ELEMENT AND NOT ANOTHER. It is the only one in row 1
-              that carries no fact the row does not already carry: it renders
-              `activeOperator.name.split(' ')[0]` — the SAME first name the
-              profile avatar renders under itself at the far left of this
-              same row, under the SAME `activeOperator` condition. Spec §4.2
-              already ruled on exactly this duplication when it removed the
-              home screen's owner chip: "redundant — the header already shows
-              the owner." The brand lockup is founder-approved at 120x36 and
-              may not shrink; the weather chip carries a real derived
-              temperature. The duplicate is what gives.
-
-              Its only non-duplicate content was the uppercase English word
-              "Owner", which is also the one piece of untranslated English
-              text row 1 put in front of a Marathi-reading farmer.
-
-              After removal these routes measure identically to the nav-card
-              routes the founder already approved: 10px+ clear on both sides
-              of the lockup at all three widths (see the change-4 report). */}
-          <div className="flex min-w-0 items-center gap-2">
-            {/* Sized to OCCUPY the gap, not to sit politely inside it (founder,
-                2026-08-24: "make that bigger and bolder ... we have enough space
-                to breathe"). 36px tall renders 120px wide, up from 93px at
-                28px. Measured gap between the farm chip and the weather chip:
-                165px at 390px wide and 135px at 360px, so 120px still clears
-                22px and 7px a side respectively.
-
-                `shrink-0` is deliberately ABSENT. At 320px the gap is only
-                95px, and letting flex shrink the lockup is what keeps it from
-                colliding with the weather chip there — measured 75px wide with
-                10px clear a side. A `shrink-0` would trade a graceful squeeze
-                on the narrowest phones for an actual overlap.
-
-                `object-contain` is what makes that squeeze honest. `h-9` pins
-                the height while `max-w-full` clamps the width, and at 320px
-                that combination resolved to a 75x36 box against the asset's
-                natural 3.33:1 — i.e. the wordmark was rendering HORIZONTALLY
-                SQUASHED, which distorts the brand rather than merely shrinking
-                it. `object-contain` letterboxes inside the clamped box so the
-                lockup stays in proportion at every width. */}
-            <img
-              src="/brand/logo-full.webp"
-              alt="Shram Safal"
-              width={120}
-              height={36}
-              loading="eager"
-              className="h-9 w-auto max-w-full object-contain"
-            />
-          </div>
-        </div>
 
         {/* RIGHT: Weather + Voice. Task 11 moved the weather chip into row
             1 here. Task 12 REMOVES the settings gear that used to follow
@@ -691,6 +588,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         onAcknowledge={() => { void acknowledge(); }}
         onOpenDecision={handleOpenDecision}
         onClose={() => setIsWaitingDrawerOpen(false)}
+        // The freshness sentence moved OFF the strip and into this overlay
+        // (founder ruling 2026-08-29 — the bar is two lines). Same source the
+        // strip was fed, so the two can never disagree.
+        lastSyncAt={queueStatus.lastSyncAt}
       />
 
       <SyncStatusDrawer
