@@ -857,18 +857,51 @@ here rather than carrying it into the next task.
 
 ### Task 6: One name renderer — romanised search plus Devanagari font, in one place
 
+> **Executed 2026-08-31 (`7d493804`, plus a follow-up closing the spelling gaps).**
+>
+> **Step 3 was already done and the plan's claim about it was false.** It asserts *"index.html
+> currently loads Inter and JetBrains Mono only."* Untrue since Task 3: it loads DM Sans + Noto Sans
+> Devanagari + JetBrains Mono, and Inter is gone. The step needed **evidence, not an edit** — and the
+> evidence mattered: with the Devanagari face deleted from `index.html`, **20 of 23 tests still
+> passed**, including every test asserting the component requests the right font family. A component
+> asking for a face is not evidence the face exists. Three tests now assert the `<link>` and its
+> weights, read from disk with a length guard.
+>
+> **`fallback = '—'` in the Step 2 sketch was wrong** against Task 5's `Masked` as shipped. It would
+> have collapsed two different facts into one character: a name that is **absent** and a name you are
+> **not permitted to see**. The first is a data problem to chase; the second is not. Default removed.
+>
+> **The Files list is incomplete** — Step 4 contains two `render(...)` assertions, which cannot live
+> in a `.ts` file. `src/components/ui/__tests__/PersonName.test.tsx` added.
+>
+> **Citation drift (sixth instance):** `app.js:35-101` is **33–101**; line 35 lands mid-sentence in
+> the section comment. The four call-site citations were the **first six-for-six correct** set on this
+> branch.
+>
+> **DECIDED 2026-08-31 — index more spellings, not fewer.** Execution surfaced three gaps and the
+> same principle settles all three: *the cost of a wrong extra result is far lower than the cost of a
+> missing one.* (a) The prototype keeps the word-final inherent 'a', so a two-word search
+> `gaikwad patil` misses — an extra spelling drops it. (b) **कुलकर्णी was unfindable by its ordinary
+> English spelling** — one of the most common surnames in Maharashtra, so not an edge case. (c) **ज्ञ
+> is indexed as both `dny` and `gy`** — Marathi reads *Dnyaneshwar*, the same character in Hindi reads
+> *gyan*, and people type both; ञ, ङ, ऑ/ॉ and the dotted letters added in the same pass.
+> **This was the coordinator's call, not the founder's** — he speaks Marathi and may want `dny` alone.
+>
+> **`PersonName` has ZERO call sites on purpose**, and the four duplicated font checks are untouched.
+> They die with their screens in Tasks 22–23. `searchKey` has no consumers until Tasks 8 and 13.
+
 **Files:**
 - Create: `src/clients/admin-web/src/lib/searchKey.ts`
 - Create: `src/clients/admin-web/src/components/ui/PersonName.tsx`
 - Create: `src/clients/admin-web/src/lib/__tests__/searchKey.test.ts`
 
 **Interfaces:**
-- Consumes v3 `app.js:35-101` (AS.roman, AS.searchKey).
+- Consumes v3 `app.js:33-101` (AS.roman at 57, AS.searchKey at 87).
 - Produces searchKey(s) and PersonName — used by the DataList search, the command palette index, and everywhere a person's name is rendered.
 
 **Why:** this is the prototype's single most valuable non-visual addition, and it also kills a live duplication. The Devanagari font check is copy-pasted at FOUR call sites today (A34).
 
-- [ ] **Step 1: Port the transliterator**
+- [x] **Step 1: Port the transliterator**
 
 ```ts
 /**
@@ -896,7 +929,7 @@ export function searchKey(s: string | null | undefined): string {
 }
 ```
 
-- [ ] **Step 2: Collapse four duplicates into one component (A34)**
+- [x] **Step 2: Collapse four duplicates into one component (A34)**
 
 ```tsx
 /**
@@ -923,9 +956,9 @@ export function PersonName({ name, fallback = '—', className }: PersonNameProp
 }
 ```
 
-- [ ] **Step 3: Load the Devanagari face.** index.html currently loads Inter and JetBrains Mono only. CONTRACT.md section 8 bans monospace anywhere; v3 uses IBM Plex Sans and IBM Plex Sans Devanagari. Whatever the chrome face becomes, Noto Sans Devanagari MUST be loaded or PersonName silently falls back to a Latin face.
+- [x] **Step 3: Load the Devanagari face.** index.html currently loads Inter and JetBrains Mono only. CONTRACT.md section 8 bans monospace anywhere; v3 uses IBM Plex Sans and IBM Plex Sans Devanagari. Whatever the chrome face becomes, Noto Sans Devanagari MUST be loaded or PersonName silently falls back to a Latin face.
 
-- [ ] **Step 4: Test the seven spellings**
+- [x] **Step 4: Test the seven spellings**
 
 ```ts
 it.each([
@@ -940,7 +973,7 @@ it('renders a Devanagari name in the Devanagari face', () => { /* … */ });
 it('renders a redacted name through Masked, never as the literal marker', () => { /* … */ });
 ```
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and enforced almost
 nowhere — Tasks 4, 5, 6, 7, 9, 10, 12 and 13 originally ended at "run and commit". An invariant
@@ -953,7 +986,7 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 5: Commit** — `feat(admin-web): romanised Devanagari search plus one PersonName renderer`
+- [x] **Step 5: Commit** — `feat(admin-web): romanised Devanagari search plus one PersonName renderer`
 
 ---
 
