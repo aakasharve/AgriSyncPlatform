@@ -11,7 +11,7 @@ import { hasDevanagari, roman, searchKey } from '@/lib/searchKey';
  * The surnames below are REAL Marathi surnames, not invented strings — an
  * invented string can be made to pass by an algorithm that helps nobody. Each
  * `typed` column is what a person would plausibly type; each is asserted with
- * `toContain`, because `searchKey` returns seven space-joined spellings and the
+ * `toContain`, because `searchKey` returns many space-joined spellings and the
  * caller searches with a substring test.
  */
 
@@ -28,8 +28,8 @@ describe('a Marathi surname is findable by typing it in Latin letters', () => {
     /* शिंदे — anusvāra before a dental: `n`, not `m`. The other half of the
        rule कांबळे proves. */
     ['शिंदे', 'shinde'],
-    /* पवार — only the FULL spelling with व as w reaches "pawar"; the tight
-       spelling is "pvara". This is the one case that needs variant 3. */
+    /* पवार — the word-initial schwa survives, so the tight form is
+       "pavar" and व as w reaches "pawar". */
     ['पवार', 'pawar'],
     /* जाधव — a word-final consonant, and व as v rather than w. */
     ['जाधव', 'jadhav'],
@@ -41,6 +41,9 @@ describe('a Marathi surname is findable by typing it in Latin letters', () => {
     ['साळुंखे', 'salunkhe'],
     /* पाटील — retroflex ट and the ी mātrā. */
     ['पाटील', 'patil'],
+    /* कुलकर्णी — the schwa retained before a conjunct. One of the most common
+       surnames in Maharashtra, and unfindable without that rule. */
+    ['कुलकर्णी', 'kulkarni'],
   ])('%s is findable by typing %s', (deva, typed) => {
     expect(searchKey(deva)).toContain(typed);
   });
@@ -58,11 +61,11 @@ describe('the anusvāra rule — the reason कांबळे is Kamble and not
    * does not speak the language.
    */
   it('romanises कांबळे with an m, because ब is a labial', () => {
-    expect(roman('कांबळे', true)).toBe('kamble');
+    expect(roman('कांबळे', { dropInherent: true })).toBe('kamble');
   });
 
   it('romanises शिंदे with an n, because द is not', () => {
-    expect(roman('शिंदे', true)).toBe('shinde');
+    expect(roman('शिंदे', { dropInherent: true })).toBe('shinde');
   });
 
   it('still indexes the n spelling, so a caller who types kanble finds her', () => {
@@ -71,11 +74,117 @@ describe('the anusvāra rule — the reason कांबळे is Kamble and not
   });
 });
 
-describe('the seven spellings', () => {
-  it('produces exactly seven, space-joined', () => {
-    expect(searchKey('वाघ').split(' ')).toHaveLength(7);
+describe('the schwa survives before a conjunct — कुलकर्णी is Kulkarni', () => {
+  /**
+   * The hidden 'a' on क is NOT dropped, because the र् that follows it is a
+   * joined pair and dropping it would collide three consonants: kul-KAR-ni.
+   *
+   * This was a real gap until 2026-08-31. Without the rule the name romanised
+   * only as "kulkrni" and "kulakarni", so a caller typing the ordinary English
+   * spelling found nothing.
+   */
+  it('keeps the a before the conjunct, and drops the one that has no conjunct', () => {
+    expect(roman('कुलकर्णी', { dropInherent: true })).toBe('kulkarni');
   });
 
+  it('does not keep it where no conjunct follows — भोसले stays bhosle', () => {
+    expect(roman('भोसले', { dropInherent: true })).toBe('bhosle');
+  });
+});
+
+describe('ज्ञ reads dny in Marathi and gy in Hindi — both must find the row', () => {
+  /**
+   * ज्ञ is irregular: it is not ज + ञ. In Marathi it is *Dnyaneshwar*; the same
+   * character in Hindi is read *gyan*, and people type the Hindi form out of
+   * habit. Both are real typings, so both are indexed.
+   *
+   * Before this, ज्ञ fell through the table entirely and became a blank.
+   */
+  it.each([
+    ['dnyaneshwar'],
+    ['gyaneshwar'],
+    ['dnyaneshvar'],
+    ['dnya'],
+  ])('ज्ञानेश्वर is findable by typing %s', (typed) => {
+    expect(searchKey('ज्ञानेश्वर')).toContain(typed);
+  });
+
+  it('is not mistaken for a plain ज — that would romanise to j', () => {
+    expect(roman('ज्ञानेश्वर')).not.toContain('j');
+  });
+});
+
+describe('the dotted letters, and both ways they are typed', () => {
+  /**
+   * ज़ क़ फ़ carry a nukta and appear in Persian- and Urdu-origin names. Some
+   * people type the dot (zakir), some type the plain letter (jakir); both are
+   * indexed.
+   *
+   * NOTE for the founder: `z`/`f` are MY choice of primary reading, not his.
+   */
+  it('indexes ज़ as both z and j', () => {
+    const key = searchKey('ज़ाकीर');
+    expect(key).toContain('zakir');
+    expect(key).toContain('jakir');
+  });
+
+  it('reads the precomposed and the decomposed spelling identically', () => {
+    // Written as explicit code points, because the two are indistinguishable
+    // on screen and a literal would silently test one string against itself.
+    // U+095B is ZA as a single character; U+091C U+093C is JA + nukta. NFC is
+    // what makes them agree: U+095B sits on the Unicode composition-exclusion
+    // list, so NFC yields the decomposed form for both.
+    const rest = 'ाकीर'; // aa-matra, ka, ii-matra, ra
+    const precomposed = 'ज़' + rest;
+    const decomposed = 'ज़' + rest;
+
+    expect(precomposed).not.toBe(decomposed);
+
+    expect(searchKey(precomposed)).toBe(searchKey(decomposed));
+    expect(searchKey(decomposed)).toContain('zakir');
+  });
+
+  it('ignores a stray nukta that follows no letter', () => {
+    expect(roman('़')).toBe('');
+  });
+});
+
+describe('the inherent vowel, kept and dropped, at both ends of a word', () => {
+  /**
+   * A bare consonant carries a hidden 'a'. Two independent choices about it —
+   * drop it between consonants, drop it at the end of a word — give four base
+   * spellings, and all four are indexed.
+   *
+   * The word-final one matters for MULTI-WORD searches. Indexing only
+   * "gaykvada" means typing "gaikwad patil" finds nothing, because the index
+   * reads "gaikwada patila". That was a real gap until 2026-08-31.
+   */
+  it('romanises गायकवाड four ways', () => {
+    expect(roman('गायकवाड')).toBe('gayakavada');
+    expect(roman('गायकवाड', { dropFinal: true })).toBe('gayakavad');
+    expect(roman('गायकवाड', { dropInherent: true })).toBe('gaykvada');
+    expect(roman('गायकवाड', { dropInherent: true, dropFinal: true })).toBe('gaykvad');
+  });
+
+  it('finds a two-word name typed the way a person says it', () => {
+    expect(searchKey('गायकवाड पाटील')).toContain('gaikwad patil');
+  });
+
+  it('finds a three-word name typed in full', () => {
+    expect(searchKey('रमेश गायकवाड पाटील')).toContain('ramesh gaikwad patil');
+  });
+
+  it('lets digits and Latin characters through untouched', () => {
+    // A name field often carries a phone fragment. It must survive the pass.
+    expect(roman('राम 8888', { dropInherent: true })).toContain('8888');
+  });
+
+  it('treats a comma or an adjacent Latin word as the end of a word', () => {
+    expect(roman('वाघ, Pune', { dropFinal: true })).toContain('vagh');
+  });
+});
+
+describe('the arguable readings are all indexed, never chosen between', () => {
   it('indexes व as both v and w — Marathi writes it both ways in Latin', () => {
     const key = searchKey('वाघ');
     expect(key).toContain('wagh');
@@ -85,7 +194,7 @@ describe('the seven spellings', () => {
   it('indexes ay as ai — gaykwad and gaikwad are the same surname', () => {
     const key = searchKey('गायकवाड');
     expect(key).toContain('gaikwad');
-    expect(key).toContain('gaykvad');
+    expect(key).toContain('gaykwad');
   });
 
   it('indexes the inherent a both kept and dropped — bhosale and bhosle', () => {
@@ -95,53 +204,48 @@ describe('the seven spellings', () => {
   });
 });
 
-describe('what roman actually does with the inherent vowel', () => {
+describe('what the index costs — measured, so Task 8 inherits a number', () => {
   /**
-   * A bare consonant carries an inherent `a`. The "tight" form drops it —
-   * EXCEPT at the end of a word, where the prototype keeps it. So गायकवाड
-   * romanises "gaykvada", never "gaykvad".
+   * Measured 2026-08-31 on 3,000 rows of real Marathi names, single run under
+   * jsdom on one machine — order-of-magnitude, not a benchmark. Task 8
+   * (`DataList`) builds a haystack from these keys and searches it on every
+   * keystroke, so the SHAPE of the cost matters more than the size:
    *
-   * Substring search is unaffected (typing "gaikwad" still matches
-   * "gaikwada"), which is why this is documented rather than changed. It is
-   * on the founder's list: it is a transliteration judgement, not a bug a
-   * test can settle.
+   *   BUILD  3,000 rows -> ~60 ms one-time, ~355 KB of index held in memory
+   *   SCAN   3,000 rows -> ~0.4 ms per keystroke
+   *
+   * The scan is free. The BUILD is not, and it must be memoised on the row
+   * data — recomputing it inside a keystroke handler turns a 0.4 ms search
+   * into a 60 ms one. The ceilings below exist so a later change to the
+   * respelling rules cannot quietly make that build ten times worse.
    */
-  it('keeps the inherent a on a word-final consonant, even when dropping', () => {
-    expect(roman('गायकवाड', true)).toBe('gaykvada');
-    expect(roman('गायकवाड', false)).toBe('gayakavada');
+  it('keeps a single surname in single digits', () => {
+    // Measured: शिंदे 1, भोसले 2, कांबळे 4, गायकवाड 16 (the worst single word).
+    expect(searchKey('कांबळे').split(' ').length).toBeLessThanOrEqual(8);
+    expect(searchKey('गायकवाड').split(' ').length).toBeLessThanOrEqual(16);
   });
 
-  it('lets digits and Latin characters through untouched', () => {
-    // A name field often carries a phone fragment. It must survive the pass.
-    expect(roman('राम 8888', true)).toContain('8888');
+  it('keeps a full three-word name under a kilobyte', () => {
+    // Measured: 48 spellings, 503 characters — the worst case in the sample.
+    const key = searchKey('ज्ञानेश्वर बाळासाहेब कुलकर्णी');
+    expect(key.split(' ').length).toBeLessThanOrEqual(64);
+    expect(key.length).toBeLessThan(1024);
   });
-});
 
-describe('KNOWN GAP — a halant conjunct after a dropped inherent vowel', () => {
-  /**
-   * कुलकर्णी yields "kulkrni" (tight) and "kulakarni" (full). A caller typing
-   * "kulkarni" — the ordinary English spelling — matches NEITHER, because the
-   * real spelling sits between the two forms.
-   *
-   * Inherited from the v3 prototype and deliberately NOT fixed in this task:
-   * fixing it changes the shape of the key and needs the founder's eyes on the
-   * result. Recorded here so it cannot be forgotten. When it is fixed, ADD the
-   * "kulkarni" assertion — this test does not assert the gap is desirable, only
-   * that the row is reachable by something today.
-   */
-  it('is still reachable by the tight spelling', () => {
-    expect(searchKey('कुलकर्णी')).toContain('kulkrni');
+  it('costs nothing for a name without an arguable reading', () => {
+    // A respelling that does not apply is a no-op and de-duplicates away.
+    // शिंदे has no व, no ay, no labial anusvāra, no ज्ञ and no nukta.
+    expect(searchKey('शिंदे')).toBe('shinde');
   });
 });
 
 describe('a Latin name needs no index', () => {
-  it.each([
-    ['Ramesh Patil'],
-    ['ACME Agri FPO'],
-    ['9764012345'],
-  ])('%s indexes to nothing — it is already searchable as itself', (name) => {
-    expect(searchKey(name)).toBe('');
-  });
+  it.each([['Ramesh Patil'], ['ACME Agri FPO'], ['9764012345']])(
+    '%s indexes to nothing — it is already searchable as itself',
+    (name) => {
+      expect(searchKey(name)).toBe('');
+    }
+  );
 
   it.each([[null], [undefined], ['']])('%s indexes to nothing', (name) => {
     expect(searchKey(name)).toBe('');
