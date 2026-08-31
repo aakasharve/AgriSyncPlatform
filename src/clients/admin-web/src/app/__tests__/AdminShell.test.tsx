@@ -5,6 +5,11 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AdminShell } from '@/app/AdminShell';
 import shellSource from '../AdminShell.tsx?raw';
+// TASK 13 moved the destination list out of the shell and into `nav.ts`, so
+// the palette could stop keeping a second, already-divergent copy of it. The
+// A53 slot and its REASON moved with the list; the assertion below follows
+// them rather than being deleted.
+import navSource from '../nav.ts?raw';
 import ForbiddenPage from '@/pages/ForbiddenPage';
 import { adminApi } from '@/lib/api';
 import { authStore } from '@/lib/auth';
@@ -48,6 +53,8 @@ it('read the real shell source, not an empty stub', () => {
   // there, and that is one line to prove rather than to assume.
   expect(shellSource.length).toBeGreaterThan(2000);
   expect(shellSource).toContain('export function AdminShell');
+  expect(navSource.length).toBeGreaterThan(2000);
+  expect(navSource).toContain('export const NAV');
 });
 
 const ORG_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -430,8 +437,11 @@ describe('the sidebar (A53, A58)', () => {
      * is that the slot and its REASON both survive; deleting the reason is how
      * the slot gets deleted next.
      */
-    expect(shellSource).toContain('badge?: number');
-    expect(shellSource).toContain('Preservation Register A53');
+    // The slot and its reason live in `nav.ts` since Task 13; the pill that
+    // renders it is still the shell's. Both halves are still asserted, which
+    // is the point — deleting the reason is how the slot gets deleted next.
+    expect(navSource).toContain('badge?: number');
+    expect(navSource).toContain('Preservation Register A53');
     expect(shellSource).toContain("typeof n.badge === 'number'");
   });
 

@@ -30,7 +30,27 @@ export interface SufferingItem { farmId: string; name: string; errorCount: numbe
  * `lib/orgQuery.ts` — same behaviour across a page change, loading state
  * across an org change.
  */
-export function useFarmsList(page: number, pageSize: number, search?: string, tier?: string) {
+export function useFarmsList(
+  page: number,
+  pageSize: number,
+  search?: string,
+  tier?: string,
+  /**
+   * `enabled: false` keeps the hook mounted but silent — the same gate
+   * `useFarmerHealth` already offers (A28), spelled the same way so there is
+   * one idiom for it in this console rather than two.
+   *
+   * ADDED IN TASK 13, for one reason that is a security property rather than
+   * a performance one. The command palette indexes farm names and owner
+   * phone numbers, and it must not ASK for them when the current scope says
+   * the reader may not see them: an unconditional fetch would 403, and a 403
+   * on a data endpoint invalidates the cached scope (App.tsx's QueryCache
+   * onError), so a palette opened by an admin without `farms.list` would
+   * quietly re-ask for the scope every time. Fail-closed at the request, not
+   * at the render.
+   */
+  options?: { enabled?: boolean },
+) {
   const org = useOrgKey();
   return useQuery<AdminResponse<FarmsList>>({
     queryKey: ['farms', 'list', org, page, pageSize, search, tier],
@@ -41,6 +61,7 @@ export function useFarmsList(page: number, pageSize: number, search?: string, ti
       const { data } = await adminApi.get<AdminResponse<FarmsList>>(`/shramsafal/admin/farms?${sp}`);
       return data;
     },
+    enabled: options?.enabled !== false,
     staleTime: 60_000, placeholderData: keepPreviousDataWithinOrg<AdminResponse<FarmsList>>(org),
   });
 }

@@ -239,7 +239,6 @@ export default function App() {
         <ActiveOrgProvider>
           <AdminAuthProvider>
             <LoginRedirectBridge />
-            <CommandPalette />
             <Suspense fallback={<Fallback />}>
               <Routes>
                 <Route path="/login" element={<LoginPage />} />
@@ -248,6 +247,28 @@ export default function App() {
                   element={
                     <RequireAuth>
                       <RequireScope>
+                        {/* TASK 13 MOVED THIS INSIDE THE GATE. IT IS A SECURITY
+                            CHANGE, NOT A TIDY-UP (Preservation Register A46).
+
+                            It used to sit beside <Routes>, outside RequireAuth,
+                            which was harmless while the palette listed eleven
+                            static page names. Task 13 made it index farm names,
+                            owners and farmer phone numbers — the whole point of
+                            the v2 palette — and that PII would then have been
+                            one keystroke away from the sign-in screen. The v3
+                            prototype dodged the same problem by not loading
+                            app.js on login.html; an omission is not a rule and
+                            does not survive a port.
+
+                            It is inside RequireScope as well, because every
+                            entry it can offer is scoped to one organisation and
+                            `canRead` fails closed until the scope resolves.
+                            Above this line it would be a keystroke that opens
+                            an empty dialog on the org-switcher interstitial.
+
+                            `CommandPalette.test.tsx` fails if it moves back
+                            out. */}
+                        <CommandPalette />
                         <AdminShell />
                       </RequireScope>
                     </RequireAuth>

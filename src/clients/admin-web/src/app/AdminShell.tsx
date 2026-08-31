@@ -2,30 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  AlertTriangle,
   Building2,
-  Calendar,
   Check,
   ChevronDown,
-  Frown,
-  HeartPulse,
-  Home as HomeIcon,
   Leaf,
   LogOut,
-  Mic,
   RefreshCw,
   Search,
-  Settings as SettingsIcon,
-  Star,
-  TrendingDown,
   User as UserIcon,
-  Users as UsersIcon,
-  Wheat,
-  Zap,
-  type LucideIcon,
 } from 'lucide-react';
 import { useAdminAuth } from './AdminAuthProvider';
 import { useActiveOrg } from './ActiveOrgProvider';
+import { GROUP_ORDER, NAV } from './nav';
 import { ToastHost } from './ToastHost';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { PersonName } from '@/components/ui/PersonName';
@@ -67,48 +55,16 @@ import { cn } from '@/lib/utils';
  */
 
 /**
- * Six groups, not five. CONTRACT.md §2 confirms it and says why: WVFD is
- * alone in Product because it is neither an Operations item nor a Farms item.
+ * THE DESTINATIONS MOVED TO `./nav.ts` IN TASK 13, and it is worth one line
+ * to say why rather than leaving a reader to find them.
  *
- * ONE difference from the prototype, kept deliberately: v3 files Live Health
- * under Overview, the live console files it under Operations. Moving it is a
- * visible change to the founder's navigation with no instruction behind it,
- * so the console's own grouping wins — machinery beats mockup, and where the
- * mockup is merely different rather than better, so does the incumbent.
+ * The command palette kept a SECOND hardcoded list of the same screens, and
+ * the two had already drifted: Farmer Health was in this sidebar and missing
+ * from the palette entirely. `nav.ts` is now the one statement of "these are
+ * the screens this console has", it carries each route's module key so the
+ * palette can filter by permission, and the `badge` slot (Preservation
+ * Register A53) and the six-group ordering moved with it.
  */
-const GROUP_ORDER = ['Overview', 'Operations', 'Product', 'Farms', 'Schedules', 'Admin'] as const;
-
-interface NavItem {
-  to: string;
-  label: string;
-  Icon: LucideIcon;
-  /**
-   * KEEP THIS, EVEN THOUGH NOTHING SETS IT (Preservation Register A53).
-   *
-   * It renders nothing today, so it appears in no screenshot, so a port
-   * driven by screenshots removes it as dead code — and then someone
-   * "invents" it later as a new feature. It is the natural home for a live
-   * alert or suffering count, which the v3 Home screen already computes.
-   * The pill below is the whole of the slot; populating it is a screen's job.
-   */
-  badge?: number;
-  group: (typeof GROUP_ORDER)[number];
-}
-
-const NAV: NavItem[] = [
-  { to: '/', label: 'Home', Icon: HomeIcon, group: 'Overview' },
-  { to: '/ops/live', label: 'Live Health', Icon: Zap, group: 'Operations' },
-  { to: '/ops/errors', label: 'API Errors', Icon: AlertTriangle, group: 'Operations' },
-  { to: '/ops/voice', label: 'Voice Pipeline', Icon: Mic, group: 'Operations' },
-  { to: '/metrics/nsm', label: 'WVFD', Icon: Star, group: 'Product' },
-  { to: '/farms', label: 'All Farms', Icon: Wheat, group: 'Farms' },
-  { to: '/farms/silent-churn', label: 'Silent Churn', Icon: TrendingDown, group: 'Farms' },
-  { to: '/farms/suffering', label: 'Suffering', Icon: Frown, group: 'Farms' },
-  { to: '/farmer-health', label: 'Farmer Health', Icon: HeartPulse, group: 'Farms' },
-  { to: '/schedules/templates', label: 'Templates', Icon: Calendar, group: 'Schedules' },
-  { to: '/users', label: 'Users', Icon: UsersIcon, group: 'Admin' },
-  { to: '/settings/admins', label: 'Settings', Icon: SettingsIcon, group: 'Admin' },
-];
 
 /**
  * The keyboard the admin is actually sitting at. The palette binds metaKey OR
