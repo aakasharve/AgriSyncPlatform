@@ -133,9 +133,66 @@ export function DataList<T>(config: DataListConfig<T>) {
    */
   const [opened, setOpened] = useState(() => url.isOpen || (collapsible?.defaultOpen ?? false));
 
+  /**
+   * SUMMARY-FIRST HAS A FAILURE MODE ALL FARMS COULD NOT REACH.
+   *
+   * FOUND IN TASK 15, the first summary-first SCREEN. Every figure in the
+   * summary — the headline count, every facet count, the Show all label — is
+   * computed from `rows`, and `rows` is `[]` while the first request is in
+   * flight AND `[]` when that request comes back a 500. So a collapsed
+   * watchlist over a broken endpoint rendered the headline
+   *
+   *     0 farms
+   *
+   * with the list shut, which means the `LoadFailed` block that names the 500
+   * was inside a `hidden` container and nobody ever saw it. That is D9's
+   * defect — a failure rendered as good news — relocated from the empty table
+   * into the summary above it, where it reads WORSE: on this screen "0 farms
+   * silent" is the best possible news.
+   *
+   * Two rules, both here rather than in a screen, because Tasks 16 and 17 are
+   * summary-first too and would each have had to remember:
+   *
+   *   1. NO FIGURES UNTIL THERE ARE FIGURES. With no answer in hand the
+   *      summary is not rendered at all. It is not rendered as zero.
+   *   2. A CAUSE IS NEVER HIDDEN. The list is forced open, so the skeleton or
+   *      the `LoadFailed` / `FeedDown` block is on screen with nothing to
+   *      expand first.
+   *
+   * `isLoading`, NOT `isFetching`: a background poll still holds the previous
+   * answer, and hiding the summary on every refetch would make the page flicker
+   * for no honesty gain.
+   *
+   * A MEASURED zero is deliberately NOT in this set. Rows `[]` from a request
+   * that succeeded is a real reading, and "0 farms" is then the true headline.
+   */
+  const noFigures = states.isLoading || !!states.error || !!states.feedDown;
+
+  /**
+   * A SUMMARY-FIRST LIST WITH NOTHING IN IT HAS NOTHING TO HIDE.
+   *
+   * Also found in Task 15. A watchlist that came back genuinely empty
+   * rendered "0 farms" and a "Show all 0 farms" button — and the
+   * `MeasuredZero` block, the one thing on the screen that names the WINDOW
+   * the zero was measured over, sat inside the `hidden` container behind that
+   * button. So the reader got a bare zero with no evidence, and a control
+   * whose only outcome was to reveal an empty table.
+   *
+   * A bare zero with no window is indistinguishable from a feed that died,
+   * which is the collapse CONTRACT.md §6.2 exists to prevent. Nothing is
+   * gated here, because there is nothing behind the gate.
+   *
+   * Only when the emptiness is the ANSWER: a filter or a search that excluded
+   * everything already opens the list on its own, and those keep their
+   * controls because clearing them is the action to offer.
+   */
+  const emptyResult = !noFigures && rows.length === 0 && !filtered && !hasQuery;
+
   /* THE THREE WAYS IN: a filter, Show all, or a typed search. Someone who has
-     typed a name has already asked for rows. */
-  const listOpen = !summaryFirst || opened || filtered || hasQuery;
+     typed a name has already asked for rows. Plus the two that are not ways in
+     at all — with no figures, and with no rows, there is no summary worth
+     standing in front of the cause. */
+  const listOpen = !summaryFirst || opened || filtered || hasQuery || noFigures || emptyResult;
 
   /* ── sorting ──────────────────────────────────────────────────────────── */
 
@@ -545,8 +602,13 @@ export function DataList<T>(config: DataListConfig<T>) {
       {/* The facet rows render whenever a screen HAS facets. Summary-first —
           the headline figures and the Show all control — is the separate
           decision, and it is `collapsible` that makes it. A screen may filter
-          without hiding its rows behind the filter. */}
-      {(summaryFirst || facets.length > 0) && (
+          without hiding its rows behind the filter.
+
+          `!noFigures` is the whole block, not just the headline: a facet
+          button reading "8 weeks or more · 0 farms" over a 500 is the same
+          fabricated zero the headline was, and a Show all control offering to
+          show all 0 rows is an invitation to nothing. See the note above. */}
+      {!noFigures && (summaryFirst || facets.length > 0) && (
         <SummaryFacets
           id={id}
           rows={rows}
@@ -574,7 +636,7 @@ export function DataList<T>(config: DataListConfig<T>) {
             )
           }
           showAll={
-            summaryFirst
+            summaryFirst && !emptyResult
               ? { label: showAllLabel, onClick: onShowAll, listId, listOpen }
               : undefined
           }
