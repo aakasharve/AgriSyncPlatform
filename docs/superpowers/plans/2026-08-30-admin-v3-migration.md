@@ -1736,9 +1736,9 @@ here rather than carrying it into the next task.
 **Files:**
 - Rewrite: `src/clients/admin-web/src/app/CommandPalette.tsx`
 
-- [ ] **Step 1: Index entities, not just pages.** v3 indexes 12 nav destinations PLUS 16 farms (sub-line = owner) and 19 users (sub-line = phone) against the romanised haystack from T6, and deep-links via a q param into the destination screen's search box, FORCING ITS LIST OPEN so the jump lands on the person, not the summary. The live palette is 11 hardcoded nav commands and is missing Farmer Health entirely (`CommandPalette.tsx:7-19` — verified, no farmer-health entry).
+- [x] **Step 1: Index entities, not just pages.** v3 indexes 12 nav destinations PLUS 16 farms (sub-line = owner) and 19 users (sub-line = phone) against the romanised haystack from T6, and deep-links via a q param into the destination screen's search box, FORCING ITS LIST OPEN so the jump lands on the person, not the summary. The live palette is 11 hardcoded nav commands and is missing Farmer Health entirely (`CommandPalette.tsx:7-19` — verified, no farmer-health entry).
 
-- [ ] **Step 2: Move it behind RequireAuth and filter by canRead (A46, B16)**
+- [x] **Step 2: Move it behind RequireAuth and filter by canRead (A46, B16)**
 
 ```tsx
 /**
@@ -1757,11 +1757,11 @@ here rather than carrying it into the next task.
  */
 ```
 
-- [ ] **Step 3: Add the missing destination.** Farmer Health is absent from the palette today. Add it, and the per-farm drilldown.
+- [x] **Step 3: Add the missing destination.** Farmer Health is absent from the palette today. Add it, and the per-farm drilldown.
 
-- [ ] **Step 4: Resolve D4 here.** If the founder chose implement, bind Cmd-1 to /, Cmd-2 to /ops/live and Cmd-F to /farms in the same handler that owns Cmd-K and Escape. If drop, remove the badges in T10.
+- [x] **Step 4: Resolve D4 here.** If the founder chose implement, bind Cmd-1 to /, Cmd-2 to /ops/live and Cmd-F to /farms in the same handler that owns Cmd-K and Escape. If drop, remove the badges in T10.
 
-- [ ] **Step 5: Test**
+- [x] **Step 5: Test**
 
 ```tsx
 it('is not mounted for an anonymous user', () => { /* PII must not be reachable pre-auth */ });
@@ -1770,7 +1770,7 @@ it('finds a Marathi surname when the user types its Latin spelling', () => {});
 it('deep-links via the q param and forces the destination list open', () => {});
 ```
 
-- [ ] **Final step for this task: prove the console still builds**
+- [x] **Final step for this task: prove the console still builds**
 
 The "shippable at every task" invariant is asserted throughout this plan and enforced almost
 nowhere — Tasks 4, 5, 6, 7, 9, 10, 12 and 13 originally ended at "run and commit". An invariant
@@ -1783,7 +1783,49 @@ cd src/clients/admin-web && npm run build && npm run test && npm run lint
 Expected: exit code 0 on all three. If the build is red, the invariant is already broken — fix it
 here rather than carrying it into the next task.
 
-- [ ] **Step 6: Commit** — `feat(admin-web): entity-aware palette behind auth, filtered by scope`
+- [x] **Step 6: Commit** — `feat(admin-web): entity-aware palette behind auth, filtered by scope`
+
+---
+
+> **Task 13 executed 2026-08-31 (`856de09a`), plus a follow-up on the URL question.**
+>
+> **🛑 Step 1's `?q` deep link would have shipped a DEAD LINK.** Nothing anywhere in `admin-web` reads
+> `q` — `DataList` reads `search?.paramKey ?? 'search'` and `useListUrlState` defaults `draftKey` to
+> `'search'`. A palette emitting v3's `?q=` would have reviewed perfectly and done **nothing**, in
+> today's console *and* the ported one. The palette emits **`?search=`**, which is live in both:
+> `FarmsListPage.tsx:17` and `UsersPage.tsx:14` already read it and seed their input from it.
+> **No `?open=1` either** — `DataList` already treats a typed search as one of the three ways a
+> summary-first list opens, so writing the flag would be the duplicate mechanism Task 8 warned against.
+>
+> **`App.tsx:111` (Step 2 and register A46) is wrong — the mount was at line 242.** Tasks 2, 11 and 12
+> grew the file. **Task 7's `app.js:726,729` is off by three** — the generated links are at 723 and 726.
+> **`users.html:684` is mis-located**: 684 is the seed, not an open flag; that file opens its list at
+> **573**. So "the prototype's own summary-first open flag" is textually true for two of four files,
+> effect-true for a third, and points at the wrong line in the fourth.
+>
+> **Task 13's Files list is incomplete** — it names only `CommandPalette.tsx`, but the mount move *is*
+> Step 2, the security decision the task exists for, and it lives in `App.tsx`.
+>
+> **The pre-auth mutation was made to print the leak, not merely fail.** Moving the palette back
+> outside `RequireAuth` produces a red naming a farmer: `found <span … कांबळे …`. The stubbed server is
+> deliberately **hostile** — it serves a scope and farm rows to anyone who asks — so the test models a
+> stale token rather than trusting the server to be the last line of defence. It also asserts the
+> anonymous keystroke fired **zero** requests.
+>
+> **The route→module map is checked against the real route tree in `App.tsx`, not against
+> `ROUTE_GUARDS`** — importing that would have made both tests tautological.
+>
+> **DECIDED 2026-09-01 — a farm row prefers the id-only drilldown route whenever the reader can open
+> it**, falling back to `?search=<name>` only without `farmer.health`. A name in a URL lands in browser
+> history, a pasted message, a screenshot and a server access log — none covered by the permission
+> filter. The palette must not *manufacture* such links. This also collapses the doubled list.
+> **Settled without change:** people stay searchable by name and phone (that is the founder's own
+> support-loop design — a farmer calls and someone must find him in seconds); the scope-stating footer
+> wording stands; unreadable destinations are **hidden**, not greyed out.
+>
+> **D4 resolved by removal** — `Cmd-1`/`Cmd-2`/`Cmd-F` bind nothing, asserted over six presses in both
+> modifier flavours. **Baselines: 679 tests / 29 files; lint 13** (one *fewer* than baseline — the old
+> palette's `setState`-in-effect went with the rewrite).
 
 ---
 
