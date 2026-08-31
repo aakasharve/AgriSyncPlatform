@@ -114,25 +114,39 @@ jobs:
           # Catches a half-finished key rotation (new keystore, old password) in
           # seconds rather than at the end of a 20-minute build. The alias is
           # fixed by app/build.gradle.
-          keytool -list -keystore "$KS" -storepass "$KEYSTORE_PASSWORD" -alias shramsafal > /dev/null
+          #
+          # keytool writes its failure diagnostic to STDOUT, not stderr, so the
+          # earlier `> /dev/null` form silently discarded the one line that says
+          # what went wrong — leaving a bare non-zero exit and making this the
+          # only guard here without a named message. Capture it instead.
+          if ! KT_OUT=$(keytool -list -keystore "$KS" -storepass "$KEYSTORE_PASSWORD" -alias shramsafal 2>&1); then
+            echo "::error title=Keystore does not match KEYSTORE_PASSWORD::${KT_OUT}"
+            exit 1
+          fi
           echo "Keystore opens with the supplied password, and contains alias 'shramsafal'."
 
       - name: Grant Gradle execute permission
         working-directory: src/clients/mobile-web/android
         run: chmod +x gradlew
 
-      # Both artifacts come from ONE Gradle invocation so they share the compile
-      # and R8 passes — and so the APK a farmer sideloads and the AAB uploaded to
-      # Play are built from byte-identical inputs. `-q` is deliberately not used:
-      # it hides which task failed.
-      #   APK — what the pilot installs from shramsafal.in/download
-      #   AAB — what Google Play requires for a new app
-      - name: Build signed release APK + AAB
+      # The APK is built and published ALONE, before the Play bundle is even
+      # attempted. `-q` is deliberately not used: it hides which task failed.
+      #
+      # These were briefly one command (`assembleRelease bundleRelease`) with a
+      # comment claiming a bundle problem could never block the APK. That was
+      # false: no step in this file carries `if:` or `continue-on-error:`, so a
+      # failure in the shared step aborts the job and skips every APK publish
+      # step below it. `bundleRelease` had never run in this repo, and its first
+      # execution would have sat upstream of the pilot's only way to get the app.
+      #
+      # Ordering is what makes the promise true, not the comment. The bundle is
+      # built after the APK is on S3 — see "Build Play bundle" at the end.
+      - name: Build signed release APK
         working-directory: src/clients/mobile-web/android
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease bundleRelease --no-daemon
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Verify APK
         run: |
@@ -181,13 +195,27 @@ jobs:
           retention-days: 30
 
       # --- Google Play bundle -------------------------------------------------
-      # Deliberately AFTER every APK step. The APK is what a pilot farmer
-      # installs; a problem with the Play bundle must never block publishing it.
+      # Everything below runs only once the APK is already published to S3 and
+      # uploaded as an artifact. That ORDER is the guarantee: if the bundle
+      # fails, the farmer-facing APK has already shipped, and the run still goes
+      # red so the failure is visible rather than swallowed. `continue-on-error`
+      # is deliberately NOT used — it would trade that visibility away for
+      # nothing, since ordering alone already protects the APK.
+      #
+      # Gradle reuses the compile and R8 outputs from assembleRelease above, so
+      # the APK and the bundle are still built from identical inputs.
       #
       # The AAB is NOT uploaded to S3. Those are public download URLs served as
       # application/vnd.android.package-archive, and an .aab is not installable
       # on a phone — publishing one there would hand farmers a file that cannot
       # open. It goes to Play Console, by hand, from the workflow artifact.
+      - name: Build Play bundle
+        working-directory: src/clients/mobile-web/android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew bundleRelease --no-daemon
+
       - name: Verify AAB
         run: |
           AAB=src/clients/mobile-web/android/app/build/outputs/bundle/release/app-release.aab

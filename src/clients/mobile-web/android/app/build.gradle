@@ -55,6 +55,15 @@ gradle.taskGraph.whenReady { graph ->
         return
     }
 
+    // Android Studio's "Generate Signed Bundle / APK" wizard and `npx cap build
+    // android` supply signing material through AGP's injected properties, not
+    // through the env vars this guard reads. Without this the guard fires on a
+    // build that HAS valid credentials and reports them missing — the exact
+    // "message points at the wrong input" failure it exists to prevent.
+    if (project.hasProperty('android.injected.signing.store.file')) {
+        return
+    }
+
     def missing = []
     def ks = android.signingConfigs.release.storeFile
     if (ks == null || !ks.exists()) {
