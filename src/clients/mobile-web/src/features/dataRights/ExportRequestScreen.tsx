@@ -6,6 +6,7 @@
 
 import React, { useCallback, useState } from 'react';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { apiFetch } from '../../infrastructure/api/apiFetch';
 import {
     toDataRightsLocale,
     tDataRights,
@@ -20,8 +21,11 @@ interface Props {
 
 type SubmitStatus = 'idle' | 'submitting' | 'success' | 'error';
 
+// `apiFetch`, not `fetch` — see ErasureRequestScreen for the full reason. A bare
+// relative fetch reached the WebView instead of the API in the APK, and sent no
+// Authorization header to an endpoint declared .RequireAuthorization().
 async function defaultSubmit(): Promise<{ requestId: string }> {
-    const res = await fetch('/shramsafal/me/export/request', {
+    const res = await apiFetch('/shramsafal/me/export/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
     });
