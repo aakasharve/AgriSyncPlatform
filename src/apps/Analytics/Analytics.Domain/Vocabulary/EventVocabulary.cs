@@ -69,11 +69,33 @@ public static class EventVocabulary
                 RequiredProps: ["farmId", "outcome"],
                 Optional: ["cost_usd", "model"]),
 
-            // api.error fires on pre-auth pipeline failures too, where the
-            // farmId is not yet known; no required props per the ADR.
+            // 2026-08-30 (founder decision, spec 2026-08-30-error-capture-scope):
+            // an api.error MUST name itself and MUST state whether the farmer's
+            // work survived. Before this the row kept only endpoint/status/farmId
+            // — so `ShramSafal.CropCycleOverlap` travelled correctly all the way
+            // to the client and the record we kept said `500`.
+            //
+            // `workKept` is three-state: "kept" | "lost" | "unknown". Required
+            // means it must be STATED, never that it must be known — claiming
+            // "kept", or reading "lost" off a status code, violates P4.
+            //
+            // farmId stays OPTIONAL: the 2026-05-02 rationale holds for it
+            // specifically, because pre-auth failures fire before the user is
+            // known. It does not hold for the other four — a pre-auth failure
+            // still knows its endpoint, its status and whether it refused work,
+            // and names itself "Uncatalogued" when no catalogued Error produced it.
+            //
+            // The key is `statusCode`, NOT `status`. This entry listed `status`
+            // from the day it was written and nothing ever emitted or read it;
+            // the emitter has always written `statusCode`
+            // (RequestObservabilityMiddleware.cs) and three live queries read
+            // props->>'statusCode' (AdminOpsRepository.cs:99, :226,
+            // AdminFarmerHealthRepository.cs:367). The doc was wrong, not the code.
             ["api.error"] = new(
-                RequiredProps: [],
-                Optional: ["endpoint", "status", "farmId"]),
+                RequiredProps: ["endpoint", "statusCode", "errorCode", "workKept"],
+                Optional: ["farmId", "message", "appVersion",
+                           "latencyMs", "traceId",
+                           "rejectedWorkItems", "rejectedWorkReason"]),
 
             ["client.error"] = new(
                 RequiredProps: ["message"],

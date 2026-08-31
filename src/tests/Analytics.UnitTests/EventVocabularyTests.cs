@@ -44,6 +44,25 @@ public sealed class EventVocabularyTests
             "every ADR row must have a registry entry — drift here is a parity-gate failure waiting to happen");
     }
 
+    [Fact]
+    public void ApiError_requires_the_error_to_name_itself_and_state_the_work_outcome()
+    {
+        var def = EventVocabulary.Registry["api.error"];
+
+        def.RequiredProps.Should().Contain("errorCode",
+            "an error that cannot say which error it was is the defect this contract exists to prevent");
+        def.RequiredProps.Should().Contain("workKept",
+            "whether the farmer's work survived is the difference between an annoyance and a lost day");
+        def.RequiredProps.Should().Contain("statusCode",
+            "AdminOpsRepository.cs:99/:226 and AdminFarmerHealthRepository.cs:367 read "
+            + "props->>'statusCode'; this registry said 'status' for months while the emitter "
+            + "said 'statusCode'");
+        def.RequiredProps.Should().NotContain("status",
+            "nothing has ever emitted or read a key called 'status' — requiring it would have "
+            + "broken three live queries");
+        def.Optional.Should().Contain(new[] { "farmId", "message", "appVersion" });
+    }
+
     [Theory]
     [InlineData("closure.started")]
     [InlineData("ai.invocation")]
@@ -197,12 +216,21 @@ public sealed class EventVocabularyTests
     }
 
     [Fact]
-    public void Validator_Accepts_ApiError_With_Empty_Props_Bag()
+    public void Validator_Rejects_An_ApiError_That_Cannot_Name_Itself()
     {
-        // api.error has zero RequiredProps because pre-auth failures fire
-        // before farmId is known. The validator MUST accept an empty bag for
-        // it; rejecting would force pre-auth code to invent placeholder
-        // values, defeating the point.
+        // SUPERSEDES Validator_Accepts_ApiError_With_Empty_Props_Bag (2026-05-02),
+        // whose rationale was: "api.error has zero RequiredProps because pre-auth
+        // failures fire before farmId is known. Rejecting would force pre-auth
+        // code to invent placeholder values, defeating the point."
+        //
+        // That argument survives for farmId — which is exactly why farmId stays
+        // OPTIONAL. It does not extend to the other four. A pre-auth failure
+        // still knows its endpoint, its status code, and whether it refused any
+        // work; and if no catalogued Error produced it, it says so with the
+        // literal "Uncatalogued". Nothing is forced to invent anything.
+        //
+        // Reversed by founder decision 2026-08-30, spec
+        // 2026-08-30-error-capture-scope D1. ADR-2026-05-02 amended to match.
         var sut = new IngestEventsValidator();
         var cmd = new IngestEventsCommand(new[]
         {
@@ -211,7 +239,11 @@ public sealed class EventVocabularyTests
 
         var result = sut.Validate(cmd);
 
-        result.IsValid.Should().BeTrue();
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle();
+        result.Errors[0].Code.Should().Be("analytics.missing_required_prop");
+        result.Errors[0].MissingProps.Should().BeEquivalentTo(
+            new[] { "endpoint", "statusCode", "errorCode", "workKept" });
     }
 
     // -----------------------------------------------------------------
