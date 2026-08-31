@@ -71,12 +71,6 @@ public static class RequestObservabilityProps
             ["latencyMs"] = latencyMs,
             ["traceId"] = traceId,
 
-            // Duplicates the analytics.events.farm_id COLUMN deliberately: the
-            // vocabulary lists farmId as an api.error prop, and a row read out
-            // of props alone should be self-describing. The column stays
-            // authoritative — AdminFarmerHealthRepository filters on farm_id.
-            ["farmId"] = farmId,
-
             // Null on every pre-existing emit path, so existing consumers of
             // analytics.events are unaffected. Non-null means: the response
             // carried this many refused work items despite its status code.
@@ -123,6 +117,17 @@ public static class RequestObservabilityProps
         props["message"] = ErrorExplanations.For(errorCode)?.Meaning;
 
         props["appVersion"] = SanitiseAppVersion(ctx.Request.Headers["X-App-Version"].FirstOrDefault());
+
+        // BELOW the early return on purpose (2026-08-31 ruling). It duplicates
+        // the analytics.events.farm_id COLUMN deliberately, because the
+        // vocabulary lists farmId as an api.error prop and a row read out of
+        // props alone should be self-describing — but ONLY on api.error. This
+        // key sat in the base bag when it was first written, which would have
+        // silently widened api.slow and sync.mutation_rejected past the
+        // "keep exactly their current props shape" constraint they were
+        // reviewed under. The COLUMN stays authoritative for every event type
+        // — AdminFarmerHealthRepository filters on farm_id, not on this key.
+        props["farmId"] = farmId;
 
         return props;
     }

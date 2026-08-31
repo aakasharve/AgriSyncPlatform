@@ -56,8 +56,23 @@ public static class RequestObservabilityKeys
 
     /// <summary>
     /// <c>string</c> — the runtime type NAME of an exception that escaped the
-    /// endpoint, e.g. <c>NullReferenceException</c>. Set by
-    /// <c>RequestObservabilityMiddleware</c> itself on the catch path.
+    /// endpoint, e.g. <c>NullReferenceException</c>.
+    ///
+    /// <para>
+    /// <b>Nothing writes this key today, and that is deliberate — read this
+    /// before "fixing" it.</b> When it was added (2026-08-30) the intent was
+    /// that <c>RequestObservabilityMiddleware</c> would stamp it on
+    /// <c>HttpContext.Items</c>. The middleware ends up both producing AND
+    /// consuming the value inside a single call — it catches the exception and
+    /// hands the type name straight to
+    /// <c>RequestObservabilityProps.Build(..., unhandledExceptionType)</c> as a
+    /// parameter — so routing it through <c>Items</c> would be a round trip
+    /// through mutable shared state for no reader. The name is kept because it
+    /// documents the vocabulary the props bag speaks; it is NOT a seam anyone
+    /// is currently filling. If a future endpoint wants to report an exception
+    /// it handled itself, this is the key to use, and the middleware would then
+    /// need to read it.
+    /// </para>
     ///
     /// A type name is a code, so it passes the props privacy rule. The
     /// exception MESSAGE is deliberately NOT captured and must never be added

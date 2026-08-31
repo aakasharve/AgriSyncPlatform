@@ -30,6 +30,7 @@ public sealed class RequestObservabilityPropsTests
     [Fact]
     public void An_api_error_reports_the_code_the_endpoint_actually_answered()
     {
+        var farm = Guid.Parse("11111111-2222-3333-4444-555555555555");
         var ctx = Ctx("POST", "/shramsafal/logs", 409);
         ctx.Request.Headers["X-App-Version"] = "1.0.9";
         ctx.Items[RequestObservabilityKeys.ErrorCode] = "ShramSafal.CropCycleOverlap";
@@ -41,7 +42,7 @@ public sealed class RequestObservabilityPropsTests
             latencyMs: 42,
             rejectedWorkItems: null,
             rejectedWorkReason: null,
-            farmId: null,
+            farmId: farm,
             traceId: "trace-1",
             unhandledExceptionType: null);
 
@@ -49,6 +50,10 @@ public sealed class RequestObservabilityPropsTests
         Assert.Equal("1.0.9", props["appVersion"]);
         Assert.Equal("POST /shramsafal/logs", props["endpoint"]);
         Assert.Equal(409, props["statusCode"]);
+        // farmId is an api.error prop in the vocabulary, so it stays on THIS
+        // event type — the 2026-08-31 ruling narrowed it to api.error, it did
+        // not delete it.
+        Assert.Equal(farm, props["farmId"]);
         // Authored text from the explanation catalogue — never the raw
         // Error.Description, which is interpolated in several places.
         Assert.Equal(
@@ -146,6 +151,11 @@ public sealed class RequestObservabilityPropsTests
         Assert.Equal("POST /shramsafal/logs", props["endpoint"]);
         Assert.Equal(200, props["statusCode"]);
         Assert.Equal(3100L, props["latencyMs"]);
+        // 2026-08-31 ruling: farmId belongs BELOW the api.error early return.
+        // The plan's Global Constraint is that api.slow keeps EXACTLY its
+        // current props shape, and the middleware has never emitted farmId in
+        // props. Gaining a key here would be a widening nobody reviewed.
+        Assert.False(props.ContainsKey("farmId"));
     }
 
     [Fact]
@@ -162,6 +172,10 @@ public sealed class RequestObservabilityPropsTests
         Assert.False(props.ContainsKey("errorCode"));
         Assert.False(props.ContainsKey("workKept"));
         Assert.Equal(2, props["rejectedWorkItems"]);
+        // Same ruling as above: sync.mutation_rejected was deliberately
+        // separated from api.error at the type layer, and must not be widened
+        // at the props layer either.
+        Assert.False(props.ContainsKey("farmId"));
     }
 
     [Theory]
