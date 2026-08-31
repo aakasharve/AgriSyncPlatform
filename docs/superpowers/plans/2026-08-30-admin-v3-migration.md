@@ -2140,6 +2140,42 @@ cd - && dotnet test src/tests/AgriSync.ArchitectureTests/
 
 ---
 
+## 🛑 Prerequisite for the Founder Acceptance Gate — MEASURED 2026-08-31, NOT YET SOLVED
+
+**The founder cannot walk a single one of the sixteen routes on this machine today.** Measured, not
+inferred:
+
+```
+POST /user/auth/login  {8888888888 / Testuser@123}  -> 200, token issued (476 chars)
+GET  /shramsafal/admin/me/scope                     -> {"outcome":"Unauthorized",
+                                                        "scope":null,"memberships":[]}
+```
+
+**The console is behaving correctly.** `Unauthorized` with zero memberships is the fail-closed
+property `useAdminScope.ts:97-99` guarantees and Task 2 pinned — `canRead`/`canWrite`/`canExport`
+return false when scope is unresolved. `/403` is the right answer to that scope. **This is not a
+migration defect and must not be "fixed" by loosening a guard.**
+
+The cause is that the only seeded local user is a **farmer**. `PurveshDemoSeeder` creates no admin
+membership, and per this plan's own Task 25 note, `ssf.admin_users` **has never been read because its
+migration has not been run**. So there is no local path to an admin scope at all.
+
+**This blocks the acceptance gate, not the build.** Tasks 12–30 continue unaffected; every screen is
+verified by test. But the gate requires walking sixteen routes by hand, and that is impossible until
+an admin membership exists locally.
+
+**Options, to be decided before the gate — not at it:**
+1. **Seed an admin membership locally** for the existing test user. Smallest change; touches seed
+   data only; no schema, no guard, no production surface.
+2. **Run the `ssf.admin_users` migration locally only.** This plan scopes that migration OUT (Task
+   25) because running it in prod is a DB change — running it against a local database is not.
+3. **Verify against production** `admin.shramsafal.in`, where the founder already is an admin. But
+   prod is hibernated, and this branch is not deployed, so this proves the OLD console, not the new one.
+
+**Option 1 is the recommendation** — it is the only one that changes nothing outside local seed data.
+
+---
+
 ## Founder Acceptance Gate
 
 Do not proceed to deployment until the founder has verified these himself and ticked the box.
