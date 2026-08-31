@@ -10,7 +10,35 @@
  * a figure covered was never stated.
  */
 import { describe, it, expect } from 'vitest';
-import { formatWindowRange } from '../marathiDate';
+import { formatWindowRange, formatLedgerDayHead } from '../marathiDate';
+
+describe('formatLedgerDayHead — हजेरी वही column heads', () => {
+    // The server sends ISO dates. A machine date must never reach a farmer,
+    // and it would not fit a 26px column head either.
+    it('turns an ISO date into its Marathi weekday letter', () => {
+        expect(formatLedgerDayHead('2026-08-31')).toBe('सो'); // a Monday
+        expect(formatLedgerDayHead('2026-08-30')).toBe('र');  // a Sunday
+    });
+
+    // Preview/mock fixtures already hold Marathi letters; they must pass through.
+    it('returns a non-ISO label unchanged', () => {
+        expect(formatLedgerDayHead('सो')).toBe('सो');
+    });
+
+    // A blank head would silently shift every cell under it against the wrong
+    // day — worse than an ugly label.
+    it('never returns empty', () => {
+        ['2026-08-31', 'सो', 'whatever'].forEach((d) => {
+            expect(formatLedgerDayHead(d).length).toBeGreaterThan(0);
+        });
+    });
+
+    it('covers all seven days without a hole', () => {
+        const week = Array.from({ length: 7 }, (_, i) =>
+            formatLedgerDayHead(`2026-08-${String(24 + i).padStart(2, "0")}`));
+        expect(new Set(week).size).toBe(7);
+    });
+});
 
 describe('formatWindowRange', () => {
     it('collapses a range inside one month to a single month name', () => {

@@ -15,6 +15,28 @@ export const MARATHI_MONTHS = [
     'जुलै', 'ऑग', 'सप्टें', 'ऑक्टो', 'नोव्हें', 'डिसें',
 ];
 
+/**
+ * Weekday letters for the हजेरी वही column heads, indexed by `Date.getDay()`
+ * so index 0 is Sunday. NOT new copy: these are the same seven letters the
+ * labour mock has always rendered (`labourMock.ts`), moved somewhere the live
+ * register can reach them.
+ */
+export const MARATHI_WEEKDAY_LETTERS = ['र', 'सो', 'मं', 'बु', 'गु', 'शु', 'श'];
+
+/**
+ * A ledger column head. The server sends ISO dates — a machine date must never
+ * reach a farmer, and it would not fit a 26px column anyway.
+ *
+ * Anything that is not an ISO date is returned UNCHANGED, which is what keeps
+ * the preview/mock fixtures (already Marathi letters) rendering as they always
+ * have. Never blank: a column with no head would silently shift every cell
+ * under it against the wrong day.
+ */
+export function formatLedgerDayHead(day: string): string {
+    const parsed = parseIsoDate(day);
+    return parsed ? MARATHI_WEEKDAY_LETTERS[parsed.getDay()] : day;
+}
+
 /** ASCII digits to Devanagari. Non-digits pass through untouched. */
 export const toMarathiDigits = (n: number): string =>
     String(n).replace(/\d/g, (d) => '०१२३४५६७८९'[Number(d)]);

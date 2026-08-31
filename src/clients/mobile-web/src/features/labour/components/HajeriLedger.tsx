@@ -11,6 +11,7 @@ import { Check, BookText } from 'lucide-react';
 import type { LabourData, PresenceStatus } from '../labourMock';
 import { Avatar, EmptyState } from './LabourUiKit';
 import { isReadableWeekRange } from '../weekLabel';
+import { formatLedgerDayHead } from '../marathiDate';
 
 /**
  * Task 5 (spec: 2026-08-28-labour-v2-release-1, P4, founder Global
@@ -86,7 +87,11 @@ const HajeriLedger: React.FC<{ data: LabourData; onToast: (m: string) => void }>
             <div className="overflow-x-auto rounded-[18px] border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
                 <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
                     <span className="w-[82px] flex-none text-[12.5px] font-extrabold text-slate-700">दिवस</span>
-                    <span className="flex flex-1 gap-1.5">{L.days.map((d) => <span key={d} className="flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">{d}</span>)}</span>
+                    {/* Keyed by INDEX, not by the label. The server sends one entry per day it
+                        has a record for, so a month-long window repeats weekday letters —
+                        `key={d}` collided and React dropped columns, silently shifting the
+                        cells below against the wrong days. */}
+                    <span className="flex flex-1 gap-1.5">{L.days.map((d, i) => <span key={`${d}-${i}`} className="flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">{formatLedgerDayHead(d)}</span>)}</span>
                     <span className="w-9 flex-none text-center text-[10px] font-bold text-slate-400">दिवस</span>
                 </div>
                 {L.rows.map((r) => (
