@@ -60,8 +60,8 @@ public static class RequestObservabilityProps
             ["endpoint"] = $"{ctx.Request.Method} {ctx.Request.Path}",
 
             // NOT "status". Three live SQL readers depend on this exact name —
-            // AdminOpsRepository.cs:99, AdminOpsRepository.cs:226 and
-            // AdminFarmerHealthRepository.cs:367 — and Postgres answers an
+            // AdminOpsRepository.GetRecentErrorsAsync, its GetErrorsPagedAsync,
+            // and AdminFarmerHealthRepository — and Postgres answers an
             // absent key with NULL rather than an error, so a rename would
             // degrade the admin console silently. The vocabulary's Optional
             // list said "status" for months while the emitter said

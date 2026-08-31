@@ -54,7 +54,7 @@ public sealed class EventVocabularyTests
         def.RequiredProps.Should().Contain("workKept",
             "whether the farmer's work survived is the difference between an annoyance and a lost day");
         def.RequiredProps.Should().Contain("statusCode",
-            "AdminOpsRepository.cs:99/:226 and AdminFarmerHealthRepository.cs:367 read "
+            "AdminOpsRepository and AdminFarmerHealthRepository read "
             + "props->>'statusCode'; this registry said 'status' for months while the emitter "
             + "said 'statusCode'");
         def.RequiredProps.Should().NotContain("status",

@@ -69,11 +69,13 @@ public sealed class RequestObservabilityPropsTests
         var props = RequestObservabilityProps.Build(
             ctx, AnalyticsEventType.ApiError, 500, 10, null, null, null, "t", null);
 
-        // AdminOpsRepository.cs:99, AdminOpsRepository.cs:226 and
-        // AdminFarmerHealthRepository.cs:367 all read props->>'statusCode'.
-        // On an absent key Postgres yields NULL, not an error, and both
-        // repositories swallow — so a rename here would degrade the admin
-        // console silently. Renaming needs its own plan and a reader migration.
+        // AdminOpsRepository.GetRecentErrorsAsync, its GetErrorsPagedAsync,
+        // and AdminFarmerHealthRepository all read props->>'statusCode'.
+        // On an absent key Postgres yields NULL, not an error, so a rename
+        // here would degrade the admin console. AdminOpsRepository now LOGS
+        // that failure (2026-08-31); AdminFarmerHealthRepository still has ten
+        // bare `catch { /* graceful */ }` blocks and stays silent. Renaming
+        // needs its own plan and a reader migration.
         Assert.True(props.ContainsKey("statusCode"));
         Assert.False(props.ContainsKey("status"));
     }

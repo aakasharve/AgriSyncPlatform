@@ -88,9 +88,10 @@ public static class EventVocabulary
             // The key is `statusCode`, NOT `status`. This entry listed `status`
             // from the day it was written and nothing ever emitted or read it;
             // the emitter has always written `statusCode`
-            // (RequestObservabilityProps.cs:69) and three live queries read
-            // props->>'statusCode' (AdminOpsRepository.cs:99, :226,
-            // AdminFarmerHealthRepository.cs:367). The doc was wrong, not the code.
+            // (RequestObservabilityProps.Build) and three live queries read
+            // props->>'statusCode' (AdminOpsRepository.GetRecentErrorsAsync,
+            // its GetErrorsPagedAsync, and AdminFarmerHealthRepository).
+            // The doc was wrong, not the code.
             ["api.error"] = new(
                 RequiredProps: ["endpoint", "statusCode", "errorCode", "workKept"],
                 Optional: ["farmId", "message", "appVersion",
