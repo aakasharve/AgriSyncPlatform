@@ -95,6 +95,33 @@ const LabourReview: React.FC<LabourReviewProps> = ({ labourEntries, totalWorkerC
                                     : `${count != null ? count : UNKNOWN} workers`}
                             </span>
                         </div>
+
+                        {/* FOUNDER RULING 2026-08-31 — "names marked here means
+                            attendance + identity recorded". A count alone is a
+                            headcount; the names are what make it हजेरी. Each is
+                            rendered EXACTLY as spoken — never normalised,
+                            title-cased or reordered, because the farmer has to
+                            recognise his own words to confirm them.
+
+                            Absent when nobody was named, which is a complete
+                            record and not a gap (P9): "चार लोक आले" states four
+                            people and no identities, and an empty row here would
+                            invite one to be invented. Names are NEVER a
+                            headcount either — two names beside `count: 8` means
+                            eight worked, two of whom were named. */}
+                        {(entry.workerNames?.length ?? 0) > 0 && (
+                            <div className="mt-2.5 flex flex-wrap gap-1.5" data-testid="labour-review-worker-names">
+                                {entry.workerNames!.map((workerName, nameIndex) => (
+                                    <span
+                                        key={`${workerName}-${nameIndex}`}
+                                        className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[13px] font-bold text-stone-800"
+                                        style={{ fontFamily: MARATHI_BODY }}
+                                    >
+                                        {workerName}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                         {entry.provenanceVerified === false && (entry.sourceText || entry.systemInterpretation) && (
                             <div
                                 data-testid="provenance-unverified-flag"

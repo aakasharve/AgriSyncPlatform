@@ -81,7 +81,9 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
                        - emit exactly ONE labour entry with:
                            type: "HIRED"
                            count: how many people were named (three names => 3)
-                           notes: the names exactly as spoken, comma separated
+                           workerNames: the names as a JSON array of strings, each exactly
+                                        as spoken ["संतु रोकडे", "चंदू रोकडे", "काका"]
+                           notes: the same names comma separated, for readers that show text
                            sourceText: the phrase the names came from
                        - OMIT `activity` entirely when no task was stated. Never invent one,
                          and never guess from the crop or the season.
@@ -175,7 +177,7 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
                          "dayOutcome": "WORK_RECORDED|DISTURBANCE_RECORDED|NO_WORK_PLANNED|IRRELEVANT_INPUT",
                          "cropActivities": [],
                          "irrigation": [],
-                         "labour": [],
+                         "labour": [],   // each entry MAY carry workerNames: ["name", ...]
                          "inputs": [],
                          "machinery": [],
                          "activityExpenses": [],

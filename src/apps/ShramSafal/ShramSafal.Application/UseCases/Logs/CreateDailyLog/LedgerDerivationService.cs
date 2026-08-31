@@ -346,7 +346,18 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                     // Descriptive only (Task 2.3) — never touch money above.
                     shift: LabourAssignmentFactory.MapLabourShift(ReadString(item, "shift")),
                     task: ReadTrimmedString(item, "activity"),
-                    workerNames: ReadStringArray(item, "whoWorked"),
+                    // FOUNDER RULING 2026-08-31 — "names marked here means
+                    // attendance + identity recorded". This reader existed and
+                    // had never once received anything: it read "whoWorked",
+                    // which the CLIENT contract defines as an ENUM
+                    // (OWNER|OPERATOR|HIRED_LABOUR|UNKNOWN), and the prompt
+                    // never emitted it in any shape. ReadStringArray on a
+                    // string returns null, so WorkerNamesJson defaulted to "[]"
+                    // for every labour row ever written. The prompt now emits
+                    // an unambiguous `workerNames` array; `whoWorked` stays as a
+                    // fallback only so an older stored AiJob still resolves the
+                    // same way it did (namely: to null).
+                    workerNames: ReadStringArray(item, "workerNames") ?? ReadStringArray(item, "whoWorked"),
                     // wave-3.12 — how sure he was of the COST. Keyed on "totalCost", the
                     // sibling number it qualifies, so a farmer vague about the wage and
                     // exact about the dose is recorded as exactly that.

@@ -462,6 +462,21 @@ export const LabourEventSchema = z.object({
     notes: z.string().optional(),
     detectedCrop: z.string().optional(),
     whoWorked: LabourWhoWorkedSchema.optional(),
+    /**
+     * FOUNDER RULING 2026-08-31 — the people named as present, each exactly
+     * as spoken. "names marked here means attendance + identity recorded."
+     *
+     * Distinct from `whoWorked`, which is an ENUM describing the KIND of
+     * labour (owner / operator / hired). The server had a names reader
+     * pointed at `whoWorked` that could never fire because of exactly that
+     * collision; this field is unambiguous.
+     *
+     * Declared here so Zod does not strip it — an object schema drops
+     * unknown keys, which would leave the confirm screen with a count and
+     * no names to show. Persistence is independent: the server derives from
+     * its own stored parse, not from this round-trip.
+     */
+    workerNames: z.array(z.string()).optional(),
     activity: z.string().optional(),
     targetPlotName: z.string().optional(),
     // Track B Wave-2 (B2.4) — richer labour capture (optional, back-compat; legacy fields retained)

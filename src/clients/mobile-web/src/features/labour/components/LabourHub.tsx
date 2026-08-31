@@ -178,6 +178,40 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
                                 <span className="block font-mono text-[20px] font-extrabold text-orange-700">{formatCurrency(labour.totalCost)}</span>
                             </span>
                         </div>
+                        {/* FOUNDER RULING 2026-08-31 — the card showed "४ मजूर"
+                            and no names. His words: "names marked here means
+                            attendance + identity recorded" — a count is a
+                            headcount, the names are what make it हजेरी.
+
+                            Read off `labour.events`, the same raw entries
+                            reflect reads, so the two screens can never disagree
+                            about who was named. Exactly as spoken: never
+                            normalised or reordered.
+
+                            Renders nothing when nobody was named — a complete
+                            record, not a gap (P9) — and is never a headcount:
+                            two names beside four मजूर means four came, two of
+                            whom he named. */}
+                        {(() => {
+                            const spokenNames = labour.events.flatMap((event) => event.workerNames ?? []);
+                            if (spokenNames.length === 0) return null;
+                            return (
+                                <div
+                                    data-testid="labour-just-logged-worker-names"
+                                    className="mt-2.5 flex flex-wrap gap-1.5 pl-[56px]"
+                                >
+                                    {spokenNames.map((workerName, nameIndex) => (
+                                        <span
+                                            key={`${workerName}-${nameIndex}`}
+                                            className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[14px] font-bold text-stone-800"
+                                        >
+                                            {workerName}
+                                        </span>
+                                    ))}
+                                </div>
+                            );
+                        })()}
+
                         <div className="mt-2.5 space-y-1.5 pl-[56px] text-[16px] text-stone-600">
                             {labour.maleCount > 0 && (
                                 <div className="flex items-center justify-between">
