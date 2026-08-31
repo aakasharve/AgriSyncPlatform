@@ -157,16 +157,55 @@ jobs:
         env:
           VITE_AGRISYNC_API_URL: "https://api.shramsafal.in"
 
+  # Admin console characterisation suite. 118 tests that pin the admin
+  # console's INVISIBLE machinery before the v3 port rewrites all 43 .tsx
+  # files: whether one organisation's permissions can be served to another,
+  # whether entitlements fail CLOSED while scope is still resolving, whether
+  # a hard refresh on a guarded deep link bounces a legitimate user to /403,
+  # and whether the next user in the same browser tab inherits the previous
+  # user's grants. None of those are visible in a screenshot, so nothing but
+  # this job can notice when the port breaks one.
+  #
+  # It lives HERE, in the required gate, and deliberately NOT in eslint.yml:
+  # that workflow is not a required check, and DEPLOYMENT_TRACKER.md records
+  # admin-web-lint going red and being merged past with founder approval. A
+  # promise checked by a job nobody has to pass is not a promise.
+  admin-web-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/clients/admin-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: src/clients/admin-web/package-lock.json
+      # Tolerant install, mirroring admin-web-lint (eslint.yml:110-119) so the
+      # two admin-web jobs can never disagree about whether admin-web installs.
+      # Reason recorded there: the lockfile is generated on developer Windows
+      # machines and `npm ci` validates it BEFORE omitting optional deps, so the
+      # Linux-only @emnapi/lightningcss native fast-paths fail `npm ci` even
+      # with --omit=optional. Same pattern as sync-contract in `frontend` above.
+      - run: npm install --no-audit --no-fund
+      - name: Unit tests (vitest)
+        run: npm run test
+
   gate:
     name: gate
-    needs: [backend, frontend]
+    needs: [backend, frontend, admin-web-test]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Verify all gate jobs passed
         run: |
-          echo "backend=${{ needs.backend.result }}  frontend=${{ needs.frontend.result }}"
-          if [ "${{ needs.backend.result }}" != "success" ] || [ "${{ needs.frontend.result }}" != "success" ]; then
+          echo "backend=${{ needs.backend.result }}  frontend=${{ needs.frontend.result }}  admin-web-test=${{ needs.admin-web-test.result }}"
+          # Every job in `needs` must ALSO be named in this condition. The job
+          # is `if: always()`, so it runs even when a dependency failed and its
+          # own exit code is decided entirely by this script — a job added to
+          # `needs` but omitted here would be decorative.
+          if [ "${{ needs.backend.result }}" != "success" ] || [ "${{ needs.frontend.result }}" != "success" ] || [ "${{ needs.admin-web-test.result }}" != "success" ]; then
             echo "::error::CI Gate failed — not safe to merge."
             exit 1
           fi
