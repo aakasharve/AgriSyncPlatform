@@ -94,21 +94,92 @@ export interface PillarMeta {
   measurable: boolean;
   /** Why it cannot be measured — rendered, not just commented. */
   why?: string;
+  /**
+   * FALSE for the three pillars that join `USING (farm_id)` with no week
+   * (property 4), so the same figure is written into every week of the trend.
+   * The drilldown says so beside the bar; a reader comparing two weeks
+   * otherwise reads a flat line as stability rather than as an artefact.
+   */
+  weekly: boolean;
+  /**
+   * WHAT THE PILLAR IS, taken from the matview arithmetic rather than from
+   * the design brief. Added by Task 23, which needed a true sentence per bar
+   * for the drilldown's expandable rows and found that four of the six
+   * sentences the card carried were wrong about the formula:
+   *
+   *   Trigger fit        was "the right reminder at the right time" — it is
+   *                      schedule compliance, which is not a reminder at all.
+   *   Proof              was "share of closures with evidence, full credit at
+   *                      80%" — it is a 60/40 blend of two different figures
+   *                      and full credit needs both at maximum.
+   *   Repeat             was "consecutive-day closure streak" — it counts
+   *                      DISTINCT days in the last seven; nothing requires
+   *                      them to be consecutive.
+   *   Action simplicity  printed the literal placeholder "N seconds" at the
+   *                      reader.
+   *
+   * They live here, beside the max, because a weight and its meaning drifting
+   * apart is how the card came to describe a formula the server does not run.
+   */
+  explain: string;
 }
 
 export const PILLARS: readonly PillarMeta[] = [
-  { key: 'triggerFit', label: 'Trigger fit', max: 10, measurable: true },
-  { key: 'actionSimplicity', label: 'Action simplicity', max: 20, measurable: true },
-  { key: 'proof', label: 'Proof', max: 25, measurable: true },
-  { key: 'reward', label: 'Reward', max: 10, measurable: true },
+  {
+    key: 'triggerFit',
+    label: 'Trigger fit',
+    max: 10,
+    measurable: true,
+    weekly: true,
+    explain:
+      'Schedule compliance for the week, from mis.schedule_compliance_weekly — ten points times the compliance percentage. A farm with no compliance row for the week scores 0 here rather than dropping out.',
+  },
+  {
+    key: 'actionSimplicity',
+    label: 'Action simplicity',
+    max: 20,
+    measurable: true,
+    weekly: false,
+    explain:
+      'Median closure duration: full credit at 30 seconds or faster, nothing at 90 seconds or slower, straight-line in between. A farm with no measured median is scored as if every closure took the full 90 seconds.',
+  },
+  {
+    key: 'proof',
+    label: 'Proof',
+    max: 25,
+    measurable: true,
+    weekly: true,
+    explain:
+      'Two parts, not one: weekly verified farm-days out of seven carries 60 per cent, and the share of submitted closures with a proof attached carries 40 per cent. Full credit needs both at maximum.',
+  },
+  {
+    key: 'reward',
+    label: 'Reward',
+    max: 10,
+    measurable: true,
+    weekly: true,
+    explain:
+      'Closure summaries viewed divided by closures submitted, in that week. It measures whether the farmer looked at their own outcome, not whether the outcome was good.',
+  },
   {
     key: 'investment',
     label: 'Investment',
     max: 10,
     measurable: false,
-    why: 'The scorer has never computed this pillar. Its input is a placeholder that returns 0 for every farm until the worker-transcript store is built (T-DWC-E-WTL-TRANSCRIPT-STORE), so the 0 the server sends is the placeholder, not a reading — and every farm "fails" it by construction.',
+    weekly: false,
+    why: 'The scorer has never computed this pillar. Its input is a placeholder CTE that returns 0 for every farm — the follow-up migration that was to replace it with the real worker join was never written — so the 0 the server sends is the placeholder, not a reading, and every farm "fails" it by construction.',
+    explain:
+      'Intended as voluntary log depth — worker reuse across logs. The matview still carries the placeholder CTE, so nothing is computed and no farm has ever scored a point here.',
   },
-  { key: 'repeat', label: 'Repeat', max: 25, measurable: true },
+  {
+    key: 'repeat',
+    label: 'Repeat',
+    max: 25,
+    measurable: true,
+    weekly: false,
+    explain:
+      'Distinct days in the last SEVEN carrying a submitted closure, out of seven. It is a count of days, not a consecutive streak — six days on and one off scores the same as any other six.',
+  },
 ] as const;
 
 /** The axis, in the shape `fillAxis` wants. Order is fixed and never sorted. */

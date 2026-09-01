@@ -1,36 +1,59 @@
-import { Sparkles } from 'lucide-react';
+import { NotMeasured, NotMeasuredPanel } from '@/components/state';
+import { fmt, rate01 } from '@/lib/format';
+import { aiRatesAreReadings } from '../drilldown';
 import type { FarmerHealthAiHealthDto } from '../farmer-health.types';
+import { OpsPanel } from './OpsPanel';
 
 /**
- * AiHealthBlock — Mode A Band 5 (UI brief §4 Band 5; gated by ops:read).
+ * BAND 5b — AI invocation health over fourteen days. PRIVILEGED: the server
+ * only fills this block for a caller holding `ops.voice`
+ * (`AdminFarmerHealthRepository.cs:83-85`).
  *
- * Surfaces the farmer's 14-day AI invocation health:
- *   - voice parse success rate
- *   - receipt parse success rate
- *   - total invocations
+ * ── 🔴 THE FABRICATION HERE POINTS THE OTHER WAY FROM A38 ────────────────
+ * A38 registers the rule "null, NaN or undefined becomes an em dash; clamp
+ * 0..1; never a fabricated 0%". That rule is kept — `rate01` is the same
+ * sanitisation, lifted into `@/lib/format` by Task 4 and imported rather than
+ * re-implemented.
  *
- * Visually distinct per C8 — slate-tinted left border, matching
- * SyncStateBlock so the two ops sections read as a pair.
+ * But the fabrication this block actually ships is a **100%**, and it is
+ * worse, because a perfect score is the reading nobody questions:
+ *
+ *   `GetAiHealthAsync` returns `(1m, 1m, 0)` from its `catch` (`:423`), and
+ *   its SQL COALESCEs each ratio to `1.0` when the denominator is zero
+ *   (`:400,:406`).
+ *
+ * So "voice parse 100%" is what a broken query looks like, what an empty
+ * fourteen-day window looks like, and what a genuinely flawless farm looks
+ * like — three different facts, one figure. With no invocations there is
+ * nothing to take a ratio OF, so neither rate is a reading and neither is
+ * drawn. `aiRatesAreReadings` is the single predicate that decides it.
+ *
+ * What survives even when there ARE invocations: `invocationCount14d` counts
+ * every `ai.invocation` event, while each rate's denominator counts only the
+ * events tagged with that provider. A farm with receipt invocations and no
+ * voice invocations therefore still shows voice at 100%. That cannot be
+ * separated from the client, and it is said in words under the figures rather
+ * than left for a reader to discover.
+ *
+ * C7 is the tone ramp: a good rate tops out at `--color-pillar-good`, the
+ * teal, and never reaches a bright green. C8 — the slate inset edge — belongs
+ * to `OpsPanel`.
  */
 
-function pct(rate?: number): { label: string; tone: 'good' | 'warn' | 'bad' | 'none' } {
-  if (rate === undefined || rate === null || Number.isNaN(rate)) {
-    return { label: '—', tone: 'none' };
-  }
-  const r = Math.max(0, Math.min(1, rate));
-  const label = `${(r * 100).toFixed(0)}%`;
-  if (r >= 0.9) return { label, tone: 'good' };
-  if (r >= 0.7) return { label, tone: 'warn' };
-  return { label, tone: 'bad' };
+type Tone = 'good' | 'warn' | 'bad';
+
+function toneFor(rate: number): Tone {
+  if (rate >= 0.9) return 'good';
+  if (rate >= 0.7) return 'warn';
+  return 'bad';
 }
 
-/* `none` is an honesty state, so it takes --color-text-3 like every other
-   honesty state on the console — not a muted grey chosen here. */
-const TONE_COLOR: Record<'good' | 'warn' | 'bad' | 'none', string> = {
-  good: 'var(--color-pillar-good)',  // teal — never bright green per C7
+/* Text colour, so the C7 teal — never a bright green — is what a healthy
+   reading reaches. Tokens only; the values live in `globals.css`. */
+const TONE_COLOR: Record<Tone, string> = {
+  good: 'var(--color-pillar-good)',
   warn: 'var(--color-amber)',
-  bad:  'var(--color-red)',
-  none: 'var(--color-text-3)',
+  bad: 'var(--color-red)',
 };
 
 export interface AiHealthBlockProps {
@@ -38,60 +61,86 @@ export interface AiHealthBlockProps {
 }
 
 export function AiHealthBlock({ health }: AiHealthBlockProps) {
-  const voice = pct(health?.voiceParseSuccessRate14d);
-  const receipt = pct(health?.receiptParseSuccessRate14d);
-  const invocations = health?.invocationCount14d ?? 0;
+  if (!health) {
+    return (
+      <OpsPanel title="AI health (14 days)" grant="ops.voice">
+        <NotMeasuredPanel
+          title="No AI health block was sent for this farm"
+          why="Your role includes the grant this block needs, so an absent block is the server declining to assemble it rather than a farm with no AI activity."
+        />
+      </OpsPanel>
+    );
+  }
+
+  const measured = aiRatesAreReadings(health);
+  const invocations = fmt.num(health.invocationCount14d);
 
   return (
-    <section
-      className="glass-panel p-5"
-      style={{ boxShadow: 'inset 4px 0 0 0 var(--color-ops-inset)' }}
-      aria-label="AI health (ops:read)"
-    >
-      <div className="mb-3 flex items-center gap-2">
-        <span className="grid h-6 w-6 place-items-center rounded-md bg-surface-sidebar text-text-secondary">
-          <Sparkles size={13} strokeWidth={2.4} />
-        </span>
-        <h3 className="text-base font-extrabold text-text-primary">AI health (14d)</h3>
-        <span className="ml-auto text-[10px] uppercase tracking-[0.08em] text-text-muted">
-          ops:read
-        </span>
-      </div>
-
-      {!health ? (
-        <div className="rounded-md border border-dashed border-surface-border px-3 py-2 text-[12px] text-text-muted">
-          No AI invocations recorded for this farm in the last 14 days.
+    <OpsPanel title="AI health (14 days)" grant="ops.voice">
+      <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Rate label="Voice parse" rate={health.voiceParseSuccessRate14d} measured={measured} />
+        <Rate label="Receipt parse" rate={health.receiptParseSuccessRate14d} measured={measured} />
+        <div>
+          <dt className="text-[13px] text-text-2">Invocations</dt>
+          <dd className="mt-0.5 text-[18px] font-semibold tabular-nums text-text-1">
+            {invocations === null ? (
+              <NotMeasured state="unmeasured" why="The invocation count did not arrive as a number." />
+            ) : (
+              invocations
+            )}
+          </dd>
+          <p className="mt-0.5 text-[13px] text-text-3">
+            Every <code>ai.invocation</code> event on this farm in fourteen days.
+          </p>
         </div>
-      ) : (
-        <dl className="grid grid-cols-3 gap-3 text-[12px]">
-          <div>
-            <dt className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Voice parse</dt>
-            <dd
-              className="mt-0.5 font-mono text-[18px] font-extrabold tabular-nums"
-              style={{ color: TONE_COLOR[voice.tone] }}
-              aria-label={`Voice parse success rate ${voice.label}`}
-            >
-              {voice.label}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Receipt parse</dt>
-            <dd
-              className="mt-0.5 font-mono text-[18px] font-extrabold tabular-nums"
-              style={{ color: TONE_COLOR[receipt.tone] }}
-              aria-label={`Receipt parse success rate ${receipt.label}`}
-            >
-              {receipt.label}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-[10px] uppercase tracking-[0.08em] text-text-muted">Invocations</dt>
-            <dd className="mt-0.5 font-mono text-[18px] font-extrabold tabular-nums text-text-primary">
-              {invocations}
-            </dd>
-          </div>
-        </dl>
-      )}
-    </section>
+      </dl>
+
+      <p className="mt-3 text-[13px] text-text-3">
+        {measured ? (
+          <>
+            Each rate divides successes by invocations <b>of that provider</b>, while the count
+            beside them is every provider. A farm with receipt invocations and no voice ones still
+            shows voice at 100 per cent, because the server substitutes 1.0 for an empty
+            denominator — so a rate of exactly 100 per cent is worth checking against the count
+            before it is quoted.
+          </>
+        ) : (
+          <>
+            Nothing was invoked in the window, so there is no ratio to take. The server would send
+            100 per cent for both rates here — it substitutes 1.0 for an empty denominator, and
+            answers a failed query with the same pair — which is why neither is drawn.
+          </>
+        )}
+      </p>
+    </OpsPanel>
+  );
+}
+
+function Rate({ label, rate, measured }: { label: string; rate: number; measured: boolean }) {
+  const clamped = rate01(rate);
+  const printed = measured ? fmt.ratePct(rate) : null;
+
+  return (
+    <div>
+      <dt className="text-[13px] text-text-2">{label}</dt>
+      <dd
+        data-rate={label}
+        className="mt-0.5 text-[18px] font-semibold tabular-nums"
+        style={printed !== null && clamped !== null ? { color: TONE_COLOR[toneFor(clamped)] } : undefined}
+      >
+        {printed === null ? (
+          <NotMeasured
+            state={measured ? 'unmeasured' : 'never'}
+            why={
+              measured
+                ? 'This rate did not arrive as a number.'
+                : 'There were no AI invocations in the window, so there is no ratio to take. The 100% the server sends here is a substitution, not a measurement.'
+            }
+          />
+        ) : (
+          printed
+        )}
+      </dd>
+    </div>
   );
 }

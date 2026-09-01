@@ -1,86 +1,116 @@
-import { format, parseISO } from 'date-fns';
-import { Users } from 'lucide-react';
+import { NotMeasured, NotMeasuredPanel } from '@/components/state';
+import { PersonName } from '@/components/ui/PersonName';
+import { DATE_FORMATS, fmt } from '@/lib/format';
+import { WORKER_DISCLAIMER, WORKER_LIMIT, realName } from '../drilldown';
 import type { FarmerHealthWorkerSummaryDto } from '../farmer-health.types';
-import { EmptyState } from './EmptyAndErrorStates';
 
 /**
- * WorkerSummaryList — Mode A Band 4 (UI brief §4 Band 4).
+ * BAND 4 — WTL v0. The workers seen on this farm, and NOTHING ELSE.
  *
- * WTL v0 surface — adheres to constraint C6 / plan §1.6 red-line.
- * Renders ONLY:
- *   - worker name (Marathi, 'Noto Sans Devanagari')
- *   - assignment count (DM Sans, tabular)
- *   - first-seen date ("since {date}")
+ * ── 🛑 THE RED LINE, CARRIED FROM THE SOURCE ─────────────────────────────
+ * **DO NOT add fields here without a new task. No reputation, no dispute,
+ * no payout, no skill, no score.**
  *
- * **DO NOT add fields here without a new task.** No reputation, no dispute,
- * no payout, no skill, no score. The disclaimer is mandatory copy — sets
- * the right expectation for admin staff who might assume more.
+ * That sentence is the whole reason this component is three columns wide and
+ * looks unfinished. It is not unfinished. Worker names are captured PASSIVELY
+ * from voice transcripts — no worker ever asked to be listed here, and no
+ * worker can see or correct what is written about them — so every field added
+ * to this panel is a fact recorded about a person who has no standing in the
+ * system that records it. The founder's line is that worker names ARE the
+ * product and that nothing may accrete around them without a decision; a
+ * redesign that reads the disclaimer as copy and "fills out" a thin-looking
+ * list crosses it in one commit and looks like an improvement in review.
+ *
+ * Renders exactly three things per row: the name (through `PersonName`, so
+ * Marathi resolves to Noto Sans Devanagari and a withheld name never prints a
+ * marker), the count, and the first-seen date.
+ *
+ * ── The disclaimer is MANDATORY COPY (A35), byte for byte ────────────────
+ * `WORKER_DISCLAIMER` lives in `../drilldown` and is asserted
+ * character-for-character in this screen's test. It sets the expectation for
+ * an admin who would otherwise assume the count means something it does not.
+ *
+ * ── A34 dies here ────────────────────────────────────────────────────────
+ * This file held the LAST of the four copy-pasted `HAS_DEVANAGARI` + `fontFor`
+ * pairs (`:20-26`). Task 6 built `PersonName` and deliberately gave it no call
+ * sites; Task 22 took two, and this is the fourth and last.
+ *
+ * ── What the list is NOT ─────────────────────────────────────────────────
+ * The server sends at most five rows, ordered by `assignment_count DESC`
+ * (`AdminFarmerHealthRepository.cs:296-303`). Five is a TOP FIVE, not a
+ * roster, and a panel that shows five names beside a count labelled with the
+ * total would read as one. The heading says top five and the caption says what
+ * the count is a count of.
  */
-
-const HAS_DEVANAGARI = /[ऀ-ॿ]/;
-
-function fontFor(name: string): string {
-  return HAS_DEVANAGARI.test(name)
-    ? "'Noto Sans Devanagari', sans-serif"
-    : "'DM Sans', sans-serif";
-}
-
-function fmtSince(iso: string): string {
-  try { return format(parseISO(iso), 'dd MMM yyyy'); }
-  catch { return '—'; }
-}
 
 export interface WorkerSummaryListProps {
   workers: FarmerHealthWorkerSummaryDto[];
 }
 
 export function WorkerSummaryList({ workers }: WorkerSummaryListProps) {
+  const rows = workers.slice(0, WORKER_LIMIT);
+
   return (
-    <section className="glass-panel p-5" aria-label="Workers seen on this farm">
-      <div className="mb-3 flex items-center gap-2">
-        <span className="grid h-6 w-6 place-items-center rounded-md bg-surface-sidebar text-text-secondary">
-          <Users size={13} strokeWidth={2.4} />
-        </span>
-        <h3 className="text-base font-extrabold text-text-primary">Workers seen on this farm</h3>
-        <span className="ml-auto rounded-md bg-surface-sidebar px-2 py-0.5 font-mono text-[11px] font-extrabold tabular-nums text-text-secondary">
-          {workers.length}
-        </span>
+    <section
+      data-band="workers"
+      className="rounded-panel bg-page p-5 shadow-surface"
+      aria-label="Workers seen on this farm"
+    >
+      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-[15px] font-semibold text-text-1">
+          Workers seen on this farm{rows.length > 0 && <> — top {fmt.num(rows.length)}</>}
+        </h3>
       </div>
 
-      {workers.length === 0 ? (
-        <EmptyState
-          message="No workers captured yet."
-          hint="Workers appear here once their names are mentioned in voice logs."
+      {rows.length === 0 ? (
+        /*
+          NOT "No workers captured yet." — that sentence promises a pipeline
+          that is running and has found nobody. `GetTopWorkersAsync` ends in a
+          bare `catch { }` (`AdminFarmerHealthRepository.cs:320`), so a missing
+          table, a revoked grant and a farm whose logs named nobody all arrive
+          here as the same empty array with HTTP 200.
+        */
+        <NotMeasuredPanel
+          title="No worker names on this farm"
+          why="Names are captured passively from voice transcripts, so an empty list can mean the logs named nobody, that no voice log has been parsed for this farm, or that the query failed — this read answers its own exception with an empty result, and the response carries nothing that separates the three."
         />
       ) : (
-        <ul className="flex flex-col divide-y divide-row-divider" aria-label="Worker list">
-          {workers.slice(0, 5).map((w) => (
-            <li key={w.workerId} className="flex items-center gap-3 py-2.5">
-              <div className="min-w-0 flex-1">
-                <div
-                  className="truncate text-sm font-semibold text-text-primary"
-                  style={{ fontFamily: fontFor(w.name) }}
+        <ul className="flex flex-col divide-y divide-line" aria-label="Worker list">
+          {rows.map((w) => {
+            const since = fmt.date(w.firstSeenUtc, DATE_FORMATS.workerSince);
+            return (
+              <li key={w.workerId} className="flex items-center gap-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <PersonName
+                    name={realName(w.name)}
+                    className="block truncate text-[15px] font-semibold text-text-1"
+                  />
+                  <div className="text-[13px] text-text-3">
+                    {since === null ? (
+                      <NotMeasured
+                        state="unmeasured"
+                        why="The first-seen timestamp on this worker row did not parse."
+                      />
+                    ) : (
+                      <>since {since}</>
+                    )}
+                  </div>
+                </div>
+                <span
+                  className="shrink-0 rounded-chip bg-wash px-2 py-0.5 text-[13px] font-semibold tabular-nums text-text-1"
+                  aria-label={`${w.assignmentCount} mentions`}
                 >
-                  {w.name || '—'}
-                </div>
-                <div className="font-mono text-[11px] text-text-muted tabular-nums">
-                  since {fmtSince(w.firstSeenUtc)}
-                </div>
-              </div>
-              <span
-                className="rounded-md bg-surface-sidebar px-2 py-0.5 font-mono text-[12px] font-extrabold tabular-nums text-text-primary"
-                aria-label={`${w.assignmentCount} assignments`}
-                title={`Mentioned in ${w.assignmentCount} voice log${w.assignmentCount === 1 ? '' : 's'}`}
-              >
-                {w.assignmentCount}×
-              </span>
-            </li>
-          ))}
+                  {fmt.num(w.assignmentCount)}×
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
 
-      <p className="mt-3 text-[11px] italic leading-snug text-text-muted">
-        (captured automatically from voice logs; reputation tracking not yet built)
+      <p className="mt-3 text-[13px] leading-snug text-text-3">
+        The count is how many times this name was picked out of a voice log on this farm — not
+        shifts, not days worked and not payments. {WORKER_DISCLAIMER}
       </p>
     </section>
   );

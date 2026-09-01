@@ -235,6 +235,11 @@ describe('DATE_FORMATS matches the screens it claims to describe (A51)', () => {
        imports the module rather than holding the literal. */
     cohortRow: 'src/features/farmer-health/FarmerHealthPage.tsx',
     workerSince: 'src/features/farmer-health/components/WorkerSummaryList.tsx',
+    /* Added by Task 23 with the drilldown, which is the one screen v3 does
+       not contain at all. All three replace literals the components held. */
+    dwcWeek: 'src/features/farmer-health/components/DwcScoreCard.tsx',
+    drilldownSyncRow: 'src/features/farmer-health/components/SyncStateBlock.tsx',
+    timelineDay: 'src/features/farmer-health/components/FarmerTimeline.tsx',
     voiceDay: 'src/pages/ops/OpsVoicePage.tsx',
     nsmWeek: 'src/pages/metrics/NorthStarPage.tsx',
     nsmWeekFull: 'src/pages/metrics/NorthStarPage.tsx',
@@ -264,12 +269,19 @@ describe('DATE_FORMATS matches the screens it claims to describe (A51)', () => {
     }
   );
 
-  it('keeps all fourteen, and keeps them different on purpose', () => {
+  it('keeps all seventeen, and keeps them different on purpose', () => {
     /* Eleven at Task 4; the twelfth is `voiceDay`, the first of the eleven
        recharts axis formats that report routed to Tasks 19, 21 and 22.
        Thirteen and fourteen are `nsmWeek` and `nsmWeekFull`, the two North
-       Star carried in Task 21. */
-    expect(Object.keys(DATE_FORMATS)).toHaveLength(14);
+       Star carried in Task 21. Fifteen to seventeen are the drilldown's
+       three, carried in Task 23. */
+    expect(Object.keys(DATE_FORMATS)).toHaveLength(17);
+    /* `drilldownSyncRow` and `cohortRow` are the SAME STRING and are two
+       constants on purpose: one is a queue's recency column and the other is
+       a log line. The file's rule is that a format carries its reason rather
+       than its coincidence, so merging them would be a loss of meaning
+       dressed as a de-duplication. */
+    expect(DATE_FORMATS.drilldownSyncRow).toBe(DATE_FORMATS.cohortRow);
     /* `nsmWeek` deliberately does NOT preserve the literal it replaced.
        `NorthStarPage.tsx:174` read `'MMM d'` — the one month-first format in
        the console — and it now reads day-first like the other thirteen. The

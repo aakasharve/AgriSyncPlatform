@@ -100,6 +100,27 @@ export const DATE_FORMATS = {
   /** Four-digit year — a worker's start date is a record, not a recency. WorkerSummaryList.tsx:29 */
   workerSince: 'dd MMM yyyy',
   /**
+   * The week a DWC score belongs to. Four-digit year, because the drilldown
+   * shows the MOST RECENT SCORED week — `ORDER BY week_start DESC LIMIT 1`
+   * (`AdminFarmerHealthRepository.cs:174-176`) — and on a view that has not
+   * refreshed that can be arbitrarily old. A two-digit year on a figure whose
+   * whole job is to say how stale the reading is would be the wrong economy.
+   * Moved here by Task 23 from `DwcScoreCard.tsx:104`, which printed the raw
+   * ISO string.
+   */
+  dwcWeek: 'dd MMM yyyy',
+  /**
+   * A sync-error row on the drilldown: day, month, clock. Same spelling as
+   * `cohortRow` and NOT shared with it — that one is a queue's recency column
+   * and this one is a log line, and the file's own rule is that a format
+   * carries its reason rather than its coincidence. Preserved from
+   * `SyncStateBlock.tsx:104`, which used `'dd MMM, HH:mm'` inline.
+   */
+  drilldownSyncRow: 'dd MMM, HH:mm',
+  /** One column header on the 14-day grid — two digits, and the full date is
+   *  in the cell's own title. Preserved from `FarmerTimeline.tsx:90`. */
+  timelineDay: 'dd',
+  /**
    * Day + month, no year — one slot on the voice window's axis, which is
    * never wider than 31 dates. OpsVoicePage.tsx:115 (the recharts
    * `tickFormatter`), moved here by Task 19.
