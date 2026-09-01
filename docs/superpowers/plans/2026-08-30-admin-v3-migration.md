@@ -2410,14 +2410,14 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 
 **This is the biggest single feature loss in the design, and it will not appear in any screenshot diff — the flat v3 farmer-health.html looks complete.** It is also the only working row drilldown in the console.
 
-- [ ] **Step 1: Port the route and all five bands.**
+- [x] **Step 1: Port the route and all five bands.**
   - **Band 1** — back link, name (through PersonName, falling back to the farmId when the name is redacted), farm id, bucket badge, suspicious-flag alert.
   - **Band 2** — DwcScoreCard: the 64px total with the six-pillar expandable accordion at their UNEQUAL maxes summing to 100 (Trigger fit 10, Action simplicity 20, Proof 25, Reward 10, Investment 10, Repeat 25).
   - **Band 3** — FarmerTimeline: the 14-day by 6-event heat grid with PER-ROW normalisation.
   - **Band 4** — WorkerSummaryList: capped at 5, with its mandatory disclaimer.
   - **Band 5** — SyncStateBlock plus AiHealthBlock, gated.
 
-- [ ] **Step 2: Keep the in-page ops:read gate and its honest denial panel (A5)**
+- [x] **Step 2: Keep the in-page ops:read gate and its honest denial panel (A5)**
 
 ```tsx
 /**
@@ -2436,12 +2436,56 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
  */
 ```
 
-- [ ] **Step 3: Keep Band 1 outside the state branches (A40).** Error, loading, empty and data are four separate branches and the header renders in ALL FOUR, so context is never lost. A port collapses this into one loading skeleton over the whole page. Keep "Farm not found in your scope." as a distinct empty state — it is a scope statement, not a 404 — and keep the retryable ErrorState.
-- [ ] **Step 4: Keep the worker-list red line (A35).** Carry the disclaimer byte-for-byte — "(captured automatically from voice logs; reputation tracking not yet built)" — and carry the source comment into the new component file: "DO NOT add fields here without a new task. No reputation, no dispute, no payout, no skill, no score." A redesign treats copy as copy and enriches a thin-looking list.
-- [ ] **Step 5: Keep C7 and C8 as tokens, not hexes (A37).** They read as styling; they are product constraints. A healthy pillar tops out at teal deliberately; the slate inset edge is how an admin tells privileged ops data from the core farmer profile.
-- [ ] **Step 6: Extend the null-returning formatter contract to every drilldown figure (A38).** Ironically v3 has the STRONGER version of this rule — but only if the port applies it to a screen v3 does not contain. Includes the sync-state em-dash fallback on an unparseable timestamp.
-- [ ] **Step 7: Keep per-band LoadingStates sized to real content with their explicit labels (A32)** — "Loading DWC score", "Loading 14-day timeline", "Loading worker summary" — rather than one generic spinner. Those labels are what tell a screen-reader user WHICH block is loading.
-- [ ] **Step 8: Commit** — `feat(admin-web): Farmer Health drilldown, all five bands, gate intact`
+- [x] **Step 3: Keep Band 1 outside the state branches (A40).** Error, loading, empty and data are four separate branches and the header renders in ALL FOUR, so context is never lost. A port collapses this into one loading skeleton over the whole page. Keep "Farm not found in your scope." as a distinct empty state — it is a scope statement, not a 404 — and keep the retryable ErrorState.
+- [x] **Step 4: Keep the worker-list red line (A35).** Carry the disclaimer byte-for-byte — "(captured automatically from voice logs; reputation tracking not yet built)" — and carry the source comment into the new component file: "DO NOT add fields here without a new task. No reputation, no dispute, no payout, no skill, no score." A redesign treats copy as copy and enriches a thin-looking list.
+- [x] **Step 5: Keep C7 and C8 as tokens, not hexes (A37).** They read as styling; they are product constraints. A healthy pillar tops out at teal deliberately; the slate inset edge is how an admin tells privileged ops data from the core farmer profile.
+- [x] **Step 6: Extend the null-returning formatter contract to every drilldown figure (A38).** Ironically v3 has the STRONGER version of this rule — but only if the port applies it to a screen v3 does not contain. Includes the sync-state em-dash fallback on an unparseable timestamp.
+- [x] **Step 7: Keep per-band LoadingStates sized to real content with their explicit labels (A32)** — "Loading DWC score", "Loading 14-day timeline", "Loading worker summary" — rather than one generic spinner. Those labels are what tell a screen-reader user WHICH block is loading.
+- [x] **Step 8: Commit** — `feat(admin-web): Farmer Health drilldown, all five bands, gate intact`
+
+---
+
+> **Task 23 executed 2026-09-01 (`06c93b0f`). 835 tests / 40 files; lint 8. Thirteen mutations,
+> thirteen kills.**
+>
+> **🔴 A5's GATE KEY IS WRONG IN THE PLAN, AND THE WRONG KEY CAUSED THE EXACT FAILURE A5 EXISTS TO
+> PREVENT.** The plan says *"keep `canRead(ModuleKeys.OpsLive)`"*. `AdminFarmerHealthRepository.cs:80-85`
+> fills the two sub-blocks **independently** — `OpsErrors` for sync, `OpsVoice` for AI. A single
+> `ops.live` gate was wrong in both directions: an admin with `ops.live` but **not** `ops.errors` saw
+> `SyncStateBlock` render over a server-nulled block, printing *"No sync activity recorded."* at
+> someone who had been **denied** it. Now gated per block on the server's own keys, with the verbatim
+> denial kept for the both-denied path (which is also the scope-loading path). **A deliberate
+> deviation from a literal instruction, on repo-is-truth grounds.**
+>
+> **🔴 A38 POINTS AT THE WRONG FABRICATION.** The registered rule is *"never a fabricated 0%"*; the
+> live code ships a fabricated **100%** — `GetAiHealthAsync` returns `(1m, 1m, 0)` from its `catch`
+> and COALESCEs both ratios to `1.0` on a zero denominator. Both rules now enforced.
+>
+> **🔴 TWENTY-NINE swallow sites.** Ten more in `AdminFarmerHealthRepository.cs`, **four of which
+> fabricate complete, well-formed answers**: `EmptyScore()` (a whole score row including a week
+> boundary of *today*), the 14-day zero backfill built **outside** its `try`, `(1m,1m,0)` AI health,
+> and `FarmIdentity("—","—")`. Plus `IsFarmInScopeAsync`'s `catch { return false; }` — **a database
+> failure becomes "not in your scope."**
+>
+> **🛑 The DTO's own XML doc is wrong.** `FarmerHealthDto.cs:15-19` claims `FarmerName`/`Phone` are
+> redacted to `**redacted**` and the ops blocks nulled *by the redactor*. `RedactionMatrix` names six
+> fields and **none of those three is among them**; the ops nulling is the **repository's**.
+> **Do not tick B16** — confirmed independently for this endpoint.
+>
+> **🛑 Four of six pillar explanations described formulas the matview does not run** — Trigger fit is
+> schedule compliance, not reminders; Proof is a 60/40 blend, not an 80% attach rate; Repeat counts
+> *distinct* days, not a consecutive streak; and Action simplicity **printed the literal placeholder
+> `"N seconds"` at the reader.** Corrected from the SQL.
+>
+> **Band 2 will read "This farm has not been scored." for every farm in production today** — the score
+> matview has never been populated (D3, found by Task 22). That is the honest reading and it will look
+> like a broken screen. Drawing `0/100 · Intervention` would be the fabrication.
+>
+> **A41: `LoadFailed` used, not `ErrorState`** — `ErrorState`'s own header said its last two call sites
+> *"do not migrate until Task 23"*. Both A41 properties live in `LoadFailed`, which also makes retry
+> mandatory. **`ErrorState` now has zero call sites; `EmptyState` has one** — Task 27 inputs.
+> **A34 is complete: `PersonName` is 4/4**, the last two duplicated Devanagari checks are dead.
+> **The `**redacted**` page-title bug (flagged and correctly deferred by Tasks 5, 6 and 13) is fixed.**
 
 ---
 
