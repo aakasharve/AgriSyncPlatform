@@ -182,6 +182,26 @@ jobs:
             --distribution-id E2M06A2B71ZW1O \
             --paths "/download/shramsafal-latest.apk" \
             --output text --query "Invalidation.Id"
+          # The site's download label is hardcoded HTML and nothing republished it,
+          # so it froze at v1.0.9 while the APK it links to was v1.0.12 - the file
+          # was right and the label lied. Patch it from the versionName we just
+          # built, in the live object, so the two can never disagree again.
+          VERSION_NAME=$(grep -oP '(?<=versionName ")[^"]+' src/clients/mobile-web/android/app/build.gradle)
+          if [ -z "$VERSION_NAME" ]; then
+            echo "::error::could not read versionName from build.gradle; refusing to write a blank label" >&2
+            exit 1
+          fi
+          aws s3 cp "s3://shramsafal-marketing-prod/index.html" /tmp/site-index.html
+          # Rewrite only the parenthesised version inside the APK download link.
+          sed -i -E "s|Download APK \(v[0-9][^)]*\)|Download APK (v${VERSION_NAME})|" /tmp/site-index.html
+          if ! grep -q "Download APK (v${VERSION_NAME})" /tmp/site-index.html; then
+            echo "::error::label rewrite did not take - the download link markup changed. Not uploading a page whose label may still be wrong." >&2
+            exit 1
+          fi
+          aws s3 cp /tmp/site-index.html "s3://shramsafal-marketing-prod/index.html"             --content-type "text/html; charset=utf-8"             --cache-control "no-cache, no-store, must-revalidate"
+          aws cloudfront create-invalidation             --distribution-id E2M06A2B71ZW1O             --paths "/" "/index.html"             --output text --query "Invalidation.Id"
+          echo "   Site label updated to v${VERSION_NAME}"
+
           echo "✅ APK published:"
           echo "   Download: https://shramsafal.in/download/shramsafal-latest.apk"
           echo "   Versioned: https://app.shramsafal.in/apk/shramsafal-${SHA_SHORT}.apk"
