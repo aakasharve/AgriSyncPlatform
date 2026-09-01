@@ -2198,11 +2198,11 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useOpsVoice(days) against `/shramsafal/admin/ops/voice?days=`, envelope, 5-minute cadence.
 **Register rows:** A18, A19, A24; B5.
 
-- [ ] **Step 1: S1 to S6, using ChartShell.**
-- [ ] **Step 2: Keep the days 7/14/30 selector, end to end (A19, B5).** v3 hardcodes 14 days in data.js, so the control is simply absent from the design. The value must flow into ALL FOUR places it flows today: the hook argument, the query key (so 7, 14 and 30 are three cache entries, `useOpsVoice.ts:17`), the API query string, and the interpolated card title "Voice Success Rate — last N days" (`OpsVoicePage.tsx:97`).
-- [ ] **Step 3: Add the v3 by-provider breakdown,** with a null average latency given a full-size note rather than a footnote. The v3 data.js self-checks that provider rows sum to the daily totals; the React port asserts the same in a test rather than a console warning.
-- [ ] **Step 4: Hatched gaps for never-measured days (T9 Step 3).** A day with no numbers is a hatched hole, never a zero-height bar.
-- [ ] **Step 5: Commit** — `feat(admin-web): Voice Pipeline with a real day-window selector`
+- [x] **Step 1: S1 to S6, using ChartShell.**
+- [x] **Step 2: Keep the days 7/14/30 selector, end to end (A19, B5).** v3 hardcodes 14 days in data.js, so the control is simply absent from the design. The value must flow into ALL FOUR places it flows today: the hook argument, the query key (so 7, 14 and 30 are three cache entries, `useOpsVoice.ts:17`), the API query string, and the interpolated card title "Voice Success Rate — last N days" (`OpsVoicePage.tsx:97`).
+- [x] **Step 3: Add the v3 by-provider breakdown,** with a null average latency given a full-size note rather than a footnote. The v3 data.js self-checks that provider rows sum to the daily totals; the React port asserts the same in a test rather than a console warning.
+- [x] **Step 4: Hatched gaps for never-measured days (T9 Step 3).** A day with no numbers is a hatched hole, never a zero-height bar.
+- [x] **Step 5: Commit** — `feat(admin-web): Voice Pipeline with a real day-window selector`
 
 ---
 
@@ -2211,8 +2211,8 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useOpsHealth() against `/shramsafal/admin/ops/health`. NO ENVELOPE (A27), 30-second cadence.
 **Register rows:** A24, A27, A51, A52; B10; D7, D8, D10.
 
-- [ ] **Step 1: S1 to S6.**
-- [ ] **Step 2: Keep the unwrapped response type (A27)**
+- [x] **Step 1: S1 to S6.**
+- [x] **Step 2: Keep the unwrapped response type (A27)**
 
 ```ts
 /**
@@ -2225,19 +2225,65 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
  */
 ```
 
-- [ ] **Step 3: Delete useOpsHealthWrapped (D10).** Zero callers; wiring it beside useOpsHealth would poll the same endpoint twice every 30 seconds on a 2-vCPU box.
-- [ ] **Step 4: Ship the v3 R1-R8 fix (D8).** Keep the three-state alert badge — BREACH, CLEAR, N/A (v3 Appendix 8) — and render R1 to R8 as a grey NOT CHECKED rule. `HomePage.tsx:34` claims "all R1-R10 clear" while this page evaluates only R9 and R10; the redesign is where that self-contradiction dies.
-- [ ] **Step 5: Add the v3 "Evaluated, but never delivered" note.** A breach writes one line to the API host log, sends no email, no SMS, no push, no page, and has never reached a person on its own. That is a true and important statement about the alerting system.
-- [ ] **Step 6: Replace the dev-machine error banner (D7).** "Backend unreachable. Start the .NET API on port 5001." is rendered to a production operator at admin.shramsafal.in. Use FeedDown, which names when the feed stopped and never shows the last good number as current.
-- [ ] **Step 7: Decide the second suffering panel explicitly (A52, B10).**
+- [x] **Step 3: Delete useOpsHealthWrapped (D10).** Zero callers; wiring it beside useOpsHealth would poll the same endpoint twice every 30 seconds on a 2-vCPU box.
+- [x] **Step 4: Ship the v3 R1-R8 fix (D8).** Keep the three-state alert badge — BREACH, CLEAR, N/A (v3 Appendix 8) — and render R1 to R8 as a grey NOT CHECKED rule. `HomePage.tsx:34` claims "all R1-R10 clear" while this page evaluates only R9 and R10; the redesign is where that self-contradiction dies.
+- [x] **Step 5: Add the v3 "Evaluated, but never delivered" note.** A breach writes one line to the API host log, sends no email, no SMS, no push, no page, and has never reached a person on its own. That is a true and important statement about the alerting system.
+- [x] **Step 6: Replace the dev-machine error banner (D7).** "Backend unreachable. Start the .NET API on port 5001." is rendered to a production operator at admin.shramsafal.in. Use FeedDown, which names when the feed stopped and never shows the last good number as current.
+- [x] **Step 7: Decide the second suffering panel explicitly (A52, B10).**
 
 > This looks like a duplicate of /farms/suffering and a redesign de-duplicates it. IT IS NOT A DUPLICATE: different endpoint (/ops/health vs /farms/suffering), different shape (farmId only, no farm name — `OpsLivePage.tsx:150`), different window (24h inside a live health poll). The v3 live-health.html puts a service-health table in that slot instead.
 >
 > **Decision: keep both.** The service-health table is additive and goes below. If the founder cuts the suffering panel, /farms/suffering must first be confirmed to cover the operational need — see the founder questions.
 
-- [ ] **Step 8: Add the v3 service-health table.** API, each voice provider, the dead collector, the nightly rebuild. Its "what it feeds" list is DERIVED by scanning freshness metadata for a nightly source, not typed by hand.
-- [ ] **Step 9: Keep the two deliberate time formats (A51)** — seconds precision on the recent-errors rows, minutes on last-error.
-- [ ] **Step 10: Commit** — `feat(admin-web): Live Health tells the truth about R1-R8`
+- [x] **Step 8: Add the v3 service-health table.** API, each voice provider, the dead collector, the nightly rebuild. Its "what it feeds" list is DERIVED by scanning freshness metadata for a nightly source, not typed by hand.
+- [x] **Step 9: Keep the two deliberate time formats (A51)** — seconds precision on the recent-errors rows, minutes on last-error.
+- [x] **Step 10: Commit** — `feat(admin-web): Live Health tells the truth about R1-R8`
+
+---
+
+> **Tasks 19 and 20 executed 2026-09-01 (`42926035`, `ed088aed`). 777 tests / 37 files; lint 8.**
+>
+> **T19 — the by-provider breakdown (Step 3) is NOT BUILDABLE.** `OpsVoiceTrendDto` has no provider
+> field, and `/admin/ai-health` (which does carry providers) counts **attempts, not calls**, over a
+> fixed 24h window — so it could never sum to these totals. Shipped without it, with the gap named.
+> **The screen is also not only voice:** the query is `event_type = 'ai.invocation'` with **no
+> `operation` filter**, so receipt and patti extractions are inside every figure.
+> **The 90% "target" line was fabricated** — the only real rule is **R10: failure rate > 20% in 6
+> hours**. Deleted. **`?days` was never validated:** `?days=x` sent the literal `NaN` to a
+> non-nullable `int`, and `?days=3` was silently clamped to 7 by the server.
+> **Latency sentinel:** the SQL does `COALESCE(ROUND(AVG(latencyMs)), 0)`, so a date with no recorded
+> duration reports **0 ms** — a fabricated reading, rescued client-side as *not measured*.
+>
+> **T20 — v3's rule numbers are FICTION.** `data.js` says R9 breaches at 50 in 24h and R10 under 96%.
+> The SQL says **R9 = >30 API errors in 1 hour** and **R10 = >20% failures in 6 hours**
+> (`20260502000000_AnalyticsRewrite.cs:424-456`). R10 is now quoted in the same words on both ops
+> screens. **v3's claim that nothing evaluates R1–R8 is also false** — eight views exist and
+> `AlertDispatcherJob` reads all ten daily; the true, narrower claim shipped: *this endpoint* reads two.
+>
+> **🛑 The two-list collision Task 8 predicted landed here, and it is three lists, not two.**
+> `useListUrlState` gained a `urlNamespace` covering `page`/`sort`/`dir`/`open` only; an un-namespaced
+> list is byte-for-byte unchanged, so A17/A18's shipped links keep working. One list component, as
+> required. Proved by removing the namespaces: sorting the events table silently reordered the
+> watchlist.
+>
+> **🔴 The swallow-site list is short by FIVE.** Beyond the five already catalogued, this one endpoint
+> holds `AdminOpsRepository.cs:81` (voice → `(0,0,0,0,0)`), `:120`, `:161`, `:172`, `:181`.
+> **Ten sites now.** And **D18 understates it**: the server substitutes all five voice figures on
+> failure and `COALESCE(...,0)` fabricates the rate and both latencies independently — hence the
+> screen's rule that all-five-zero means *no reading*.
+>
+> **🛑 A24 cannot be ticked for Live Health as written.** It registers `meta.source`/`meta.lastRefreshed`
+> driving the chip; **this endpoint has no `meta` at all** (A27). The chip is driven by
+> `computedAtUtc`, which the page used to fetch and then discard in favour of the browser's own fetch
+> time — *a chip must state the server's age, not ours.*
+>
+> **Backend bug found, not fixed:** `voice_errors` is
+> `endpoint LIKE '%voice%' OR event_type='ai.invocation' AND outcome='failure'` — `AND` binds tighter
+> and the outer `WHERE` already excludes `ai.invocation`, so **the second branch is dead**.
+> Sync/Logs/Voice are overlapping `LIKE` matches that do not sum to the total. Both stated on screen.
+>
+> **🛑 `HomePage.tsx:34` still claims "all R1–R10 clear" over a hardcoded `value={0}`.** Live Health
+> fixed its half of D8; **Home is Task 26.**
 
 ---
 
