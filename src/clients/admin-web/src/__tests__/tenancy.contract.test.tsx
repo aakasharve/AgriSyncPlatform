@@ -18,6 +18,26 @@ import { renderWithProviders } from '@/test/renderWithProviders';
 import { installAdapter, type CapturedRequest, type StubbedAdapter } from '@/test/stubAdapter';
 
 /**
+ * WHOLE_CONSOLE_WAIT - measured 2026-09-01, and it is not a tolerance for slow tests.
+ *
+ * These files mount the real <App />, whose routes are `lazy()`. Resolving a route
+ * chunk is a genuine dynamic import, and under full-suite parallelism that import
+ * competes with 35 other jsdom environments for the same cores.
+ *
+ * Several waiters here asked for an element that only exists AFTER such an import
+ * while using Testing Library's 1000ms default. The line above them correctly
+ * waited 15s for the URL to change; the line itself then gave the page one second
+ * to arrive. On an idle machine that failed roughly two runs in three, always with
+ * `Unable to find role="heading" and name "All Farms"` - the route had not finished
+ * importing. Tasks 15, 16, 17, 18 and 19 each measured it and each routed it onward
+ * as a "timing cliff"; it was a missing argument.
+ *
+ * This does NOT weaken anything. Every assertion is unchanged; a real regression
+ * still fails, it just fails after waiting rather than before the page exists.
+ */
+const WHOLE_CONSOLE_WAIT = 15_000;
+
+/**
  * TENANCY — the property this whole console is wrong without.
  *
  * A grep of the v3 prototype returns ZERO hits for org, tenant or scope. v3 is
@@ -319,7 +339,9 @@ describe('THE CROSS-TENANT ASSERTION — org A rows are never served to org B', 
     }
 
     renderWithProviders(<Screen />, { queryClient: cacheRetainingClient(), route: AT_ORG_A });
-    expect(await screen.findByText('Org A Grape Schedule')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Org A Grape Schedule', undefined, { timeout: WHOLE_CONSOLE_WAIT }),
+    ).toBeInTheDocument();
 
     await act(async () => {
       captured.setActiveOrgId?.(ORG_B);

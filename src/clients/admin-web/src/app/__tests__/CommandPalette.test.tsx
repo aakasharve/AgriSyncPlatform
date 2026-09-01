@@ -16,6 +16,26 @@ import { makeTestQueryClient, renderWithProviders } from '@/test/renderWithProvi
 import { installAdapter, type CapturedRequest, type StubbedAdapter } from '@/test/stubAdapter';
 
 /**
+ * WHOLE_CONSOLE_WAIT - measured 2026-09-01, and it is not a tolerance for slow tests.
+ *
+ * These files mount the real <App />, whose routes are `lazy()`. Resolving a route
+ * chunk is a genuine dynamic import, and under full-suite parallelism that import
+ * competes with 35 other jsdom environments for the same cores.
+ *
+ * Several waiters here asked for an element that only exists AFTER such an import
+ * while using Testing Library's 1000ms default. The line above them correctly
+ * waited 15s for the URL to change; the line itself then gave the page one second
+ * to arrive. On an idle machine that failed roughly two runs in three, always with
+ * `Unable to find role="heading" and name "All Farms"` - the route had not finished
+ * importing. Tasks 15, 16, 17, 18 and 19 each measured it and each routed it onward
+ * as a "timing cliff"; it was a missing argument.
+ *
+ * This does NOT weaken anything. Every assertion is unchanged; a real regression
+ * still fails, it just fails after waiting rather than before the page exists.
+ */
+const WHOLE_CONSOLE_WAIT = 15_000;
+
+/**
  * TASK 13 — the command palette, v2.
  *
  * THE ASSERTION THIS FILE EXISTS FOR is the first one: the palette must not be
@@ -262,14 +282,14 @@ async function mountConsole(route: string, options_: ServerOptions) {
   authStore.set(SESSION);
   go(route);
   render(<App />);
-  await screen.findByRole('complementary', { name: 'Sections' });
+  await screen.findByRole('complementary', { name: 'Sections' }, { timeout: WHOLE_CONSOLE_WAIT });
   await settle();
 }
 
 /** Opens the palette and waits for it, rather than assuming it opened. */
 async function openPalette() {
   cmdK();
-  await screen.findByRole('dialog', { name: 'Search the console' });
+  await screen.findByRole('dialog', { name: 'Search the console' }, { timeout: WHOLE_CONSOLE_WAIT });
   await settle();
 }
 
@@ -288,7 +308,7 @@ describe('the palette is not reachable before sign-in (A46, Task 13 Step 2)', ()
     authStore.clear();
     go('/login');
     render(<App />);
-    await screen.findByLabelText('Phone number');
+    await screen.findByLabelText('Phone number', undefined, { timeout: WHOLE_CONSOLE_WAIT });
 
     cmdK();
     await settle();

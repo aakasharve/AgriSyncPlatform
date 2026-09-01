@@ -115,7 +115,10 @@ function go(url: string) {
 }
 
 async function signIn() {
-  await userEvent.type(await screen.findByLabelText('Phone number'), '8888888888');
+  await userEvent.type(
+    await screen.findByLabelText('Phone number', undefined, { timeout: WAIT }),
+    '8888888888',
+  );
   await userEvent.type(screen.getByLabelText('Password'), 'Testuser@123');
   await userEvent.click(screen.getByRole('button', { name: /Sign in/ }));
 }
@@ -140,13 +143,15 @@ describe('a deep link survives the sign-in it triggered (A9, B2, Step 6)', () =>
     render(<App />);
 
     // Signed out: the guard sent us to /login and kept where we were going.
-    await screen.findByRole('button', { name: /Sign in/ });
+    await screen.findByRole('button', { name: /Sign in/ }, { timeout: WAIT });
     expect(at()).toBe('/login');
 
     await signIn();
 
     await waitFor(() => expect(at()).toBe('/farms?page=7&tier=B'), { timeout: WAIT });
-    expect(await screen.findByRole('heading', { name: 'All Farms' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'All Farms' }, { timeout: WAIT }),
+    ).toBeInTheDocument();
   });
 
   it('carries ?org= back too — the parameter that decides whose data it is', async () => {

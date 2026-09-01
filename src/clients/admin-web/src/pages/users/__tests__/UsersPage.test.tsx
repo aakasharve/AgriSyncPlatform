@@ -118,8 +118,26 @@ function cells(tr: HTMLTableRowElement): HTMLTableCellElement[] {
  * anchor is the one event that happens in every world, including the world
  * where a 500 is drawn as "No users found".
  */
+/**
+ * SETTLE_WAIT - measured 2026-09-01. Not a tolerance for slow tests.
+ *
+ * This waited on Testing Library's 1000ms default. Under full-suite parallelism
+ * 36 jsdom environments compete for the same cores, and the loading block had
+ * not always cleared inside one second - so an assertion that a state is ABSENT
+ * ran while the previous state was still on screen, and the failure read
+ * `expected <div role="status"> to be null`, which looks like a product defect
+ * and is not one.
+ *
+ * The same missing argument caused the "timing cliff" Tasks 15-19 each measured
+ * and each routed onward. Nothing is weakened: a real regression still fails, it
+ * just fails after waiting rather than before the screen has finished changing.
+ */
+const SETTLE_WAIT = 15_000;
+
 async function settled() {
-  await waitFor(() => expect(screen.queryByRole('status', { name: /Loading/ })).toBeNull());
+  await waitFor(() => expect(screen.queryByRole('status', { name: /Loading/ })).toBeNull(), {
+    timeout: SETTLE_WAIT,
+  });
 }
 
 /* ═══════════ 1. AN EMPTY ANSWER HERE IS NOT A MEASUREMENT (D9, Step 4) */

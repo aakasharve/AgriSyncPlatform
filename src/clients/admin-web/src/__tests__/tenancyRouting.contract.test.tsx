@@ -11,6 +11,26 @@ import { makeTestQueryClient, renderWithProviders } from '@/test/renderWithProvi
 import { installAdapter, type CapturedRequest, type StubbedAdapter } from '@/test/stubAdapter';
 
 /**
+ * WHOLE_CONSOLE_WAIT - measured 2026-09-01, and it is not a tolerance for slow tests.
+ *
+ * These files mount the real <App />, whose routes are `lazy()`. Resolving a route
+ * chunk is a genuine dynamic import, and under full-suite parallelism that import
+ * competes with 35 other jsdom environments for the same cores.
+ *
+ * Several waiters here asked for an element that only exists AFTER such an import
+ * while using Testing Library's 1000ms default. The line above them correctly
+ * waited 15s for the URL to change; the line itself then gave the page one second
+ * to arrive. On an idle machine that failed roughly two runs in three, always with
+ * `Unable to find role="heading" and name "All Farms"` - the route had not finished
+ * importing. Tasks 15, 16, 17, 18 and 19 each measured it and each routed it onward
+ * as a "timing cliff"; it was a missing argument.
+ *
+ * This does NOT weaken anything. Every assertion is unchanged; a real regression
+ * still fails, it just fails after waiting rather than before the page exists.
+ */
+const WHOLE_CONSOLE_WAIT = 15_000;
+
+/**
  * TENANCY, END TO END — through the real router, on real screens.
  *
  * `tenancy.contract.test.tsx` proves the org is in every query key and that a
@@ -147,7 +167,13 @@ describe('the org survives a filter change on a REAL list screen (A15, A20, Step
     expect(await screen.findByRole('heading', { name: 'All Farms' }, { timeout: WAIT }))
       .toBeInTheDocument();
 
-    await userEvent.click(await screen.findByRole('button', { name: /Active organization/ }));
+    await userEvent.click(
+      await screen.findByRole(
+        'button',
+        { name: /Active organization/ },
+        { timeout: WHOLE_CONSOLE_WAIT },
+      ),
+    );
     const menu = screen.getByRole('menu', { name: 'Switch organization' });
     await userEvent.click(within(menu).getByRole('menuitem', { name: new RegExp(ORG_B_NAME) }));
 
@@ -330,7 +356,9 @@ describe('NotInOrg clears the selection, and says so truthfully (D16, Step 5)', 
      * scheduler.
      */
     await waitFor(() => expect(stub!.requests.length).toBeGreaterThan(1), { timeout: WAIT });
-    await screen.findByText('That organization is not in your memberships');
+    await screen.findByText('That organization is not in your memberships', undefined, {
+      timeout: WHOLE_CONSOLE_WAIT,
+    });
 
     await userEvent.click(screen.getByRole('button', { name: new RegExp(ORG_B_NAME) }));
     await waitFor(() => expect(localStorage.getItem('admin.active-org.v1')).toBe(ORG_B));
