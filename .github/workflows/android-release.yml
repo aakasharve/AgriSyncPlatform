@@ -186,7 +186,11 @@ jobs:
           # so it froze at v1.0.9 while the APK it links to was v1.0.12 - the file
           # was right and the label lied. Patch it from the versionName we just
           # built, in the live object, so the two can never disagree again.
-          VERSION_NAME=$(grep -oP '(?<=versionName ")[^"]+' src/clients/mobile-web/android/app/build.gradle)
+          # sed, not `grep -oP`: -P needs a unibyte/UTF-8 locale and dies with
+          # "grep: -P supports only unibyte and UTF-8 locales" where it is not set.
+          # This step ABORTS on an empty version, so a locale quirk on the runner
+          # would have blocked every APK release. sed has no such dependency.
+          VERSION_NAME=$(sed -n 's/.*versionName "\([^"]*\)".*/\1/p' src/clients/mobile-web/android/app/build.gradle | head -1)
           if [ -z "$VERSION_NAME" ]; then
             echo "::error::could not read versionName from build.gradle; refusing to write a blank label" >&2
             exit 1
