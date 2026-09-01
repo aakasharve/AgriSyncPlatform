@@ -20,6 +20,16 @@ import { resetAndSeed } from '../fixtures/seed.api';
 import { loginViaPassword, passConsentGateIfPresent } from '../fixtures/loginHelper';
 
 test.describe('Login', () => {
+    // 2026-09-01 — every landing assertion below moved from `home-greeting` to
+    // `running-cost-card`. A home-view reorder DELETED home-greeting and added a
+    // unit test asserting its absence, while these specs still waited 30s for it:
+    // the repo held both guarantees at once and e2e was red on main for six days
+    // (15 consecutive runs from 2026-08-26). The `.not.toBeVisible()` cases were
+    // worse than useless — a negative assertion on an element that cannot exist
+    // passes whatever the app does, so they could never have failed.
+    // `running-cost-card` is the home view's own element (mainView.tsx, gated only
+    // on !recordingSegment). Guarded by core/navigation/__tests__/e2eSelectorsExist.test.ts.
+
     test('login with seeded user lands on home', async ({ page }) => {
         await resetAndSeed('purvesh-demo');
 
@@ -60,8 +70,13 @@ test.describe('Login', () => {
         await expect(alert).toBeVisible({ timeout: 10_000 });
         await expect(alert).toContainText(/invalid|incorrect|wrong|चुकीचे|unauthorized|login failed|check phone/i);
 
-        // Still on login — home-greeting should NOT be present
-        await expect(page.getByTestId('home-greeting')).not.toBeVisible();
+        // Still on login — the home view must NOT have rendered.
+        //
+        // 2026-09-01: this asserted `home-greeting`, an element a home-view reorder
+        // had already deleted. A not.toBeVisible() on an element that cannot exist
+        // passes no matter what the app does — this line could never have failed,
+        // so it was proving nothing about staying on the login screen.
+        await expect(page.getByTestId('running-cost-card')).not.toBeVisible();
     });
 });
 
@@ -129,7 +144,7 @@ test.describe('remembered device sessions', () => {
         await loginViaPassword(page, '8888888888', 'Testuser@123');
 
         // Confirm we are on the authenticated home shell.
-        await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId('running-cost-card')).toBeVisible({ timeout: 30_000 });
 
         // Full page reload — simulates the user closing the browser tab and
         // returning. The HttpOnly refresh-token cookie is sent automatically;
@@ -138,7 +153,7 @@ test.describe('remembered device sessions', () => {
 
         // After reload the app shell should restore immediately. Give it a
         // generous timeout for CI (initial sync pull + WASM hydration).
-        await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId('running-cost-card')).toBeVisible({ timeout: 30_000 });
 
         // The login page must NOT be visible after the reload.
         await expect(page.getByRole('button', { name: /पासवर्डने/i })).not.toBeVisible();
@@ -158,7 +173,7 @@ test.describe('remembered device sessions', () => {
         await resetAndSeed('purvesh-demo');
 
         await loginViaPassword(page, '8888888888', 'Testuser@123');
-        await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId('running-cost-card')).toBeVisible({ timeout: 30_000 });
 
         // Read all localStorage entries and assert none contain a refreshToken.
         const sessionRaw = await page.evaluate(() =>
@@ -194,7 +209,7 @@ test.describe('remembered device sessions', () => {
         await resetAndSeed('purvesh-demo');
 
         await loginViaPassword(page, '8888888888', 'Testuser@123');
-        await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId('running-cost-card')).toBeVisible({ timeout: 30_000 });
 
         // Trigger logout through the profile page.
         await logoutViaProfile(page);
@@ -211,7 +226,7 @@ test.describe('remembered device sessions', () => {
         await expect(useLegacyButton).toBeVisible({ timeout: 20_000 });
 
         // The authenticated home shell must be gone.
-        await expect(page.getByTestId('home-greeting')).not.toBeVisible();
+        await expect(page.getByTestId('running-cost-card')).not.toBeVisible();
     });
 
     /**
@@ -234,13 +249,13 @@ test.describe('remembered device sessions', () => {
         await resetAndSeed('purvesh-demo');
 
         await loginViaPassword(page, '8888888888', 'Testuser@123');
-        await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId('running-cost-card')).toBeVisible({ timeout: 30_000 });
 
         // Reload into a remembered session.
         await page.reload({ waitUntil: 'domcontentloaded' });
 
         // Wait for the authenticated home shell to be stable.
-        await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId('running-cost-card')).toBeVisible({ timeout: 30_000 });
 
         // At this point the app has fully settled on the authenticated shell.
         // The login toggle button must NOT be in the DOM at all — any flash

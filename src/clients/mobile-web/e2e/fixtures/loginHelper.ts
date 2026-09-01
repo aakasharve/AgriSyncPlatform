@@ -11,7 +11,7 @@ import { expect } from '@playwright/test';
  *
  * Then fill phone + password + optionally toggle the "Remember this device"
  * checkbox (pre-checked by default; pass rememberDevice: false to uncheck it),
- * then click submit. Asserts home-greeting visible (proves auth + initial sync
+ * then click submit. Asserts the home view rendered (proves auth + initial sync
  * pull completed).
  *
  * spec: secure-remembered-device-sessions-2026-06-24 — Task 7.1
@@ -135,20 +135,29 @@ export async function loginViaPassword(
         await page.getByTestId('onboarding-skip').click();
     }
 
-    // Auth + initial sync pull takes a moment; home-greeting only appears once
+    // Auth + initial sync pull takes a moment; the home view only renders once
     // both complete. Generous timeout for CI.
-    await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 30_000 });
+    //
+    // 2026-09-01 — was `home-greeting`, which a home-view reorder DELETED. The
+    // repo then held two contradictory guarantees: log-view-home-reorder.test.tsx
+    // asserts home-greeting is ABSENT, while this helper waited 30s for it to be
+    // present. Both suites passed on their own terms and e2e was red for six days.
+    // `running-cost-card` is the home view's own element (mainView.tsx, gated only
+    // on !recordingSegment) and cannot appear on the welcome or permission screens,
+    // so it still distinguishes a real landing from a half-finished one.
+    // Guarded by core/navigation/__tests__/e2eSelectorsExist.test.ts.
+    await expect(page.getByTestId('running-cost-card')).toBeVisible({ timeout: 30_000 });
 }
 
 async function waitForLoginLanding(page: Page): Promise<'home' | 'permissions' | 'welcome'> {
     const deadline = Date.now() + 30_000;
-    const homeGreeting = page.getByTestId('home-greeting');
+    const homeMarker = page.getByTestId('running-cost-card');
     const welcomeContinue = page.getByTestId('welcome-continue');
     const skipBtn = page.getByTestId('onboarding-skip');
     const alert = page.getByRole('alert').first();
 
     while (Date.now() < deadline) {
-        if (await homeGreeting.isVisible().catch(() => false)) {
+        if (await homeMarker.isVisible().catch(() => false)) {
             return 'home';
         }
 
@@ -168,6 +177,6 @@ async function waitForLoginLanding(page: Page): Promise<'home' | 'permissions' |
         await page.waitForTimeout(250);
     }
 
-    await expect(homeGreeting).toBeVisible({ timeout: 1 });
+    await expect(homeMarker).toBeVisible({ timeout: 1 });
     return 'home';
 }
