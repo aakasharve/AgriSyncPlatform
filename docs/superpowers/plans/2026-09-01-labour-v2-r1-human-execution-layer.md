@@ -126,6 +126,26 @@ Every task's requirements implicitly include these. A change that violates one h
   means rebuilding it."* Its proposed resolution — **confirmation lives on the ROW, with disputed
   days the one cell-level exception** — is explicitly NOT founder-approved, so Phase 1 must put it
   to him. R1 BUILDS no confirmation; R1 must not FORECLOSE it.
+- **D16's RESOLUTION IS SUPERSEDED — read this before touching the crew shape.** The
+  recovered spec (`2026-08-28-LABOUR-V2-LOCKED-DECISIONS.md`, D16) instructs an implementer to
+  carry `accompanying_count` on Shankar's OWN `attendance_marks` row
+  (`subject=Shankar, status=Present, accompanying_count=8`). **Do not build that.** The founder's
+  final direction §3 (2026-09-01) is later and binding: crew counts are ENGAGEMENT-scoped and the
+  aggregate must NOT land on his farm-day mark. Repo truth agrees — `attendance_marks` is unique
+  on `(farm_id, field_operator_id, work_date)`, so Shankar with 8 on grapes and 4 on cane the
+  same day would have to store an invented 12, asserting 12 unique people, which D9.12 forbids.
+- **What SURVIVES from D16, and must be preserved by whatever shape Phase 0 picks:** *"Do not
+  create two independently editable presence truths for the same person."* Shankar's own presence
+  is his `Day`/`Night` marks on his own row — the identical fields every other person uses. There
+  must be nowhere to contradict it. The model must still honestly express **"Shankar's
+  accompanying workers were present, Shankar himself was not."** The invariant is STRUCTURAL, not
+  disciplinary: an engagement-scoped crew link satisfies it, a second presence field never does.
+- **P10, verbatim, for the offline write path:** offline capture is required, but until server
+  acknowledgement it stays **explicitly unsynchronized intent — never rendered as saved**, where
+  **`Acknowledged = reconstructable without the originating device.`** That last clause is the
+  test Task 3.5 must actually meet; "the POST returned 200" is not it.
+- **Decision 4b, inherited:** un-hiding a surface means **finishing** it. Flipping a flag over an
+  unfinished path ships a screen that lies to a farmer. (Binds Task 4.0 to Task 4.1.)
 - **Farm Mukadam ≠ Labour Mukadam.** Farm Mukadam = `AppRole.Mukadam`
   (AgriSync.SharedKernel/Contracts/Roles/AppRole.cs:6), a farm-membership role,
   account-bound, governs authority. Labour Mukadam = a `FieldOperator`
@@ -277,7 +297,7 @@ a permanent `Crew`. Find the smallest repo-native shape:**
 | Candidate | What it costs | Known objection |
 |---|---|---|
 | (a) Nothing new — `LabourAssignment.WorkerCount` (:63) is 9 with `WorkerNamesJson` (:97) = `["Shankar"]` | zero | **ELIMINATED by final direction §3.** Loses "through whom": a reader cannot tell Shankar organised the 8 from Shankar merely being named first. The founder has ruled the relationship is required, so a representation that cannot express it is not a candidate. |
-| (b) One nullable FK on the engagement: `labour_assignments.engaged_through_field_operator_id uuid NULL` | one column, one migration, no entity | **LEADING CANDIDATE** — engagement-scoped by construction, which is exactly what §3 requires. The anonymous remainder stays arithmetic (`WorkerCount − distinct attributed operators`), so no fabricated worker row can exist. Phase 0 confirms or beats it on repo evidence; the founder does not choose the column. |
+| (b) One nullable FK on the engagement: `labour_assignments.engaged_through_field_operator_id uuid NULL` | one column, one migration, no entity | **LEADING CANDIDATE** — engagement-scoped by construction, which is exactly what §3 requires, and it preserves D16's surviving invariant (Shankar's presence stays his own Day/Night marks, with nowhere to contradict them). The anonymous remainder stays arithmetic (`WorkerCount − distinct attributed operators`), so no fabricated worker row can exist. Phase 0 confirms or beats it on repo evidence; the founder does not choose the column. |
 | (c) Spec D16's `accompanying_count` on `attendance_marks` | one column | **REJECTED by repo truth.** `attendance_marks` is unique on `(farm_id, field_operator_id, work_date)` (`Migrations/20260831180408_AddAttendanceMarks.cs:41-44`), but a crew count is per **engagement**. Shankar bringing 8 to grapes and 4 to cane on one day must store an invented 12 — asserting 12 unique people, which D9.12 forbids — or silently drop one. It also duplicates `WorkerCount`, giving one fact two editable homes. **Record this rejection in the plan; the spec is wrong here.**
 
 - [ ] **Step 1: Recommend the smallest shape that satisfies §3, with file:line evidence.
