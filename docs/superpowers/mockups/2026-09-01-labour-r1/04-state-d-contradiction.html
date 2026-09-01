@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="mr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>State D — the contradiction · Labour R1 mockup (4 of 7)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700;800;900&family=Noto+Sans+Devanagari:wght@400;600;700;800&family=Noto+Serif+Devanagari:wght@600;700&display=swap">
+<style>
+  html, body { overflow-x: hidden; }
+  body { font-family: 'Noto Sans Devanagari', sans-serif; background: #eef1f4; }
+  /* DM Sans carries no Devanagari — Noto fallback so Marathi inside an
+     English-set block never lands on a system font. */
+  .num, .en { font-family: 'DM Sans', 'Noto Sans Devanagari', sans-serif; }
+  .mrh { font-family: 'Noto Serif Devanagari', serif; }
+  .ico { stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+</head>
+<body class="pb-16">
+
+<!-- lucide icon shapes, inline. No icon library is loaded. -->
+<svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+  <symbol id="i-chev-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-chev-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+</svg>
+
+<!-- ============ HONESTY BANNER ============ -->
+<div class="en border-b-2 border-yellow-300 bg-yellow-50 px-4 py-3">
+  <div class="mx-auto max-w-[760px]">
+    <p class="text-[13px] font-black uppercase tracking-wider text-yellow-900">Mockup — not the live app</p>
+    <p class="mt-1 text-[12.5px] leading-relaxed text-yellow-900/85">
+      Static HTML drawn at a <b>390&nbsp;px reference width</b>. Nothing here is wired to data: every name, number and
+      date is illustrative. No screen below exists in the product yet — this is for founder approval of
+      <b>layout and behaviour</b>, not a preview of shipped software. Marathi that is not already approved appears as a
+      <span class="rounded bg-yellow-200 px-1 py-0.5 text-[11px] font-bold text-yellow-900">[FOUNDER COPY REQUIRED]</span>
+      placeholder with the English meaning underneath — copy is a UI gate, not a data-model gate.
+    </p>
+  </div>
+</div>
+
+<!-- ============ PAGE TITLE ============ -->
+<header class="mx-auto max-w-[760px] px-4 pt-7">
+  <p class="en text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Labour R1 · screen 4 of 7</p>
+  <h1 class="mrh mt-1 text-[26px] font-bold leading-tight text-slate-900">State D — the contradiction</h1>
+  <p class="en mt-2 text-[13.5px] leading-relaxed text-slate-600">
+    Two kinds of contradiction, both drawn. <b>A —</b> the headcount disagreement: the Work Log said 12, speaking the
+    names produced 10, and <i>both statements survive</i>. <b>B —</b> the day-level contradiction: one person implies
+    Full in one work and Half in another on the same farm-day, so ShramSafal asks <b>one</b> polite question, once, and
+    then stops. The last frame is the case that asks <b>nothing</b>.
+  </p>
+  <div class="en mt-4 rounded-xl border border-slate-200 bg-white p-3.5 text-[12.5px] leading-relaxed text-slate-700">
+    <b>The framing that decides this screen:</b> this is a <b>semantic question asked before saving</b> — ShramSafal
+    noticing that two things it was told cannot both be a whole day, and asking. It is <b>not</b> a database error
+    surfaced to the farmer. Nothing below may look like a failure, a crash, a validation error or a red alert.
+  </div>
+  <div class="en mt-2.5 rounded-xl border border-slate-200 bg-white p-3.5 text-[12.5px] leading-relaxed text-slate-700">
+    <b>The test every frame must pass:</b> <i>"Where is ShramSafal asking me for something I already told it?"</i>
+    Each caption states what the farmer already told it, and what — the single unstated thing — is asked here.
+  </div>
+</header>
+
+<main class="mx-auto max-w-[760px] px-4 pt-9">
+
+  <!-- ==================== FRAME 1 ==================== -->
+  <section class="mb-10">
+    <div class="mb-3 flex items-start gap-3">
+      <span class="num mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-slate-900 text-[14px] font-black text-white">1</span>
+      <div class="min-w-0">
+        <h2 class="en text-[15.5px] font-extrabold text-slate-900">A — the headcount disagreement, both statements standing</h2>
+        <p class="en mt-1 text-[13px] leading-relaxed text-slate-600">
+          The Work Log's "12" and the ten names that were actually spoken sit side by side with neither one overwritten,
+          and the owner is asked the single thing nobody has stated: whether the other two were there.
+        </p>
+        <p class="en mt-1.5 text-[12px] leading-relaxed text-slate-500">
+          <b>Already told it:</b> the count (12), the ten names, the work, the plot, the day.
+          <b>Asked here:</b> only what was never said — who or what the remaining two are.
+        </p>
+      </div>
+    </div>
+
+    <div class="en mx-auto mb-1 w-[390px] max-w-full text-center text-[10.5px] font-bold uppercase tracking-wider text-slate-400">Mockup · 390px reference · not wired to data</div>
+    <div class="w-full overflow-x-auto pb-1">
+      <div class="mx-auto w-[390px] flex-none overflow-hidden rounded-[26px] border border-slate-300 bg-slate-50 shadow-[0_10px_30px_-12px_rgba(20,40,30,0.35)]">
+
+        <div class="flex items-center gap-3 bg-[#f6f7f5] px-4 pb-3 pt-3">
+          <span class="flex min-h-[56px] items-center gap-2 rounded-full bg-white py-3 pl-4 pr-5 text-[18px] font-bold text-stone-700 shadow-sm ring-1 ring-stone-100">
+            <svg class="ico h-[22px] w-[22px]"><use href="#i-back"/></svg> मागे
+          </span>
+          <div class="flex-1 truncate pr-8 text-center text-[18px] font-bold text-stone-500">ShramSafalला समजलं</div>
+        </div>
+
+        <div class="flex flex-col gap-2.5 bg-slate-50 px-4 pb-6 pt-2">
+
+          <!-- STATEMENT 1 — the Work Log count, preserved and un-struck -->
+          <div class="rounded-[18px] border border-slate-100 bg-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <div class="flex items-center gap-3">
+              <span class="flex h-10 w-10 flex-none items-center justify-center rounded-[12px] bg-blue-50 text-blue-600">
+                <svg class="ico h-5 w-5"><use href="#i-book"/></svg>
+              </span>
+              <div class="min-w-0 flex-1">
+                <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+                <span class="en mt-1 block text-[11px] italic leading-snug text-slate-500">English meaning: "In the Work Log you said twelve people came."</span>
+              </div>
+              <span class="num flex-none text-[34px] font-black leading-none text-slate-800 [font-variant-numeric:tabular-nums]">12</span>
+            </div>
+          </div>
+
+          <!-- STATEMENT 2 — the names that were spoken, preserved -->
+          <div class="rounded-[18px] border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <div class="flex items-center gap-2.5 border-b border-slate-100 px-1 pb-2.5">
+              <span class="flex h-10 w-10 flex-none items-center justify-center rounded-[12px] bg-emerald-50 text-emerald-700">
+                <svg class="ico h-5 w-5"><use href="#i-mic"/></svg>
+              </span>
+              <span class="flex-1 text-[15px] font-extrabold text-slate-800"><span class="num">12</span> पैकी <span class="num">10</span> समजले</span>
+            </div>
+            <div class="mt-2 grid grid-cols-2 gap-1.5">
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-orange-100 text-[12px] font-black text-orange-600">ग</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">गणेश</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-violet-100 text-[12px] font-black text-violet-600">श</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">शंकर</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-blue-100 text-[12px] font-black text-blue-600">रा</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">रामभाऊ</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-emerald-50 text-[12px] font-black text-emerald-700">मा</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">मारुती</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-rose-100 text-[12px] font-black text-rose-600">द</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">दत्तू</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-amber-100 text-[12px] font-black text-amber-700">बा</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">बाळू</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-orange-100 text-[12px] font-black text-orange-600">सु</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">सुनीता</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-emerald-50 text-[12px] font-black text-emerald-700">क</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">कविता</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-blue-100 text-[12px] font-black text-blue-600">अ</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">अनिता</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-violet-100 text-[12px] font-black text-violet-600">स</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">सविता</span></span>
+            </div>
+          </div>
+
+          <!-- THE ONE QUESTION — the app's own green explain-card, not an alert -->
+          <div class="rounded-[13px] border border-emerald-100 bg-emerald-50 p-4">
+            <div class="flex items-start gap-3">
+              <span class="flex h-9 w-9 flex-none items-center justify-center rounded-full border border-emerald-200 bg-white text-[19px] font-bold text-emerald-700">?</span>
+              <div class="min-w-0 flex-1">
+                <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+                <span class="en mt-1.5 block text-[11px] italic leading-relaxed text-slate-600">English meaning: "You said twelve. Ten names came through. Were the other two there without their names being said — or was it ten in all?"</span>
+              </div>
+            </div>
+
+            <div class="mt-3 flex flex-col gap-2">
+              <span class="flex items-center gap-3 rounded-[14px] border border-slate-200 bg-white p-3">
+                <span class="min-w-0 flex-1">
+                  <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+                  <span class="en mt-1 block text-[11px] italic leading-snug text-slate-500">English meaning: "Twelve were there — two of their names weren't said."</span>
+                </span>
+                <span class="num flex-none text-[20px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">12</span>
+                <svg class="ico h-[22px] w-[22px] flex-none text-slate-400"><use href="#i-chev-right"/></svg>
+              </span>
+              <span class="flex items-center gap-3 rounded-[14px] border border-slate-200 bg-white p-3">
+                <span class="min-w-0 flex-1">
+                  <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+                  <span class="en mt-1 block text-[11px] italic leading-snug text-slate-500">English meaning: "It was ten."</span>
+                </span>
+                <span class="num flex-none text-[20px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">10</span>
+                <svg class="ico h-[22px] w-[22px] flex-none text-slate-400"><use href="#i-chev-right"/></svg>
+              </span>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[11.5px] leading-relaxed text-slate-600">
+            <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+            <span class="en mt-1 block text-[11px] italic leading-relaxed text-slate-500">English meaning: "Both the twelve you said and the ten names stay in the book. Answering does not rub out either one."</span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <p class="en mx-auto mt-2.5 max-w-[560px] text-center text-[11.5px] leading-relaxed text-slate-500">
+      The 12 is <b>intact and un-struck</b> — no strikethrough, no "corrected to 10", no red. Two statements, one
+      question, and the answer is added <i>beside</i> them rather than on top of them.
+    </p>
+  </section>
+
+  <!-- ==================== FRAME 2 ==================== -->
+  <section class="mb-10">
+    <div class="mb-3 flex items-start gap-3">
+      <span class="num mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-slate-900 text-[14px] font-black text-white">2</span>
+      <div class="min-w-0">
+        <h2 class="en text-[15.5px] font-extrabold text-slate-900">A resolved — twelve stands, ten are named, two stay anonymous</h2>
+        <p class="en mt-1 text-[13px] leading-relaxed text-slate-600">
+          The owner answered "twelve", so the day carries ten named people plus two unnamed ones held apart as two
+          people, and both original statements are still on the record with nothing rewritten.
+        </p>
+        <p class="en mt-1.5 text-[12px] leading-relaxed text-slate-500">
+          <b>Already told it:</b> everything in frame 1, plus the answer.
+          <b>Asked here:</b> nothing — only the standard confirm before saving.
+        </p>
+      </div>
+    </div>
+
+    <div class="en mx-auto mb-1 w-[390px] max-w-full text-center text-[10.5px] font-bold uppercase tracking-wider text-slate-400">Mockup · 390px reference · not wired to data</div>
+    <div class="w-full overflow-x-auto pb-1">
+      <div class="mx-auto w-[390px] flex-none overflow-hidden rounded-[26px] border border-slate-300 bg-slate-50 shadow-[0_10px_30px_-12px_rgba(20,40,30,0.35)]">
+
+        <div class="flex items-center gap-3 bg-[#f6f7f5] px-4 pb-3 pt-3">
+          <span class="flex min-h-[56px] items-center gap-2 rounded-full bg-white py-3 pl-4 pr-5 text-[18px] font-bold text-stone-700 shadow-sm ring-1 ring-stone-100">
+            <svg class="ico h-[22px] w-[22px]"><use href="#i-back"/></svg> मागे
+          </span>
+          <div class="flex-1 truncate pr-8 text-center text-[18px] font-bold text-stone-500">ShramSafalला समजलं</div>
+        </div>
+
+        <div class="flex flex-col gap-2.5 bg-slate-50 px-4 pb-6 pt-2">
+
+          <!-- both statements, side by side, both intact -->
+          <div class="grid grid-cols-2 gap-2.5">
+            <div class="rounded-[18px] border border-slate-100 bg-white p-3 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+              <span class="flex h-8 w-8 items-center justify-center rounded-[10px] bg-blue-50 text-blue-600"><svg class="ico h-4 w-4"><use href="#i-book"/></svg></span>
+              <span class="num mt-2 block text-[26px] font-black leading-none text-slate-800 [font-variant-numeric:tabular-nums]">12</span>
+              <span class="mt-1 inline-block rounded bg-yellow-100 px-1.5 py-0.5 text-[10.5px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+              <span class="en mt-1 block text-[10.5px] italic leading-snug text-slate-500">"what you said"</span>
+            </div>
+            <div class="rounded-[18px] border border-slate-100 bg-white p-3 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+              <span class="flex h-8 w-8 items-center justify-center rounded-[10px] bg-emerald-50 text-emerald-700"><svg class="ico h-4 w-4"><use href="#i-mic"/></svg></span>
+              <span class="num mt-2 block text-[26px] font-black leading-none text-slate-800 [font-variant-numeric:tabular-nums]">10</span>
+              <span class="mt-1 inline-block rounded bg-yellow-100 px-1.5 py-0.5 text-[10.5px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+              <span class="en mt-1 block text-[10.5px] italic leading-snug text-slate-500">"names that came through"</span>
+            </div>
+          </div>
+
+          <div class="rounded-[18px] border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <div class="flex items-center gap-2.5 border-b border-slate-100 px-1 pb-2.5">
+              <span class="flex h-10 w-10 flex-none items-center justify-center rounded-[12px] bg-emerald-50 text-emerald-700">
+                <svg class="ico h-5 w-5"><use href="#i-users"/></svg>
+              </span>
+              <span class="flex-1 text-[15px] font-extrabold text-slate-800"><span class="num">12</span> पैकी <span class="num">10</span> समजले</span>
+            </div>
+
+            <div class="mt-2 grid grid-cols-2 gap-1.5">
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-orange-100 text-[12px] font-black text-orange-600">ग</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">गणेश</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-violet-100 text-[12px] font-black text-violet-600">श</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">शंकर</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-blue-100 text-[12px] font-black text-blue-600">रा</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">रामभाऊ</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-emerald-50 text-[12px] font-black text-emerald-700">मा</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">मारुती</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-rose-100 text-[12px] font-black text-rose-600">द</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">दत्तू</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-amber-100 text-[12px] font-black text-amber-700">बा</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">बाळू</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-orange-100 text-[12px] font-black text-orange-600">सु</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">सुनीता</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-emerald-50 text-[12px] font-black text-emerald-700">क</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">कविता</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-blue-100 text-[12px] font-black text-blue-600">अ</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">अनिता</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-stone-100 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-violet-100 text-[12px] font-black text-violet-600">स</span><span class="truncate text-[12.5px] font-extrabold text-slate-700">सविता</span></span>
+            </div>
+
+            <!-- the two unnamed people: two rows, held apart, never merged -->
+            <div class="mt-1.5 grid grid-cols-2 gap-1.5">
+              <span class="flex items-center gap-2 rounded-xl border border-dashed border-slate-200 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-slate-100 text-slate-400"><svg class="ico h-3.5 w-3.5"><use href="#i-users"/></svg></span><span class="truncate text-[12.5px] font-extrabold tracking-widest text-slate-300">— —</span></span>
+              <span class="flex items-center gap-2 rounded-xl border border-dashed border-slate-200 bg-white px-2 py-1.5"><span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-slate-100 text-slate-400"><svg class="ico h-3.5 w-3.5"><use href="#i-users"/></svg></span><span class="truncate text-[12.5px] font-extrabold tracking-widest text-slate-300">— —</span></span>
+            </div>
+            <div class="mt-2 px-1">
+              <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+              <span class="en mt-1 block text-[11px] italic leading-snug text-slate-500">English meaning: "Two more were there. Their names were not said." — two people, kept as two, never folded into one and never guessed at.</span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2.5">
+            <span class="flex w-full items-center justify-center gap-2 rounded-[14px] border border-slate-200 bg-white py-3.5 text-[13px] font-extrabold text-slate-700">बदल करा</span>
+            <span class="flex w-full items-center justify-center gap-2 rounded-[14px] bg-emerald-600 py-3.5 text-[13px] font-extrabold text-white">
+              <svg class="ico h-4 w-4"><use href="#i-check"/></svg> बरोबर
+            </span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <p class="en mx-auto mt-2.5 max-w-[560px] text-center text-[11.5px] leading-relaxed text-slate-500">
+      The two anonymous slots are drawn as <b>two dashed rows, not one row saying "2"</b>. Collapsing them, or matching
+      them to a known worker, would be the deduplication this release forbids.
+    </p>
+  </section>
+
+  <!-- ==================== FRAME 3 ==================== -->
+  <section class="mb-10">
+    <div class="mb-3 flex items-start gap-3">
+      <span class="num mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-slate-900 text-[14px] font-black text-white">3</span>
+      <div class="min-w-0">
+        <h2 class="en text-[15.5px] font-extrabold text-slate-900">B — the day-level contradiction: one person, one question</h2>
+        <p class="en mt-1 text-[13px] leading-relaxed text-slate-600">
+          Ganesh reads as a full day in one work and a half day in another on the same farm-day, so ShramSafal asks the
+          one thing that settles his day — and asks it exactly once.
+        </p>
+        <p class="en mt-1.5 text-[12px] leading-relaxed text-slate-500">
+          <b>Already told it:</b> both works, both crops, that Ganesh was on the farm, and what each work said.
+          <b>Asked here:</b> only his day, which was never stated as one thing.
+        </p>
+      </div>
+    </div>
+
+    <div class="en mx-auto mb-1 w-[390px] max-w-full text-center text-[10.5px] font-bold uppercase tracking-wider text-slate-400">Mockup · 390px reference · not wired to data</div>
+    <div class="w-full overflow-x-auto pb-1">
+      <div class="mx-auto w-[390px] flex-none overflow-hidden rounded-[26px] border border-slate-300 bg-slate-50 shadow-[0_10px_30px_-12px_rgba(20,40,30,0.35)]">
+
+        <div class="flex items-center gap-3 bg-[#f6f7f5] px-4 pb-3 pt-3">
+          <span class="flex min-h-[56px] items-center gap-2 rounded-full bg-white py-3 pl-4 pr-5 text-[18px] font-bold text-stone-700 shadow-sm ring-1 ring-stone-100">
+            <svg class="ico h-[22px] w-[22px]"><use href="#i-back"/></svg> मागे
+          </span>
+          <div class="flex-1 truncate pr-8 text-center text-[18px] font-bold text-stone-500">एक गोष्ट स्पष्ट करा</div>
+        </div>
+
+        <div class="flex flex-col gap-2.5 bg-slate-50 px-4 pb-6 pt-2">
+
+          <div class="flex items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-[17px] font-black text-orange-600">ग</span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-[20px] font-bold text-stone-800">गणेश</span>
+              <span class="mt-1 inline-block rounded bg-yellow-100 px-1.5 py-0.5 text-[10.5px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+              <span class="en mt-1 block text-[10.5px] italic leading-snug text-slate-500">"today, in two works"</span>
+            </span>
+          </div>
+
+          <!-- the two work contexts: both preserved, neither marked wrong -->
+          <div class="grid grid-cols-2 gap-2.5">
+            <div class="rounded-[18px] border border-slate-100 bg-white p-3 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+              <span class="flex items-center gap-2">
+                <span class="flex h-8 w-8 flex-none items-center justify-center rounded-[10px] bg-blue-50 text-blue-600"><svg class="ico h-4 w-4"><use href="#i-book"/></svg></span>
+                <span class="truncate text-[13px] font-extrabold text-slate-700">द्राक्ष</span>
+              </span>
+              <span class="mt-2.5 inline-flex items-center rounded-lg bg-emerald-50 px-2.5 py-1 text-[15px] font-bold text-emerald-700">पूर्ण</span>
+            </div>
+            <div class="rounded-[18px] border border-slate-100 bg-white p-3 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+              <span class="flex items-center gap-2">
+                <span class="flex h-8 w-8 flex-none items-center justify-center rounded-[10px] bg-blue-50 text-blue-600"><svg class="ico h-4 w-4"><use href="#i-book"/></svg></span>
+                <span class="truncate text-[13px] font-extrabold text-slate-700">ऊस</span>
+              </span>
+              <span class="mt-2.5 inline-flex items-center rounded-lg bg-amber-100 px-2.5 py-1 text-[15px] font-bold text-amber-700">अर्धा</span>
+            </div>
+          </div>
+
+          <!-- THE ONE QUESTION -->
+          <div class="rounded-[13px] border border-emerald-100 bg-emerald-50 p-4">
+            <div class="flex items-start gap-3">
+              <span class="flex h-9 w-9 flex-none items-center justify-center rounded-full border border-emerald-200 bg-white text-[19px] font-bold text-emerald-700">?</span>
+              <div class="min-w-0 flex-1">
+                <span class="block text-[17px] font-extrabold text-emerald-700">एक गोष्ट स्पष्ट करा</span>
+                <span class="mt-1.5 inline-block rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+                <span class="en mt-1.5 block text-[11px] italic leading-relaxed text-slate-600">English meaning: "Ganesh is in two works today — a full day in one, half in the other. What was his day?"</span>
+              </div>
+            </div>
+            <div class="mt-3 grid grid-cols-2 gap-2.5">
+              <span class="flex w-full items-center justify-center rounded-[14px] bg-emerald-600 py-3.5 text-[17px] font-extrabold text-white">पूर्ण</span>
+              <span class="flex w-full items-center justify-center rounded-[14px] border border-amber-200 bg-white py-3.5 text-[17px] font-extrabold text-amber-700">अर्धा</span>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[11.5px] leading-relaxed text-slate-600">
+            <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+            <span class="en mt-1 block text-[11px] italic leading-relaxed text-slate-500">English meaning: "Asked once. What each work said stays exactly as it was said."</span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <p class="en mx-auto mt-2.5 max-w-[560px] text-center text-[11.5px] leading-relaxed text-slate-500">
+      Both work cards stay plain white — neither is flagged as the wrong one. The question borrows the app's own green
+      explain-card, so it reads as ShramSafal noticing something, never as something breaking.
+    </p>
+  </section>
+
+  <!-- ==================== FRAME 4 ==================== -->
+  <section class="mb-10">
+    <div class="mb-3 flex items-start gap-3">
+      <span class="num mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-slate-900 text-[14px] font-black text-white">4</span>
+      <div class="min-w-0">
+        <h2 class="en text-[15.5px] font-extrabold text-slate-900">B answered — and it stops</h2>
+        <p class="en mt-1 text-[13px] leading-relaxed text-slate-600">
+          The day is settled as full, both original statements still stand underneath it, and the second work does not
+          raise a second question.
+        </p>
+        <p class="en mt-1.5 text-[12px] leading-relaxed text-slate-500">
+          <b>Already told it:</b> everything, including his day. <b>Asked here:</b> nothing at all.
+        </p>
+      </div>
+    </div>
+
+    <div class="en mx-auto mb-1 w-[390px] max-w-full text-center text-[10.5px] font-bold uppercase tracking-wider text-slate-400">Mockup · 390px reference · not wired to data</div>
+    <div class="w-full overflow-x-auto pb-1">
+      <div class="mx-auto w-[390px] flex-none overflow-hidden rounded-[26px] border border-slate-300 bg-slate-50 shadow-[0_10px_30px_-12px_rgba(20,40,30,0.35)]">
+
+        <div class="flex items-center gap-3 bg-[#f6f7f5] px-4 pb-3 pt-3">
+          <span class="flex min-h-[56px] items-center gap-2 rounded-full bg-white py-3 pl-4 pr-5 text-[18px] font-bold text-stone-700 shadow-sm ring-1 ring-stone-100">
+            <svg class="ico h-[22px] w-[22px]"><use href="#i-back"/></svg> मागे
+          </span>
+          <div class="flex-1 truncate pr-8 text-center text-[18px] font-bold text-stone-500">ShramSafalला समजलं</div>
+        </div>
+
+        <div class="flex flex-col gap-2.5 bg-slate-50 px-4 pb-6 pt-2">
+
+          <div class="flex items-center gap-3.5 rounded-[20px] border border-emerald-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-[17px] font-black text-orange-600">ग</span>
+            <span class="min-w-0 flex-1 text-[20px] font-bold text-stone-800">गणेश</span>
+            <span class="flex flex-none items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-[17px] font-bold text-emerald-700">
+              <svg class="ico h-4 w-4" style="stroke-width:3.2"><use href="#i-check"/></svg> पूर्ण
+            </span>
+          </div>
+
+          <!-- the two source statements, still standing, unedited -->
+          <div class="rounded-[18px] border border-slate-100 bg-white p-3 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <div class="px-1">
+              <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+              <span class="en mt-1 block text-[11px] italic leading-snug text-slate-500">English meaning: "What each work said" — kept, not corrected.</span>
+            </div>
+            <div class="mt-2 flex flex-col gap-1.5">
+              <span class="flex items-center gap-2.5 rounded-xl border border-stone-100 bg-white px-2.5 py-2">
+                <svg class="ico h-4 w-4 flex-none text-blue-500"><use href="#i-book"/></svg>
+                <span class="flex-1 truncate text-[13px] font-extrabold text-slate-700">द्राक्ष</span>
+                <span class="rounded-lg bg-emerald-50 px-2.5 py-1 text-[13px] font-bold text-emerald-700">पूर्ण</span>
+              </span>
+              <span class="flex items-center gap-2.5 rounded-xl border border-stone-100 bg-white px-2.5 py-2">
+                <svg class="ico h-4 w-4 flex-none text-blue-500"><use href="#i-book"/></svg>
+                <span class="flex-1 truncate text-[13px] font-extrabold text-slate-700">ऊस</span>
+                <span class="rounded-lg bg-amber-100 px-2.5 py-1 text-[13px] font-bold text-amber-700">अर्धा</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- how the day lands in the हजेरी वही -->
+          <div class="overflow-x-auto rounded-[18px] border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <div class="flex items-center gap-2 border-b border-slate-100 pb-2">
+              <span class="w-[82px] flex-none text-[12.5px] font-extrabold text-slate-700">दिवस</span>
+              <span class="flex flex-1 gap-1.5">
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">र</span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">सो</span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">मं</span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">बु</span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">गु</span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">शु</span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">श</span>
+              </span>
+              <span class="w-9 flex-none text-center text-[10px] font-bold text-slate-400">दिवस</span>
+            </div>
+            <div class="flex items-center gap-2 py-1.5">
+              <span class="flex w-[82px] flex-none items-center gap-2 text-[12.5px] font-extrabold text-slate-700">
+                <span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-orange-100 text-[12px] font-black text-orange-600">ग</span>गणेश
+              </span>
+              <span class="flex flex-1 gap-1.5">
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white text-[12px] font-extrabold text-slate-200"></span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700"><svg class="ico h-[13px] w-[13px]" style="stroke-width:3.2"><use href="#i-check"/></svg></span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-amber-100 text-[12px] font-extrabold text-amber-700">½</span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-slate-100 text-[12px] font-extrabold text-slate-300">–</span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white text-[12px] font-extrabold text-slate-200"></span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700 ring-2 ring-emerald-300"><svg class="ico h-[13px] w-[13px]" style="stroke-width:3.2"><use href="#i-check"/></svg></span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white text-[12px] font-extrabold text-slate-200"></span>
+              </span>
+              <span class="num w-9 flex-none text-center text-[15px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">2</span>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[11.5px] leading-relaxed text-slate-600">
+            <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+            <span class="en mt-1 block text-[11px] italic leading-relaxed text-slate-500">English meaning: "That is all — nothing more to ask about today."</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2.5">
+            <span class="flex w-full items-center justify-center gap-2 rounded-[14px] border border-slate-200 bg-white py-3.5 text-[13px] font-extrabold text-slate-700">बदल करा</span>
+            <span class="flex w-full items-center justify-center gap-2 rounded-[14px] bg-emerald-600 py-3.5 text-[13px] font-extrabold text-white">
+              <svg class="ico h-4 w-4"><use href="#i-check"/></svg> बरोबर
+            </span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <p class="en mx-auto mt-2.5 max-w-[560px] text-center text-[11.5px] leading-relaxed text-slate-500">
+      Two works, <b>one</b> day of presence in the हजेरी वही. The empty cells stay dashed and blank — "nobody said" —
+      never the grey <span class="font-bold">–</span>, which means he did not come.
+    </p>
+  </section>
+
+  <!-- ==================== FRAME 5 ==================== -->
+  <section class="mb-12">
+    <div class="mb-3 flex items-start gap-3">
+      <span class="num mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-slate-900 text-[14px] font-black text-white">5</span>
+      <div class="min-w-0">
+        <h2 class="en text-[15.5px] font-extrabold text-slate-900">The case that asks nothing — two works that agree</h2>
+        <p class="en mt-1 text-[13px] leading-relaxed text-slate-600">
+          Ganesh is full on grapes and full on cane the same day: one person, two works, one day of presence, and there
+          is no question card on this screen at all.
+        </p>
+        <p class="en mt-1.5 text-[12px] leading-relaxed text-slate-500">
+          <b>Already told it:</b> everything. <b>Asked here:</b> nothing. Drawing the silence is as load-bearing as
+          drawing the question — an app that asks whenever a person appears twice punishes honest logging.
+        </p>
+      </div>
+    </div>
+
+    <div class="en mx-auto mb-1 w-[390px] max-w-full text-center text-[10.5px] font-bold uppercase tracking-wider text-slate-400">Mockup · 390px reference · not wired to data</div>
+    <div class="w-full overflow-x-auto pb-1">
+      <div class="mx-auto w-[390px] flex-none overflow-hidden rounded-[26px] border border-slate-300 bg-slate-50 shadow-[0_10px_30px_-12px_rgba(20,40,30,0.35)]">
+
+        <div class="flex items-center gap-3 bg-[#f6f7f5] px-4 pb-3 pt-3">
+          <span class="flex min-h-[56px] items-center gap-2 rounded-full bg-white py-3 pl-4 pr-5 text-[18px] font-bold text-stone-700 shadow-sm ring-1 ring-stone-100">
+            <svg class="ico h-[22px] w-[22px]"><use href="#i-back"/></svg> मागे
+          </span>
+          <div class="flex-1 truncate pr-8 text-center text-[18px] font-bold text-stone-500">ShramSafalला समजलं</div>
+        </div>
+
+        <div class="flex flex-col gap-2.5 bg-slate-50 px-4 pb-6 pt-2">
+
+          <div class="flex items-center gap-3.5 rounded-[20px] border border-emerald-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-[17px] font-black text-orange-600">ग</span>
+            <span class="min-w-0 flex-1 text-[20px] font-bold text-stone-800">गणेश</span>
+            <span class="flex flex-none items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-[17px] font-bold text-emerald-700">
+              <svg class="ico h-4 w-4" style="stroke-width:3.2"><use href="#i-check"/></svg> पूर्ण
+            </span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2.5">
+            <div class="rounded-[18px] border border-slate-100 bg-white p-3 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+              <span class="flex items-center gap-2">
+                <span class="flex h-8 w-8 flex-none items-center justify-center rounded-[10px] bg-blue-50 text-blue-600"><svg class="ico h-4 w-4"><use href="#i-book"/></svg></span>
+                <span class="truncate text-[13px] font-extrabold text-slate-700">द्राक्ष</span>
+              </span>
+              <span class="mt-2.5 inline-flex items-center rounded-lg bg-emerald-50 px-2.5 py-1 text-[15px] font-bold text-emerald-700">पूर्ण</span>
+            </div>
+            <div class="rounded-[18px] border border-slate-100 bg-white p-3 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+              <span class="flex items-center gap-2">
+                <span class="flex h-8 w-8 flex-none items-center justify-center rounded-[10px] bg-blue-50 text-blue-600"><svg class="ico h-4 w-4"><use href="#i-book"/></svg></span>
+                <span class="truncate text-[13px] font-extrabold text-slate-700">ऊस</span>
+              </span>
+              <span class="mt-2.5 inline-flex items-center rounded-lg bg-emerald-50 px-2.5 py-1 text-[15px] font-bold text-emerald-700">पूर्ण</span>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[11.5px] leading-relaxed text-slate-600">
+            <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+            <span class="en mt-1 block text-[11px] italic leading-relaxed text-slate-500">English meaning: "He worked in two places today. That is one day." — a statement, not a question.</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2.5">
+            <span class="flex w-full items-center justify-center gap-2 rounded-[14px] border border-slate-200 bg-white py-3.5 text-[13px] font-extrabold text-slate-700">बदल करा</span>
+            <span class="flex w-full items-center justify-center gap-2 rounded-[14px] bg-emerald-600 py-3.5 text-[13px] font-extrabold text-white">
+              <svg class="ico h-4 w-4"><use href="#i-check"/></svg> बरोबर
+            </span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <p class="en mx-auto mt-2.5 max-w-[560px] text-center text-[11.5px] leading-relaxed text-slate-500">
+      Same person, same day, two works, <b>no question</b>. Agreement is not a contradiction, and appearing twice is not
+      a duplicate.
+    </p>
+  </section>
+
+  <!-- ============ READING NOTES ============ -->
+  <section class="mb-8 rounded-2xl border border-slate-200 bg-white p-5">
+    <h3 class="en text-[14.5px] font-extrabold text-slate-900">Reading notes</h3>
+    <ul class="en mt-2.5 space-y-2 text-[12.5px] leading-relaxed text-slate-600">
+      <li><b>Marathi shown verbatim</b> (already approved, not reworded): <span class="font-bold text-slate-800">एक गोष्ट स्पष्ट करा · ShramSafalला समजलं · 12 पैकी 10 समजले · बरोबर · बदल करा · पूर्ण · अर्धा · हजेरी वही · दिवस · मागे</span>. Everything else inside a frame is a placeholder chip with its English meaning underneath.</li>
+      <li><b>"12 पैकी 10 समजले"</b> reuses the approved sentence with this day's own numbers. The words are unchanged; only the figures — which are data, not copy — differ from the approved example.</li>
+      <li><b>द्राक्ष · ऊस · the ten names</b> are farm data read back from what the farmer already logged, not new copy. Worker names are the product, not something to scrub.</li>
+      <li class="flex items-start gap-2">
+        <svg class="ico mt-0.5 h-4 w-4 flex-none text-slate-400"><use href="#i-clock"/></svg>
+        <svg class="ico mt-0.5 h-4 w-4 flex-none text-slate-400"><use href="#i-moon"/></svg>
+        <span><b>No clock anywhere.</b> हजेरी remembers duration — पूर्ण · अर्धा · रात्र · जादा 2 तास · 4 तास — never a start/end time. Operational timing belongs to the Work Log. No frame shows a derived half-day number and no frame shows a wage.</span>
+      </li>
+      <li class="flex items-start gap-2">
+        <svg class="ico mt-0.5 h-4 w-4 flex-none text-slate-400"><use href="#i-chev-down"/></svg>
+        <span>Frames 1&nbsp;→&nbsp;2 are one sequence (ask, then resolved). Frames 3&nbsp;→&nbsp;4 are the other (ask, then it stops). Frame 5 stands alone: it is the same day shape with nothing asked.</span>
+      </li>
+    </ul>
+  </section>
+
+  <!-- ============ WHAT THIS SCREEN MUST NEVER DO ============ -->
+  <section class="rounded-2xl border-2 border-slate-800 bg-white p-5">
+    <div class="flex items-center gap-2.5">
+      <svg class="ico h-5 w-5 flex-none text-slate-800"><use href="#i-alert"/></svg>
+      <h3 class="en text-[15px] font-black uppercase tracking-wide text-slate-900">What this screen must never do</h3>
+    </div>
+    <p class="en mt-1.5 text-[12.5px] text-slate-600">Check the rule as well as the picture — each line is a constraint the frames above are meant to satisfy.</p>
+    <ul class="en mt-3.5 space-y-2.5 text-[13px] leading-relaxed text-slate-700">
+      <li class="flex gap-2.5"><span class="font-black text-slate-400">&#10005;</span><span><b>Never an error state.</b> No "something went wrong", no failure framing, no retry banner. This is a question asked before saving, not a fault report.</span></li>
+      <li class="flex gap-2.5"><span class="font-black text-slate-400">&#10005;</span><span><b>Never red or destructive styling.</b> No rose error card, no red border, no warning triangle in front of the farmer. Green explain-card, plain white options.</span></li>
+      <li class="flex gap-2.5"><span class="font-black text-slate-400">&#10005;</span><span><b>Never a stack trace, an error code, or any code.</b> Nothing technical reaches this surface.</span></li>
+      <li class="flex gap-2.5"><span class="font-black text-slate-400">&#10005;</span><span><b>Never a reconciliation dashboard.</b> No list of open conflicts, no count of disagreements, no queue to work through.</span></li>
+      <li class="flex gap-2.5"><span class="font-black text-slate-400">&#10005;</span><span><b>Never a per-person-per-task timesheet.</b> The two work cards report what each work said; they are not a grid of people &times; tasks &times; hours to fill in.</span></li>
+      <li class="flex gap-2.5"><span class="font-black text-slate-400">&#10005;</span><span><b>Never more than one question.</b> One question per contradiction, asked once, then it stops — and none at all when the statements agree.</span></li>
+      <li class="flex gap-2.5"><span class="font-black text-slate-400">&#10005;</span><span><b>Never deduplicate anonymous crew.</b> Two unnamed people stay two unnamed people: never merged into one, never matched to a known worker, never given a guessed name.</span></li>
+      <li class="flex gap-2.5"><span class="font-black text-slate-400">&#10005;</span><span><b>Never silently overwrite a statement.</b> The 12 stays 12 and the अर्धा stays अर्धा. An answer is recorded beside what was said, never in place of it.</span></li>
+      <li class="flex gap-2.5"><span class="font-black text-slate-400">&#10005;</span><span><b>Never re-ask what was already told.</b> No plot, no crop, no count, no name is asked for again — only the one thing that was never stated.</span></li>
+      <li class="flex gap-2.5"><span class="font-black text-slate-400">&#10005;</span><span><b>Never a clock range, a derived 0.5/1.5 day, or a wage.</b> Durations are stated facts and stay stated.</span></li>
+      <li class="flex gap-2.5"><span class="font-black text-slate-400">&#10005;</span><span><b>Never render an unknown day as "–".</b> A blank dashed cell means nobody said; the grey dash means he did not come. They are different facts.</span></li>
+    </ul>
+  </section>
+
+  <p class="en mt-8 text-center text-[11px] leading-relaxed text-slate-400">
+    docs/superpowers/mockups/2026-09-01-labour-r1/04-state-d-contradiction.html · screen 4 of 7 · static mockup, no
+    data, no wiring, not the live app.
+  </p>
+
+</main>
+</body>
+</html>

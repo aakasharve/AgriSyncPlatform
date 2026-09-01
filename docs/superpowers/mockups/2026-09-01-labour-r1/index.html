@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Labour V2 R1 — Phase 1 mockups</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700;800;900&family=Noto+Sans+Devanagari:wght@400;600;700;800&family=Noto+Serif+Devanagari:wght@600;700&display=swap">
+<style>
+  html, body { overflow-x: hidden; }
+  body { background: #eef1f4; font-family: 'DM Sans', 'Noto Sans Devanagari', sans-serif; }
+  .mr  { font-family: 'Noto Sans Devanagari', sans-serif; }
+  .mrh { font-family: 'Noto Serif Devanagari', serif; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<div class="bg-yellow-100 px-4 py-3 text-center text-[12px] font-bold text-yellow-900">
+  These are MOCKUPS at 390px reference width — not the live app. Nothing here is wired to data.
+  Open them on your phone to judge the real size.
+</div>
+
+<div class="mx-auto flex max-w-[720px] flex-col gap-2.5 px-4 pb-24 pt-5">
+
+  <div class="flex flex-col gap-1 rounded-[18px] border border-slate-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+    <h1 class="mrh text-[19px] font-bold text-slate-800">Labour V2 R1 — Phase 1</h1>
+    <p class="text-[13px] leading-relaxed text-slate-600">
+      Seven screens for visual approval. Nothing is built. Phases 2–5 do not start until you
+      approve these.
+    </p>
+    <p class="mt-2 rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[12px] leading-relaxed text-slate-600">
+      <span class="font-bold text-slate-700">The test you set:</span>
+      <span class="italic">“Where is ShramSafal asking me for something I already told it?”</span>
+      Walk screens 1 → 3 → 5 in that order — that is the sequence the whole release is judged on.
+    </p>
+  </div>
+
+  <a href="01-state-a-anchored.html" class="group flex items-center gap-3.5 rounded-[20px] border border-emerald-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-all active:scale-[0.98]">
+    <span class="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-emerald-50 text-[17px] font-black text-emerald-700">1</span>
+    <span class="min-w-0">
+      <span class="block text-[15px] font-extrabold text-slate-800">The anchored flow</span>
+      <span class="block text-[12.5px] leading-snug text-slate-500">Main Log knew 12 → Labour asks only WHO → you speak → Labour's own answer → <span class="mr">बरोबर</span>. <span class="font-bold text-emerald-700">The most important screen.</span></span>
+    </span>
+  </a>
+
+  <a href="02-state-b-no-anchor.html" class="group flex items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-all active:scale-[0.98]">
+    <span class="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-stone-100 text-[17px] font-black text-stone-600">2</span>
+    <span class="min-w-0">
+      <span class="block text-[15px] font-extrabold text-slate-800">No headcount yet</span>
+      <span class="block text-[12.5px] leading-snug text-slate-500">Why the mic waits — and the register stays open anyway. Check that the <span class="mr">हजेरी वही</span> tile is never blocked.</span>
+    </span>
+  </a>
+
+  <a href="03-state-c-already-known.html" class="group flex items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-all active:scale-[0.98]">
+    <span class="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-stone-100 text-[17px] font-black text-stone-600">3</span>
+    <span class="min-w-0">
+      <span class="block text-[15px] font-extrabold text-slate-800">Already understood</span>
+      <span class="block text-[12.5px] leading-snug text-slate-500">Everyone is known, so you are not asked to speak again — only to confirm.</span>
+    </span>
+  </a>
+
+  <a href="04-state-d-contradiction.html" class="group flex items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-all active:scale-[0.98]">
+    <span class="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-stone-100 text-[17px] font-black text-stone-600">4</span>
+    <span class="min-w-0">
+      <span class="block text-[15px] font-extrabold text-slate-800">When two things disagree</span>
+      <span class="block text-[12.5px] leading-snug text-slate-500">One polite question, asked once — never an error. And the case that asks nothing at all.</span>
+    </span>
+  </a>
+
+  <a href="05-adaptive-ladder.html" class="group flex items-center gap-3.5 rounded-[20px] border border-emerald-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-all active:scale-[0.98]">
+    <span class="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-emerald-50 text-[17px] font-black text-emerald-700">5</span>
+    <span class="min-w-0">
+      <span class="block text-[15px] font-extrabold text-slate-800">The ladder — all four rungs</span>
+      <span class="block text-[12.5px] leading-snug text-slate-500">The whole behaviour on one sheet. <span class="font-bold text-emerald-700">The more ShramSafal understands, the emptier the screen gets.</span></span>
+    </span>
+  </a>
+
+  <a href="06-hajeri-ledger.html" class="group flex items-center gap-3.5 rounded-[20px] border border-violet-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-all active:scale-[0.98]">
+    <span class="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-violet-100 text-[17px] font-black text-violet-600">6</span>
+    <span class="min-w-0">
+      <span class="mr block text-[15px] font-extrabold text-slate-800">हजेरी वही — the biggest one</span>
+      <span class="block text-[12.5px] leading-snug text-slate-500">All five realities, <span class="mr">मुकादम</span>-wise rows, the three views, money placement, and the one question about worker confirmation.</span>
+    </span>
+  </a>
+
+  <a href="07-allow-labour-management.html" class="group flex items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-all active:scale-[0.98]">
+    <span class="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-stone-100 text-[17px] font-black text-stone-600">7</span>
+    <span class="min-w-0">
+      <span class="block text-[15px] font-extrabold text-slate-800">One control — Allow Labour Management</span>
+      <span class="block text-[12.5px] leading-snug text-slate-500">On, on-until-a-date, or off. Existing <span class="mr">मुकादम</span> start off, as you ruled.</span>
+    </span>
+  </a>
+
+  <div class="mt-4 flex flex-col gap-2 rounded-[18px] border border-amber-100 bg-amber-50 p-4">
+    <h2 class="text-[15px] font-extrabold text-amber-900">Open questions — only you can settle these</h2>
+    <ol class="flex list-decimal flex-col gap-2 pl-5 text-[12.5px] leading-relaxed text-amber-900">
+      <li>
+        <span class="font-bold">The last column on a crew row.</span> For a row like
+        <span class="mr">Shankarसोबत 8</span>, does the end number mean <em>days</em>, <em>people</em>,
+        or should it stay blank? It is drawn three different ways right now, deliberately, so you
+        can pick. Screen 6 vs screen 1.
+      </li>
+      <li>
+        <span class="font-bold">Which numerals does a farmer actually read?</span>
+        <span class="mr">१२</span> or <span>12</span>? Both appear. Marathi digits look native;
+        Latin digits match the rest of the app. Your call — it affects every screen.
+      </li>
+      <li>
+        <span class="font-bold">Worker confirmation — row or cell?</span> Screen 6's last panel.
+        The cell already holds three things; confirmation would be a fourth. The proposal is that
+        it lives on the row, with a disputed day the one exception. The spec says this must be
+        settled <em>before</em> the grid is built, or it gets rebuilt later.
+      </li>
+      <li>
+        <span class="font-bold">Missing Marathi.</span> Every yellow
+        <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+        chip is a sentence nobody has approved. The layout is settled; only the words are open.
+      </li>
+    </ol>
+  </div>
+
+  <div class="rounded-xl border border-slate-100 bg-slate-50 p-3 text-[11.5px] leading-relaxed text-slate-600">
+    Built against the <span class="mr">हजेरी</span> that already exists — same 26px cells, same
+    colours, same name column — because you ruled it is the baseline, not something to redesign.
+    A dashed empty cell means <span class="font-bold">nobody said</span>; a
+    <span class="mr font-bold">–</span> means <span class="font-bold">he did not come</span>.
+    Those are different facts and the screens never confuse them.
+  </div>
+
+</div>
+</body>
+</html>
