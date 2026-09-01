@@ -4,7 +4,7 @@ import { Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { FeedDown, LoadFailed, MeasuredZero, NoMatch, NotMeasuredPanel } from '@/components/state';
-import { OPEN_KEY, SORT_DIR_KEY, SORT_KEY, useListUrlState } from '@/lib/useListUrlState';
+import { useListUrlState } from '@/lib/useListUrlState';
 import type { ParamValue, SortDir } from '@/lib/useListUrlState';
 import { ExpandChevron, ExpandableRow } from './ExpandableRow';
 import { Pager } from './Pager';
@@ -46,16 +46,21 @@ import type { DataListConfig } from './types';
  * never hide a behavioural one. That sequencing is why the build is still
  * green seven tasks in.
  *
- * ── URL STATE: ONE PRIMARY LIST PER SCREEN, TODAY ────────────────────────
+ * ── URL STATE: NAMESPACED SINCE TASK 20 ──────────────────────────────────
  * Sort, open/closed and the facet selections live in the URL through T7,
- * whose param names (`page`, `sort`, `dir`, `open`) are module constants with
- * no namespace. TWO DataLists on ONE screen would therefore share them.
+ * whose param names (`page`, `sort`, `dir`, `open`) were module constants with
+ * no namespace, so TWO DataLists on ONE screen shared them.
  *
- * Every screen this plan re-points in Tasks 14-18 has exactly one list, so
- * nothing collides today. **Ops Live (Task 20) has two tables** (A52: the
- * service-health panel plus the second Farmer Suffering watchlist) and will
- * need namespaced params — a small addition to T7, not a second copy of this
- * component. Recorded here rather than discovered there.
+ * Tasks 14-19 each ported a screen with exactly one list, so nothing collided
+ * and this header recorded the prediction: *"Ops Live (Task 20) has two tables
+ * (A52) and will need namespaced params — a small addition to T7, not a second
+ * copy of this component."* Ops Live arrived with THREE (recent events,
+ * service health, the suffering watchlist), and that is what `urlNamespace`
+ * is: `ns` on T7's hook, prefixing those four keys and nothing else. There is
+ * still ONE list component.
+ *
+ * A screen that omits `urlNamespace` is byte-for-byte unchanged — the six
+ * already-ported screens keep `?page`, `?sort`, `?dir` (A17, A18).
  *
  * ── THE TWO-WRITE TRAP ───────────────────────────────────────────────────
  * `setSearchParams` closes over the CURRENT render, so two `set()` calls in
@@ -93,7 +98,11 @@ export function DataList<T>(config: DataListConfig<T>) {
   } = config;
 
   const searchParamKey = search?.paramKey ?? 'search';
-  const url = useListUrlState({ draftKey: searchParamKey });
+  /* `urlNamespace` reaches the URL through T7 and NOWHERE else — the four keys
+     below are read back off `url`, never spelled here, so this component
+     cannot be the place a prefix is forgotten. */
+  const url = useListUrlState({ draftKey: searchParamKey, ns: config.urlNamespace });
+  const { sort: SORT, dir: SORT_DIR, open: OPEN } = url.paramKeys;
 
   const listId = `${id}-list`;
   const summaryFirst = !!collapsible;
@@ -258,14 +267,14 @@ export function DataList<T>(config: DataListConfig<T>) {
        `if (chosen[g.key]) opened = true;`). Page resets to 1 — a filter
        change that leaves the reader on page 5 shows an empty list for a
        filter that matched (A20). */
-    url.setMany({ [key]: isOn ? null : value, [OPEN_KEY]: '1' });
+    url.setMany({ [key]: isOn ? null : value, [OPEN]: '1' });
     setOpened(true);
   }
 
   /** The chip's close control, and the no-match block's. Back to the SUMMARY
    *  — not to a longer list. */
   function clearFacetsToSummary() {
-    url.setMany({ ...facetNulls, [OPEN_KEY]: null });
+    url.setMany({ ...facetNulls, [OPEN]: null });
     setOpened(false);
   }
 
@@ -280,7 +289,7 @@ export function DataList<T>(config: DataListConfig<T>) {
    *    closed              -> "Show all N" : opens it */
   function onShowAll() {
     if (filtered) {
-      url.setMany({ ...facetNulls, [OPEN_KEY]: '1' });
+      url.setMany({ ...facetNulls, [OPEN]: '1' });
       setOpened(true);
       return;
     }
@@ -288,12 +297,12 @@ export function DataList<T>(config: DataListConfig<T>) {
       /* Hiding the list drops a search that may be holding it open too,
          otherwise the button reads "Hide the list", is pressed, and nothing
          moves. Two keys, one write. */
-      url.setMany({ [searchParamKey]: null, [OPEN_KEY]: null }, { resetPage: false });
+      url.setMany({ [searchParamKey]: null, [OPEN]: null }, { resetPage: false });
       url.setDraft('');
       setOpened(false);
       return;
     }
-    url.set(OPEN_KEY, '1', { resetPage: false });
+    url.set(OPEN, '1', { resetPage: false });
     setOpened(true);
   }
 
@@ -316,7 +325,7 @@ export function DataList<T>(config: DataListConfig<T>) {
   function onSort(columnKey: string, defaultDir: SortDir) {
     const nextDir: SortDir =
       columnKey === effectiveSortKey ? (effectiveSortDir === 'asc' ? 'desc' : 'asc') : defaultDir;
-    url.setMany({ [SORT_KEY]: columnKey, [SORT_DIR_KEY]: nextDir }, { resetPage: false });
+    url.setMany({ [SORT]: columnKey, [SORT_DIR]: nextDir }, { resetPage: false });
   }
 
   /* ── the words ────────────────────────────────────────────────────────── */

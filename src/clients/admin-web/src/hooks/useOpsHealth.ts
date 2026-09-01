@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { adminApi, type AdminResponse } from '@/lib/api';
+import { adminApi } from '@/lib/api';
 import { useOrgKey } from '@/lib/orgQuery';
 
 export interface OpsErrorEvent {
@@ -46,29 +46,23 @@ export function useOpsHealth() {
 }
 
 /**
- * A TWELFTH DATA KEY THE PLAN DID NOT NAME.
+ * `useOpsHealthWrapped` WAS HERE. Deleted in Task 20 (D10).
  *
- * Task 12's envelope lists eleven hooks; this dead duplicate is a twelfth data
- * key on the same endpoint, with ZERO callers (verified). It is scheduled for
- * deletion in Task 20 (D10). The org goes into its key anyway, because the one
- * thing that must not survive this task is an example of an org-less data key
- * sitting in the file a later hook gets copied from.
+ * A dead duplicate of the hook above on the SAME endpoint with a divergent
+ * query key and zero callers (verified again before deleting: `grep` found it
+ * only in its own definition and in the tenancy contract test that mounted it).
+ * Wiring it beside `useOpsHealth` would have polled `/shramsafal/admin/ops/health`
+ * TWICE every 30 seconds — on a 2-vCPU box with a measured ceiling of about 32
+ * simultaneous requests, and behind a 30-second server-side output cache that
+ * would have served the second call a byte-identical body.
  *
- * The org sits at index 2 here as well, ahead of the wrapped discriminator,
- * because that position is a convention `lib/orgQuery.ts` reads by index and
- * `tenancy.contract.test.tsx` asserts for all twelve keys.
+ * Task 12 gave it an org key anyway, deliberately, so that an org-LESS data key
+ * could not sit in the file the next hook gets copied from. That reason expires
+ * with the hook, and this note is what replaces it: the file it would have been
+ * copied from now contains exactly one key, and that key carries the org.
+ *
+ * It also typed the response as `AdminResponse<OpsHealthData>`, which is the
+ * A27 mistake in source form — this endpoint sends no envelope, so the hook
+ * would have handed every caller `data.data === undefined` and a `meta` that
+ * was never there.
  */
-export function useOpsHealthWrapped() {
-  const org = useOrgKey();
-  return useQuery<AdminResponse<OpsHealthData>>({
-    queryKey: ['ops', 'health', org, 'wrapped'],
-    queryFn: async () => {
-      const { data } = await adminApi.get<AdminResponse<OpsHealthData>>(
-        '/shramsafal/admin/ops/health'
-      );
-      return data;
-    },
-    staleTime: 25_000,
-    refetchInterval: 30_000,
-  });
-}

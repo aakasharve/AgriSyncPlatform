@@ -261,10 +261,21 @@ export interface DataListStates {
 /* ─────────────────────────────────────────────────────────────── config */
 
 export interface DataListConfig<T> {
-  /** Namespaces the DOM ids this list generates and names its regions. See
-   *  the URL-state note in `DataList.tsx` — it does NOT namespace URL params
-   *  today, because `useListUrlState` owns those keys. */
+  /** Namespaces the DOM ids this list generates and names its regions. It does
+   *  NOT namespace URL params — `urlNamespace` does, deliberately separately,
+   *  because a DOM id is free to change and a URL key is a shared link. */
   id: string;
+  /**
+   * Prefix for `page`, `sort`, `dir` and `open` in the URL (T7's `ns`).
+   *
+   * REQUIRED on a screen with more than one list, and forbidden anywhere else:
+   * with it, Ops Live's three tables sort independently and a link restores
+   * each to the table it belongs to; without it on a one-list screen, `?sort`
+   * stays the plain key A18 registers and every already-shipped link keeps
+   * working. Omitting it on a multi-list screen is not a cosmetic slip — one
+   * header click reorders every table on the page.
+   */
+  urlNamespace?: string;
   /** The accessible name — "All farms". Used on the table, the search box and
    *  the loading announcement, so a page with several loading blocks does not
    *  produce several identical announcements. */

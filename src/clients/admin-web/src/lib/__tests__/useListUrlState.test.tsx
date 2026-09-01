@@ -174,6 +174,7 @@ describe('the org param — the bug this hook exists to make unreachable', () =>
         'get',
         'isOpen',
         'page',
+        'paramKeys',
         'params',
         'reset',
         'set',
@@ -418,5 +419,97 @@ describe('the draft key is configurable, because not every screen calls it searc
     renderAt(`/users?org=${ORG}&search=purvesh`);
     expect(screen.getByTestId('draft')).toHaveTextContent('purvesh');
     expect((screen.getByLabelText('draft') as HTMLInputElement).value).toBe('purvesh');
+  });
+});
+
+/* ══════════════ namespaces — the Task 20 addition (three lists, one URL) ══ */
+
+/** The same harness, namespaced. Only the four list-owned keys move; a facet
+ *  key (`tier`) is a string the SCREEN chose and stays exactly where it was. */
+function NsHarness({ ns }: { ns: string }) {
+  const q = useListUrlState({ ns });
+  return (
+    <div>
+      <button onClick={() => q.toggleSort('score', 'desc')}>{`${ns} sort score`}</button>
+      <button onClick={() => q.setPage(4)}>{`${ns} page 4`}</button>
+      <button onClick={() => q.setOpen(true)}>{`${ns} open`}</button>
+      <button onClick={() => q.set('tier', 'C')}>{`${ns} tier C`}</button>
+      <button onClick={() => q.reset()}>{`${ns} reset`}</button>
+      <output data-testid={`${ns}-sort`}>{`${q.sortKey ?? 'none'}/${q.sortDir}`}</output>
+      <output data-testid={`${ns}-page`}>{q.page}</output>
+      <output data-testid={`${ns}-open`}>{q.isOpen ? 'open' : 'closed'}</output>
+      <output data-testid={`${ns}-keys`}>{Object.values(q.paramKeys).join(',')}</output>
+    </div>
+  );
+}
+
+describe('two lists on one screen (T20 — the collision T8 predicted)', () => {
+  it('each namespace reads and writes its own four keys, and neither reads the other', async () => {
+    const user = userEvent.setup();
+    renderAt(
+      `/ops/live?org=${ORG}`,
+      <>
+        <NsHarness ns="events" />
+        <NsHarness ns="suffering" />
+      </>,
+    );
+
+    expect(screen.getByTestId('events-keys')).toHaveTextContent(
+      'events.page,events.sort,events.dir,events.open',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'events sort score' }));
+
+    expect(qs().get('events.sort')).toBe('score');
+    expect(qs().get('events.dir')).toBe('desc');
+    /* THE WHOLE POINT. A bare `sort` would be read by every list on the page. */
+    expect(qs().get('sort')).toBeNull();
+    expect(screen.getByTestId('events-sort')).toHaveTextContent('score/desc');
+    /* The other list did not move — it is not sorted, and it is not sorted by
+       score either. */
+    expect(screen.getByTestId('suffering-sort')).toHaveTextContent('none/asc');
+
+    await user.click(screen.getByRole('button', { name: 'suffering page 4' }));
+    expect(qs().get('suffering.page')).toBe('4');
+    expect(screen.getByTestId('suffering-page')).toHaveTextContent('4');
+    /* A20 still applies, per namespace: events' own page is untouched by a
+       write to another list's. */
+    expect(qs().get('events.page')).toBe('1');
+    expect(screen.getByTestId('events-page')).toHaveTextContent('1');
+    expect(qs().get('org')).toBe(ORG);
+  });
+
+  it('reset() on one list clears its own keys and leaves the other list alone', async () => {
+    const user = userEvent.setup();
+    renderAt(
+      `/ops/live?org=${ORG}&events.sort=score&events.dir=desc&suffering.sort=name&suffering.open=1`,
+      <>
+        <NsHarness ns="events" />
+        <NsHarness ns="suffering" />
+      </>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'events reset' }));
+
+    expect(qs().get('events.sort')).toBeNull();
+    /* "Clear this table" wiping the table beside it is the same class of bug
+       as the object form dropping the org: a write reaching further than the
+       control that was pressed. */
+    expect(qs().get('suffering.sort')).toBe('name');
+    expect(qs().get('suffering.open')).toBe('1');
+    expect(qs().get('org')).toBe(ORG);
+  });
+
+  it('an un-namespaced list is byte-for-byte what it was before (A17, A18)', async () => {
+    const user = userEvent.setup();
+    renderAt(`/farms?org=${ORG}`);
+
+    await user.click(screen.getByRole('button', { name: 'sort score' }));
+
+    /* Six screens already shipped links carrying these exact keys. */
+    expect(qs().get('sort')).toBe('score');
+    expect(qs().get('dir')).toBe('desc');
+    expect(qs().get('page')).toBe('1');
+    expect([...qs().keys()].some((k) => k.includes('.'))).toBe(false);
   });
 });

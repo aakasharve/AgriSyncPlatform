@@ -63,6 +63,30 @@ export const SORT_DIR_KEY = 'dir';
 export const OPEN_KEY = 'open';
 
 /**
+ * ── NAMESPACES: THE COLLISION TASK 8 PREDICTED, ARRIVING IN TASK 20 ───────
+ *
+ * The four keys above are module constants with no prefix, which is right
+ * while every screen has ONE list — a shared link then reads `?sort=name&dir=asc`
+ * and says what it means. `DataList.tsx`'s header recorded, in Task 8, that
+ * *"Ops Live (Task 20) has two tables (A52) and will need namespaced params —
+ * a small addition to T7, not a second copy of this component."* Ops Live
+ * ships THREE lists (recent events, service health, the suffering watchlist),
+ * so without this every header click would reorder all three at once and a
+ * shared link would restore a sort onto the wrong table.
+ *
+ * `ns` prefixes ONLY these four. It does NOT touch a facet key or a search
+ * param: those are strings the SCREEN chooses, so a screen with two searchable
+ * lists names them apart itself (`search` and `endpoint` already differ).
+ *
+ * `ns: undefined` — the default, and what every screen ported in Tasks 14-19
+ * keeps — is byte-for-byte today's behaviour. A27/A17/A18's `?page`, `?sort`,
+ * `?dir` do not become `list.page` on any screen that already shipped.
+ */
+export function listParamKey(ns: string | undefined, base: string): string {
+  return ns ? `${ns}.${base}` : base;
+}
+
+/**
  * Params this hook will never delete, not even on `reset()`.
  *
  * `org` is the active tenant. "Clear all filters" clearing the tenant is the
@@ -90,6 +114,13 @@ export interface UseListUrlStateOptions {
    * One draft per screen — every screen that has one today has exactly one.
    */
   draftKey?: string;
+  /**
+   * Prefix for the four list-owned keys, so two lists on one screen do not
+   * fight over `?sort`. See the note beside `listParamKey`. Omit it and the
+   * keys are exactly `page`, `sort`, `dir`, `open` — today's behaviour on
+   * every screen that already shipped.
+   */
+  ns?: string;
 }
 
 /** Props for a CONTROLLED input that writes the URL only on Enter. See `draftInputProps`. */
@@ -109,6 +140,10 @@ export interface BlurCommitInputProps {
 export interface ListUrlState {
   /** The live params. Read-only by convention — write through `set`/`setMany`/`reset`. */
   params: URLSearchParams;
+  /** The four list-owned keys AS WRITTEN, namespace included. A caller that
+   *  needs to read or link to one reads it here rather than re-deriving the
+   *  prefix — one spelling, in one place. */
+  paramKeys: { page: string; sort: string; dir: string; open: string };
   /** `params.get(key)`, spelled out so a call site never needs `params` for a read. */
   get: (key: string) => string | null;
   /** `?page` as a number. Junk or missing reads as 1 — never NaN, never 0. */
@@ -188,8 +223,22 @@ function applyOne(next: URLSearchParams, key: string, value: ParamValue): void {
  */
 export function useListUrlState(options: UseListUrlStateOptions = {}): ListUrlState {
   const draftKey = options.draftKey ?? 'search';
+  const ns = options.ns;
   const [params, setSearchParams] = useSearchParams();
   const [draft, setDraft] = useState(() => params.get(draftKey) ?? '');
+
+  /** The four keys this instance owns, resolved once. Every read and every
+   *  write below goes through these — a literal `'sort'` anywhere in this file
+   *  is the namespace leaking. */
+  const paramKeys = useMemo(
+    () => ({
+      page: listParamKey(ns, PAGE_KEY),
+      sort: listParamKey(ns, SORT_KEY),
+      dir: listParamKey(ns, SORT_DIR_KEY),
+      open: listParamKey(ns, OPEN_KEY),
+    }),
+    [ns],
+  );
 
   /**
    * The single write path. `prev` is a fresh copy React Router hands us, so
@@ -210,29 +259,29 @@ export function useListUrlState(options: UseListUrlStateOptions = {}): ListUrlSt
     (key, value, opts) => {
       write((next) => {
         applyOne(next, key, value);
-        if (opts?.resetPage !== false && key !== PAGE_KEY) next.set(PAGE_KEY, '1');
+        if (opts?.resetPage !== false && key !== paramKeys.page) next.set(paramKeys.page, '1');
       });
     },
-    [write],
+    [write, paramKeys],
   );
 
   const setMany = useCallback<ListUrlState['setMany']>(
     (entries, opts) => {
       write((next) => {
-        const keys = Object.keys(entries);
-        for (const key of keys) applyOne(next, key, entries[key]);
-        const touchedAFilter = keys.some((k) => k !== PAGE_KEY);
-        if (opts?.resetPage !== false && touchedAFilter && !keys.includes(PAGE_KEY)) {
-          next.set(PAGE_KEY, '1');
+        const written = Object.keys(entries);
+        for (const key of written) applyOne(next, key, entries[key]);
+        const touchedAFilter = written.some((k) => k !== paramKeys.page);
+        if (opts?.resetPage !== false && touchedAFilter && !written.includes(paramKeys.page)) {
+          next.set(paramKeys.page, '1');
         }
       });
     },
-    [write],
+    [write, paramKeys],
   );
 
   const setPage = useCallback<ListUrlState['setPage']>(
-    (page) => set(PAGE_KEY, String(Math.max(1, Math.trunc(page) || 1))),
-    [set],
+    (page) => set(paramKeys.page, String(Math.max(1, Math.trunc(page) || 1))),
+    [set, paramKeys],
   );
 
   const toggle = useCallback<ListUrlState['toggle']>(
@@ -240,47 +289,62 @@ export function useListUrlState(options: UseListUrlStateOptions = {}): ListUrlSt
       write((next) => {
         if (next.get(key) === value) next.delete(key);
         else next.set(key, value);
-        next.set(PAGE_KEY, '1');
+        next.set(paramKeys.page, '1');
       });
     },
-    [write],
+    [write, paramKeys],
   );
 
-  const sortKey = params.get(SORT_KEY);
-  const sortDir: SortDir = params.get(SORT_DIR_KEY) === 'desc' ? 'desc' : 'asc';
+  const sortKey = params.get(paramKeys.sort);
+  const sortDir: SortDir = params.get(paramKeys.dir) === 'desc' ? 'desc' : 'asc';
 
   const setSort = useCallback<ListUrlState['setSort']>(
-    (key, dir = 'asc') => setMany({ [SORT_KEY]: key, [SORT_DIR_KEY]: key ? dir : null }),
-    [setMany],
+    (key, dir = 'asc') =>
+      setMany({ [paramKeys.sort]: key, [paramKeys.dir]: key ? dir : null }),
+    [setMany, paramKeys],
   );
 
   const toggleSort = useCallback<ListUrlState['toggleSort']>(
     (key, defaultDir = 'asc') => {
       write((next) => {
-        const currentKey = next.get(SORT_KEY);
-        const currentDir = next.get(SORT_DIR_KEY) === 'desc' ? 'desc' : 'asc';
-        next.set(SORT_KEY, key);
-        next.set(SORT_DIR_KEY, key === currentKey ? (currentDir === 'asc' ? 'desc' : 'asc') : defaultDir);
-        next.set(PAGE_KEY, '1');
+        const currentKey = next.get(paramKeys.sort);
+        const currentDir = next.get(paramKeys.dir) === 'desc' ? 'desc' : 'asc';
+        next.set(paramKeys.sort, key);
+        next.set(
+          paramKeys.dir,
+          key === currentKey ? (currentDir === 'asc' ? 'desc' : 'asc') : defaultDir,
+        );
+        next.set(paramKeys.page, '1');
       });
     },
-    [write],
+    [write, paramKeys],
   );
 
   const setOpen = useCallback<ListUrlState['setOpen']>(
     // Opening or closing the list is not a filter — it does not change which
     // rows match, so it must not throw the reader back to page 1.
-    (open) => set(OPEN_KEY, open ? '1' : null, { resetPage: false }),
-    [set],
+    (open) => set(paramKeys.open, open ? '1' : null, { resetPage: false }),
+    [set, paramKeys],
   );
 
+  /**
+   * Clear this list's state and nothing else.
+   *
+   * A NAMESPACED instance clears only its OWN prefix: on a screen with three
+   * lists, "clear" on one of them wiping the other two's sort order is the
+   * same class of bug as the object form dropping `?org` — a write reaching
+   * further than the control the reader pressed. An un-namespaced instance
+   * keeps today's behaviour exactly: everything but `org`.
+   */
   const reset = useCallback<ListUrlState['reset']>(() => {
     write((next) => {
       for (const key of [...next.keys()]) {
-        if (!PRESERVED_KEYS.has(key)) next.delete(key);
+        if (PRESERVED_KEYS.has(key)) continue;
+        if (ns && !key.startsWith(`${ns}.`)) continue;
+        next.delete(key);
       }
     });
-  }, [write]);
+  }, [write, ns]);
 
   const commitDraft = useCallback(() => {
     // Trimmed on commit, NOT on keystroke: the box still shows exactly what
@@ -314,16 +378,17 @@ export function useListUrlState(options: UseListUrlStateOptions = {}): ListUrlSt
 
   const get = useCallback((key: string) => params.get(key), [params]);
 
-  const rawPage = Number(params.get(PAGE_KEY));
+  const rawPage = Number(params.get(paramKeys.page));
   const page = Number.isFinite(rawPage) && rawPage >= 1 ? Math.trunc(rawPage) : 1;
 
   return {
     params,
+    paramKeys,
     get,
     page,
     sortKey,
     sortDir,
-    isOpen: params.get(OPEN_KEY) === '1',
+    isOpen: params.get(paramKeys.open) === '1',
     set,
     setMany,
     toggle,

@@ -8,7 +8,7 @@ import { ORG_KEY_INDEX } from '@/lib/orgQuery';
 import { useFarmsList, useSilentChurn, useSuffering } from '@/hooks/useFarms';
 import { useUsersList } from '@/hooks/useUsers';
 import { useOpsErrors } from '@/hooks/useOpsErrors';
-import { useOpsHealth, useOpsHealthWrapped } from '@/hooks/useOpsHealth';
+import { useOpsHealth } from '@/hooks/useOpsHealth';
 import { useOpsVoice } from '@/hooks/useOpsVoice';
 import { useWvfd } from '@/hooks/useWvfd';
 import { useCohortPatterns } from '@/features/farmer-health/hooks/useCohortPatterns';
@@ -54,7 +54,7 @@ const WHOLE_CONSOLE_WAIT = 15_000;
  *
  * ── HOW TO KNOW THESE TESTS HAVE TEETH ────────────────────────────────────
  * Every assertion below was written against a deliberate break and watched to
- * go red. Delete the org from any ONE of the twelve data keys and
+ * go red. Delete the org from any ONE of the eleven data keys and
  * "org A's rows are never served to org B" fails, by name, for that hook. Take
  * the org out of `useFarms.ts` alone and it is `useFarmsList` that reports it.
  * That is the point: a green test here that could not fail would license
@@ -75,14 +75,14 @@ function cacheRetainingClient() {
   });
 }
 
-/* ───────────────────────── the twelve data queries ─────────────────────── */
+/* ───────────────────────── the eleven data queries ─────────────────────── */
 
 interface QueryLike {
   data: unknown;
 }
 
 /**
- * ELEVEN HOOKS, TWELVE KEYS — counted from the source, not from the plan.
+ * ELEVEN HOOKS, ELEVEN KEYS — counted from the source, not from the plan.
  *
  * Task 12's envelope names eleven: useFarmsList, useSilentChurn, useSuffering,
  * useUsersList, useOpsErrors, useOpsHealth, useOpsVoice, useWvfd,
@@ -92,10 +92,12 @@ interface QueryLike {
  *  - `useScheduleTemplates` DOES NOT EXIST. It is an inline `useQuery` in
  *    `ScheduleTemplatesPage.tsx`; Task 24 extracts it. It is covered by its own
  *    test below, through the page, because there is no hook to mount.
- *  - `useOpsHealthWrapped` is a TWELFTH data key the envelope does not name —
- *    a dead duplicate with zero callers, scheduled for deletion in Task 20.
- *    It is included: the one thing that must not survive this task is an
- *    org-less data key sitting in a file the next hook gets copied from.
+ *  - `useOpsHealthWrapped` WAS a twelfth data key the envelope did not name —
+ *    a dead duplicate with zero callers. Task 12 included it here rather than
+ *    exempt it, because an org-less data key sitting in a file the next hook
+ *    gets copied from is how the omission spreads. Task 20 DELETED the hook
+ *    (D10), so the row is gone from this list too: a contract test that mounts
+ *    a hook nobody ships is testing the test.
  */
 const DATA_HOOKS: ReadonlyArray<readonly [string, () => QueryLike]> = [
   ['useFarmsList', () => useFarmsList(1, 40)],
@@ -104,7 +106,6 @@ const DATA_HOOKS: ReadonlyArray<readonly [string, () => QueryLike]> = [
   ['useUsersList', () => useUsersList(1, 50)],
   ['useOpsErrors', () => useOpsErrors({ page: 1, pageSize: 50 })],
   ['useOpsHealth', () => useOpsHealth()],
-  ['useOpsHealthWrapped', () => useOpsHealthWrapped()],
   ['useOpsVoice', () => useOpsVoice()],
   ['useWvfd', () => useWvfd()],
   ['useCohortPatterns', () => useCohortPatterns()],
