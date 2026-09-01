@@ -201,6 +201,19 @@ export interface ChartShellProps<V> {
   /** REQUIRED. See §1 of this file's header before reaching for a default. */
   dataTable: ChartDataTable<V>;
 
+  /**
+   * WHAT ONE SLOT IS CALLED. Added by Task 22 and defaulted to today's word,
+   * so every chart shipped before it is unchanged.
+   *
+   * The gap note and the nothing-measured panel both say how many slots have
+   * no reading, and until now they said "period" — right for a day, a week or
+   * a month, and wrong for the three axes Farmer Health draws, whose slots are
+   * SCORE BINS, ENGAGEMENT TIERS and PILLARS. "1 of 6 periods was never
+   * measured" over a list of pillars is a sentence that makes a reader stop
+   * and re-read, which is the opposite of what an honesty note is for.
+   */
+  slotNoun?: { one: string; many: string };
+
   states: ChartShellStates;
 
   /** The chart itself — recharts, `Sparkline`, a heatmap, anything. */
@@ -214,6 +227,7 @@ export function ChartShell<V>({
   subtitle,
   slots,
   dataTable,
+  slotNoun = { one: 'period', many: 'periods' },
   states,
   children,
   className,
@@ -228,10 +242,10 @@ export function ChartShell<V>({
    *  review can see it, which is the whole lesson of the sr-only table. */
   function gapNote(): ReactNode {
     if (gaps === 0) return null;
-    const periods = gaps === 1 ? 'period was' : 'periods were';
+    const noun = gaps === 1 ? `${slotNoun.one} was` : `${slotNoun.many} were`;
     return (
       <p data-gap-note="" className="text-[13px] text-text-3">
-        {gaps} of {slots.length} {periods} never measured — shown hatched, not as zero.
+        {gaps} of {slots.length} {noun} never measured — shown hatched, not as zero.
       </p>
     );
   }
@@ -289,7 +303,7 @@ export function ChartShell<V>({
           title={`${title} — not measured`}
           why={
             <>
-              None of the {slots.length} periods on this chart has a reading. This is an absence of
+              None of the {slots.length} {slotNoun.many} on this chart has a reading. This is an absence of
               measurement, not a run of zeros — drawing it as bars would show a flat chart that
               looks like an answer.
             </>

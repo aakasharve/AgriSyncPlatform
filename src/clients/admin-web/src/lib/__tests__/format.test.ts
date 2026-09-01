@@ -230,7 +230,10 @@ describe('DATE_FORMATS matches the screens it claims to describe (A51)', () => {
     usersLastLogin: 'src/pages/users/UsersPage.tsx',
     churnLastLog: 'src/pages/farms/SilentChurnPage.tsx',
     sufferLastErr: 'src/pages/farms/SufferingPage.tsx',
-    cohortRow: 'src/features/farmer-health/components/InterventionQueueTable.tsx',
+    /* Re-pointed by Task 22: `InterventionQueueTable.tsx` is deleted and both
+       cohort lists are `DataList` configurations on the screen itself, which
+       imports the module rather than holding the literal. */
+    cohortRow: 'src/features/farmer-health/FarmerHealthPage.tsx',
     workerSince: 'src/features/farmer-health/components/WorkerSummaryList.tsx',
     voiceDay: 'src/pages/ops/OpsVoicePage.tsx',
     nsmWeek: 'src/pages/metrics/NorthStarPage.tsx',

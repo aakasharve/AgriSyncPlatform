@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   fillAxis,
@@ -199,12 +199,21 @@ describe('the recency ramp (v3 AS.ramp)', () => {
 });
 
 /**
- * THE TWO COPIES MUST AGREE.
+ * THE DUPLICATE IS GONE — AND THAT IS WHAT IS ASSERTED NOW.
  *
- * `fillAxis.ts` documents the three fixed axes; the three live charts still
- * own theirs, because no chart is re-pointed until Tasks 21-23. A duplicate
- * nothing compares is a duplicate that drifts, so these read the live files
- * FROM DISK.
+ * Task 9 documented the three fixed axes here while the three live charts
+ * still owned theirs, and read those files from disk so the two copies could
+ * not drift. **Task 22 re-pointed all four Farmer Health charts onto
+ * `ChartShell` and DELETED them** — `ScoreDistributionChart.tsx`,
+ * `EngagementTierBreakdown.tsx`, `PillarHeatmap.tsx` and
+ * `WeeklyTrendChart.tsx`. There is no second copy of `SCORE_BINS` or
+ * `TIER_ORDER` left to compare against, and `PILLAR_ORDER` moved into the
+ * feature as `PILLARS`/`PILLAR_AXIS` because it carries a weight and a
+ * measurability rule this module has no business knowing.
+ *
+ * So the assertion inverts: instead of proving two copies agree, prove there
+ * is only one. A `grep` for a re-declared axis is the cheap, direct form of
+ * "nobody quietly started a second one".
  *
  * The length guard is not decoration. `vitest.config.ts` sets `css: false`,
  * which stubs css requests — including `?raw` — to an empty string, and Task 3
@@ -212,61 +221,101 @@ describe('the recency ramp (v3 AS.ramp)', () => {
  * than .css so the stub does not apply, but the failure mode (a suite passing
  * against '') is cheap enough to rule out that ruling it out is not optional.
  */
-function source(file: string): string {
-  const text = readFileSync(
-    resolve(process.cwd(), 'src/features/farmer-health/components', file),
-    'utf-8',
-  );
-  expect(text.length).toBeGreaterThan(500);
+function source(rel: string): string {
+  const text = readFileSync(resolve(process.cwd(), rel), 'utf-8');
+  expect(text.length, rel).toBeGreaterThan(500);
   return text;
 }
 
-describe('the documented axes match the live charts (A33)', () => {
-  it('SCORE_BINS matches FIXED_BINS in ScoreDistributionChart', () => {
-    const declared = source('ScoreDistributionChart.tsx').match(/const FIXED_BINS = \[([^\]]*)\]/);
-    expect(declared).not.toBeNull();
-    const live = (declared?.[1] ?? '').match(/'([^']+)'/g)?.map((s) => s.slice(1, -1));
+const FEATURE = 'src/features/farmer-health';
 
-    expect(live).toEqual([...SCORE_BINS]);
-    expect(live).toHaveLength(10);
-  });
-
-  it('TIER_ORDER matches TIER_ORDER in EngagementTierBreakdown', () => {
-    const declared = source('EngagementTierBreakdown.tsx').match(
-      /const TIER_ORDER: EngagementTier\[\] = \[([^\]]*)\]/,
-    );
-    expect(declared).not.toBeNull();
-    const live = (declared?.[1] ?? '').match(/'([^']+)'/g)?.map((s) => s.slice(1, -1));
-
-    expect(live).toEqual([...TIER_ORDER]);
-  });
-
-  it('PILLAR_ORDER matches PILLAR_ORDER in PillarHeatmap', () => {
-    const declared = source('PillarHeatmap.tsx').match(/const PILLAR_ORDER = \[([^\]]*)\]/);
-    expect(declared).not.toBeNull();
-    const live = (declared?.[1] ?? '').match(/'([^']+)'/g)?.map((s) => s.slice(1, -1));
-
-    expect(live).toEqual(PILLAR_ORDER.map((p) => (typeof p === 'string' ? p : p.key)));
-    expect(live).toHaveLength(6);
-  });
-
-  it('all five charts still carry a "Show data table" disclosure (A32)', () => {
-    // The register line this task is built on. If one of these disappears
-    // before Tasks 21-23 re-point them, it disappeared without the shell.
+describe('there is exactly ONE copy of each fixed axis (A33)', () => {
+  it('the four re-pointed charts are gone, not orphaned beside the shell', () => {
+    /* A rewrite that left them on disk would leave two charts per axis, one
+       of which nothing renders — which is how a "fixed axis" starts drifting
+       from the one the reader is looking at. */
     for (const file of [
       'ScoreDistributionChart.tsx',
       'EngagementTierBreakdown.tsx',
       'PillarHeatmap.tsx',
       'WeeklyTrendChart.tsx',
-      'FarmerTimeline.tsx',
     ]) {
-      expect(source(file)).toContain('Show data table');
+      expect(existsSync(resolve(process.cwd(), FEATURE, 'components', file)), file).toBe(false);
     }
   });
 
-  it('the sr-only one is still sr-only — the reason this prop is required', () => {
-    // EngagementTierBreakdown.tsx:95. Invisible in every screenshot review,
-    // which is why a convention was never going to be enough.
-    expect(source('EngagementTierBreakdown.tsx')).toContain('<details className="sr-only">');
+  it('no farmer-health file re-declares SCORE_BINS or TIER_ORDER', () => {
+    for (const rel of featureFiles()) {
+      const text = readFileSync(rel, 'utf-8');
+      expect(/const FIXED_BINS\s*[:=]/.test(text), rel).toBe(false);
+      expect(/const TIER_ORDER\s*[:=]/.test(text), rel).toBe(false);
+    }
+  });
+
+  it('the pillar axis the screen draws is the six pillars, in weighting order', () => {
+    /* PILLAR_ORDER's keys still have to be these six, in this order, wherever
+       they live — the heatmap's whole honesty property is that an absent
+       pillar keeps its place. */
+    const text = source(`${FEATURE}/cohort.ts`);
+    const from = text.indexOf('export const PILLARS');
+    const to = text.indexOf('] as const;', from);
+    expect(from, 'PILLARS not found in cohort.ts').toBeGreaterThan(-1);
+    expect(to, 'PILLARS block not terminated').toBeGreaterThan(from);
+
+    const keys = [...text.slice(from, to).matchAll(/key: '([^']+)'/g)].map((m) => m[1]);
+
+    expect(keys).toEqual(PILLAR_ORDER.map((p) => (typeof p === 'string' ? p : p.key)));
+    expect(keys).toHaveLength(6);
+  });
+
+  it('every chart still carries a "Show data table" disclosure (A32)', () => {
+    /* The four that moved get theirs from `ChartShell`, whose `dataTable` is a
+       REQUIRED prop — the compiler is the assertion there, and the screen test
+       reads the rendered tables. The fifth is still hand-rolled and still
+       Task 23's. */
+    expect(source('src/components/data/ChartShell.tsx')).toContain('Show data table');
+    expect(source(`${FEATURE}/components/FarmerTimeline.tsx`)).toContain('Show data table');
+  });
+
+  it('the sr-only disclosure is gone, and nothing brought it back', () => {
+    /* `EngagementTierBreakdown.tsx:95` was `<details className="sr-only">` —
+       the one accessibility affordance on the page, and the one thing no
+       screenshot review could see. It is the reason `dataTable` is a required
+       prop. Its replacement is VISIBLE, and no farmer-health file may hide a
+       data table again. */
+    for (const rel of featureFiles()) {
+      /* CODE ONLY. This very rule is quoted in a comment in `FarmerHealthPage`
+         — the note explaining why the sr-only table went — and an assertion
+         that cannot tell a prohibition from its own explanation is an
+         assertion that punishes documenting the decision. */
+      expect(/<details className="sr-only">/.test(codeOf(readFileSync(rel, 'utf-8'))), rel).toBe(
+        false,
+      );
+    }
   });
 });
+
+/** The file with its comments removed, so a rule quoted in a comment does not
+ *  read as the rule being broken. */
+function codeOf(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
+/** Every .ts/.tsx under the feature, tests excluded. */
+function featureFiles(): string[] {
+  const root = resolve(process.cwd(), FEATURE);
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== '__tests__') walk(full);
+      } else if (/\.tsx?$/.test(entry.name)) {
+        out.push(full);
+      }
+    }
+  };
+  walk(root);
+  expect(out.length).toBeGreaterThan(5);
+  return out;
+}

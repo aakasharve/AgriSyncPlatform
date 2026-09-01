@@ -99,3 +99,34 @@ export function formatError(error: unknown): string {
   }
   return 'Unexpected error — see console.';
 }
+
+/**
+ * THE TWO SENTENCES, AS DATA — added in Task 22 and NOT a refactor for its own
+ * sake.
+ *
+ * Task 22 puts the intervention queue on `DataList`, which owns the empty
+ * branch and takes the words as `states.measuredZero.what` rather than as a
+ * component. Without this export the port would have retyped both strings into
+ * the screen, and the byte-for-byte assertions in
+ * `__tests__/honestStates.test.tsx` would have gone on passing against a copy
+ * nothing rendered. One source, read by `InterventionQueueEmpty` AND by the
+ * screen.
+ *
+ * It lives HERE, in the vocabulary module, rather than beside the component,
+ * for the reason this file's own header gives: this module holds words and no
+ * JSX. Exporting a constant from a component file also trips
+ * `react-refresh/only-export-components`, and a lint warning bought to save an
+ * import is a bad trade.
+ */
+export const INTERVENTION_EMPTY = {
+  understated: {
+    message: 'No farms in intervention bucket yet.',
+    /** Deliberately none. Saying "all scored farms are above the threshold"
+     *  over an unscored cohort is a claim about farms nobody has measured. */
+    hint: undefined as string | undefined,
+  },
+  normal: {
+    message: 'No farms in intervention bucket.',
+    hint: 'All scored farms are above the 40-pt intervention threshold.' as string | undefined,
+  },
+} as const;

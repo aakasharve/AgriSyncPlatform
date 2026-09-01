@@ -30,7 +30,7 @@
  */
 
 /* the vocabulary itself — no components, no JSX */
-export { STATE_WORD, formatError, stateWord } from './honestState';
+export { INTERVENTION_EMPTY, STATE_WORD, formatError, stateWord } from './honestState';
 export type { HonestState } from './honestState';
 export { REDACTED, isPartlyMasked, isRedacted, maskState } from './redaction';
 export type { MaskState } from './redaction';

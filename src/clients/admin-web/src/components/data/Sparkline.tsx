@@ -59,8 +59,31 @@ export interface SparklineProps<V> {
    */
   label: string;
   tone?: SparkTone;
+  /**
+   * PER-SLOT TONE — opt-in, added by Task 22, and silence keeps the
+   * single-tone behaviour of every series shipped before it byte for byte.
+   *
+   * Rule 1 above says one colour per series, and that is right for a TIME
+   * series: a week is not a different kind of thing from the week beside it.
+   * A CATEGORY axis can be. The score histogram's ten bins are the DWC bands —
+   * 0-40 needs a person, 41-60 is worth watching, 61+ is fine — so the colour
+   * is carrying the thresholds, not decorating the bars
+   * (`ScoreDistributionChart.tsx:22-27` did the same with a raw hex ramp).
+   *
+   * 🛑 A GAP NEVER REACHES THIS FUNCTION. An honesty state outranks any
+   * semantic colour, so an absent slot is grey and hatched whatever a caller
+   * would have said about it.
+   */
+  toneOf?: (slot: Extract<AxisSlot<V>, { kind: 'value' }>) => SparkTone;
   size?: 'sm' | 'lg';
-  /** The faintest step, for the oldest period. v3's default is 0.45. */
+  /**
+   * The faintest step, for the oldest period. v3's default is 0.45.
+   *
+   * 🛑 PASS `1` ON A CATEGORY AXIS. The step means "how recent", and on an
+   * axis whose slots are score bins or tiers there is no older end to fade —
+   * a faded first bin would state a recency the data does not have. `ramp()`
+   * returns 1 for every position when `faint` is 1, which is the opt-out.
+   */
   faint?: number;
   className?: string;
 }
@@ -70,6 +93,7 @@ export function Sparkline<V>({
   valueOf,
   label,
   tone = 'blue',
+  toneOf,
   size = 'sm',
   faint = 0.45,
   className,
@@ -117,12 +141,18 @@ export function Sparkline<V>({
            invisible fact is an omission. It is 2% against a full-height
            hatch, so the two never look alike. */
         const pct = Math.max(2, Math.round((value / span) * 100));
+        /* `slot` is narrowed by the gap branch above, so `toneOf` cannot be
+           handed an absence. */
+        const slotTone = toneOf
+          ? toneOf(slot as Extract<AxisSlot<V>, { kind: 'value' }>)
+          : tone;
         return (
           <div
             key={slot.key}
             data-state="value"
+            data-tone={slotTone}
             title={`${slot.label}: ${value}`}
-            className={cn('min-h-0.5 flex-1 basis-0 rounded-sm', TONE_FILL[tone])}
+            className={cn('min-h-0.5 flex-1 basis-0 rounded-sm', TONE_FILL[slotTone])}
             style={{ height: `${pct}%`, opacity: ramp(i, n, faint) }}
           />
         );

@@ -1,3 +1,4 @@
+import { INTERVENTION_EMPTY } from './honestState';
 import { EmptyState } from './EmptyState';
 
 /**
@@ -29,12 +30,6 @@ export interface InterventionQueueEmptyProps {
 }
 
 export function InterventionQueueEmpty({ understated }: InterventionQueueEmptyProps) {
-  return (
-    <EmptyState
-      message={
-        understated ? 'No farms in intervention bucket yet.' : 'No farms in intervention bucket.'
-      }
-      hint={understated ? undefined : 'All scored farms are above the 40-pt intervention threshold.'}
-    />
-  );
+  const copy = understated ? INTERVENTION_EMPTY.understated : INTERVENTION_EMPTY.normal;
+  return <EmptyState message={copy.message} hint={copy.hint} />;
 }

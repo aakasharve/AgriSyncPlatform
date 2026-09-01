@@ -94,7 +94,8 @@ export const DATE_FORMATS = {
   churnLastLog: 'dd MMM yyyy',
   /** Time FIRST, then the date — the hour is the signal on a suffering row. SufferingPage.tsx:42 */
   sufferLastErr: 'HH:mm, dd MMM',
-  /** Date then time, no year — the cohort queue is a recent window. InterventionQueueTable.tsx:37 */
+  /** Date then time, no year — the cohort queue is a recent window.
+   *  `FarmerHealthPage.tsx` (was `InterventionQueueTable.tsx:37`, deleted by T22). */
   cohortRow: 'dd MMM, HH:mm',
   /** Four-digit year — a worker's start date is a record, not a recency. WorkerSummaryList.tsx:29 */
   workerSince: 'dd MMM yyyy',
