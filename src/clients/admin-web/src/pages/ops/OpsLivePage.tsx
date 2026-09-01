@@ -7,6 +7,15 @@ import type { DataListColumn } from '@/components/data';
 import { FeedDown, LoadFailed, NotMeasured, NotMeasuredPanel } from '@/components/state';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { KpiCard } from '@/components/ui/KpiCard';
+import {
+  FROM_A_NIGHTLY_VIEW,
+  R9,
+  R10,
+  RULES_NOT_CHECKED_BY_OPS_HEALTH,
+  RULE_WORD,
+  ruleStateOf,
+  type RuleState,
+} from '@/lib/alertRules';
 import { metaRefreshedAt, type AdminResponse } from '@/lib/api';
 import { DATE_FORMATS, fmt } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -155,18 +164,21 @@ import type { OpsErrorEvent, OpsFarmError, OpsHealthData } from '@/hooks/useOpsH
 
 /* ─────────────────────────────────────────────────────────── THE RULES */
 
-/** BREACH / CLEAR / NOT CHECKED — three states, and the third is not a shade
- *  of the second. `null` is what the endpoint sends when it could not read
- *  the view at all; `undefined` is a rule this endpoint never reads. */
-type RuleState = 'breach' | 'clear' | 'unread' | 'not-checked';
-
-const RULE_WORD: Record<RuleState, string> = {
-  breach: 'BREACH',
-  clear: 'CLEAR',
-  unread: 'N/A',
-  'not-checked': 'NOT CHECKED',
-};
-
+/**
+ * THE FOUR STATES, THE TWO RULES AND THEIR THRESHOLDS NOW LIVE IN
+ * `@/lib/alertRules` — moved there by Task 26, unchanged.
+ *
+ * Not a tidy-up. Home counts R9 and R10 breaches on its Active Alerts tile and
+ * takes its Voice Success tone from R10, so those threshold sentences are now
+ * read by TWO screens. A second copy of "voice failure rate above 20% in 6
+ * hours" would be a second statement of one fact about the database, and the
+ * day one of them changed the other would go on rendering the old number under
+ * the same rule id — the drift `nav.ts` was written to end, in a place where it
+ * would make one of two screens lie about an alert.
+ *
+ * Every word rendered below is byte-identical to what this screen rendered
+ * before the move; the file it now comes from carries the SQL citations.
+ */
 interface RuleRow {
   id: string;
   name: string;
@@ -176,45 +188,34 @@ interface RuleRow {
   meta: string;
 }
 
-function ruleStateOf(breached: boolean | null | undefined): RuleState {
-  if (breached === true) return 'breach';
-  if (breached === false) return 'clear';
-  return 'unread';
-}
-
-/** The verdict's provenance, in one line under the rule. Property (3): a
- *  matview verdict has no age this endpoint reports, so none is implied. */
-const FROM_A_NIGHTLY_VIEW =
-  'read from a materialized view rebuilt once a day at 02:00 UTC — this feed does not report when';
-
 function rulesFrom(data: OpsHealthData | undefined): RuleRow[] {
   return [
     {
-      id: 'R9',
-      name: 'API error spike',
-      rule: 'more than 30 API errors in 1 hour',
+      id: R9.id,
+      name: R9.name,
+      rule: R9.rule,
       state: data ? ruleStateOf(data.apiErrorSpike) : 'unread',
       meta:
         data && data.apiErrorSpike !== null
           ? FROM_A_NIGHTLY_VIEW
-          : 'mis.alert_r9_api_error_spike could not be read on this request',
+          : `${R9.view} could not be read on this request`,
     },
     {
-      id: 'R10',
-      name: 'Voice degraded',
-      rule: 'voice failure rate above 20% in 6 hours',
+      id: R10.id,
+      name: R10.name,
+      rule: R10.rule,
       state: data ? ruleStateOf(data.voiceDegraded) : 'unread',
       meta:
         data && data.voiceDegraded !== null
           ? FROM_A_NIGHTLY_VIEW
-          : 'mis.alert_r10_voice_degraded could not be read on this request',
+          : `${R10.view} could not be read on this request`,
     },
     {
       /* D8, in one row. Property (5) is why the sentence is about THIS
          endpoint rather than about the platform. */
-      id: 'R1–R8',
-      name: 'Sync, engagement, correction and referral rules',
-      rule: 'eight named rules with eight views of their own',
+      id: RULES_NOT_CHECKED_BY_OPS_HEALTH.id,
+      name: RULES_NOT_CHECKED_BY_OPS_HEALTH.name,
+      rule: RULES_NOT_CHECKED_BY_OPS_HEALTH.rule,
       state: 'not-checked',
       meta:
         'this endpoint reads two views and these are not among them, so this screen has no state to report for them',

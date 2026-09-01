@@ -14,6 +14,7 @@ import {
 import { useAdminAuth } from './AdminAuthProvider';
 import { useActiveOrg } from './ActiveOrgProvider';
 import { GROUP_ORDER, NAV } from './nav';
+import { useNavBadges } from './navBadges';
 import { ToastHost } from './ToastHost';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { PersonName } from '@/components/ui/PersonName';
@@ -79,6 +80,14 @@ export function AdminShell() {
   const location = useLocation();
   const crumb = humanizePath(location.pathname);
 
+  /* A53 — the badge slot has been styled and empty since Task 10. This is
+     where it stops being empty. The shell asks for numbers keyed by route and
+     learns nothing else; see `navBadges.ts` for what fills it and what it
+     costs. A route with no computed badge falls back to the static `n.badge`,
+     which nothing sets today and which stays for the same reason it always
+     has: a declared slot is harder to delete by accident than an absent one. */
+  const badges = useNavBadges();
+
   return (
     /* 1280 is the design width and gets the full 236px sidebar; 1024-1279
        narrows it to 212px; below 1024 the sidebar stops being a column and
@@ -135,11 +144,7 @@ export function AdminShell() {
                         <n.Icon size={18} aria-hidden="true" />
                       </span>
                       <span className="hidden sm:inline">{n.label}</span>
-                      {typeof n.badge === 'number' && (
-                        <span className="ml-auto rounded-full bg-tint-red px-2 text-[13px] font-semibold text-red">
-                          {n.badge}
-                        </span>
-                      )}
+                      <NavBadge count={badges[n.to] ?? n.badge} label={n.label} />
                     </>
                   )}
                 </NavLink>
@@ -205,6 +210,36 @@ export function AdminShell() {
  * router can see, and a filter change on the screen underneath no longer
  * strips it back out.
  */
+/**
+ * THE BADGE, WITH A WORD BESIDE THE NUMBER.
+ *
+ * A bare number in a red pill beside "Home" says nothing to a screen-reader
+ * user and very little to anyone else — "12" next to Home is a quantity of
+ * an unnamed thing. The digits are what a sighted reader scans; the sentence
+ * is what everyone else gets, and it names WHICH number this is.
+ *
+ * `undefined` renders nothing. That is the whole of the "disappears when there
+ * is nothing to report" rule, and it covers three different truths on purpose
+ * — no rows, no entitlement, and no answer yet — because none of the three
+ * is a zero and a pill has no room to tell them apart. The count of zero is a
+ * finding, and it belongs on the screen the badge points at, where there is
+ * room to say "checked at 11:41 against both watchlists".
+ */
+function NavBadge({ count, label }: { count: number | undefined; label: string }) {
+  if (typeof count !== 'number') return null;
+  return (
+    <span
+      data-nav-badge={label}
+      className="ml-auto rounded-full bg-tint-red px-2 text-[13px] font-semibold text-red"
+    >
+      <span aria-hidden="true">{count}</span>
+      <span className="sr-only">
+        {count} {count === 1 ? 'farm needs' : 'farms need'} a person today
+      </span>
+    </span>
+  );
+}
+
 function OrgScope() {
   const { scope, memberships } = useAdminScope();
   const { activeOrgId, setActiveOrgId } = useActiveOrg();

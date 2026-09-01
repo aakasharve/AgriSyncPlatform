@@ -6,7 +6,7 @@ import { Masked, NotMeasured, NotMeasuredPanel } from '@/components/state';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { PersonName } from '@/components/ui/PersonName';
 import { DATE_FORMATS, fmt } from '@/lib/format';
-import { useSilentChurn } from '@/hooks/useFarms';
+import { partitionSilentChurn, useSilentChurn } from '@/hooks/useFarms';
 import type { SilentChurnItem } from '@/hooks/useFarms';
 
 /**
@@ -132,36 +132,24 @@ const NO_LAST_LOG =
 
 /* ───────────────────────────────────────────────────────── THE PARTITION */
 
-interface ChurnPartition {
-  /** Rows whose silence is measurable — every row this feed can return. */
-  watchlist: SilentChurnItem[];
-  /** Rows with no last log. Unmeasurable, and therefore not silent for a long
-   *  time and not silent for zero weeks. Held out. */
-  heldOut: SilentChurnItem[];
-}
-
 /**
- * The whole of Step 3, in one function.
+ * THE PARTITION MOVED TO `@/hooks/useFarms` IN TASK 26 (`partitionSilentChurn`),
+ * and it is the same function — same one line, same reason, same guard.
  *
- * NOT exported. It was, briefly, "so a test can break it" — but the tests
- * break it by editing this line, and a value export from a page file costs a
- * `react-refresh/only-export-components` warning for a seam nothing uses.
- * Proving the partition through the rendered screen is also the stronger
- * proof: it is the SUMMARY, the COUNT and the ROWS that must not contain a
- * never-logged farm, and a unit test on this function alone would pass while
- * any one of the three still did.
+ * It used to live here, NOT exported, on the grounds that "the tests break it
+ * by editing this line" and a value export from a page file costs a
+ * `react-refresh/only-export-components` warning. Both were true. What changed
+ * is that Home now merges this feed with Suffering and needs the identical
+ * split, so keeping it here would have meant TWO copies of one product rule —
+ * and the conflation Task 15 deleted ("never logged" and "logged and stopped"
+ * printed as the same thing) would have come back on whichever screen was
+ * edited second.
  *
- * `weeksSilent` arrives as a plain non-null number on every row. For a row
- * with no `lastLogAt` that number was computed from nothing, so it is not a
- * reading — which is why the split keys on the last log and never on the
- * week count.
+ * It now lives beside the FEED it partitions rather than beside either screen.
+ * The proof stays where it was: it is the SUMMARY, the COUNT and the ROWS on
+ * this screen that must not contain a never-logged farm, and this screen's test
+ * still breaks the rule at its source and asserts all three.
  */
-function partition(rows: SilentChurnItem[]): ChurnPartition {
-  const watchlist: SilentChurnItem[] = [];
-  const heldOut: SilentChurnItem[] = [];
-  for (const row of rows) (row.lastLogAt ? watchlist : heldOut).push(row);
-  return { watchlist, heldOut };
-}
 
 /* ─────────────────────────────────────────────────────────── THE COLUMNS */
 
@@ -352,7 +340,7 @@ export default function SilentChurnPage() {
   const lastRefreshed = metaRefreshedAt(data?.meta);
 
   /** Step 3. Before the summary, before the facets, before the sort. */
-  const { watchlist, heldOut } = partition(items);
+  const { watchlist, heldOut } = partitionSilentChurn(items);
 
   /**
    * NEVER `new Date()`. The window this list was checked over is the server's

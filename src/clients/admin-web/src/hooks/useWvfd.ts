@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { adminApi, type AdminResponse } from '@/lib/api';
 import { useOrgKey } from '@/lib/orgQuery';
+import type { FeedOptions } from './useFarms';
 
 /**
  * WVFD — WHAT `/shramsafal/admin/metrics/wvfd` ACTUALLY RETURNS.
@@ -106,8 +107,9 @@ export const WVFD_FARM_LIMIT = 50;
 export const WVFD_MIN_WEEKS = 4;
 export const WVFD_MAX_WEEKS = 52;
 
-/** Org in the key (A7, T12 S3) — see the note in `useFarms.ts`. */
-export function useWvfd(weeks = 12) {
+/** Org in the key (A7, T12 S3) — see the note in `useFarms.ts`.
+ *  `options.enabled` is the fail-closed gate documented on `useSilentChurn`. */
+export function useWvfd(weeks = 12, options?: FeedOptions) {
   const org = useOrgKey();
   return useQuery<AdminResponse<WvfdHistory>>({
     /* `weeks` IS LOAD-BEARING HERE. See the header. */
@@ -118,6 +120,7 @@ export function useWvfd(weeks = 12) {
       );
       return data;
     },
+    enabled: options?.enabled !== false,
     staleTime: 300_000,
     refetchInterval: 300_000,
   });

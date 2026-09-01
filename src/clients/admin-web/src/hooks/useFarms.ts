@@ -65,19 +65,74 @@ export function useFarmsList(
     staleTime: 60_000, placeholderData: keepPreviousDataWithinOrg<AdminResponse<FarmsList>>(org),
   });
 }
-export function useSilentChurn() {
+/**
+ * THE SAME `enabled` GATE `useFarmsList` ALREADY CARRIES, AND FOR THE SAME
+ * SECURITY REASON — added in Task 26, spelled identically so this console has
+ * one idiom for "mounted but silent" rather than three.
+ *
+ * Home is the ONE screen with no route guard (Preservation Register A4), and
+ * it mounts five hooks whose endpoints are each gated server-side on a
+ * different module key. An admin who may open Home but holds none of those
+ * keys would fire five requests that each come back a denial — and a denial
+ * invalidates the cached scope (`App.tsx`'s `QueryCache.onError`), which
+ * re-asks for the scope, which re-renders Home, which fires them again. Task 13
+ * met exactly this shape on the command palette and closed it the same way:
+ * FAIL CLOSED AT THE REQUEST, NOT AT THE RENDER.
+ */
+export interface FeedOptions {
+  enabled?: boolean;
+}
+
+/**
+ * THE SILENT-CHURN HOLD-OUT, AS ONE RULE READ BY TWO SCREENS.
+ *
+ * A row with no `lastLogAt` has nothing to count silence back from, so it is
+ * held OUT of the watchlist: out of the list, out of the summary, out of every
+ * facet count and out of the sort. Task 15 established it and proved it by
+ * breaking it; Task 26 needs the same split to merge this feed with Suffering
+ * on Home, and a second copy of the rule is how the conflation Task 15 deleted
+ * ("never logged" and "logged and stopped" printed the same) comes back on one
+ * screen and not the other.
+ *
+ * ⚠️ THE HELD-OUT SIDE IS EMPTY TODAY, BY CONSTRUCTION, AND THE GUARD STILL
+ * SHIPS. `mis.silent_churn_watchlist` does `FROM sf JOIN last_log ll … WHERE
+ * ll.last_log_at < NOW() - INTERVAL '14 days'` — an INNER JOIN plus a
+ * comparison against NULL — so a farm with no log is dropped before the list
+ * is built. The DTO's `LastLogAt` is nullable and the reader handles `DBNull`,
+ * so the day the feed changes, the conflation must not come back with it.
+ *
+ * `weeksSilent` arrives as a plain non-null number on every row. For a row
+ * with no `lastLogAt` that number was computed from nothing, so it is not a
+ * reading — which is why the split keys on the last log and never on the week
+ * count.
+ */
+export interface SilentChurnPartition {
+  watchlist: SilentChurnItem[];
+  heldOut: SilentChurnItem[];
+}
+
+export function partitionSilentChurn(rows: SilentChurnItem[]): SilentChurnPartition {
+  const watchlist: SilentChurnItem[] = [];
+  const heldOut: SilentChurnItem[] = [];
+  for (const row of rows) (row.lastLogAt ? watchlist : heldOut).push(row);
+  return { watchlist, heldOut };
+}
+
+export function useSilentChurn(options?: FeedOptions) {
   const org = useOrgKey();
   return useQuery<AdminResponse<SilentChurnItem[]>>({
     queryKey: ['farms', 'silent-churn', org],
     queryFn: async () => { const { data } = await adminApi.get<AdminResponse<SilentChurnItem[]>>('/shramsafal/admin/farms/silent-churn'); return data; },
+    enabled: options?.enabled !== false,
     staleTime: 300_000,
   });
 }
-export function useSuffering() {
+export function useSuffering(options?: FeedOptions) {
   const org = useOrgKey();
   return useQuery<AdminResponse<SufferingItem[]>>({
     queryKey: ['farms', 'suffering', org],
     queryFn: async () => { const { data } = await adminApi.get<AdminResponse<SufferingItem[]>>('/shramsafal/admin/farms/suffering'); return data; },
+    enabled: options?.enabled !== false,
     staleTime: 60_000, refetchInterval: 60_000,
   });
 }

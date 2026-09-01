@@ -121,8 +121,28 @@ function cellsOf(row: HTMLTableRowElement): HTMLTableCellElement[] {
   return [...row.querySelectorAll('td')];
 }
 
+/**
+ * A TENTH WAITER OF THE SHAPE `558b6a9d` FIXED, MISSED BY IT — found by Task
+ * 26, which added three files to the suite and measured what happened.
+ *
+ * That commit gave nine waiters an explicit 15-second timeout because each
+ * asked for something that only exists AFTER an async boundary while using
+ * Testing Library's 1000 ms default; its own message says one residual
+ * remained. This is not that residual — it is a tenth instance, in a file the
+ * commit did not touch. Measured over eighteen full-suite runs on this branch,
+ * it and one other were the only intermittent failures, at roughly one run in
+ * nine, and the failure was never a timeout of the test: it was
+ * `Unable to find role="table" and name "All farms"` — the screen had not
+ * finished answering.
+ *
+ * NO ASSERTION CHANGES. A real regression still fails; it now fails after
+ * waiting rather than before the screen has finished changing.
+ * `vitest.config.ts` is untouched.
+ */
+const SETTLE_WAIT = 15_000;
+
 async function rowsAppear() {
-  await screen.findByRole('table', { name: 'All farms' });
+  await screen.findByRole('table', { name: 'All farms' }, { timeout: SETTLE_WAIT });
 }
 
 function lastFarmsRequest(): CapturedRequest {

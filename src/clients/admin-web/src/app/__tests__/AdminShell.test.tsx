@@ -140,6 +140,84 @@ afterEach(() => {
   stub = undefined;
 });
 
+/* ═════════════════════════════════ the two watchlists behind the nav badge ══ */
+
+const BADGE_MODULES = ['farms.suffering', 'farms.silent-churn'];
+
+function scopeWithModules(keys: string[]): MeScopeResponse {
+  const base = scopeResponse(ONE_MEMBERSHIP);
+  return {
+    ...base,
+    scope: {
+      ...base.scope!,
+      modules: keys.map((key) => ({ key, canRead: true, canWrite: false, canExport: false })),
+    },
+  };
+}
+
+/** The REAL `SufferingItemDto` shape (`AdminMisRepository.cs:240-242`). */
+function sufferingRow(farmId: string, name: string) {
+  return {
+    farmId,
+    name,
+    errorCount: 12,
+    syncErrors: 4,
+    logErrors: 0,
+    voiceErrors: 3,
+    lastErrorAt: '2026-09-01T06:20:00.0000000Z',
+  };
+}
+
+/** The REAL `SilentChurnItemDto` shape (`AdminMisRepository.cs:209-215`). */
+function churnRow(farmId: string, name: string, over: Record<string, unknown> = {}) {
+  return {
+    farmId,
+    name,
+    ownerPhone: '98******10',
+    plan: 'trial',
+    weeksSilent: 3,
+    lastLogAt: '2026-08-10T04:00:00.0000000Z',
+    ...over,
+  };
+}
+
+/** The envelope these two endpoints really send (`AdminResponse<T>`). */
+function envelope(data: unknown) {
+  return {
+    data,
+    meta: {
+      source: 'materialized',
+      lastRefreshedUtc: '2026-09-01T08:30:00.0000000Z',
+      ttlSeconds: 300,
+    },
+  };
+}
+
+/** The badge, by the attribute the shell writes it under. `null` when the
+ *  slot rendered nothing, which is a state this file asserts four times. */
+function homeBadge(): HTMLElement | null {
+  return document.querySelector('[data-nav-badge="Home"]');
+}
+
+function serveWatchlists({
+  suffering = [] as unknown[],
+  churn = [] as unknown[],
+  churnPending = false,
+} = {}) {
+  stub = installAdapter(async (req) => {
+    if (req.url.includes('/me/scope')) {
+      return { status: 200, data: scopeWithModules(BADGE_MODULES) };
+    }
+    if (req.url.includes('/farms/suffering')) return { status: 200, data: envelope(suffering) };
+    if (req.url.includes('/farms/silent-churn')) {
+      if (churnPending) return neverSettles();
+      return { status: 200, data: envelope(churn) };
+    }
+    return { status: 404, data: {} };
+  });
+  return stub;
+}
+
 describe('the avatar is the signed-in admin (D12)', () => {
   it('renders DIFFERENT initials for two different people', async () => {
     /*
@@ -424,25 +502,83 @@ describe('the sidebar (A53, A58)', () => {
     expect(current[0]).toHaveTextContent('All Farms');
   });
 
-  it('keeps the badge slot even though nothing populates it (A53)', async () => {
+  /* ═══════════════════════════════════════ A53, WHICH IS NO LONGER EMPTY ══ */
+
+  /**
+   * THIS TEST USED TO ASSERT A STRING IN THE SOURCE, and that was the right
+   * test while the slot rendered nothing: a capability that produces no DOM
+   * can only be proved from the file. Task 26 populated it from the
+   * should-call-today count, so the source assertion is retired in favour of
+   * the behaviour it was standing in for. Both halves of the register line are
+   * still proved — the slot renders, and it renders nothing when there is
+   * nothing to report.
+   */
+  it('renders the should-call-today count on the Home item (A53)', async () => {
+    serveWatchlists({
+      suffering: [sufferingRow('11111111-1111-1111-1111-111111111111', 'Wagholi Grapes')],
+      churn: [
+        churnRow('22222222-2222-2222-2222-222222222222', 'Ozar Onion'),
+        /* The SAME farm on both watchlists. One call, one row, one count —
+           if the badge said 3 the union would be a concatenation. */
+        churnRow('11111111-1111-1111-1111-111111111111', 'Wagholi Grapes'),
+      ],
+    });
+    signIn({ display_name: 'Test Admin' });
+    renderShell();
+    await screen.findByText(ORG_A_NAME);
+
+    await waitFor(() => expect(homeBadge()).not.toBeNull());
+    const badge = homeBadge()!;
+    expect(badge).toHaveTextContent('2');
+    /* A coloured pill with a bare number beside "Home" is undecodable. */
+    expect(badge).toHaveTextContent('2 farms need a person today');
+  });
+
+  it('renders no badge at all when both watchlists are empty (A53)', async () => {
+    serveWatchlists({ suffering: [], churn: [] });
+    signIn({ display_name: 'Test Admin' });
+    renderShell();
+    await screen.findByText(ORG_A_NAME);
+
+    /* A measured zero is a finding and it belongs on the screen the badge
+       points at, where there is room to say what was checked and when. A "0"
+       pill in the sidebar would be that finding with its reasoning removed. */
+    await waitFor(() => {
+      expect(homeBadge()).toBeNull();
+    });
+  });
+
+  it('renders no badge when the reader may not read either watchlist (A53)', async () => {
+    /* `serve()` grants no modules at all. The two feeds are never requested,
+       so there is no list to count — which is a different fact from an empty
+       one, and the pill cannot tell them apart, so it shows neither. */
     serve();
     signIn({ display_name: 'Test Admin' });
     renderShell();
     await screen.findByText(ORG_A_NAME);
 
-    /*
-     * A53 is a capability that renders NOTHING today, so the DOM cannot prove
-     * it survives — only the source can, the same device routes.contract.test
-     * uses for the two ungated-route comments. The point of the register line
-     * is that the slot and its REASON both survive; deleting the reason is how
-     * the slot gets deleted next.
-     */
-    // The slot and its reason live in `nav.ts` since Task 13; the pill that
-    // renders it is still the shell's. Both halves are still asserted, which
-    // is the point — deleting the reason is how the slot gets deleted next.
-    expect(navSource).toContain('badge?: number');
-    expect(navSource).toContain('Preservation Register A53');
-    expect(shellSource).toContain("typeof n.badge === 'number'");
+    await waitFor(() => {
+      expect(homeBadge()).toBeNull();
+    });
+    /* And it asked for nothing it was not entitled to. Home is the one screen
+       with no route guard, so a denial here would invalidate the cached scope
+       and re-ask in a loop (App.tsx's QueryCache.onError). */
+    const asked = stub!.requests.map((r) => r.url);
+    expect(asked.some((url) => url.includes('/farms/suffering'))).toBe(false);
+    expect(asked.some((url) => url.includes('/farms/silent-churn'))).toBe(false);
+  });
+
+  it('renders no badge while a watchlist it is entitled to has not answered (A53)', async () => {
+    /* A count that silently dropped a whole watchlist is worse than no count,
+       and a pill has no room to say "at least". */
+    serveWatchlists({ suffering: [], churn: [], churnPending: true });
+    signIn({ display_name: 'Test Admin' });
+    renderShell();
+    await screen.findByText(ORG_A_NAME);
+
+    await waitFor(() => {
+      expect(homeBadge()).toBeNull();
+    });
   });
 
   it('shows the breadcrumb for the current route (A58)', async () => {

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { adminApi } from '@/lib/api';
 import { useOrgKey } from '@/lib/orgQuery';
+import type { FeedOptions } from './useFarms';
 
 export interface OpsErrorEvent {
   eventType: string;
@@ -31,8 +32,30 @@ export interface OpsHealthData {
   computedAtUtc: string;
 }
 
-/** Org in the key (A7, T12 S3) — see the note in `useFarms.ts`. */
-export function useOpsHealth() {
+/**
+ * THE `recentErrors` WINDOW IS TWO HOURS AND ITS CAP IS FIFTY — read in
+ * `AdminOpsRepository.GetRecentErrorsAsync` (`:85-123`) on 2026-09-01, and
+ * recorded here because Task 26 needed it and the plan assumed otherwise.
+ *
+ * `WHERE event_type IN ('api.error','api.slow','client.error') AND
+ *  occurred_at_utc >= NOW() - INTERVAL '2 hours' ORDER BY occurred_at_utc DESC
+ *  LIMIT 50`, ending in `catch { /* graceful *\/ }` over a pre-declared empty
+ * list. Three consequences a caller must not discover by accident:
+ *
+ *   1. There is NO 24-hour API-error count on this endpoint. The plan's Home
+ *      tile asked for one; the nearest true reading is a 2-hour count, and
+ *      Home says two hours because two hours is what was measured.
+ *   2. An EMPTY list is not a quiet window. The catch and a genuinely calm two
+ *      hours arrive identically, with HTTP 200.
+ *   3. FIFTY ROWS IS A FLOOR. At the cap the count is "at least 50", and a
+ *      subcount of one event type within it is a floor twice over.
+ */
+export const OPS_HEALTH_RECENT_WINDOW = 'the last 2 hours';
+export const OPS_HEALTH_RECENT_CAP = 50;
+
+/** Org in the key (A7, T12 S3) — see the note in `useFarms.ts`.
+ *  `options.enabled` is the fail-closed gate documented on `useSilentChurn`. */
+export function useOpsHealth(options?: FeedOptions) {
   const org = useOrgKey();
   return useQuery<OpsHealthData>({
     queryKey: ['ops', 'health', org],
@@ -40,6 +63,7 @@ export function useOpsHealth() {
       const { data } = await adminApi.get<OpsHealthData>('/shramsafal/admin/ops/health');
       return data;
     },
+    enabled: options?.enabled !== false,
     staleTime: 25_000,
     refetchInterval: 30_000,
   });

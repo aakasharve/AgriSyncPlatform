@@ -4,6 +4,7 @@ import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-qu
 import { AdminAuthProvider, useAdminAuth } from '@/app/AdminAuthProvider';
 import { ActiveOrgProvider, useActiveOrg } from '@/app/ActiveOrgProvider';
 import { AdminShell } from '@/app/AdminShell';
+import { ConsoleBootBoundary } from '@/app/ConsoleBootBoundary';
 import { CommandPalette } from '@/app/CommandPalette';
 import { useAdminScope } from '@/hooks/useAdminScope';
 import { OrgSwitcher } from '@/components/OrgSwitcher';
@@ -239,85 +240,100 @@ export default function App() {
         <ActiveOrgProvider>
           <AdminAuthProvider>
             <LoginRedirectBridge />
-            <Suspense fallback={<Fallback />}>
-              <Routes>
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/403" element={<ForbiddenPage />} />
-                <Route
-                  element={
-                    <RequireAuth>
-                      <RequireScope>
-                        {/* TASK 13 MOVED THIS INSIDE THE GATE. IT IS A SECURITY
-                            CHANGE, NOT A TIDY-UP (Preservation Register A46).
+            {/* TASK 26 STEP 7 — THE BOOT-FAILURE STATE.
 
-                            It used to sit beside <Routes>, outside RequireAuth,
-                            which was harmless while the palette listed eleven
-                            static page names. Task 13 made it index farm names,
-                            owners and farmer phone numbers — the whole point of
-                            the v2 palette — and that PII would then have been
-                            one keystroke away from the sign-in screen. The v3
-                            prototype dodged the same problem by not loading
-                            app.js on login.html; an omission is not a rule and
-                            does not survive a port.
+                Every screen below is a `lazy()` import. `<Suspense>` covers a
+                chunk that is still arriving; nothing covered a chunk that never
+                arrives, and there was no error boundary anywhere in this
+                application — so a rejected dynamic import (the ordinary
+                consequence of a deploy while a console is open) unmounted the
+                whole tree and left an operator looking at white.
 
-                            It is inside RequireScope as well, because every
-                            entry it can offer is scoped to one organisation and
-                            `canRead` fails closed until the scope resolves.
-                            Above this line it would be a keystroke that opens
-                            an empty dialog on the org-switcher interstitial.
+                It wraps the routes rather than sitting inside one, because the
+                shell is as capable of failing as a page is; and it is imported
+                statically, never lazily, because a boundary that must itself be
+                fetched cannot report a failed fetch. */}
+            <ConsoleBootBoundary>
+              <Suspense fallback={<Fallback />}>
+                <Routes>
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/403" element={<ForbiddenPage />} />
+                  <Route
+                    element={
+                      <RequireAuth>
+                        <RequireScope>
+                          {/* TASK 13 MOVED THIS INSIDE THE GATE. IT IS A SECURITY
+                              CHANGE, NOT A TIDY-UP (Preservation Register A46).
 
-                            `CommandPalette.test.tsx` fails if it moves back
-                            out. */}
-                        <CommandPalette />
-                        <AdminShell />
-                      </RequireScope>
-                    </RequireAuth>
-                  }
-                >
-                  {/* HomePage is a KPI collage — individual cards can 403 independently without
-                      hiding the whole page. No single module gate fits, so no guard here. */}
-                  <Route path="/" element={<HomePage />} />
+                              It used to sit beside <Routes>, outside RequireAuth,
+                              which was harmless while the palette listed eleven
+                              static page names. Task 13 made it index farm names,
+                              owners and farmer phone numbers — the whole point of
+                              the v2 palette — and that PII would then have been
+                              one keystroke away from the sign-in screen. The v3
+                              prototype dodged the same problem by not loading
+                              app.js on login.html; an omission is not a rule and
+                              does not survive a port.
 
-                  <Route path="/ops/live" element={
-                    <EntitlementGuard module={ModuleKeys.OpsLive}><OpsLivePage /></EntitlementGuard>
-                  } />
-                  <Route path="/ops/errors" element={
-                    <EntitlementGuard module={ModuleKeys.OpsErrors}><OpsErrorsPage /></EntitlementGuard>
-                  } />
-                  <Route path="/ops/voice" element={
-                    <EntitlementGuard module={ModuleKeys.OpsVoice}><OpsVoicePage /></EntitlementGuard>
-                  } />
-                  <Route path="/metrics/nsm" element={
-                    <EntitlementGuard module={ModuleKeys.MetricsNsm}><NorthStarPage /></EntitlementGuard>
-                  } />
-                  <Route path="/farms" element={
-                    <EntitlementGuard module={ModuleKeys.FarmsList}><FarmsListPage /></EntitlementGuard>
-                  } />
-                  <Route path="/farms/silent-churn" element={
-                    <EntitlementGuard module={ModuleKeys.FarmsSilentChurn}><SilentChurnPage /></EntitlementGuard>
-                  } />
-                  <Route path="/farms/suffering" element={
-                    <EntitlementGuard module={ModuleKeys.FarmsSuffering}><SufferingPage /></EntitlementGuard>
-                  } />
-                  <Route path="/farmer-health" element={
-                    <EntitlementGuard module={ModuleKeys.FarmerHealth}><FarmerHealthPage /></EntitlementGuard>
-                  } />
-                  <Route path="/farmer-health/:farmId" element={
-                    <EntitlementGuard module={ModuleKeys.FarmerHealth}><FarmerHealthDrilldown /></EntitlementGuard>
-                  } />
-                  <Route path="/users" element={
-                    <EntitlementGuard module={ModuleKeys.AdminUsers}><UsersPage /></EntitlementGuard>
-                  } />
-                  {/* Schedules + Settings: no matching module key in W0-A's ModuleKey set yet.
-                      Relying on RequireScope (any resolved scope) for now; specific module
-                      gates land when schedule / admin-management surfaces add their keys. */}
-                  <Route path="/schedules/templates" element={<ScheduleTemplatesPage />} />
-                  <Route path="/settings/admins" element={<SettingsAdminsPage />} />
+                              It is inside RequireScope as well, because every
+                              entry it can offer is scoped to one organisation and
+                              `canRead` fails closed until the scope resolves.
+                              Above this line it would be a keystroke that opens
+                              an empty dialog on the org-switcher interstitial.
 
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </Route>
-              </Routes>
-            </Suspense>
+                              `CommandPalette.test.tsx` fails if it moves back
+                              out. */}
+                          <CommandPalette />
+                          <AdminShell />
+                        </RequireScope>
+                      </RequireAuth>
+                    }
+                  >
+                    {/* HomePage is a KPI collage — individual cards can 403 independently without
+                        hiding the whole page. No single module gate fits, so no guard here. */}
+                    <Route path="/" element={<HomePage />} />
+
+                    <Route path="/ops/live" element={
+                      <EntitlementGuard module={ModuleKeys.OpsLive}><OpsLivePage /></EntitlementGuard>
+                    } />
+                    <Route path="/ops/errors" element={
+                      <EntitlementGuard module={ModuleKeys.OpsErrors}><OpsErrorsPage /></EntitlementGuard>
+                    } />
+                    <Route path="/ops/voice" element={
+                      <EntitlementGuard module={ModuleKeys.OpsVoice}><OpsVoicePage /></EntitlementGuard>
+                    } />
+                    <Route path="/metrics/nsm" element={
+                      <EntitlementGuard module={ModuleKeys.MetricsNsm}><NorthStarPage /></EntitlementGuard>
+                    } />
+                    <Route path="/farms" element={
+                      <EntitlementGuard module={ModuleKeys.FarmsList}><FarmsListPage /></EntitlementGuard>
+                    } />
+                    <Route path="/farms/silent-churn" element={
+                      <EntitlementGuard module={ModuleKeys.FarmsSilentChurn}><SilentChurnPage /></EntitlementGuard>
+                    } />
+                    <Route path="/farms/suffering" element={
+                      <EntitlementGuard module={ModuleKeys.FarmsSuffering}><SufferingPage /></EntitlementGuard>
+                    } />
+                    <Route path="/farmer-health" element={
+                      <EntitlementGuard module={ModuleKeys.FarmerHealth}><FarmerHealthPage /></EntitlementGuard>
+                    } />
+                    <Route path="/farmer-health/:farmId" element={
+                      <EntitlementGuard module={ModuleKeys.FarmerHealth}><FarmerHealthDrilldown /></EntitlementGuard>
+                    } />
+                    <Route path="/users" element={
+                      <EntitlementGuard module={ModuleKeys.AdminUsers}><UsersPage /></EntitlementGuard>
+                    } />
+                    {/* Schedules + Settings: no matching module key in W0-A's ModuleKey set yet.
+                        Relying on RequireScope (any resolved scope) for now; specific module
+                        gates land when schedule / admin-management surfaces add their keys. */}
+                    <Route path="/schedules/templates" element={<ScheduleTemplatesPage />} />
+                    <Route path="/settings/admins" element={<SettingsAdminsPage />} />
+
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Route>
+                </Routes>
+              </Suspense>
+            </ConsoleBootBoundary>
           </AdminAuthProvider>
         </ActiveOrgProvider>
       </BrowserRouter>
