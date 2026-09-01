@@ -74,6 +74,11 @@ Every task's requirements implicitly include these. A change that violates one h
   `5 पूर्ण / 1 अर्धा / 2 रात्री / 3 तास जादा`, exact treatment being a Phase 1 decision —
   never a single invented `6.5`. `AttendanceMark.Value` may not be used to manufacture
   that equivalence.
+- **Money placement is D-H7 (layout 3), not "an amount everywhere".** Normal days show
+  ONLY attendance marks. A day paid differently from the standard rate shows its amount in
+  that day's cell. Every ROW ends in the week's money, and so does the bottom line. An
+  amount in every cell was REJECTED by mockup — it renders at 8.5px, smaller than anything
+  else in the app, on the screen a man reads in sunlight to check his own pay.
 - **Money is DISPLAYED but never CALCULATED** (founder ruling 2026-09-01, option b,
   overturning the panel's reading of Correction 9). D-H6 stands: the register IS the
   wage book, and D-H7's "every row ends in the week's money" is R1 scope. What
@@ -94,6 +99,33 @@ Every task's requirements implicitly include these. A change that violates one h
   **This is NOT a statement about who may read it.** Existing farm access and privacy rules
   still govern which actors may see attendance and stated money. Labour V2 does not redesign
   farm privacy, and membership alone is not asserted to authorise reading anything.
+- **ONE REGISTER, THREE VIEWS — D-H8, and it is R1 read-path scope.** The spec is explicit:
+  *"An attendance register is safe to show anyone on the farm. A wage book is not."* The moment
+  money enters the grid, showing the हजेरी वही to a मुकादम shows him what every man in his crew
+  earns. The resolution is already decided:
+
+  | Viewer | Sees |
+  |---|---|
+  | **Owner** | the whole book — every name, every day, every rupee. His record, his PDF. |
+  | **मुकादम** | his crew's attendance. Money ONLY per-confirmation (D-H9), never as a roster. |
+  | **Worker** | his own row only — his days and his money, nobody else's. |
+
+  D-H8's own words: this **"must be in the read path from the first migration, not added
+  later."** Combined with the founder's correction 7, this is the precise answer to "who may
+  read हजेरी" — and it is a spec decision the plan must OBEY, not a privacy redesign.
+- **D-H9 — a मुकादम sees money ONE WORKER AT A TIME, never as a browsable roster.** He sees one
+  amount, for one man, at the moment he confirms on that man's behalf, and the system LOGS that
+  he saw it. Each disclosure is an auditable event, not ambient access. (Driven by a hard fact:
+  30–50% of farm workers have no usable phone, so proxy confirmation is required, and a मुकादम
+  cannot ask "₹400, correct?" on a man's behalf without seeing ₹400.)
+- **D-H10 — THE CELL MUST RESOLVE THE FOURTH AXIS BEFORE THE GRID SHIPS.** The D-H3 split cell
+  already answers three questions: how much (full/half/absent/unmarked), when (day/night), and
+  money (D-H7). Worker confirmation adds a fourth — confirmed · disputed · proxy-confirmed ·
+  awaiting — and four axes do not fit a 26px square. The spec's warning is literal: *"Do not
+  design the attendance cell without resolving this. Adding a fourth axis after the grid ships
+  means rebuilding it."* Its proposed resolution — **confirmation lives on the ROW, with disputed
+  days the one cell-level exception** — is explicitly NOT founder-approved, so Phase 1 must put it
+  to him. R1 BUILDS no confirmation; R1 must not FORECLOSE it.
 - **Farm Mukadam ≠ Labour Mukadam.** Farm Mukadam = `AppRole.Mukadam`
   (AgriSync.SharedKernel/Contracts/Roles/AppRole.cs:6), a farm-membership role,
   account-bound, governs authority. Labour Mukadam = a `FieldOperator`
@@ -473,7 +505,19 @@ prose; he sees it by comparing screens.
       mic; eight rows or eight invented names (rule 11); Ganesh and Shankar under one heading;
       the 8 folded into Shankar's own cell (D16 forbids two presence truths for one man);
       the word मुकादम used to mean the `AppRole`.
-- [ ] **Step 5: FOUNDER GATE — two questions.** (i) At exactly zero rows there is nothing to
+- [ ] **Step 4b: Panel 3 — THE THREE VIEWS (D-H8).** The same week rendered three times:
+      owner (every name, every day, every rupee), मुकादम (his crew's attendance; NO money
+      column — money reaches him only per-confirmation per D-H9), worker (his own row only).
+      **MUST NOT SHOW** a मुकादम a browsable crew wage list. This is R1 read-path scope by
+      D-H8's own words, not a later feature.
+- [ ] **Step 4c: Panel 4 — THE FOURTH AXIS (D-H10), the one that must not be deferred.**
+      Draw the row with a confirmation slot present but INACTIVE in R1, and one disputed day
+      carrying its cell-level marker. R1 builds no confirmation; R1 must not foreclose it.
+      Drawing this now is what stops the grid being rebuilt later.
+- [ ] **Step 5: FOUNDER GATE — three questions.** (iii) D-H10's proposed resolution is
+      recorded as NOT founder-approved: does worker confirmation live on the ROW, with disputed
+      days the single cell-level exception? This must be answered before the cell is built —
+      the spec says so in terms. (i) At exactly zero rows there is nothing to
       draw a grid from: keep the empty-state card but place it BELOW a visible empty week, or
       is the takeover acceptable at zero rows and nowhere else? (ii) Does the register need
       two visibly different words for Farm Mukadam and Labour Mukadam — the app has only one,
@@ -730,6 +774,13 @@ ruling) and implements the D-H3 split cell.
 `src/tests/ShramSafal.Domain.Tests/Labour/BuildHajeriLedgerTests.cs` — 10 cases pin the
 current derive-from-names behaviour.
 
+**Constraint (D-H8, R1 read-path scope):** the read path must resolve WHICH VIEW the caller
+gets — owner (whole book), मुकादम (crew attendance, no money roster), worker (own row only).
+The spec requires this "in the read path from the first migration, not added later", so it is
+not deferrable. Phase 0 unknown 5 reports the boundary that exists TODAY; this task makes the
+read honour D-H8 without redesigning farm privacy. **Test:** a मुकादम reading the register
+receives his crew's attendance and no other worker's money.
+
 **Constraint (founder ruling b):** the register DISPLAYS money the farmer stated — D-H6,
 the register is the wage book. It never CALCULATES one: no rate x days, no derived
 settlement total, no inferred week figure. A week with no stated amount renders blank.
@@ -816,6 +867,22 @@ asked us to leave open."
 **One caveat to record in the plan text, not to build:** because `Amend` mutates in place, a
 future acknowledgement event MUST carry the day/night values it acknowledged, or it will
 silently follow a later correction. That is the one thing R1 must not make impossible.
+
+**The two spec escalations, recorded (D-H10 section, "NOT yet decided"):**
+- **E2 — the owner must not be able to silently change a confirmed event.** R1 already carries
+  the mechanism: `AttendanceMarkCorrection` is a separate append-only table, enforced at the
+  GRANT level (SELECT + INSERT only), preserving original fact → who → when → why. Task 5.1's
+  test should assert that mechanism survives. This is the cheapest of the two and is nearly free.
+- **E1 — the worker must see his own history independent of any farm's permission.** STILL OPEN
+  and materially larger than D-H8: D-H8 gives him his own row *inside the owner's app, under the
+  owner's account*. The confirmation design wants a record the owner cannot gate — *"employer-
+  controlled reputation, not worker dignity"*. That is a product, not a permission rule. **R1
+  does not build it and must not foreclose it** — which is exactly what Task 5.1's attachability
+  test protects.
+
+**Measurement principle to carry forward (spec, verbatim):** *"A zero-dispute farm is not an
+honest farm, it is a silent one."* An absence read as a positive fact is the same defect every
+trust rule in this release exists to prevent.
 
 **NOT in R1:** no `AcknowledgementKind` enum, no `direct/proxy/none` field, no channel, no
 scoring, no worker app. The dignity intent stays recorded in Appendix A (§8–13, §21).
