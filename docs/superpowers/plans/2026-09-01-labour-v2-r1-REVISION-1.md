@@ -1,47 +1,84 @@
-# Labour V2 R1 — The Human-Execution Layer
+# Labour V2 R1 — REVISION 1 (modified sections only)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+**Status:** awaiting founder approval. NOT yet spliced into the plan.
+**Plan it revises:** `2026-09-01-labour-v2-r1-human-execution-layer.md` (same folder).
+**Produced by:** four independent expert passes (CTO / cross-verifier / data engineer /
+design expert) against your 11 corrections, then one integrator. 67 findings.
 
-> **REVISED 2026-09-01.** This plan incorporates REVISION 1 (four expert passes, 67
-> findings) and the binding **Founder Final Direction** of 2026-09-01. Nine product
-> questions are SETTLED and must not be reopened — the fence is at the top of
-> `2026-09-01-labour-v2-r1-REVISION-1.md` (same folder). Read it before Phase 0.
+**One founder ruling is already applied here:** your 2026-09-01 answer (b) on money —
+D-H6 stands, the register IS the wage book, and Correction 9 forbids the system
+CALCULATING a wage, not the register SHOWING an amount you stated. The experts were
+briefed before that ruling and had written "money is outside R1" in five places;
+all five are corrected.
 
-**Goal:** Make ShramSafal able to record, correct and read back *who was present on a farm-day* — as a trust layer on the existing multi-user farm architecture, never as a parallel attendance product.
+Each section below says exactly which part of the plan it replaces.
 
-**Architecture:** Attendance is a **third kind of fact** beside work and money. Authority comes from the farm-membership model that already exists; work identity comes from `FieldOperator`, which already exists without requiring an account; the mark itself is new because no existing entity can carry a ruling about a person on a day. The capture experience reuses the one microphone shell the app already has, but the invoking feature owns the meaning and owns the result screen.
+---
+# Founder Final Direction — 2026-09-01 (binding)
 
-**Tech Stack:** .NET 10 (Domain / Application / Infrastructure / Api), EF Core + PostgreSQL 16 (schema `ssf`, RLS enabled *and* forced), React 19 + TypeScript + Vite + Dexie, Vitest, xUnit.
+**"Do not restart the plan."** REVISION 1 is accepted as conceptually close enough. The 15
+corrections are applied below. Execution order is fixed:
 
-**Specs (all three bind; later supersedes earlier on conflict):**
-1. `2026-08-28-LABOUR-V2-LOCKED-DECISIONS.md` (D1–D16) — on branch `task/labour-v2-spec-and-husky-fix`, commit `b6940af9`. **Not reachable from `main` or from `feat/labour-v2-r1`. Task 0.1 fixes that.**
-2. `docs/superpowers/specs/2026-08-31-hajeri-design-decisions.md` (D-H1–D-H10) — currently only in the main checkout, uncommitted to this branch.
-3. **Founder conceptual lock, 2026-09-01** (this conversation) — reproduced in Appendix A because it exists nowhere else.
+> Phase 0 verification → founder-approved visuals → exact implementation plan → build.
+
+## Phase 0 MAY decide (engineering truth only)
+
+- the exact anchor provenance available in the repo
+- the smallest engagement-scoped representation for the Labour Mukadam relationship
+- the existing primitives usable for extra time and explicit hours
+- the repo-native attendance write / sync route
+- the exact permission changes required
+- the existing access and privacy boundaries
+
+## Phase 0 may NOT reopen — these are founder decisions ALREADY MADE
+
+1. whether all five attendance realities belong in R1 — **they do**
+2. whether offline attendance belongs in R1 — **it does**
+3. whether Mukadam authority is owner-controlled — **it is**
+4. whether temporary delegation belongs in the pilot — **it does**
+5. whether हजेरी is always available independent of capture state — **it is**
+6. whether the Labour Mukadam relationship matters — **it does**
+7. whether no-work attendance is valid — **it is**
+8. whether generic voice may discover Labour information — **it may**
+9. whether Labour voice is verification-only — **it is**
+
+**Phase 0 returns only findings that force a change in implementation. It returns no
+settled product questions.** A finding that contradicts one of the nine is escalated as a
+repo-truth conflict with file:line evidence — never as a question to re-decide.
+
+## Final acceptance, asked of every interaction and every stored fact
+
+> **Did ShramSafal remember enough that the farmer had to tell us less than before?**
+>
+> **Did we preserve farm reality without inventing certainty?**
+
+If both are yes, proceed.
 
 ---
 
-## Global Constraints
+# REVISED PLAN SECTIONS — Labour V2 R1
 
-Every task's requirements implicitly include these. A change that violates one has drifted, however elegant.
+## Resolutions of expert disagreement (stated, not averaged)
 
-**The fifteen trust rules (founder, verbatim):**
+| Conflict | Taken | Why |
+|---|---|---|
+| **Crew representation.** CTO: no new anything (`WorkerCount` + `WorkerNamesJson` suffice). Crossverifier: adopt spec D16's `accompanying_count` on `attendance_marks`. DataEngineer: reject D16, add `engaged_through_field_operator_id` FK on `labour_assignments`. | **DataEngineer's rejection of D16, but NOT his FK.** All three pre-decide, and Correction 7 says Phase 0 must *find* the smallest representation. Converted to a Phase 0 investigation with all three candidates named and the D16 defect recorded. | D16's `accompanying_count` on the mark is provably wrong: `attendance_marks` is unique on `(farm_id, field_operator_id, work_date)` (`Migrations/20260831180408_AddAttendanceMarks.cs:41-44`) but a crew count is per-engagement — Shankar bringing 8 to grapes and 4 to cane on one day would have to store an invented 12. That is a repo-verified rejection, so it goes in. The FK is a *good* candidate, not a verified necessity, so it does not. |
+| **Anchor definition.** CTO: `DailyLog.CurrentVerificationStatus != Draft` + non-null `WorkerCount` (zero schema change). Crossverifier/DataEngineer: add `headcount_certainty` + `headcount_spoken_text` columns mirroring the cost pair. | **CTO's, with the column pair kept as the named fallback.** | Correction 3 says the anchor is "human-stated **or accepted**". A confirmed log *is* acceptance, and `CurrentVerificationStatus` (`DailyLog.cs:106-111`) already carries it with no migration. The column pair is only needed if Phase 0 finds the confirm screen never actually shows the headcount to the farmer — so it becomes a conditional Phase 0 question, not a scheduled build. |
+| **`SHOW_LEDGER_TILE`.** CTO: delete the constant and the `|| isPreview` escape. Crossverifier: flip it to `true`. | **CTO's deletion.** | A constant that can be flipped back is a switch, and Correction 5 says the ledger "may never" be gated. Deleting the branch is the only version that survives a future executor. |
+| **`AttendanceMark.Value`.** CTO/crossverifier: delete or rename. DataEngineer: `[Obsolete]`, defer, remove consumers from the read path. | **DataEngineer's.** | Correction 9 says do not pre-decide night arithmetic. Deleting `Value` is itself a decision; marking it obsolete and keeping it out of the R1 read path leaves the founder's ruling genuinely open. |
+| **Task 1.5 (worker confirmation mockup).** CTO: "demote or cut". Crossverifier: "cut to a single frame or defer". Design: "remove entirely, record intent in Appendix A". | **Design's — removed entirely.** | With Task 5.1 reduced to an architecture test, R1 builds nothing this screen would describe. A gate on an unbuilt concept is exactly the misallocation Correction 2 names. |
 
-1. What farmer said must not silently change.
-2. Naming never changes counting.
-3. Unknown is not zero.
-4. Untouched is not absent.
-5. AI draft is not confirmed truth.
-6. No work is not no attendance.
-7. Attendance is not proof that work happened.
-8. Actor and subject are different.
-9. One human must not be duplicated merely because roles change.
-10. Two same names must never be automatically merged.
-11. Anonymous workers remain anonymous until real identity exists.
-12. Farm data remains farm-isolated.
-13. Half-day is attendance evidence, not automatically half wage.
-14. Offline/local intent must not be represented as server-confirmed truth before acknowledgment.
-15. Do not make the farmer answer questions only because the database wants fields.
+**Marked UNVERIFIED (asserted without file:line, not adopted):**
+- Crossverifier: "the governing spec's offline ruling makes attendance capture offline-mandatory." I confirmed `SyncMutationCatalog.cs` has no attendance descriptor and `LabourEndpoints.cs` has no attendance route, but the claim that R1 *must* ship offline attendance rests on spec P10, which says offline capture is required in general — it does not name attendance. **UNVERIFIED as an R1 obligation.** Recorded as a Phase 0 question, not a task.
+- Design: "the approved decisions were made against interactive mockups that are not in this repo." I confirmed no `.html` exists under `docs/` on this branch. Whether approved mockups exist *elsewhere* is **UNVERIFIED** — the plan must ask the founder, not assert their absence.
 
+---
+
+## 1. Replaces: `## Global Constraints` → the block `**Additional locks from 2026-09-01:**` (plan lines 40–52)
+
+**Serves corrections 5, 9, 11.**
+
+```markdown
 **Additional locks from 2026-09-01:**
 
 - **One control, not a matrix.** The owner decides *once* whether a person may
@@ -109,9 +146,15 @@ settlement · reputation · worker scoring · permanent crew identities · marke
 attendance prediction · biometric attendance · mandatory worker accounts ·
 per-person-per-task timesheets as a farmer workflow · generic RBAC redesign ·
 **a worker acknowledgement channel**.
+```
 
 ---
 
+## 2. Replaces: `## File Structure` (both tables, plan lines 56–82)
+
+**Serves corrections 1, 5, 6, 7, 10.**
+
+```markdown
 ## File Structure
 
 **Already exists — reuse, do not duplicate:**
@@ -154,40 +197,60 @@ crew entity, and Task 0.3 Q2 finds the smallest representation among existing
 primitives. No `FarmResponsibility.cs` — Correction 1 rules out a responsibility set;
 the one control is `CanManageLabourRecords`. No acknowledgement field on
 `AttendanceMark` — Correction 10 locks attachability, not a field.
+```
+
 ---
 
-# Phase 0 — Cross-verify this plan against the repo
+## 3. Replaces: `### Task 0.1: Make the governing specs reachable` — Steps 3 onward
 
-**Nothing here writes product code. Every task's output is a written finding that either confirms a claim above or corrects it.** A plan that assumes wrongly wastes the founder's review time on screens built over a false floor.
+**Serves corrections 2, 7, 9 (gives Phase 0 a checkable floor).**
 
-### Task 0.1: Make the governing specs reachable
-
-**Files:**
-- Create: `docs/superpowers/handoffs/2026-08-28-LABOUR-V2-LOCKED-DECISIONS.md`
-- Create: `docs/superpowers/specs/2026-08-31-hajeri-design-decisions.md`
-
-**Why this is Task 0.1 and not an afterthought:** the entire drift this plan corrects happened because the governing spec sat on an unmerged branch nobody opened. Executors read the plan *and the spec*; the spec must be beside the plan.
-
-- [ ] **Step 1: Recover the locked decisions from the unmerged branch**
-
-```bash
-git show b6940af9:docs/superpowers/handoffs/2026-08-28-LABOUR-V2-LOCKED-DECISIONS.md \
-  > docs/superpowers/handoffs/2026-08-28-LABOUR-V2-LOCKED-DECISIONS.md
-```
-
-- [ ] **Step 2: Copy the हजेरी design decisions from the main checkout**
-
-```bash
-cp "e:/APPS/Running App Versions/AgriSyncPlatform/docs/superpowers/specs/2026-08-31-hajeri-design-decisions.md" \
-   docs/superpowers/specs/2026-08-31-hajeri-design-decisions.md
-```
-
+```markdown
 - [ ] **Step 3: Verify both are non-empty and complete — exact counts, so the check can fail**
 
 ```bash
 grep -c "^## D[0-9]" docs/superpowers/handoffs/2026-08-28-LABOUR-V2-LOCKED-DECISIONS.md   # expect 15
 grep -c "D-H[0-9]"   docs/superpowers/specs/2026-08-31-hajeri-design-decisions.md          # expect 23
 grep -n  "^## .*D-H" docs/superpowers/specs/2026-08-31-hajeri-design-decisions.md          # expect D-H1..D-H10
+```
+
+`grep -c "^## D-H"` returns **9**, not 10 — D-H10's heading is `## 🔴 D-H10 —` and the
+emoji defeats the anchor. Do not read 9 as a truncated copy.
+
+- [ ] **Step 4: Record this branch's migration inventory verbatim in the plan's Phase 0 findings**
+
+```bash
+git log --oneline main..HEAD --name-only -- src/apps/ShramSafal/ShramSafal.Infrastructure/Persistence/Migrations/
+```
+
+Expected — three additive migrations, **none of which any correction reverts**:
+1. `20260831155124_GrantFieldOperatorWorkRowsToAppRole` — grants only. KEEP.
+2. `20260831180408_AddAttendanceMarks` — creates `ssf.attendance_marks`, RLS ENABLE **and**
+   FORCE (:51-57), grants (:82-94), `ux_attendance_marks_farm_operator_day` unique (:41-44).
+   KEEP — that unique index is what makes Correction 8 safe by construction.
+3. `20260831185516_AddAttendanceMarkCorrections` — append-only enforced at the GRANT
+   (SELECT + INSERT only). KEEP — it is the proof-of-pattern Correction 10 relies on.
+
+Record also: `attendance_marks` holds no PII of its own and the erasure worker's
+disposition is already written (`Infrastructure/Privacy/ErasureWorker.cs:196-217`).
+Any column added later must keep that true — a name snapshot would not.
+
+- [ ] **Step 5: Create the mockup directory Phase 1 writes into**
+
+```bash
+mkdir -p docs/superpowers/mockups/2026-09-01-labour-r1
+```
+
+- [ ] **Step 6: Commit**
+```
+
+---
+
+## 4. Replaces: `### Task 0.2: Verify the permission floor`
+
+**Serves correction 1.**
+
+```markdown
 ### Task 0.2: The permission floor — three findings already established, one open
 
 **Files:** Create `docs/superpowers/plans/2026-09-01-labour-r1-VERIFICATION.md`
@@ -219,6 +282,15 @@ grep -n  "^## .*D-H" docs/superpowers/specs/2026-08-31-hajeri-design-decisions.m
 
 - [ ] **Step 1: Record findings 1-3 with evidence; carry question 4 to the Task 0.5 gate**
 - [ ] **Step 2: Commit**
+```
+
+---
+
+## 5. Replaces: `### Task 0.3: Verify the identity and crew floor`
+
+**Serves corrections 6, 7, 9, 10.**
+
+```markdown
 ### Task 0.3: The identity and crew floor — find the smallest representation
 
 **Findings to record (established, do not re-derive):**
@@ -293,6 +365,15 @@ SYNCHRONISED TRUTH, and the UI must not claim the stronger state before the weak
 resolves.
 
 - [ ] **Step 2: Answer all with file:line, mark CONFIRMS/CORRECTS, commit**
+```
+
+---
+
+## 6. Replaces: `### Task 0.4: Verify the capture floor`
+
+**Serves corrections 3, 4, 11.**
+
+```markdown
 ### Task 0.4: The capture floor — two findings confirmed, three open
 
 **Confirmed, record and move on:**
@@ -336,13 +417,15 @@ resolves.
   carry it to the founder as copy, marked `[FOUNDER: Marathi needed]`.
 
 - [ ] **Step 1: Answer all with file:line, mark CONFIRMS/CORRECTS, commit**
-### Task 0.5: Founder gate — verification review
-
-- [ ] **Step 1: Present the four verification documents' `CORRECTS PLAN` findings only**
-- [ ] **Step 2: STOP. The founder decides which corrections change the plan before any screen is drawn.**
+```
 
 ---
 
+## 7. Replaces: `# Phase 1 — UI mockups and founder approval` (the whole phase, plan lines 173–227)
+
+**Serves corrections 2, 4, 5, 6, 9, 10 — this is the largest change.**
+
+```markdown
 # Phase 1 — UI mockups and founder approval
 
 **No product code in this phase.** Output is screens the founder judges by eye, at 390px,
@@ -509,9 +592,15 @@ already exists** — the team list with a per-member switch renders today at
 - [ ] **Step 2: The gate question is: "walk this and tell me where it asks you something you
       already said."** That is the only test Correction 4 can be judged by.
 - [ ] **Step 3: STOP. Implementation begins only after this gate.**
+```
 
 ---
 
+## 8. Replaces: `# Phase 2 — Authority` (Tasks 2.1–2.3)
+
+**Serves corrections 1 and 11.**
+
+```markdown
 # Phase 2 — Authority (D9.10 items 3 and 5 depend on it)
 
 **Step-level code for Phases 2–5 is written after Task 1.8, deliberately.**
@@ -589,6 +678,15 @@ capture authority into the read while building Phase 2.
 
 **Phase 0 must report** (Q8, new): what access/privacy boundary the ledger read enforces
 today, stated with file:line, so Phase 2 preserves it rather than inventing one.
+```
+
+---
+
+## 9. Replaces: `# Phase 3 — Capture` (Tasks 3.1–3.4)
+
+**Serves corrections 3, 4, 11, and the Correction 2 result surface.**
+
+```markdown
 # Phase 3 — Capture (D9.10 items 3 and 4)
 
 ### Task 3.1: The labour mic anchor gate
@@ -680,6 +778,43 @@ feature.**
 
 **Deliverable — every link, in the repo's existing patterns, building no second offline system:**
 
+```
+Attendance UI
+  ↓  offline-capable mutation      (existing queue + SyncMutationCatalog descriptor)
+  ↓  server command / use case     (RecordAttendanceMark handler, LabourManagementGate-gated)
+  ↓  persistence                   (ssf.attendance_marks — already exists, RLS + grants shipped)
+  ↓  sync acknowledgement          (existing push/pull acknowledgement contract)
+  ↓  ledger read-back              (Task 4.1)
+```
+
+**Trust semantics (settled, §5):** an offline mark is LOCAL INTENT. It becomes DURABLE
+SYNCHRONISED TRUTH only on server acknowledgement. The UI must show the weaker state honestly
+and must never present an unacknowledged mark as confirmed — doctrine P5, and the exact defect
+shape recorded in memory as "success measured one boundary short".
+
+**Acceptance (the whole task passes or fails on this one sentence):** an authorised person marks
+attendance from the real UI **with connectivity off**, the mark survives, sync completes, the app
+is closed and reopened, and the same fact is visible in हजेरी.
+
+**Tests:**
+- offline mark → queued, and the UI does not claim it is confirmed
+- reconnect → acknowledged → ledger read-back shows the identical day/night values
+- an unauthorised caller is refused server-side by `LabourManagementGate.IsAllowedAsync`,
+  not merely hidden in the UI
+- revert-proof: deleting the descriptor makes the offline test fail, not silently pass
+
+**Constraints:** follow the existing `SyncMutationDescriptor` / endpoint idiom exactly. Do NOT
+invent a parallel queue, a bespoke retry, or an attendance-specific sync protocol. Phase 0
+remaining-unknown 3 names the exact route before this task is written at step precision.
+```
+
+---
+
+## 10. Replaces: `# Phase 4 — The register` (Tasks 4.1–4.2)
+
+**Serves corrections 5, 6, 8, 9.**
+
+```markdown
 # Phase 4 — The register (D9.10 item 8, partly built)
 
 ### Task 4.0: The ledger door is not a switch
@@ -786,6 +921,15 @@ consistent marks ask nothing at all.
 
 **Constraint (D9.12):** no reconciliation dashboard, no per-person-per-task screen, no
 cross-plot deduplication of anonymous crews. Anonymous stays anonymous.
+```
+
+---
+
+## 11. Replaces: `# Phase 5 — The second signature slot` / `### Task 5.1`
+
+**Serves correction 10.**
+
+```markdown
 # Phase 5 — The second signature slot
 
 ### Task 5.1: An architectural acceptance test, no feature
@@ -819,13 +963,94 @@ silently follow a later correction. That is the one thing R1 must not make impos
 
 **NOT in R1:** no `AcknowledgementKind` enum, no `direct/proxy/none` field, no channel, no
 scoring, no worker app. The dignity intent stays recorded in Appendix A (§8–13, §21).
-## Appendix A — The 2026-09-01 founder lock
+```
 
-Reproduced because it governs this plan and exists in no committed document. Sections referenced above by number: §1 five day realities · §2 ledger is a primary surface · §3 two Mukadam meanings · §4 attendance authority is owner-granted · §5 permission centre · §6 temporary responsibility is pilot scope · §7 owner resolves contradictions · §8–10 worker confirmation as a second signature on the same event · §11 direct/proxy/none stay distinct · §12 never a wage gate · §13 disagreement without accusation · §14 correctable never silently editable · §16 no account required · §17 no fake persistent people · §18 partial coverage is legitimate · §19 no trust score in R1 · §21 smallest meaningful slice · §22 three layers: authority, subject, verification.
+---
 
-**North stars:**
-> Labour V2 is not "attendance software"; it is the human-execution layer of ShramSafal's shared farm memory.
+# Task ledger
 
-> The mic is universal; the conversation is contextual.
+**DELETED (5):**
+1. **Task 1.1 "The ledger exception collision"** — the collision was invented by the plan, not found in the code, and money itself STAYS per founder ruling (b) (now Task 1.6 Step 2 and Task 4.1). `HajeriLedger.tsx` renders no money at all (sole "money" match is the comment at :24) and `LedgerRow` (`labour.types.ts:102-117`) has no amount field. It also reopened a screen the plan's own line 46 called approved.
+2. **Task 1.3 "Permission Centre"** — the stack is already shipped (`MembershipEndpoints.cs:220-221`, `labourPermissionsClient.ts`, `useLabourPermissions.ts`, `IdentitySection.tsx:492-503`). Folded into new 1.7.
+3. **Task 1.4 "Temporary responsibility"** — one control with a duration, not a second screen. Folded into new 1.7.
+4. **Task 1.5 "Worker second signature (concept only)"** — R1 builds nothing it describes; Correction 2 ranks it below the four capture states.
+5. **Task 5.1's implementation deliverable** — replaced by an architecture test.
 
-> Main Log discovers. Labour verifies.
+**ADDED (10):**
+1. **Task 0.1 Step 4** — migration inventory (three additive migrations, none reverted).
+2. **Task 0.1 Step 5** — `mkdir -p docs/superpowers/mockups/2026-09-01-labour-r1` (the directory does not exist; every Phase 1 task wrote into it).
+3. **Tasks 1.1–1.4** — states A, B, C, D, the four screens Correction 2 names. None existed.
+4. **Task 1.5** — the adaptive ladder, all four rungs on one sheet (Correction 4 made visible).
+5. **Task 1.6** — the always-available ledger + the Mukadam-wise day (absorbs old 1.2).
+6. **Task 2.4** — architecture test preserving capture/memory separation (Correction 11).
+7. **Task 3.4a** — delete the labour auto-submit at `AppRouter.tsx:214-228`.
+8. **Task 4.0** — delete the ledger gate constants (the largest miss: the plan could execute in full and the ledger would still be unreachable).
+9. **Task 4.3** — one person, two works, one farm-day (Correction 8, absent from the plan).
+10. **Task 5.1** — the attachability architecture test.
+
+**CONVERTED to Phase 0 investigations (6):**
+1. **`LabourCrew.cs`** (was a File-Structure "to create" row) → Task 0.3 Q2, three candidates, D16's version rejected with evidence. Correction 7 requires Phase 0 to *find* it.
+2. **`FarmResponsibility.cs`** → deleted outright; Correction 1 forbids a responsibility set.
+3. **"Five day realities"** (was a Global Constraint assertion) → Task 0.3 Q4, a founder choice.
+4. **Night arithmetic** (was a Task 4.1 test line) → Task 0.3 Q3, `Value` obsoleted pending his ruling.
+5. **The anchor definition** (was the undefined phrase "a stated headcount") → Task 0.4 Q5, with the fallback column pair named but not scheduled.
+6. **Offline attendance capture** → Task 0.3 Q6, marked UNVERIFIED as an R1 obligation.
+
+---
+
+# Test against the founder's complete flow
+
+| Step | Supported? | By what |
+|---|---|---|
+| natural main log | **yes, unchanged** | untouched; D9.7 keeps the generic parser unrestricted |
+| work truth recorded | **yes** | existing `LabourAssignment` path |
+| labour info carried forward | **yes** | Task 3.2, by field name (`count`, `workerNames`, `LabourAttendanceDraftDto.Headcount`) |
+| anchor exists | **yes** | Task 3.1 + Task 0.4 Q5 |
+| mic available | **yes** | Task 3.1 gates only the recorder behind `LabourHub.tsx:334` |
+| ask only WHO | **yes** | Task 1.5 ladder + Task 3.2 |
+| labour-owned result | **yes** | Task 1.1 panel 2 → Task 3.4a + 3.4b |
+| confirm / correct | **yes** | `बरोबर` is now the only save event (3.4a) |
+| one person, two works = one attendance | **yes, free** | Task 4.3; unique index at `Migrations/20260831180408_AddAttendanceMarks.cs:41-44` |
+| anonymous stays anonymous | **yes** | Task 0.3 Q2 forbids fabricated rows; Task 1.6 Step 4 forbids eight rows |
+| ledger available throughout | **yes** | Task 4.0 (door) + Task 4.1 (empty-register fix) |
+| weekly memory | **partly — see gap 2** | |
+| future acknowledgement can attach | **yes** | Task 5.1 |
+
+## Steps the revised plan still does NOT support
+
+**Founder final direction (2026-09-01) closed gaps 1, 2, 3, 4, 5 and 6 as PRODUCT questions.**
+What survives below is engineering work to be sized in Phase 0 and built in Phases 2–4 — none
+of it returns to the founder as a decision.
+
+| Was gap | Status after the final direction |
+|---|---|
+| 1. "Shankar brought 8" has no home | **SETTLED (§3).** The relationship is required and engagement-scoped. Candidate (a) eliminated. Phase 0 sizes the shape; Task 1.6 panel 2 draws it as approved intent, not speculation. |
+| 2. The weekly total is undefined | **SETTLED (§2).** The week is never collapsed into one number. Dimensions are preserved; only the visual treatment is a Phase 1 decision. `LabourLedgerRowDto.Total`/`WeekTotal` must stop summing `present=1/half=0.5/_=0` (`GetLabourDataHandler.cs:877,:901-906`), which collapses Absent into Unmarked and breaks trust rule 3. |
+| 3. The write path is not scheduled | **SETTLED (§5, §6).** Offline attendance is R1. Scheduled as new Task 3.5, end to end. |
+| 4. Extra time and hours unsupported | **SETTLED (§1).** All five realities are R1; this is a capability to build, not a choice to make. Phase 2 gains the migration task. |
+| 5. Marathi copy missing | **SETTLED (§14).** Copy is a UI gate, not a data-model gate. Phase 1 draws the approved visual with `[FOUNDER COPY REQUIRED]` plus the English meaning; the founder supplies Marathi before implementation. Architecture never waits on four strings. |
+| 6. Are there approved 390px mockups elsewhere? | **SETTLED (§15).** Stop searching. The existing built हजेरी is the design baseline — the founder has called it one of the clearest UIs built. Phase 1 visually verifies only the newly-required realities (night, extra time, explicit hours, always-visible empty state, Mukadam-wise grouping, stated money, blank/unknown, no-work attendance). Do not redesign the ledger. |
+
+### Remaining engineering unknowns (Phase 0 answers these; none is a founder question)
+
+1. The smallest repo-native shape for the engagement-scoped Labour Mukadam relationship (§3).
+2. The smallest repo-native storage for extra time and explicit hours (§1).
+3. The repo-native offline write/sync route for attendance (§5) — existing pattern only.
+4. The pre-persistence place for semantic conflict detection (§8).
+5. The access/privacy boundary the ledger read enforces today (§7), stated with file:line.
+6. The exact permission changes required to make owner-controlled Mukadam authority real (§12).
+
+### Superseded — the original gap text, retained for traceability
+
+
+1. **"Shankar brought 8" has no confirmed home.** Task 0.3 Q2 finds it; it does not build it. If the founder picks candidate (b), a Phase 4 task must be added after the gate. **Until he rules, Task 1.6 panel 2 draws a row (`Shankarसोबत 8`) that no schema can currently produce.** That is deliberate — the mockup is how he rules — but it must not be read as approved capability.
+
+2. **The weekly total is undefined.** `LabourLedgerRowDto.Total` and `WeekTotal` exist and today sum `present=1 / half=0.5 / _=0` (`GetLabourDataHandler.cs:877,:901-906`) — which collapses Absent and Unmarked, failing trust rule 3 inside the one number the register shows. Task 4.1 forbids consuming `AttendanceMark.Value` but **does not say what the week total is**, because Correction 9 withheld that. Task 1.6 Step 5 must ask him: does a week with one Full+Night day total ६.५, does it read "६ दिवस · २ रात्री", or does the total stay silent?
+
+3. **The write path is not scheduled end-to-end.** `RecordAttendanceMark` is listed as to-create, but no task writes the HTTP endpoint on `LabourEndpoints.cs` (no attendance route exists) or the `SyncMutationDescriptor` in `SyncMutationCatalog.cs` (no attendance descriptor exists). Persistence exists; the door to it does not. **Add a Phase 3 task once Task 0.3 Q6 settles whether offline is required** — the two answers give very different work.
+
+4. **Extra time and specific hours remain unsupported.** Three of the five day realities are storable. If the founder rules them into R1 at the Task 0.5 gate, a Phase 2 migration task must be added — none exists in this revision, by design.
+
+5. **The Marathi for four surfaces is missing and must not be invented:** the no-anchor reason (Task 1.2), ladder rung (c) (Task 1.5), a second word for Labour Mukadam if he wants one (Task 1.6), and the Allow-Labour-Management ON/OFF states (Task 1.7 — `IdentitySection.tsx:466-468` records these have shipped in English since Phase 5).
+
+6. **UNVERIFIED: whether approved 390px ledger mockups exist outside this repo.** No `.html` exists under `docs/` on either checkout. The plan asserts the ledger design is approved; Task 1.6 re-approves the *built* screen against Corrections 5, 6 and 9 without reopening D-H1/D-H3 — but if those original mockups exist somewhere, the founder should point at them before 1.6 is drawn.
