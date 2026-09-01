@@ -37,7 +37,7 @@ is one query's mistake. No backend test covers it.
   screen · (b) ship with the honest empty state.
 
 ### A3 🔴 A database failure is answered as good news
-`AdminMisRepository.cs:219`, `:245`, `:287` are all `catch { return empty; }`. A dropped connection,
+`AdminMisRepository.cs:219`, `:245`, `:287` **and `AdminOpsRepository.cs:253`** are all `catch { return empty; }` — four sites. A dropped connection,
 a missing matview or a `mis` permission failure reaches the client as an empty list with a success
 code — so the console's four honest states are the four *the client* can see.
 - **Shipped default:** screens that swallow now render *"not measured"*, not *"measured zero"*.
@@ -60,6 +60,27 @@ Task 12 put the org in every query **key** (separates the client cache); it does
 - **⚠️ Trap:** `Program.cs:131` `CacheOutput` is 30s and **does not vary by header** — the day these
   are org-scoped, that cache becomes a cross-tenant leak.
 - **The real question:** should these feeds be org-scoped at all — i.e. who may hold `farms.suffering`?
+
+### A8 🔴 Almost no error row can name a farm
+`RequestObservabilityMiddleware.cs:161-162` reads the farm from a `farm_id` **claim**, and **no token
+this platform issues carries one** — `JwtTokenIssuer` is the only issuer and neither of its two
+methods stamps it; `Claim("farm...` appears nowhere in the repo. `/telemetry/client-error` reads the
+same absent claim. Only the mobile outbox can attribute a row, via `props.farmId` in the body.
+- **Consequence:** on `/ops/errors`, *"not attributable"* is the **normal** case, not the edge — so
+  "which farmer is this hurting" is usually unanswerable.
+- **Fix:** stamp the claim at issue time, or attribute another way.
+
+### A9 🔴 A whole failure type is invisible on the failures screen
+RG5 added `sync.mutation_rejected` — **a farmer's mutation dropped inside a 200** by `POST /sync/push`.
+It is deliberately not `api.error` (overloading that string would fire the R9 spike alert), and
+`/ops/errors` selects `event_type IN ('api.error','api.slow','client.error')`. **One string in a
+backend SQL list.**
+
+### A10 No `event_id` is projected
+The column exists and is written on every row; the SELECT omits it
+(`AdminOpsRepository.cs:222-229`). **No row on the errors screen can be pointed at in a ticket** — the
+row key is a page position. Directly at odds with the support-loop design, where an error is meant to
+be copy-pasteable as a work order with an address.
 
 ### A6 Two computed signals have zero readers
 - **`mis.zero_engagement_farms`** — farms on a paid or trial plan that have **never logged anything**.
@@ -113,6 +134,20 @@ No email field exists in the product (auth is phone + OTP); `apps` is the litera
 though real grants live in `public.memberships` and are never joined.
 - **Shipped default:** removed, stated once in words.
 - **Options:** (a) as shipped · (b) both back as *"not measured"* · (c) Apps back + join the grants table.
+
+### B9 The screen is called "API Errors" and two of its three event types are not API errors
+`api.slow` is a write that **succeeded** and took over two seconds; `client.error` is the farmer's own
+device. Only `api.error` is what the title says. An operator counting "errors" is counting successful
+slow saves and browser script errors alongside real failures.
+- **Shipped default:** title unchanged; the subtitle names all three, and `api.slow` is amber rather
+  than the colour of a 500.
+- **Cost of changing:** one string in `nav.ts` and one heading.
+
+### B10 The time-window buttons have no "selected" state
+Pressing *"Last 6 hours"* writes a fixed instant, so no button lights up afterwards.
+- **Why:** a link written at 09:00 asking for the last hour is four hours wide by noon. Highlighting
+  "Last hour" then would be a claim that stopped being true the moment the reader looked away.
+- **Shipped default:** the screen states in words the instant the URL actually asks for.
 
 ### B8 Copy the founder has not yet read
 Written to the honest-state rules; all live in one file each.
