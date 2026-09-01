@@ -2292,11 +2292,45 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useWvfd(weeks) against `/shramsafal/admin/metrics/wvfd?weeks=`, envelope, 5-minute cadence.
 **Register rows:** A18, A19, A24; B5.
 
-- [ ] **Step 1: S1 to S6, using ChartShell.**
-- [ ] **Step 2: Keep the weeks 8/12/24 selector end to end (A19, B5)** — hook argument, query key, query string, and the interpolated title "WVFD — last N weeks" (`NorthStarPage.tsx:153`).
-- [ ] **Step 3: Never-computed weeks are gaps, not zeros.** v3 has two such weeks in its sample; the live chart would draw them as a trough.
-- [ ] **Step 4: Keep the goal bar, the delta and the tier chips,** but route currentWvfd, priorWvfd and goalWvfd through fmt so a null renders through NotMeasured rather than the current hardcoded fallbacks at `NorthStarPage.tsx:83,96,124-125`, which print a fabricated number when the API returns nothing.
-- [ ] **Step 5: Commit** — `feat(admin-web): WVFD with a real week-window selector and honest gaps`
+- [x] **Step 1: S1 to S6, using ChartShell.**
+- [x] **Step 2: Keep the weeks 8/12/24 selector end to end (A19, B5)** — hook argument, query key, query string, and the interpolated title "WVFD — last N weeks" (`NorthStarPage.tsx:153`).
+- [x] **Step 3: Never-computed weeks are gaps, not zeros.** v3 has two such weeks in its sample; the live chart would draw them as a trough.
+- [x] **Step 4: Keep the goal bar, the delta and the tier chips,** but route currentWvfd, priorWvfd and goalWvfd through fmt so a null renders through NotMeasured rather than the current hardcoded fallbacks at `NorthStarPage.tsx:83,96,124-125`, which print a fabricated number when the API returns nothing.
+- [x] **Step 5: Commit** — `feat(admin-web): WVFD with a real week-window selector and honest gaps`
+
+---
+
+> **Task 21 executed 2026-09-01 (`5fc45e50`). 785 tests / 38 files; lint 8. Four mutations, four kills.**
+>
+> **🔴 THE NORTH STAR METRIC RISES WHEN FARMS CHURN.** `farm_week` is grouped out of `ssf.daily_logs`,
+> so **a farm with no log that week has no row at all** and is absent from `AVG(wvfd)` — while a farm
+> that logged and had nothing confirmed is in it as a 0. **The number the product is steered by goes
+> UP when the least-engaged farms leave.** Same class as Task 16's counted-successes and Task 19's
+> measures-more-than-its-name, on the metric that matters most. Stated in the page subtitle in bold.
+>
+> **🛑 The headline week is ALWAYS partial.** `week_start` is an IST Monday and the matview rebuilds
+> nightly at 02:00 UTC — on a Tuesday no farm can score above 1. The hero figure and the delta carry a
+> **weekly sawtooth that is calendar, not business.**
+>
+> **🔴 TWELVE swallow sites, not ten — and this one is the worst.** `AdminMisRepository.cs:78` is
+> `catch { return new WvfdHistoryDto(0m, null, 4.5m, [], []); }`. Every other site returns *empty*;
+> **this one returns a complete set of numbers with HTTP 200.** `:145` (Farms) is a twelfth,
+> also uncatalogued.
+>
+> **`priorWvfd` is the previous ROW, not the previous WEEK** (`:69`) — the old *"vs last week"* label
+> named a comparison that was not made. **`currentWvfd` is a sentinel** when there are no weeks
+> (`:68`). **`topFarms` is `LIMIT 50` ordered `wvfd DESC`**, so the old tier chips presented a
+> truncated, *best-first* prefix as the whole distribution.
+>
+> **The 4.5 goal is a C# literal** (`:74`) — declared, unlike Task 19's fabricated 90%, but the only
+> other record of it (`FarmWeekMisDto.cs:9`) defines it on a **rolling seven days** while every figure
+> here is a **calendar week**. Kept and sourced on screen; never printed from client code.
+>
+> **Step 4's citations were off** (`:84`, `:97`, `:125`, `:126`, not `:83,96,124-125`) **and missed a
+> fifth fabrication** — a hardcoded `ReferenceLine y={4.5}` at `:186-190`.
+> **`WvfdFarmRowDto.ActiveFarms` is hardcoded `0`** (`:65`); not rendered, documented so it stays that way.
+> Seventh endpoint, seventh with no org parameter. `?weeks=x` sent the literal `NaN` to a non-nullable
+> `int`; `?weeks=2` was silently clamped to 4.
 
 ---
 
