@@ -2339,17 +2339,67 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useCohortPatterns() against `/admin/farmer-health/cohort` — DIFFERENT PREFIX (A26), 5-minute cadence, AbortSignal threaded.
 **Register rows:** A14, A24, A25, A26, A28, A29, A30, A31, A32, A33, A34, A35, A36, A39, A41; B7, B8.
 
-- [ ] **Step 1: S1 to S6.**
-- [ ] **Step 2: Keep the endpoint prefix distinct, with a comment (A26).** A port that centralises the admin prefix as a tidy-up 404s both farmer-health screens. Nothing on screen hints at it.
-- [ ] **Step 3: Port FarmerSearchBox intact (A29, B7).** v3 has no farmer search at all. Preserve every subtlety: the 300ms debounce gating ONLY the button (not the query), the query firing on EXPLICIT SUBMIT via enabled, acceptance of a farmId OR a userId OR a phone, probe-first so a bad id never lands on a broken page, navigation to the SERVER-RESOLVED farmId rather than the typed string, encodeURIComponent on the path segment, the non-blocking inline miss message ("Couldn t find that farmer in your scope." — carry the real apostrophe from the source), and the onResolved extension point.
-- [ ] **Step 4: Keep retry 0 and enabled-gating on useFarmerHealth (A28).** Deliberate: a 404 must fail fast and become not-found UX. A rewrite inheriting the global retry 1 breaks the search box not-found path with a two-attempt hang.
-- [ ] **Step 5: Move the sorters into DataList options, not away (A30, A31).**
+- [x] **Step 1: S1 to S6.**
+- [x] **Step 2: Keep the endpoint prefix distinct, with a comment (A26).** A port that centralises the admin prefix as a tidy-up 404s both farmer-health screens. Nothing on screen hints at it.
+- [x] **Step 3: Port FarmerSearchBox intact (A29, B7).** v3 has no farmer search at all. Preserve every subtlety: the 300ms debounce gating ONLY the button (not the query), the query firing on EXPLICIT SUBMIT via enabled, acceptance of a farmId OR a userId OR a phone, probe-first so a bad id never lands on a broken page, navigation to the SERVER-RESOLVED farmId rather than the typed string, encodeURIComponent on the path segment, the non-blocking inline miss message ("Couldn t find that farmer in your scope." — carry the real apostrophe from the source), and the onResolved extension point.
+- [x] **Step 4: Keep retry 0 and enabled-gating on useFarmerHealth (A28).** Deliberate: a 404 must fail fast and become not-found UX. A rewrite inheriting the global retry 1 breaks the search box not-found path with a two-attempt hang.
+- [x] **Step 5: Move the sorters into DataList options, not away (A30, A31).**
   - Intervention queue: 4 sortable columns, live aria-sort, per-column default direction, default score ASC with the lastActiveAt DESC tiebreak. v3 sorts everything with DIFFERENT semantics (state-parks-last, stable, no tiebreak rule), so a reviewer sees parity where there is none. URL-SYNC THE SORT STATE — today it is component-local and dies on refresh.
   - Watchlist: collapsed by default, aria-expanded and aria-controls, ordering FIXED at weeklyDelta ascending (biggest drop first) and deliberately NOT user-sortable. v3 makes every table sortable, which would silently convert a product decision into a user preference. Carry the in-code note.
-- [ ] **Step 6: Render the two charts v3 never draws (B8).** scoreDistribution and engagementTiers exist in the data and appear on no v3 screen. Keep the fixed axes (A33) and the data tables (A32) — including the sr-only one under the donut.
-- [ ] **Step 7: Keep the cross-surface emptiness computation (A35, A36).** The ScoringActiveBanner fires only when interventionQueue length plus watchlist length plus the summed scoreDistribution equals zero (`FarmerHealthPage.tsx:38-42`). That sum is what distinguishes "first deploy, nothing scored yet" from "scored, and nothing needs intervention" — which is exactly the understated-versus-normal empty split (A36).
-- [ ] **Step 8: The org name moves to the top bar (A39, T10 Step 4)** — but this page keeps its subtitle, because it is the page where scope matters most.
-- [ ] **Step 9: Commit** — `feat(admin-web): Farmer Health landing, charts v3 never drew`
+- [x] **Step 6: Render the two charts v3 never draws (B8).** scoreDistribution and engagementTiers exist in the data and appear on no v3 screen. Keep the fixed axes (A33) and the data tables (A32) — including the sr-only one under the donut.
+- [x] **Step 7: Keep the cross-surface emptiness computation (A35, A36).** The ScoringActiveBanner fires only when interventionQueue length plus watchlist length plus the summed scoreDistribution equals zero (`FarmerHealthPage.tsx:38-42`). That sum is what distinguishes "first deploy, nothing scored yet" from "scored, and nothing needs intervention" — which is exactly the understated-versus-normal empty split (A36).
+- [x] **Step 8: The org name moves to the top bar (A39, T10 Step 4)** — but this page keeps its subtitle, because it is the page where scope matters most.
+- [x] **Step 9: Commit** — `feat(admin-web): Farmer Health landing, charts v3 never drew`
+
+---
+
+> **Task 22 executed 2026-09-01 (`0edb68eb`). 796 tests / 39 files; lint 8. Twelve mutations, twelve
+> kills** — one survived first (`userEvent.type` finishes long before 300ms, so the assertion measured
+> the clock, not the contract), was strengthened, and re-killed. **The agent's connection dropped
+> mid-task and it resumed from its own uncommitted diff; the report names which half was interrupted.**
+>
+> **🔴 THE SCREEN WAS BLANK OVER A HEALTHY 200.** `GetCohortPatternsHandler.cs:34` returns
+> `Result<CohortPatternsDto>` — **no envelope**. The old page read `data.data`, got `undefined`, and
+> rendered an empty queue, an empty watchlist and four *"not enough data yet"* charts. **A27's "the ONE
+> endpoint returning no envelope" is wrong — there are THREE, and the other two are both
+> farmer-health.** No envelope also means **no server clock**, so no freshness chip is possible and
+> `MeasuredZero`'s "checked at" cannot be written — every block uses `unproven`.
+>
+> **🔴 `mis.dwc_score_per_farm_week` HAS NEVER BEEN POPULATED IN PRODUCTION** — stated in the repo at
+> `20260817150453_WvfdWeekBoundaryToIst.cs:95-110`, with prod's own `0A000` error quoted and D3
+> recorded NOT LIVE. So *"Scoring active; data accumulating"* is very probably **not** the true reason
+> for an empty screen.
+>
+> **🔴 THE INVESTMENT PILLAR HAS NEVER BEEN COMPUTED.** Its CTE is a documented placeholder returning
+> `0.0` for every farm, and the old heatmap drew that as `0.0 / 10` plus *"N failing"*. **The reachable
+> maximum is 90, not 100 — and the 40/60 thresholds were never adjusted.**
+>
+> **🛑 A farm that did nothing is SCORED, not absent** (`matrix` cross-joins farms × weeks, every
+> pillar `COALESCE(...,0)`), and a **30-point suspicion penalty** decides the band — so the
+> intervention queue mixes struggling, absent and gaming farms. `insufficient_data` exists in the
+> scorer and is **not in the DTO**. **Three of six pillars join without a week**, so the weekly line
+> can only move on Trigger fit, Proof and Reward. **`lastActiveAt` is fabricated when absent**
+> (`COALESCE(la.last_active, NOW() - INTERVAL '30 days')`) — **and it is the tiebreak key.**
+>
+> **🔴 THE REDACTOR IS A STRUCTURAL NO-OP HERE.** `ResponseRedactor` does not recurse into
+> collections, and `RedactionMatrix` never names `farmerName`. The literal `**redacted**` exists
+> nowhere in the C# outside one doc comment. **Do not tick B16.** Client-side tolerance kept anyway.
+>
+> **🔴 Seven more swallow sites** in `AdminCohortPatternsRepository.cs`, two returning a **complete set
+> of zeros** rather than an empty result — the histogram builds ten zero bins outside its own `try`,
+> and the pillar loop falls through to `(name, 0m, 0)`. **Nineteen sites now.**
+>
+> **Step 8 / A39 re-verified: this IS the first org-scoped admin endpoint** (ninth checked) — *except*
+> for a platform admin, where `ScopeJoin` returns an empty fragment. The subtitle branches; a fourth
+> `74da3d3b`-class false-scope sentence avoided.
+>
+> **The apostrophe (Step 3):** the plan quotes a typographic `’`; the source is `&apos;` = U+0027.
+> **The repo is truth** — kept straight and asserted byte-for-byte.
+>
+> **recharts is gone from this screen** — histogram and trend on `Sparkline`/`GapBar`, the tier donut
+> replaced by a proportion bar with the same fixed A–D axis. Chunk **399 kB → 24 kB**, and
+> `recharts` now has **zero importers** (Task 27). Reason: recharts cannot draw the hatch, so a
+> never-measured tier would be drawn at zero.
 
 ---
 
