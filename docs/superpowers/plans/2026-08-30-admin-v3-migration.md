@@ -2050,12 +2050,53 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useUsersList(page, 50, search) against `/shramsafal/admin/users`, envelope, keepPreviousData.
 **Register rows:** A17, A18, A20, A21, A24, A25, A51; B4, B12, B13, B16; D9.
 
-- [ ] **Step 1: S1 to S6.**
-- [ ] **Step 2: Keep server pagination at 50 per page** and the draft-commit search contract.
-- [ ] **Step 3: Mask the phone (B16).** v3 prints full phone numbers on every user row. The phone IS the account, so the column stays — but it renders through Masked and respects whatever the server sends.
-- [ ] **Step 4: Show absences as absences.** The bare em dashes at `UsersPage.tsx:61-62` carry no reason. Route them through NotMeasured so they say WHY. Same for lastLoginAt — "never signed in" is a fact, not a blank.
-- [ ] **Step 5: Cross-filtered facet counts OFF.**
-- [ ] **Step 6: Commit** — `feat(admin-web): Users on DataList, absences named`
+- [x] **Step 1: S1 to S6.**
+- [x] **Step 2: Keep server pagination at 50 per page** and the draft-commit search contract.
+- [x] **Step 3: Mask the phone (B16).** v3 prints full phone numbers on every user row. The phone IS the account, so the column stays — but it renders through Masked and respects whatever the server sends.
+- [x] **Step 4: Show absences as absences.** The bare em dashes at `UsersPage.tsx:61-62` carry no reason. Route them through NotMeasured so they say WHY. Same for lastLoginAt — "never signed in" is a fact, not a blank.
+- [x] **Step 5: Cross-filtered facet counts OFF.**
+- [x] **Step 6: Commit** — `feat(admin-web): Users on DataList, absences named`
+
+---
+
+> **Task 17 executed 2026-09-01 (`1cd48808`). 747 tests. Ten mutations, nine kills; the tenth
+> exposed inert configuration, deleted rather than kept.**
+>
+> **🔴 `/shramsafal/admin/users` CANNOT RETURN A ROW, AND NEVER HAS.**
+> `AdminMisRepository.cs:250-288` selects `u.user_id`, `u.email`, `u.created_at`, `u.last_login_at`
+> from `public.users`, which defines **none** of them — independently confirmed: the table has `Id`,
+> `phone`, `display_name`, `password_hash`, `credential_created_at_utc`, `created_at_utc`,
+> `is_active`, and no later migration adds the others. Raises `42703`; `:287` is
+> `catch { return empty; }` — **HTTP 200, empty, every request, every environment.** Two sibling
+> queries address the same table correctly, so it is one query's mistake. **No backend test covers
+> it.** The count query above it succeeds and its result is discarded with the exception.
+> **Third swallow in that file.**
+>
+> **🛑 Step 4's second half is false. "Never signed in" is not readable from a null** — there
+> is no last-login column, so a null is the **absence of a record, not a record of absence**, and
+> printing "never" over it would invent a finding about a person. Both readings ship, render
+> differently, and a named constant emits only the honest one.
+>
+> **🛑 Step 5 is moot — ZERO facets are buildable.** v3's role / app-band / last-active groups
+> rest on a role that belongs to a **membership** not a person, an `apps` array that is the literal
+> `[]` at `:283` (grants live in `public.memberships`, never joined), and the missing column.
+> **`email` is not a nullable field — it is not a field**; auth is phone + OTP. Email and Apps dropped
+> as columns and stated once in words: *a column that can only ever show one value is a sentence.*
+>
+> **🔴 A FIFTH CAUSE was added to the vocabulary.** `MeasuredZero` closes *"This is a measured
+> zero, not a missing feed"* — **provably false here.** `DataList` gained one opt-in field,
+> `states.measuredZero.unproven`, rendering a `NotMeasuredPanel` in the same slot. Silence keeps prior
+> behaviour, so Tasks 15-16 are untouched.
+>
+> **🔴 THE ENVELOPE KEY WAS INVERTED IN THE SHARED TYPE** — found here, fixed at `7a742b05`.
+> Every freshness chip on every screen was reading a key the server never sends.
+>
+> **A surviving mutation revealed a toothless assertion:** removing `.trim()` from the name sort
+> survived because the assertion read the whole **row**, and every row contains "not measured" in its
+> sign-in cell. Narrowed to the cell, it kills.
+>
+> **Baselines after T17: 747 tests / 33 files; lint 10 — one FEWER.** Rows satisfied: A17, A18, A20,
+> A21, A24, A25, A34, A51, B4, B12, B13, D9. **B16: NO — fourth endpoint, fourth with no redactor.**
 
 ---
 
@@ -2064,9 +2105,9 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useOpsErrors with page, pageSize 50, endpoint and since, against `/shramsafal/admin/ops/errors`; envelope; staleTime 25s plus refetchInterval 30s; keepPreviousData.
 **Register rows:** A16, A17, A18, A20, A21, A24, A25, A50, A51; B4, B12, B13; D9.
 
-- [ ] **Step 1: S1 to S6, using the server-paginated DataList mode** backed by tanstack react-table manualPagination (A50). This is the one screen that already has server pagination; a port that unifies on the v3 client-side sorter loses it.
+- [x] **Step 1: S1 to S6, using the server-paginated DataList mode** backed by tanstack react-table manualPagination (A50). This is the one screen that already has server pagination; a port that unifies on the v3 client-side sorter loses it.
 
-- [ ] **Step 2: Keep the since param — and finally give it a control (A16)**
+- [x] **Step 2: Keep the since param — and finally give it a control (A16)**
 
 ```tsx
 /**
@@ -2081,17 +2122,74 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
  */
 ```
 
-- [ ] **Step 3: Keep the blur-OR-Enter endpoint filter exactly (A21)** — uncontrolled defaultValue, a trim, and the conditional Clear filter button. It looks identical to the Farms search in a screenshot and behaves differently on purpose.
+- [x] **Step 3: Keep the blur-OR-Enter endpoint filter exactly (A21)** — uncontrolled defaultValue, a trim, and the conditional Clear filter button. It looks identical to the Farms search in a screenshot and behaves differently on purpose.
 
-- [ ] **Step 4: Replace "No errors found. The system is healthy." (D9)** with the v3 measured zero: "No errors in the last 2 hours. The window was checked at 11:41. This is a measured zero, not a missing feed."
+- [x] **Step 4: Replace "No errors found. The system is healthy." (D9)** with the v3 measured zero: "No errors in the last 2 hours. The window was checked at 11:41. This is a measured zero, not a missing feed."
 
-- [ ] **Step 5 — BLOCKED on the error-capture plan Task 8** ("Carry it to the admin API" — NOT its Task 6, which widens the vocabulary)**:** add the errorCode and Meaning columns.
+- [x] **Step 5 — BLOCKED on the error-capture plan Task 8** ("Carry it to the admin API" — NOT its Task 6, which widens the vocabulary)**:** add the errorCode and Meaning columns.
 
-- [ ] **Step 6 — BLOCKED:** the expandable row showing what the server actually said (Message), which app build the farmer was on (AppVersion), and whether the farmer's work survived (WorkKept — kept, lost or unknown, rendered as three distinct states, never defaulted).
+- [x] **Step 6 — BLOCKED:** the expandable row showing what the server actually said (Message), which app build the farmer was on (AppVersion), and whether the farmer's work survived (WorkKept — kept, lost or unknown, rendered as three distinct states, never defaulted).
 
-- [ ] **Step 7 — BLOCKED for the roll-up, NOT blocked for attribution:** the v3 "Where the errors landed" endpoint roll-up (endpoint, errors, worst status, share) with a computed section dot. Rows that cannot be attributed render "— not attributable" rather than guessing a farm; that part is NOT blocked, because farmId is already nullable in OpsErrorEvent (`useOpsHealth.ts:9`).
+- [x] **Step 7 — BLOCKED for the roll-up, NOT blocked for attribution:** the v3 "Where the errors landed" endpoint roll-up (endpoint, errors, worst status, share) with a computed section dot. Rows that cannot be attributed render "— not attributable" rather than guessing a farm; that part is NOT blocked, because farmId is already nullable in OpsErrorEvent (`useOpsHealth.ts:9`).
 
-- [ ] **Step 8: Commit** — `feat(admin-web): API Errors on DataList; the since filter gets a control`
+- [x] **Step 8: Commit** — `feat(admin-web): API Errors on DataList; the since filter gets a control`
+
+---
+
+> **Task 18 executed 2026-09-01 (`4cba59e6`). 763 tests / 35 files; lint 8 — two FEWER.**
+> **Eleven mutations, eleven kills. Steps 5-7 BLOCKED as the rule requires; nothing stubbed.**
+>
+> **🔴 ALMOST NO ROW CAN NAME A FARM — attribution is the normal case, not the edge.** The
+> middleware takes the farm from a `farm_id` **claim** (`RequestObservabilityMiddleware.cs:161-162`)
+> and **no token this platform issues carries one**: `JwtTokenIssuer` is the only issuer
+> (`DependencyInjection.cs:86`), neither `GenerateTokens` (`:26-40`) nor `GenerateIdentityTokens`
+> (`:75-79`) stamps it, and `Claim("farm...` appears **nowhere** in the repo.
+> `/telemetry/client-error` reads the same absent claim (`Program.cs:684`). Only the mobile outbox can
+> attribute a row, because `/analytics/ingest` lifts `props.farmId` from the body.
+>
+> **🔴 A FOURTH EVENT TYPE IS EMITTED AND THIS FEED CANNOT SHOW IT.** RG5 added
+> `sync.mutation_rejected` for a 200 that refused work inside it — **a farmer's mutation dropped by
+> `POST /sync/push`.** It is deliberately not `api.error` (`AnalyticsEventType.cs:61-62`: overloading
+> that string would fire `mis.alert_r9_api_error_spike`), and this query's
+> `event_type IN ('api.error','api.slow','client.error')` excludes it. **The failure shape the
+> observability rulebook added last month is invisible on the screen built to show failures.**
+>
+> **🔴 NO `event_id` IS PROJECTED.** The column exists — `RequestObservabilityMiddleware.cs:121`
+> writes `Guid.NewGuid()` — and the SELECT omits it (`AdminOpsRepository.cs:222-229`). **No row on
+> this screen can be pointed at in a ticket;** the row key is a page position.
+>
+> **🔴 A FOURTH SWALLOW SITE:** `GetErrorsPagedAsync` ends `catch { return empty; }`
+> (`AdminOpsRepository.cs:253`), beside `AdminMisRepository.cs:219/:245/:287`.
+> `measuredZero.unproven` supplied — but note the difference from Users: there the query is *provably
+> broken*, here nothing is known to be wrong, so the copy claims the weaker true thing.
+>
+> **🛑 Step 4 names the wrong window.** It asks for *"the last 2 hours"*; this endpoint's
+> default is **24 hours** (`AdminOpsRepository.cs:204-205`, and the handler's envelope says
+> `last 24h`). The 2-hour figure belongs to `GetRecentErrorsAsync`, the `/ops/health` snapshot — a
+> different method on the same class.
+>
+> **🛑 "The one screen that already has server pagination" is wrong.** A17 registers it on
+> three screens, and by now the other two are already on `DataList`'s pager. What was unique here is
+> the **library**, which is what A50 registers. **TanStack Table is dropped; `@tanstack/react-table`
+> now has ZERO importers** (Task 27 removes it from `package.json`). Lint had reported
+> `react-hooks/incompatible-library` on it — the React Compiler was **skipping this whole component**
+> — and what the API contributed over a paginated list was one division. **Ledger D4 is now live.**
+>
+> **`?since` writes an ABSOLUTE instant, never a relative token.** `AdminEndpoints.cs:123` is
+> `DateTime.TryParse(...) ? dt : null` and anything unparseable **falls silently back to 24 hours** —
+> a relative token would put a window in the URL the answer does not honour.
+>
+> **The `COALESCE(props->>'endpoint','unknown')` sentinel is an absence, not an endpoint.** A
+> `client.error` carries no endpoint prop, so it prints `unknown` — and can never match the endpoint
+> filter either, because that filter matches the same missing property.
+>
+> **Confirmed as stated:** no org parameter (fifth endpoint, fifth platform-wide), and
+> `props->>'statusCode'` is the live key — three SQL readers and the emitter agree while
+> `EventVocabulary.cs:76` documents `status`, which nothing has ever emitted. Not touched.
+>
+> **Timing cliff, measured again and worse under load:** 34 files gave 1 failure in 4 runs *before*
+> this task; a 9-mount version of the new file gave **4 in 5**; merging to 7 mounts — **no assertion
+> dropped** — returned it to **5 green of 5**. `vitest.config.ts` untouched. **Task 29.**
 
 ---
 
