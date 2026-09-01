@@ -13,6 +13,68 @@
 
 **Tech Stack:** .NET 10 (Domain / Application / Infrastructure / Api), EF Core + PostgreSQL 16 (schema `ssf`, RLS enabled *and* forced), React 19 + TypeScript + Vite + Dexie, Vitest, xUnit.
 
+**Spec:** `docs/superpowers/handoffs/2026-08-28-LABOUR-V2-LOCKED-DECISIONS.md` (D1–D16) ·
+`docs/superpowers/specs/2026-08-31-hajeri-design-decisions.md` (D-H1–D-H10) ·
+`docs/superpowers/plans/2026-09-01-labour-v2-r1-REVISION-1.md` (the binding Founder Final
+Direction and its Phase 0 fence). **Executors read the plan AND the specs.** Recovered onto this
+branch by Task 0.1 — the drift this plan corrects happened because the governing spec sat on an
+unmerged branch nobody opened. Where they disagree, later founder direction wins, and every
+supersession is written down in Global Constraints rather than left for a reader to infer
+(D16's resolution is superseded; D9.9 and D-H6 are reconciled, not in conflict).
+
+## Change Surface
+
+Each layer answered explicitly, per the project Definition of Done. Shapes marked **(Phase 0)**
+are named but not final until Phase 0 reports; nothing here is built before the Task 1.8 gate.
+
+**DB —** YES, additive only.
+- `labour_assignments`: one nullable FK for the engagement-scoped Labour Mukadam link
+  (**Phase 0** unknown 1 confirms the shape). Engagement-scoped, never on the mark.
+- `attendance_marks`: columns for extra time and explicit hours, stored as stated
+  (**Phase 0** unknown 2 confirms; leading shape `hours numeric(4,1) NULL` + an `hours_basis`
+  reusing `LabourTimeBasis`). **No money column, ever** — D9.9.
+- `attendance_mark_corrections`: the matching correctable fields for anything added above.
+- `farm_memberships`: one nullable `labour_grant_expires_at_utc` for temporary authority.
+- Every new table or column ships its **GRANTs in the creating migration**, and RLS **enabled
+  AND forced**. `ssf.field_operator_work_rows` shipped without grants and was dead its entire
+  life; that is the failure this rule exists to prevent.
+
+**Backend —** YES.
+- `LabourManagementPermission`: remove `AppRole.Mukadam` from `IsCarriedByRole` so the owner's
+  switch governs him (this is the change that makes founder correction 1 possible at all).
+- `LabourManagementGate.IsAllowedAsync`: evaluate expiry against `IClock` — a signature change
+  across its call sites (**Phase 0** unknown 6 returns the exact count).
+- New `RecordAttendanceMark` handler + HTTP route + `SyncMutationDescriptor` — the write path
+  that does not exist today (Task 3.5).
+- `GetLabourDataHandler` / `BuildHajeriLedger`: read from `AttendanceMark` instead of deriving
+  presence from names and engagement shift; honour D-H8's three views; join stated money from
+  the engagement rather than denormalising it.
+- `AiPromptBuilder` / labour parse contract: carry the four-rung ladder context.
+
+**Frontend —** YES.
+- Delete the labour auto-submit (`AppRouter.tsx:214-228`) so `बरोबर` is the only save event.
+- New Labour-owned `AttendanceResult` surface; the generic Work Log review is never the landing.
+- Mic anchor gate on the hero only — never on the Labour route, hub, tile or ledger.
+- `PresenceStatus` becomes a day/night pair; `HajeriLedger` implements the D-H3 split cell,
+  blank-for-unknown, and reserves D-H10's row-level confirmation slot so the grid is not rebuilt.
+- Delete `SHOW_LEDGER_TILE`, `SHOW_LEDGER_BUTTON` and the `|| isPreview` escape — deleted, not
+  flipped, because a switch that can be flipped back is still a gate.
+- Offline attendance capture through the existing queue; local intent never rendered as saved.
+
+**Cross-cutting —** YES.
+- Offline trust semantics: P10's definition is the bar — `Acknowledged = reconstructable without
+  the originating device`. A 200 response is not acknowledgement.
+- Access boundary: D-H8's three views enter the read path from the first migration, not later.
+  Labour V2 preserves the existing farm privacy model; it does not redesign it.
+- Append-only corrections stay enforced at the GRANT level (SELECT + INSERT only).
+- Architecture tests: capture authority must not leak into the ledger read (Task 2.4); a future
+  worker acknowledgement must be able to attach without reshaping the mark (Task 5.1).
+- Marathi copy is a UI gate, not a data-model gate — `[FOUNDER COPY REQUIRED]` placeholders
+  carry an English meaning and never ship invented farmer-facing text.
+
+**Prompt version:** touched only if the labour parse contract changes in Phase 3. If it does,
+the version bumps automatically (it is content-hashed) and a golden-set delta is required.
+
 **Specs (all three bind; later supersedes earlier on conflict):**
 1. `2026-08-28-LABOUR-V2-LOCKED-DECISIONS.md` (D1–D16) — on branch `task/labour-v2-spec-and-husky-fix`, commit `b6940af9`. **Not reachable from `main` or from `feat/labour-v2-r1`. Task 0.1 fixes that.**
 2. `docs/superpowers/specs/2026-08-31-hajeri-design-decisions.md` (D-H1–D-H10) — currently only in the main checkout, uncommitted to this branch.
