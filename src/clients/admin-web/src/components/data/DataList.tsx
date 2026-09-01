@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
-import { FeedDown, LoadFailed, MeasuredZero, NoMatch } from '@/components/state';
+import { FeedDown, LoadFailed, MeasuredZero, NoMatch, NotMeasuredPanel } from '@/components/state';
 import { OPEN_KEY, SORT_DIR_KEY, SORT_KEY, useListUrlState } from '@/lib/useListUrlState';
 import type { ParamValue, SortDir } from '@/lib/useListUrlState';
 import { ExpandChevron, ExpandableRow } from './ExpandableRow';
@@ -440,6 +440,22 @@ export function DataList<T>(config: DataListConfig<T>) {
     }
 
     if (showMeasuredZero) {
+      /* AN EMPTY ANSWER IS NOT ALWAYS A MEASUREMENT (added in Task 17, the
+         first screen whose feed cannot produce one). `MeasuredZero` closes
+         with "This is a measured zero, not a missing feed" — a sentence a
+         screen may know to be false, because three repository methods answer
+         a database failure with an empty list and HTTP 200. A screen that
+         knows says so IN THE SAME SLOT rather than under a headline that has
+         already contradicted it. See `types.ts` on `measuredZero.unproven`. */
+      if (states.measuredZero.unproven) {
+        return (
+          <NotMeasuredPanel
+            title={states.measuredZero.what}
+            why={states.measuredZero.unproven}
+            className="m-4"
+          />
+        );
+      }
       return (
         <MeasuredZero what={states.measuredZero.what} checkedAt={states.measuredZero.checkedAt} />
       );

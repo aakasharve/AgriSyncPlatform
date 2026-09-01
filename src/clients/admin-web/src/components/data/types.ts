@@ -231,8 +231,26 @@ export interface DataListStates {
    * `checkedAt` must arrive already formatted through `@/lib/format` — never
    * a raw ISO string, and never a `new Date()` computed at render, which is
    * the fabricated-freshness defect (D5).
+   *
+   * ── `unproven` — WHEN AN EMPTY ANSWER IS NOT A MEASUREMENT (added Task 17)
+   * `MeasuredZero` ends with a fixed sentence: *"This is a measured zero, not
+   * a missing feed."* On most screens that is exactly right and it is the
+   * whole point of the block.
+   *
+   * On some it is FALSE, and the screen knows it. Three repository methods end
+   * in a bare `catch { return []; }` (`AdminMisRepository.cs:219`, `:245`,
+   * `:287`), so a dropped connection, a missing matview or a permission
+   * failure on the database reaches the client as an empty list with HTTP 200.
+   * Tasks 15 and 16 met that and could only add a footnote UNDER a block whose
+   * headline sentence already contradicted it.
+   *
+   * Supply `unproven` and the empty branch renders a `NotMeasuredPanel` in the
+   * same slot instead: `what` becomes its heading and `unproven` says why the
+   * zero cannot be claimed as a reading. It is opt-in per screen — silence
+   * keeps today's behaviour exactly, because on a screen whose feed cannot
+   * swallow its own failure "measured zero" is the true and stronger claim.
    */
-  measuredZero: { what: string; checkedAt: string };
+  measuredZero: { what: string; checkedAt: string; unproven?: ReactNode };
 
   /** The feed stopped. When present the rows are NOT rendered: v3 §6.3 says
    *  nothing below the line is current, and a table of yesterday under

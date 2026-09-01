@@ -177,7 +177,15 @@ describe('the org survives a filter change on a REAL list screen (A15, A20, Step
     expect(await screen.findByRole('heading', { name: 'Users' }, { timeout: WAIT }))
       .toBeInTheDocument();
 
-    await userEvent.type(screen.getByPlaceholderText('Search phone or name…'), 'arve{Enter}');
+    /* By ACCESSIBLE NAME, not by placeholder text. Task 17 reworded the
+       placeholder to match the Farms convention ("Search by phone or name…")
+       and this line went red — the org property being tested has nothing to do
+       with the wording inside the box, and `aria-label` is the handle that
+       does not move when the copy does. */
+    await userEvent.type(
+      screen.getByRole('textbox', { name: 'Search accounts' }),
+      'arve{Enter}',
+    );
 
     await waitFor(() => expect(at()).toContain('search=arve'));
     expect(at()).toContain(`org=${ORG_A}`);
