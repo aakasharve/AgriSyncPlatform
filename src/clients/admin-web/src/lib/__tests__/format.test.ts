@@ -233,6 +233,8 @@ describe('DATE_FORMATS matches the screens it claims to describe (A51)', () => {
     cohortRow: 'src/features/farmer-health/components/InterventionQueueTable.tsx',
     workerSince: 'src/features/farmer-health/components/WorkerSummaryList.tsx',
     voiceDay: 'src/pages/ops/OpsVoicePage.tsx',
+    nsmWeek: 'src/pages/metrics/NorthStarPage.tsx',
+    nsmWeekFull: 'src/pages/metrics/NorthStarPage.tsx',
   };
 
   const read = (rel: string) => readFileSync(resolve(process.cwd(), rel), 'utf-8');
@@ -259,10 +261,19 @@ describe('DATE_FORMATS matches the screens it claims to describe (A51)', () => {
     }
   );
 
-  it('keeps all twelve, and keeps them different on purpose', () => {
+  it('keeps all fourteen, and keeps them different on purpose', () => {
     /* Eleven at Task 4; the twelfth is `voiceDay`, the first of the eleven
-       recharts axis formats that report routed to Tasks 19, 21 and 22. */
-    expect(Object.keys(DATE_FORMATS)).toHaveLength(12);
+       recharts axis formats that report routed to Tasks 19, 21 and 22.
+       Thirteen and fourteen are `nsmWeek` and `nsmWeekFull`, the two North
+       Star carried in Task 21. */
+    expect(Object.keys(DATE_FORMATS)).toHaveLength(14);
+    /* `nsmWeek` deliberately does NOT preserve the literal it replaced.
+       `NorthStarPage.tsx:174` read `'MMM d'` — the one month-first format in
+       the console — and it now reads day-first like the other thirteen. The
+       change is recorded beside the constant; asserting it here stops it
+       being quietly reverted to match a stale citation. */
+    expect(DATE_FORMATS.nsmWeek).toBe(DATE_FORMATS.voiceDay);
+    expect(DATE_FORMATS.nsmWeekFull).toContain('yyyy');
     // API Errors carries the full date because an operator may be looking days
     // back; Ops Live carries time only because its window is the last two
     // hours. Collapsing these into one format breaks both screens at once.

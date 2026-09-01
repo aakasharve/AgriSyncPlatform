@@ -108,6 +108,28 @@ export const DATE_FORMATS = {
    * to Tasks 19, 21 and 22. This is the first of them to arrive.
    */
   voiceDay: 'd MMM',
+  /**
+   * One slot on the WVFD axis — a week START, which is always a Monday.
+   * `NorthStarPage.tsx:174` (the recharts `tickFormatter`), moved here by
+   * Task 21.
+   *
+   * ⚠️ THE PATTERN CHANGED, and it is recorded rather than slipped in. That
+   * call site read `'MMM d'` — "Aug 10" — the ONLY month-first date format in
+   * a console whose other twelve are all day-first. Two axes now sit two
+   * screens apart (`voiceDay` here is `'d MMM'`), and an operator comparing
+   * them would be reading two orders of the same three characters. Day-first
+   * wins because twelve call sites already are, and because v3 renders this
+   * exact label with `Number(p[2]) + ' ' + MONTHS[...]` — "10 Aug"
+   * (`wvfd.html:211-214`).
+   */
+  nsmWeek: 'd MMM',
+  /**
+   * A week named in PROSE — "the week of 10 August 2026". Four-digit year,
+   * because a 52-week window reaches back across a year boundary and "10 Aug"
+   * alone would be ambiguous there. Preserved exactly from the tooltip's
+   * `labelFormatter` at `NorthStarPage.tsx:201`.
+   */
+  nsmWeekFull: 'dd MMM yyyy',
 } as const;
 
 export const fmt = {
