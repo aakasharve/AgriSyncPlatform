@@ -2575,9 +2575,9 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 
 **Home is done last** because every tile is a reading of a screen already ported, and because it is the only screen whose tiles must 403 independently — which is why it is ungated (A4).
 
-- [ ] **Step 1: Delete all three lies at once (D5, D6, D8).** The fabricated now and lastNightly timestamps, the Phase 2 / Phase 3 scaffolding copy, and the "all R1-R10 clear" claim.
+- [x] **Step 1: Delete all three lies at once (D5, D6, D8).** The fabricated now and lastNightly timestamps, the Phase 2 / Phase 3 scaffolding copy, and the "all R1-R10 clear" claim.
 
-- [ ] **Step 2: Wire the eight tiles to real hooks, and be honest about the four that have no source.**
+- [x] **Step 2: Wire the eight tiles to real hooks, and be honest about the four that have no source.**
 
 | Tile | Source | If there is none |
 |---|---|---|
@@ -2592,12 +2592,55 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 
 Four of eight tiles have no source. That is the truth and the screen must show it. The KpiCard forced-grey rule from T3 Step 4 makes it structural: a tile whose state is not ok cannot be painted green.
 
-- [ ] **Step 3: Build the v3 "Farms a person should call today".** A union over suffering, silentChurn and silentChurnExcluded; one row per farm carrying EVERY reason it was flagged as coloured pills; sorted errors-descending then weeks-descending. This is the most useful thing v3 adds and it needs no new endpoint — useSuffering and useSilentChurn already exist.
-- [ ] **Step 4: Enforce cross-screen consistency.** Re-derive the Voice Success tile tone from rule R10 rather than from its own field, so Ops Now cannot paint green the exact figure the Active Alerts tile beside it counts as a breach.
-- [ ] **Step 5: Add computed section-head state dots,** each with a screen-reader WORD beside it (a coloured dot alone is undecodable), explicit worst-state-wins ordering, and NO DOT AT ALL when a section has nothing to report.
-- [ ] **Step 6: Populate the nav badge (A53)** from the "should call today" count — the slot has been styled and empty since it was written.
-- [ ] **Step 7: Add the page-level boot-failure state.** The v3 Home inlines its own SVG precisely because the shared script may be the thing that failed to load; the React equivalent is an error boundary around the shell that does not itself depend on a lazy-loaded chunk.
-- [ ] **Step 8: Commit** — `feat(admin-web): Home wired to real hooks, four honest non-values, no fabricated freshness`
+- [x] **Step 3: Build the v3 "Farms a person should call today".** A union over suffering, silentChurn and silentChurnExcluded; one row per farm carrying EVERY reason it was flagged as coloured pills; sorted errors-descending then weeks-descending. This is the most useful thing v3 adds and it needs no new endpoint — useSuffering and useSilentChurn already exist.
+- [x] **Step 4: Enforce cross-screen consistency.** Re-derive the Voice Success tile tone from rule R10 rather than from its own field, so Ops Now cannot paint green the exact figure the Active Alerts tile beside it counts as a breach.
+- [x] **Step 5: Add computed section-head state dots,** each with a screen-reader WORD beside it (a coloured dot alone is undecodable), explicit worst-state-wins ordering, and NO DOT AT ALL when a section has nothing to report.
+- [x] **Step 6: Populate the nav badge (A53)** from the "should call today" count — the slot has been styled and empty since it was written.
+- [x] **Step 7: Add the page-level boot-failure state.** The v3 Home inlines its own SVG precisely because the shared script may be the thing that failed to load; the React equivalent is an error boundary around the shell that does not itself depend on a lazy-loaded chunk.
+- [x] **Step 8: Commit** — `feat(admin-web): Home wired to real hooks, four honest non-values, no fabricated freshness`
+
+---
+
+> **Task 26 executed 2026-09-01 (`0e2a46c1`). 873 tests / 45 files; lint 7 — one FEWER.**
+> **Twenty-one mutations, twenty-one kills. ALL THIRTEEN SCREENS ARE NOW PORTED.**
+>
+> **🔴 MRR IS NOT MERELY UNBUILT — IT IS NOT COMPUTABLE.**
+> `Accounts.Domain.Subscriptions.Subscription` carries a plan code, a status and two dates.
+> **No amount. No currency.** A revenue tile cannot be built from this data at all.
+>
+> **🔴 `ModuleKey.MetricsRetention` EXISTS AND GATES NOTHING.** Repo-wide it appears in exactly two
+> files: its C# declaration and the TS mirror. **The entitlement for D30 retention was declared; the
+> metric was never built.**
+>
+> **🛑 There is no 24-hour API-error count on `/ops/health`.** `GetRecentErrorsAsync` is
+> `… >= NOW() - INTERVAL '2 hours' … LIMIT 50`. The plan's tile specified a window the endpoint does
+> not serve; it ships as **"API errors · last 2 hours"**, counting `api.error` alone.
+> **So the plan says "four of eight tiles have no source" and its own table marks three** — the fourth
+> is real but different: the *specified* API-errors tile had no source either.
+>
+> **🛑 `totalCount` is not "Active Farms".** `SELECT COUNT(DISTINCT f.farm_id) FROM ssf.farms f` — no
+> activity, status or org filter. Relabelled **"Farms on record"**.
+>
+> **🔴 A name sentinel Task 15 missed:** `COALESCE(s.farm_name, 'Unknown')`
+> (`AdminMisRepository.cs:195`) makes Silent Churn print the literal word **Unknown** as a farm's
+> name. Home handles it; **`SilentChurnPage.tsx` still does not** — that needs its own assertions,
+> not a drive-by edit.
+>
+> **🛑 Home is the ONE ungated screen and it mounts FIVE separately-gated endpoints.** Without
+> `enabled` gates an unentitled admin fires five denials, **each invalidating the cached scope, which
+> re-renders Home.** The plan does not mention it; every hook now fails closed at the request.
+>
+> **The call list is NOT ranked by severity** — it is ranked by how many watchlists flagged the farm,
+> then longest silence. **There is no honest severity number on these feeds:** Task 16 established
+> that the suffering figure counts successful AI calls, so sorting by it would put the heaviest,
+> happiest users at the top of a call list. Home does not undo that honesty.
+>
+> **R9/R10 now live in `src/lib/alertRules.ts`**, read byte-identically by Home and Live Health — a
+> threshold sentence rendered by two screens is one fact, not two strings.
+>
+> **A tenth instance of the `558b6a9d` missing-timeout shape** was found and fixed
+> (`FarmsListPage.test.tsx:125`, a bare `findByRole`). The `deepLink` residual is **not** that shape —
+> it already waits 15 s under a 20 s ceiling. **Task 29.**
 
 ---
 
