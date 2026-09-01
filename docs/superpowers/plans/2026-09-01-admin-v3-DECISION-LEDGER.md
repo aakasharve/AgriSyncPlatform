@@ -1,15 +1,30 @@
-# Admin v3 — Founder Decision Ledger
+# Admin v3 — Decisions and Gaps: the single ledger
 
-> **Purpose.** Every decision surfaced during the admin-v3 migration, collected in one place so the
-> founder answers once rather than thirteen times. **Nothing here blocks the build.** Every remaining
-> task proceeds on the honest default recorded beside it; each entry names what changes if he decides
+> **THIS IS THE ONE FILE.** Every open decision and every known gap from the admin-console v3
+> migration lives here. Nothing is kept only in a chat log, only in a commit message, or only in a
+> subagent report. If it is not in this file, it is not tracked.
+>
+> **Written to be read cold.** A person — or an agent — with no memory of the work that produced it
+> should be able to act on any entry without asking anyone what it means. Each carries: what it is,
+> how it was verified, what the build currently does about it, what changes if the founder decides
 > otherwise, and roughly what that costs.
 >
-> **Standing rule applied throughout:** where doctrine already settles a question (`P4` no fabricated
-> numbers, fail-closed permissions, no PII beyond need), it was decided and recorded — not asked.
-> This ledger holds only what genuinely needs him.
+> **Nothing here blocks the build.** Every remaining task proceeds on the default recorded beside it.
 >
-> Opened 2026-09-01, after Task 17. Appended as later tasks surface items.
+> **Where the evidence lives.** Line-cited findings are reproducible against
+> `origin/main` at the time of writing. The per-task execution notes in
+> `docs/superpowers/plans/2026-08-30-admin-v3-migration.md` carry the full detail and the mutation
+> proofs; this file carries the decisions and the gaps only. The backend items are mirrored into the
+> agent memory note `backend-defects-found-by-admin-v3-port.md` so they survive if this branch is
+> never merged.
+>
+> **How it was produced.** Every entry came from execution checking a plan premise against the code
+> rather than trusting it. Twenty-seven plan premises have proved false so far; the ones that turned
+> out to be product or backend facts are what this file holds.
+>
+> **Status:** opened 2026-09-01 after Task 17, appended after every task since.
+> **Sections:** A backend defects · B product and copy defaults · C already decided · D blocked ·
+> E engineering, no founder content.
 
 ---
 
