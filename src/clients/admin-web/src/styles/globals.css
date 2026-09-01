@@ -18,8 +18,9 @@
  *
  * Two blocks live below and they are NOT peers:
  *   §A  the v3 token layer   — what every screen is styled against.
- *   §B  the legacy glass layer — kept alive ONLY because 19 files have
- *       not been ported yet. Deleted in Task 27. Do not build on it.
+ *   §B  the legacy glass layer — half deleted in Task 27 on a per-class
+ *       count. What survives is listed by name, with its consumer, in the
+ *       §B header below. Do not build on it.
  * ===================================================================== */
 
 @theme {
@@ -32,10 +33,21 @@
    * the console duplicates that check in four places today and Task 6
    * removes all four in favour of this.
    *
-   * `--font-mono` survives only because 27 unported files still say
-   * `font-mono`, 92 times. CONTRACT.md §8 bans monospace anywhere; that ban lands
-   * screen by screen in Tasks 14–26, and the token dies with the last
-   * caller in Task 27. */
+   * `--font-mono` SURVIVES TASK 27, and the comment that said it would not
+   * was measured rather than trusted. It said 27 files, 92 times. The count
+   * on 2026-09-02, after all thirteen screens were ported, is SIX files and
+   * EIGHTEEN uses:
+   *   FarmerSearchBox.tsx:126        the phone/name search input
+   *   FarmerHealthPage.tsx           ×6, timestamps and tabular figures
+   *   ForbiddenPage.tsx:64,69        two <code> spans
+   *   LoginPage.tsx:135              the OTP input
+   *   OpsErrorsPage.tsx              ×5, timestamps, status codes, ids
+   *   ScheduleTemplatesPage.tsx      ×3, three <code> table names
+   * CONTRACT.md §8 bans monospace, and Tasks 14-26 chose it anyway on the
+   * three surfaces where a value is read character by character. That is a
+   * disagreement with the contract on live screens, not leftover scaffolding,
+   * and clearing it is a visual change to six shipped files. It is a
+   * founder decision, not a deletion — so the token stays and says so. */
   --font-sans: 'DM Sans', 'Noto Sans Devanagari', sans-serif;
   --font-devanagari: 'Noto Sans Devanagari', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -99,8 +111,10 @@
   /* --- §A.9 geometry --------------------------------------------------- */
   --radius-panel: 12px;
   --radius-chip: 8px;
-  --radius-card: 1rem; /* legacy §B, kept until Task 27 */
-  --radius-kpi: 0.875rem; /* legacy §B, kept until Task 27 */
+  /* legacy §B. `--radius-kpi` left with `.glass-kpi` in Task 27;
+     `--radius-card` is still read by `.glass-panel`, which ForbiddenPage
+     still renders. */
+  --radius-card: 1rem;
 
   /* Layout constants the shell is built from (Task 10 consumes these).
      1280 is the design width: 236px sidebar, four KPIs across. */
@@ -109,33 +123,48 @@
   --spacing-topbar: 60px;
   --spacing-row: 52px;
 
-  /* --- §B legacy tokens — DELETED IN TASK 27 ---------------------------
-   * The `.glass*`, `.chip-*` and `.nav-active` rules below are still
-   * referenced by 19 unported files (25 references, counted 2026-08-31 —
-   * down from 21 / 27 at HEAD, because Card and KpiCard moved off).
-   * These tokens exist to keep those rules rendering, and for no other
-   * reason. Do not style anything new against them. */
+  /* --- §B legacy tokens — PARTLY DELETED IN TASK 27 ---------------------
+   * Task 3 scheduled this whole block for deletion here, conditional on the
+   * last consumer having moved. Counted at Task 27, file by file, rather
+   * than assumed: the count is NOT zero, so the block is NOT gone.
+   *
+   * WHAT LEFT (ten tokens, four rule blocks — all at zero consumers):
+   *   .glass, .glass-kpi, .glass-sidebar, .nav-active and the tokens only
+   *   they read — brand-green-soft, brand-mint, brand-deep, background,
+   *   foreground, surface-glass, surface-kpi, surface-sidebar, row-divider,
+   *   and --radius-kpi from §A.9.
+   *
+   * WHAT IS STILL HERE, AND WHO HOLDS IT — the honest list, so the next
+   * person deletes on a count instead of on this comment:
+   *   .glass-panel (+ ::before)   ForbiddenPage.tsx:48
+   *   .chip-fresh / -live / -mat  components/ui/FreshnessChip.tsx:64,66
+   *   brand-green/-teal/-sky      .glass-panel::before, LoginPage.tsx:66,116
+   *   brand-leaf                  LoginPage.tsx:92
+   *   text-primary/-secondary     ForbiddenPage, LoginPage, OrgSwitcher
+   *   text-muted                  App.tsx:79, OrgSwitcher, LoginPage
+   *   surface-panel/-border(-strong)  OrgSwitcher.tsx:86-87, .glass-panel
+   *   success                     .chip-live
+   *   danger / warning            ForbiddenPage.tsx:49
+   *
+   * Those five files (ForbiddenPage, LoginPage, OrgSwitcher, FreshnessChip,
+   * and App.tsx's Fallback) are NOT screens in Tasks 14-26 — they are the
+   * gate, the sign-in and the shell, which no screen task owned. Deleting
+   * the block anyway would leave them rendering unstyled, and no build gate
+   * catches that. Their restyle is a visual change and needs the founder.
+   *
+   * Do not style anything new against what remains. */
   --color-brand-green: #00c853;
-  --color-brand-green-soft: #00f248;
   --color-brand-teal: #52c0be;
-  --color-brand-mint: #83d1ba;
   --color-brand-sky: #a9d6d8;
   --color-brand-leaf: #329128;
-  --color-brand-deep: #0c174b;
 
-  --color-background: #eefaf3;
-  --color-foreground: #000000;
   --color-text-primary: #000000;
   --color-text-secondary: #1a1a1a;
   --color-text-muted: #333333;
 
-  --color-surface-glass: color-mix(in oklab, #ffffff 74%, transparent);
   --color-surface-panel: color-mix(in oklab, #ffffff 88%, transparent);
-  --color-surface-kpi: color-mix(in oklab, #ffffff 85%, transparent);
-  --color-surface-sidebar: color-mix(in oklab, #ffffff 55%, transparent);
   --color-surface-border: color-mix(in oklab, #52c0be 30%, transparent);
   --color-surface-border-strong: color-mix(in oklab, #52c0be 55%, transparent);
-  --color-row-divider: color-mix(in oklab, #000000 8%, transparent);
 
   --color-success: #00c853;
   --color-danger: #dc2626;
@@ -233,35 +262,30 @@ body {
 }
 
 /* =====================================================================
- * §B LEGACY — glass utility classes.
+ * §B LEGACY — what is LEFT of the glass utility classes.
  *
- * 🛑 DO NOT DELETE THESE HERE. 19 files still reference them (25
- * references) and they are ported in Tasks 14–26. Task 27 deletes this
- * whole block plus the §B tokens above, after the last consumer moves.
+ * TASK 27 DELETED FOUR OF THE EIGHT, on a per-class count:
+ *   .glass          — 0 consumers
+ *   .glass-kpi      — 0 consumers (KpiCard moved to the token layer, Task 3)
+ *   .glass-sidebar  — 0 consumers (AdminShell was rebuilt in Task 10)
+ *   .nav-active     — 0 consumers (AdminShell's NavLink styles from tokens)
+ *
+ * FOUR REMAIN, WITH NAMED CONSUMERS. This is a count, not a plan:
+ *   .glass-panel (+::before)  ForbiddenPage.tsx:48
+ *   .chip-fresh  (+ .dot)     components/ui/FreshnessChip.tsx:66
+ *   .chip-live                components/ui/FreshnessChip.tsx:64
+ *   .chip-mat                 components/ui/FreshnessChip.tsx:64
  *
  * CONTRACT.md §8 bans glassmorphism, translucency and gradients, so
- * nothing new is built on this. It is a bridge, not a foundation.
+ * `.glass-panel` — a translucent panel with a 3px gradient bar — is a live
+ * violation on /403, and `.chip-*` are translucent colour-mixes. Neither
+ * file belonged to a screen task, so neither was ported, and restyling them
+ * here would change what the founder sees on the two pages he can actually
+ * reach on this machine. Left standing, deliberately and visibly.
  *
- * The `:root[data-mode='dark']` overrides that used to sit inside this
- * block are gone with D1, along with the `[data-theme='dusk']` palette
- * (D2 — `setTheme` had zero callers and was reachable only by hand-
- * editing localStorage).
+ * Nothing new is built on this. It is a bridge, and it is shorter than it
+ * was.
  * ===================================================================== */
-.glass {
-  background: var(--color-surface-glass);
-  -webkit-backdrop-filter: blur(30px) saturate(180%);
-  backdrop-filter: blur(30px) saturate(180%);
-  border: 2px solid var(--color-surface-border-strong);
-  border-radius: var(--radius-card);
-  box-shadow:
-    0 12px 44px 0 color-mix(in oklab, var(--color-brand-green) 18%, transparent),
-    0 0 0 1px var(--color-surface-border),
-    inset 0 1px 0 0 color-mix(in oklab, #ffffff 40%, transparent);
-  position: relative;
-  overflow: hidden;
-  color: var(--color-text-primary);
-}
-
 .glass-panel {
   background: var(--color-surface-panel);
   -webkit-backdrop-filter: blur(30px) saturate(185%);
@@ -290,52 +314,6 @@ body {
     var(--color-brand-sky)
   );
   opacity: 0.75;
-}
-
-.glass-kpi {
-  background: var(--color-surface-kpi);
-  -webkit-backdrop-filter: blur(26px) saturate(185%);
-  backdrop-filter: blur(26px) saturate(185%);
-  border: 1.5px solid var(--color-surface-border-strong);
-  border-radius: var(--radius-kpi);
-  box-shadow:
-    0 6px 22px color-mix(in oklab, var(--color-brand-green) 10%, transparent),
-    0 0 0 1px var(--color-surface-border),
-    inset 0 1px 0 color-mix(in oklab, #ffffff 35%, transparent);
-  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
-  position: relative;
-  overflow: hidden;
-}
-.glass-kpi:hover {
-  transform: translateY(-3px);
-  border-color: var(--color-brand-teal);
-  box-shadow:
-    0 12px 30px color-mix(in oklab, var(--color-brand-green) 22%, transparent),
-    0 0 0 1.5px var(--color-brand-teal),
-    inset 0 1px 0 color-mix(in oklab, #ffffff 50%, transparent);
-}
-.glass-kpi::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--color-brand-teal),
-    var(--color-brand-green),
-    transparent
-  );
-  opacity: 0.6;
-}
-
-.glass-sidebar {
-  background: var(--color-surface-sidebar);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-  border-right: 2px solid var(--color-surface-border);
 }
 
 /* Freshness chip */
@@ -367,25 +345,14 @@ body {
   border-color: color-mix(in oklab, var(--color-brand-teal) 60%, transparent);
 }
 
-/* Sidebar active nav pill (reused in AdminShell) */
-.nav-active {
-  background: linear-gradient(
-    135deg,
-    color-mix(in oklab, var(--color-brand-green) 22%, transparent),
-    color-mix(in oklab, var(--color-brand-teal) 26%, transparent)
-  );
-  border: 1.5px solid color-mix(in oklab, var(--color-brand-green) 50%, transparent);
-  box-shadow: 0 2px 8px color-mix(in oklab, var(--color-brand-green) 18%, transparent),
-    inset 0 1px 0 color-mix(in oklab, #ffffff 60%, transparent);
-}
-
 /* =====================================================================
  * Quality floor (CONTRACT.md §10)
  * ===================================================================== */
 
 /* An admin who has asked their OS to stop moving things gets a console
-   that does not move. This kills the legacy `.glass-kpi` hover lift too,
-   which is the point — it is one rule, not a per-component opt-in. */
+   that does not move. One rule, not a per-component opt-in — which is why
+   it kept working when Task 27 deleted the legacy hover lift it used to
+   name here by class. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -399,22 +366,23 @@ body {
 
 /* A printed console is evidence. Chrome goes, content stays, and a panel
    or a tile is never split across a page break.
-   Two selectors, both live: `.glass-sidebar` is today's nav and prints
-   nothing right now; `[data-print="chrome"]` is the attribute Task 10's
-   rebuilt shell puts on its sidebar and top bar, so this rule keeps
-   working across the port instead of going dead the moment the class
-   name changes. */
+
+   This rule carried `.glass-sidebar`, `.glass` and `.glass-kpi` as well,
+   deliberately, so it kept working while the shell was rebuilt. Task 27
+   deleted all three classes, so those selectors matched nothing and were
+   removed with them — a print rule naming a class that no longer exists is
+   the kind of thing that gets copied forward for years.
+   `[data-print="chrome"]` is the attribute Task 10's shell puts on its
+   sidebar and top bar, and it is now the only one doing the work.
+   `.glass-panel` stays only as long as ForbiddenPage does. */
 @media print {
   body {
     background: var(--color-page);
   }
-  .glass-sidebar,
   [data-print='chrome'] {
     display: none !important;
   }
-  .glass,
-  .glass-panel,
-  .glass-kpi {
+  .glass-panel {
     break-inside: avoid;
     box-shadow: none;
     backdrop-filter: none;

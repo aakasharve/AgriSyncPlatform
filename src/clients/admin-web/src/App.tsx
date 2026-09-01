@@ -16,6 +16,7 @@ import { currentPathWithQuery, setLoginRedirectHandler } from '@/lib/returnTo';
 const HomePage               = lazy(() => import('@/pages/HomePage'));
 const LoginPage               = lazy(() => import('@/pages/LoginPage'));
 const ForbiddenPage           = lazy(() => import('@/pages/ForbiddenPage'));
+const NotFoundPage            = lazy(() => import('@/pages/NotFoundPage'));
 
 const OpsLivePage             = lazy(() => import('@/pages/ops/OpsLivePage'));
 const OpsErrorsPage           = lazy(() => import('@/pages/ops/OpsErrorsPage'));
@@ -329,7 +330,28 @@ export default function App() {
                     <Route path="/schedules/templates" element={<ScheduleTemplatesPage />} />
                     <Route path="/settings/admins" element={<SettingsAdminsPage />} />
 
-                    <Route path="*" element={<Navigate to="/" replace />} />
+                    {/* TASK 27 STEP 2 — A REAL 404 REPLACES A SILENT BOUNCE (A43).
+
+                        This was `<Navigate to="/" replace />`: every unknown
+                        path landed on Home with the address bar rewritten and
+                        nothing said. A typo, a stale bookmark and a BUG were
+                        then indistinguishable — which is not a hypothesis, it
+                        is how D11 lived its whole life. FarmsListPage sent
+                        every row click to `/farms/:farmId`, a route that has
+                        never been registered, and the catch-all swallowed all
+                        of them into Home under a `cursor-pointer` table. The
+                        mask is no longer load-bearing: Task 14 replaced that
+                        row-click with DataList's expandable row, and there is
+                        now no `navigate()` in this console pointing at an
+                        unregistered path (verified by grep, not by build).
+
+                        It stays INSIDE the shell route on purpose, so the
+                        answer to "is this address real?" is still gated the
+                        same way every other answer is: an anonymous visitor
+                        is sent to /login by RequireAuth exactly as before,
+                        and a signed-in one gets the nav on screen beside the
+                        message rather than a dead end. */}
+                    <Route path="*" element={<NotFoundPage />} />
                   </Route>
                 </Routes>
               </Suspense>

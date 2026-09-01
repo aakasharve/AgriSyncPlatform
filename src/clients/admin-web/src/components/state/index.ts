@@ -18,10 +18,15 @@
  *   One value is hidden by permission   -> Masked
  *   It is still loading                 -> LoadingState    (name the block)
  *
- * `EmptyState` and `ErrorState` are here because ten farmer-health call sites
- * still use them and do not migrate until Tasks 22-23. They are the generic
- * forms this task exists to replace — read their file headers before using
- * either on anything new.
+ * `EmptyState` and `ErrorState` were promoted here because ten farmer-health
+ * call sites still used them at Task 5. Counted again at Task 27, after the
+ * migration: `EmptyState` has ONE (`InterventionQueueEmpty`) and `ErrorState`
+ * has NONE — Task 23 moved its last two panels to `LoadFailed`, whose Retry is
+ * required rather than optional. Both are kept: `ErrorState` because the
+ * Preservation Register carries its working Retry and `formatError` ladder as
+ * A41, and a registered guarantee is not dropped because the count reached
+ * zero. They remain the generic forms this vocabulary exists to replace — read
+ * their file headers before using either on anything new.
  *
  * ⚠️ IMPORT DEPTH. A screen imports from this barrel. A shared PRIMITIVE
  * (KpiCard) imports `./honestState` directly, so the whole vocabulary — and

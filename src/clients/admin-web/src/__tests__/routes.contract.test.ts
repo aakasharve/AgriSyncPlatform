@@ -175,13 +175,43 @@ describe('the three deliberately ungated routes (A4)', () => {
     for (const path of Object.keys(ROUTE_GUARDS)) expect(insideShell).toContain(path);
   });
 
-  it('sends every unmatched path Home with replace, and no 404 page exists', () => {
+  /*
+   * CHANGED IN TASK 27 STEP 2, WITH THE BEHAVIOUR IT DESCRIBES (A43).
+   *
+   * This assertion used to be titled "sends every unmatched path Home with
+   * replace, and no 404 page exists", and it was a true description of a
+   * defect. The catch-all redirected silently, so a typo, a stale bookmark
+   * and a genuine broken link all produced the same thing — Home, with the
+   * address bar rewritten. D11 (`/farms/:farmId`, never registered, clicked
+   * from every row of a `cursor-pointer` table) survived its entire life
+   * inside that mask, which is the whole argument for the change.
+   *
+   * The register row is not ticked as "preserved"; it is ticked as decided.
+   */
+  it('renders a real 404 for an unmatched path, and redirects nowhere', () => {
     const catchAll = routeElements.find((r) => propsOf(r).path === CATCH_ALL);
+    expect(catchAll).toBeDefined();
+
     const redirect = flatten(propsOf(catchAll as ReactElement).element).find(
       (e) => e.type === Navigate,
     );
-    expect(propsOf(redirect as ReactElement).to).toBe('/');
-    expect(propsOf(redirect as ReactElement).replace).toBe(true);
+    expect(redirect).toBeUndefined();
+  });
+
+  /*
+   * The catch-all sits INSIDE the shell route, not beside /login and /403.
+   * That is what keeps an unknown path answering with the same gate every
+   * known path answers with: anonymous still goes to /login, and a signed-in
+   * reader gets the nav next to the message. Moving it out would make "does
+   * this address exist?" the one question this console answers before
+   * checking who is asking.
+   */
+  it('keeps the catch-all inside the authenticated shell', () => {
+    const shellRoute = routeElements.find((r) => propsOf(r).path === undefined);
+    const insideShell = flatten(propsOf(shellRoute as ReactElement).children)
+      .filter((e) => e.type === Route)
+      .map((e) => propsOf(e).path);
+    expect(insideShell).toContain(CATCH_ALL);
   });
 });
 

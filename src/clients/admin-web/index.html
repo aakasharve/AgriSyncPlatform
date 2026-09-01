@@ -14,9 +14,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!-- DM Sans = English, brand and numbers. Noto Sans Devanagari = Marathi
-         body text. Both are charter rules, not preferences. JetBrains Mono is
-         still loaded because 20 unported screens say `font-mono`; CONTRACT.md
-         §8 bans monospace and it leaves with the last caller (Task 27). -->
+         body text. Both are charter rules, not preferences.
+
+         JetBrains Mono STAYS after Task 27. The count it was waiting on was
+         re-measured with all thirteen screens ported: SIX files, EIGHTEEN
+         uses of `font-mono`, not the 20 screens this comment used to claim.
+         They are deliberate choices made during the port — the OTP field, the
+         farmer-search field, error timestamps and status codes, and five
+         <code> spans naming a module, a route, two ssf tables and a version
+         hash — on surfaces read character by character. CONTRACT.md §8 bans monospace, so this is a live
+         disagreement between the contract and six shipped files, and it
+         is the founder's call, not a sweep. See globals.css §A.1. -->
     <link
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700;800&display=swap"
       rel="stylesheet"

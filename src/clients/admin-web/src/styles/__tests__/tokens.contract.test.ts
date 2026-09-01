@@ -170,33 +170,104 @@ describe('quality floor (CONTRACT.md §10)', () => {
   });
 });
 
-describe('SEQUENCING — the legacy glass layer stays until Task 27', () => {
+describe('the legacy glass layer after Task 27 — a count, not a comment', () => {
   /*
-   * 19 files still render these classes (25 references). Deleting them before
-   * those files are ported gives a console that builds green and renders
-   * unstyled, which no build gate catches. Task 27 deletes the block after
-   * the last consumer moves; until then these assertions are the guard rail.
+   * Task 3 scheduled the whole §B block for deletion in Task 27, conditional
+   * on the last consumer having moved. Task 27 counted instead of assuming:
+   * four classes were at zero and left; four still have named consumers and
+   * stayed.
+   *
+   * These assertions are two-sided ON PURPOSE. A class that is still USED
+   * must still be DEFINED (deleting it gives a console that builds green and
+   * renders unstyled, which no build gate catches); a class that is DEFINED
+   * must still be USED (leaving it behind gives dead CSS nobody dares touch,
+   * which is how §B reached 25 references in the first place).
    */
-  it.each([
-    '.glass',
-    '.glass-panel',
-    '.glass-kpi',
-    '.glass-sidebar',
-    '.chip-fresh',
-    '.chip-live',
-    '.chip-mat',
-    '.nav-active',
-  ])('%s is still defined', (cls) => {
-    expect(cssRules).toContain(`${cls} {`);
+
+  const GONE = ['glass', 'glass-kpi', 'glass-sidebar', 'nav-active'] as const;
+  const KEPT = ['glass-panel', 'chip-fresh', 'chip-live', 'chip-mat'] as const;
+
+  /**
+   * WHY NOT A WORD-BOUNDARY ANCHOR. It reads as the obvious choice and it is
+   * wrong here: a hyphen is a non-word character, so a word-boundary anchor
+   * around `glass` matches inside `glass-panel`, and every "is it gone?"
+   * assertion built on one passes while the class is still there. The
+   * boundary that means "this whole class name and not a longer one" has to
+   * exclude the hyphen explicitly.
+   */
+  const NOT_NAME_CHAR = '[A-Za-z0-9_-]';
+  const exactly = (name: string) =>
+    new RegExp(`(?<!${NOT_NAME_CHAR})${name}(?!${NOT_NAME_CHAR})`);
+
+  it.each(GONE)('.%s is deleted — it had zero consumers', (name) => {
+    expect(cssRules).not.toMatch(exactly(`[.]${name}`));
   });
 
-  it('and is still referenced by unported screens', () => {
-    const pattern =
-      /\b(glass|glass-panel|glass-kpi|glass-sidebar|chip-fresh|chip-live|chip-mat|nav-active)\b/;
-    const consumers = Object.keys(SOURCES).filter((path) => pattern.test(code(path)));
-    // If this ever reaches zero the port is finished, and the block above
-    // should be deleted rather than left behind as dead CSS.
-    expect(consumers.length).toBeGreaterThan(0);
+  it.each(GONE)('.%s is referenced by no source file either', (name) => {
+    const consumers = Object.keys(SOURCES).filter((path) => exactly(name).test(code(path)));
+    expect(consumers).toEqual([]);
+  });
+
+  it.each(KEPT)('.%s is still defined, because it is still rendered', (name) => {
+    expect(cssRules).toContain(`.${name} {`);
+  });
+
+  /*
+   * The consumers, by name. If one of these files is restyled off §B, this
+   * list is what tells the next person the class may now go — rather than a
+   * comment claiming a number nobody re-counted.
+   */
+  it('names every file still holding the four survivors alive', () => {
+    const holders = (name: string) =>
+      Object.keys(SOURCES)
+        .filter((path) => exactly(name).test(code(path)))
+        .sort();
+
+    expect(holders('glass-panel')).toEqual(['/src/pages/ForbiddenPage.tsx']);
+    for (const name of ['chip-fresh', 'chip-live', 'chip-mat']) {
+      expect(holders(name)).toEqual(['/src/components/ui/FreshnessChip.tsx']);
+    }
+  });
+
+  /*
+   * The §A.9 radius pair: `--radius-kpi` was read only by `.glass-kpi` and
+   * left with it; `--radius-card` is read by `.glass-panel` and stayed.
+   */
+  it('drops --radius-kpi with .glass-kpi and keeps --radius-card with .glass-panel', () => {
+    expect(cssRules).not.toContain('--radius-kpi');
+    expect(cssRules).toContain('--radius-card');
+  });
+});
+
+describe('--font-mono outlived its deletion date, and says so (Task 27)', () => {
+  /*
+   * The token's own comment promised it would die with the last `font-mono`
+   * caller in Task 27. It did not: seven ported files still use it 21 times.
+   * That is a real disagreement between CONTRACT.md §8 and seven shipped
+   * screens, and it is the founder's to settle — so the token stays and the
+   * comment now states the measured count instead of a stale promise.
+   *
+   * This test exists so the token cannot be quietly deleted without those
+   * seven files moving first, and cannot be quietly kept once they have.
+   */
+  const MONO_FILES = [
+    '/src/features/farmer-health/components/FarmerSearchBox.tsx',
+    '/src/features/farmer-health/FarmerHealthPage.tsx',
+    '/src/pages/ForbiddenPage.tsx',
+    '/src/pages/LoginPage.tsx',
+    '/src/pages/ops/OpsErrorsPage.tsx',
+    '/src/pages/schedules/ScheduleTemplatesPage.tsx',
+  ];
+
+  it('is still declared, because callers still exist', () => {
+    expect(cssRules).toContain('--font-mono');
+  });
+
+  it('is used by exactly the files the comment names', () => {
+    const users = Object.keys(SOURCES)
+      .filter((path) => /(?<![A-Za-z0-9_-])font-mono(?![A-Za-z0-9_-])/.test(code(path)))
+      .sort();
+    expect(users).toEqual(MONO_FILES.sort());
   });
 });
 

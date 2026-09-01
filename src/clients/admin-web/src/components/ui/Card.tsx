@@ -4,11 +4,21 @@ import { cn } from '@/lib/utils';
 /**
  * Card — v3 `.as-panel`, on the token layer.
  *
- * The surface changed; the API did not. Ten screens compose
- * `<Card><CardHeader><CardTitle/></CardHeader>…</Card>` today and none of
- * them are ported yet, so the padding contract (`p-5` on the Card itself)
- * is deliberately preserved. Changing it here would silently reflow ten
- * screens that no test covers.
+ * The surface changed; the API did not.
+ *
+ * ── THE COUNT, RE-MEASURED IN TASK 27 ────────────────────────────────
+ * This header said "ten screens compose `<Card>` today and none of them are
+ * ported yet". Both halves are now stale, and a stale count is what makes a
+ * later reader afraid to touch a file. Counted 2026-09-02 with all thirteen
+ * screens ported, `@/components/ui/Card` has TWO importers:
+ *   components/OrgSwitcher.tsx
+ *   pages/settings/SettingsAdminsPage.tsx
+ * The other eight moved to `DataList`, `ChartShell` or a plain panel during
+ * Tasks 14-26.
+ *
+ * The `p-5` padding contract is still preserved, but the reason is now the
+ * ordinary one — those two screens are laid out against it — rather than
+ * "ten unported screens no test covers".
  *
  * What did change, and why:
  *  - `glass-panel` → a plain white panel. CONTRACT.md §8 bans

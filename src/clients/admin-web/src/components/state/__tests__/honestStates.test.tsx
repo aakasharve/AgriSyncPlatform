@@ -27,7 +27,6 @@ import {
   type HonestState,
 } from '@/components/state';
 
-import * as shim from '@/features/farmer-health/components/EmptyAndErrorStates';
 
 /**
  * THE HONESTY RULES, WITH TEETH.
@@ -253,7 +252,18 @@ describe('LoadingState keeps its accessibility contract (A32)', () => {
   });
 });
 
-describe('ErrorState keeps its working Retry (A41)', () => {
+/*
+ * ERRORSTATE HAS ZERO CALL SITES AFTER TASK 23, AND IS KEPT DELIBERATELY.
+ *
+ * Task 23 moved the last two panels to `LoadFailed`, whose Retry is REQUIRED
+ * rather than optional. `ErrorState`'s Retry is optional, which is the
+ * difference, and the Preservation Register carries it as A41 — the working
+ * Retry wired to refetch() plus the `formatError` unwrapping ladder. Deleting
+ * it in Task 27 would drop a registered guarantee on the quiet grounds that
+ * nothing currently calls it, which is exactly the move the register exists
+ * to stop. It stays, and this test is why it is not dead weight.
+ */
+describe('ErrorState keeps its working Retry (A41) — zero call sites, kept on purpose', () => {
   it('calls refetch when Retry is pressed', async () => {
     const refetch = vi.fn();
     render(<ErrorState error={new Error('nope')} onRetry={refetch} />);
@@ -270,7 +280,9 @@ describe('ErrorState keeps its working Retry (A41)', () => {
   });
 });
 
-describe('EmptyState still renders for its nine unmigrated importers', () => {
+/* Counted at Task 27: ONE call site, `InterventionQueueEmpty`. The other nine
+ * moved to the four named causes in Tasks 22-23. */
+describe('EmptyState still renders for its one remaining call site', () => {
   it('shows the message and the optional hint', () => {
     render(<EmptyState message="No activity yet" hint="Nothing was logged this week." />);
     expect(screen.getByRole('status')).toHaveTextContent('No activity yet');
@@ -412,22 +424,18 @@ describe('NotMeasuredPanel — a panel with no data source, not a broken one', (
   });
 });
 
-/* ════════════════════════════ the shim (T27) ══════════════════════════════ */
+/* ═══════════════════════ the shim is gone (Task 27) ═══════════════════════ */
 
-describe('the old path still resolves for its nine unmigrated importers', () => {
-  it('re-exports the SAME four symbols, not copies', () => {
-    // Identity, not shape: a shim that re-implements is a second copy that
-    // drifts. Task 27 deletes the file once the last importer moves.
-    expect(shim.EmptyState).toBe(EmptyState);
-    expect(shim.LoadingState).toBe(LoadingState);
-    expect(shim.ErrorState).toBe(ErrorState);
-    expect(shim.ScoringActiveBanner).toBe(ScoringActiveBanner);
-  });
-
-  it('still renders through the old import path', () => {
-    render(<shim.ScoringActiveBanner deployDate="first deploy" />);
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'Scoring active from first deploy; data accumulating.'
-    );
-  });
-});
+/*
+ * `features/farmer-health/components/EmptyAndErrorStates.tsx` WAS HERE, as a
+ * four-symbol re-export, and this file asserted the re-exports were the same
+ * objects rather than copies.
+ *
+ * Task 5 created that shim so the build stayed green from Task 5 to Task 23
+ * while ten importers migrated one screen at a time, and Task 5's own note
+ * said it dies here. Measured at Task 27: its last importer was THIS FILE —
+ * the test of the shim was the only thing still importing the shim, which is
+ * the point at which a bridge is carrying nothing but its own weight.
+ *
+ * Deleted. The four symbols are asserted above, at their real path.
+ */
