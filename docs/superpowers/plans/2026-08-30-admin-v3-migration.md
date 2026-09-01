@@ -2650,17 +2650,17 @@ Four of eight tiles have no source. That is the truth and the screen must show i
 - Delete: `src/pages/PlaceholderPage.tsx`, `src/assets/hero.png`, `src/assets/vite.svg`, `public/icons.svg`, the Vite-template `README.md`, and useOpsHealthWrapped from `src/hooks/useOpsHealth.ts`
 - Modify: `src/App.tsx`
 
-- [ ] **Step 1: Delete the six dead artefacts (D10, D14).** All verified: PlaceholderPage has zero importers; useOpsHealthWrapped has zero callers; hero.png, vite.svg and icons.svg have zero references anywhere in src or index.html. Write a real README for admin-web in their place.
+- [x] **Step 1: Delete the six dead artefacts (D10, D14).** All verified: PlaceholderPage has zero importers; useOpsHealthWrapped has zero callers; hero.png, vite.svg and icons.svg have zero references anywhere in src or index.html. Write a real README for admin-web in their place.
 
-- [ ] **Step 2: Decide the catch-all explicitly (A43).**
+- [x] **Step 2: Decide the catch-all explicitly (A43).**
 
 > `App.tsx:165` silently redirects every unknown path to `/` with replace. v3 is a set of files with no router, so unknown-path behaviour is undefined in the design and whatever the new router does by default would become the answer. The silent redirect is also what has been MASKING the broken /farms/:farmId link (D11) for its whole life.
 >
 > **Decision: introduce a real 404** now that D11 is fixed. A silent bounce to Home is indistinguishable from a broken link, which is how D11 survived. If the founder prefers the redirect, keep it — but keep it DELIBERATELY, with the comment saying so.
 
-- [ ] **Step 3: Decide the farm-detail route (D11).** Either register /farms/:farmId or remove the row-click affordance and the cursor-pointer styling. T14 Step 5 chose the expandable row; this step is where the dead navigate() call is actually deleted.
-- [ ] **Step 4: Run the full suite.** `npm run test && npm run build && npm run lint`
-- [ ] **Step 5: Commit** — `chore(admin-web): delete dead scaffolding; 404 and farm-detail decided`
+- [x] **Step 3: Decide the farm-detail route (D11).** Either register /farms/:farmId or remove the row-click affordance and the cursor-pointer styling. T14 Step 5 chose the expandable row; this step is where the dead navigate() call is actually deleted.
+- [x] **Step 4: Run the full suite.** `npm run test && npm run build && npm run lint`
+- [x] **Step 5: Commit** — `chore(admin-web): delete dead scaffolding; 404 and farm-detail decided`
 
 ---
 
@@ -2671,7 +2671,7 @@ Four of eight tiles have no source. That is the truth and the screen must show i
 - Create: `src/clients/admin-web/scripts/deploy-s3.sh`
 - Verify: `vite.config.ts`, `tsconfig.app.json`, `eslint.config.js`, `package.json`
 
-- [ ] **Step 1: Find and commit the history fallback (A44).**
+- [x] **Step 1: Find and commit the history fallback (A44).**
 
 > **This is the one failure mode that is invisible until deployment.** Every shareable URL — /farms with a tier and a page, /farmer-health with a farmId, /ops/errors with a since — works perfectly in vite dev and 404s in prod if the host does not rewrite unknown paths to index.html. There is no _redirects, no vercel.json, no netlify.toml and no nginx conf anywhere in admin-web — verified.
 >
@@ -2679,14 +2679,62 @@ Four of eight tiles have no source. That is the truth and the screen must show i
 >
 > **Corollary, taken from the mobile-web tracker rows:** on a distribution with a 404-to-index rule at 200, ANY MISSING OBJECT RETURNS HTTP 200 WITH text/html. A status-code-only smoke check produces false greens. Every prod proof in the Deployment Plan below therefore asserts Content-Type, not just status.
 
-- [ ] **Step 2: Verify the alias is declared in both places (A49).** `vite.config.ts:8-12` AND `tsconfig.app.json`. Missing one half gives a build that type-checks but will not bundle. It is now declared in three places, counting vitest.config.ts.
-- [ ] **Step 3: Keep port 4001 strictPort.** Local tooling, CORS allowlists and the founder bookmarks assume it.
-- [ ] **Step 4: Keep the build and lint config.** `eslint.config.js:8-41` deliberately demotes rules to warn with a 9999 warning ceiling so admin-web participates in the gate without a shell OR-true. Inheriting stricter defaults fails CI on day one.
-- [ ] **Step 5: Write the deploy script that does not exist.**
+- [x] **Step 2: Verify the alias is declared in both places (A49).** `vite.config.ts:8-12` AND `tsconfig.app.json`. Missing one half gives a build that type-checks but will not bundle. It is now declared in three places, counting vitest.config.ts.
+- [x] **Step 3: Keep port 4001 strictPort.** Local tooling, CORS allowlists and the founder bookmarks assume it.
+- [x] **Step 4: Keep the build and lint config.** `eslint.config.js:8-41` deliberately demotes rules to warn with a 9999 warning ceiling so admin-web participates in the gate without a shell OR-true. Inheriting stricter defaults fails CI on day one.
+- [x] **Step 5: Write the deploy script that does not exist.**
 
 > `src/clients/mobile-web/scripts/deploy-s3.sh` exists and self-verifies from the edge. `src/clients/admin-web` HAS NO scripts DIRECTORY AT ALL — verified. The tracker root-cause note on the 2026-07-17 cache incident says it plainly: "No script owns the S3 sync; every deploy re-types it freehand, so the method silently drifts. This will recur until the sync, with cache headers baked in, lives in a script." Create `src/clients/admin-web/scripts/deploy-s3.sh` modelled on the mobile-web one: explicit cache-control per class, index.html no-cache, hashed assets one-year immutable, ZERO objects immutable without a content hash, and an edge-side self-verification pass.
 
-- [ ] **Step 6: Commit** — `chore(admin-web): commit the SPA fallback and a codified S3 sync`
+- [x] **Step 6: Commit** — `chore(admin-web): commit the SPA fallback and a codified S3 sync`
+
+---
+
+> **Tasks 27 and 28 executed 2026-09-01/02 (`8a11c5ed`, `578168d6`). 893 tests / 47 files; lint 7.**
+>
+> **🛑 THE `deepLink` FLAKE IS NOT CONTENTION — IT FAILS IN ISOLATION.** Five tasks blamed
+> parallelism. Run alone with nothing competing:
+> `npx vitest run src/__tests__/deepLink.contract.test.tsx` → **2 failed / 9 passed** on the first of
+> three isolated runs. Contention raises the rate; it does not cause it. **Task 29 owns a real
+> defect, not a tuning problem** — and `558b6a9d`'s missing-timeout fix, correct as it was, is not
+> the whole story.
+>
+> **🔴 A TEST THAT COULD NOT FAIL, FOUND IN THE SEQUENCING GUARD ITSELF.** The `§B` guard used
+> `(glass|glass-panel|…)`. **A hyphen is a non-word character, so `glass` matches inside
+> `glass-panel`** — an "is it gone?" assertion built on that passes **while the class is still
+> there.** Replaced with an explicit `(?<![A-Za-z0-9_-])…(?![A-Za-z0-9_-])` boundary.
+>
+> **🛑 The `§B` deletion is NOT DOABLE AS WRITTEN, and the remainder is a live §8 violation.** Task 3
+> made it conditional on the last consumer moving; **the last consumers belong to no screen task**, so
+> they never moved. `.glass`, `.glass-kpi`, `.glass-sidebar`, `.nav-active` were at zero and are gone.
+> **Four survive:** `.glass-panel` → `ForbiddenPage.tsx:48` (**glassmorphism *and* a gradient, both
+> banned**) and `.chip-fresh`/`-live`/`-mat` → `FreshnessChip.tsx`. **Founder decision — Task 30.**
+>
+> **`font-mono` is 6 files / 18 uses, not 27/92** as its own comment claimed. Every one is a port-era
+> choice on a value read character by character — the OTP field, error timestamps, status codes.
+> §8 bans monospace. **Sweep, or amend §8? Founder decision — Task 30.**
+>
+> **🛑 `CONTRACT.md` DOES NOT EXIST IN THIS REPO.** It lives at `G:/VALIDATION/ADMIN_ REDESIGN/v3/`.
+> **Every `CONTRACT.md §N` citation in the code and in this plan points outside the repo.**
+>
+> **`useOpsHealthWrapped` was already deleted by Task 20**, yet still listed among Task 27's six.
+> **`Card`'s "ten importers, none ported" is wrong twice over** — the real count is **two**.
+> **The plan's Task 27 file list omitted** the shim, the two `package.json` dependencies, the `§B`
+> block, and the print/reduced-motion rules naming deleted classes.
+>
+> **Both libraries are gone** from `package.json`, `package-lock.json` **and `node_modules`** — no
+> recharts chunk and no react-table chunk exist. Farmer Health is **22.81 kB** (was 399 kB).
+> **A50 can no longer be ticked as preserved and needs the founder's Deliberately-Dropped signature.**
+>
+> **🛑 The committed CloudFront config has NOT been diffed against the live distribution** — prod is
+> hibernated, no AWS call was made. It is the *intended* state, and the file says so in its own
+> header. **And the corollary is load-bearing:** with 404→index at 200, **any missing object returns
+> HTTP 200 with `text/html`**, so every prod proof asserts **Content-Type**, not status. Pinned by
+> test, and the Content-Type check runs *before* the Cache-Control comparison so a missing file
+> reports as missing rather than as a header bug.
+>
+> **`src/clients/mobile-web/scripts/deploy-s3.sh` is committed mode `100644`, not `100755`** — on a
+> fresh Linux clone `./deploy-s3.sh` fails with Permission denied. admin-web's is `100755`.
 
 ---
 
