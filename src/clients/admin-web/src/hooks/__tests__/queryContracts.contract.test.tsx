@@ -11,6 +11,10 @@ import { useCohortPatterns } from '@/features/farmer-health/hooks/useCohortPatte
 import { useFarmerHealth } from '@/features/farmer-health/hooks/useFarmerHealth';
 import { farmerHealthApi } from '@/features/farmer-health/api/farmerHealthApi';
 import ScheduleTemplatesPage from '@/pages/schedules/ScheduleTemplatesPage';
+import {
+  SCHEDULE_TEMPLATES_404_PATH,
+  SCHEDULE_TEMPLATES_PATH,
+} from '@/hooks/useScheduleTemplates';
 import { makeTestQueryClient, renderWithProviders } from '@/test/renderWithProviders';
 import { installAdapter, neverSettles, type StubbedAdapter } from '@/test/stubAdapter';
 
@@ -163,16 +167,36 @@ describe('endpoint prefixes (A26)', () => {
     expect(stub.requests[0].url).toBe('/admin/farmer-health/farm%2F1');
   });
 
-  it('reads schedule templates from reference-data, and gets a RAW array with no envelope', async () => {
-    // ScheduleTemplatesPage.tsx:17 — the one admin screen whose endpoint returns
-    // no AdminResponse at all. It therefore has no meta.source and no
-    // meta.lastRefreshed to put in a freshness chip.
+  /**
+   * 🔴 THE 404 THIS ASSERTION USED TO PIN (fixed in Task 24).
+   *
+   * It read `expect(stub.requests[0].url).toBe(
+   * '/shramsafal/reference-data/crop-schedule-templates')` — the path the page
+   * sent for its whole life, and a path **no C# file in this repository
+   * contains**. The server publishes `/shramsafal/reference/schedule-templates`
+   * (`ModuleEndpoints.cs:10,52` then `ReferenceDataEndpoints.cs:14,16`), so both
+   * the group and the route were wrong and every request 404'd. The screen
+   * rendered that as "No schedule templates found."
+   *
+   * A green test pinning a dead URL is the shape of the problem, not evidence
+   * against it: the stub answered whatever was asked for. This now asserts the
+   * published path AND asserts the dead one is not reachable, so a revert goes
+   * red with the 404 named.
+   */
+  /* ONE mount, two claims — the mount budget Tasks 14 and 18 measured. No
+     assertion is dropped to hold it. */
+  it('reads schedule templates from the published path, not the 404, and gets a RAW array', async () => {
     stub = installAdapter(async () => ({
       status: 200,
       data: [
         {
-          templateId: 't1', name: 'Grapes', cropType: 'GRAPES', version: '1',
-          isPublished: true, taskCount: 3, estimatedDurationDays: 90,
+          id: 't1',
+          name: 'Grapes - Standard Seasonal Template',
+          cropType: 'Grapes',
+          totalDays: 150,
+          stages: [],
+          activities: [],
+          versionHash: 'abc123',
         },
       ],
     }));
@@ -181,8 +205,24 @@ describe('endpoint prefixes (A26)', () => {
     renderWithProviders(<ScheduleTemplatesPage />, { queryClient });
 
     await waitFor(() => expect(stub?.requests.length).toBeGreaterThan(0));
-    expect(stub.requests[0].url).toBe('/shramsafal/reference-data/crop-schedule-templates');
 
+    expect(stub.requests[0].url).toBe(SCHEDULE_TEMPLATES_PATH);
+    expect(SCHEDULE_TEMPLATES_PATH).toBe('/shramsafal/reference/schedule-templates');
+
+    // The exact string that 404'd, named so a failure here reads as what it is
+    // rather than as "a URL changed".
+    expect(SCHEDULE_TEMPLATES_404_PATH).toBe(
+      '/shramsafal/reference-data/crop-schedule-templates',
+    );
+    for (const request of stub.requests) {
+      expect(
+        request.url,
+        `requested ${SCHEDULE_TEMPLATES_404_PATH} — the server publishes no such route and answers 404`,
+      ).not.toBe(SCHEDULE_TEMPLATES_404_PATH);
+    }
+
+    // No envelope. `Results.Ok(result.Value)` sends the DTO list bare, so there
+    // is no meta.source and no meta.lastRefreshed to put in a freshness chip.
     await waitFor(() =>
       expect(queryClient.getQueryData(['schedules', 'templates', NO_ORG])).toBeDefined(),
     );

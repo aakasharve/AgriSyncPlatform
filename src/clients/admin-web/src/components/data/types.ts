@@ -99,6 +99,19 @@ export interface DataListColumn<T> {
   headerHidden?: boolean;
 }
 
+/**
+ * One column, already rendered for one row — what a card layout receives.
+ *
+ * `key` and `label` are the column's own; `node` is the result of its
+ * `render`. A card picks the fields it wants by key and lays them out; it does
+ * not re-render a value the column already knows how to render.
+ */
+export interface RenderedField {
+  key: string;
+  label: ReactNode;
+  node: ReactNode;
+}
+
 /* ─────────────────────────────────────────────────────────── pagination */
 
 export interface ServerPagination {
@@ -315,6 +328,40 @@ export interface DataListConfig<T> {
    * this component computes.
    */
   collapsible?: { defaultOpen: boolean; summary?: (rows: T[]) => ReactNode };
+
+  /**
+   * CARDS INSTEAD OF A TABLE — the one layout this component did not have.
+   *
+   * Supplying `renderCard` swaps the `<table>` for a grid of cards and nothing
+   * else: the search box, the facets, the sort, the URL state, the four honest
+   * causes, the count line and the pager are the same objects doing the same
+   * work. Schedule Templates is the only screen that asks for it (v3
+   * CONTRACT.md Appendix 12), and it asks for a layout, not a second list
+   * component.
+   *
+   * ── Why the card is handed its own rendered COLUMNS ──────────────────────
+   * `fields` is `columns` already rendered, in order, so a card composes the
+   * same cells the table would have drawn. Two consequences, and both are the
+   * reason for the argument:
+   *
+   *   1. NOTHING IN `columns` GOES INERT. Task 17 deleted configuration that
+   *      no longer ran rather than leave it looking live. A `render` that the
+   *      card layout never called would be exactly that — a value a reader
+   *      would maintain and nobody would see.
+   *   2. THE SORT AND THE CARD CANNOT DISAGREE. The sort control below reads
+   *      the same `columns`, so a field on a card and the option that orders
+   *      by it are one declaration.
+   *
+   * A card layout has no header row to click, so `SortHeader` is replaced by an
+   * explicit control. `?sort` and `?dir` are written by the same code either
+   * way, so a shared link behaves identically.
+   *
+   * `expand` is NOT supported alongside it: an expandable card is a different
+   * interaction (v3 expands table rows, not cards) and pretending otherwise
+   * would ship a chevron that does nothing. A card that needs more room shows
+   * it on the card.
+   */
+  renderCard?: (row: T, fields: RenderedField[]) => ReactNode;
 
   /** Expandable row detail — prose plus a definition list of context. */
   expand?: (row: T) => ReactNode;

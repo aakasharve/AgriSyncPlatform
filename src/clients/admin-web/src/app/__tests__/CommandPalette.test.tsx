@@ -190,7 +190,9 @@ function server({
         }),
       };
     }
-    if (req.url.includes('crop-schedule-templates')) return { status: 200, data: [] };
+    /* Raw array, and the path the server actually publishes — corrected with
+       the screen in Task 24. */
+    if (req.url.includes('/reference/schedule-templates')) return { status: 200, data: [] };
     return { status: 200, data: envelope({ items: [], totalCount: 0, page: 1, pageSize: 40 }) };
   });
 }

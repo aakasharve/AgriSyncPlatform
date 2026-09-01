@@ -62,6 +62,21 @@ import type { DataListConfig } from './types';
  * A screen that omits `urlNamespace` is byte-for-byte unchanged — the six
  * already-ported screens keep `?page`, `?sort`, `?dir` (A17, A18).
  *
+ * ── CARDS, ADDED IN TASK 24, AND STILL ONE LIST COMPONENT ────────────────
+ * Task 24's brief calls Schedule Templates *"the one screen `DataList` does not
+ * own"*. It owns it. What that screen actually needs is a different BODY —
+ * cards rather than rows (v3 CONTRACT.md Appendix 12) — and everything else it
+ * needs is already here: the search contract, the facets, the sort, the URL
+ * state, the four honest causes, the count line, the pager.
+ *
+ * So `renderCard` swaps the body and nothing else. The alternative — a second
+ * component, or a headless hook plus a bespoke screen — would have re-derived
+ * six behaviours to change one, and the whole global constraint of this plan is
+ * that there is ONE list. Two things follow, and both are deliberate:
+ *   · a card grid has no header row, so `SortHeader` is replaced by an explicit
+ *     control writing the SAME `?sort`/`?dir` (`cardSortControl` below);
+ *   · `expand` is not supported with it — see `types.ts`.
+ *
  * ── THE TWO-WRITE TRAP ───────────────────────────────────────────────────
  * `setSearchParams` closes over the CURRENT render, so two `set()` calls in
  * one handler both build from the same pre-first-call snapshot and the second
@@ -90,12 +105,20 @@ export function DataList<T>(config: DataListConfig<T>) {
     fixedSort,
     defaultSort,
     collapsible,
+    renderCard,
     expand,
     actions,
     rowEdge,
     states,
     skeleton,
   } = config;
+
+  /* CARDS ARE A LAYOUT, NOT A SECOND COMPONENT (Task 24, Schedule Templates —
+     v3 CONTRACT.md Appendix 12). Everything above and below this line is shared;
+     only the body and the sort affordance change. See `types.ts` on
+     `renderCard` for why the card is handed rendered columns rather than a bare
+     row. */
+  const cards = !!renderCard;
 
   const searchParamKey = search?.paramKey ?? 'search';
   /* `urlNamespace` reaches the URL through T7 and NOWHERE else — the four keys
@@ -412,6 +435,24 @@ export function DataList<T>(config: DataListConfig<T>) {
     }
 
     if (states.isLoading) {
+      /* B12 — shaped like the real thing. A card grid loading behind a table
+         skeleton would reflow the whole panel the moment the answer arrived. */
+      if (cards) {
+        return (
+          <div role="status" aria-busy="true" aria-label={`Loading ${label}`} className="p-4">
+            <span className="sr-only">Loading {label}</span>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: skeleton.rows }).map((_, r) => (
+                <div key={r} className="rounded-panel border border-line p-4">
+                  {Array.from({ length: skeleton.cells }).map((__, c) => (
+                    <div key={c} className="mb-2.5 h-4 animate-pulse rounded-chip bg-wash last:mb-0" />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
       return (
         <div role="status" aria-busy="true" aria-label={`Loading ${label}`}>
           <span className="sr-only">Loading {label}</span>
@@ -467,6 +508,43 @@ export function DataList<T>(config: DataListConfig<T>) {
       }
       return (
         <MeasuredZero what={states.measuredZero.what} checkedAt={states.measuredZero.checkedAt} />
+      );
+    }
+
+    /* ── the card grid ────────────────────────────────────────────────────
+       A list, and marked up as one: a card is a group of related values, not
+       a row of a grid, and a screen-reader user gets "list, 4 items" rather
+       than a table with no headers. The caption is carried across as the
+       list's own description so nothing that was said to a screen-reader user
+       under the table stops being said under the cards. */
+    if (renderCard) {
+      const captionId = `${id}-cards-caption`;
+      return (
+        <div className="p-4">
+          {caption && (
+            <p id={captionId} className="sr-only">
+              {caption}
+            </p>
+          )}
+          <ul
+            aria-label={label}
+            aria-describedby={caption ? captionId : undefined}
+            className="grid list-none gap-4 sm:grid-cols-2 xl:grid-cols-3"
+          >
+            {sorted.map((row) => (
+              <li key={rowKey(row)}>
+                {renderCard(
+                  row,
+                  columns.map((column) => ({
+                    key: column.key,
+                    label: column.label,
+                    node: column.render(row),
+                  })),
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       );
     }
 
@@ -541,6 +619,67 @@ export function DataList<T>(config: DataListConfig<T>) {
             })}
           </tbody>
         </table>
+      </div>
+    );
+  }
+
+  /* ── the sort control a card grid needs ───────────────────────────────
+     A table sorts from its headers. A card grid has none, so the same two URL
+     keys get an explicit control instead of losing the capability — which is
+     what a "cards, not a table" instruction costs if nobody notices.
+
+     It writes through the same `setMany` as `onSort`, with the same
+     `resetPage: false`, so `?sort` and `?dir` mean exactly what they mean on
+     the other nine screens and a link shared from either layout restores the
+     same order. Hidden entirely when the order is fixed (A31's rule: a product
+     decision is not a preference) and when there is nothing on screen to
+     order. */
+  function cardSortControl(): ReactNode {
+    if (!cards || fixedSort) return null;
+    const sortable = columns.filter(isSortable);
+    if (sortable.length === 0) return null;
+    if (states.isLoading || states.error || states.feedDown || sorted.length === 0) return null;
+
+    const selectId = `${id}-card-sort`;
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor={selectId} className="text-[13px] text-text-2">
+          Sort by
+        </label>
+        <select
+          id={selectId}
+          className="rounded-chip border border-line bg-page px-2 py-1 text-[13px] text-text-1"
+          value={effectiveSortKey ?? ''}
+          onChange={(event) => {
+            const key = event.target.value;
+            const column = columns.find((c) => c.key === key);
+            url.setMany({ [SORT]: key, [SORT_DIR]: column?.defaultDir ?? 'asc' }, { resetPage: false });
+          }}
+        >
+          {/* Only while nothing has been chosen and no `defaultSort` applies.
+              Naming the real order beats an empty option that looks like a
+              placeholder for one. */}
+          {!effectiveSortKey && <option value="">the order the server sent</option>}
+          {sortable.map((column) => (
+            <option key={column.key} value={column.key}>
+              {column.label}
+            </option>
+          ))}
+        </select>
+        {effectiveSortKey && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              url.setMany(
+                { [SORT]: effectiveSortKey, [SORT_DIR]: effectiveSortDir === 'asc' ? 'desc' : 'asc' },
+                { resetPage: false },
+              )
+            }
+          >
+            {effectiveSortDir === 'asc' ? 'Ascending' : 'Descending'}
+          </Button>
+        )}
       </div>
     );
   }
@@ -677,6 +816,7 @@ export function DataList<T>(config: DataListConfig<T>) {
                 {fixedSort && (
                   <span className="text-[13px] text-text-3">{fixedSort.because}</span>
                 )}
+                {cardSortControl()}
                 {/* No count beside a no-match block (it would count nothing)
                     and none beside a dead feed (it would describe rows that
                     are not being shown). */}

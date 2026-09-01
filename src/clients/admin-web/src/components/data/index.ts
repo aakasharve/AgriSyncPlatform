@@ -56,6 +56,7 @@ export type {
   FacetConfig,
   FacetOption,
   PaginationConfig,
+  RenderedField,
   RowEdge,
   SearchConfig,
   ServerPagination,

@@ -90,7 +90,10 @@ function server({ modules = [], dataStatus = 200, dataBody = emptyList }: Server
     if (req.url.includes('/user/auth/login')) {
       return { status: 200, data: { ...SESSION, refreshToken: 'refresh-1' } };
     }
-    if (req.url.includes('crop-schedule-templates')) return { status: 200, data: [] };
+    /* The templates feed is a RAW array, not an envelope, and its path changed
+       in Task 24 — `/reference/schedule-templates`, not the
+       `/reference-data/crop-schedule-templates` the console used to 404 on. */
+    if (req.url.includes('/reference/schedule-templates')) return { status: 200, data: [] };
     return { status: dataStatus, data: dataBody };
   });
 }

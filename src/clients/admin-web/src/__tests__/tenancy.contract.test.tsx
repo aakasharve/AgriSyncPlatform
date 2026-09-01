@@ -13,6 +13,7 @@ import { useOpsVoice } from '@/hooks/useOpsVoice';
 import { useWvfd } from '@/hooks/useWvfd';
 import { useCohortPatterns } from '@/features/farmer-health/hooks/useCohortPatterns';
 import { useFarmerHealth } from '@/features/farmer-health/hooks/useFarmerHealth';
+import { useScheduleTemplates } from '@/hooks/useScheduleTemplates';
 import ScheduleTemplatesPage from '@/pages/schedules/ScheduleTemplatesPage';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { installAdapter, type CapturedRequest, type StubbedAdapter } from '@/test/stubAdapter';
@@ -89,9 +90,10 @@ interface QueryLike {
  * useCohortPatterns, useFarmerHealth and useScheduleTemplates. Two corrections
  * from the repo:
  *
- *  - `useScheduleTemplates` DOES NOT EXIST. It is an inline `useQuery` in
- *    `ScheduleTemplatesPage.tsx`; Task 24 extracts it. It is covered by its own
- *    test below, through the page, because there is no hook to mount.
+ *  - `useScheduleTemplates` DID NOT EXIST when Task 12 wrote this list — it was
+ *    an inline `useQuery` in `ScheduleTemplatesPage.tsx`, and this file had to
+ *    mount the whole page to reach its key. **Task 24 extracted it**, so it is
+ *    now a hook like the other ten and is mounted through `Probe`.
  *  - `useOpsHealthWrapped` WAS a twelfth data key the envelope did not name —
  *    a dead duplicate with zero callers. Task 12 included it here rather than
  *    exempt it, because an org-less data key sitting in a file the next hook
@@ -169,14 +171,23 @@ describe('every data query key carries the active org (A7, Step 3)', () => {
       .toBe(ORG_A);
   });
 
-  it('the schedule-templates query keys on the org too — it has no hook to mount', async () => {
-    // The plan calls this `useScheduleTemplates`. There is no such hook: it is
-    // an inline useQuery in the page (Task 24 extracts it), so the page is what
-    // a test can mount.
+  it('the schedule-templates query keys on the org too', async () => {
+    // This note used to read "there is no such hook: it is an inline useQuery in
+    // the page (Task 24 extracts it), so the page is what a test can mount."
+    // Task 24 extracted it, so this is now a hook like the eleven above it and
+    // costs one Probe rather than a whole screen.
+    //
+    // The org stays in the key even though the ENDPOINT takes no org
+    // (`GetScheduleTemplatesHandler.HandleAsync(ct)`): a key separates one
+    // tenant's cache entry from another's, which is the only thing a key can do.
+    // Cheap when redundant; a tenant boundary when it is not.
     stub = installAdapter(async () => ({ status: 200, data: [] }));
     const queryClient = cacheRetainingClient();
 
-    renderWithProviders(<ScheduleTemplatesPage />, { queryClient, route: AT_ORG_A });
+    renderWithProviders(<Probe use={() => useScheduleTemplates()} />, {
+      queryClient,
+      route: AT_ORG_A,
+    });
     await waitFor(() => expect(stub?.requests.length).toBeGreaterThan(0));
 
     expect(queryClient.getQueryCache().getAll()[0].queryKey)
@@ -318,12 +329,25 @@ describe('THE CROSS-TENANT ASSERTION — org A rows are never served to org B', 
   it('the templates screen drops the previous org’s templates from the DOM', async () => {
     stub = installAdapter(async (req) => {
       if (req.headers['X-Active-Org-Id'] === ORG_A) {
+        /* The REAL `ScheduleTemplateDto` shape (`ReferenceDataDtos.cs:17-24`).
+           This fixture used to carry `templateId / version / isPublished /
+           taskCount / estimatedDurationDays` — five fields the endpoint has
+           never sent — because it was written from the page's own declared
+           interface rather than from the server. Task 24 corrected both. */
         return {
           status: 200,
           data: [
             {
-              templateId: 't1', name: 'Org A Grape Schedule', cropType: 'GRAPES', version: '1',
-              isPublished: true, taskCount: 3, estimatedDurationDays: 90,
+              id: 't1',
+              name: 'Org A Grape Schedule',
+              cropType: 'Grapes',
+              totalDays: 150,
+              stages: [],
+              activities: [{
+                name: 'Pruning', category: 'Pruning', stageName: 'Post Pruning',
+                startDay: 0, endDay: 1, frequencyMode: 'one_time', intervalDays: null,
+              }],
+              versionHash: 'aaa111',
             },
           ],
         };

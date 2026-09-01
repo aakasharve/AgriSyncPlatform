@@ -33,16 +33,32 @@ describe('FreshnessChip — it may only state an age it actually has', () => {
     expect(screen.getByText(/Live · 2m ago/)).toBeInTheDocument();
   });
 
-  it('falls back to a word, not a number, when there is no timestamp at all', () => {
-    // NOTE: this pins TODAY's behaviour, which is still wrong for a different
-    // reason — D13: a chip with no timestamp still claims freshness ("now" /
-    // "recent"). That is a visible change to Schedule Templates and belongs to
-    // Task 24, which ports that screen. When Task 24 lands, this expectation
-    // changes in the same commit as the code, never quietly.
-    render(<FreshnessChip source="materialized" />);
+  /**
+   * D13, CLOSED IN TASK 24 — and this is the expectation that changed.
+   *
+   * It used to read `expect(text).toBe('Nightly · recent')` under a note saying
+   * that pinning "recent" pinned a defect: a chip with no timestamp still
+   * claimed freshness, and on Schedule Templates it printed a permanent
+   * "Nightly · recent" over an endpoint with no clock at all. That note promised
+   * the expectation would change in the same commit as the code. It has.
+   */
+  it('states the absence, not an age, when there is no timestamp at all', () => {
+    render(<FreshnessChip source="materialized" lastRefreshed={undefined} />);
 
     const text = screen.getByText(/Nightly/).textContent ?? '';
-    expect(text).toBe('Nightly · recent');
+    expect(text).toBe('Nightly · age not reported');
+
+    // The words that made the two cases indistinguishable. "recent" and "now"
+    // are what this chip says when it HAS a reading; neither may be reachable
+    // without one.
+    expect(text).not.toMatch(/recent/);
+    expect(text).not.toMatch(/\bnow\b/);
     expect(text).not.toMatch(/NaN/);
+  });
+
+  it('cannot be given an age it does not have on the live source either', () => {
+    render(<FreshnessChip source="live" lastRefreshed={undefined} />);
+
+    expect(screen.getByText(/Live/).textContent).toBe('Live · age not reported');
   });
 });
