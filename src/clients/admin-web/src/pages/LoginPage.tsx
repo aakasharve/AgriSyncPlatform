@@ -132,7 +132,7 @@ export default function LoginPage() {
               required
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3.5 font-mono text-[16px] font-semibold text-black outline-none transition-colors focus:border-brand-teal focus:bg-white"
+              className="w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3.5 font-mono text-[16px] font-semibold text-black transition-colors focus:border-brand-teal focus:bg-white"
               placeholder="10 digits"
             />
           </label>
@@ -144,7 +144,7 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3.5 text-[16px] font-semibold text-black outline-none transition-colors focus:border-brand-teal focus:bg-white"
+              className="w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3.5 text-[16px] font-semibold text-black transition-colors focus:border-brand-teal focus:bg-white"
             />
           </label>
 
@@ -168,7 +168,15 @@ export default function LoginPage() {
             {submitting ? 'Signing in…' : 'Sign in →'}
           </button>
 
-          <p className="mt-6 text-center text-[12px] font-medium text-gray-400">
+          {/* TASK 29 — `text-gray-400` (#99a1af) on white is 2.60:1, and this
+              line is 12px, so WCAG AA asks for 4.5:1. It was the ONLY
+              accessibility failure Lighthouse found on the whole console, and
+              it is on the one route the CI budget can actually reach: the job
+              is unauthenticated, so `.github/workflows/lighthouse.yml` scores
+              THIS page whatever url it is pointed at. `--color-text-2`
+              (#55655c) is 6.17:1 and is already the console's caption colour,
+              so this stops being a second grey as well as a failing one. */}
+          <p className="mt-6 text-center text-[12px] font-medium text-text-2">
             Not an admin? This console is restricted access.
           </p>
         </form>

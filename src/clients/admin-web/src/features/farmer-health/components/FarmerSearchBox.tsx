@@ -123,7 +123,7 @@ export function FarmerSearchBox({ onResolved }: FarmerSearchBoxProps) {
             /* Note 3, said on screen: three kinds of input, one box. */
             placeholder="farm ID, user ID, or phone"
             autoComplete="off"
-            className="h-9 w-72 rounded-chip border border-line bg-page pl-8 pr-3 font-mono text-[13px] text-text-1 outline-none focus:border-blue"
+            className="h-9 w-72 rounded-chip border border-line bg-page pl-8 pr-3 font-mono text-[13px] text-text-1 focus:border-blue"
           />
         </div>
         <button

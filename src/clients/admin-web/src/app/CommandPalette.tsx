@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HeartPulse, Search, Users as UsersIcon, Wheat, type LucideIcon } from 'lucide-react';
 import { LoadFailed, Masked, NoMatch, isPartlyMasked, isRedacted } from '@/components/state';
@@ -243,6 +252,16 @@ const NAV_ENTRIES: Array<Entry & { module: string | null }> = NAV.map((item) => 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
 
+  /* Where the operator was when they pressed Cmd-K, so they can be put back
+     (§8). `isOpen` mirrors the state in a ref because the window handler is
+     registered once and would otherwise close over `open` from the first
+     render forever. */
+  const returnFocusTo = useRef<HTMLElement | null>(null);
+  const isOpen = useRef(false);
+  useEffect(() => {
+    isOpen.current = open;
+  }, [open]);
+
   /**
    * TWO BINDINGS. Cmd-K (or Ctrl-K) toggles, Escape closes. D4 removed the
    * other three; see §7. Registered on the window because the shortcut has to
@@ -252,6 +271,7 @@ export function CommandPalette() {
     const down = (e: globalThis.KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
+        if (!isOpen.current) returnFocusTo.current = document.activeElement as HTMLElement | null;
         setOpen((o) => !o);
       }
       if (e.key === 'Escape') setOpen(false);
@@ -260,6 +280,21 @@ export function CommandPalette() {
     return () => window.removeEventListener('keydown', down);
   }, []);
 
+  /**
+   * Hand the keyboard back on the way out (§8).
+   *
+   * `isConnected`, not `!= null`: selecting a result NAVIGATES, so the element
+   * that had focus may have been unmounted by the router on the way. Focusing
+   * a detached node does nothing at all, silently; the guard makes that case
+   * explicit rather than leaving focus on `<body>` and calling it restored.
+   */
+  useEffect(() => {
+    if (open) return;
+    const target = returnFocusTo.current;
+    returnFocusTo.current = null;
+    if (target?.isConnected) target.focus();
+  }, [open]);
+
   /* The dialog is a separate component so the entity queries MOUNT WITH IT.
      A closed palette fetches nothing at all — no farm names, no phone
      numbers — which is the cheapest possible form of the rule in §1. */
@@ -267,11 +302,85 @@ export function CommandPalette() {
   return <PaletteDialog onClose={() => setOpen(false)} />;
 }
 
+/**
+ * ══ 8. THE MODAL KEEPS THE KEYBOARD, AND GIVES IT BACK — TASK 29 ═════════
+ *
+ * `aria-modal="true"` is a PROMISE to a screen reader that nothing outside
+ * this dialog is reachable. Until this task the palette made that promise and
+ * did not keep it: Tab walked straight out of the dialog into the shell
+ * underneath — which is still rendered, still focusable, and now covered by a
+ * translucent backdrop a keyboard user cannot see. Someone who tabbed once was
+ * operating a screen they had been told was not there.
+ *
+ * The second half matters as much and is the half that is usually skipped.
+ * `autoFocus` on the input moves focus IN; nothing moved it back. On Escape
+ * the dialog unmounted and focus fell to `<body>`, so the next Tab restarted
+ * from the top of the console — an operator who opened the palette, changed
+ * their mind and pressed Escape lost their place on the page.
+ *
+ * 🛑 WHERE THE "WHERE WAS I" IS CAPTURED IS NOT A DETAIL, AND THE FIRST
+ * DRAFT OF THIS FIX GOT IT WRONG. It cannot be read from inside
+ * `PaletteDialog`: React attaches refs and applies `autoFocus` CHILD-FIRST, so
+ * by the time any effect or ref callback in the dialog runs,
+ * `document.activeElement` is already the search input — and the dialog would
+ * then "restore" focus to its own input, which is the thing being removed.
+ * Measured: focus landed on `<body>` and the test asserting otherwise went red.
+ * It is captured in the KEY HANDLER above instead, one tick before the dialog
+ * exists.
+ */
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Tab and Shift+Tab wrap inside `container`; every other key is left alone.
+ *
+ * The edges are found by comparing against the FIRST and LAST focusable
+ * rather than by tracking an index, so a row the dialog gains between
+ * keystrokes — a "Search the server" option appearing as you type — cannot
+ * strand the cursor outside the list. `!contains(active)` covers focus having
+ * escaped already, which is the state this trap exists to end.
+ *
+ * There is deliberately NO visibility filter on the query. `offsetParent` is
+ * always null under jsdom, so filtering on it would leave a single element in
+ * the list, make `first === last`, and turn the trap into a no-op whose own
+ * test still passed. Nothing inside this dialog is hidden; the day something
+ * is, it needs a filter a test environment can actually evaluate.
+ */
+function useTabTrap(container: RefObject<HTMLDivElement | null>) {
+  return useCallback(
+    (e: KeyboardEvent<HTMLDivElement>) => {
+      if (e.key !== 'Tab') return;
+      const box = container.current;
+      if (!box) return;
+
+      const items = [...box.querySelectorAll<HTMLElement>(FOCUSABLE)];
+      if (items.length === 0) return;
+
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+
+      if (e.shiftKey && (active === first || !box.contains(active))) {
+        e.preventDefault();
+        last.focus();
+        return;
+      }
+      if (!e.shiftKey && (active === last || !box.contains(active))) {
+        e.preventDefault();
+        first.focus();
+      }
+    },
+    [container],
+  );
+}
+
 function PaletteDialog({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState('');
   const [idx, setIdx] = useState(0);
   const navigate = useNavigate();
   const { canRead } = useAdminScope();
+  const dialog = useRef<HTMLDivElement>(null);
+  const trapTab = useTabTrap(dialog);
 
   /* Fail-closed: `canRead` returns false until the scope resolves, so an
      unresolved scope yields a palette of the three ungated screens and
@@ -497,11 +606,13 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
       onClick={onClose}
     >
       <div
+        ref={dialog}
         role="dialog"
         aria-modal="true"
         aria-label="Search the console"
         className="w-full max-w-xl overflow-hidden rounded-panel bg-page shadow-float"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={trapTab}
       >
         <div className="flex items-center gap-3 border-b border-line px-4 py-3">
           <Search size={16} aria-hidden="true" className="flex-none text-text-3" strokeWidth={2.5} />
@@ -520,7 +631,7 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
             }}
             onKeyDown={onKey}
             placeholder="Jump to a screen, a farm or a person"
-            className="flex-1 bg-transparent text-[15px] font-semibold text-text-1 outline-none placeholder:text-text-3"
+            className="flex-1 bg-transparent text-[15px] font-semibold text-text-1 placeholder:text-text-3"
           />
           <kbd className="rounded-chip bg-wash px-1.5 py-0.5 text-[11px] text-text-3">ESC</kbd>
         </div>
