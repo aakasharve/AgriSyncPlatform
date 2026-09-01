@@ -2740,12 +2740,12 @@ Four of eight tiles have no source. That is the truth and the screen must show i
 
 ### Task 29: Accessibility, responsiveness and the performance budget
 
-- [ ] **Step 1: Keyboard sweep.** Every expandable row responds to Enter AND Space; focus is visible everywhere at 2px indigo with 2px offset; no outline is removed; the palette traps focus and returns it.
-- [ ] **Step 2: Screen-reader sweep.** Every chart has its data table (A32); every loading block has a named aria-label; every aria-sort is live; every state dot has a word beside it; every aria-expanded is truthful.
-- [ ] **Step 3: Responsive sweep** at 1280, 1279 and 1023, with the sidebar collapsing to a horizontal strip. The viewport lock was removed in T3 Step 6.
-- [ ] **Step 4: prefers-reduced-motion and print** both honoured (T3 Step 5).
-- [ ] **Step 5: Run the existing Lighthouse budget.** `.github/workflows/lighthouse.yml:55-95` builds admin-web and asserts perf 0.7 and a11y 0.9 on /farmer-health from a static dist. It must still pass. Note the job's own comment: unauthenticated, it actually scores /login, so a11y regressions on GATED routes will NOT be caught by it — Step 2 manual sweep is not optional.
-- [ ] **Step 6: Commit** — `fix(admin-web): a11y and responsive sweep across all 13 routes`
+- [x] **Step 1: Keyboard sweep.** Every expandable row responds to Enter AND Space; focus is visible everywhere at 2px indigo with 2px offset; no outline is removed; the palette traps focus and returns it.
+- [x] **Step 2: Screen-reader sweep.** Every chart has its data table (A32); every loading block has a named aria-label; every aria-sort is live; every state dot has a word beside it; every aria-expanded is truthful.
+- [x] **Step 3: Responsive sweep** at 1280, 1279 and 1023, with the sidebar collapsing to a horizontal strip. The viewport lock was removed in T3 Step 6.
+- [x] **Step 4: prefers-reduced-motion and print** both honoured (T3 Step 5).
+- [x] **Step 5: Run the existing Lighthouse budget.** `.github/workflows/lighthouse.yml:55-95` builds admin-web and asserts perf 0.7 and a11y 0.9 on /farmer-health from a static dist. It must still pass. Note the job's own comment: unauthenticated, it actually scores /login, so a11y regressions on GATED routes will NOT be caught by it — Step 2 manual sweep is not optional.
+- [x] **Step 6: Commit** — `fix(admin-web): a11y and responsive sweep across all 13 routes`
 
 ---
 
@@ -2754,7 +2754,7 @@ Four of eight tiles have no source. That is the truth and the screen must show i
 **Files:**
 - Create: `src/clients/admin-web/src/__tests__/preservation.register.test.ts`
 
-- [ ] **Step 1: Encode the register as a test.**
+- [x] **Step 1: Encode the register as a test.**
 
 ```ts
 /**
@@ -2790,16 +2790,77 @@ const MECHANICAL = [
 
 ```
 
-- [ ] **Step 2: Walk every route with the harness** and assert each one renders, is guarded exactly as ROUTE_GUARDS says, and survives a hard refresh with its full query string intact.
-- [ ] **Step 3: Tick every register row** in this document. A row that cannot be ticked either gets a task, or moves — WITH THE FOUNDER SIGNATURE — into the Deliberately Dropped table. There is no third option.
-- [ ] **Step 4: Run everything.**
+- [x] **Step 2: Walk every route with the harness** and assert each one renders, is guarded exactly as ROUTE_GUARDS says, and survives a hard refresh with its full query string intact.
+- [x] **Step 3: Tick every register row** in this document. A row that cannot be ticked either gets a task, or moves — WITH THE FOUNDER SIGNATURE — into the Deliberately Dropped table. There is no third option.
+- [x] **Step 4: Run everything.**
 
 ```bash
 cd "src/clients/admin-web" && npm run test && npm run build && npm run lint
 cd - && dotnet test src/tests/AgriSync.ArchitectureTests/
 ```
 
-- [ ] **Step 5: Commit** — `test(admin-web): preservation register sweep — nothing lost`
+- [x] **Step 5: Commit** — `test(admin-web): preservation register sweep — nothing lost`
+
+---
+
+> **Tasks 29 and 30 executed 2026-09-02 (`a2434e8e`, `a9c23b56`). ALL 30 TASKS COMPLETE.**
+> **987 tests / 50 files, three consecutive green full runs verified independently; lint 7, 0 errors;
+> build exit 0.**
+>
+> **🔴 THE FLAKE WAS A REAL DEFECT, AND THE MECHANISM IS WORTH READING.** Five tasks blamed
+> parallelism; Task 28 disproved that; Task 29 found the cause. **The test suite was reaching the
+> real API.** `installAdapter().restore()` puts back **axios's own XHR adapter**, so between one test
+> restoring and the next installing, `adminApi` was wired to the live network. React Query does not
+> cancel a fetch when its last observer unmounts, so a whole-console test that ended the moment its
+> heading appeared left `GET /admin/me/scope` **in flight** — instrumented and counted: **seven
+> distinct leaks across three runs.** The .NET API is listening on `127.0.0.1:5048` on this machine
+> and answered **401** to the fixture token. The interceptor is a module singleton, so the 401 ran for
+> real: `authStore.clear()` wiped the session the *current* test had written in its first line, and
+> `redirectToLogin()` hard-assigned `/login`. `AdminAuthProvider` reads the store once, on mount — so
+> a 401 landing between `authStore.set()` and `render(<App/>)` **mounted the console anonymous.**
+> That is exactly the failure DOM: *"Unable to find … Ops Now"* over a rendered sign-in form.
+> **Fixed at the transport, not with a timeout:** unstubbed requests now fail with an error carrying
+> **no HTTP response**, so no status branch is reachable. **3 failures in 5 runs before; 0 in 11 after.**
+>
+> **🛑 A second problem, genuinely environmental, reported not papered over:** a timeline probe caught
+> `tenancyRouting` exceeding the 20 s ceiling **while making steady progress** — org switched at
+> +17.2 s, filter applied at +19.9 s, with multi-second event-loop stalls between. Contention, not a
+> hang. **No timeout was raised; `vitest.config.ts` untouched.**
+>
+> **🔴 THE COMMAND PALETTE'S FOCUS TRAP DID NOT EXIST.** `aria-modal="true"` promised a screen-reader
+> user that nothing outside was reachable, and **Tab walked into the shell underneath**; Escape
+> dropped focus to `<body>`. Now traps and restores.
+>
+> **🔴 The Lighthouse budget is broken AND has never run on a PR.** It targets
+> `http://localhost/farmer-health` over a static dist **without `--collect.isSinglePageApplication`**,
+> so lhci never falls back to `index.html`: reproduced verbatim, *"Lighthouse was unable to reliably
+> load the page you requested. (Status code: 404)"*. It does **not** "actually score `/login`" as its
+> own comment claims — **it errors.** And it is `on: workflow_dispatch` only. **One-flag fix, in
+> `.github/`, outside the executor's allowlist.**
+>
+> **A contrast failure fixed:** LoginPage's footer was `text-gray-400` on white = **2.60:1** at 12px
+> against AA's 4.5:1. Now **6.17:1**. Lighthouse accessibility **0.91 → 1.00**; performance 0.90–0.91.
+>
+> **Four `outline-none` utilities deleted as INERT** — `:focus-visible` is unlayered and outranks
+> every `@layer utilities` rule, so the ring was already winning and the utility described a behaviour
+> the stylesheet was overriding. **No pixel changed.**
+>
+> ## The Preservation Register roll-call — 59 rows, four verdicts, exhaustive by construction
+>
+> `preservation.register.test.ts`, 69 tests. **41 kept · 16 changed · 1 manual (A56) · 1 unsigned
+> (A50).** One test asserts the keys are exactly `A1…A59` with no gap or duplicate; another pins the
+> tally; another proves every named proof file still exists. **Falsifiability proved by five
+> mutations, each naming its row.**
+>
+> **The sixteen that cannot be ticked as written** — A3 (10 of 13 routes, 36 keys, not 9/12/33) ·
+> A5 (per-block on `ops.errors`/`ops.voice`) · A13 · A16 · A17 (three screens, not one) ·
+> A24 & A27 (**four** unwrapped endpoints, not one) · A33 · A38 (the live code shipped a fabricated
+> **100%**, not 0%) · A41 (`ErrorState` has zero call sites, kept only because this row names it) ·
+> A43 · A46 · A47 · A53 · A54 · **A55 (needs the founder's eye: recharts is gone, so the fixed
+> `[0,7]` domain and `ReferenceLine` went with it — the series is now relatively scaled, the exact
+> floating axis A55 warned about, mitigated by stating the scaling in words and a separate fixed goal
+> bar).**
+> **B16 is NOT satisfied and is NOT ticked.**
 
 ---
 
