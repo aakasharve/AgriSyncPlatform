@@ -74,6 +74,31 @@ Every task's requirements implicitly include these. A change that violates one h
   `5 पूर्ण / 1 अर्धा / 2 रात्री / 3 तास जादा`, exact treatment being a Phase 1 decision —
   never a single invented `6.5`. `AttendanceMark.Value` may not be used to manufacture
   that equivalence.
+- **WHERE MONEY LIVES — D9.9 and D-H6 are not in conflict, and the boundary is structural.**
+  D9.9 (2026-08-28): *"Attendance records evidence, never money."* D-H6 (2026-08-31): *"The
+  register IS the wage book."* Both hold, because they govern different things:
+  - **The attendance MARK carries no money, and must never gain a money column.** Verified:
+    `20260831180408_AddAttendanceMarks.cs` has no cost/amount/wage column. Keep it that way.
+    `full / half / night / hours` are evidence facts.
+  - **The register VIEW displays money it READS from the engagement.** Stated money already
+    lives on `LabourAssignment`: `WagePerPerson` (:64), `TotalCost` (:67), qualified by
+    `CostCertainty` (:130) and `CostSpokenText` (:133).
+  - **The founder's (b) ruling is already law in this code.** `LabourAssignment.cs:46` carries
+    the NO-MULTIPLY honesty rule — `TotalCost` is *"stored as-given, never computed"* (ADR §1 /
+    §3.2d). Display stated, never calculate, is not a new rule to invent; it is the rule the
+    domain already enforces. A register that shows `TotalCost` obeys it; one that multiplies a
+    rate by days breaks a load-bearing invariant, not just a preference.
+  - **Corollary for Task 4.1:** the ledger read JOINS money from the engagement. It does not
+    denormalise an amount onto the mark, and it does not sum one into existence.
+- **D9.4 — WHO MARKED is not WHO WAS PRESENT.** Shankar marking attendance at 21:00 does not
+  make him present. Structurally satisfied today: `AttendanceMark.RecordedByUserId` (:84) and
+  `RecordedAtUtc` (:86) are the ACTOR; `Day`/`Night` are the PRESENCE. Never let one imply the
+  other, and note `Amend` reassigns `RecordedByUserId` (:146) — the history of who said what
+  lives in `AttendanceMarkCorrection`, not on the mark.
+- **D9.5 — crew-count language is ambiguous and must not be resolved by assumption.**
+  `शंकर आठ जण घेऊन आला` normally means Shankar **+ 8**; `शंकरकडचे एकूण आठ जण होते` may mean **8
+  in total**. Carry `sourceText` + `systemInterpretation` (both already exist in parser output,
+  verified in production) and let CONFIRMATION settle it. Binds Task 3.2 and Task 3.3.
 - **Money placement is D-H7 (layout 3), not "an amount everywhere".** Normal days show
   ONLY attendance marks. A day paid differently from the standard rate shows its amount in
   that day's cell. Every ROW ends in the week's money, and so does the bottom line. An
