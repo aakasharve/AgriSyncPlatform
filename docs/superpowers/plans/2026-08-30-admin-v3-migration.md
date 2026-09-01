@@ -2494,12 +2494,12 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** useScheduleTemplates() — NEW, extracted from the inline useQuery at `ScheduleTemplatesPage.tsx:13-20`, against `/shramsafal/reference-data/crop-schedule-templates`. RAW ARRAY, no envelope, no meta (A26).
 **Register rows:** A4, A26; D13.
 
-- [ ] **Step 1: S1 to S6.** Templates render as CARDS, NOT A TABLE (v3 Appendix 12) — this is the one screen DataList does not own; it uses the same config for search, sort and state but a card renderer.
-- [ ] **Step 2: Extract the hook** so no page holds an inline useQuery, and comment the missing envelope so the next reader does not "fix" it.
-- [ ] **Step 3: Delete the unprovable freshness chip (D13).** A FreshnessChip with a materialized source and no lastRefreshed (`ScheduleTemplatesPage.tsx:29`) renders a permanent "Nightly recent" over an endpoint that returns no timestamp at all. CONTRACT.md section 9.1: every number states its source AND its age. There is no age here, so there is no chip — say "reference data, no timestamp available" instead.
-- [ ] **Step 4: Keep the route ungated (A4).**
-- [ ] **Step 5: Add the v3 unauthored-draft state.** A draft with no task list is a name and nothing else; a taskCount of 0 must not read as "zero tasks planned".
-- [ ] **Step 6: Commit** — `feat(admin-web): Schedule Templates, honest about having no timestamp`
+- [x] **Step 1: S1 to S6.** Templates render as CARDS, NOT A TABLE (v3 Appendix 12) — this is the one screen DataList does not own; it uses the same config for search, sort and state but a card renderer.
+- [x] **Step 2: Extract the hook** so no page holds an inline useQuery, and comment the missing envelope so the next reader does not "fix" it.
+- [x] **Step 3: Delete the unprovable freshness chip (D13).** A FreshnessChip with a materialized source and no lastRefreshed (`ScheduleTemplatesPage.tsx:29`) renders a permanent "Nightly recent" over an endpoint that returns no timestamp at all. CONTRACT.md section 9.1: every number states its source AND its age. There is no age here, so there is no chip — say "reference data, no timestamp available" instead.
+- [x] **Step 4: Keep the route ungated (A4).**
+- [x] **Step 5: Add the v3 unauthored-draft state.** A draft with no task list is a name and nothing else; a taskCount of 0 must not read as "zero tasks planned".
+- [x] **Step 6: Commit** — `feat(admin-web): Schedule Templates, honest about having no timestamp`
 
 ---
 
@@ -2508,11 +2508,63 @@ Every screen task shares the SAME SIX STEPS. They are written out once here and 
 **Hook:** NONE — there is no endpoint.
 **Register rows:** A4; D9.
 
-- [ ] **Step 1: Remove the hardcoded SEEDED_ADMINS array** (`SettingsAdminsPage.tsx:4-6`). A constant rendered inside a table with a green Active pill is data-shaped, and it is not data. It is a copy of what the config allow-list contained at the time the file was written.
-- [ ] **Step 2: Ship the honest v3 version.** The console is showing ONE SOURCE OF TWO: the config allow-list is what is read; ssf.admin_users has never been read because its migration has not been run. State that. Also state the v3 all-or-nothing explanation: on the allow-list means every farmer phone and every farm log; off it means a 403; there is nothing in between.
-- [ ] **Step 3: Replace the "Phase 6" scaffolding copy** (`SettingsAdminsPage.tsx:23-27`) with the same statement written for an operator, not for a developer reading a plan.
-- [ ] **Step 4: Keep the route ungated (A4)** — there is still no ModuleKey for admin management.
-- [ ] **Step 5: Commit** — `feat(admin-web): Settings states its source instead of hardcoding a row`
+- [x] **Step 1: Remove the hardcoded SEEDED_ADMINS array** (`SettingsAdminsPage.tsx:4-6`). A constant rendered inside a table with a green Active pill is data-shaped, and it is not data. It is a copy of what the config allow-list contained at the time the file was written.
+- [x] **Step 2: Ship the honest v3 version.** The console is showing ONE SOURCE OF TWO: the config allow-list is what is read; ssf.admin_users has never been read because its migration has not been run. State that. Also state the v3 all-or-nothing explanation: on the allow-list means every farmer phone and every farm log; off it means a 403; there is nothing in between.
+- [x] **Step 3: Replace the "Phase 6" scaffolding copy** (`SettingsAdminsPage.tsx:23-27`) with the same statement written for an operator, not for a developer reading a plan.
+- [x] **Step 4: Keep the route ungated (A4)** — there is still no ModuleKey for admin management.
+- [x] **Step 5: Commit** — `feat(admin-web): Settings states its source instead of hardcoding a row`
+
+---
+
+> **Tasks 24 and 25 executed 2026-09-01 (`d9235ff4`, `c1619632`). 850 tests / 42 files; lint 8.**
+> **Nineteen mutations, nineteen kills.**
+>
+> **🔴 THE SAME DEAD PATH BREAKS THE FARMER APP.** `ScheduleResource.ts:18` calls
+> `/shramsafal/reference-data/crop-schedule-templates`; the backend publishes
+> `/shramsafal/reference/schedule-templates` (`ReferenceDataEndpoints.cs:14` + `:16`) — **both the
+> group and the route differ**, and `crop-schedule-templates` appears in **zero** `.cs` files.
+> `SchedulePickerModal.tsx:42` renders that 404 to the farmer as
+> **"टेम्पलेट लोड होऊ शकले नाही. पुन्हा प्रयत्न करा."** — *asking him to retry a request that can never
+> succeed.* The console side is fixed; **the farmer side is untouched and needs its own spec.**
+>
+> **🔴 AND FIXING THE PATH IS NOT SUFFICIENT.** Task 24's card shape was wrong in **five of seven
+> fields**: `templateId`, `version`, `isPublished`, `taskCount`, `estimatedDurationDays` **do not
+> exist** on `ScheduleTemplateDto`. Repointing the URL alone would have swapped a 404 for a card of
+> `undefined`s — and because `isPublished` would be undefined on every row, **a console stating that
+> no template is visible to any farmer.** *A wrong answer at HTTP 200 is worse than no answer.*
+>
+> **🔴 This screen lists the WRONG template table.** Those five names describe
+> `ssf.crop_schedule_templates` — the table a farmer actually adopts, gated on `IsPublished` by
+> `AdoptScheduleHandler.cs:70-79`. **No endpoint lists it.**
+> `GetCropScheduleTemplatesForCropAsync` exists on the port with **no caller outside test doubles**.
+>
+> **🛑 The endpoint cannot return an empty array** — `GetScheduleTemplatesHandler.cs:31-34`
+> **substitutes four templates hardcoded in C#** when the table is empty. **`totalDays` is a property
+> of the CROP with a 60-day floor**, so two templates of one crop always report the same number.
+> **`cropType` is derived by splitting the name on its first hyphen.** **`versionHash` is one hash for
+> the whole payload**, stamped on every row.
+>
+> **🛑 "Cards, not a table (v3 Appendix 12)" — v3's own `templates.html` IS a table**, seven sortable
+> columns including two fields the API does not send. Appendix 12 describes the *live* console. Cards
+> shipped as instructed; `DataList` gained one optional `renderCard`, so no `column.render` goes inert.
+>
+> **🔴 Task 25: "the config allow-list is what is read" is FALSE since W0-B.**
+> `JwtTokenIssuer.cs:44-48` says *"That path is removed"*; `EntitlementResolver.cs:38-47` reads
+> `ssf.organization_memberships` **per request**. **And `ssf.admin_users` and `IAdminResolver` do not
+> exist anywhere in the repo** — *"its migration has not been run"* implies a migration exists; **there
+> is none.** **The hardcoded row was not even a faithful copy**: `appsettings.Development.json:110-113`
+> lists **two** ids, the table showed one; `appsettings.json` and `appsettings.Production.json` have
+> **no `Admins` section at all.** **"Off the list means a 403" — it is a 401.**
+>
+> **🛑 "There is nothing in between" is true of PLATFORM membership and false of the product** —
+> `EntitlementMatrix` gives FPO/FPC/consulting/lab memberships a graduated per-module set.
+>
+> **🛑 The no-envelope count has been wrong twice.** A27 said one; Task 22 corrected to three; A26 had
+> already registered this one, which neither count included. **Four.**
+>
+> **🛑 Gate items 12 and 14 no longer match what ships** and need rewording before the walkthrough.
+> **D13 is closed at the component:** `lastRefreshed` is now a **required** prop, so a chip with no
+> timestamp is a compile error, and the absence reads *"age not reported"*.
 
 ---
 
