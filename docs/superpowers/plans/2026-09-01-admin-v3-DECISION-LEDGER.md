@@ -22,9 +22,29 @@
 > rather than trusting it. Twenty-seven plan premises have proved false so far; the ones that turned
 > out to be product or backend facts are what this file holds.
 >
-> **Status:** opened 2026-09-01 after Task 17, appended after every task since.
+> **Status: CLOSED 2026-09-02 — all 30 tasks complete, 987 tests, 3/3 green runs verified
+> independently. Nothing below blocks the build; it is what the build could not decide.**
 > **Sections:** A backend defects · B product and copy defaults · C already decided · D blocked ·
 > E engineering, no founder content.
+
+---
+
+## 0. START HERE — the ten things that need you, in priority order
+
+Everything else in this file is the evidence behind these.
+
+| # | What | Why it matters | Where |
+|---|---|---|---|
+| 1 | **The farmer's schedule picker has never worked** | It calls a path the backend does not publish and tells the farmer *"try again"* for a request that can never succeed. **This is the only item that reaches a farmer.** | own memory note |
+| 2 | **Four endpoints send unmasked farmer phone numbers** | Contradicts your standing rule. And the redactor **does not recurse into collections**, so switching it on would not mask a list anyway | A4, B16 |
+| 3 | **The suffering list is ranked by successful usage** | Your heaviest, happiest farmers top the call list. One `FILTER` clause | A1 |
+| 4 | **The North Star metric rises when farms churn** | A farm that stops logging vanishes from the average instead of counting as zero | §A, T21 note |
+| 5 | **A database failure is reported as good news — 29 sites** | Several fabricate *complete, well-formed answers*, not empty ones | A3 |
+| 6 | **The Users screen has never returned a row** | Four column names that do not exist, swallowed into HTTP 200 + empty | A2 |
+| 7 | **No MIS endpoint filters by organisation** | And the 30s cache does not vary by header — **the day they are scoped, that cache is the leak** | A5 |
+| 8 | **The acceptance gate cannot be walked** | No local admin membership; every route lands on `/403`. **That is the fail-closed rule working** | D2 |
+| 9 | **The Lighthouse budget is broken and has never run on a PR** | 404s on its own target; `workflow_dispatch` only. One flag, in `.github/` | E1 |
+| 10 | **Five signatures** | A50 (react-table dropped) · the four surviving `§B` classes · `font-mono` · A55 (chart now relatively scaled) · A43 (404 replaces the silent bounce) | §C, §D |
 
 ---
 
@@ -201,6 +221,19 @@ Written to the honest-state rules; all live in one file each.
 | D2 | **The Founder Acceptance Gate cannot be walked locally** — the seeded user is a farmer; `/admin/me/scope` returns `Unauthorized`, so all sixteen routes land on `/403`. **The console is correct; the guard must not be loosened** | Seeding one admin membership locally (touches seed data only — no schema, no guard, no prod surface) |
 | D3 | **Register row B16** | A4 above |
 | D4 | **Register row A50** — if Task 18 also drops TanStack Table for the pager | Founder tick in the Deliberately-Dropped table |
+
+---
+
+## D2 detail — why the gate cannot be walked, and the one safe fix
+
+Measured: the seeded user logs in fine, then `/shramsafal/admin/me/scope` returns
+`{"outcome":"Unauthorized","scope":null,"memberships":[]}`, so all sixteen routes land on `/403`.
+**The console is correct** — that is the fail-closed property Task 2 pinned, and **the guard must not
+be loosened to make a preview work.** The only seeded local user is a farmer; `ssf.admin_users` does
+not exist anywhere in the repo, so there is no local path to an admin scope at all.
+
+**Recommendation: seed one admin membership locally.** Touches seed data only — no schema, no guard,
+no production surface.
 
 ---
 
