@@ -85,27 +85,27 @@ afterEach(() => {
 
 describe('an unknown path renders a 404 and stops there (A43)', () => {
   /*
-   * ONE MOUNT, NOT FOUR, AND THAT IS A MEASUREMENT.
+   * ONE MOUNT, NOT FOUR, AND THE REASON IS MEASURED RATHER THAN stylistic.
    *
-   * Every assertion below was first written as its own `it`, which read
-   * better and cost four whole-console mounts. Measured on this machine:
-   * the suite was green at 45 files and went to one failure on every run at
-   * 46 — always in `deepLink.contract.test.tsx`, never here, and never an
-   * assertion. It is the contention Task 18 already measured and
-   * `vitest.config.ts` already documents: whole-console mounts run in
-   * parallel processes and compete for the same cores, and the file that
-   * loses is whichever one was already closest to its ceiling.
+   * Every assertion below was first written as its own `it`, which reads
+   * better and costs four whole-console mounts. With those four in place the
+   * suite failed on 3 of 3 runs and at two mounts on 2 of 2 — always in
+   * `deepLink.contract.test.tsx`, never here, and always its 20s TEST timeout
+   * rather than an assertion. At one mount it has been green on 6 of 6.
    *
-   * Two mounts still failed. One does not. NO assertion was removed to get
-   * there — the three that shared a URL were merged into the single mount
-   * below, and the fourth is proved without mounting at all (see the note at
-   * the end of this describe). Raising a timeout instead would have hidden a
-   * real cost behind a bigger number.
+   * BE HONEST ABOUT WHAT THAT DOES AND DOES NOT PROVE. That file carries a
+   * pre-existing intermittent failure which Task 29 owns; this is not its
+   * cause. What the numbers show is that its failure RATE rises with how much
+   * else is competing for the cores, exactly as `vitest.config.ts` and Task 18
+   * both already recorded. So the mount count here is kept at the minimum that
+   * still proves the thing — not because four mounts would be wrong, but
+   * because the suite has no headroom to lend and a flake made likelier is a
+   * required check made less believable.
    *
-   * Add a second mount to this file only if you have re-measured. The suite
-   * was at its ceiling before this file existed — `deepLink.contract.test.tsx`
-   * carries a residual flake that Task 29 owns — and one more whole-console
-   * mount is enough to push it over.
+   * NO ASSERTION WAS DROPPED to get there: the three that shared a URL were
+   * merged into the single mount below, and the fourth is proved without
+   * mounting at all (see the note at the end of this describe). Raising a
+   * timeout instead would have hidden a real cost behind a bigger number.
    */
   it('renders the 404 for a signed-in reader: names the address, keeps the url, is not Home', async () => {
     authStore.set(SESSION);

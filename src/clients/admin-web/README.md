@@ -169,6 +169,50 @@ console has never registered, survived under a `cursor-pointer` table for its wh
 
 ---
 
+## Deploying
+
+`scripts/deploy-s3.sh` owns the S3 sync. Do not re-type an `aws s3 sync` by hand — that is
+exactly how mobile-web lost the Cache-Control headers on 70 objects on 2026-07-17, and it
+was nearly missed because the review compared the code diff (innocent) rather than the
+deploy method.
+
+```bash
+npm run build
+./scripts/deploy-s3.sh --dry-run          # see the plan first, change nothing
+./scripts/deploy-s3.sh                    # sync + invalidate + verify from the edge
+./scripts/deploy-s3.sh --check-spa-fallback   # read-only: live CloudFront vs the repo
+```
+
+The cache policy lives in the script and nowhere else: content-hashed assets one year
+immutable, `index.html` `no-cache`, everything else seven days — and **zero objects are
+immutable without a content hash**, enforced by classifying on the filename rather than on
+the `assets/` prefix.
+
+### A status code is not proof on this distribution
+
+The admin site is CloudFront `E31NGXQN85PXV7` over S3 `shramsafal-admin-prod`, and it
+carries a **SPA history fallback**: origin 403 and 404 are rewritten to `/index.html`
+**with status 200**. Without it every deep link this console builds — `/farms` with a tier
+and a page, `/farmer-health/<farmId>`, `/ops/errors?since=` — works in `vite dev` and 404s
+in production. It is committed at `aws/admin/cloudfront-spa-fallback.json` so a recreated
+distribution does not silently lose all of them.
+
+The corollary is the part that catches people:
+
+> **On this distribution, ANY missing object returns HTTP 200 with `Content-Type:
+> text/html`.** A missing JS bundle returns 200. A typo'd asset path returns 200. A
+> completely failed deploy returns 200 on every URL you try.
+
+So **a status-code-only smoke check produces false greens here.** Every check — in the
+deploy script, in a runbook, in a PR comment — must assert **`Content-Type`**, not just
+status: `index.html` must be `text/html`, and a hashed asset must be `javascript` or
+`text/css`. If an asset comes back `text/html`, it does not exist and you are looking at
+the fallback wearing its clothes. The verify pass in the script does exactly this, and
+finishes by requesting an asset that is known not to exist so the trap is visible in the
+output rather than only in this paragraph.
+
+---
+
 ## Testing
 
 ```bash
