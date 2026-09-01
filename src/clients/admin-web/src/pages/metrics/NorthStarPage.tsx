@@ -1,3 +1,4 @@
+import { metaRefreshedAt } from '@/lib/api';
 import { useSearchParams } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import {
@@ -23,7 +24,7 @@ export default function NorthStarPage() {
   const { data, isLoading } = useWvfd(weeks);
 
   const h = data?.data;
-  const lastRefreshed = data?.meta?.lastRefreshed;
+  const lastRefreshed = metaRefreshedAt(data?.meta);
   const delta = h && h.priorWvfd != null ? +(h.currentWvfd - h.priorWvfd).toFixed(2) : null;
   const trend = delta === null ? 'flat' : delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
   const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Minus;

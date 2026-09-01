@@ -1,3 +1,4 @@
+import { metaRefreshedAt } from '@/lib/api';
 import { Wheat } from 'lucide-react';
 import { DataList } from '@/components/data';
 import type { DataListColumn } from '@/components/data';
@@ -315,7 +316,7 @@ export default function FarmsListPage() {
 
   const items = data?.data?.items ?? [];
   const totalCount = data?.data?.totalCount ?? 0;
-  const lastRefreshed = data?.meta?.lastRefreshed;
+  const lastRefreshed = metaRefreshedAt(data?.meta);
 
   /**
    * NEVER `new Date()`. The checked-at time is the server's own

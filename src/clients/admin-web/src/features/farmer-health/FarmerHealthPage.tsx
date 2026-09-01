@@ -1,3 +1,4 @@
+import { metaRefreshedAt } from '@/lib/api';
 import { HeartPulse } from 'lucide-react';
 import { useActiveOrg } from '@/app/ActiveOrgProvider';
 import { useAdminScope } from '@/hooks/useAdminScope';
@@ -33,7 +34,7 @@ export default function FarmerHealthPage() {
   const activeOrgName = memberships.find(m => m.orgId === activeOrgId)?.orgName ?? 'No active organization';
   const { data, isLoading, error, refetch, isFetching } = useCohortPatterns();
   const cohort = data?.data;
-  const lastRefreshed = data?.meta?.lastRefreshed;
+  const lastRefreshed = metaRefreshedAt(data?.meta);
 
   const totalRowsAcrossSurfaces =
     (cohort?.interventionQueue.length ?? 0) +

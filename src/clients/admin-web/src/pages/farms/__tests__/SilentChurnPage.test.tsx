@@ -42,7 +42,7 @@ function envelope(items: SilentChurnItem[]) {
     meta: {
       source: 'materialized',
       window: 'current',
-      lastRefreshed: LAST_REFRESHED,
+      lastRefreshedUtc: LAST_REFRESHED,
       ttlSeconds: 300,
     },
   };

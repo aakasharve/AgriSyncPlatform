@@ -68,7 +68,7 @@ function scopeBody(modules: Module[]) {
 
 const envelope = (data: unknown) => ({
   data,
-  meta: { source: 'live', window: '24h', lastRefreshed: new Date().toISOString(), ttlSeconds: 60 },
+  meta: { source: 'live', window: '24h', lastRefreshedUtc: new Date().toISOString(), ttlSeconds: 60 },
 });
 
 const emptyList = envelope({ items: [], totalCount: 0, page: 1, pageSize: 40 });

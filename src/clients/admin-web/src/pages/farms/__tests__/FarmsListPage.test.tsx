@@ -45,7 +45,7 @@ function envelope(items: FarmSummary[], totalCount = items.length) {
     meta: {
       source: 'live-aggregated',
       window: 'current',
-      lastRefreshed: LAST_REFRESHED,
+      lastRefreshedUtc: LAST_REFRESHED,
       ttlSeconds: 60,
     },
   };

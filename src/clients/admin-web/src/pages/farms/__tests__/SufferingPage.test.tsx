@@ -44,7 +44,7 @@ function envelope(items: SufferingItem[]) {
     meta: {
       source: 'live-aggregated',
       window: 'last 24h',
-      lastRefreshed: LAST_REFRESHED,
+      lastRefreshedUtc: LAST_REFRESHED,
       ttlSeconds: 60,
     },
   };

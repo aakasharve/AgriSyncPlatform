@@ -118,7 +118,7 @@ function tagged(org: unknown) {
     page: 1,
     pageSize: 50,
     data: { tenant: org, items: [], totalCount: 0, page: 1, pageSize: 50 },
-    meta: { source: 'live', window: '24h', lastRefreshed: '2026-08-31T00:00:00Z', ttlSeconds: 60 },
+    meta: { source: 'live', window: '24h', lastRefreshedUtc: '2026-08-31T00:00:00Z', ttlSeconds: 60 },
   };
 }
 

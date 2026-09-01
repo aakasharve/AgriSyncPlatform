@@ -86,7 +86,7 @@ function scopeBody(modules: Module[]) {
 
 const envelope = (data: unknown) => ({
   data,
-  meta: { source: 'live', window: '24h', lastRefreshed: '2026-08-31T06:00:00Z', ttlSeconds: 60 },
+  meta: { source: 'live', window: '24h', lastRefreshedUtc: '2026-08-31T06:00:00Z', ttlSeconds: 60 },
 });
 
 function farm(over: Partial<FarmSummary> & { farmId: string }): FarmSummary {

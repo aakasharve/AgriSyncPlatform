@@ -1,3 +1,4 @@
+import { metaRefreshedAt } from '@/lib/api';
 import { Users } from 'lucide-react';
 import { DataList } from '@/components/data';
 import type { DataListColumn } from '@/components/data';
@@ -361,7 +362,7 @@ export default function UsersPage() {
    * change `FreshnessChip.tsx` refused to make for the same reason; it is
    * reported and routed instead.
    */
-  const lastRefreshed = data?.meta?.lastRefreshed ?? data?.meta?.lastRefreshedUtc;
+  const lastRefreshed = metaRefreshedAt(data?.meta);
 
   /* NEVER `new Date()` — that is D5, the fabricated freshness. When the server
      sends no time we say so rather than filling the gap. */

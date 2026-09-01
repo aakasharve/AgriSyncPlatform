@@ -1,3 +1,4 @@
+import { metaRefreshedAt } from '@/lib/api';
 import { TrendingDown } from 'lucide-react';
 import { DataList, facetOptionsFrom } from '@/components/data';
 import type { DataListColumn, FacetConfig, FacetOption } from '@/components/data';
@@ -348,7 +349,7 @@ export default function SilentChurnPage() {
    * an org switch.
    */
   const items = data?.data ?? [];
-  const lastRefreshed = data?.meta?.lastRefreshed;
+  const lastRefreshed = metaRefreshedAt(data?.meta);
 
   /** Step 3. Before the summary, before the facets, before the sort. */
   const { watchlist, heldOut } = partition(items);

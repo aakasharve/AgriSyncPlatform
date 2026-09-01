@@ -221,7 +221,7 @@ describe('/ops/health is the one unwrapped endpoint (A27)', () => {
       data: { items: [], totalCount: 0, page: 1, pageSize: 50 },
       meta: {
         source: 'live', window: '24h',
-        lastRefreshed: '2026-08-30T11:41:00Z', ttlSeconds: 30,
+        lastRefreshedUtc: '2026-08-30T11:41:00Z', ttlSeconds: 30,
       },
     };
     stub = installAdapter(async () => ({ status: 200, data: envelope }));
@@ -234,8 +234,14 @@ describe('/ops/health is the one unwrapped endpoint (A27)', () => {
         queryClient.getQueryData(['ops', 'errors', NO_ORG, { page: 1, pageSize: 50 }]),
       ).toBeDefined(),
     );
+    // CORRECTED 2026-09-01. This asserted `meta.lastRefreshed` — the key the
+    // client TYPE named, not the key the server sends. AdminMetaDto is
+    // (Source, Window, LastRefreshedUtc, TtlSeconds), so the wire key is
+    // `lastRefreshedUtc`. This test was the one place that could have caught the
+    // inversion, and instead it encoded it: the fixture above stubbed the wrong
+    // key, and the assertion agreed with the fixture. Both now match the server.
     expect(queryClient.getQueryData(['ops', 'errors', NO_ORG, { page: 1, pageSize: 50 }]))
-      .toHaveProperty('meta.lastRefreshed');
+      .toHaveProperty('meta.lastRefreshedUtc');
   });
 });
 

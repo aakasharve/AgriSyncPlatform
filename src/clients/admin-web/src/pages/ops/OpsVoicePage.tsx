@@ -1,3 +1,4 @@
+import { metaRefreshedAt } from '@/lib/api';
 import { Mic, TrendingUp } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
@@ -15,7 +16,7 @@ export default function OpsVoicePage() {
   const { data, isLoading } = useOpsVoice(days);
 
   const trend = data?.data?.days ?? [];
-  const lastRefreshed = data?.meta?.lastRefreshed;
+  const lastRefreshed = metaRefreshedAt(data?.meta);
 
   const avgSuccess = trend.length
     ? (trend.reduce((s, d) => s + d.successRatePct, 0) / trend.length).toFixed(1)

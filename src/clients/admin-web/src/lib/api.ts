@@ -140,9 +140,40 @@ export interface AdminResponse<T> {
   meta: {
     source: 'live' | 'live-aggregated' | 'materialized';
     window: string;
-    /** ISO-8601. Backend sends lastRefreshedUtc; older health endpoint has no meta. */
-    lastRefreshed: string;
+    /**
+     * ISO-8601, and the name is NOT a matter of taste.
+     *
+     * CORRECTED 2026-09-01. `AdminMetaDto` is
+     * `(Source, Window, LastRefreshedUtc, TtlSeconds)` — see
+     * `ShramSafal.Application/Contracts/Dtos/AdminResponseDto.cs:11-16`, whose own
+     * doc-comment says the chip reads `LastRefreshedUtc`. That serialises to
+     * **`lastRefreshedUtc`**. This type previously declared `lastRefreshed`
+     * REQUIRED and `lastRefreshedUtc` optional — exactly inverted — so against the
+     * real server `meta.lastRefreshed` was `undefined` on EVERY admin screen and
+     * every freshness chip fell through to "Live · now": a fabricated freshness
+     * age, the D5 defect, on every screen at once.
+     *
+     * It survived because the test fixtures stubbed the key this TYPE named
+     * rather than the key the SERVER sends — a seam every test injects, so the
+     * shipping shape was never exercised.
+     *
+     * Read it through `metaRefreshedAt()` below. Do not read either field
+     * directly; a screen should not have to know which spelling arrived.
+     */
     lastRefreshedUtc?: string;
+    /** Legacy alias. No endpoint is known to send this; kept so a stub cannot lie. */
+    lastRefreshed?: string;
     ttlSeconds: number;
   };
+}
+
+/**
+ * The one place that knows how the server spells its freshness stamp.
+ *
+ * Returns `undefined` when the envelope carries no stamp — and a caller must
+ * render that as an absence, never as `now`. A chip may only state an age it
+ * actually has.
+ */
+export function metaRefreshedAt(meta?: { lastRefreshedUtc?: string; lastRefreshed?: string }) {
+  return meta?.lastRefreshedUtc ?? meta?.lastRefreshed;
 }

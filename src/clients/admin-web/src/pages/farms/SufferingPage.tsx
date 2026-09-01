@@ -1,3 +1,4 @@
+import { metaRefreshedAt } from '@/lib/api';
 import { Frown } from 'lucide-react';
 import { DataList } from '@/components/data';
 import type { DataListColumn, FacetConfig, FacetOption } from '@/components/data';
@@ -422,7 +423,7 @@ export default function SufferingPage() {
    * watchlist on screen across an org switch.
    */
   const items = data?.data ?? [];
-  const lastRefreshed = data?.meta?.lastRefreshed;
+  const lastRefreshed = metaRefreshedAt(data?.meta);
 
   /**
    * NEVER `new Date()`. The only time this screen has is the server's own

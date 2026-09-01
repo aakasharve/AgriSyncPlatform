@@ -1,3 +1,4 @@
+import { metaRefreshedAt } from '@/lib/api';
 import {
   createColumnHelper,
   flexRender,
@@ -68,7 +69,7 @@ export default function OpsErrorsPage() {
   const items = data?.data?.items ?? [];
   const total = data?.data?.totalCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const lastRefreshed = data?.meta?.lastRefreshed;
+  const lastRefreshed = metaRefreshedAt(data?.meta);
 
   const table = useReactTable({
     data: items,
