@@ -153,8 +153,26 @@ export interface ChartShellStates {
    * `checkedAt` arrives already formatted through `@/lib/format`. Never a raw
    * ISO string, and never a `new Date()` computed at render, which is the
    * fabricated-freshness defect (D5).
+   *
+   * ── `unproven` — WHEN AN EMPTY ANSWER IS NOT A MEASUREMENT ──────────────
+   * The same opt-in `DataList` grew in Task 17, and it is here for the same
+   * reason: `MeasuredZero` closes with a fixed sentence — *"This is a measured
+   * zero, not a missing feed"* — which some screens KNOW to be false.
+   *
+   * FIVE repository methods now end in a bare `catch { return <empty>; }`
+   * (`AdminMisRepository.cs:219`, `:245`, `:287`, `AdminOpsRepository.cs:253`
+   * and `:293`, the last found by Task 19 behind `/ops/voice`), so a dropped
+   * connection, a missing view or a permission failure reaches the client as
+   * an empty result with HTTP 200. A chart is the worse place for it: an empty
+   * chart still draws its own frame and therefore still looks like an answer.
+   *
+   * Supply `unproven` and the empty branch renders a `NotMeasuredPanel` in the
+   * same slot instead: `what` becomes its heading and `unproven` says why the
+   * zero cannot be claimed as a reading. Opt-in per screen — silence keeps
+   * today's behaviour exactly, because on a feed that cannot swallow its own
+   * failure "measured zero" is the true and the stronger claim.
    */
-  measuredZero: { what: string; checkedAt: string };
+  measuredZero: { what: string; checkedAt: string; unproven?: ReactNode };
 
   /** The feed stopped. Nothing below the line is drawn — a chart of
    *  yesterday under today's heading is the most damaging thing this console
@@ -244,6 +262,18 @@ export function ChartShell<V>({
        held nothing to plot. That IS a measured zero, and it names what was
        looked for and when. */
     if (slots.length === 0) {
+      /* AN EMPTY ANSWER IS NOT ALWAYS A MEASUREMENT. A screen whose feed can
+         answer its own database failure with an empty result and HTTP 200
+         says so IN THIS SLOT, rather than under a headline that has already
+         claimed the opposite. See `ChartShellStates.measuredZero.unproven`. */
+      if (states.measuredZero.unproven) {
+        return (
+          <NotMeasuredPanel
+            title={states.measuredZero.what}
+            why={states.measuredZero.unproven}
+          />
+        );
+      }
       return (
         <MeasuredZero what={states.measuredZero.what} checkedAt={states.measuredZero.checkedAt} />
       );

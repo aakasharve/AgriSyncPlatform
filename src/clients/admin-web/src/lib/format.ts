@@ -98,6 +98,16 @@ export const DATE_FORMATS = {
   cohortRow: 'dd MMM, HH:mm',
   /** Four-digit year — a worker's start date is a record, not a recency. WorkerSummaryList.tsx:29 */
   workerSince: 'dd MMM yyyy',
+  /**
+   * Day + month, no year — one slot on the voice window's axis, which is
+   * never wider than 31 dates. OpsVoicePage.tsx:115 (the recharts
+   * `tickFormatter`), moved here by Task 19.
+   *
+   * The Task 4 report listed eleven `format(...)` call sites this table did
+   * not cover, all of them recharts axis and tooltip formats, and routed them
+   * to Tasks 19, 21 and 22. This is the first of them to arrive.
+   */
+  voiceDay: 'd MMM',
 } as const;
 
 export const fmt = {

@@ -13,7 +13,17 @@ export interface OpsVoiceTrend {
   days: OpsVoiceDay[];
 }
 
-/** Org in the key (A7, T12 S3) — see the note in `useFarms.ts`. */
+/**
+ * Org in the key (A7, T12 S3) — see the note in `useFarms.ts`.
+ *
+ * 🛑 `days` IS IN THE KEY, AND IT HAS TO BE (A19, Task 19). It is the third
+ * of the four places the window has to reach — hook argument, QUERY KEY,
+ * query string, and the interpolated card title on the screen. Drop it and 7,
+ * 14 and 30 become one cache entry: the screen then draws a fortnight under a
+ * heading that says thirty days, with no request in the network tab, no error
+ * anywhere and no way for the reader to tell. `OpsVoicePage.test.tsx` breaks
+ * if the second window stops issuing its own request.
+ */
 export function useOpsVoice(days = 14) {
   const org = useOrgKey();
   return useQuery<AdminResponse<OpsVoiceTrend>>({

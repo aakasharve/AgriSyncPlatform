@@ -232,6 +232,7 @@ describe('DATE_FORMATS matches the screens it claims to describe (A51)', () => {
     sufferLastErr: 'src/pages/farms/SufferingPage.tsx',
     cohortRow: 'src/features/farmer-health/components/InterventionQueueTable.tsx',
     workerSince: 'src/features/farmer-health/components/WorkerSummaryList.tsx',
+    voiceDay: 'src/pages/ops/OpsVoicePage.tsx',
   };
 
   const read = (rel: string) => readFileSync(resolve(process.cwd(), rel), 'utf-8');
@@ -258,8 +259,10 @@ describe('DATE_FORMATS matches the screens it claims to describe (A51)', () => {
     }
   );
 
-  it('keeps all eleven, and keeps them different on purpose', () => {
-    expect(Object.keys(DATE_FORMATS)).toHaveLength(11);
+  it('keeps all twelve, and keeps them different on purpose', () => {
+    /* Eleven at Task 4; the twelfth is `voiceDay`, the first of the eleven
+       recharts axis formats that report routed to Tasks 19, 21 and 22. */
+    expect(Object.keys(DATE_FORMATS)).toHaveLength(12);
     // API Errors carries the full date because an operator may be looking days
     // back; Ops Live carries time only because its window is the last two
     // hours. Collapsing these into one format breaks both screens at once.

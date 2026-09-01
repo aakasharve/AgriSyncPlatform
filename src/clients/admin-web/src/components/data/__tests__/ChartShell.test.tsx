@@ -256,6 +256,38 @@ describe('an empty chart says WHICH kind of empty it is', () => {
     expect(screen.getByText(/31 Aug 2026, 06:12/)).toBeInTheDocument();
   });
 
+  /*
+   * ── `unproven` (added Task 19, the first screen whose feed can swallow) ──
+   * FIVE repository methods end in a bare `catch { return <empty>; }`, so a
+   * database failure can reach a screen as an empty result with HTTP 200. On
+   * those feeds "This is a measured zero, not a missing feed" is a sentence
+   * the client cannot support. Opt-in, exactly as on `DataList`: silence
+   * keeps the stronger claim for every feed that can still make it.
+   */
+  it('an empty axis a screen knows it cannot vouch for is NOT MEASURED, not a measured zero', () => {
+    renderShell([], {
+      measuredZero: {
+        what: 'No weeks scored in the last 8 weeks',
+        checkedAt: '31 Aug 2026, 06:12',
+        unproven: 'This endpoint answers its own failures with an empty list.',
+      },
+    });
+
+    expect(
+      screen.queryByText(/This is a measured zero/),
+      'a feed that can answer a database failure with an empty list reported that empty as a measurement',
+    ).toBeNull();
+    expect(screen.getByText('No weeks scored in the last 8 weeks')).toBeInTheDocument();
+    expect(
+      screen.getByText('This endpoint answers its own failures with an empty list.'),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the measured-zero claim when a screen says nothing', () => {
+    renderShell([]);
+    expect(screen.getByText(/This is a measured zero, not a missing feed/)).toBeInTheDocument();
+  });
+
   it('a broken request is a failure with a retry, never an empty chart', async () => {
     const onRetry = vi.fn();
     renderShell(weeks([{ weekStart: 'w1', avgScore: 4 }]), {
