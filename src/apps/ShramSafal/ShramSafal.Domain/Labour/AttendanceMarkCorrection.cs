@@ -102,7 +102,8 @@ public sealed class AttendanceMarkCorrection : Entity<Guid>
 
     public FarmId FarmId { get; private set; }
 
-    /// <summary><see cref="DayField"/> or <see cref="NightField"/>.</summary>
+    /// <summary>One of <see cref="CorrectableFields"/> — <see cref="DayField"/>,
+    /// <see cref="NightField"/>, <see cref="HoursWorkedField"/> or <see cref="ExtraHoursField"/>.</summary>
     public string ChangedField { get; private set; } = string.Empty;
 
     /// <summary>
