@@ -197,10 +197,11 @@
 //     RULED about a person on a farm-day; day mark full/half/absent/unmarked plus
 //     night mark worked/not-worked/unmarked).
 //     NO PII COLUMN OF ITS OWN, and that is a deliberate design choice rather than
-//     an accident: farm_id, field_operator_id, work_date, two enums, a recorder id
-//     and two timestamps. The identifying TEXT lives entirely on the referenced
-//     ssf.field_operators row, which AnonymizeFieldOperatorAsync below already
-//     sentinel-replaces.
+//     an accident: farm_id, field_operator_id, work_date, two enums, two
+//     numeric(4,1) hour counts plus an integer basis (quantities, not text — no
+//     PII), a recorder id and two timestamps. The identifying TEXT lives entirely
+//     on the referenced ssf.field_operators row, which AnonymizeFieldOperatorAsync
+//     below already sentinel-replaces.
 //     THE NAME IS DELIBERATELY NOT SNAPSHOTTED HERE, unlike
 //     field_operator_work_rows.display_name_at_attach. That snapshot exists so a
 //     payout approved for "बाळू" still reads "बाळू" after a rename — history that
@@ -219,9 +220,10 @@
 //     who changed it and when (founder ruling: corrections are fine, silent ones
 //     are not).
 //     NO PII COLUMN OF ITS OWN: a mark id, a farm id, which half changed, and the
-//     enum NAMES either side of the change ("Half" -> "Full"). It names nobody —
-//     the person is reachable only through the mark it points at, and from there
-//     ssf.field_operators, which AnonymizeFieldOperatorAsync already scrubs.
+//     enum NAMES or hours values either side of the change ("Half" -> "Full",
+//     null -> "3.5|Explicit") — still names nobody: the person is reachable only
+//     through the mark it points at, and from there ssf.field_operators, which
+//     AnonymizeFieldOperatorAsync already scrubs.
 //     corrected_by_user_id identifies the FARMER who made the change, and on
 //     creator erasure that farmer is the data subject — but see below.
 //     KEEP, AND IT CANNOT BE OTHERWISE. The table is append-only enforced at the

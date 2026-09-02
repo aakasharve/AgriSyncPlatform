@@ -22,6 +22,9 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     work_date = table.Column<DateOnly>(type: "date", nullable: false),
                     day_mark = table.Column<int>(type: "integer", nullable: false),
                     night_mark = table.Column<int>(type: "integer", nullable: false),
+                    hours_worked = table.Column<decimal>(type: "numeric(4,1)", nullable: true),
+                    extra_hours = table.Column<decimal>(type: "numeric(4,1)", nullable: true),
+                    hours_basis = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
                     recorded_by_user_id = table.Column<Guid>(type: "uuid", nullable: false),
                     recorded_at_utc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     modified_at_utc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)

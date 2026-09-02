@@ -1,4 +1,5 @@
 using AgriSync.SharedKernel.Contracts.Ids;
+using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Labour;
 using Xunit;
 
@@ -118,10 +119,11 @@ public sealed class AttendanceMarkTests
         var later = At.AddHours(3);
         var otherActor = new UserId(Guid.Parse("44444444-4444-4444-4444-444444444444"));
 
-        var (previousDay, previousNight) = mark.Amend(DayMark.Full, NightMark.Worked, otherActor, later);
+        var previous = mark.Amend(
+            DayMark.Full, NightMark.Worked, null, null, LabourTimeBasis.Unspecified, otherActor, later);
 
-        Assert.Equal(DayMark.Half, previousDay);
-        Assert.Equal(NightMark.Unmarked, previousNight);
+        Assert.Equal(DayMark.Half, previous.Day);
+        Assert.Equal(NightMark.Unmarked, previous.Night);
         Assert.Equal(DayMark.Full, mark.Day);
         Assert.Equal(2m, mark.Value);
         Assert.Equal(later, mark.ModifiedAtUtc);
@@ -138,7 +140,8 @@ public sealed class AttendanceMarkTests
         var mark = Mark(DayMark.Full, NightMark.Worked);
 
         Assert.Throws<ArgumentException>(
-            () => mark.Amend(DayMark.Unmarked, NightMark.Unmarked, Actor, At.AddHours(1)));
+            () => mark.Amend(DayMark.Unmarked, NightMark.Unmarked, null, null,
+                LabourTimeBasis.Unspecified, Actor, At.AddHours(1)));
     }
 
     /// <summary>
@@ -150,5 +153,116 @@ public sealed class AttendanceMarkTests
     {
         var mark = Mark(DayMark.Full, NightMark.Unmarked);
         Assert.Equal(mark.RecordedAtUtc, mark.ModifiedAtUtc);
+    }
+    // ── The five day-realities: hours land on the mark (final direction §1) ──
+
+    /// <summary>
+    /// Task 2.5 acceptance, verbatim from the plan: "गणेश रात्री 3 तास होता"
+    /// persists Night=Worked AND Hours=3 with basis=Explicit — and NOTHING
+    /// converts hours into day fractions.
+    /// </summary>
+    [Fact]
+    public void StatedNightHoursPersistBesideTheNightMarkAndConvertToNothing()
+    {
+        var mark = AttendanceMark.Create(
+            Guid.NewGuid(), Farm, Operator, Day, DayMark.Unmarked, NightMark.Worked,
+            Actor, At, hoursWorked: 3m, hoursBasis: LabourTimeBasis.Explicit);
+
+        Assert.Equal(NightMark.Worked, mark.Night);
+        Assert.Equal(3m, mark.HoursWorked);
+        Assert.Equal(LabourTimeBasis.Explicit, mark.HoursBasis);
+
+        var without = AttendanceMark.Create(
+            Guid.NewGuid(), Farm, Operator, Day, DayMark.Unmarked, NightMark.Worked, Actor, At);
+        Assert.Equal(without.Value, mark.Value); // hours never fold into day-worth (C12 stays pinned)
+    }
+
+    /// <summary>The widened emptiness guard: hours alone are now a statement.</summary>
+    [Fact]
+    public void AnHoursOnlyRulingIsAMarkNowNotARefusal()
+    {
+        var mark = AttendanceMark.Create(
+            Guid.NewGuid(), Farm, Operator, Day, DayMark.Unmarked, NightMark.Unmarked,
+            Actor, At, hoursWorked: 4m, hoursBasis: LabourTimeBasis.Explicit);
+        Assert.Equal(4m, mark.HoursWorked);
+    }
+
+    /// <summary>"+2 जादा" is a distinct fact beside Full — never an invented 1.25 days.</summary>
+    [Fact]
+    public void ExtraHoursRideBesideAFullDayNeverInsideIt()
+    {
+        var mark = AttendanceMark.Create(
+            Guid.NewGuid(), Farm, Operator, Day, DayMark.Full, NightMark.Unmarked,
+            Actor, At, extraHours: 2m, hoursBasis: LabourTimeBasis.Explicit);
+        Assert.Equal(DayMark.Full, mark.Day);
+        Assert.Equal(2m, mark.ExtraHours);
+        Assert.Equal(1m, mark.Value);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void NonPositiveHoursAreRefused(int hours)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => AttendanceMark.Create(
+            Guid.NewGuid(), Farm, Operator, Day, DayMark.Full, NightMark.Unmarked,
+            Actor, At, hoursWorked: hours, hoursBasis: LabourTimeBasis.Explicit));
+    }
+
+    /// <summary>
+    /// The recorder is "never the app" (AttendanceMark.cs). Hours on a mark are
+    /// somebody's WORDS: basis must be Explicit — Assumed is the server inventing
+    /// a duration, which belongs to the engagement, never here.
+    /// </summary>
+    [Theory]
+    [InlineData(LabourTimeBasis.Unspecified)]
+    [InlineData(LabourTimeBasis.Assumed)]
+    public void HoursWithoutExplicitProvenanceAreRefused(LabourTimeBasis basis)
+    {
+        Assert.Throws<ArgumentException>(() => AttendanceMark.Create(
+            Guid.NewGuid(), Farm, Operator, Day, DayMark.Full, NightMark.Unmarked,
+            Actor, At, hoursWorked: 3m, hoursBasis: basis));
+    }
+
+    [Fact]
+    public void ABasisWithNoHoursIsRefused()
+    {
+        Assert.Throws<ArgumentException>(() => AttendanceMark.Create(
+            Guid.NewGuid(), Farm, Operator, Day, DayMark.Full, NightMark.Unmarked,
+            Actor, At, hoursBasis: LabourTimeBasis.Explicit));
+    }
+
+    /// <summary>numeric(4,1) would silently round a second decimal; stored must equal stated (P4).</summary>
+    [Fact]
+    public void ASecondDecimalPlaceIsRefusedSoStoredEqualsStated()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => AttendanceMark.Create(
+            Guid.NewGuid(), Farm, Operator, Day, DayMark.Full, NightMark.Unmarked,
+            Actor, At, hoursWorked: 3.25m, hoursBasis: LabourTimeBasis.Explicit));
+    }
+
+    /// <summary>
+    /// The guard nuance Phase 0 demanded be decided in the domain shape:
+    /// Amend may RESTATE stated hours, never silently blank them — "nobody said"
+    /// has no value name a correction row could record, so a quiet null here
+    /// would be an unrecorded deletion.
+    /// </summary>
+    [Fact]
+    public void AmendMayRestateHoursButNeverSilentlyDropThem()
+    {
+        var mark = AttendanceMark.Create(
+            Guid.NewGuid(), Farm, Operator, Day, DayMark.Full, NightMark.Unmarked,
+            Actor, At, hoursWorked: 3m, hoursBasis: LabourTimeBasis.Explicit);
+
+        Assert.Throws<ArgumentException>(() => mark.Amend(
+            DayMark.Full, NightMark.Unmarked, null, null, LabourTimeBasis.Unspecified,
+            Actor, At.AddHours(1)));
+
+        var previous = mark.Amend(
+            DayMark.Full, NightMark.Unmarked, 3.5m, null, LabourTimeBasis.Explicit,
+            Actor, At.AddHours(2));
+        Assert.Equal(3m, previous.HoursWorked);
+        Assert.Equal(LabourTimeBasis.Explicit, previous.HoursBasis);
+        Assert.Equal(3.5m, mark.HoursWorked);
     }
 }

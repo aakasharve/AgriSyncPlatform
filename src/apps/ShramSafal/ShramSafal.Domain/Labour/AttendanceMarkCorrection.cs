@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Domain;
 using AgriSync.SharedKernel.Contracts.Ids;
+using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Domain.Labour;
 
@@ -48,6 +49,33 @@ public sealed class AttendanceMarkCorrection : Entity<Guid>
     /// <summary>The night half of a mark. Matches <see cref="AttendanceMark.Night"/>.</summary>
     public const string NightField = "night_mark";
 
+    /// <summary>Stated hours. Values carry their basis, mirroring
+    /// <see cref="LabourCorrection.FieldDurationHours"/>: <c>"3.5|Explicit"</c>.</summary>
+    public const string HoursWorkedField = "hours_worked";
+
+    /// <summary>Stated extra hours. Values carry their basis, as above.</summary>
+    public const string ExtraHoursField = "extra_hours";
+
+    /// <summary>
+    /// The CLOSED set of correctable mark facts — the same idiom as
+    /// <c>LabourCorrection.CorrectableFields</c>. Widening it is a scope
+    /// change, not a fix.
+    /// </summary>
+    private static readonly HashSet<string> CorrectableFields = new(StringComparer.Ordinal)
+    {
+        DayField,
+        NightField,
+        HoursWorkedField,
+        ExtraHoursField,
+    };
+
+    /// <summary>ONE way to write an hours value into a correction row.</summary>
+    public static string FormatHours(decimal hours, LabourTimeBasis basis) =>
+        $"{hours.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)}|{basis}";
+
+    private static bool IsHoursField(string changedField) =>
+        changedField is HoursWorkedField or ExtraHoursField;
+
     private AttendanceMarkCorrection() : base(Guid.Empty) { } // EF Core
 
     private AttendanceMarkCorrection(
@@ -55,8 +83,8 @@ public sealed class AttendanceMarkCorrection : Entity<Guid>
         Guid attendanceMarkId,
         FarmId farmId,
         string changedField,
-        string originalValue,
-        string newValue,
+        string? originalValue,
+        string? newValue,
         UserId correctedByUserId,
         DateTime correctedAtUtc)
         : base(id)
@@ -81,11 +109,12 @@ public sealed class AttendanceMarkCorrection : Entity<Guid>
     /// The enum name it USED to hold, e.g. <c>Half</c>. Stored as the NAME, not
     /// the number: a correction has to stay readable years later, and an enum
     /// whose members are renumbered would silently rewrite history recorded as
-    /// integers.
+    /// integers. Null = absent on this side of the change — legal ONLY for the
+    /// two hours fields, where "nobody said" has no value name.
     /// </summary>
-    public string OriginalValue { get; private set; } = string.Empty;
+    public string? OriginalValue { get; private set; }
 
-    public string NewValue { get; private set; } = string.Empty;
+    public string? NewValue { get; private set; }
 
     /// <summary>Who changed it. Never the app.</summary>
     public UserId CorrectedByUserId { get; private set; }
@@ -97,8 +126,8 @@ public sealed class AttendanceMarkCorrection : Entity<Guid>
         Guid attendanceMarkId,
         FarmId farmId,
         string changedField,
-        string originalValue,
-        string newValue,
+        string? originalValue,
+        string? newValue,
         UserId correctedByUserId,
         DateTime correctedAtUtc)
     {
@@ -113,23 +142,36 @@ public sealed class AttendanceMarkCorrection : Entity<Guid>
                 "A correction must point at the mark it corrects.", nameof(attendanceMarkId));
         }
 
-        if (changedField != DayField && changedField != NightField)
+        if (!CorrectableFields.Contains(changedField))
         {
             throw new ArgumentException(
-                $"A mark has exactly two halves: '{DayField}' or '{NightField}'.",
+                $"'{changedField}' is not a correctable mark fact: "
+                + $"'{DayField}', '{NightField}', '{HoursWorkedField}' or '{ExtraHoursField}'.",
                 nameof(changedField));
         }
 
-        if (string.IsNullOrWhiteSpace(originalValue) || string.IsNullOrWhiteSpace(newValue))
+        var original = string.IsNullOrWhiteSpace(originalValue) ? null : originalValue.Trim();
+        var updated = string.IsNullOrWhiteSpace(newValue) ? null : newValue.Trim();
+
+        if (IsHoursField(changedField))
+        {
+            if (original is null && updated is null)
+            {
+                throw new ArgumentException(
+                    "A correction must state at least one side of the change.", nameof(originalValue));
+            }
+        }
+        else if (original is null || updated is null)
         {
             // A correction that cannot say what it changed FROM is not a record
             // of a change, it is the change happening quietly — the exact thing
-            // this entity exists to prevent.
+            // this entity exists to prevent. Day and night always HAVE a name
+            // (Unmarked is a real value), so both sides stay mandatory for them.
             throw new ArgumentException(
                 "A correction must state both the original and the new value.", nameof(originalValue));
         }
 
-        if (originalValue == newValue)
+        if (original == updated)
         {
             // Recording a non-change would pad the history and make a real
             // correction harder to find among restatements of the same fact.
@@ -139,7 +181,7 @@ public sealed class AttendanceMarkCorrection : Entity<Guid>
         }
 
         return new AttendanceMarkCorrection(
-            id, attendanceMarkId, farmId, changedField, originalValue, newValue,
+            id, attendanceMarkId, farmId, changedField, original, updated,
             correctedByUserId, correctedAtUtc);
     }
 }

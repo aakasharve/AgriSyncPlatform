@@ -20,8 +20,8 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     attendance_mark_id = table.Column<Guid>(type: "uuid", nullable: false),
                     farm_id = table.Column<Guid>(type: "uuid", nullable: false),
                     changed_field = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
-                    original_value = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
-                    new_value = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    original_value = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
+                    new_value = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
                     corrected_by_user_id = table.Column<Guid>(type: "uuid", nullable: false),
                     corrected_at_utc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },

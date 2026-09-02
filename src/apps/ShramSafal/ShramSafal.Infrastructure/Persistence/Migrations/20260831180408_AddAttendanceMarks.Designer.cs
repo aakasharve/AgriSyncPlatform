@@ -3362,6 +3362,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("day_mark");
 
+                    b.Property<decimal?>("ExtraHours")
+                        .HasColumnType("numeric(4,1)")
+                        .HasColumnName("extra_hours");
+
                     b.Property<Guid>("FarmId")
                         .HasColumnType("uuid")
                         .HasColumnName("farm_id");
@@ -3369,6 +3373,16 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("FieldOperatorId")
                         .HasColumnType("uuid")
                         .HasColumnName("field_operator_id");
+
+                    b.Property<int>("HoursBasis")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("hours_basis");
+
+                    b.Property<decimal?>("HoursWorked")
+                        .HasColumnType("numeric(4,1)")
+                        .HasColumnName("hours_worked");
 
                     b.Property<DateTime>("ModifiedAtUtc")
                         .HasColumnType("timestamp with time zone")

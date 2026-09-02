@@ -32,13 +32,11 @@ internal sealed class AttendanceMarkCorrectionConfiguration
         // history recorded as integers. 32 is generous for "Unmarked".
         builder.Property(x => x.OriginalValue)
             .HasColumnName("original_value")
-            .HasMaxLength(32)
-            .IsRequired();
+            .HasMaxLength(32);
 
         builder.Property(x => x.NewValue)
             .HasColumnName("new_value")
-            .HasMaxLength(32)
-            .IsRequired();
+            .HasMaxLength(32);
 
         builder.Property(x => x.CorrectedByUserId)
             .HasColumnName("corrected_by_user_id")

@@ -1,4 +1,5 @@
 using AgriSync.SharedKernel.Contracts.Ids;
+using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Labour;
 using Xunit;
 
@@ -103,5 +104,51 @@ public sealed class AttendanceMarkCorrectionTests
         Assert.Equal("Half", c.OriginalValue);
         Assert.Equal("Absent", c.NewValue);
         Assert.False(int.TryParse(c.OriginalValue, out _));
+    }
+    /// <summary>
+    /// Unlike day/night — where Unmarked is a real value name — "nobody said"
+    /// has NO name for the hours fields. So for them a null side is legal
+    /// (first-ever statement), and the both-required rule keeps holding for the
+    /// two enum halves.
+    /// </summary>
+    [Theory]
+    [InlineData(AttendanceMarkCorrection.HoursWorkedField)]
+    [InlineData(AttendanceMarkCorrection.ExtraHoursField)]
+    public void AFirstEverHoursStatementRecordsNullToValue(string field)
+    {
+        var c = AttendanceMarkCorrection.Create(
+            Guid.NewGuid(), MarkId, Farm, field,
+            null, AttendanceMarkCorrection.FormatHours(3.5m, LabourTimeBasis.Explicit), Actor, At);
+
+        Assert.Null(c.OriginalValue);
+        Assert.Equal("3.5|Explicit", c.NewValue);
+    }
+
+    [Fact]
+    public void DayAndNightStillRequireBothSides()
+    {
+        Assert.Throws<ArgumentException>(() => AttendanceMarkCorrection.Create(
+            Guid.NewGuid(), MarkId, Farm, AttendanceMarkCorrection.DayField,
+            null, "Full", Actor, At));
+    }
+
+    [Fact]
+    public void ANullToNullHoursCorrectionIsRefused()
+    {
+        Assert.Throws<ArgumentException>(() => AttendanceMarkCorrection.Create(
+            Guid.NewGuid(), MarkId, Farm, AttendanceMarkCorrection.HoursWorkedField,
+            null, null, Actor, At));
+    }
+
+    [Theory]
+    [InlineData(AttendanceMarkCorrection.HoursWorkedField)]
+    [InlineData(AttendanceMarkCorrection.ExtraHoursField)]
+    public void TheHoursFieldsAreCorrectable(string field)
+    {
+        var c = AttendanceMarkCorrection.Create(
+            Guid.NewGuid(), MarkId, Farm, field,
+            AttendanceMarkCorrection.FormatHours(3m, LabourTimeBasis.Explicit),
+            AttendanceMarkCorrection.FormatHours(4m, LabourTimeBasis.Explicit), Actor, At);
+        Assert.Equal(field, c.ChangedField);
     }
 }

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Labour;
 
 namespace ShramSafal.Infrastructure.Persistence.Configurations;
@@ -35,6 +36,23 @@ internal sealed class AttendanceMarkConfiguration : IEntityTypeConfiguration<Att
 
         builder.Property(x => x.Night)
             .HasColumnName("night_mark")
+            .IsRequired();
+
+        // Founder master review 2026-09-02 — hours provenance ships in the
+        // CREATING migration; added after rows exist it is unrecoverable for
+        // every earlier row. numeric(4,1) matches the STATED grain (one
+        // decimal); the domain guard refuses finer, so stored == stated.
+        builder.Property(x => x.HoursWorked)
+            .HasColumnName("hours_worked")
+            .HasColumnType("numeric(4,1)");
+
+        builder.Property(x => x.ExtraHours)
+            .HasColumnName("extra_hours")
+            .HasColumnType("numeric(4,1)");
+
+        builder.Property(x => x.HoursBasis)
+            .HasColumnName("hours_basis")
+            .HasDefaultValue(LabourTimeBasis.Unspecified)
             .IsRequired();
 
         builder.Property(x => x.RecordedByUserId)

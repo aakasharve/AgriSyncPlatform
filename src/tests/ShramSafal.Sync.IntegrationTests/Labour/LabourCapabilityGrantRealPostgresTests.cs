@@ -397,6 +397,39 @@ public sealed class LabourCapabilityGrantRealPostgresTests(Xunit.Abstractions.IT
         output.WriteLine($"[EVIDENCE] worker gets  : {asWorker.Error.Code}");
     }
 
+    /// <summary>
+    /// Task 2.5 — the edited-in-place CreateTable actually lands the three
+    /// hours columns with the declared types. information_schema, superuser
+    /// read: a data check, not an RLS proof.
+    /// </summary>
+    [Fact]
+    public async Task The_attendance_hours_columns_exist_with_the_declared_types()
+    {
+        await using var read = new NpgsqlConnection(_superuserConn);
+        await read.OpenAsync();
+        await using var cmd = read.CreateCommand();
+        cmd.CommandText = """
+            SELECT column_name, data_type,
+                   COALESCE(numeric_precision::text, ''), COALESCE(numeric_scale::text, ''),
+                   is_nullable
+            FROM information_schema.columns
+            WHERE table_schema = 'ssf' AND table_name = 'attendance_marks'
+              AND column_name IN ('hours_worked', 'extra_hours', 'hours_basis')
+            ORDER BY column_name
+            """;
+        var rows = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            rows.Add(string.Join("|", Enumerable.Range(0, 5).Select(reader.GetString)));
+        }
+
+        rows.Should().Equal(
+            "extra_hours|numeric|4|1|YES",
+            "hours_basis|integer|32|0|NO",
+            "hours_worked|numeric|4|1|YES");
+    }
+
     // ═════════════════════════════════════════════════════════════════════════
     // Harness
     // ═════════════════════════════════════════════════════════════════════════
