@@ -439,7 +439,11 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         var totalPaid = decimal.Round(
             activeWorkerIds.Sum(id => paidByWorker.GetValueOrDefault(id)) + unattributedPaid,
             2, MidpointRounding.AwayFromZero);
-        var totalAdvance = decimal.Round(people.Sum(p => p.Advance), 2, MidpointRounding.AwayFromZero);
+        // (`p.Advance` is nullable ONLY for the D-H8 view projection applied at
+        // the single Result.Success site; HERE, pre-projection, it is the
+        // builder's own 0m constant from §4 above — this is not a
+        // coalesce-a-withheld-figure-to-zero, which stays forbidden.)
+        var totalAdvance = decimal.Round(people.Sum(p => p.Advance ?? 0m), 2, MidpointRounding.AwayFromZero);
 
         // THE MONEY CARD, in full — R13 (ruling, Task 10) for `Owed`, widened
         // to all four of its figures by R15 (ruling, Task 13). Every one of
@@ -743,7 +747,9 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
 
         var topLevelIds = people.Select(p => p.Id).ToList();
 
-        return Result.Success(new LabourDataDto(topLevelIds, people, dashboard, ledger, review, attendance));
+        var built = new LabourDataDto(
+            topLevelIds, people, dashboard, ledger, review, attendance, View: "owner");
+        return Result.Success(ApplyRegisterView(built, ResolveRegisterView(resolvedCallerRole)));
     }
 
     /// <summary>Latest <see cref="FinanceCorrection"/> per <c>CostEntryId</c>, by <c>CorrectedAtUtc</c>.</summary>
@@ -973,6 +979,57 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
     /// element, not an index: Devanagari letters carry combining matras, and
     /// slicing one UTF-16 unit off "कांतीलाल" yields a broken glyph.
     /// </summary>
+    /// <summary>
+    /// D-H8: which of the three register views this caller gets. Resolved on
+    /// the SAME role the handler already authorises with (:174-178) — the
+    /// boundary Phase 0 documented. Owner tier = the whole book; Mukadam =
+    /// attendance without a money roster (D-H9's per-confirmation disclosure
+    /// is a later confirmation feature — until it exists he sees no money at
+    /// all); everything else = own-row (empty until an account↔FieldOperator
+    /// link exists — FieldOperator carries no user member, verified).
+    /// </summary>
+    internal static LabourRegisterView ResolveRegisterView(AppRole role) => role switch
+    {
+        AppRole.PrimaryOwner or AppRole.SecondaryOwner => LabourRegisterView.OwnerBook,
+        AppRole.Mukadam => LabourRegisterView.CrewAttendance,
+        _ => LabourRegisterView.OwnRow,
+    };
+
+    /// <summary>
+    /// Projects one built response into the caller's view. Money members go
+    /// ABSENT (null) for non-owner views — blank is not zero, and a withheld
+    /// figure must be indistinguishable from "nothing stated" to its reader
+    /// rather than fabricated as ₹0. Attendance stays: "An attendance register
+    /// is safe to show anyone on the farm. A wage book is not." (D-H8.)
+    /// </summary>
+    internal static LabourDataDto ApplyRegisterView(LabourDataDto dto, LabourRegisterView view)
+    {
+        if (view == LabourRegisterView.OwnerBook)
+        {
+            return dto with { View = "owner" };
+        }
+
+        var people = dto.People
+            .Select(p => p with { RecordedWages = null, Paid = null, Advance = null })
+            .ToList();
+        var dashboard = dto.Dashboard with { Wages = null, Advances = null, Owed = null, Money = null };
+        var review = dto.Review
+            .Select(r => r with { Points = r.Points with { Amount = null } })
+            .ToList();
+        var ledger = view == LabourRegisterView.OwnRow
+            ? dto.Ledger with { Rows = [], CrewRows = [] }
+            : dto.Ledger;
+
+        return dto with
+        {
+            View = view == LabourRegisterView.CrewAttendance ? "crew" : "own",
+            People = people,
+            Dashboard = dashboard,
+            Review = review,
+            Ledger = ledger,
+        };
+    }
+
     private static string FirstLetterOf(string name)
     {
         var trimmed = name.Trim();
@@ -1088,4 +1145,12 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
 
         return new LabourAttendanceDraftDto(plot, headcount, rows, soleAssignmentId);
     }
+}
+
+/// <summary>D-H8's three views. Internal — the wire carries the string form on <see cref="LabourDataDto.View"/>.</summary>
+internal enum LabourRegisterView
+{
+    OwnerBook = 0,
+    CrewAttendance = 1,
+    OwnRow = 2,
 }

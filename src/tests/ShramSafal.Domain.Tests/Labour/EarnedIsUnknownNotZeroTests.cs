@@ -79,7 +79,7 @@ public sealed class EarnedIsUnknownNotZeroTests
 
         // The mechanism: real money WAS paid — that fact stays intact.
         data.Dashboard.Wages.Should().Be(4000m, "money actually paid is evidenced by a real CostEntry row");
-        data.Dashboard.Money.Paid.Should().Be(4000m);
+        data.Dashboard.Money!.Paid.Should().Be(4000m);
 
         // ...while job-card evidence is entirely absent, so RecordedWages
         // ("काम झालं") must be UNKNOWN, never a fabricated ₹0.

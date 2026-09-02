@@ -173,7 +173,7 @@ public sealed class LabourWindowScopingTests
             new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(OwnerGuid), window));
 
         result.IsSuccess.Should().BeTrue();
-        var money = result.Value!.Dashboard.Money;
+        var money = result.Value!.Dashboard.Money!;
 
         money.Recorded.Should().Be(15000m,
             "काम झालं on this card is the all-time recorded position (1000+2000+4000+8000), not the "
@@ -203,7 +203,7 @@ public sealed class LabourWindowScopingTests
         var result = await BuildHandler(repo).HandleAsync(
             new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(OwnerGuid), window));
 
-        var money = result.Value!.Dashboard.Money;
+        var money = result.Value!.Dashboard.Money!;
 
         money.Recorded.Should().NotBeNull("this fixture carries real job-card evidence all-time");
         (money.Paid + money.Advance + money.Owed).Should().Be(money.Recorded,
@@ -244,7 +244,7 @@ public sealed class LabourWindowScopingTests
             "बाकी देणं is an outstanding POSITION as of now, not 'of this window's work, what's unpaid' — "
             + "narrowing it to a period would let a farmer who still owes money see a smaller figure "
             + "(or ₹0) while looking at आज, which is exactly the danger R13 exists to remove");
-        d.Money.Owed.Should().Be(13500m);
+        d.Money!.Owed.Should().Be(13500m);
     }
 
     /// <summary>
@@ -289,7 +289,7 @@ public sealed class LabourWindowScopingTests
         // The dashboard rollup is documented as the SAME population as the
         // rows below it, and both are now on the same (all-time) basis, so
         // they agree under every window rather than only the default one.
-        person.RecordedWages.Should().Be(dashboard.Money.Recorded);
+        person.RecordedWages.Should().Be(dashboard.Money!.Recorded);
     }
 
     /// <summary>
@@ -328,7 +328,7 @@ public sealed class LabourWindowScopingTests
         person.Paid.Should().Be(1300m,
             "दिलं beside his name is everything he has been paid, because it is one term of the "
             + "बाकी shown next to it — ₹500 there would say ₹2,500 is still owed when ₹1,700 is");
-        d.Money.Paid.Should().Be(1300m, "the money card's दिलं shares its basis with its own बाकी");
+        d.Money!.Paid.Should().Be(1300m, "the money card's दिलं shares its basis with its own बाकी");
         d.Money.Owed.Should().Be(1700m);
         (d.Money.Paid + d.Money.Advance + d.Money.Owed).Should().Be(d.Money.Recorded);
     }
@@ -633,7 +633,7 @@ public sealed class LabourWindowScopingTests
 
         var d = result.Value!.Dashboard;
         d.Wages.Should().Be(900m, "money actually paid today is evidenced by a real CostEntry row");
-        d.Money.Recorded.Should().Be(8000m,
+        d.Money!.Recorded.Should().Be(8000m,
             "the card's header is the all-time recorded position — an em-dash here is what let a "
             + "₹7,100 segment be drawn inside an unknown total (R15)");
         d.Money.Paid.Should().Be(900m);
@@ -682,7 +682,7 @@ public sealed class LabourWindowScopingTests
 
         var d = result.Value!.Dashboard;
         d.Wages.Should().Be(0m, "no labour cost row inside the window means no labour money moved inside it");
-        d.Money.Recorded.Should().Be(1000m);
+        d.Money!.Recorded.Should().Be(1000m);
         // R13 (Task 10) — Owed is the ALL-TIME balance, not this window's own
         // (Recorded − Wages) subtraction: all-time recorded is 1000 (today's
         // card, the only one), all-time paid is 800 (last month's payout, the

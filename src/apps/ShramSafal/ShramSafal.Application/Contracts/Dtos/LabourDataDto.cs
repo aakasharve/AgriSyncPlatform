@@ -12,7 +12,13 @@ public sealed record LabourDataDto(
     LabourDashboardDto Dashboard,
     LabourLedgerDto Ledger,
     IReadOnlyList<LabourReviewItemDto> Review,
-    LabourAttendanceDraftDto Attendance);
+    LabourAttendanceDraftDto Attendance,
+    // D-H8 (ONE REGISTER, THREE VIEWS) — which projection this response IS:
+    // "owner" (whole book) | "crew" (attendance, no money roster) | "own"
+    // (own row only; empty until an account↔FieldOperator link exists).
+    // Resolved server-side from the caller's membership role; the client
+    // renders what arrives and adds nothing back.
+    string View);
 
 public sealed record LabourPersonDto(
     string Id,
@@ -57,9 +63,12 @@ public sealed record LabourPersonDto(
     // Task 9 windowed them; that defect was unreachable only because leaving
     // आढावा resets the window, and persisting the window would have armed it —
     // a man still owed ₹8,000 reading as owed nothing under आज.
+    // Phase 4 (D-H8) — Paid and Advance are `decimal?`: null means WITHHELD BY
+    // VIEW (a non-owner caller gets no money roster), distinct from the 0m a
+    // real empty payout history produces for an owner. Never coalesce to 0.
     decimal? RecordedWages,
-    decimal Paid,
-    decimal Advance,
+    decimal? Paid,
+    decimal? Advance,
     string? TodayStatus,
     int? DaysThisWeek,
     IReadOnlyList<string>? MemberIds,
@@ -122,8 +131,10 @@ public sealed record LabourDashboardDto(
     // — see that member's doc for why the two totals share a representation.
     decimal? ManDays,
     int ManDaysTrend,
-    decimal Wages,
-    decimal Advances,
+    // Phase 4 (D-H8) — nullable: null = withheld by view (non-owner caller).
+    // An owner's real figures are never null here.
+    decimal? Wages,
+    decimal? Advances,
     // Task 1 — `null` when zero job-card evidence exists farm-wide, ALL TIME
     // (see LabourMoneyDto.Owed below); never a fabricated ₹0 or a balance
     // derived from one. R13 (Task 10, corrects Task 9) — this is an
@@ -140,7 +151,7 @@ public sealed record LabourDashboardDto(
     // logs awaiting this caller's approval.
     int Pending,
     IReadOnlyList<LabourPlotBarDto> Plots,
-    LabourMoneyDto Money);
+    LabourMoneyDto? Money);
 
 public sealed record LabourPlotBarDto(
     string Name,
