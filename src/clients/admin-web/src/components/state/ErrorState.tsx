@@ -44,7 +44,7 @@ export function ErrorState({ error, onRetry, className }: ErrorStateProps) {
         <AlertTriangle size={16} className="mt-0.5 text-amber" aria-hidden />
         <div className="flex-1">
           <div className="font-extrabold">Couldn&apos;t load farmer-health data.</div>
-          <div className="mt-0.5 break-words text-[12px] text-text-2">{formatError(error)}</div>
+          <div className="mt-0.5 break-words text-caption text-text-2">{formatError(error)}</div>
         </div>
         {onRetry && (
           <button

@@ -211,6 +211,7 @@ Written to the honest-state rules; all live in one file each.
 | C10 | **`ja` indexed as both `dny` and `gy`; more spellings, not fewer** | A missing row costs a farmer a call that ends in "I can't find you" |
 | C11 | **`npm ci` stays strict in CI** | It failed *loudly* when the lockfile drifted — that is the check working |
 | C12 | 🔄 **REVERSAL — glassmorphism is UN-banned; the console is glass** | Founder, 2026-09-02, verbatim: *"the overall colour theme is too dark make it aesthetic and use the Glass morphism effect not theme to highlight the aesthetics and re design it all"*. **This overturns a decision he previously signed**, so it is written out below rather than left as a row |
+| C13 | ⚠️ **A second Latin face — Nunito Sans for prose; DM Sans kept for headings, the brand, figures, table headers and Latin names** | Founder, same instruction: *"change the font make it more friendly to read"*, alongside *"font size must be increased"*. **This diverges from root `CLAUDE.md`'s brand-wide font rule** (English/brand/numbers → DM Sans) and it is his to revert. See the detail below |
 
 ---
 
@@ -299,3 +300,40 @@ no production surface.
 - **`.glass*` / `.chip-*` / `.nav-active` legacy CSS** still has consumers. **Task 27 deletes it.**
 - **`FreshnessChip`'s `|| 'now'` fallback (D13)** still claims a freshness it may not have when no
   timestamp exists at all. **Task 24 owns it.**
+
+---
+
+## C13 detail — the font split, and exactly what it costs
+
+**The rule.** Root `CLAUDE.md`, brand-wide and hard: Marathi body text is `'Noto Sans Devanagari'`;
+English, brand and numbers are `'DM Sans'`; `system-ui`, `Arial` and bare generic fallbacks are
+never used for visible text.
+
+**The instruction.** *"change the font make it more friendly to read and font size must be
+increased bit"*.
+
+**What was done.** Most of "unfriendly" was size and density, and that was fixed on its own terms —
+the whole scale went up a step (body 15→17, caption 13→15, h1 30→34, the KPI figure 52→56), every
+line-height opened with it, and prose is capped at a 68-character measure. Eleven hand-written
+sizes between 11px and 18px on six screens were swept onto the shared steps in the same commit.
+
+Beyond that, one face was added:
+
+| | Face | Where |
+|---|---|---|
+| `--font-sans` | **Nunito Sans** *(new)* | Prose, labels, captions, table cells, the caveats. Humanist: open apertures, large x-height, softly-cut terminals, and letterforms that vary in width — which is what makes a paragraph read faster than a geometric face at the same size |
+| `--font-display` | **DM Sans** *(unchanged)* | `h1`-`h4`, `th`, `kbd`, and the four display steps (`text-figure`, `text-h1`, `text-h2`, `text-h3`, `text-eyebrow`). Headings, the brand mark, KPI figures, table headers, and every Latin person's name |
+| `--font-devanagari` | **Noto Sans Devanagari** *(unchanged, non-negotiable)* | Marathi. Also second in **both** Latin stacks, so a mixed string resolves without a per-component check |
+
+**What it costs, stated plainly:** a numeral inside a sentence or a table cell now sets in Nunito
+Sans, and the rule says numbers are DM Sans. Figures that are the *point* of their surface — a KPI
+value, a table header, a heading — are on the display face explicitly. That is the whole
+divergence.
+
+**How to revert:** one line. Put `'DM Sans'` back at the head of `--font-sans` in `globals.css`
+§A.1. The scale, the measure and the sweep are independent of it and survive.
+
+**How it is kept honest:** `tokens.contract.test.ts` now asserts *both* stacks, asserts that Noto
+Sans Devanagari is in *both* of them, asserts the `<link>` fetches all three families — not just
+the CSS, because Task 6 proved 20 of 23 tests still pass with the Devanagari face deleted when the
+tag is not checked — and asserts that the paragraph admitting the divergence is still in the file.

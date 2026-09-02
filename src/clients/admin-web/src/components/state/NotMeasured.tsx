@@ -51,7 +51,7 @@ export function NotMeasured({ state = 'unmeasured', why, className }: NotMeasure
       title={why}
       className={cn('inline-block align-top text-text-3', className)}
     >
-      <span aria-hidden="true" className="text-[17px] leading-none">
+      <span aria-hidden="true" className="text-h3 leading-none">
         &mdash;
       </span>
       <span className="block text-caption text-text-3">{STATE_WORD[state]}</span>

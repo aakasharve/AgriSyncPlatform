@@ -117,7 +117,7 @@ export function ExpandableRow({
       {expandable && (
         <tr id={detailId} hidden={!expanded} style={edgeStyle(edge)} className="bg-wash">
           <td colSpan={colSpan} className="px-4 pb-5 pt-1">
-            <div className="max-w-[100ch] text-body text-text-2">{detail}</div>
+            <div className="max-w-[var(--text-measure)] text-body text-text-2">{detail}</div>
           </td>
         </tr>
       )}

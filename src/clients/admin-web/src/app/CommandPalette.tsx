@@ -633,7 +633,7 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
             placeholder="Jump to a screen, a farm or a person"
             className="flex-1 bg-transparent text-body font-semibold text-text-1 placeholder:text-text-3"
           />
-          <kbd className="rounded-chip bg-wash px-1.5 py-0.5 text-[11px] text-text-3">ESC</kbd>
+          <kbd className="rounded-chip bg-wash px-1.5 py-0.5 text-caption text-text-3">ESC</kbd>
         </div>
 
         <div className="max-h-[50vh] overflow-y-auto p-2">
@@ -708,7 +708,7 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
                   )}
                 </span>
                 <span
-                  className={`flex-none text-[11px] font-normal ${
+                  className={`flex-none text-caption font-normal ${
                     i === active ? 'text-page' : 'text-text-3'
                   }`}
                 >

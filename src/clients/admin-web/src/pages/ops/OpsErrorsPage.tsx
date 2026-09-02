@@ -271,7 +271,7 @@ const COLUMNS: DataListColumn<OpsErrorRow>[] = [
           data-type={e.eventType}
           title={info?.what}
           className={cn(
-            'inline-block rounded-chip px-2 py-0.5 font-mono text-[12px] font-semibold',
+            'inline-block rounded-chip px-2 py-0.5 font-mono text-caption font-semibold',
             /* An unknown type gets the honesty grey rather than a guessed
                verdict: a colour we cannot explain is one we must not draw. */
             info?.className ?? 'bg-tint-grey text-text-2',
@@ -360,7 +360,7 @@ const COLUMNS: DataListColumn<OpsErrorRow>[] = [
      */
     render: (e) =>
       e.farmId ? (
-        <span className="font-mono text-[12px] break-all text-text-2">{e.farmId}</span>
+        <span className="font-mono text-caption break-all text-text-2">{e.farmId}</span>
       ) : (
         <NotMeasured state="unattributed" why={NOT_ATTRIBUTABLE} />
       ),

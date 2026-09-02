@@ -125,7 +125,7 @@ export function DwcScoreCard({ score }: DwcScoreCardProps) {
             aria-label={`Total DWC score ${score.total} of ${SCORE_MAX}`}
           >
             {fmt.num(score.total)}
-            <span className="ml-1 text-2xl text-text-3">/{fmt.num(SCORE_MAX)}</span>
+            <span className="ml-1 text-h2 text-text-3">/{fmt.num(SCORE_MAX)}</span>
           </div>
 
           <span

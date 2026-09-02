@@ -126,8 +126,17 @@ describe('a name renders in the face its script was designed for', () => {
     // component, that is a split font rule and this test is where it surfaces.
     render(<PersonName name="वाघ" />);
     expect(faces(screen.getByText('वाघ').style.fontFamily)).toBe(faces(fontToken('devanagari')));
-    // --font-sans leads with DM Sans; PersonName's Latin stack is that head.
-    expect(faces(fontToken('sans')).startsWith('DM Sans')).toBe(true);
+    /* WAS `fontToken('sans')`, AND MOVING IT IS THE POINT RATHER THAN A
+       REPAIR. On 2026-09-02 `--font-sans` became Nunito Sans — the prose face
+       — and `--font-display` kept DM Sans for the places the console speaks in
+       its own name. A person's name in a table is one of those: it sits in a
+       column beside every other name, and a proper noun is not prose.
+
+       So the anti-drift assertion follows the component to the token it now
+       mirrors. It is not weaker: it still fails the moment PersonName and the
+       token layer disagree about the Latin face, which is the only thing it
+       ever guarded. */
+    expect(faces(fontToken('display')).startsWith('DM Sans')).toBe(true);
   });
 });
 

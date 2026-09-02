@@ -191,7 +191,7 @@ const COLUMNS: DataListColumn<FarmSummary>[] = [
         <span
           data-tier={f.engagementTier}
           className={cn(
-            'inline-grid size-8 place-items-center rounded-chip text-[15px] font-bold',
+            'inline-grid size-8 place-items-center rounded-chip text-caption font-bold',
             TIER_CLASS[f.engagementTier] ?? 'bg-tint-grey text-text-2',
           )}
         >

@@ -201,7 +201,7 @@ function templateCard(t: ScheduleTemplate, fields: RenderedField[]) {
           screen that cannot see it must not guess, and must not let its silence
           read as "no". Said once per card rather than only in the note, because
           the card is where the reader looks for it. */}
-      <p className="mt-auto text-[12px] text-text-3">
+      <p className="mt-auto text-caption text-text-3">
         Whether farmers can see this template is not carried by this feed.
       </p>
     </article>
@@ -364,9 +364,9 @@ export default function ScheduleTemplatesPage() {
           <>
             <p>
               <b>These are not the templates a farmer subscribes to.</b> This feed reads{' '}
-              <code className="font-mono text-[12px]">ssf.schedule_templates</code>, the planning
+              <code className="font-mono text-caption">ssf.schedule_templates</code>, the planning
               templates the activity planner works from. The ones a farmer adopts live in{' '}
-              <code className="font-mono text-[12px]">ssf.crop_schedule_templates</code>, they carry
+              <code className="font-mono text-caption">ssf.crop_schedule_templates</code>, they carry
               their own published flag, and <b>no screen or endpoint in this product lists them</b>.
               Whether a farmer can see a schedule cannot be answered from here.
             </p>
@@ -388,7 +388,7 @@ export default function ScheduleTemplatesPage() {
                 <b>There is one version for the whole answer, not one per template.</b> The server
                 hashes the payload it is about to send and stamps every row with it, so this is a
                 fingerprint of this response:{' '}
-                <code className="font-mono text-[12px]">{setVersion.slice(0, 12)}</code>. It is not a
+                <code className="font-mono text-caption">{setVersion.slice(0, 12)}</code>. It is not a
                 template version and it does not survive a change anywhere else in the list.
               </p>
             )}

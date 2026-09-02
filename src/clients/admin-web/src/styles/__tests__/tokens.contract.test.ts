@@ -126,13 +126,58 @@ describe('the v3 signal palette exists as tokens (CONTRACT.md §7.7)', () => {
   });
 });
 
-describe('fonts follow the charter, not the prototype', () => {
-  it('uses DM Sans for English and Noto Sans Devanagari for Marathi', () => {
-    // Non-negotiable project rule. The v3 mock is drawn in IBM Plex; a mock
-    // does not get to overrule the charter.
-    expect(cssRules).toContain("--font-sans: 'DM Sans', 'Noto Sans Devanagari', sans-serif;");
+describe('two Latin faces, and the rule that says there should be one', () => {
+  /*
+   * 🛑 THIS ASSERTION USED TO READ "uses DM Sans for English and Noto Sans
+   * Devanagari for Marathi", and it went red on 2026-09-02. It is rewritten
+   * rather than relaxed, and what it now pins is the DIVERGENCE — so the
+   * divergence cannot spread, and cannot be forgotten.
+   *
+   * Root `CLAUDE.md`: English, brand and numbers are DM Sans; Marathi is Noto
+   * Sans Devanagari; `system-ui`, `Arial` and bare generics are never used for
+   * visible text. The founder's instruction the same day was "change the font
+   * make it more friendly to read", and one face cannot be both the brand
+   * voice and the friendliest reading face.
+   *
+   * So the split is asserted, in both directions:
+   *   the PROSE face may change  — that is the founder's call, one line;
+   *   the DISPLAY face may NOT quietly stop being DM Sans;
+   *   MARATHI MAY NOT MOVE AT ALL, and it must be in BOTH stacks, so a
+   *   farmer's name resolves whichever face the surrounding text is in.
+   */
+  it('splits prose from display, and keeps DM Sans as the display face', () => {
+    expect(cssRules).toContain("--font-sans: 'Nunito Sans', 'Noto Sans Devanagari', sans-serif;");
+    expect(cssRules).toContain("--font-display: 'DM Sans', 'Noto Sans Devanagari', sans-serif;");
+  });
+
+  it('carries Noto Sans Devanagari in BOTH Latin stacks — Marathi never falls out', () => {
+    for (const token of ['sans', 'display']) {
+      const stack = new RegExp(`--font-${token}:\\s*([^;]+);`).exec(cssRules)?.[1] ?? '';
+      expect(`${token} carries Devanagari: ${stack.includes("'Noto Sans Devanagari'")}`).toBe(
+        `${token} carries Devanagari: true`
+      );
+    }
+    expect(cssRules).toContain("--font-devanagari: 'Noto Sans Devanagari', sans-serif;");
+  });
+
+  it('LOADS all three — the `<link>`, not just the CSS', () => {
+    /*
+     * A stylesheet naming a face that was never fetched is a silent failure,
+     * and this repo has already proved the shape: Task 6 deleted the
+     * Devanagari face from index.html and 20 of 23 tests still passed,
+     * because they asserted the CSS. So the tag is asserted, not the token.
+     */
+    expect(htmlMarkup).toContain('family=Nunito+Sans');
     expect(htmlMarkup).toContain('family=DM+Sans');
     expect(htmlMarkup).toContain('family=Noto+Sans+Devanagari');
+  });
+
+  it('says out loud, in the file, that it diverges from the project rule', () => {
+    // Anyone dropping DM Sans altogether has to first delete the paragraph
+    // saying this was a founder decision and how to undo it. Same device as
+    // C7, C8 and §A.10.
+    expect(css).toMatch(/§A\.1 type[\s\S]{0,600}DIVERGENCE FROM THE\s*\n\s*\*\s*PROJECT FONT RULE/i);
+    expect(css).toMatch(/put DM Sans back at the head of `--font-sans`/);
   });
 
   it('never falls back to system-ui or Arial for visible text', () => {

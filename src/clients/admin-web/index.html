@@ -13,20 +13,36 @@
     <meta name="description" content="AgriSync Admin · operations console" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- DM Sans = English, brand and numbers. Noto Sans Devanagari = Marathi
-         body text. Both are charter rules, not preferences.
+    <!-- FOUR FAMILIES, AND ONE OF THEM IS A DIVERGENCE FROM THE PROJECT FONT
+         RULE. Stated here as well as in globals.css §A.1, because this tag is
+         what actually makes a face exist and a stylesheet naming a font that
+         was never loaded is a silent failure — Task 6 proved that shape: 20 of
+         23 tests still passed with the Devanagari face deleted, because they
+         asserted the CSS and not the `<link>`.
 
-         JetBrains Mono STAYS after Task 27. The count it was waiting on was
-         re-measured with all thirteen screens ported: SIX files, EIGHTEEN
-         uses of `font-mono`, not the 20 screens this comment used to claim.
-         They are deliberate choices made during the port — the OTP field, the
-         farmer-search field, error timestamps and status codes, and five
-         <code> spans naming a module, a route, two ssf tables and a version
-         hash — on surfaces read character by character. CONTRACT.md §8 bans monospace, so this is a live
-         disagreement between the contract and six shipped files, and it
-         is the founder's call, not a sweep. See globals.css §A.1. -->
+           Nunito Sans           prose and UI text. Added 2026-09-02 on the
+                                 founder's instruction "change the font make
+                                 it more friendly to read". Root CLAUDE.md
+                                 says English is DM Sans; this is his call and
+                                 it is one line to revert.
+           DM Sans               headings, the brand mark, KPI figures, table
+                                 headers, Latin person names. The brand voice,
+                                 unchanged.
+           Noto Sans Devanagari  Marathi. NON-NEGOTIABLE. Farmer names render
+                                 in it. It is second in both Latin stacks so a
+                                 mixed string resolves without a per-component
+                                 check.
+           JetBrains Mono        STAYS after Task 27. Re-measured with all
+                                 thirteen screens ported: SIX files, EIGHTEEN
+                                 uses — the OTP field, the farmer-search field,
+                                 error timestamps and status codes, and five
+                                 <code> spans. Every one is a value read
+                                 character by character. CONTRACT.md §8 bans
+                                 monospace, so this is a live disagreement
+                                 between the contract and six shipped files,
+                                 and it is the founder's call, not a sweep. -->
     <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <title>AgriSync Admin</title>

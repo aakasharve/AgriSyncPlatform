@@ -82,7 +82,7 @@ export function AiHealthBlock({ health }: AiHealthBlockProps) {
         <Rate label="Receipt parse" rate={health.receiptParseSuccessRate14d} measured={measured} />
         <div>
           <dt className="text-caption text-text-2">Invocations</dt>
-          <dd className="mt-0.5 text-[18px] font-semibold tabular-nums text-text-1">
+          <dd className="mt-0.5 text-h3 font-semibold tabular-nums text-text-1">
             {invocations === null ? (
               <NotMeasured state="unmeasured" why="The invocation count did not arrive as a number." />
             ) : (
@@ -125,7 +125,7 @@ function Rate({ label, rate, measured }: { label: string; rate: number; measured
       <dt className="text-caption text-text-2">{label}</dt>
       <dd
         data-rate={label}
-        className="mt-0.5 text-[18px] font-semibold tabular-nums"
+        className="mt-0.5 text-h3 font-semibold tabular-nums"
         style={printed !== null && clamped !== null ? { color: TONE_COLOR[toneFor(clamped)] } : undefined}
       >
         {printed === null ? (

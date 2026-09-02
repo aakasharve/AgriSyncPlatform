@@ -1,3 +1,37 @@
+/* THE BRAND VOICE, WHEREVER THE CONSOLE SPEAKS IN ITS OWN NAME.
+   `--font-display` is DM Sans; `--font-sans` is the friendlier body face.
+
+   TWO SELECTORS, BECAUSE THE CONSOLE HAS TWO KINDS OF HEADING. Real
+   elements — `h1`-`h4`, `th`, `kbd` — cover the semantic ones. The four
+   display STEPS cover the rest: `causes.tsx` sets its state titles on a
+   `<p class="text-h2">` and `KpiCard` sets its figure on a
+   `<div class="text-figure">`, both correctly, because neither is a
+   document heading. Binding the face to the size means thirteen screens did
+   not each have to remember a second class.
+
+   Yes, this keys CSS off Tailwind's generated utility names. They are
+   generated from `--text-*` in §A.1 — our own tokens, in this file — so the
+   coupling is to something two hundred lines above, not to a framework
+   internal. Rename a step and this rule is in the same commit.
+
+   Everything else — prose, labels, captions, table cells, the caveats — is
+   the body face. That includes numerals inside a sentence or a cell, which
+   is the divergence §A.1 states out loud. */
+h1,
+h2,
+h3,
+h4,
+th,
+kbd,
+.font-display,
+.text-figure,
+.text-h1,
+.text-h2,
+.text-h3,
+.text-eyebrow {
+  font-family: var(--font-display);
+}
+
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
@@ -44,46 +78,95 @@
 
 @theme {
   /* --- §A.1 type ------------------------------------------------------
-   * The charter font rules outrank the prototype. v3's mock is drawn in
-   * IBM Plex; AgriSync's non-negotiable rule is DM Sans for English, brand
-   * and numbers, and Noto Sans Devanagari for Marathi body text. Devanagari
-   * sits second in the stack so a farmer's name in Marathi resolves to Noto
-   * Sans Devanagari without a per-component check.
+   *
+   * 🛑 TWO LATIN FACES SINCE 2026-09-02, AND THAT IS A DIVERGENCE FROM THE
+   * PROJECT FONT RULE. Said out loud here rather than left to be found.
+   *
+   * Root `CLAUDE.md` reads: DM Sans for English, brand and numbers; Noto
+   * Sans Devanagari for Marathi; never `system-ui`, `Arial` or a generic
+   * fallback for visible text. The founder's instruction on 2026-09-02 was
+   * "change the font make it more friendly to read". One face cannot be
+   * both the brand voice and the friendliest reading face, so the split is:
+   *
+   *   --font-sans     Nunito Sans   PROSE AND UI TEXT. A humanist face with
+   *                                 open apertures, a large x-height and
+   *                                 softly-cut terminals. It is what the
+   *                                 word "friendly" describes, and humanist
+   *                                 letterforms vary in width, which is what
+   *                                 makes a paragraph easier to read than a
+   *                                 geometric face at the same size.
+   *   --font-display  DM Sans       HEADINGS, THE BRAND MARK, KPI FIGURES,
+   *                                 TABLE HEADERS AND EVERY PERSON'S NAME IN
+   *                                 LATIN SCRIPT. The brand voice is intact
+   *                                 wherever the console speaks in its own
+   *                                 name.
+   *   --font-devanagari Noto Sans Devanagari  MARATHI. NON-NEGOTIABLE, and
+   *                                 unchanged. Farmer names render in it and
+   *                                 it sits second in BOTH Latin stacks, so a
+   *                                 mixed string resolves without a
+   *                                 per-component check.
+   *
+   * WHAT THIS COSTS, STATED PLAINLY: a numeral inside a sentence or a table
+   * cell now sets in Nunito Sans, not DM Sans, and the rule says numbers are
+   * DM Sans. Figures that are the POINT of their surface — a KPI value, a
+   * table header, a heading — are on `--font-display` explicitly. Reverting
+   * is one line: put DM Sans back at the head of `--font-sans`. It is the
+   * founder's call, and `tokens.contract.test.ts` asserts BOTH stacks and
+   * the `<link>` that loads all three families, so it cannot drift.
    *
    * `--font-mono` SURVIVES. Measured: SIX files, EIGHTEEN uses —
    * FarmerSearchBox, FarmerHealthPage, ForbiddenPage, LoginPage,
    * OpsErrorsPage, ScheduleTemplatesPage — every one a value read character
    * by character. CONTRACT.md §8 bans monospace; that is a live disagreement
    * on shipped screens and a founder decision, not a sweep. */
-  --font-sans: 'DM Sans', 'Noto Sans Devanagari', sans-serif;
+  --font-sans: 'Nunito Sans', 'Noto Sans Devanagari', sans-serif;
+  --font-display: 'DM Sans', 'Noto Sans Devanagari', sans-serif;
   --font-devanagari: 'Noto Sans Devanagari', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  /* THE SCALE, IN ONE PLACE (added 2026-09-02).
+  /* THE SCALE, IN ONE PLACE.
    *
-   * Before this, thirteen screens each wrote `text-[26px]`, `text-[17px]`,
-   * `text-[15px]` by hand and the whole console sat inside an eleven-pixel
-   * band. Six steps, each a clear jump from the one below it, so a heading
-   * is visibly a heading and a KPI figure visibly outranks its own label. */
-  --text-figure: 52px;
+   * RAISED A WHOLE STEP ON 2026-09-02 — founder: "font size must be
+   * increased". Every value moved up and every line-height opened with it,
+   * because size without leading is a denser page, not a more readable one:
+   *
+   *   figure   52 -> 56    body     15 -> 17 (line-height 1.55 -> 1.7)
+   *   h1       30 -> 34    caption  13 -> 15 (1.45 -> 1.6)
+   *   h2       21 -> 24    eyebrow  12 -> 13 (tracking eased 0.10 -> 0.08em,
+   *   h3       17 -> 19             because tracked-out caps get harder to
+   *                                 read as they get bigger)
+   *
+   * 15px is the smallest type a SENTENCE is ever set in. 13px survives for
+   * exactly one thing — the uppercase eyebrow, which is a two-word label and
+   * not something anyone reads a line of. Eleven hand-written sizes between
+   * 11px and 18px were swept onto these steps in the same commit; before
+   * that, six screens set their own.
+   *
+   * `--text-measure` is the other half of readability and the half that
+   * usually gets skipped: a comfortable line is 60-75 characters, and a
+   * caveat paragraph running the full width of a 1280px screen is about
+   * 140. Every prose block in the console is capped by it. */
+  --text-figure: 56px;
   --text-figure--line-height: 1;
   --text-figure--letter-spacing: -0.03em;
-  --text-h1: 30px;
-  --text-h1--line-height: 1.18;
+  --text-h1: 34px;
+  --text-h1--line-height: 1.2;
   --text-h1--letter-spacing: -0.022em;
-  --text-h2: 21px;
-  --text-h2--line-height: 1.3;
+  --text-h2: 24px;
+  --text-h2--line-height: 1.35;
   --text-h2--letter-spacing: -0.014em;
-  --text-h3: 17px;
-  --text-h3--line-height: 1.4;
+  --text-h3: 19px;
+  --text-h3--line-height: 1.45;
   --text-h3--letter-spacing: -0.008em;
-  --text-body: 15px;
-  --text-body--line-height: 1.55;
-  --text-caption: 13px;
-  --text-caption--line-height: 1.45;
-  --text-eyebrow: 12px;
-  --text-eyebrow--line-height: 1.2;
-  --text-eyebrow--letter-spacing: 0.1em;
+  --text-body: 17px;
+  --text-body--line-height: 1.7;
+  --text-caption: 15px;
+  --text-caption--line-height: 1.6;
+  --text-eyebrow: 13px;
+  --text-eyebrow--line-height: 1.3;
+  --text-eyebrow--letter-spacing: 0.08em;
+
+  --text-measure: 68ch;
 
   /* --- §A.2 ink (CONTRACT.md §7.7) — DATA COLOUR, UNCHANGED ------------ */
   --color-text-1: #14201a; /* body copy, table cells, KPI labels        */
@@ -220,11 +303,13 @@
   --radius-chip: 12px;
 
   /* Layout constants the shell is built from (Task 10 consumes these).
-     1280 is the design width: 236px sidebar, four KPIs across. */
-  --spacing-sidebar: 236px;
-  --spacing-sidebar-narrow: 212px;
-  --spacing-topbar: 64px;
-  --spacing-row: 52px;
+     1280 is the design width. All four grew with the type scale: a 236px
+     sidebar that fitted 15px labels crops 17px ones, and a 64px bar that
+     held a 15px crumb is tight around a 19px one. */
+  --spacing-sidebar: 262px;
+  --spacing-sidebar-narrow: 232px;
+  --spacing-topbar: 72px;
+  --spacing-row: 60px;
 
   /* --- §A.11 BRAND AND NAVIGATION CHROME -------------------------------
    * Numbered 11 because §A.10 is the chart-gap hatch, which lives outside
@@ -466,8 +551,8 @@ body {
   background-repeat: no-repeat;
   color: var(--color-text-1);
   font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: 17px;
+  line-height: 1.7;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;

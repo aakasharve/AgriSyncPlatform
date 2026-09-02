@@ -107,7 +107,7 @@ function YourAccess() {
   const total = scope?.modules.length ?? 0;
 
   return (
-    <dl className="grid gap-3 text-[14px] sm:grid-cols-2">
+    <dl className="grid gap-3 text-caption sm:grid-cols-2">
       <Fact label="Outcome">{outcome ?? <NotMeasured why="The server did not answer." />}</Fact>
       <Fact label="Organisation">
         {scope ? (
@@ -149,7 +149,7 @@ function YourAccess() {
 function Fact({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <dt className="text-[12px] font-medium uppercase tracking-[0.06em] text-text-3">{label}</dt>
+      <dt className="text-eyebrow font-bold uppercase text-text-2">{label}</dt>
       <dd className="text-text-1">{children}</dd>
     </div>
   );
@@ -206,7 +206,7 @@ export default function SettingsAdminsPage() {
           <CardTitle>Your own access, as the server resolved it</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="mb-4 text-[14px] text-text-2">
+          <p className="mb-4 text-caption text-text-2">
             One account &mdash; the one signed in. This is the only thing on this page that was
             measured rather than described, and it is read from the same answer every screen in this
             console is gated on.
@@ -219,7 +219,7 @@ export default function SettingsAdminsPage() {
         <CardHeader>
           <CardTitle>Where admin access actually comes from</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3 text-[14px] text-text-2">
+        <CardContent className="flex flex-col gap-3 text-caption text-text-2">
           <p>
             <b>At request time, from the database.</b> Every admin request resolves the caller
             against their active, non-expired organisation memberships and the organisations those
@@ -251,7 +251,7 @@ export default function SettingsAdminsPage() {
         <CardHeader>
           <CardTitle>What admin access grants</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3 text-[14px] text-text-2">
+        <CardContent className="flex flex-col gap-3 text-caption text-text-2">
           {/* v3: "Access here is all or nothing. Being on this list means every
               farmer's phone number and every farm's logs; being off it means a
               403 at the door. There is nothing in between."

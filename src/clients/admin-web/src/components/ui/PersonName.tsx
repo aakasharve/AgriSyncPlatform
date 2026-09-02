@@ -57,7 +57,14 @@ import { hasDevanagari } from '@/lib/searchKey';
 /** Marathi body text. Charter rule; mirrors `--font-devanagari`. */
 const FONT_DEVANAGARI = "'Noto Sans Devanagari', sans-serif";
 
-/** English, brand and numbers. Charter rule; the head of `--font-sans`. */
+/** A Latin name is set in the DISPLAY face, and that is the deliberate half
+ *  of the 2026-09-02 font split. `--font-sans` became Nunito Sans for prose;
+ *  `--font-display` stayed DM Sans for the places the console speaks in its
+ *  own name, and a person's name in a table is one of them — it sits beside
+ *  every other name, in a column, and a proper noun is not prose.
+ *
+ *  This mirrors `--font-display`. `PersonName.test.tsx` asserts the two
+ *  against each other, so the component and the token cannot drift. */
 const FONT_LATIN = "'DM Sans', sans-serif";
 
 export interface PersonNameProps {

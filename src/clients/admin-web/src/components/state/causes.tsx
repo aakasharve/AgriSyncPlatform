@@ -131,7 +131,15 @@ function StateBlock({
         >
           {title}
         </p>
-        <div className={cn('text-body text-text-2', banner ? 'mt-1' : 'max-w-[58ch]')}>
+        {/* A comfortable line is 60-75 characters. `--text-measure` (§A.1)
+            is that, in one place, so a caveat does not run 140 characters
+            wide on a 1280px screen. */}
+        <div
+          className={cn(
+            'max-w-[var(--text-measure)] text-body text-text-2',
+            banner ? 'mt-1' : ''
+          )}
+        >
           {children}
         </div>
         {action && <div className="mt-4">{action}</div>}
