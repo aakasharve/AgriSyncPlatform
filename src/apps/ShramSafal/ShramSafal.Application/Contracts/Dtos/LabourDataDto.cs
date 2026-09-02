@@ -128,8 +128,8 @@ public sealed record LabourDashboardDto(
     // with real evidence for at least one assignment sums only the known ones
     // (an unstated assignment contributes NOTHING, not 0); a week with no
     // assignments logged at all is the one genuine `0m` case. `decimal` (not
-    // `int`) because this same value backs `LabourLedgerDto.WeekTotal` below
-    // — see that member's doc for why the two totals share a representation.
+    // `int`) for half-day precision. (It once also backed the ledger's
+    // `WeekTotal`, deleted with the clean-register contract — Phase 4 Task 1.)
     decimal? ManDays,
     int ManDaysTrend,
     // Phase 4 (D-H8) — nullable: null = withheld by view (non-owner caller).
