@@ -123,3 +123,23 @@ describe('AttendanceResult — display dedup and the contradiction gate', () => 
         expect(onConfirm).toHaveBeenCalledTimes(1);
     });
 });
+
+// ─── 3.4b review finding 9 (P7): the count chip attributes its real source ──
+describe('AttendanceResult — count attribution reflects its source', () => {
+    it('anchored 0 with names: the count chip is स्पष्ट माहिती, never तुम्ही सांगितलं', () => {
+        drawWithAnchor({ state: 'anchored', headcount: 0, logId: 'log-0' }, [
+            { id: 'l1', type: 'hired', workerNames: ['गणेश', 'रमेश'] } as unknown as AgriLogResponse['labour'][number],
+        ]);
+        // Nothing was spoken as a COUNT this session — the 0 is the anchor
+        // log's figure, so crediting it to the farmer would fabricate a
+        // statement. (The conflict card's "तुम्ही सांगितलं: गणेश, रमेश." is a
+        // longer string; this EXACT match targets only the bare chip label.)
+        expect(screen.queryByText('तुम्ही सांगितलं')).toBeNull();
+        expect(screen.getByText('स्पष्ट माहिती')).toBeInTheDocument();
+    });
+    it('a spoken count still carries the तुम्ही सांगितलं chip', () => {
+        draw([{ id: 'l1', type: 'hired', count: 12 } as unknown as AgriLogResponse['labour'][number]]);
+        expect(screen.getByText('तुम्ही सांगितलं')).toBeInTheDocument();
+        expect(screen.queryByText('स्पष्ट माहिती')).toBeNull();
+    });
+});

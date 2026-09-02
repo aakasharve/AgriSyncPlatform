@@ -92,7 +92,16 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                     <div className="mt-2 flex items-center gap-2">
                         <b className="text-[24px] font-black text-emerald-700 [font-variant-numeric:tabular-nums]" style={{ fontFamily: "'DM Sans', sans-serif" }}>{knownCount}</b>
                         <span className="text-[15px] font-bold text-slate-700">जण</span>
-                        <span className="ml-auto rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">{COPY.youSaidChip}</span>
+                        {/* 3.4b review finding 9 (P7): the chip must attribute the
+                            count to its ACTUAL source. knownCount is
+                            spokenCount ?? anchorHeadcount — when it came from the
+                            anchor (the log), तुम्ही सांगितलं would credit the
+                            farmer with a statement he never made this session;
+                            the anchor's figure carries the स्पष्ट माहिती chip
+                            instead (both chips are the approved D9.5 harvest). */}
+                        <span className="ml-auto rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">
+                            {spokenCount != null ? COPY.youSaidChip : COPY.explicitChip}
+                        </span>
                     </div>
                 )}
                 {displayNames.length > 0 && (
