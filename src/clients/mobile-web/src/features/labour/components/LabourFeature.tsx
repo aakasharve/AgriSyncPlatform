@@ -24,6 +24,7 @@ import { t as translate } from '../../../i18n/translations';
 import { SYNC_HONESTY_I18N_KEYS } from '../../sync/status/syncHonestyState';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
 import type { DailyLog, LedgerDefaults } from '../../../types';
+import type { LedgerRow } from '../labour.types';
 import { BackHeader, LoadErrorBanner, LoadingState } from './LabourUiKit';
 import LabourHub from './LabourHub';
 import MukadamDetail from './MukadamDetail';
@@ -31,6 +32,7 @@ import PersonDetail from './PersonDetail';
 import Attendance from './Attendance';
 import WeeklyDashboard from './WeeklyDashboard';
 import HajeriLedger from './HajeriLedger';
+import HajeriCellDetail from './HajeriCellDetail';
 import ReviewSheet from './ReviewSheet';
 import FarmInviteQrSheet from '../../onboarding/qr/FarmInviteQrSheet';
 
@@ -86,6 +88,7 @@ export const LabourFeature: React.FC<{
     const [inviteOpen, setInviteOpen] = useState(false);
     const [stack, setStack] = useState<ScreenState[]>([{ name: 'hub' }]);
     const [reviewOpen, setReviewOpen] = useState(false);
+    const [cellDetail, setCellDetail] = React.useState<{ row: LedgerRow; dayIndex: number } | null>(null);
     const [toast, setToast] = useState<string | null>(null);
     const toastTimer = useRef<number | undefined>(undefined);
 
@@ -269,7 +272,13 @@ export const LabourFeature: React.FC<{
                                 onTimeWindowChange={setTimeWindow}
                             />
                         )}
-                        {cur.name === 'ledger' && <HajeriLedger data={data} onToast={showToast} />}
+                        {cur.name === 'ledger' && (
+                            <HajeriLedger
+                                data={data}
+                                onToast={showToast}
+                                onOpenCell={(row, dayIndex) => setCellDetail({ row, dayIndex })}
+                            />
+                        )}
                     </>
                 )}
             </div>
@@ -280,6 +289,15 @@ export const LabourFeature: React.FC<{
                 minted on. Both already exist here; neither is required, and
                 without them the sheet renders exactly as it did before. */}
             <ReviewSheet open={reviewOpen} data={data} onClose={() => setReviewOpen(false)} onToast={showToast} onApproved={refresh} farmId={farm?.farmId} history={history} />
+
+            {cellDetail && (
+                <HajeriCellDetail
+                    row={cellDetail.row}
+                    dayIndex={cellDetail.dayIndex}
+                    dayIso={data.ledger.days[cellDetail.dayIndex] ?? ''}
+                    onClose={() => setCellDetail(null)}
+                />
+            )}
 
             {farm && (
                 <FarmInviteQrSheet
