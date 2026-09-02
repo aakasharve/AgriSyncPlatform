@@ -142,7 +142,15 @@ export default function LoginPage() {
             />
           </span>
           <span className="leading-tight">
-            <span className="block text-h3 font-bold text-text-1"><span className="text-word-shram">Shram</span>{' '}<span className="text-word-safal">Safal</span></span>
+            <img
+              src="/brand/logo-text.webp"
+              alt="Shram Safal"
+              width={900}
+              height={270}
+              loading="eager"
+              decoding="async"
+              className="block h-6 w-auto object-contain"
+            />
             <span className="block text-caption text-text-2">Admin console</span>
           </span>
         </div>
@@ -201,7 +209,15 @@ export default function LoginPage() {
               />
             </span>
             <span className="leading-tight">
-              <span className="block text-h3 font-bold text-text-1"><span className="text-word-shram">Shram</span>{' '}<span className="text-word-safal">Safal</span></span>
+              <img
+              src="/brand/logo-text.webp"
+              alt="Shram Safal"
+              width={900}
+              height={270}
+              loading="eager"
+              decoding="async"
+              className="block h-6 w-auto object-contain"
+            />
               <span className="block text-caption text-text-2">Admin console</span>
             </span>
           </div>

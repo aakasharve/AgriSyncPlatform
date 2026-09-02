@@ -31,18 +31,38 @@ const SURFACES = [
 ] as const;
 
 describe('the console names itself Shram Safal', () => {
-  it.each(SURFACES)('%s carries the name, not the platform name', (_where, file) => {
+  /**
+   * THE WORDMARK IS THE ARTWORK, NOT TYPED TEXT.
+   *
+   * This briefly shipped as two coloured spans — a typed approximation of the
+   * logo. The founder asked for it exactly as the asset draws it, and the real
+   * mark is italic, gradient-filled and kerned as artwork. Two flat hexes
+   * cannot reproduce that, and an approximation of a logo is worse than none.
+   *
+   * The consequence a test has to hold: an IMAGE of a name is silent. The
+   * `alt` is the only thing a screen reader gets, so it is the accessible name
+   * and it must be the name — never empty, never "logo".
+   */
+  it.each(SURFACES)('%s draws the wordmark from the asset', (_where, file) => {
     const src = read(file);
-    // The wordmark is two-tone, so the name is two spans rather than one string.
-    expect(src).toContain('>Shram</span>');
-    expect(src).toContain('>Safal</span>');
+    expect(src).toMatch(/\/brand\/logo-(text|full)\.webp/);
     expect(src).not.toMatch(/AgriSync Admin|>AgriSync</);
   });
 
-  it.each(SURFACES)('%s tints the wordmark green-then-blue', (_where, file) => {
+  it.each(SURFACES)('%s gives the wordmark image the name as its alt', (_where, file) => {
     const src = read(file);
-    expect(src).toContain('text-word-shram');
-    expect(src).toContain('text-word-safal');
+    const block = src.slice(src.search(/\/brand\/logo-(text|full)\.webp/));
+    expect(block.slice(0, 400)).toContain('alt="Shram Safal"');
+  });
+
+  it('no surface types the name where the artwork belongs', () => {
+    for (const [, file] of SURFACES) {
+      const src = read(file);
+      expect(src, `${file} still types the wordmark`).not.toContain('text-word-shram');
+    }
+    // The declaration, not the word: the comment explaining why the token
+    // was retired names it on purpose, and that comment is the point.
+    expect(read('src/styles/globals.css')).not.toMatch(/--color-word-shram:\s*#/);
   });
 
   it('the browser tab says it too', () => {
@@ -67,31 +87,16 @@ describe('the mark keeps the ground that makes it legible', () => {
    * not. Deleting it does not break a layout or a type-check; it just makes
    * the logo disappear, on the three surfaces a reader sees most.
    */
-  it.each(SURFACES)('%s puts the mark on the cream disc, not straight on the plane', (_where, file) => {
+  // Only the surfaces that draw the BARE shield need the disc. Home uses
+  // `logo-full.webp`, whose own lockup already separates the shield from the
+  // ground — and boxing the full lockup would crop the wordmark.
+  const BARE_MARK = SURFACES.filter(([, f]) => f !== 'src/pages/HomePage.tsx');
+
+  it.each(BARE_MARK)('%s puts the bare mark on the cream disc, not straight on the plane', (_where, file) => {
     const src = read(file);
     expect(src).toContain('/brand/logo-mark.webp');
     expect(src).toContain('var(--color-mark-disc)');
     expect(src).toContain('var(--color-mark-ring)');
-  });
-
-  /**
-   * THE BLUE IS THE DARKEST ONE A READER CAN READ, AND THAT IS THE POINT.
-   *
-   * The founder asked for the brand's blue and green. The brand blue is
-   * #0EA5E9 (marketing `--farm-sky`) — and measured against the two backdrops
-   * this wordmark actually sits on it reads **2.27:1** on the frosted mint
-   * plane and **2.73:1** on a glass panel. AA wants 4.5:1 for text. At that
-   * ratio it is a graphic, not a word.
-   *
-   * #0369A1 is the next step down the same sky ramp: 4.86:1 and 5.85:1. Same
-   * blue, legible. This test exists so nobody "restores the real brand blue"
-   * and quietly makes the product's own name unreadable.
-   */
-  it('the wordmark blue is the legible step of the sky ramp, not the bright one', () => {
-    const css = read('src/styles/globals.css');
-    expect(css).toMatch(/--color-word-shram:\s*#0f3d22/i);
-    expect(css).toMatch(/--color-word-safal:\s*#0369a1/i);
-    expect(css).not.toMatch(/--color-word-safal:\s*#0ea5e9/i);
   });
 
   it('both disc tokens are declared, so no surface hand-rolls the colour', () => {
@@ -100,14 +105,15 @@ describe('the mark keeps the ground that makes it legible', () => {
     expect(css).toMatch(/--color-mark-ring:\s*#d9b45b/i);
   });
 
-  it('the mark is decorative in markup — the name beside it is what is read aloud', () => {
-    // A screen reader hearing "logo" twice is noise; the visible text is the
-    // accessible name. Every img carrying the mark is aria-hidden with an
-    // empty alt, and the name sits beside it as real text.
-    for (const [, file] of SURFACES) {
+  it('the bare shield is decorative — the wordmark beside it carries the name', () => {
+    // A screen reader hearing the brand twice is noise. Where both images sit
+    // together, the shield is aria-hidden with an empty alt and the WORDMARK
+    // holds `alt="Shram Safal"`. Home draws one combined lockup instead, so it
+    // has no bare shield to hide.
+    for (const [, file] of BARE_MARK) {
       const src = read(file);
       const marks = src.split('/brand/logo-mark.webp').length - 1;
-      expect(marks, `${file} should render the mark`).toBeGreaterThan(0);
+      expect(marks, `${file} should render the bare shield`).toBeGreaterThan(0);
       expect(src).toContain('aria-hidden="true"');
     }
   });

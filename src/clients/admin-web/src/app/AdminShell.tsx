@@ -188,7 +188,19 @@ export function AdminShell() {
             {/* The product is Shram Safal; this console lives at
                 admin.shramsafal.in. It said "AgriSync" — the platform — until
                 2026-09-02. */}
-            <span className="block text-h3 font-bold text-text-1"><span className="text-word-shram">Shram</span>{' '}<span className="text-word-safal">Safal</span></span>
+            {/* The wordmark is the asset, not typed text — gradient, italic
+                and kerned as artwork. At this size the full lockup would
+                render the words illegibly small, so the shield keeps its disc
+                beside it and only the wordmark is the image. */}
+            <img
+              src="/brand/logo-text.webp"
+              alt="Shram Safal"
+              width={900}
+              height={270}
+              loading="eager"
+              decoding="async"
+              className="block h-[22px] w-auto object-contain"
+            />
             <span className="block text-caption text-nav-muted">Admin console</span>
           </span>
         </div>

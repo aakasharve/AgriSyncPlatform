@@ -747,34 +747,33 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* THE MASTHEAD. Home is the page a reader lands on, so it is where the
-          product names itself. Everywhere else the sidebar carries the brand.
-          The mark keeps its cream disc here too — the ground behind this page
-          is a pale mint bloom, and a green shield on green is the smudge
-          mobile-web already shipped once. */}
+      {/* THE MASTHEAD IS THE ASSET ITSELF.
+          `logo-full.webp` (1100x330) is the canonical lockup — the shield and
+          the wordmark drawn together, "Shram" in a green gradient and "Safal"
+          in a blue one, with the swoosh under both. Typed text cannot
+          reproduce it: it is italic, gradient-filled and kerned as artwork.
+          So the founder gets the artwork, not an imitation of it.
+
+          NO CREAM DISC HERE. That treatment exists because a green shield on a
+          DARK GREEN ground loses its outline (mobile-web's FarmNameBoard). The
+          lockup's own shield carries a white interior and sits on a pale mint
+          bloom, so the hazard does not apply — and boxing the full lockup
+          would crop the wordmark.
+
+          The alt text IS the accessible name. A logotype is exempt from the
+          contrast rule precisely because it is a picture of a name, so the
+          name has to reach a screen reader some other way. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-line pb-5">
-        <span
-          className="grid size-14 flex-none place-items-center rounded-full"
-          style={{
-            background: 'var(--color-mark-disc)',
-            boxShadow: '0 0 0 2px var(--color-mark-ring), var(--shadow-raised)',
-          }}
-        >
-          <img
-            src="/brand/logo-mark.webp"
-            alt=""
-            aria-hidden="true"
-            width={36}
-            height={36}
-            loading="eager"
-            decoding="async"
-            className="size-9 object-contain"
-          />
-        </span>
-        <div className="min-w-0">
-          <span className="block text-h2 font-bold tracking-[-0.02em] text-text-1"><span className="text-word-shram">Shram</span>{' '}<span className="text-word-safal">Safal</span></span>
-          <span className="block text-caption text-text-2">Admin console</span>
-        </div>
+        <img
+          src="/brand/logo-full.webp"
+          alt="Shram Safal"
+          width={1100}
+          height={330}
+          loading="eager"
+          decoding="async"
+          className="h-14 w-auto object-contain"
+        />
+        <span className="text-caption text-text-2">Admin console</span>
       </div>
 
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
