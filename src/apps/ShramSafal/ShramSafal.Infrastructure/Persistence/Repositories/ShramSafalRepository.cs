@@ -1609,6 +1609,48 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         await db.AttendanceMarks.AddAsync(mark, ct);
     }
 
+    public async Task<IReadOnlyList<AttendanceEngagementFact>> GetAttendanceEngagementFactsAsync(
+        FarmId farmId, Guid fieldOperatorId, DateOnly workDate, CancellationToken ct = default)
+    {
+        // Projection-only, AsNoTracking — the same discipline as
+        // GetLabourAssignmentOwnerLogIdsAsync (IShramSafalRepository.cs:705-715):
+        // this read exists so RecordAttendanceMarkHandler can refuse the
+        // contradiction BEFORE anything is staged, and name it. The explicit
+        // farm Where is mandatory: p_user_select_* policies are PERMISSIVE and
+        // OR past the tenant policy (Phase 0, UNKNOWN 5).
+        return await (
+            from row in db.FieldOperatorWorkRows.AsNoTracking()
+            join a in db.LabourAssignments.AsNoTracking() on row.LabourAssignmentId equals a.Id
+            join log in db.DailyLogs.AsNoTracking() on a.DailyLogId equals log.Id
+            where row.FieldOperatorId == fieldOperatorId
+                  && log.FarmId == farmId
+                  && log.LogDate == workDate
+            select new AttendanceEngagementFact(a.Id, a.Task, a.Shift)
+        ).ToListAsync(ct);
+    }
+
+    public async Task AddAttendanceMarkCorrectionAsync(
+        AttendanceMarkCorrection correction, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(correction);
+        // Staged only — the caller commits it with the amendment it explains,
+        // so the change can never land without its record (same contract as
+        // AddLabourCorrectionAsync / RemoveFieldOperatorWorkRowAsync).
+        await db.AttendanceMarkCorrections.AddAsync(correction, ct);
+    }
+
+    public async Task<List<AttendanceMark>> GetAttendanceMarksChangedSinceAsync(
+        IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0) return [];
+        return await db.AttendanceMarks
+            .AsNoTracking()
+            .Where(m => ids.Contains((Guid)m.FarmId) && m.ModifiedAtUtc > sinceUtc)
+            .OrderBy(m => m.ModifiedAtUtc)
+            .ToListAsync(ct);
+    }
+
     public Task RemoveFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(r);

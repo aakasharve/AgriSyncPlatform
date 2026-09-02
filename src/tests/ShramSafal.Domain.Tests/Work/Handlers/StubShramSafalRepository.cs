@@ -198,4 +198,29 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
     // recorded day with no labour is a genuine 0.
     public virtual Task<List<DailyLog>> GetDailyLogsByFarmAsync(FarmId farmId, CancellationToken ct = default)
         => Task.FromResult(new List<DailyLog>());
+
+    // Task 3.5b (spec: 2026-08-28-labour-v2-release-1) — restated `virtual`
+    // for the SAME reason as every block above: an interface DEFAULT
+    // implementation is not a virtual class member, so a FakeRepo subclass
+    // could not override it — every override would silently no-op instead of
+    // failing to compile. Bodies MATCH the interface defaults exactly: the
+    // facts read and the mark read/add THROW (a "no contradiction found" or
+    // "nothing recorded" answer is a positive claim an unimplemented double
+    // must not make silently); the correction add stages benignly like
+    // AddLabourCorrectionAsync.
+    public virtual Task<IReadOnlyList<AttendanceEngagementFact>> GetAttendanceEngagementFactsAsync(
+        FarmId farmId, Guid fieldOperatorId, DateOnly workDate, CancellationToken ct = default)
+        => throw new NotSupportedException(
+            "GetAttendanceEngagementFactsAsync is not implemented by this test double. "
+            + "Returning an empty list would assert that no contradiction exists.");
+
+    public virtual Task<AttendanceMark?> GetAttendanceMarkAsync(
+        FarmId farmId, Guid fieldOperatorId, DateOnly workDate, CancellationToken ct = default)
+        => throw new NotSupportedException("GetAttendanceMarkAsync is not implemented by this test double.");
+
+    public virtual Task AddAttendanceMarkAsync(AttendanceMark mark, CancellationToken ct = default)
+        => throw new NotSupportedException("AddAttendanceMarkAsync is not implemented by this test double.");
+
+    public virtual Task AddAttendanceMarkCorrectionAsync(AttendanceMarkCorrection correction, CancellationToken ct = default)
+        => Task.CompletedTask;
 }

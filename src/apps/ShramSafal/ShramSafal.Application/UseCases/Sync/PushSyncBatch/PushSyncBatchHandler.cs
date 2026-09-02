@@ -40,6 +40,7 @@ using ShramSafal.Application.UseCases.Work.SettleJobCardPayout;
 using ShramSafal.Application.UseCases.Work.StartJobCard;
 using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Location;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Tests;
@@ -90,6 +91,9 @@ public sealed class PushSyncBatchHandler(
     // on the sync path. The ordering win is endpoint-only.
     IHandler<VerifyLogCommand, DailyLogDto> verifyLogHandler,
     AddCostEntryHandler addCostEntryHandler,
+    // Labour V2 R1 Task 3.5b — the attendance write path rides the existing
+    // sync pipeline; no second offline system, no new REST route.
+    ShramSafal.Application.UseCases.Labour.RecordAttendanceMark.RecordAttendanceMarkHandler recordAttendanceMarkHandler,
     AllocateGlobalExpenseHandler allocateGlobalExpenseHandler,
     CorrectCostEntryHandler correctCostEntryHandler,
     SetPriceConfigVersionHandler setPriceConfigVersionHandler,
@@ -669,6 +673,8 @@ public sealed class PushSyncBatchHandler(
                 return await HandleTestInstanceCollectedAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "testinstance.reported":
                 return await HandleTestInstanceReportedAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+            case "attendance.mark":
+                return await HandleAttendanceMarkAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "compliance.acknowledge":
                 return await HandleComplianceAcknowledgeAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "compliance.resolve":
@@ -1621,6 +1627,94 @@ public sealed class PushSyncBatchHandler(
                 VendorName: request.VendorName,
                 ClientAttachmentIdsJson: clientAttachmentIdsJson),
             ct);
+
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandleAttendanceMarkAsync(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        // Set equality with attendance_mark.zod.ts is enforced by
+        // sync-contract/tests/allowlist-parity.test.ts, which parses THIS line —
+        // so it must stay on one line.
+        if (!PayloadHasOnly(payload, "attendanceMarkId", "farmId", "fieldOperatorId", "workDate", "dayMark", "nightMark", "hoursWorked", "extraHours", "resolvedLabourAssignmentId"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "attendance.mark payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<AttendanceMarkPayload>(payload);
+        if (request is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for attendance.mark.");
+        }
+
+        // Closed vocabularies, mapped TOTALLY like `direction` in
+        // HandleAddCostEntryAsync. Absence = Unmarked — "nobody said" is a
+        // fourth state, never a guess; an unrecognised value is a broken
+        // producer and is refused, never demoted to unknown.
+        DayMark day;
+        switch (request.DayMark)
+        {
+            case null or "": day = DayMark.Unmarked; break;
+            case "Full": day = DayMark.Full; break;
+            case "Half": day = DayMark.Half; break;
+            case "Absent": day = DayMark.Absent; break;
+            default:
+                return MutationExecutionOutcome.Failure(
+                    "ShramSafal.SyncInvalidPayload", "attendance.mark payload carries an unrecognised dayMark.");
+        }
+        NightMark night;
+        switch (request.NightMark)
+        {
+            case null or "": night = NightMark.Unmarked; break;
+            case "Worked": night = NightMark.Worked; break;
+            case "NotWorked": night = NightMark.NotWorked; break;
+            default:
+                return MutationExecutionOutcome.Failure(
+                    "ShramSafal.SyncInvalidPayload", "attendance.mark payload carries an unrecognised nightMark.");
+        }
+
+        // WorkDate arrives as the generated payload's DateOnly (the zod
+        // YYYY-MM-DD regex maps to DateOnly in generate-csharp-payloads.ts) —
+        // a malformed date fails DESERIALIZATION above and lands, named, in
+        // the batch loop's SyncMutationUnhandled guard, the same posture as
+        // add_cost_entry's entryDate. No second parse here to drift from it.
+
+        // C5 — /sync/ is on TenantTransactionMiddleware's skip list (:225), so no
+        // GUC is set until this call, and p_tenant_attendance_marks' WITH CHECK
+        // (20260831180408:57) would refuse the INSERT with a NULL comparison.
+        // EstablishFarmScopeForDerivationAsync is what makes the mark writable here.
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
+
+        var result = await recordAttendanceMarkHandler.HandleAsync(
+            new UseCases.Labour.RecordAttendanceMark.RecordAttendanceMarkCommand(
+                request.AttendanceMarkId, request.FarmId, request.FieldOperatorId, request.WorkDate,
+                day, night, request.HoursWorked, request.ExtraHours,
+                request.ResolvedLabourAssignmentId, actorUserId),
+            ct);
+
+        if (result.IsSuccess
+            && result.Value.Outcome == UseCases.Labour.RecordAttendanceMark.AttendanceDayOutcome.Contradicted)
+        {
+            // A fact the OWNER must rule on, surfaced to the device as a
+            // PERMANENT rejection (the answer arrives as a NEW mutation carrying
+            // resolvedLabourAssignmentId — re-pushing these bytes can never
+            // succeed). Nothing was staged: the check runs pre-staging, so the
+            // rollback above this frame has nothing to lose.
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.AttendanceContradiction",
+                "Two of today's works claim different attendance for this person. Answer in Labour, then it will sync.");
+        }
 
         return ToOutcome(result);
     }

@@ -31,6 +31,14 @@ public sealed record MyFarmProjection(
     Guid OwnerAccountId,
     AppRole? Role);
 
+/// <summary>
+/// Labour V2 R1 Task 3.5b — one engagement's day-fact about a person, as read
+/// by <c>RecordAttendanceMarkHandler</c>'s pre-persistence contradiction
+/// check. <c>Shift</c> is <c>null</c> when the engagement made no day claim
+/// ("no claim → no question", GetLabourDataHandler.cs agreement idiom).
+/// </summary>
+public sealed record AttendanceEngagementFact(Guid LabourAssignmentId, string? Task, LabourShift? Shift);
+
 public interface IShramSafalRepository
 {
     Task AddFarmAsync(Farm farm, CancellationToken ct = default);
@@ -936,6 +944,45 @@ public interface IShramSafalRepository
     Task AddAttendanceMarkAsync(AttendanceMark mark, CancellationToken ct = default)
         => throw new NotSupportedException(
             "AddAttendanceMarkAsync is not implemented by this repository.");
+
+    /// <summary>
+    /// The engagement day-facts for one person on one farm-day — the input to
+    /// <c>RecordAttendanceMarkHandler</c>'s pre-persistence contradiction
+    /// check (Labour V2 R1 Task 3.5b).
+    /// </summary>
+    /// <remarks>
+    /// THE DEFAULT THROWS, like <see cref="GetAttendanceMarksForFarmInWindowAsync"/>
+    /// and unlike the staging members around it: "no contradiction found" is a
+    /// POSITIVE claim, and an implementation that simply has not implemented
+    /// this would be making it silently.
+    /// </remarks>
+    Task<IReadOnlyList<AttendanceEngagementFact>> GetAttendanceEngagementFactsAsync(
+        FarmId farmId, Guid fieldOperatorId, DateOnly workDate, CancellationToken ct = default)
+        => throw new NotSupportedException(
+            "GetAttendanceEngagementFactsAsync is not implemented by this repository. "
+            + "Returning an empty list would assert that no contradiction exists.");
+
+    /// <summary>
+    /// Stage an APPEND-ONLY <see cref="AttendanceMarkCorrection"/> row. No
+    /// SaveChanges — the caller commits it in the SAME unit of work as the
+    /// in-place amendment of the <see cref="AttendanceMark"/> it explains, so
+    /// the change can never land without its record. Same contract as
+    /// <see cref="AddLabourCorrectionAsync"/> — deliberately no update or
+    /// delete counterpart.
+    /// </summary>
+    Task AddAttendanceMarkCorrectionAsync(AttendanceMarkCorrection correction, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Pull carriage (Labour V2 R1 Task 3.5c): every mark on the caller's
+    /// farms whose <c>ModifiedAtUtc</c> is after <paramref name="sinceUtc"/>.
+    /// Empty default mirrors <see cref="GetFinanceCorrectionsChangedSinceAsync(IEnumerable{Guid}, DateTime, CancellationToken)"/>:
+    /// a pull that misses rows retries on the frozen cursor, so an empty
+    /// answer here is recoverable in a way the facts read above is not.
+    /// </summary>
+    Task<List<AttendanceMark>> GetAttendanceMarksChangedSinceAsync(
+        IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+        => Task.FromResult(new List<AttendanceMark>());
 
     /// <summary>
     /// Stage the removal of one attribution row. No SaveChanges — the caller
