@@ -37,7 +37,9 @@ public sealed class AttendanceMarkTests
     [InlineData(DayMark.Absent, NightMark.Worked, 1)]
     public void ADayIsWorthZeroToTwo(DayMark day, NightMark night, decimal expected)
     {
+#pragma warning disable CS0618 // Value is [Obsolete] (Phase 4): pin stays, documented, acknowledged.
         Assert.Equal(expected, Mark(day, night).Value);
+#pragma warning restore CS0618
     }
 
     // ── THE FOURTH STATE ────────────────────────────────────────────────────
@@ -55,7 +57,9 @@ public sealed class AttendanceMarkTests
         var unmarked = Mark(DayMark.Unmarked, NightMark.Worked);
         var absent = Mark(DayMark.Absent, NightMark.Worked);
 
+#pragma warning disable CS0618 // Value is [Obsolete] (Phase 4): pin stays, documented, acknowledged.
         Assert.Equal(unmarked.Value, absent.Value);   // indistinguishable in arithmetic
+#pragma warning restore CS0618
         Assert.NotEqual(unmarked.Day, absent.Day);    // and never in the data
     }
 
@@ -69,7 +73,9 @@ public sealed class AttendanceMarkTests
         var unmarked = Mark(DayMark.Full, NightMark.Unmarked);
         var notWorked = Mark(DayMark.Full, NightMark.NotWorked);
 
+#pragma warning disable CS0618 // Value is [Obsolete] (Phase 4): pin stays, documented, acknowledged.
         Assert.Equal(unmarked.Value, notWorked.Value);
+#pragma warning restore CS0618
         Assert.NotEqual(unmarked.Night, notWorked.Night);
     }
 
@@ -125,7 +131,9 @@ public sealed class AttendanceMarkTests
         Assert.Equal(DayMark.Half, previous.Day);
         Assert.Equal(NightMark.Unmarked, previous.Night);
         Assert.Equal(DayMark.Full, mark.Day);
+#pragma warning disable CS0618 // Value is [Obsolete] (Phase 4): pin stays, documented, acknowledged.
         Assert.Equal(2m, mark.Value);
+#pragma warning restore CS0618
         Assert.Equal(later, mark.ModifiedAtUtc);
         Assert.Equal(otherActor, mark.RecordedByUserId);
     }
@@ -174,7 +182,9 @@ public sealed class AttendanceMarkTests
 
         var without = AttendanceMark.Create(
             Guid.NewGuid(), Farm, Operator, Day, DayMark.Unmarked, NightMark.Worked, Actor, At);
+#pragma warning disable CS0618 // Value is [Obsolete] (Phase 4): pin stays, documented, acknowledged.
         Assert.Equal(without.Value, mark.Value); // hours never fold into day-worth (C12 stays pinned)
+#pragma warning restore CS0618
     }
 
     /// <summary>The widened emptiness guard: hours alone are now a statement.</summary>
@@ -196,7 +206,9 @@ public sealed class AttendanceMarkTests
             Actor, At, extraHours: 2m, hoursBasis: LabourTimeBasis.Explicit);
         Assert.Equal(DayMark.Full, mark.Day);
         Assert.Equal(2m, mark.ExtraHours);
+#pragma warning disable CS0618 // Value is [Obsolete] (Phase 4): pin stays, documented, acknowledged.
         Assert.Equal(1m, mark.Value);
+#pragma warning restore CS0618
     }
 
     [Theory]

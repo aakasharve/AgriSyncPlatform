@@ -6,66 +6,53 @@ using Xunit;
 namespace ShramSafal.Domain.Tests.Labour;
 
 /// <summary>
-/// Task 6 (spec: 2026-08-28-labour-v2-release-1) — Defect A: <c>LabourLedgerDto.WeekTotal</c>,
-/// <c>DailyTotals</c> and <c>LabourLedgerRowDto.Total</c> were all <c>int</c>, so a half day
-/// (0.5) had nowhere to go. The shipped design fixture (<c>labourMock.ts</c>) already fabricated
-/// this: a worker with 5 present + 1 half days was given a total of <b>6</b>, not 5.5 — a whole
-/// day of work nobody did. Founder ruling D9.9 (supersedes D4): half a day is 0.5 day of
-/// EVIDENCE, never half a wage — Money is Release 2 and must not appear here.
+/// Task 6's defect (spec: 2026-08-28-labour-v2-release-1, D9.9): int-typed
+/// register totals rounded a half day (0.5) up into a fabricated whole day —
+/// a day of work nobody did. The founder master review 2026-09-02 (D4) then
+/// DELETED every aggregate from the grid contract — <c>Total</c>,
+/// <c>WeekTotal</c>, <c>DailyTotals</c> — so the rounding surface no longer
+/// exists to get wrong; their structural absence is pinned by
+/// <c>BuildHajeriLedgerTests.TheGridContractCarriesNoAggregateAndNoMoney</c>.
 ///
-/// <para>
-/// Before this task these three DTO members could not even COMPILE a half-day value — the type
-/// system itself enforced "always a whole number," which was the bug (Task 1's report makes the
-/// same observation about <c>RecordedWages</c>: a compile-time failure is a stronger proof of the
-/// defect than a runtime one, because pre-fix the type cannot express the true value at all).
-/// </para>
+/// <para>What SURVIVES of this suite's intent, and is pinned here: a half day
+/// stays its own DISCRETE fact ("half" — 1 अर्धा in the dimensional detail
+/// read), never a number a reader could round; and the members that do hold
+/// numbers (stated hours) are decimal, so .5-granularity facts survive
+/// exactly — never rounded, never folded into a whole day.</para>
 /// </summary>
 public sealed class HalfDayIsPointFiveTests
 {
+    private static LabourLedgerCellDto Cell(string day) => new(day, null, null, null, false, null);
+
     [Fact]
-    public void Row_total_is_five_point_five_not_six_for_five_present_and_one_half()
+    public void A_half_day_is_a_discrete_state_not_a_number_that_could_round()
     {
-        // The brief's exact scenario: 5 "present" + 1 "half" + 1 "absent" (a
-        // full 7-day week) = 5.5 real days of work. The old `int`-typed Total
-        // could only round that up to a fabricated whole day (6).
-        var cells = new string?[] { "present", "present", "half", "present", "present", "present", "absent" };
-        var total = cells.Sum(c => c switch
+        // The brief's exact scenario, on the CLEAN contract: 5 full + 1 half
+        // + 1 absent across a 7-day week. The old int Total fabricated a 6th
+        // whole day out of the half; the new contract has no total to
+        // fabricate into — the week reads dimensionally (5 पूर्ण · 1 अर्धा),
+        // each state its own count, the half never promoted.
+        var week = new LabourLedgerCellDto?[]
         {
-            "present" => 1m,
-            "half" => 0.5m,
-            _ => 0m, // "absent" or no fact yet (null) — both contribute nothing.
-        });
+            Cell("full"), Cell("full"), Cell("half"), Cell("full"),
+            Cell("full"), Cell("full"), Cell("absent"),
+        };
 
-        var row = new LabourLedgerRowDto("w1", "worker", "w", "or", cells, total);
-
-        Assert.Equal(5.5m, row.Total);
-        // A decimal must render as "5.5", never "5.500000" — see the report
-        // for why summing only 0m/0.5m/1m operands keeps the scale bounded.
-        Assert.Equal("5.5", row.Total.ToString(CultureInfo.InvariantCulture));
+        Assert.Equal(5, week.Count(c => c!.Day == "full"));
+        Assert.Equal(1, week.Count(c => c!.Day == "half"));
+        Assert.Equal(1, week.Count(c => c!.Day == "absent"));
     }
 
     [Fact]
-    public void A_full_week_of_halves_is_three_point_five_not_rounded()
+    public void Stated_hours_hold_a_half_exactly_and_render_it_as_point_five()
     {
-        var cells = new string?[] { "half", "half", "half", "half", "half", "half", "half" };
-        var total = cells.Sum(c => c == "half" ? 0.5m : 0m);
+        // The type-level proof the old suite carried for totals, now on the
+        // members that DO hold numbers: decimal, so 3.5 is 3.5 — never 4,
+        // and never "3.500000" on the wire (stated is stored is shown).
+        var cell = new LabourLedgerCellDto("half", null, 3.5m, 0.5m, false, null);
 
-        var row = new LabourLedgerRowDto("w2", "worker", "w", "or", cells, total);
-
-        Assert.Equal(3.5m, row.Total);
-    }
-
-    [Fact]
-    public void Ledger_daily_totals_and_week_total_hold_half_days_exactly()
-    {
-        // Column sums across several workers' rows for one week — mirrors what
-        // `DailyTotals`/`WeekTotal` roll up once Stage 5 populates real Rows.
-        var dailyTotals = new decimal[] { 3m, 3.5m, 3.5m, 4m, 3.5m, 2m, 1m };
-        var weekTotal = dailyTotals.Sum();
-
-        var ledger = new LabourLedgerDto("wk", ["सो"], [], dailyTotals, weekTotal);
-
-        Assert.Equal(20.5m, ledger.WeekTotal);
-        Assert.Equal(new decimal[] { 3m, 3.5m, 3.5m, 4m, 3.5m, 2m, 1m }, ledger.DailyTotals);
+        Assert.Equal(3.5m, cell.Hours);
+        Assert.Equal("3.5", cell.Hours!.Value.ToString(CultureInfo.InvariantCulture));
+        Assert.Equal(0.5m, cell.ExtraHours);
     }
 }

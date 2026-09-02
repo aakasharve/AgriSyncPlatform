@@ -280,6 +280,10 @@ public sealed class AttendanceMark : Entity<Guid>
     /// contributes NOTHING on either half — it is not a zero, it is a silence,
     /// and a row total must never turn one into the other.
     /// </summary>
+    [Obsolete("Night arithmetic is NOT decided (founder final direction 2026-09-01; " +
+        "master review 2026-09-02 keeps the register clean). No R1 read path may consume " +
+        "Value — display Day and Night as two preserved facts. This member also turns " +
+        "Unmarked into 0, contradicting its own remarks (Phase 0 C12).")]
     public decimal Value =>
         (Day switch { DayMark.Full => 1m, DayMark.Half => 0.5m, _ => 0m })
         + (Night == NightMark.Worked ? 1m : 0m);

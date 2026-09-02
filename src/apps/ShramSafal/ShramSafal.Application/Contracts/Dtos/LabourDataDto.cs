@@ -182,52 +182,73 @@ public sealed record LabourMoneyDto(
     decimal? Owed);
 
 /// <summary>
-/// Task 6 (spec: 2026-08-28-labour-v2-release-1, P4, D9.9 — supersedes D4) —
-/// <c>DailyTotals</c> and <c>WeekTotal</c> were <c>int</c>, which cannot hold a
-/// half day (0.5). Half a day is 0.5 day of EVIDENCE, never half a wage — no
-/// money is derived from it, that is Release 2.
+/// The CLEAN register (founder master review 2026-09-02, D4): "नावाखाली कोणताही
+/// summary, कामाचा मजकूर किंवा पैशांची कळ नाही. नाव + दिवसाचे खूण एवढेच."
 ///
-/// <para><c>WeekTotal</c> is `decimal?`, not plain `decimal`: `GetLabourDataHandler`
-/// currently derives it from the SAME interim value as `LabourDashboardDto.ManDays`
-/// (`Rows` stays `[]` until the Stage 5 per-worker ledger lands, so there is no
-/// real per-worker total to roll up yet). That value can legitimately be
-/// unknown (Task 6 Defect B), so `WeekTotal` inherits both constraints at
-/// once — decimal for the half-day fix, nullable for the unknown-headcount
-/// fix. Once Stage 5 lands and `WeekTotal` becomes a true sum of `Rows[].Total`
-/// (always a real, non-null decimal — an unmarked day contributes 0, it does
-/// not make the row's own total unknown), this nullability will no longer be
-/// reachable, but removing it is that future task's call, not this one's.</para>
+/// <para>No money member, no totals member — not days, not people, not rupees.
+/// The old <c>Total</c>/<c>WeekTotal</c>/<c>DailyTotals</c> left this contract
+/// deliberately; day-count reads live in DETAIL views (tap a cell), and the
+/// dimensional week (5 पूर्ण · 1 अर्धा · 2 रात्री…) is composed there — never
+/// one number (final direction §2). Reinstating an aggregate here requires
+/// deleting <c>BuildHajeriLedgerTests.TheGridContractCarriesNoAggregateAndNoMoney</c>,
+/// which is the point of that test.</para>
+///
+/// <para><c>Days</c> is EVERY date of a bounded window, in order — the page is
+/// always drawn (correction 5); a register with nothing written in it is still
+/// a register. Cells are per-day slots; a <c>null</c> slot is "कुणी माहिती
+/// नाही" — silence, never absence.</para>
 /// </summary>
 public sealed record LabourLedgerDto(
     string WeekLabel,
     IReadOnlyList<string> Days,
     IReadOnlyList<LabourLedgerRowDto> Rows,
-    IReadOnlyList<decimal> DailyTotals,
-    decimal? WeekTotal);
+    IReadOnlyList<LabourLedgerCrewRowDto> CrewRows);
 
 /// <summary>
-/// <c>Cells</c> are one slot per ledger day, each <c>"present"|"half"|"absent"</c>
-/// or <c>null</c>. Task 5 (spec: 2026-08-28-labour-v2-release-1, P4, founder
-/// Global Constraint 6) — a slot must exist for every day even before the
-/// farmer has said anything about it (a day not yet reached, or simply not
-/// marked yet), so `null` here means "no fact for this day", never a real
-/// absence. `GetLabourDataHandler` returns `Rows: []` unconditionally today
-/// (Stage 5 attendance ledger not built), so this is a forward-looking
-/// contract fix, not a live repair.
+/// One person's register row. <c>FieldOperatorId</c> is the durable work
+/// identity (tap-detail addresses a person-day by it); <c>PersonId</c> stays a
+/// prefixed grouping key ("op:{32-hex}") so no client ever mistakes it for a
+/// bare user id — the same defence the old "name:" prefix carried.
 /// </summary>
 public sealed record LabourLedgerRowDto(
     string PersonId,
+    Guid FieldOperatorId,
     string Name,
     string Initial,
     string Tone,
-    IReadOnlyList<string?> Cells,
-    // Task 6 (spec: 2026-08-28-labour-v2-release-1, P4, D9.9) — `decimal`, not
-    // `int`: a half day (`"half"` in Cells) is worth 0.5, and an `int` Total
-    // could only round that up to a fabricated whole day. Never `null` — a
-    // day with no fact yet (`null` in Cells) contributes 0 to this sum without
-    // making the ROW's own total unknown; see `LabourLedgerDto.WeekTotal`
-    // above for the one member of this DTO that IS nullable, and why.
-    decimal Total);
+    IReadOnlyList<LabourLedgerCellDto?> Cells);
+
+/// <summary>
+/// One person-day cell — the five approved axes (D-H3 + master review D4):
+/// day half, night half, stated hours (Nत), stated extra hours (+N), and the
+/// उक्ते engagement marker. All STATED facts. <c>Day</c>/<c>Night</c> are the
+/// wire forms of <see cref="ShramSafal.Domain.Labour.DayMark"/> /
+/// <see cref="ShramSafal.Domain.Labour.NightMark"/> with Unmarked as null —
+/// two preserved facts, never a summed number, and no reader may consume
+/// <c>AttendanceMark.Value</c> to merge them (it is [Obsolete] for exactly
+/// that reason). <c>Work</c> exists for TAP-DETAIL only; the grid never
+/// renders it (D4: no कामाचा मजकूर under the name).
+/// </summary>
+public sealed record LabourLedgerCellDto(
+    string? Day,
+    string? Night,
+    decimal? Hours,
+    decimal? ExtraHours,
+    bool Ukte,
+    string? Work);
+
+/// <summary>
+/// A crew engaged THROUGH a Labour Mukadam (final direction §3): its own
+/// aggregate row, never folded into his personal presence row. <c>Counts</c>
+/// are per-day STATED headcounts (LabourHeadcount.Resolve over that day's
+/// engaged-through engagements — known figures sum, an unstated one poisons
+/// nothing, all-unknown is null/blank). Display of what was recorded; no
+/// remainder subtraction, no reconciliation against work rows (D9.12).
+/// </summary>
+public sealed record LabourLedgerCrewRowDto(
+    Guid ThroughFieldOperatorId,
+    string ThroughName,
+    IReadOnlyList<int?> Counts);
 
 /// <summary>
 /// <c>Status</c> is the log's real <see cref="ShramSafal.Domain.Logs.VerificationStatus"/>

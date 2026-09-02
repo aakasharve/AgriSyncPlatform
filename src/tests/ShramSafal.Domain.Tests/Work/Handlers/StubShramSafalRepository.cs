@@ -223,4 +223,23 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
 
     public virtual Task AddAttendanceMarkCorrectionAsync(AttendanceMarkCorrection correction, CancellationToken ct = default)
         => Task.CompletedTask;
+
+    /// <summary>
+    /// Phase 4 (Labour V2 R1) — the register read. Seedable, NOT throwing,
+    /// deliberately unlike the single-mark read above: this stub IS the whole
+    /// data universe of a handler test, so an unseeded store answering "no
+    /// marks" is a TRUE emptiness (the fixture created nobody's marks), not an
+    /// unimplemented double silently claiming nobody was marked. Filters by
+    /// the window exactly like the production read so windowed suites stay
+    /// honest.
+    /// </summary>
+    public List<AttendanceMark> AttendanceMarks { get; } = [];
+
+    public virtual Task<IReadOnlyList<AttendanceMark>> GetAttendanceMarksForFarmInWindowAsync(
+        FarmId farmId, DateOnly? from, DateOnly? toInclusive, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<AttendanceMark>>(AttendanceMarks
+            .Where(m => m.FarmId == farmId
+                && (from is null || m.WorkDate >= from.Value)
+                && (toInclusive is null || m.WorkDate <= toInclusive.Value))
+            .ToList());
 }

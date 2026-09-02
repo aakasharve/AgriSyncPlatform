@@ -703,14 +703,23 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             // windowed `totalPaid` is still reported, once, as `Wages` above.
             Money: new LabourMoneyDto(totalRecordedAllTime, totalPaidAllTime, totalAdvance, totalOwed));
 
-        // STAGE 5 — the हजेरी वही is no longer hardcoded empty.
-        //
-        // It became buildable the moment worker names actually persisted. The
-        // names reader in LedgerDerivationService had been pointed at a key the
-        // prompt never emitted, so WorkerNamesJson was "[]" on every row ever
-        // written; with that fixed, a per-worker-per-day register can be derived
-        // from the assignments that already exist. No new table.
-        var ledger = BuildHajeriLedger(weekLabel, windowLogs, windowAssignments, manDays);
+        // STAGE 5, superseded (Phase 4) — the हजेरी वही reads attendance MARKS.
+        // Engagements contribute exactly two stated facts (उक्ते dot, crew
+        // counts) via the work-row join; names on engagements are no longer
+        // presence. All three reads are windowed; the work-row read is NOT
+        // farm-scoped by itself (PERMISSIVE user policy — see the port's own
+        // remarks), so the E4 both-sides filter is applied here.
+        var attendanceMarks = await repository.GetAttendanceMarksForFarmInWindowAsync(
+            query.FarmId, window.FromDate, window.ToDateInclusive, ct);
+        var farmOperators = await repository.GetFieldOperatorsForFarmAsync(query.FarmId, ct);
+        var windowLogDateById = windowLogs.ToDictionary(l => l.Id, l => l.LogDate);
+        var windowWorkRows = (await repository.GetFieldOperatorWorkRowsForAssignmentsAsync(
+                windowAssignments.Select(a => a.Id).ToList(), ct))
+            .Where(r => r.FarmId == query.FarmId)
+            .ToList();
+        var ledger = BuildHajeriLedger(
+            weekLabel, window, farmLocalToday, attendanceMarks, farmOperators,
+            windowWorkRows, windowAssignments, windowLogDateById);
 
         // Who has actually been ATTACHED to one of today’s engagements. An
         // attach is a deliberate human act (POST .../field-operators/{id}/attach
@@ -785,125 +794,179 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
     }
 
     /// <summary>
-    /// The हजेरी वही: one row per person NAMED as present, one cell per day the
-    /// farm has a named labour record inside the window.
+    /// STAGE 5, superseded — the हजेरी वही now reads ATTENDANCE MARKS (Phase 4,
+    /// Labour V2 R1), not names on engagements. A cell is a RULING somebody
+    /// made about a person on a farm-day; a person merely NAMED on a work
+    /// engagement has said nothing about attendance and gets no cell (being
+    /// named is not being marked — the same line BuildAttendanceDraft draws).
     ///
-    /// <para><b>What a cell means, and it is the whole integrity of this screen.</b>
-    /// <c>"present"</c> — named on that day. <c>"half"</c> — named on a day whose
-    /// assignment was recorded as a half shift. <c>null</c> — NO FACT: nobody has
-    /// said this person did not come, they simply were not named. Rendering that
-    /// as absence would invent the one fact a muster roll must never invent, and
-    /// it is the difference between a register and an accusation.</para>
+    /// <para><b>The page is always drawn</b> (correction 5): a bounded window
+    /// enumerates every one of its days; an unbounded (आजपर्यंत) window shows
+    /// every date that carries any fact, and when nothing does, the current
+    /// farm-local week — day columns with every cell blank. The build takes no
+    /// anchor, no headcount and no permission-to-capture as input, and that is
+    /// pinned on its signature by BuildHajeriLedgerTests.</para>
     ///
-    /// <para><b>These names carry no identity.</b> A spoken name resolves to no
-    /// worker id (see <c>LabourEngagementDto.WorkerNames</c>). <c>PersonId</c> is a
-    /// stable key derived from the name so the client can key a row and fold
-    /// repeats of the same spoken name together. It is NOT a user id and must
-    /// never be read as one.</para>
+    /// <para><b>What engagements still contribute</b> — exactly two stated
+    /// facts, joined via work rows, never presence: the उक्ते dot (a person-day
+    /// work row points at an engagement whose ContractUnit is stated) and the
+    /// crew aggregate rows (engagements engaged-through a Labour Mukadam,
+    /// per-day stated counts). Nothing here sums a mark, multiplies anything,
+    /// or reads AttendanceMark.Value (which is [Obsolete]).</para>
     /// </summary>
-    // internal, not private: the honesty rules in this method (null is never
-    // absence, half is 0.5, present outranks half) are the whole value of the
-    // register and are pinned directly by BuildHajeriLedgerTests rather than
-    // through a full handler round-trip. InternalsVisibleTo is already granted
-    // to ShramSafal.Domain.Tests in the csproj.
     internal static LabourLedgerDto BuildHajeriLedger(
         string weekLabel,
-        IReadOnlyList<DailyLog> windowLogs,
+        LabourTimeWindow window,
+        DateOnly farmLocalToday,
+        IReadOnlyList<AttendanceMark> marks,
+        IReadOnlyList<FieldOperator> operators,
+        IReadOnlyList<FieldOperatorWorkRow> workRows,
         IReadOnlyList<LabourAssignment> windowAssignments,
-        decimal? manDays)
+        IReadOnlyDictionary<Guid, DateOnly> logDateByLogId)
     {
-        var logDateById = windowLogs.ToDictionary(l => l.Id, l => l.LogDate);
-
-        // Only assignments whose log sits inside this window, and only those that
-        // actually named somebody — a bare headcount has nothing to put in a
-        // muster roll, and inventing a row for it is exactly the fabrication
-        // this screen exists to avoid.
-        var named = windowAssignments
-            .Where(a => logDateById.ContainsKey(a.DailyLogId))
-            .Select(a => new
-            {
-                Date = logDateById[a.DailyLogId],
-                Names = a.ToDto([]).WorkerNames,
-                IsHalf = a.Shift == LabourShift.Half,
-            })
-            .Where(x => x.Names.Count > 0)
-            .ToList();
-
-        if (named.Count == 0)
+        // ── 1. Day columns. Bounded window → every day of it, drawn whether or
+        //       not anything happened. Unbounded → every date carrying a fact;
+        //       none at all → the current farm-local week, blank. ─────────────
+        List<DateOnly> days;
+        if (window.FromDate is { } from && window.ToDateInclusive is { } to)
         {
-            // Nobody named anywhere in the window. An EMPTY register, never a
-            // zeroed one: the client shows its own empty state rather than a
-            // grid of dashes that would read as everyone being absent.
-            return new LabourLedgerDto(weekLabel, [], [], [], manDays);
+            days = [];
+            for (var d = from; d <= to; d = d.AddDays(1))
+            {
+                days.Add(d);
+            }
+        }
+        else
+        {
+            days = marks.Select(m => m.WorkDate)
+                .Concat(logDateByLogId.Values)
+                .Distinct()
+                .OrderBy(d => d)
+                .ToList();
+            if (days.Count == 0)
+            {
+                // Monday-anchored, same arithmetic as LabourTimeWindow.StartOfWeek.
+                var monday = farmLocalToday.AddDays(-(((int)farmLocalToday.DayOfWeek + 6) % 7));
+                days = Enumerable.Range(0, 7).Select(offset => monday.AddDays(offset)).ToList();
+            }
         }
 
-        var days = named.Select(x => x.Date).Distinct().OrderBy(d => d).ToList();
         var dayIndex = days
             .Select((date, index) => (date, index))
             .ToDictionary(pair => pair.date, pair => pair.index);
 
-        var cellsByName = new Dictionary<string, string?[]>(StringComparer.Ordinal);
-        foreach (var entry in named)
+        var nameByOperatorId = operators.ToDictionary(o => o.Id, o => o.DisplayName);
+        var assignmentById = windowAssignments.ToDictionary(a => a.Id);
+        var workRowsByPersonDay = workRows
+            .Where(r => dayIndex.ContainsKey(r.WorkDate))
+            .GroupBy(r => (r.FieldOperatorId, r.WorkDate))
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // ── 2. One row per marked person; one cell per mark. ────────────────
+        var cellsByOperator = new Dictionary<Guid, LabourLedgerCellDto?[]>();
+        foreach (var mark in marks)
         {
-            foreach (var workerName in entry.Names)
+            if (!dayIndex.TryGetValue(mark.WorkDate, out var index))
             {
-                if (!cellsByName.TryGetValue(workerName, out var cells))
-                {
-                    cells = new string?[days.Count];
-                    cellsByName[workerName] = cells;
-                }
-
-                var index = dayIndex[entry.Date];
-                // "present" outranks "half". If the farmer stated a full shift
-                // anywhere on that day, the person was there for a full day by
-                // his own word; a later half-shift row must not shrink it.
-                if (cells[index] == "present")
-                {
-                    continue;
-                }
-
-                cells[index] = entry.IsHalf ? "half" : "present";
+                continue; // a mark outside the drawn days (unbounded edge) has no column
             }
+
+            if (!cellsByOperator.TryGetValue(mark.FieldOperatorId, out var cells))
+            {
+                cells = new LabourLedgerCellDto?[days.Count];
+                cellsByOperator[mark.FieldOperatorId] = cells;
+            }
+
+            var contextRows = workRowsByPersonDay.TryGetValue(
+                (mark.FieldOperatorId, mark.WorkDate), out var personDayRows)
+                ? personDayRows
+                : new List<FieldOperatorWorkRow>();
+            var contextAssignments = contextRows
+                .Select(r => assignmentById.GetValueOrDefault(r.LabourAssignmentId))
+                .Where(a => a is not null)
+                .Select(a => a!)
+                .ToList();
+            var tasks = contextAssignments
+                .Select(a => a.Task)
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .Select(t => t!.Trim())
+                .Distinct()
+                .ToList();
+
+            cells[index] = new LabourLedgerCellDto(
+                Day: mark.Day switch
+                {
+                    DayMark.Full => "full",
+                    DayMark.Half => "half",
+                    DayMark.Absent => "absent",
+                    _ => null, // Unmarked: the day half was never ruled on
+                },
+                Night: mark.Night switch
+                {
+                    NightMark.Worked => "worked",
+                    NightMark.NotWorked => "notworked",
+                    _ => null,
+                },
+                Hours: mark.HoursWorked,        // as stated — never converted to day fractions
+                ExtraHours: mark.ExtraHours,    // as stated
+                Ukte: contextAssignments.Any(a => a.ContractUnit is not null),
+                Work: tasks.Count == 0 ? null : string.Join(SeparatorMiddot, tasks));
         }
 
-        var rows = cellsByName
-            .OrderBy(pair => pair.Key, StringComparer.Ordinal)
-            .Select(pair => new LabourLedgerRowDto(
-                PersonId: $"name:{pair.Key}",
-                Name: pair.Key,
-                Initial: FirstLetterOf(pair.Key),
-                Tone: ToneFor(pair.Key),
-                Cells: pair.Value,
-                Total: pair.Value.Sum(MarkValue)))
+        var rows = cellsByOperator
+            .Select(pair =>
+            {
+                // The operator row should always resolve (marks are written against
+                // this farm's operators); the attach-time snapshot is the honest
+                // fallback for a rename/erasure race — never an invented name.
+                var name = nameByOperatorId.TryGetValue(pair.Key, out var displayName)
+                    ? displayName
+                    : workRows.FirstOrDefault(r => r.FieldOperatorId == pair.Key)?.DisplayNameAtAttach ?? string.Empty;
+                return new LabourLedgerRowDto(
+                    PersonId: $"op:{pair.Key:N}",
+                    FieldOperatorId: pair.Key,
+                    Name: name,
+                    Initial: FirstLetterOf(name),
+                    Tone: ToneFor(name),
+                    Cells: pair.Value);
+            })
+            .OrderBy(row => row.Name, StringComparer.Ordinal)
             .ToList();
 
-        var dailyTotals = Enumerable.Range(0, days.Count)
-            .Select(index => rows.Sum(row => MarkValue(row.Cells[index])))
+        // ── 3. Crew aggregate rows — engagements engaged THROUGH a Labour
+        //       Mukadam (final direction §3). Stated counts only: known figures
+        //       sum, an unstated engagement poisons nothing, all-unknown is
+        //       null → the client draws a blank violet cell, never a 0. ───────
+        var crewRows = windowAssignments
+            .Where(a => a.EngagedThroughFieldOperatorId is not null
+                && logDateByLogId.TryGetValue(a.DailyLogId, out var d)
+                && dayIndex.ContainsKey(d))
+            .GroupBy(a => a.EngagedThroughFieldOperatorId!.Value)
+            .Select(group =>
+            {
+                var counts = new int?[days.Count];
+                foreach (var byDay in group.GroupBy(a => logDateByLogId[a.DailyLogId]))
+                {
+                    var stated = byDay
+                        .Select(a => LabourHeadcount.Resolve(a.WorkerCount, a.MaleCount, a.FemaleCount))
+                        .Where(h => h is not null)
+                        .Select(h => h!.Value)
+                        .ToList();
+                    counts[dayIndex[byDay.Key]] = stated.Count == 0 ? null : stated.Sum();
+                }
+
+                var throughName = nameByOperatorId.GetValueOrDefault(group.Key, string.Empty);
+                return new LabourLedgerCrewRowDto(group.Key, throughName, counts);
+            })
+            .OrderBy(crew => crew.ThroughName, StringComparer.Ordinal)
             .ToList();
 
         return new LabourLedgerDto(
             WeekLabel: weekLabel,
-            // ISO dates. The weekday letters a farmer reads are Marathi UI copy
-            // and belong to the client, which already formats the window range
-            // the same way (marathiDate.ts).
             Days: days.Select(date => date.ToString("yyyy-MM-dd")).ToList(),
             Rows: rows,
-            DailyTotals: dailyTotals,
-            // The REGISTER own sum — the days actually marked in it. Deliberately
-            // NOT manDays, which counts every stated headcount including crews
-            // nobody named. Two different questions answered with one number is
-            // how a screen starts lying quietly, and this DTO own doc already
-            // said WeekTotal would become this once Stage 5 landed.
-            WeekTotal: rows.Sum(row => row.Total));
+            CrewRows: crewRows);
     }
-
-    /// <summary>A mark worth in days: a half shift is 0.5, no fact is 0.</summary>
-    private static decimal MarkValue(string? mark) => mark switch
-    {
-        "present" => 1m,
-        "half" => 0.5m,
-        _ => 0m,
-    };
 
     /// <summary>
     /// First visible character of a spoken name, for the avatar. Uses a text
