@@ -38,15 +38,21 @@ export function EmptyState({ message, hint, icon, className }: EmptyStateProps) 
     <div
       role="status"
       className={cn(
-        'flex flex-col items-center justify-center gap-2 py-10 text-center',
+        'flex flex-col items-center justify-center gap-2 py-12 text-center',
         className
       )}
     >
-      <span className="grid h-10 w-10 place-items-center rounded-full bg-wash text-text-3">
-        {icon ?? <Inbox size={18} strokeWidth={2.2} />}
+      {/* Composition only. The grey is the honesty grey and it stays grey —
+          §9.4 — but "nothing here" now looks like an answer rather than a
+          panel that failed to render. The hint moved from `text-text-3` to
+          `text-text-2` because a hint is a SENTENCE ABOUT the absence, not
+          the absence itself: 2.98:1 → 6.17:1, and the em dash, the word and
+          the tile keep the grey that means something. */}
+      <span className="grid size-12 place-items-center rounded-panel bg-tint-grey text-text-3">
+        {icon ?? <Inbox size={22} strokeWidth={2} />}
       </span>
-      <div className="text-sm font-semibold text-text-1">{message}</div>
-      {hint && <div className="max-w-md text-[12px] text-text-3">{hint}</div>}
+      <div className="text-h3 font-semibold text-text-1">{message}</div>
+      {hint && <div className="max-w-[52ch] text-body text-text-2">{hint}</div>}
     </div>
   );
 }

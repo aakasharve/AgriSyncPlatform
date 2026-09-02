@@ -53,7 +53,30 @@ interface StateBlockProps {
   className?: string;
 }
 
-/** The shared shell. On the token layer — no raw hex anywhere in this file. */
+/**
+ * The shared shell. On the token layer — no raw hex anywhere in this file.
+ *
+ * ── RESTYLED 2026-09-02, WITHOUT MOVING ONE RULE ─────────────────────────
+ * The founder's note was that "not measured" looked like a missing feature
+ * rather than a deliberate answer, and he was right: a 34px outline glyph in
+ * the honesty grey, a line of 16px text and nothing else reads as a screen
+ * someone did not finish. So the COMPOSITION changed — the icon sits in a
+ * proper badge, the title takes the shared type scale, the body gets a
+ * measured line length and the banner gets a leading edge — and the COLOUR
+ * LOGIC did not:
+ *
+ *   broken   → tint-red, red-vivid edge, a red icon.  A failure.
+ *   not      → tint-grey, edge-grey edge, a grey icon. §9.4: an honesty state
+ *              outranks any semantic colour, so a MEASURED zero is still
+ *              never green and still never a tick of celebration.
+ *
+ * ONE COLOUR MOVED, and it moved to be MORE legible rather than louder: the
+ * banner's title was `text-red` on `tint-red`, which measures 4.13:1 and is
+ * short of AA for a sentence someone has to read while something is broken.
+ * It is the ink colour now (14.76:1) and the RED IS ON THE ICON, where a hue
+ * carries at 3:1. Nothing about what red means changed — a failure still
+ * announces itself in the failure colour.
+ */
 function StateBlock({
   state,
   icon,
@@ -73,17 +96,27 @@ function StateBlock({
       {...(role === 'status' ? { 'aria-live': 'polite' as const } : {})}
       className={cn(
         banner
-          ? 'flex items-start gap-3 rounded-panel px-4 py-4 text-left'
-          : 'flex flex-col items-center gap-1 px-5 py-12 text-center',
+          ? 'relative flex items-start gap-3 overflow-hidden rounded-panel py-4 pr-5 pl-6 text-left'
+          : 'flex flex-col items-center gap-2 px-5 py-14 text-center',
         banner && (broken ? 'bg-tint-red' : 'bg-tint-grey'),
         className
       )}
     >
+      {banner && (
+        <span
+          aria-hidden="true"
+          className={cn(
+            'absolute inset-y-0 left-0 w-1.5',
+            broken ? 'bg-red-vivid' : 'bg-edge-grey'
+          )}
+        />
+      )}
       <span
         aria-hidden="true"
         className={cn(
-          'grid flex-none',
-          banner ? 'mt-1' : 'mb-1',
+          'grid flex-none place-items-center',
+          banner ? 'mt-0.5' : 'mb-2 size-14 rounded-panel',
+          banner ? '' : broken ? 'bg-tint-red' : 'bg-tint-grey',
           broken ? 'text-red' : 'text-text-3'
         )}
       >
@@ -92,16 +125,16 @@ function StateBlock({
       <div className={banner ? 'flex-1' : 'contents'}>
         <p
           className={cn(
-            broken ? 'text-red' : 'text-text-1',
-            banner ? 'text-[15px] font-semibold' : 'text-[16px] font-medium'
+            'text-text-1',
+            banner ? 'text-h3 font-semibold' : 'text-h2 font-bold'
           )}
         >
           {title}
         </p>
-        <div className={cn('text-[15px] text-text-2', banner ? 'mt-1' : 'max-w-[64ch]')}>
+        <div className={cn('text-body text-text-2', banner ? 'mt-1' : 'max-w-[58ch]')}>
           {children}
         </div>
-        {action && <div className="mt-3">{action}</div>}
+        {action && <div className="mt-4">{action}</div>}
       </div>
     </div>
   );

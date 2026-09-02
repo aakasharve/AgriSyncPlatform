@@ -117,9 +117,19 @@ export function Sparkline<V>({
       role="img"
       aria-label={label}
       data-tone={tone}
+      /* CHROME ONLY, 2026-09-02. Three changes, none of them touching what a
+         bar or a gap MEANS:
+           · taller — h-10/h-16 were slivers, h-12/h-20 are a chart;
+           · a visible baseline, which is the zero axis the bars are already
+             measured from. Drawing it makes a true thing legible rather than
+             implied;
+           · square feet, rounded shoulders (`rounded-t`), so a bar reads as
+             standing ON that baseline instead of floating above it.
+         The two rules in this file's header are untouched: one colour per
+         series with the recency ramp, and a gap that gets neither. */
       className={cn(
-        'flex min-w-20 items-end gap-1',
-        size === 'lg' ? 'h-16' : 'h-10',
+        'flex min-w-20 items-end gap-1 border-b border-line',
+        size === 'lg' ? 'h-20' : 'h-12',
         className,
       )}
     >
@@ -152,7 +162,7 @@ export function Sparkline<V>({
             data-state="value"
             data-tone={slotTone}
             title={`${slot.label}: ${value}`}
-            className={cn('min-h-0.5 flex-1 basis-0 rounded-sm', TONE_FILL[slotTone])}
+            className={cn('min-h-0.5 flex-1 basis-0 rounded-t-[3px]', TONE_FILL[slotTone])}
             style={{ height: `${pct}%`, opacity: ramp(i, n, faint) }}
           />
         );

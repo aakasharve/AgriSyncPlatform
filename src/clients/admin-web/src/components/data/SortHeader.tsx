@@ -58,7 +58,11 @@ export function SortHeader({
         ? { 'aria-sort': active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none' }
         : {})}
       className={cn(
-        'whitespace-nowrap border-b border-line bg-page px-4 py-3 align-bottom text-[13px] font-semibold text-text-2',
+        /* The header row is a BAND now (`--color-panel-head`), not more white.
+           A table whose head is the same colour as its body has no head, it
+           has a first row — and that is what every list in this console looked
+           like. Chrome: a column label states no reading. */
+        'whitespace-nowrap border-b border-line bg-panel-head px-4 py-3.5 align-bottom text-caption font-bold text-text-2',
         align === 'right' ? 'text-right' : 'text-left',
       )}
     >
@@ -69,7 +73,7 @@ export function SortHeader({
           type="button"
           onClick={onSort}
           className={cn(
-            'inline-flex items-center gap-1 rounded-chip text-[13px] font-semibold text-text-2 hover:text-text-1',
+            'inline-flex items-center gap-1 rounded-chip text-caption font-bold text-text-2 hover:text-text-1',
             align === 'right' && 'flex-row-reverse',
           )}
         >

@@ -18,12 +18,25 @@ import { cn } from '@/lib/utils';
  *     version did exactly that and then rebuilt its own ring in brand teal.
  */
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-chip text-[15px] font-medium transition-colors disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-chip text-body font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {
-        /* The one interactive colour. Blue means "you can act on this". */
-        default: 'bg-blue text-page hover:bg-blue-press',
+        /* THE PRIMARY FILL IS BRAND GREEN (2026-09-02), and the swap is the
+           one place in this pass where chrome and data colour sit close
+           enough together to need a sentence.
+
+           A BUTTON IS NOT A READING. It is an affordance — "you can do this
+           thing" — and it asserts nothing about a number, so it is chrome and
+           the brand may own it. What it must NOT do is look like a verdict,
+           which is why `--color-brand` (#0f5c3d) is a markedly deeper forest
+           than `--color-green` (#0f8a5f, "positive"): the two never read as
+           the same green side by side. See globals.css §A.11.
+
+           Blue keeps everything it had. It is still §A.4's "interactive" on
+           links, active facets, filter chips and the focus ring; what it
+           stops being is the console's identity, which it never was. */
+        default: 'bg-brand text-page hover:bg-brand-press',
         /* v3 `.is-quiet` — a real edge, no fill until hover. */
         outline: 'border border-line bg-page text-text-1 hover:bg-wash',
         ghost: 'text-text-1 hover:bg-wash',
@@ -33,7 +46,7 @@ const buttonVariants = cva(
       },
       size: {
         default: 'h-11 px-4',
-        sm: 'h-9 px-3 text-[13px]',
+        sm: 'h-9 px-3 text-caption',
         lg: 'h-12 px-6',
         icon: 'h-11 w-11',
       },

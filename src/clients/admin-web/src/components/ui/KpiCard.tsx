@@ -52,6 +52,30 @@ const TONE_VALUE: Record<KpiTone, string> = {
   grey: 'text-text-3',
 };
 
+/**
+ * THE LEADING EDGE (added 2026-09-02) — and why it cannot lie.
+ *
+ * It is driven by `resolvedTone`, the SAME value as the tile tint and the
+ * figure colour, computed after the honesty override. So it is redundant by
+ * construction: it can only ever repeat what the tile already says, and an
+ * unmeasured tile gets `--color-edge-grey`, which §A.5 already defines as
+ * "the leading edge of a row with no verdict". There is no code path that
+ * gives a grey tile a coloured edge.
+ *
+ * That redundancy is the whole point of adding it. The founder's note was
+ * that the console reads flat; a 6px saturated edge is weight, not
+ * information, and weight is exactly what a tint at 4% saturation could not
+ * supply on its own. §A.5's rule is that vivid fills are for bars, dots and
+ * leading edges and never for text — this is a bar.
+ */
+const TONE_EDGE: Record<KpiTone, string> = {
+  blue: 'bg-blue-vivid',
+  green: 'bg-green-vivid',
+  red: 'bg-red-vivid',
+  amber: 'bg-amber-vivid',
+  grey: 'bg-edge-grey',
+};
+
 export interface KpiCardProps {
   label: string;
   value: ReactNode;
@@ -104,8 +128,9 @@ export function KpiCard({
     <div
       data-tone={resolvedTone}
       data-state={state}
+      data-print="panel"
       className={cn(
-        'relative flex min-w-0 flex-col rounded-panel px-5 py-4 shadow-raised',
+        'relative flex min-w-0 flex-col overflow-hidden rounded-panel py-5 pr-5 pl-6 shadow-raised',
         TONE_TILE[resolvedTone],
         className
       )}
@@ -120,8 +145,14 @@ export function KpiCard({
       )}
 
       <div
+        /* 52px bold, from the one type scale (§A.1 `--text-figure`), where it
+           used to be 44 semibold written by hand. The figure is the thing a
+           reader is on this tile for and it now outranks its own label by a
+           factor of three rather than by nine pixels. It also clears WCAG's
+           24px large-text threshold by a wide margin, which is what lets the
+           four measured tone pairings stay exactly as they were. */
         className={cn(
-          'text-[44px] font-semibold leading-[1.05] tracking-[-0.025em] [overflow-wrap:anywhere]',
+          'text-figure font-bold [overflow-wrap:anywhere]',
           TONE_VALUE[resolvedTone]
         )}
       >
@@ -135,16 +166,16 @@ export function KpiCard({
         )}
       </div>
 
-      <div className="mt-2 pr-10 text-[15px] font-medium text-text-1">{label}</div>
+      <div className="mt-2 pr-10 text-h3 font-semibold text-text-1">{label}</div>
 
-      {caption && <div className="mt-1 text-[13px] text-text-2">{caption}</div>}
+      {caption && <div className="mt-1 text-caption text-text-2">{caption}</div>}
 
       {/* A delta is a verdict about a number. With no number there is no
           verdict, so an unmeasured tile shows none. */}
       {measured && delta && (
         <div
           className={cn(
-            'mt-1 text-[13px] font-medium',
+            'mt-1.5 text-caption font-semibold',
             deltaTrend === 'up' && 'text-green',
             deltaTrend === 'down' && 'text-red',
             deltaTrend === 'flat' && 'text-text-2'
@@ -155,8 +186,21 @@ export function KpiCard({
       )}
 
       {note && (
-        <div className="mt-auto border-t border-line pt-3 text-[13px] text-text-2">{note}</div>
+        <div className="mt-auto border-t border-line pt-3 text-caption text-text-2">{note}</div>
       )}
+
+      {/* LAST, NOT FIRST, and that placement is load-bearing. Three screens'
+          tests read the tile's figure as `tile.firstElementChild.textContent`
+          (`OpsVoicePage.test.tsx:116` and its two siblings), so a decorative
+          span in front of the value silently turns every figure assertion
+          into an assertion about an empty string — eleven of them went red
+          proving it. The bar is absolutely positioned, so DOM order costs it
+          nothing, and the tests keep reading what they were written to read.
+          Do not move it back up for tidiness. */}
+      <span
+        aria-hidden="true"
+        className={cn('absolute inset-y-0 left-0 w-1.5', TONE_EDGE[resolvedTone])}
+      />
     </div>
   );
 }

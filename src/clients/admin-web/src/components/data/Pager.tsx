@@ -62,7 +62,7 @@ export function Pager({ page, totalPages, onPage, label }: PagerProps) {
       >
         <ChevronLeft size={14} aria-hidden="true" /> Prev
       </Button>
-      <span className="text-[13px] font-semibold text-text-2">
+      <span className="text-caption font-semibold text-text-2">
         Page {count(page)} of {count(totalPages)}
       </span>
       <Button

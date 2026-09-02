@@ -244,7 +244,7 @@ export function ChartShell<V>({
     if (gaps === 0) return null;
     const noun = gaps === 1 ? `${slotNoun.one} was` : `${slotNoun.many} were`;
     return (
-      <p data-gap-note="" className="text-[13px] text-text-3">
+      <p data-gap-note="" className="text-caption text-text-3">
         {gaps} of {slots.length} {noun} never measured — shown hatched, not as zero.
       </p>
     );
@@ -324,9 +324,9 @@ export function ChartShell<V>({
   function table(): ReactNode {
     return (
       /* NOT `sr-only`. See §1. */
-      <details data-chart-table={id} className="text-[13px] text-text-2">
+      <details data-chart-table={id} className="text-caption text-text-2">
         <summary className="cursor-pointer">Show data table</summary>
-        <table className="mt-2 w-full border-collapse text-[13px]">
+        <table className="mt-2 w-full border-collapse text-caption">
           <caption className="sr-only">{dataTable.caption}</caption>
           <thead>
             <tr className="text-left text-text-2">
@@ -391,12 +391,12 @@ export function ChartShell<V>({
       className={cn('flex flex-col gap-2', className)}
     >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h3 id={titleId} className="text-[15px] font-semibold text-text-1">
+        <h3 id={titleId} className="text-h3 font-semibold text-text-1">
           {title}
         </h3>
         {subtitle}
         {refreshing && (
-          <span data-refreshing="" className="text-[13px] text-text-3">
+          <span data-refreshing="" className="text-caption text-text-3">
             Refreshing&hellip;
           </span>
         )}

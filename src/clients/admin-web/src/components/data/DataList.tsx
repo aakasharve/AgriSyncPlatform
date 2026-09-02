@@ -643,12 +643,12 @@ export function DataList<T>(config: DataListConfig<T>) {
     const selectId = `${id}-card-sort`;
     return (
       <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor={selectId} className="text-[13px] text-text-2">
+        <label htmlFor={selectId} className="text-caption font-semibold text-text-2">
           Sort by
         </label>
         <select
           id={selectId}
-          className="rounded-chip border border-line bg-page px-2 py-1 text-[13px] text-text-1"
+          className="rounded-chip border border-line bg-page px-2 py-1 text-caption font-medium text-text-1"
           value={effectiveSortKey ?? ''}
           onChange={(event) => {
             const key = event.target.value;
@@ -689,7 +689,7 @@ export function DataList<T>(config: DataListConfig<T>) {
   function searchBox(): ReactNode {
     if (!search) return null;
     const inputClass =
-      'w-70 max-w-full rounded-chip border border-line bg-page px-3 py-2 text-[15px] text-text-1 placeholder:text-text-3';
+      'w-70 max-w-full rounded-chip border border-line bg-page px-3.5 py-2.5 text-body text-text-1 transition-colors placeholder:text-text-3 focus:border-blue';
     const inputLabel = search.label ?? `Search ${label}`;
 
     /* CONTRACT 2 — uncontrolled, trimmed, commits on blur AND Enter. API
@@ -810,18 +810,23 @@ export function DataList<T>(config: DataListConfig<T>) {
       <div id={listId} hidden={!listOpen}>
         {listOpen && (
           <div className="flex flex-col gap-4">
-            <div className="overflow-hidden rounded-panel bg-page shadow-surface">
+            <div
+              data-print="panel"
+              className="overflow-hidden rounded-panel bg-page shadow-raised"
+            >
               <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4">
                 {chipText && <FilterChip text={chipText} onClear={clearFacetsToSummary} />}
                 {fixedSort && (
-                  <span className="text-[13px] text-text-3">{fixedSort.because}</span>
+                  <span className="text-caption text-text-3">{fixedSort.because}</span>
                 )}
                 {cardSortControl()}
                 {/* No count beside a no-match block (it would count nothing)
                     and none beside a dead feed (it would describe rows that
                     are not being shown). */}
                 {!showNoMatch && !states.feedDown && (
-                  <span className="ml-auto text-[13px] text-text-2">{rowCountLine()}</span>
+                  <span className="ml-auto text-caption font-semibold text-text-2">
+                    {rowCountLine()}
+                  </span>
                 )}
               </div>
               <div>{body()}</div>

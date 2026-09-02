@@ -34,6 +34,7 @@ export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
+      data-print="panel"
       className={cn(
         'overflow-hidden rounded-panel bg-page p-5 text-text-1 shadow-surface',
         className
@@ -45,13 +46,20 @@ export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
 Card.displayName = 'Card';
 
 /** v3 `.as-panel-head` — a divider under the head is an internal rule, not
- *  an edge, so it does not violate the border-or-shadow rule above. */
+ *  an edge, so it does not violate the border-or-shadow rule above.
+ *
+ *  THE HEAD IS NOW A BAND (2026-09-02). `--color-panel-head` is a brand-tinted
+ *  surface, and running it full-bleed to the panel's edges gives a card a
+ *  legible top and bottom rather than one continuous field of white. It is
+ *  chrome: nothing in a panel head is a reading. Negative margins undo the
+ *  `p-5` the Card contract still owes its two remaining callers, so the band
+ *  reaches the corners without changing what `p-5` means to anyone. */
 export const CardHeader = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
       className={cn(
-        'mb-4 flex items-center justify-between gap-3 border-b border-line pb-4',
+        '-mx-5 -mt-5 mb-5 flex items-center justify-between gap-3 border-b border-line bg-panel-head px-5 py-4',
         className
       )}
       {...props}
@@ -60,12 +68,14 @@ export const CardHeader = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivEleme
 );
 CardHeader.displayName = 'CardHeader';
 
-/** v3 `.as-panel-title` — 15/600. Never tinted (CONTRACT.md §7.7). */
+/** v3 `.as-panel-title` — now 17/600 from the shared scale, where it was a
+ *  hand-written 15 and therefore the same size as the body text underneath
+ *  it. Never tinted (CONTRACT.md §7.7): a panel title is not a verdict. */
 export const CardTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadingElement>>(
   ({ className, ...props }, ref) => (
     <h3
       ref={ref}
-      className={cn('flex items-center gap-2 text-[15px] font-semibold text-text-1', className)}
+      className={cn('flex items-center gap-2 text-h3 font-semibold text-text-1', className)}
       {...props}
     />
   )

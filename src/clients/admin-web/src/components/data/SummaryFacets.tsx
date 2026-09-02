@@ -63,11 +63,11 @@ export function SummaryFacets<T>({
       {(headline || summary) && (
         <div className="flex flex-col gap-1">
           {headline && (
-            <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[20px] font-semibold tracking-[-0.01em] text-text-1">
+            <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-h2 font-bold text-text-1">
               {headline}
             </p>
           )}
-          {summary && <div className="text-[15px] text-text-2">{summary}</div>}
+          {summary && <div className="text-body text-text-2">{summary}</div>}
         </div>
       )}
 
@@ -80,7 +80,7 @@ export function SummaryFacets<T>({
               aria-label={facet.label.replace(/^By /, 'Filter by ')}
               className="flex flex-wrap items-start gap-4"
             >
-              <span className="w-24 flex-none pt-2 text-[13px] font-semibold text-text-2">
+              <span className="w-24 flex-none pt-2.5 text-caption font-bold text-text-2">
                 {facet.label}
               </span>
               <div className="flex min-w-0 flex-1 flex-wrap gap-2">
@@ -109,19 +109,30 @@ export function SummaryFacets<T>({
                          from an option that vanished. */
                       data-empty={empty ? 'true' : undefined}
                       onClick={() => onToggle(facet.key, view.option.value)}
+                      /* A PRESSED FACET NOW HAS A REAL EDGE, not a border the
+                         same colour as its own fill. Blue is §A.4's
+                         "interactive" and a filter is the most interactive
+                         thing on the screen — this is chrome, not a verdict
+                         about the count inside the pill.
+
+                         The `empty` branch is untouched and it is the honesty
+                         one: an option that would find nothing keeps its place,
+                         shows its 0 and stays in the honesty grey. It does NOT
+                         get the bolder treatment, which is the whole reason
+                         the bold treatment means something. */
                       className={cn(
-                        'inline-flex items-baseline gap-2 rounded-full border px-3 py-2 text-left text-[15px]',
+                        'inline-flex items-baseline gap-2 rounded-full border px-3.5 py-2 text-left text-body transition-colors',
                         view.pressed
-                          ? 'border-tint-blue bg-tint-blue font-semibold text-blue'
-                          : 'border-line bg-page hover:bg-wash',
+                          ? 'border-blue bg-tint-blue font-bold text-blue'
+                          : 'border-line bg-page hover:border-blue hover:bg-wash',
                         empty && !view.pressed && 'text-text-3',
                       )}
                     >
                       <span>{view.option.label}</span>
-                      <span className="font-semibold tabular-nums">{count(view.count)}</span>
+                      <span className="font-bold tabular-nums">{count(view.count)}</span>
                       <span
                         className={cn(
-                          'text-[13px] tabular-nums',
+                          'text-caption tabular-nums',
                           view.pressed ? 'text-blue' : empty ? 'text-text-3' : 'text-text-2',
                         )}
                       >
@@ -145,7 +156,7 @@ export function SummaryFacets<T>({
 
       {showAll && (
         <div className="flex flex-wrap items-center gap-3">
-          <span className="text-[13px] text-text-3">
+          <span className="text-caption text-text-3">
             Pick a filter to open just those {noun.many}, or show every one of them.
           </span>
           <button
@@ -154,7 +165,7 @@ export function SummaryFacets<T>({
             aria-controls={showAll.listId}
             aria-expanded={showAll.listOpen}
             onClick={showAll.onClick}
-            className="ml-auto rounded-chip border border-line bg-page px-3 py-2 text-[13px] font-medium text-text-1 hover:bg-wash"
+            className="ml-auto rounded-chip border border-line bg-page px-3.5 py-2 text-caption font-semibold text-text-1 transition-colors hover:border-blue hover:bg-wash"
           >
             {showAll.label}
           </button>
@@ -188,13 +199,17 @@ export interface FilterChipProps {
 
 export function FilterChip({ text, onClear }: FilterChipProps) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-tint-blue py-1 pl-3 pr-1 text-[15px] font-semibold tabular-nums text-blue">
+    /* SOLID, not a tint (2026-09-02). This chip is the only thing on screen
+       that says what is currently being EXCLUDED, and at a 4% tint it read as
+       decoration. White on `--color-blue` is 6.29:1. Blue because a filter is
+       interactive, which is exactly what §A.4 says blue means. */
+    <span className="inline-flex items-center gap-1 rounded-full bg-blue py-1 pl-3.5 pr-1 text-body font-semibold tabular-nums text-page">
       <span className="py-1">{text}</span>
       <button
         type="button"
         onClick={onClear}
         aria-label="Clear this filter and go back to the summary"
-        className="grid h-6 w-6 flex-none place-items-center rounded-full text-blue hover:bg-blue/15"
+        className="grid h-6 w-6 flex-none place-items-center rounded-full text-page hover:bg-blue-press"
       >
         <X size={16} aria-hidden="true" />
       </button>
