@@ -2398,6 +2398,34 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     }
 
     /// <summary>
+    /// Labour V2 R1 Task 8.5 — dedup lookup for the derivation's disturbance
+    /// branch. The event carries no farm or date of its own (EXISTS-join child),
+    /// so the (farm, log-day, reason) identity resolves through the parent
+    /// <c>daily_logs</c> row — the same join shape the RLS policies use.
+    /// AsNoTracking: existence decides a SKIP; nothing returned here is ever
+    /// mutated (contrast <see cref="GetFarmOperationByKeyAsync"/>, whose result
+    /// is tracked because supersession mutates it). Ordered oldest-first so a
+    /// pre-fix day that already holds duplicates answers deterministically.
+    /// </summary>
+    public async Task<DisturbanceEvent?> GetDisturbanceEventForFarmDayAsync(
+        Guid farmId, DateOnly logDate, string reason, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return null;
+        }
+
+        var typedFarmId = new FarmId(farmId);
+        return await db.DisturbanceEvents
+            .AsNoTracking()
+            .Where(e => e.Reason == reason && db.DailyLogs.Any(
+                l => l.Id == e.DailyLogId && l.FarmId == typedFarmId && l.LogDate == logDate))
+            .OrderBy(e => e.CreatedAtUtc)
+            .ThenBy(e => e.Id)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    /// <summary>
     /// Supersession lookup — the CURRENT-version FarmOperation whose
     /// DerivedEventKey matches, or null. <c>DerivedEventKey</c> is mapped as a
     /// WHOLE-PROPERTY value converter (FarmOperationConfiguration L28-30), so we

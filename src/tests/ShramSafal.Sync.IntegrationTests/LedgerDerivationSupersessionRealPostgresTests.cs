@@ -58,7 +58,10 @@ namespace ShramSafal.Sync.IntegrationTests;
 /// <c>application_input_items</c> (via <c>farm_operations</c>);
 /// <c>irrigation_entries</c> / <c>labour_assignments</c> /
 /// <c>machinery_usages</c> / <c>observation_events</c> /
-/// <c>disturbance_events</c> (via <c>daily_logs</c>).</item>
+/// <c>disturbance_events</c> (via <c>daily_logs</c>). The disturbance is the
+/// one family with its own farm-day dedup (Labour V2 R1 Task 8.5): the
+/// re-confirm restates the same (farm, log-day, reason), so it holds ONE
+/// live row where the per-log children hold one per confirm.</item>
 /// <item>A FORCED derivation failure does NOT roll back the log (non-blocking on
 /// real Postgres — the SAVEPOINT branch of
 /// <c>CreateDailyLogHandler.PersistSideCarAsync</c> un-aborts the ambient tx and
@@ -365,7 +368,13 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
         labour.Should().Be(2, "(iii) labour_assignments — one per confirmed log");
         machinery.Should().Be(2, "(iii) machinery_usages — one per confirmed log");
         observations.Should().Be(2, "(iii) observation_events — one per confirmed log");
-        disturbance.Should().Be(2, "(iii) disturbance_events — one per confirmed log");
+        // Labour V2 R1 Task 8.5 — the re-confirm restates the SAME (farm,
+        // log-day, reason), which is exactly the duplicate the disturbance
+        // dedup closes (LedgerDerivationService, farm-day lookup-before-write):
+        // the second derivation SKIPS, so the day holds ONE live disturbance.
+        // This count was 2 before Task 8.5 — that was the defect, not the truth.
+        disturbance.Should().Be(1,
+            "(iii) disturbance_events — same farm-day + same reason dedups to ONE live row (Task 8.5), unlike the per-log children above");
 
         // Real observed counts for the F2 evidence record (paste-into-report).
         output.WriteLine("[EVIDENCE] === F2 supersession proof (real Npgsql :5433) ===");
@@ -376,7 +385,7 @@ public sealed class LedgerDerivationSupersessionRealPostgresTests(Xunit.Abstract
         output.WriteLine($"[EVIDENCE] application_input_items on current op      = {inputItems} (expect 2)");
         output.WriteLine($"[EVIDENCE] irrigation_entries / labour_assignments    = {irrigation} / {labour} (expect 2/2)");
         output.WriteLine($"[EVIDENCE] machinery_usages / observation_events      = {machinery} / {observations} (expect 2/2)");
-        output.WriteLine($"[EVIDENCE] disturbance_events                         = {disturbance} (expect 2)");
+        output.WriteLine($"[EVIDENCE] disturbance_events                         = {disturbance} (expect 1 — farm-day dedup, Task 8.5)");
         output.WriteLine("[EVIDENCE] no 23505 raised across two confirms with same SourceAiJobId, distinct clientRequestId");
     }
 

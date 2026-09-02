@@ -752,6 +752,25 @@ public interface IShramSafalRepository
         => Task.FromResult<FarmOperation?>(null);
 
     /// <summary>
+    /// Labour V2 R1 Task 8.5 — the disturbance analogue of
+    /// <see cref="GetFarmOperationByKeyAsync"/>: the live
+    /// <see cref="DisturbanceEvent"/> for one derived identity, or <c>null</c>.
+    /// A disturbance's derived identity is (farm, log-day, reason) — the DAY,
+    /// not the parse, because the labour door and the regular door produce two
+    /// logs (two source ids) for one farm-day and "पाऊस आला" through both doors
+    /// is one fact. Every component is already a persisted column (farm and day
+    /// on the parent <c>daily_logs</c> row, reason on the event), so unlike
+    /// FarmOperation no key column is stored — production resolves the identity
+    /// with a join through <c>daily_log_id</c>. <paramref name="reason"/> is
+    /// compared against the entity-stored form (<see cref="DisturbanceEvent"/>
+    /// trims on Create), so callers pass it trimmed. Default impl returns
+    /// <c>null</c> so test doubles compile.
+    /// </summary>
+    Task<DisturbanceEvent?> GetDisturbanceEventForFarmDayAsync(
+        Guid farmId, DateOnly logDate, string reason, CancellationToken ct = default)
+        => Task.FromResult<DisturbanceEvent?>(null);
+
+    /// <summary>
     /// RoutineMemory upsert lookup — the existing <see cref="RoutinePattern"/>
     /// for (<paramref name="farmId"/>, <paramref name="plotId"/>,
     /// <paramref name="operationType"/>) or <c>null</c> on first sighting.

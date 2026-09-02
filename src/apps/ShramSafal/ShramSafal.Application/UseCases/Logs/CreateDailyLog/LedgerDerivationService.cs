@@ -433,21 +433,61 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
             var reason = ReadString(disturbance, "reason");
             if (!string.IsNullOrWhiteSpace(reason))
             {
-                var evt = DisturbanceEvent.Create(
-                    id: ids.New(),
-                    dailyLogId: log.Id,
-                    scope: MapDisturbanceScope(ReadString(disturbance, "scope")),
-                    reason: reason!,
-                    severity: MapDisturbanceSeverity(ReadString(disturbance, "severity")),
-                    blockedSegmentsJson: ReadRawArray(disturbance, "blockedSegments"),
-                    weatherEventId: ReadGuid(disturbance, "weatherEventId"),
-                    createdAtUtc: now,
-                    cause: MapDisturbanceCause(ReadString(disturbance, "cause")),
-                    affectedScope: MapAffectedScope(ReadString(disturbance, "affectedScope")),
-                    impact: ReadString(disturbance, "impact"),
-                    resolvedStatus: MapResolvedStatus(ReadString(disturbance, "resolvedStatus")));
-                await repository.AddDisturbanceEventAsync(evt, ct);
-                children++;
+                // Labour V2 R1 Task 8.5 — the same dedup discipline the inputs
+                // branch has above (DerivedEventKey lookup-before-write), adapted
+                // to this child's shape.
+                //
+                // FarmOperation stores a hashed key because its identity span (the
+                // raw transcript text) is not a column. A disturbance's derived
+                // identity is (farm, log-day, reason) — and every component is
+                // already persisted: farm and day on the parent daily_logs row,
+                // the reason on the event itself. So the lookup-before-write idiom
+                // carries over with no key column and no migration: the query IS
+                // the key.
+                //
+                // The identity is the DAY, not the parse or the log, deliberately.
+                // The labour door (attendance-only draft — Task 6 preserves its
+                // disturbance) and the regular door produce TWO logs, hence two
+                // source ids, for one farm-day; "पाऊस आला" recorded through both
+                // doors is one fact, not two. A DIFFERENT reason is a different
+                // identity and stays a second live event: dedup collapses
+                // identical derivations, never distinct facts.
+                //
+                // On a hit we SKIP where FarmOperation SUPERSEDES — not an
+                // oversight. This EXISTS-join child has no version chain (no
+                // is_current_version / superseded_by), so "mark old superseded,
+                // insert new" is unrepresentable, and mutating or deleting the
+                // OTHER door's child would falsify its lineage (daily_log_id
+                // naming log A with content from log B). The half of the
+                // FarmOperation semantics that guards day truth — never a second
+                // live row for one identity — is exactly what skip preserves, and
+                // the identity contains the entire load-bearing free-text, so a
+                // skipped second arrival loses no farmer words.
+                //
+                // The failure mode stays LOUD: no catch here. A thrown lookup or
+                // write error propagates to PersistSideCarAsync's savepoint
+                // isolation exactly as every other derivation write's does.
+                var trimmedReason = reason!.Trim(); // the entity-stored form (DisturbanceEvent.Create trims)
+                var existingDisturbance = await repository.GetDisturbanceEventForFarmDayAsync(
+                    log.FarmId.Value, log.LogDate, trimmedReason, ct);
+                if (existingDisturbance is null)
+                {
+                    var evt = DisturbanceEvent.Create(
+                        id: ids.New(),
+                        dailyLogId: log.Id,
+                        scope: MapDisturbanceScope(ReadString(disturbance, "scope")),
+                        reason: reason!,
+                        severity: MapDisturbanceSeverity(ReadString(disturbance, "severity")),
+                        blockedSegmentsJson: ReadRawArray(disturbance, "blockedSegments"),
+                        weatherEventId: ReadGuid(disturbance, "weatherEventId"),
+                        createdAtUtc: now,
+                        cause: MapDisturbanceCause(ReadString(disturbance, "cause")),
+                        affectedScope: MapAffectedScope(ReadString(disturbance, "affectedScope")),
+                        impact: ReadString(disturbance, "impact"),
+                        resolvedStatus: MapResolvedStatus(ReadString(disturbance, "resolvedStatus")));
+                    await repository.AddDisturbanceEventAsync(evt, ct);
+                    children++;
+                }
             }
         }
 
