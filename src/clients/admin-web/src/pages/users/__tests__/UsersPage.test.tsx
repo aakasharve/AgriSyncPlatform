@@ -333,7 +333,7 @@ describe('a sign-in that never happened and a sign-in nobody wrote down are diff
 
     /* And the screen states the consequence in words, not only in a tooltip. */
     expect(
-      screen.getByText(/An account that has never been used and an account whose last use we failed to write down/),
+      screen.getByText(/An account nobody has ever used and an account whose last use we\s+failed to write down/),
     ).toBeInTheDocument();
 
     /* The expanded row must not close with v3's "Has never signed in." */
@@ -450,7 +450,7 @@ describe('the phone column renders what the server sends, and never the marker',
        `GetUsersListHandler` takes no `IResponseRedactor`. Four admin endpoints
        checked now, four that redact nothing. */
     expect(
-      screen.getByText(/returns them in full to every admin who can open the screen/),
+      screen.getByText(/Every admin who can open this screen sees complete numbers/),
     ).toBeInTheDocument();
   });
 });

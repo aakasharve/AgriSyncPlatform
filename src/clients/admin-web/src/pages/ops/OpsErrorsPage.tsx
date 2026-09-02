@@ -441,10 +441,11 @@ export default function OpsErrorsPage() {
               (`AdminEndpoints.cs:109-117`) — the fifth admin endpoint checked
               and the fifth that is platform-wide. The org in the query key
               separates the cache; it does not scope the data. */}
-          <p className="mt-1 text-body text-text-2">
-            Every call the API failed or refused, every write that succeeded but took over two
-            seconds, and every error the farmer&rsquo;s own app reported — platform-wide, newest
-            first. Three different things, and the Type column is what tells them apart.
+          <p className="mt-1 max-w-[var(--text-measure)] text-body text-text-2">
+            Three different things, newest first, across the whole platform: requests the server
+            <b> failed or refused</b>, requests that <b>worked but took more than two seconds</b>,
+            and errors the <b>farmer&rsquo;s own app</b> reported. The Type column is what tells
+            them apart &mdash; a slow request is not a broken one.
           </p>
         </div>
         <FreshnessChip source={data?.meta?.source ?? 'live'} lastRefreshed={lastRefreshed} />
@@ -589,38 +590,40 @@ export default function OpsErrorsPage() {
 
       <StandingNote
         title="What this screen does not carry"
+        summary="What actually went wrong, and who it happened to. This list can say a request failed and when — not what the farmer lost."
         why={
           <>
             <p>
-              <b>What the server actually said is not on the row.</b> The message, the error code,
-              which app build the farmer was on, and whether their work survived are all being
-              built by the error-capture work and are not in this codebase yet. Until they land,
-              this list can tell an operator that a call failed and when — not what the person on
-              the other end lost. Those columns and the row detail that holds them are the blocked
-              part of this screen.
+              <b>What actually went wrong is not on the row.</b> The message, the error code, which
+              version of the app the farmer was on, and whether their work survived &mdash; none of
+              it reaches this screen yet. It is being built by separate work that has not landed.
+              Until it does, this list can tell you <b>that</b> something failed and <b>when</b>,
+              but not what the person at the other end lost.
             </p>
-            <p className="mt-2">
-              <b>Almost nothing here can be traced to a farm.</b> The farm is taken from a claim on
-              the signed-in token, and no token this platform issues carries one, so every call
-              recorded by the server lands unattributed. Only an error the farmer&rsquo;s own app
-              reported can name a farm — and even then it is an identifier, never a name: no farm
-              name comes back on this feed at all.
+            <p>
+              <b>Almost nothing here can be traced back to a farm.</b> To name the farm, the error
+              record would have to carry the farm&rsquo;s identifier, and the sign-in credentials
+              this platform issues do not include one &mdash; so nearly every error the server
+              records is anonymous. Only errors reported by the farmer&rsquo;s own app can name a
+              farm, and even then it is an id rather than a name: no farm name comes back here at
+              all.
             </p>
-            <p className="mt-2">
-              <b>There is no error rate.</b> Nothing counts total requests — the middleware writes
-              a row only when a call fails, is refused or runs slow — so there is no denominator,
-              and any percentage on this screen would be invented.
+            <p>
+              <b>There is no error rate, and there cannot be one.</b> Nothing counts how many
+              requests <b>succeeded</b> &mdash; a record is only written when something fails, is
+              refused, or runs slow. Without the total there is nothing to divide by, so any
+              percentage on this screen would be invented.
             </p>
-            <p className="mt-2">
-              <b>One kind of failure is missing entirely.</b> When a batch write answers 200 and
-              refuses some of the work inside it, that is recorded under its own event type, and
-              this feed reads three types that do not include it. A farmer&rsquo;s mutation dropped
-              that way is counted somewhere and shown nowhere.
+            <p>
+              <b>One kind of failure is missing altogether.</b> When the app sends up a batch of the
+              farmer&rsquo;s work and the server accepts some of it and rejects the rest, the
+              rejected part is filed under a category this screen does not read. That work is
+              counted somewhere and shown nowhere.
             </p>
-            <p className="mt-2">
-              <b>This list is not scoped to an organisation.</b> The endpoint takes no
-              organisation and returns every recorded call on the platform, so switching
-              organisation in the top bar does not change what is on this screen.
+            <p>
+              <b>This list covers the whole platform.</b> The server is never asked about an
+              organisation here, so switching organisation in the top bar changes nothing on this
+              screen.
             </p>
           </>
         }

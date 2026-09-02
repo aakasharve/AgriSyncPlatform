@@ -346,10 +346,12 @@ export default function OpsVoicePage() {
           </h1>
           {/* Property (1) and property (6), in the two sentences that stop
               every figure below from being read as something it is not. */}
-          <p className="mt-1 text-body text-text-2">
-            Every AI call the platform made, by UTC date &mdash; platform-wide. It is not only
-            voice: receipt photos and patti photos are the same kind of call and are counted here
-            too, because the feed records the call and not what it was for.
+          <p className="mt-1 max-w-[var(--text-measure)] text-body text-text-2">
+            Every AI request the platform made, day by day, across all farms. <b>It is not only
+            voice.</b> A photographed receipt and a photographed patti are the same kind of request
+            and are counted here too &mdash; what gets recorded is that an AI request happened, not
+            what it was for. Days are counted in UTC, so a day here runs from 5:30am to 5:30am
+            India time.
           </p>
         </div>
         <FreshnessChip
@@ -530,35 +532,37 @@ export default function OpsVoicePage() {
 
       <StandingNote
         title="What this screen cannot tell you"
+        summary="Which AI service answered, and whether the answers were any good — only whether they completed."
         why={
           <>
             <p>
-              <b>Which provider served which call.</b> Every call records the provider that
-              answered it, but this feed groups by date alone and carries no provider column, so
-              there is no breakdown to show and no per-provider latency or failure rate. Adding it
-              is a change to the query behind this endpoint, not to this screen.
+              <b>Which AI service answered which request.</b> Each request does record which service
+              handled it, but the server groups these figures by date alone, so there is no
+              per-service breakdown, speed or failure rate to show. Getting one means changing what
+              the server sends, not this screen.
             </p>
-            <p className="mt-2">
-              <b>Whether a call that succeeded was any good.</b> A failure is a call that did not
-              complete. Nothing here measures whether a completed call understood the farmer, and a
-              parse that returned confident nonsense is counted as a success.
+            <p>
+              <b>Whether a request that succeeded was any good.</b> &ldquo;Failed&rdquo; here means
+              the request did not finish. Nothing on this screen measures whether the AI actually
+              understood the farmer &mdash; a confident, completely wrong answer counts as a
+              success.
             </p>
-            <p className="mt-2">
-              <b>Whether a quiet date was quiet.</b> A date with no calls produces no row at all,
-              which is the same thing the feed sends when nothing was recorded. Those dates are
-              drawn as holes and left out of every figure &mdash; they are not zeros, and they are
-              not proof of a zero.
+            <p>
+              <b>Whether a quiet day was really quiet.</b> A day with no requests produces no row at
+              all, which is exactly what the server also sends when nothing was recorded. Those days
+              are drawn as <b>holes</b> in the chart and left out of every average. They are not
+              zeros, and they are not proof of a zero.
             </p>
-            <p className="mt-2">
-              <b>Whether an empty answer means anything.</b> When this endpoint&rsquo;s own query
-              fails it returns an empty list with a success code, so a database problem arrives
-              looking like a silent fortnight. A failure this screen CAN see &mdash; a broken
-              request, a timeout, a refused permission &mdash; is always named as one.
+            <p>
+              <b>Whether an empty answer means anything.</b> If the server&rsquo;s own lookup fails
+              it replies with an empty list and calls it a success, so a database problem arrives
+              looking like a quiet fortnight. Failures this screen <b>can</b> see are always named
+              as failures.
             </p>
-            <p className="mt-2">
-              <b>Anything about one organisation.</b> This endpoint takes only the number of days;
-              every figure is platform-wide. Dates are UTC dates, so a day here begins at 05:30 in
-              India and ends at 05:30 the next morning.
+            <p>
+              <b>Anything about one organisation.</b> The server is only asked for a number of days,
+              never for an organisation, so every figure here covers the whole platform. Switching
+              organisation in the top bar changes nothing on this screen.
             </p>
           </>
         }

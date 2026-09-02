@@ -384,9 +384,9 @@ export default function UsersPage() {
               search, ct)` takes no org parameter (`IAdminMisRepository.cs:16`),
               exactly like the three MIS feeds Task 16 corrected — the org in
               the query key separates the cache, it does not scope the data. */}
-          <p className="mt-1 text-body text-text-2">
-            Every account this feed returns, platform-wide. The phone number is the account: it is
-            the login identity, not a contact detail.
+          <p className="mt-1 max-w-[var(--text-measure)] text-body text-text-2">
+            Every account on the platform. <b>The phone number is the account</b> &mdash; it is how
+            somebody signs in, not a contact number we happen to hold.
           </p>
         </div>
         <FreshnessChip source={data?.meta?.source ?? 'live'} lastRefreshed={lastRefreshed} />
@@ -489,32 +489,33 @@ export default function UsersPage() {
 
       <StandingNote
         title="What this screen does not carry"
+        summary="Whether anyone has ever signed in, what they are allowed to use, and it shows every phone number in full."
         why={
           <>
             <p>
-              <b>Whether a person has ever signed in is not recorded.</b> There is no last-login
-              column on an account, so every sign-in cell reads &ldquo;not measured&rdquo;. An
-              account that has never been used and an account whose last use we failed to write down
-              are different things, and this console currently cannot tell you which one you are
-              looking at.
+              <b>Whether a person has ever signed in is not recorded anywhere.</b> Accounts have no
+              last-sign-in date, which is why every one of those cells says &ldquo;not
+              measured&rdquo;. An account nobody has ever used and an account whose last use we
+              failed to write down are different things, and this console cannot tell you which one
+              you are looking at.
             </p>
-            <p className="mt-2">
-              <b>There is no email and no app list.</b> An account is a phone number and a one-time
-              code; no email is stored anywhere. The app grants are real and live in
-              <code> public.memberships</code>, but this feed never reads them and sends an empty
-              list on every row — which is why neither is a column here. Role is a property of a
-              grant rather than of a person, so there is no role filter either.
+            <p>
+              <b>There is no email address, and no list of what each person can use.</b> An account
+              is a phone number and a one-time code &mdash; no email is stored at all. What a person
+              is allowed to use <b>is</b> recorded, elsewhere, but this screen is never sent it and
+              receives an empty list on every row. That is also why there is no role filter: a role
+              belongs to a permission, not to a person.
             </p>
-            <p className="mt-2">
-              <b>The phone numbers are not masked by the server.</b> This endpoint returns them in
-              full to every admin who can open the screen. The screen renders whatever it is sent
-              and will show a partly-hidden number the moment the server starts sending one, but the
-              hiding has to happen on the server, and today it does not.
+            <p>
+              🛑 <b>The phone numbers are shown in full, and that is the server&rsquo;s doing.</b>{' '}
+              Every admin who can open this screen sees complete numbers. This screen shows whatever
+              it is sent, and will show a partly-hidden number the moment the server starts sending
+              one &mdash; but the hiding has to happen on the server, and today it does not.
             </p>
-            <p className="mt-2">
-              <b>This list is not scoped to an organisation.</b> The endpoint takes no organisation
-              and returns every account on the platform, so switching organisation in the top bar
-              does not change who is on this list.
+            <p>
+              <b>This list covers the whole platform.</b> The server is never asked about an
+              organisation, so switching organisation in the top bar does not change who is on this
+              list.
             </p>
           </>
         }

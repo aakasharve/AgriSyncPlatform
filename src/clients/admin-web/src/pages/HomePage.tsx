@@ -529,7 +529,7 @@ export default function HomePage() {
         value: null,
         state: 'unmeasured',
         caption: notYours(ModuleKeys.OpsLive),
-        note: 'The full paginated list lives on API Errors, behind its own grant.',
+        note: 'The full list, page by page, is on the API Errors screen — if your account is allowed to open it.',
       }
     : {
         label: 'API errors · last 2 hours',
@@ -541,7 +541,7 @@ export default function HomePage() {
             ? `at least — the server sent its ${fmt.num(OPS_HEALTH_RECENT_CAP)}-row maximum, read at ${opsCheckedAt}`
             : `out of ${fmt.num(recent.length)} events read at ${opsCheckedAt}`
           : 'the feed returned no events at all, which is also what it returns when the query fails',
-        note: 'Two hours, not twenty-four — that is the window this endpoint reads. It also returns api.slow and client.error, which are not API errors and are not counted here.',
+        note: 'The last TWO hours, not the last twenty-four. It also leaves out requests that merely ran slow and errors the farmer’s own app reported — those are on the API Errors screen.',
       };
 
   /* The five-zero rescue Task 20 established: the voice query's catch block
@@ -594,7 +594,7 @@ export default function HomePage() {
     value: null,
     state: 'unmeasured',
     caption: 'there is no endpoint behind this tile',
-    note: 'Nothing in the admin API counts logs in a day. WVFD counts verified farm-days per week, which is a different measurement over a different window. This is an absence, not a zero.',
+    note: 'Nothing on the server counts how many logs were recorded in a day. The nearest thing we have counts confirmed days per week, which is a different measurement over a different period. This is an absence, not a zero.',
   };
 
   /* ── Business ────────────────────────────────────────────────────────── */
@@ -614,7 +614,7 @@ export default function HomePage() {
         value: null,
         state: 'unmeasured',
         caption: notYours(ModuleKeys.MetricsNsm),
-        note: 'The North Star metric and its twelve-week history are on WVFD, behind that grant.',
+        note: 'This number and its twelve-week history are on the North Star screen — if your account is allowed to open it.',
       }
     : {
         label: 'WVFD',
@@ -629,7 +629,7 @@ export default function HomePage() {
             : goalWvfd !== null
               ? `goal ${fmt.num(goalWvfd, 1)} — a constant in the API, not a setting`
               : `newest of ${fmt.num(wvfdWeeks.length)} weeks read`,
-        note: 'The newest week is always partial, so this figure climbs through the week and falls every Monday. Its denominator is farms that LOGGED, so it also rises when the least engaged farms leave.',
+        note: 'The newest week is always half-finished, so this figure climbs all week and drops every Monday. It is averaged only over farms that recorded something, so it also goes UP when the least engaged farms stop using the app.',
       };
 
   const farmsList = farms.data?.data;
@@ -645,7 +645,7 @@ export default function HomePage() {
         value: null,
         state: 'unmeasured',
         caption: notYours(ModuleKeys.FarmsList),
-        note: 'The list this figure counts is on All Farms, behind that grant.',
+        note: 'The list this figure counts is on the All Farms screen — if your account is allowed to open it.',
       }
     : {
         label: 'Farms on record',
@@ -655,7 +655,7 @@ export default function HomePage() {
         caption: farmsAnswered
           ? 'every farm row, counted by the server'
           : 'the feed answered with no rows and a count of zero, which is also its failure path',
-        note: 'NOT "active farms": the count has no activity filter, no status filter and no organisation filter — this endpoint takes no organisation at all, so the figure is platform-wide whichever org is selected.',
+        note: 'This is NOT "active farms". It counts every farm ever created: there is no activity filter, no status filter and no organisation filter. It is the same number whichever organisation you have selected.',
       };
 
   const retentionTile: Tile = {
@@ -663,7 +663,7 @@ export default function HomePage() {
     value: null,
     state: 'unmeasured',
     caption: 'there is no endpoint behind this tile',
-    note: 'Never built. The entitlement for it exists — ModuleKey "metrics.retention" is declared in the domain — and it gates nothing, because there is nothing to gate.',
+    note: 'Never built. A permission for it does exist — metrics.retention — and it guards nothing, because there is nothing behind it to guard.',
   };
 
   const mrrTile: Tile = {
@@ -671,7 +671,7 @@ export default function HomePage() {
     value: null,
     state: 'unmeasured',
     caption: 'there is no endpoint behind this tile',
-    note: 'Never built, and not computable from what is stored: a subscription record carries a plan code, a status and two dates. It carries no amount and no currency.',
+    note: 'Never built, and it cannot be worked out from what we store. A subscription record holds a plan name, a status and two dates. It holds no amount and no currency, so there is nothing to add up.',
   };
 
   /* ── the call list ───────────────────────────────────────────────────── */
@@ -750,10 +750,12 @@ export default function HomePage() {
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
           <h1 className="text-h1 font-bold text-text-1">Ops Now</h1>
-          <p className="mt-1 text-body text-text-2">
-            What the platform is doing right now, who needs a person today, and what it cannot tell
-            you. Four of the eight figures below have no source at all and say so; none of the
-            others is scoped to one organisation, because none of these endpoints takes one.
+          <p className="mt-1 max-w-[var(--text-measure)] text-body text-text-2">
+            What the platform is doing right now, who needs a phone call today, and what none of it
+            can tell you. <b>Four of the eight figures below have nothing behind them at all</b>
+            &mdash; they say so rather than showing a zero. The other four cover the whole platform:
+            the server is never asked about one organisation here, so switching organisation in the
+            top bar changes nothing on this page.
           </p>
         </div>
       </div>
@@ -816,16 +818,18 @@ export default function HomePage() {
 
       {noWatchlistReadable ? (
         <p className="rounded-panel bg-tint-grey px-5 py-4 text-body text-text-2">
-          This list merges the suffering watchlist and the silent-churn watchlist. Your role
-          includes neither {ModuleKeys.FarmsSuffering} nor {ModuleKeys.FarmsSilentChurn}, so neither
-          feed was requested. Nothing here is a count of zero.
+          This list merges the two watchlists &mdash; farms that are struggling, and farms that
+          have gone quiet. Your account is allowed to see neither of them, so neither was even
+          requested. <b>This is not a count of zero</b>; it is a screen you cannot see.
+          The permissions you would need are {ModuleKeys.FarmsSuffering} and{' '}
+          {ModuleKeys.FarmsSilentChurn}.
         </p>
       ) : (
         <>
           <DataList<CallRow>
             id="should-call-today"
             label="Farms a person should call today"
-            caption="Every farm either watchlist flagged, once each, carrying every reason it was flagged, the events counted against it, the number of whole silent weeks and the date of its last log. Select a row to open its detail."
+            caption="Every farm flagged by either watchlist, listed once, with every reason it was flagged, the events counted against it, how many whole weeks it has been quiet, and the date it last recorded anything. Select a row to see the detail."
             noun={{ one: 'farm', many: 'farms' }}
             rows={call.rows}
             rowKey={(row) => row.farmId}
@@ -840,7 +844,7 @@ export default function HomePage() {
               key: 'why',
               dir: 'desc',
               because:
-                'Ordered by how many watchlists flagged the farm, then by the longest silence, then by name. It is deliberately NOT ordered by the event count — see the note below.',
+                'Sorted by how many problems a farm has, then by the longest silence, then by name. Deliberately not sorted by the events column — see the note under the table.',
             }}
             states={{
               isLoading: callLoading,

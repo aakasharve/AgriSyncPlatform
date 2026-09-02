@@ -863,10 +863,11 @@ export default function OpsLivePage() {
             <Activity size={20} strokeWidth={2} aria-hidden="true" className="text-text-2" />
             Live Health
           </h1>
-          <p className="mt-1 text-body text-text-2">
-            The two rules this endpoint really reads, the AI pipeline over the last 24 hours, and
-            the state of every feed behind them &mdash; platform-wide. This endpoint takes no
-            organisation, so nothing here is scoped to one.
+          <p className="mt-1 max-w-[var(--text-measure)] text-body text-text-2">
+            The two automatic checks the server actually runs, how the AI has behaved over the last
+            24 hours, and whether each of the sources behind those numbers answered. This covers the
+            whole platform: the server is never asked about one organisation here, so switching
+            organisation in the top bar changes nothing on this screen.
           </p>
         </div>
         {/* A chip may only state an age it actually has, and the age it states
@@ -1141,34 +1142,37 @@ export default function OpsLivePage() {
 
           <StandingNote
             title="What this screen cannot tell you"
+            summary="How old the two green verdicts are, what the other eight checks found, and which farm most errors belong to."
             why={
               <>
                 <p>
-                  <b>How old the R9 and R10 verdicts are.</b> Both are read from materialized views
-                  rebuilt once a day at 02:00 UTC, and this endpoint sends the verdict without the
-                  rebuild time. CLEAR means the rule found nothing when the view was last built.
+                  <b>How old the R9 and R10 verdicts are.</b> Both come from summaries that are
+                  rebuilt once a day, at about 7:30am India time, and the server sends the verdict
+                  without saying when the rebuild happened. So <b>CLEAR</b> means &ldquo;this check
+                  found nothing the last time it ran&rdquo;, not &ldquo;nothing is wrong right
+                  now&rdquo;.
                 </p>
-                <p className="mt-2">
-                  <b>Anything about R1 to R8.</b> Eight more detector views exist and a daily job
-                  reads them; this endpoint does not. NOT CHECKED is the state of this screen&rsquo;s
-                  knowledge, not a claim that nothing ran.
+                <p>
+                  <b>Anything about checks R1 to R8.</b> Eight more checks exist and a nightly job
+                  runs them &mdash; but this screen is never told the result.{' '}
+                  <b>NOT CHECKED</b> describes what this screen knows, not whether the check ran.
                 </p>
-                <p className="mt-2">
-                  <b>Whether an empty table means anything.</b> Four separate queries behind this
-                  one request answer their own database failures with an empty or zero result and a
-                  success code, so a broken query and a quiet window arrive looking the same. A
-                  failure this screen CAN see &mdash; a refused permission, a timeout, a broken
-                  request &mdash; is always named as one.
+                <p>
+                  <b>Whether an empty table means anything.</b> Four separate lookups sit behind this
+                  one page, and each of them answers its own database failure with an empty or zero
+                  result and calls it a success. So a broken lookup and a genuinely quiet hour
+                  arrive looking identical. Failures this screen <b>can</b> see &mdash; a refused
+                  permission, a timeout, a request that broke &mdash; are always named as failures.
                 </p>
-                <p className="mt-2">
-                  <b>Which farm most errors belong to.</b> Attribution needs a farm id on the event
-                  row and almost nothing the server emits carries one, so the watchlist above sees a
-                  narrow slice of what farmers actually hit.
+                <p>
+                  <b>Which farm most errors belong to.</b> Tying an error to a farm needs the farm&rsquo;s
+                  identifier on the error record, and almost nothing the server writes carries one.
+                  So the watchlist above sees only a narrow slice of what farmers actually hit.
                 </p>
-                <p className="mt-2">
-                  <b>Anything about one organisation.</b> This endpoint takes no parameters at all;
-                  every figure is platform-wide. The organisation in the address bar scopes the
-                  cache, not the data.
+                <p>
+                  <b>Anything about one organisation.</b> The server is asked nothing at all here,
+                  so every figure covers the whole platform. Switching organisation in the top bar
+                  changes nothing on this screen.
                 </p>
               </>
             }

@@ -882,27 +882,27 @@ export default function FarmerHealthPage() {
 
       <StandingNote
         title="What this screen cannot tell you"
+        summary="How old these scores are, whether a low score means struggling or simply absent, and it shows farmer phone numbers in full."
         why={
           <>
             <p>
-              <b>How old any of it is.</b> These two endpoints are the only admin endpoints that
-              return no response envelope, so there is no <code>lastRefreshed</code> to read and no
-              freshness chip to draw. The scores are rebuilt nightly at best.
+              <b>How old any of this is.</b> Every other screen&rsquo;s answer arrives with a
+              timestamp on it. These two do not, so there is no freshness badge to show. The scores
+              are rebuilt overnight at best.
             </p>
-            <p className="mt-2">
-              <b>Whether a farmer is struggling or absent.</b> The score view cross-joins every farm
-              with every week and fills missing inputs with zeros, so an inactive farm and a failing
-              farm produce the same low number. The scorer computes an{' '}
-              <code>insufficient_data</code> flag for exactly this, and the cohort payload does not
-              carry it.
+            <p>
+              <b>Whether a low score means struggling or simply absent.</b> The scoring treats a farm
+              that did nothing as a farm that scored zero on everything, so a farm in trouble and a
+              farm nobody is using look identical from here. The scoring system does work out which
+              is which &mdash; it just does not send that on to this screen.
             </p>
-            <p className="mt-2">
-              <b>Who the farmer is, safely.</b> The handler calls the redactor, but the redactor
-              does not recurse into collections and no role&rsquo;s policy names{' '}
-              <code>farmerName</code>, so names arrive unmasked for every admin who can open this
-              screen. This screen renders them redaction-tolerantly &mdash; a withheld name shows
-              the farm id and never a marker &mdash; but that is a client that is ready, not a
-              server that is masking.
+            <p>
+              🛑 <b>Farmer names and numbers arrive unhidden.</b> The server has a mechanism for
+              hiding personal details, and for this screen it is not switched on: every admin who
+              can open this page sees the real names. This screen is <b>ready</b> for hidden names
+              &mdash; if the server starts withholding one, the farm&rsquo;s id is shown instead and
+              never a placeholder &mdash; but a client that is ready is not a server that is
+              hiding.
             </p>
           </>
         }

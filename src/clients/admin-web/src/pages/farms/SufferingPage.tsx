@@ -461,11 +461,11 @@ export default function SufferingPage() {
               it never said what repeated meant. This is the only place either
               watchlist's rule is stated on screen (A57), so it is preserved —
               restated true, and now naming the cap. */}
-          <p className="mt-1 text-body text-text-2">
-            Farms with three or more failed events in the last seven days &mdash; a server error, an
-            error in the farmer&rsquo;s own app, or an AI call that failed. The server sends the 50
-            with the most events and no more, so this is a worklist rather than a total. Select a
-            row to open its detail.
+          <p className="mt-1 max-w-[var(--text-measure)] text-body text-text-2">
+            Farms where <b>three or more things have failed in the last seven days</b> &mdash;
+            something broke on our servers, something broke in the farmer&rsquo;s own app, or an AI
+            request did not complete. The server sends 50 farms and no more, so read this as
+            today&rsquo;s call list rather than a total. Select a row to see the detail.
           </p>
         </div>
         {/* Reported as the server reports it, including the source label. The
@@ -543,31 +543,33 @@ export default function SufferingPage() {
 
       <StandingNote
         title="What this screen cannot tell you"
+        summary="Whether anything was fixed, and how to reach the farmer. Neither is recorded, and these rows are refreshed only overnight."
         why={
           <>
             <p>
-              <b>Nothing in this product marks an error resolved.</b> A farm leaves this list when
-              its events age out of the seven-day window &mdash; not when somebody fixes it &mdash;
-              so a farm you helped yesterday is still here today, and a farm that is quiet may
-              simply have stopped using the app. Every expanded row therefore reads
+              <b>Nothing in this product records that a problem was fixed.</b> A farm drops off this
+              list when its failures get older than seven days &mdash; not when somebody sorts them
+              out. So a farm you helped yesterday is still here today, and a farm that has gone
+              quiet may simply have stopped using the app. That is why every opened row says
               &ldquo;Resolved &mdash; not measured&rdquo;.
             </p>
-            <p className="mt-2">
-              <b>An empty list here is not proof that nothing broke.</b> When this endpoint&rsquo;s
-              own query fails it answers with an empty list and a success code rather than an error,
-              so a database problem and a genuinely quiet week arrive looking the same. A failure
-              this screen CAN see &mdash; a broken request, a timeout, a refused permission &mdash;
-              is always named as one.
+            <p>
+              <b>An empty list is not proof that nothing broke.</b> If the server&rsquo;s own lookup
+              fails, it replies with an empty list and calls it a success, so a database problem and
+              a genuinely quiet week arrive looking identical. Failures this screen <b>can</b> see
+              &mdash; a request that broke, one that timed out, one that was refused &mdash; are
+              always named as failures.
             </p>
-            <p className="mt-2">
-              <b>The freshness chip is the age of the request, not of the data.</b> The server
-              stamps each answer with the moment it was served, while the list behind it is rebuilt
-              once a night, so an error from an hour ago may not be on it yet.
+            <p>
+              <b>The freshness badge is the age of the answer, not of the information.</b> The
+              server stamps each reply with the moment it sent it, but the list behind that reply
+              is put together only once every night. An error from an hour ago will not be on it
+              yet.
             </p>
-            <p className="mt-2">
-              The feed also carries no owner, phone, village, crop, plan or engagement tier, so
-              there are no filters for them, nothing to search on, and no way to reach the farmer
-              from this screen.
+            <p>
+              The server also sends no owner name, no phone number, no village, crop or plan. So
+              there is nothing to filter or search by, and <b>no way to contact the farmer from this
+              screen</b> &mdash; you will need the Farmer Health screen or All Farms for that.
             </p>
           </>
         }

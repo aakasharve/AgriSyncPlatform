@@ -213,6 +213,7 @@ Written to the honest-state rules; all live in one file each.
 | C12 | 🔄 **REVERSAL — glassmorphism is UN-banned; the console is glass** | Founder, 2026-09-02, verbatim: *"the overall colour theme is too dark make it aesthetic and use the Glass morphism effect not theme to highlight the aesthetics and re design it all"*. **This overturns a decision he previously signed**, so it is written out below rather than left as a row |
 | C13 | ⚠️ **A second Latin face — Nunito Sans for prose; DM Sans kept for headings, the brand, figures, table headers and Latin names** | Founder, same instruction: *"change the font make it more friendly to read"*, alongside *"font size must be increased"*. **This diverges from root `CLAUDE.md`'s brand-wide font rule** (English/brand/numbers → DM Sans) and it is his to revert. See the detail below |
 | C14 | **Every standing caveat is folded behind a disclosure — and not one is deleted** | Founder, same instruction: *"on each screen alot of text is tehre just make it expandable when user wants to know"*. **Two classes of caveat stay visible by exception** — see the detail below |
+| C15 | **The console's prose is rewritten for a non-technical reader** | Founder, same instruction: *"explain every aspect as if any one can understand what it is"*. Not one claim was dropped or softened; sixteen test assertions moved from the wording to the property, each with the reason at the assertion. See the detail below |
 
 ---
 
@@ -311,6 +312,53 @@ both are invisible in a screenshot and in every other test in the repo.
 
 **What reverting costs:** `Disclosure.tsx`, `StandingNote.tsx`, and a component name on eleven
 screens. The words themselves are unchanged by this commit and survive it.
+
+
+---
+
+## C15 detail — the plain-language pass, and what it was not allowed to do
+
+**The instruction.** *"explain every aspect as if any one can understand what it is"*.
+
+**The risk it carries, and how it was contained.** Rewriting a caveat is the easiest possible way
+to soften it by accident. So the rule for this pass was: **the claim may not change, only the
+words.** Concretely — no *"probably"*, no *"minor"*, no *"just"*, no zero standing in for an
+absence, and nothing dropped because it was hard to say simply.
+
+**What changed.** Every screen's intro, all eleven standing notes, the Home tile notes, the list
+captions and the sort explanations. Vocabulary that assumed the reader works here was replaced:
+
+| was | is |
+|---|---|
+| endpoint, feed, query, repository | the server, this screen, what the server sends |
+| materialized view, matview, aggregate | a summary rebuilt overnight |
+| an empty list with HTTP 200 / a success code | replies with an empty list and calls it a success |
+| denominator | the number it is averaged over |
+| `error_count` is a bare `COUNT(*)` | it counts every AI action, the ones that worked as well as the ones that failed |
+| mutation | the farmer's work |
+| a claim on the signed-in token | the sign-in credentials do not include the farm |
+| `ssf.crop_schedule_templates` | a different set of templates, kept somewhere else |
+| the entitlement / ModuleKey | the permission your account would need |
+| hatched | drawn as a striped gap |
+| UTC date | days run 5:30am to 5:30am India time |
+
+Every standing note also gained a **`summary`** — one plain sentence, always visible, saying what is
+inside it, so nobody has to click to find out whether clicking is worth it.
+
+**Sixteen test assertions moved with the copy.** Each was pointed at the old *sentence*; each is now
+pointed at the *claim*, in the same commit, with the reason written at the assertion. Two got
+stronger in the process:
+
+- `HomePage.test.tsx` no longer asserts a string about the events column. It asserts that the
+  correction is present **and is not inside a disclosure** — which is what stops a later tidy-up
+  folding it away.
+- `SufferingPage.test.tsx` reads the rule out of the subtitle element rather than by text match, so
+  all three parts of the entry condition are checked rather than one sentence being present.
+
+**One thing was deliberately NOT simplified.** `metrics.retention`, the two watchlist permission
+keys, and the exact subscription states (*trialing, active, past-due*) stayed as they are. They are
+what an operator has to quote to ask for access or to file a bug, and a plain-language paraphrase of
+an identifier is a paraphrase nobody can act on.
 
 ---
 

@@ -787,13 +787,17 @@ export function DataList<T>(config: DataListConfig<T>) {
             <>
               {collapsible?.summary?.(rows)}
               {pageScoped && (
-                /* The scope, in words, once. Every facet count and the sort
-                   order below cover the rows in hand; the total above comes
-                   from the server and is exact. */
-                <p className="mt-1 text-text-3">
-                  The filter counts and the sort order cover the {count(rows.length)}{' '}
-                  {nounFor(rows.length, noun)} on this page, not all {count(totalCount)}. Asking the
-                  server for counts over the whole set is a separate change.
+                /* 🛑 THIS ONE STAYS OPEN, and it is one of the eight named
+                   exceptions to the 2026-09-02 disclosure rollout. It corrects
+                   the counts printed immediately above it: a reader who folds
+                   this away reads "8 farms" as eight farms on the platform
+                   rather than eight on this page. A caveat that changes how the
+                   number beside it should be read cannot be one click away. */
+                <p className="mt-1 max-w-[var(--text-measure)] text-text-3">
+                  These counts and this sort cover the {count(rows.length)}{' '}
+                  {nounFor(rows.length, noun)} <b>on this page</b>, not all{' '}
+                  {count(totalCount)}. Counting across the whole set would mean asking the server
+                  for something it does not offer yet.
                 </p>
               )}
             </>

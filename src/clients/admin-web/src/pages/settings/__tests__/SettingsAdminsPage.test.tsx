@@ -239,7 +239,11 @@ describe('the missing permission gate is stated, not closed', () => {
     });
 
     const body = document.body.textContent ?? '';
-    expect(body).toMatch(/any account whose admin scope resolves at all can open it/i);
+    /* Re-pointed at the plain-language wording on 2026-09-02. The claim is
+       the same and is still the one that matters: this screen has no
+       permission check, and any account that can reach the console can reach
+       it. */
+    expect(body).toMatch(/Any account that can get into the console at all can reach\s+this page/i);
     /* Why it is not closed here: no key exists, and a check against a key that
        does not exist refuses everyone (A4). */
     expect(body).toMatch(/refuses everyone/i);

@@ -366,10 +366,11 @@ export default function SilentChurnPage() {
           </h1>
           {/* A57 — the rule, restated so it matches the query. See the file
               header for the three clauses that were false. */}
-          <p className="mt-1 text-body text-text-2">
-            Farms on a trialing, active or past-due subscription that have recorded no log for more
-            than 14 days, longest silence first. The server sends the 50 longest and no more, so
-            this is a worklist rather than a total.
+          <p className="mt-1 max-w-[var(--text-measure)] text-body text-text-2">
+            Farms that have <b>gone quiet</b>: nobody has recorded anything on them for more than 14
+            days, and they are still paying, still in a trial, or behind on payment &mdash; a
+            trialing, active or past-due subscription. The quietest come first. The server sends
+            50 farms and no more, so read this as today&rsquo;s call list rather than a total.
           </p>
         </div>
         <FreshnessChip source="materialized" lastRefreshed={lastRefreshed} />
@@ -482,14 +483,22 @@ export default function SilentChurnPage() {
 
       <StandingNote
         title="What this screen cannot tell you"
+        summary="Who has already been phoned. Nothing in the product records that, so this list cannot avoid repeat calls for you."
         why={
           <>
-            <b>Outreach is not recorded anywhere in this product.</b> This screen can tell you who
-            has gone quiet; it cannot tell you who has already been phoned, which is why every
-            expanded row reads &ldquo;Last contacted &mdash; not measured&rdquo;. Read that as an
-            absent record, never as a call that did not happen. The feed also carries no village, no
-            crop, no land area and no engagement tier, so there are no filters for them and no quiet
-            acreage in the summary.
+            <p>
+              <b>Nowhere in this product records that somebody called a farmer.</b> This screen can
+              tell you who has gone quiet. It cannot tell you who has already been rung about it,
+              which is why every opened row says &ldquo;Last contacted &mdash; not
+              measured&rdquo;. Read that as <b>we have no record of a call</b> &mdash; never as
+              proof that nobody called. Those are different things, and only the first one is
+              true here.
+            </p>
+            <p>
+              The server also sends no village, no crop, no land area and no engagement level for
+              these farms. So there is nothing to filter by, and the summary at the top cannot tell
+              you how many acres have gone quiet.
+            </p>
           </>
         }
       />

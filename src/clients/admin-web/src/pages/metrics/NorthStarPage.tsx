@@ -516,12 +516,17 @@ export default function NorthStarPage() {
           </h1>
           {/* Property (1) and the endpoint's scope, in the two sentences that
               stop every figure below from being read as something it is not. */}
-          <p className="mt-1 text-body text-text-2">
-            Weekly Verified Farm-Days is the number the product is steered by: how many days in a
-            week a farm closed with work that someone confirmed, averaged across{' '}
-            <b>the farms that logged something that week</b> &mdash; platform-wide. A farm that
-            logged nothing has no row and is left out of the average entirely, so this figure rises
-            when the least engaged farms stop using the app.
+          <p className="mt-1 max-w-[var(--text-measure)] text-body text-text-2">
+            <b>Weekly Verified Farm-Days</b> is the one number this product is steered by: in an
+            average week, how many days does a farm end with work that somebody confirmed? It is
+            averaged across <b>only the farms that recorded something that week</b>, across the
+            whole platform.
+          </p>
+          <p className="mt-2 max-w-[var(--text-measure)] text-body text-text-2">
+            🛑 That last part matters more than it sounds. A farm that recorded nothing is not
+            counted as a zero &mdash; it is left out of the average entirely. So{' '}
+            <b>this number goes UP when the least engaged farms stop using the app.</b> Read a rise
+            with that in mind.
           </p>
         </div>
         <FreshnessChip
@@ -894,40 +899,42 @@ export default function NorthStarPage() {
 
       <StandingNote
         title="What this screen cannot tell you"
+        summary="How many farms are left out of the average, why this week always looks worse, and who is allowed to confirm work."
         why={
           <>
             <p>
-              <b>How many farms are missing from the average.</b> A farm only has a row in a week
-              it logged something, so the denominator is the farms that logged &mdash; not the
-              farms that exist. This answer carries no total, so the share cannot be stated, and
-              the figure moves up when a farm goes quiet.
+              <b>How many farms are missing from the average.</b> A farm is only counted in a week it
+              recorded something, so the average is taken over the farms that showed up &mdash; not
+              over the farms that exist. The server never sends the total, so this screen cannot tell
+              you what share that is. It is also why the number rises when a farm goes quiet.
             </p>
-            <p className="mt-2">
-              <b>Whether the newest week is comparable to the ones before it.</b> Weeks are
-              calendar weeks starting on a Monday in India time, and the aggregate is rebuilt once
-              a night, so the newest column covers only the days elapsed so far. It is lower than a
-              finished week for a reason that has nothing to do with the farms.
+            <p>
+              <b>Whether the newest week can be compared to the ones before it.</b> Weeks run
+              Monday to Sunday in India time and the figures are rebuilt once a night, so the newest
+              column only covers the days that have happened so far. It is lower than a finished
+              week for a reason that has nothing to do with any farm.
             </p>
-            <p className="mt-2">
-              <b>Whether a confirmed day was confirmed by anyone but the farmer.</b> The check is
-              on the confirming person&rsquo;s role, not on whether they are the person who
-              recorded the work.
+            <p>
+              <b>Whether work was confirmed by anybody other than the farmer.</b> The rule checks
+              the confirming person&rsquo;s <b>role on the farm</b>, and nothing else. A farm owner
+              confirming their own entry counts exactly the same as a supervisor confirming it. Read
+              this as confirmed activity, not as independent confirmation.
             </p>
-            <p className="mt-2">
-              <b>Whether a week with no bar was a quiet week.</b> A week with no row in the
-              aggregate and a week nobody has computed arrive here looking identical. Those weeks
-              are drawn as holes and left out of every figure &mdash; they are not zeros, and they
-              are not proof of a zero.
+            <p>
+              <b>Whether a week with no bar was a quiet week.</b> A week where nothing happened and a
+              week nobody has calculated arrive here looking identical. Those weeks are drawn as{' '}
+              <b>holes</b> and left out of every figure. They are not zeros, and they are not proof
+              of a zero.
             </p>
-            <p className="mt-2">
-              <b>Whether an empty answer means anything.</b> When this endpoint&rsquo;s own query
-              fails it returns a WVFD of 0 and a goal of 4.5 with a success code, so a database
-              problem arrives looking like a real reading. A failure this screen CAN see &mdash; a
-              broken request, a timeout, a refused permission &mdash; is always named as one.
+            <p>
+              <b>Whether an empty answer means anything.</b> If the server&rsquo;s own lookup fails
+              it replies with a score of 0 and a goal of 4.5, and calls it a success &mdash; so a
+              database problem arrives looking like a real, very bad reading. Failures this screen{' '}
+              <b>can</b> see are always named as failures.
             </p>
-            <p className="mt-2">
-              <b>Anything about one organisation.</b> This endpoint takes only the number of weeks;
-              every figure is platform-wide.
+            <p>
+              <b>Anything about one organisation.</b> The server is only asked for a number of
+              weeks, so every figure covers the whole platform.
             </p>
           </>
         }

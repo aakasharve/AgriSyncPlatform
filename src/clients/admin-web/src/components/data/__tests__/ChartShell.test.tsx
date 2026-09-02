@@ -155,7 +155,10 @@ describe('a gap is not a zero — in the table', () => {
     renderShell(weeks([{ weekStart: 'w1', avgScore: 4 }]));
 
     expect(screen.getByText(/3 of 4 periods were never measured/)).toBeInTheDocument();
-    expect(screen.getByText(/hatched, not as zero/)).toBeInTheDocument();
+    /* "hatched" -> "a striped gap", 2026-09-02: an operator should not have to
+       know what a hatch is to read the sentence that stops a gap being read as
+       a zero. The claim is unchanged and is still the load-bearing half. */
+    expect(screen.getByText(/drawn as a striped gap, not as a zero/)).toBeInTheDocument();
   });
 
   it('says nothing about gaps when there are none', () => {

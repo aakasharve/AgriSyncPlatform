@@ -339,9 +339,10 @@ export default function FarmsListPage() {
             <Wheat size={20} strokeWidth={2} aria-hidden="true" className="text-text-2" />
             All Farms
           </h1>
-          <p className="mt-1 text-body text-text-2">
-            Every farm this feed returns, with the figures this console actually measures — and
-            a grey em dash wherever it does not measure one.
+          <p className="mt-1 max-w-[var(--text-measure)] text-body text-text-2">
+            Every farm on the platform, with the few things we actually measure about each
+            one. Where a figure is <b>grey with a dash</b>, it means we have not measured it
+            &mdash; not that the answer is zero.
           </p>
         </div>
         <FreshnessChip source="live-aggregated" lastRefreshed={lastRefreshed} />
@@ -464,14 +465,29 @@ export default function FarmsListPage() {
 
       <StandingNote
         title="What this list does not carry"
+        summary="Seven things per farm, and no village, crop, plot or acreage — so there is nothing to filter them by."
         why={
           <>
-            The farms feed returns farm name, owner phone, engagement tier, WVFD 7d, errors in the
-            last 24 hours, last log and created date, and nothing else. Village, crop, plots and
-            land-record area are not in it, so this screen has no filters for them; the plan field
-            it does return is the literal <code>trial</code> on every row, so there is no plan
-            filter either. The owner&apos;s name is not in it, which is why that column is headed by
-            the phone number.
+            <p>
+              The server sends <b>seven things</b> about each farm and nothing else: the farm name,
+              the owner&rsquo;s phone number, how engaged the farm is, its verified-days figure for
+              the last week, how many errors it hit in the last 24 hours, when it last recorded
+              anything, and when it was created.
+            </p>
+            <p>
+              Village, crop, plots and land area are <b>not</b> among them. That is why you cannot
+              filter or search this screen by any of those &mdash; the information never arrives, so
+              there is nothing here to filter.
+            </p>
+            <p>
+              There is a &ldquo;plan&rdquo; field, but every farm comes back with the same value in
+              it, so it would sort every farm into one pile. It is not shown, and there is no plan
+              filter.
+            </p>
+            <p>
+              The owner&rsquo;s <b>name</b> is not sent either. That is why the Owner column is
+              headed by a phone number rather than a person.
+            </p>
           </>
         }
       />

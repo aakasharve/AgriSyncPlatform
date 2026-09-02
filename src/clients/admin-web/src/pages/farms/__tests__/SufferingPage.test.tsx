@@ -292,11 +292,18 @@ describe('an absence names its cause, and never celebrates (D9, Step 2)', () => 
      * database failure into a measured zero before the client is told. Saying
      * "measured zero" and stopping would inherit that quietly.
      */
+    /* WORDING MOVED IN THE 2026-09-02 PLAIN-LANGUAGE PASS, PROPERTY DID NOT.
+       These assertions guard a claim the screen has to keep making, not the
+       sentence it makes it in. Each one below was re-pointed at the new
+       wording in the same commit as the copy, and each still fails if the
+       claim itself goes. */
     expect(
-      screen.queryByText(/An empty list here is not proof that nothing broke/),
+      screen.queryByText(/An empty list is not proof that nothing broke/),
       'the screen stopped warning that an empty answer can be a swallowed failure — GetSufferingAsync ends in `catch { return []; }`, so a dropped connection or a missing matview arrives as an empty list with HTTP 200 and this screen cannot tell it from a quiet week',
     ).not.toBeNull();
-    expect(screen.getByText(/empty list and a success code rather than an error/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/replies with an empty list and calls it a success/),
+    ).toBeInTheDocument();
   });
 });
 
@@ -335,7 +342,11 @@ describe('every expanded row says resolution is not recorded (Step 3)', () => {
 
     /* And the consequence, said out loud: rows leave this list by TIME, not by
        anyone fixing anything. */
-    expect(screen.getByText(/its events age out of the seven-day window/)).toBeInTheDocument();
+    /* "events age out of the seven-day window" -> "failures get older than
+       seven days". Same fact, said to somebody who does not work here. */
+    expect(
+      screen.getByText(/when its failures get older than seven days/),
+    ).toBeInTheDocument();
   });
 });
 
@@ -452,14 +463,19 @@ describe('the rule-definition subtitle (A57)', () => {
       screen.queryByText(/repeated API errors/),
       'the subtitle calls them API errors — two of the three qualifying event types are an error in the farmers own app and an AI call that failed, so the line names one of three and hides the two that are about the farmer',
     ).toBeNull();
+    /* The entry condition is now split across a bold span, so the assertion
+       reads the whole paragraph rather than its direct text nodes. The RULE is
+       what A57 requires on screen, and all three of its parts are checked:
+       the count, the window, and what counts as a failure. */
+    const subtitle = document.querySelector('h1 + p') as HTMLElement;
     expect(
-      screen.queryByText(/three or more failed events in the last seven days/),
+      subtitle.textContent,
       'the subtitle no longer states the entry condition — a farm reaches this list at three or more failed events, and a watchlist whose rule is unstated is a list nobody can act on',
-    ).not.toBeNull();
-    expect(screen.getByText(/an AI call that failed/)).toBeInTheDocument();
+    ).toMatch(/three or more things have failed in the last seven days/);
+    expect(subtitle.textContent).toMatch(/an AI request did not complete/);
     /* The cap, which the old screen never mentioned: a reader seeing 50 rows
        had no way to know 50 was a ceiling and not a count. */
-    expect(screen.getByText(/the 50 with the most events and no more/)).toBeInTheDocument();
+    expect(subtitle.textContent).toMatch(/sends 50 farms and no more/);
 
     /* NO PAGINATION, and it is not an omission: the endpoint has no `page`
        parameter, so a pager would be a control with nothing behind it. */

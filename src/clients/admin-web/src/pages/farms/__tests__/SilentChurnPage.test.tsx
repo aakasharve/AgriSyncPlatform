@@ -243,7 +243,12 @@ describe('every expanded row says outreach is not measured (Step 4)', () => {
     const term = screen.getByText('Last contacted');
     const value = term.nextElementSibling as HTMLElement;
     expect(within(value).getByText('not measured')).toBeInTheDocument();
-    expect(screen.getByText(/never as a call that did not happen/)).toBeInTheDocument();
+    /* The 2026-09-02 copy pass rewrote this sentence in plain language, so the
+       old string is gone. What it guards is not the string: it is that the
+       screen refuses to let "we have no record" be read as "nobody called".
+       Both halves are still asserted — the softened form is absent above, and
+       the honest form is present here. */
+    expect(screen.getByText(/never as\s+proof that nobody called/)).toBeInTheDocument();
   });
 });
 
@@ -389,12 +394,23 @@ describe('the v3 summary-first gate stays on this screen', () => {
      * records this line as the ONLY place the rule is stated on screen, so it
      * is preserved — as a true sentence.
      */
-    expect(screen.getByText(/no log for more than 14 days/)).toBeInTheDocument();
+    /* Rewritten for a non-technical reader on 2026-09-02 — "no log" became
+       "nobody has recorded anything". A57 requires that the RULE be stated on
+       screen, not that it be stated in the query's vocabulary, and both of its
+       clauses are still here: the 14-day threshold and the three subscription
+       states. */
+    expect(
+      screen.getByText(/recorded anything on them for more than 14\s+days/),
+    ).toBeInTheDocument();
     expect(screen.getByText(/trialing, active or past-due subscription/)).toBeInTheDocument();
     expect(screen.queryByText(/WVFD/)).toBeNull();
     /* The cap, which the old screen never mentioned: a reader seeing 50 rows
        had no way to know 50 was a ceiling and not a count. */
-    expect(screen.getByText(/50 longest and no more/)).toBeInTheDocument();
+    /* The cap, still stated. "50 longest" became "50 farms" in the plain-language
+       pass — the screen orders by longest silence and says so in the sentence
+       before, so "longest" was doing the same work twice. The number, which is
+       the part that stops this list being read as a total, is unchanged. */
+    expect(screen.getByText(/sends\s+50 farms and no more/)).toBeInTheDocument();
   });
 });
 

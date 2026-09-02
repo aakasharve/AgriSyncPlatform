@@ -300,15 +300,22 @@ export default function SettingsAdminsPage() {
           unless it says otherwise. */}
       <StandingNote
         title="This screen is not permission-gated"
+        summary="Any account that can open the console at all can open this page, including ones that can see nothing else."
         why={
-          <p>
-            Every other screen in this console is behind a per-module permission check. This one is
-            not: any account whose admin scope resolves at all can open it, including roles whose
-            only other readable screen is a farm list. It is deliberate rather than forgotten &mdash;
-            there is no permission key for admin management, and a check against a key that does not
-            exist refuses everyone, founder included. The gap is recorded in the decision ledger and
-            is not closed by this change.
-          </p>
+          <>
+            <p>
+              Every other screen in this console checks a specific permission before it will open.
+              <b> This one does not.</b> Any account that can get into the console at all can reach
+              this page &mdash; including accounts whose only other readable screen is a list of
+              farms.
+            </p>
+            <p>
+              It is deliberate rather than forgotten. There is no permission defined for
+              &ldquo;admin management&rdquo;, and a check against a permission that does not exist
+              refuses everyone, founder included. The gap is written down in the decision ledger
+              and this change does not close it.
+            </p>
+          </>
         }
       />
     </div>

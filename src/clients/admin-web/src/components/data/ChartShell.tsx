@@ -244,8 +244,11 @@ export function ChartShell<V>({
     if (gaps === 0) return null;
     const noun = gaps === 1 ? `${slotNoun.one} was` : `${slotNoun.many} were`;
     return (
+      /* Stays visible, always. It is a correction to the chart standing
+         directly above it: without the sentence, a hatched slot reads as a low
+         bar and a gap in our own pipeline gets read as a bad week on a farm. */
       <p data-gap-note="" className="text-caption text-text-3">
-        {gaps} of {slots.length} {noun} never measured — shown hatched, not as zero.
+        {gaps} of {slots.length} {noun} never measured — drawn as a striped gap, not as a zero.
       </p>
     );
   }

@@ -242,9 +242,10 @@ export default function ScheduleTemplatesPage() {
               "in this organisation" either: the handler takes no org parameter,
               so the org in the query key separates the cache and does not scope
               the data — the eighth endpoint checked that takes none. */}
-          <p className="mt-1 text-body text-text-2">
-            The crop schedules the activity planner derives its plan from, platform-wide. Every
-            template the server holds is here &mdash; this feed has no pages and no filter.
+          <p className="mt-1 max-w-[var(--text-measure)] text-body text-text-2">
+            The crop schedules the app builds a farmer&rsquo;s plan from, across the whole platform.
+            Every template the server holds is on this one page &mdash; there is no paging and no
+            filtering, because the server sends the lot.
           </p>
         </div>
 
@@ -360,41 +361,44 @@ export default function ScheduleTemplatesPage() {
           a value above should be read, and an operator cannot open the C#. */}
       <StandingNote
         title="What this list does not carry"
+        summary="These are the planning templates, not the ones a farmer signs up to — and nothing here says whether a farmer can see them."
         why={
           <>
             <p>
-              <b>These are not the templates a farmer subscribes to.</b> This feed reads{' '}
-              <code className="font-mono text-caption">ssf.schedule_templates</code>, the planning
-              templates the activity planner works from. The ones a farmer adopts live in{' '}
-              <code className="font-mono text-caption">ssf.crop_schedule_templates</code>, they carry
-              their own published flag, and <b>no screen or endpoint in this product lists them</b>.
-              Whether a farmer can see a schedule cannot be answered from here.
+              <b>These are not the schedules a farmer signs up to.</b> There are two separate sets
+              of templates in this product. This screen shows the <b>planning</b> ones the app
+              builds a plan from. The ones a farmer actually adopts are a different set, kept
+              somewhere else, with their own published/not-published switch &mdash; and{' '}
+              <b>no screen in this product can list those</b>. So &ldquo;can a farmer see this
+              schedule?&rdquo; cannot be answered from here.
             </p>
-            <p className="mt-2">
-              <b>Publication state is not sent.</b> The row records when it was published; the API
-              does not project it. The card above says so rather than showing every template as a
-              draft, which is what this screen did before.
+            <p>
+              <b>Whether a template is published is not sent.</b> The server records it but does not
+              pass it on. The card above says so, rather than showing every template as a draft,
+              which is what this screen used to do.
             </p>
-            <p className="mt-2">
-              <b>The crop is read off the name.</b> The server splits the template name at its first
-              hyphen and calls the left-hand side the crop. Nobody classified these.
+            <p>
+              <b>The crop is guessed from the name.</b> The server takes the template&rsquo;s name,
+              cuts it at the first hyphen, and calls the left-hand half the crop. Nobody has
+              actually classified these.
             </p>
-            <p className="mt-2">
-              <b>The planning window belongs to the crop, not the template</b>, and it never goes
-              below 60 days. Two templates of one crop always report the same number.
+            <p>
+              <b>The planning window belongs to the crop, not to the template</b>, and it is never
+              shorter than 60 days. Two templates for the same crop will always show the same
+              number of days.
             </p>
             {setVersion && (
-              <p className="mt-2">
-                <b>There is one version for the whole answer, not one per template.</b> The server
-                hashes the payload it is about to send and stamps every row with it, so this is a
-                fingerprint of this response:{' '}
-                <code className="font-mono text-caption">{setVersion.slice(0, 12)}</code>. It is not a
-                template version and it does not survive a change anywhere else in the list.
+              <p>
+                <b>The version code covers the whole list, not one template.</b> The server takes a
+                fingerprint of everything it is about to send and stamps every row with the same
+                one: <code className="font-mono text-caption">{setVersion.slice(0, 12)}</code>.
+                Change any template and every row&rsquo;s code changes. It is not a version number
+                for the template beside it.
               </p>
             )}
-            <p className="mt-2">
-              <b>The list is platform-wide.</b> This endpoint takes no organisation, so switching
-              organisation does not change what is on this screen.
+            <p>
+              <b>This list covers the whole platform.</b> The server is never asked about an
+              organisation, so switching organisation in the top bar changes nothing here.
             </p>
           </>
         }

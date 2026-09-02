@@ -307,7 +307,12 @@ describe('every feed answering', () => {
     expect(errors).toHaveAttribute('data-state', 'ok');
     expect(within(errors).getByText('2')).toBeInTheDocument();
     expect(within(errors).getByText(/out of 4 events read at/)).toBeInTheDocument();
-    expect(within(errors).getByText(/Two hours, not twenty-four/)).toBeInTheDocument();
+    /* Re-pointed at the plain-language wording, 2026-09-02. The claim guarded
+       is the window — this tile reads two hours, not the twenty-four its
+       neighbours read — and it is still asserted. */
+    expect(
+      within(errors).getByText(/The last TWO hours, not the last twenty-four/),
+    ).toBeInTheDocument();
 
     /* ── the three tiles with no endpoint: an absence, never a zero ───── */
     for (const label of ['Logs today', 'D30 retention', 'MRR']) {
@@ -339,7 +344,12 @@ describe('every feed answering', () => {
     /* The goal is the SERVER's constant, printed from the response and never
        from a client-side 4.5. */
     expect(within(w).getByText(/goal 4\.5 — a constant in the API/)).toBeInTheDocument();
-    expect(within(w).getByText(/newest week is always partial/)).toBeInTheDocument();
+    /* Re-pointed at the plain-language wording, 2026-09-02. The claim guarded
+       is that the tile warns the newest week is incomplete, so a Monday dip is
+       not a finding. Still asserted, in words a new support hire can read. */
+    expect(
+      within(w).getByText(/newest week is always half-finished/),
+    ).toBeInTheDocument();
     /* A partial week is not a verdict. */
     expect(w).not.toHaveAttribute('data-tone', 'green');
 
@@ -378,7 +388,12 @@ describe('every feed answering', () => {
     expect(names[0]).toContain('Wagholi Grapes');
     expect(names[1]).toContain('Ozar Onion');
     expect(names[2]).toContain('Sinnar Tomato');
-    expect(screen.getByText(/Ordered by how many watchlists flagged the farm/)).toBeInTheDocument();
+    /* Re-pointed at the plain-language wording, 2026-09-02. The claim guarded
+       is that the screen STATES its fixed order — a list a reader cannot
+       re-sort has to say what it is sorted by. */
+    expect(
+      screen.getByText(/Sorted by how many problems a farm has/),
+    ).toBeInTheDocument();
 
     /* ── THE CORRECTION IS STILL ON SCREEN, AND STILL UNFOLDED ─────────────
      *
@@ -474,7 +489,10 @@ describe('the one ungated screen asks for nothing it may not read', () => {
 
     /* No list, and a sentence in its place that is not a zero. */
     expect(document.querySelector('[data-list="should-call-today"]')).toBeNull();
-    expect(screen.getByText(/Nothing here is a count of zero/)).toBeInTheDocument();
+    /* Same claim, plainer words: an empty screen here is a permission fact,
+       never a measurement. Read from the paragraph rather than its direct text
+       nodes, because the sentence now carries a bold span. */
+    expect(document.body.textContent).toMatch(/This is not a count of zero/);
 
     /* A dot that means nothing teaches a reader to ignore all of them. */
     expect(dotFor('Ops now')).toBeNull();
