@@ -17,6 +17,8 @@
  */
 import React, { useCallback, useRef, useState } from 'react';
 import { useLabourState } from '../useLabourState';
+import { resolveLabourAnchor } from '../labourAnchor';
+import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
 import type { DailyLog, LedgerDefaults } from '../../../types';
 import { BackHeader, LoadErrorBanner, LoadingState } from './LabourUiKit';
@@ -131,6 +133,18 @@ export const LabourFeature: React.FC<{
         : cur.name === 'person' && cur.id ? (data.people[cur.id]?.name ?? 'कामगार')
             : TITLES[cur.name];
 
+    // Labour V2 R1 Task 3.1 — the labour mic anchor, derived from the same
+    // optional log history the hub already receives. The real app always
+    // supplies `history` (AppRouterContext.history is a required DailyLog[]),
+    // so every real mount gets a concrete anchored/no-anchor verdict. The bare
+    // `?preview=labour` mount has NO history to judge from — there `anchor`
+    // stays undefined, which the hub's contract reads as "keep today's
+    // behaviour: hero active" (its onGoToLog fallback is already a toast).
+    const anchor = React.useMemo(
+        () => (history ? resolveLabourAnchor(history, getDateKey()) : undefined),
+        [history],
+    );
+
     return (
         <div className="relative flex min-h-screen flex-col bg-[#f6f7f5]">
             <BackHeader title={title} onBack={handleBack} />
@@ -167,6 +181,7 @@ export const LabourFeature: React.FC<{
                                 onReview={() => setReviewOpen(true)}
                                 onGoToLog={goToLog}
                                 onInviteWorker={farm ? () => setInviteOpen(true) : undefined}
+                                anchor={anchor}
                                 history={history}
                                 ledgerDefaults={ledgerDefaults}
                                 lastLabourLogIds={lastLabourLogIds}

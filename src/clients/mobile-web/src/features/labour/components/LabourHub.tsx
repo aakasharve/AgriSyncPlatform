@@ -20,6 +20,9 @@ import { generateDayWorkSummary } from '../../analysis/dayWorkSummary';
 import { formatCurrency } from '../../../shared/utils/currency';
 import { GroupLabel, PersonRow, HelpNote, EmptyState } from './LabourUiKit';
 import { toMr } from './LabourDataPoints';
+import type { LabourAnchor } from '../labourAnchor';
+import { NO_ANCHOR_TEST_IDS } from '../labourAnchor';
+import { ATTENDANCE_COPY } from '../attendanceCopy';
 
 /**
  * हजेरी घ्या's "जतन करा" claims "जतन झाले" (saved) but writes nothing
@@ -60,6 +63,15 @@ interface Props {
     onReview: () => void;
     /** Voice input lives only on the canonical log page — the voice card navigates there. */
     onGoToLog: () => void;
+    /**
+     * Labour V2 R1 Task 3.1 — the labour mic anchor. `no-anchor` draws the
+     * hero inactive (grey, disabled) with the founder-approved reason card
+     * beneath it; it gates ONLY the recorder — never the route, this hub,
+     * the हजेरी वही tile, or HajeriLedger (Correction 11). Absent (the bare
+     * `?preview=labour` mount, which has no log history at all) keeps
+     * today's behaviour: hero active.
+     */
+    anchor?: LabourAnchor;
     /**
      * Opens the real "share farm QR" sheet (`FarmInviteQrSheet`) so the
      * honest empty people-state has a genuine next step, not a decorative
@@ -286,12 +298,16 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
     );
 };
 
-const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onDashboard, onLedger, onReview, onGoToLog, onInviteWorker, history, ledgerDefaults, lastLabourLogIds, isPreview = false }) => {
+const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onDashboard, onLedger, onReview, onGoToLog, onInviteWorker, anchor, history, ledgerDefaults, lastLabourLogIds, isPreview = false }) => {
     const justLoggedLogs = (history && ledgerDefaults && lastLabourLogIds && lastLabourLogIds.length > 0)
         ? lastLabourLogIds
             .map((id) => history.find((log) => log.id === id))
             .filter((log): log is DailyLog => Boolean(log))
         : [];
+
+    // Task 3.1 — no anchor → the recorder's doorway goes inactive. ONLY the
+    // recorder: every other surface on this hub renders exactly as before.
+    const heroInactive = anchor?.state === 'no-anchor';
 
     return (
     <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2">
@@ -322,16 +338,25 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
           * takes हजेरी and has nowhere to see it — tracked against
           * SHOW_ATTENDANCE_TILE, not against this headline.
           */}
-        <button type="button" onClick={onGoToLog} className="relative flex w-full items-center gap-4 overflow-hidden rounded-[24px] bg-gradient-to-br from-emerald-500 to-emerald-700 p-5 text-left shadow-[0_16px_32px_-12px_rgba(5,150,105,0.65)] transition-transform active:scale-[0.99]">
-            <span className="relative flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white">
+        <button type="button" disabled={heroInactive} onClick={heroInactive ? undefined : onGoToLog}
+            className={`relative flex w-full items-center gap-4 overflow-hidden rounded-[24px] p-5 text-left transition-transform ${heroInactive
+                ? 'bg-slate-100 shadow-none'
+                : 'bg-gradient-to-br from-emerald-500 to-emerald-700 shadow-[0_16px_32px_-12px_rgba(5,150,105,0.65)] active:scale-[0.99]'}`}>
+            <span className={`relative flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl ${heroInactive ? 'bg-slate-200 text-slate-400' : 'bg-white/20 text-white'}`}>
                 <Mic size={32} strokeWidth={2.4} />
             </span>
             <span className="min-w-0 flex-1">
-                <span className="block text-[23px] font-black leading-tight text-white">बोलून हजेरी घ्या</span>
-                <span className="mt-1 block text-[16px] font-medium leading-snug text-emerald-50">“रोकडेचे दहा लोक आले” — असं बोला</span>
+                <span className={`block text-[23px] font-black leading-tight ${heroInactive ? 'text-slate-400' : 'text-white'}`}>बोलून हजेरी घ्या</span>
+                <span className={`mt-1 block text-[16px] font-medium leading-snug ${heroInactive ? 'text-slate-400' : 'text-emerald-50'}`}>“रोकडेचे दहा लोक आले” — असं बोला</span>
             </span>
-            <span className="flex-shrink-0 rounded-full bg-white/25 px-4 py-3 text-[17px] font-extrabold text-white">उघडा</span>
+            <span className={`flex-shrink-0 rounded-full px-4 py-3 text-[17px] font-extrabold ${heroInactive ? 'bg-slate-200 text-slate-400' : 'bg-white/25 text-white'}`}>उघडा</span>
         </button>
+        {heroInactive && (
+            <div data-testid={NO_ANCHOR_TEST_IDS.reason}
+                className="rounded-xl border border-amber-200 border-l-[3px] border-l-amber-600 bg-amber-50 p-3 text-[13.5px] leading-relaxed text-amber-800">
+                {ATTENDANCE_COPY.noAnchorReason}
+            </div>
+        )}
 
         <div className="grid grid-cols-2 gap-2.5">
             {/* Task 18 — `isPreview` is the one declared exception to the

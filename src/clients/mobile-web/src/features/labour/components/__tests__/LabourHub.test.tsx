@@ -447,3 +447,32 @@ describe('LabourHub — preview-only review exception (Task 18)', () => {
         expect(screen.queryByText('हजेरी वही')).toBeNull();
     });
 });
+
+// ---------------------------------------------------------------------------
+// Task 3.1 (Labour V2 R1) — the labour mic is a verification instrument. No
+// explicit labour anchor → no mic. The anchor gates ONLY the recorder (the
+// hero behind which the mic lives): the route, hub, हजेरी वही tile and
+// HajeriLedger are untouched (Correction 11). A missing `anchor` prop (the
+// bare `?preview=labour` mount) keeps today's behaviour: hero active.
+// ---------------------------------------------------------------------------
+describe('Task 3.1 — anchor gates ONLY the recorder', () => {
+    afterEach(() => cleanup());
+
+    const renderHub = (extra: Partial<React.ComponentProps<typeof LabourHub>>) =>
+        render(<LabourHub {...baseProps()} {...extra} />);
+
+    it('no anchor: hero inactive, approved reason rendered, ledger tile untouched', () => {
+        renderHub({ anchor: { state: 'no-anchor' } });          // via the file's render helper
+        const hero = screen.getByRole('button', { name: /बोलून हजेरी घ्या/ });
+        expect(hero).toBeDisabled();
+        expect(screen.getByTestId('labour-no-anchor-reason').textContent)
+            .toContain('आजच्या कामात किती जण होते ते अजून समजलं नाही');
+        // Correction 11: the reason never gates the register door.
+        expect(screen.getByText('तपासा')).toBeInTheDocument();
+    });
+    it('anchored: hero active, no reason card', () => {
+        renderHub({ anchor: { state: 'anchored', headcount: 12, logId: 'x' } });
+        expect(screen.getByRole('button', { name: /बोलून हजेरी घ्या/ })).toBeEnabled();
+        expect(screen.queryByTestId('labour-no-anchor-reason')).toBeNull();
+    });
+});
