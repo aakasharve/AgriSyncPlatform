@@ -43,10 +43,40 @@ import type { LabourEntry } from './labourParse';
  * union — and structurally by ABSENCE wherever a fact is optional (see
  * `LabourData.attendance.rows`: an unmarked person simply has no row).
  * `null` is never defaulted to `'absent'` by any reader of either shape.
+ * The LEDGER no longer uses this union — a register cell is the five-axis
+ * `LedgerCell` below (master review D4).
  */
 export type PresenceStatus = 'present' | 'half' | 'absent';
 export type LabourRole = 'mukadam' | 'submukadam' | 'worker';
 export type AvatarTone = 'or' | 'em' | 'bl' | 'vi' | 'rs' | 'am';
+
+/**
+ * Phase 4 (master review 2026-09-02, D4) — one register cell, five approved
+ * axes, ALL stated facts: day half, night half (◾ रात्र), stated hours (Nत),
+ * stated extra hours (+N जादा), and the उक्ते engagement marker. `null` on an
+ * axis = nobody said. A `null` CELL (see `LedgerRow.cells`) = no mark at all
+ * that day — रिकामं = कुणी माहिती नाही, drawn dashed, never as `–` absence.
+ * Nothing here is ever summed, ranked, or converted into a day fraction.
+ */
+export interface LedgerCell {
+    day: 'full' | 'half' | 'absent' | null;
+    night: 'worked' | 'notworked' | null;
+    hours: number | null;
+    extraHours: number | null;
+    ukte: boolean;
+    /** Tap-detail work context (e.g. 'द्राक्ष छाटणी'). The GRID never renders it. */
+    work: string | null;
+}
+
+/** A crew engaged through a Labour Mukadam — per-day STATED counts, null = unknown (blank violet cell). */
+export interface LedgerCrewRow {
+    throughFieldOperatorId: string;
+    throughName: string;
+    counts: (number | null)[];
+}
+
+/** D-H8 — which projection the server sent. The client renders what arrives; it never adds back. */
+export type LabourView = 'owner' | 'crew' | 'own';
 
 /**
  * A person's settlement POSITION — R15 (Task 13, spec:
@@ -61,10 +91,10 @@ export type AvatarTone = 'or' | 'em' | 'bl' | 'vi' | 'rs' | 'am';
 export interface LabourBalance {
     /** काम झालं — recorded/agreed wage value of completed work, all-time. `null` = unknown (no job-card evidence yet). */
     recorded: number | null;
-    /** दिलं — actually paid out so far, all-time (finance-consistent). */
-    paid: number;
-    /** उचल — advance money given out. Always 0 from the server (no advance system exists). */
-    advance: number;
+    /** दिलं — actually paid out so far, all-time (finance-consistent). `null` = withheld by view (D-H8) — never coalesce to 0. */
+    paid: number | null;
+    /** उचल — advance money given out. Always 0 from the server (no advance system exists). `null` = withheld by view (D-H8) — never coalesce to 0. */
+    advance: number | null;
 }
 
 export interface LabourPerson {
@@ -100,7 +130,10 @@ export interface LabourPerson {
 }
 
 export interface LedgerRow {
+    /** Prefixed grouping key ("op:{32-hex}") — never a bare user id. */
     personId: string;
+    /** The durable work identity — tap-detail addresses a person-day by it. */
+    fieldOperatorId: string;
     name: string;
     initial: string;
     tone: AvatarTone;
@@ -109,20 +142,16 @@ export interface LedgerRow {
      * the farmer has said anything about that day (a day not yet reached, or
      * simply not marked yet). `null` = no fact for that day; it is NEVER a
      * real absence and must never render or count identically to a
-     * deliberate `'absent'` tap. See `HajeriLedger.tsx`'s `cellClass` /
-     * `cellGlyph`, which give `null` its own neutral, visually-distinct
+     * deliberate `'absent'` tap. See `HajeriLedger.tsx`'s `cellDayClass` /
+     * `cellDayGlyph`, which give `null` its own neutral, visually-distinct
      * rendering.
      */
-    cells: (PresenceStatus | null)[];
+    cells: (LedgerCell | null)[];
     /**
-     * Task 6 (spec: 2026-08-28-labour-v2-release-1, P4, D9.9 — supersedes D4)
-     * — a half day (a `'half'` cell) is worth 0.5, so this is real-valued
-     * (`5.5`, not an `int`-rounded `6`), never `null`: a `null` cell (no fact
-     * yet) contributes 0 to this sum without making the ROW's own total
-     * unknown. No money is derived from it — half a day is 0.5 day of
-     * EVIDENCE, never half a wage; money is Release 2.
+     * Phase 4 — `total` was DELETED (master review D4: no totals column at
+     * all; day-count reads live in tap-detail). `cells` slots stay per-day;
+     * a `null` slot is silence, never absence — unchanged rule.
      */
-    total: number;
 }
 
 /**
@@ -185,8 +214,10 @@ export interface DashboardData {
      */
     manDays: number | null;
     manDaysTrend: number;
-    wages: number;
-    advances: number;
+    /** `null` = withheld by view (D-H8) — never coalesce to 0. */
+    wages: number | null;
+    /** `null` = withheld by view (D-H8) — never coalesce to 0. */
+    advances: number | null;
     /** Task 1 (P4) — `null` when the farm carries zero job-card evidence; never a fabricated ₹0 balance. */
     owed: number | null;
     logs: number;
@@ -208,7 +239,12 @@ export interface DashboardData {
      * inside ₹1,000. `wages` above is the windowed "money that moved in this
      * period" figure, and deliberately the only one.
      */
-    money: { recorded: number | null; paid: number; advance: number; owed: number | null };
+    /**
+     * Phase 4 (D-H8) — the whole card is `null` when the server WITHHELD
+     * money for this view (मुकादम/worker). Withheld is not absent: render
+     * `—`, never a fabricated ₹0 card.
+     */
+    money: { recorded: number | null; paid: number; advance: number; owed: number | null } | null;
 }
 
 export interface LabourData {
@@ -217,13 +253,14 @@ export interface LabourData {
     people: Record<string, LabourPerson>;
     dashboard: DashboardData;
     /**
-     * Task 6 — `weekTotal` mirrors `Dashboard.manDays` server-side (Stage 5's
-     * per-worker ledger is not built; `rows` stays `[]` until then, so there
-     * is no real per-worker roll-up yet) and inherits the same nullability:
-     * `null` when this week's labour was logged but no headcount was ever
-     * stated. `dailyTotals` elements are never `null` — see `LedgerRow.total`.
+     * Phase 4 (master review D4) — the CLEAN register: rows of five-axis
+     * cells plus crew aggregate rows. `dailyTotals`/`weekTotal` left this
+     * contract with `LedgerRow.total` (no totals column of any kind);
+     * day-count reads live in tap-detail.
      */
-    ledger: { weekLabel: string; days: string[]; rows: LedgerRow[]; dailyTotals: number[]; weekTotal: number | null };
+    ledger: { weekLabel: string; days: string[]; rows: LedgerRow[]; crewRows: LedgerCrewRow[] };
+    /** D-H8 — the projection the server sent (owner | crew | own). Display alignment only; the SERVER strips. */
+    view: LabourView;
     review: ReviewItem[];
     /**
      * Attendance draft for "today" (a plot's gang). Task 5 (founder Global
@@ -277,7 +314,9 @@ export interface LabourData {
  * like the WeeklyDashboard overpayment stat tile.
  */
 export const netBalance = (b: LabourBalance): { owe: boolean; amount: number; isAdvance: boolean } | null => {
-    if (b.recorded === null) {
+    if (b.recorded === null || b.paid === null || b.advance === null) {
+        // Unknown OR withheld-by-view (D-H8): a balance struck against an
+        // absent term is a fabrication either way. Render nothing.
         return null;
     }
     const net = b.recorded - b.paid - b.advance;

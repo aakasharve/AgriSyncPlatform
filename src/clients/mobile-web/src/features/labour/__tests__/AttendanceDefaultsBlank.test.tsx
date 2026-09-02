@@ -36,16 +36,21 @@ import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
-import HajeriLedger, { cellClass, cellGlyph } from '../components/HajeriLedger';
+import HajeriLedger, { cellDayClass, cellDayGlyph } from '../components/HajeriLedger';
 import Attendance from '../components/Attendance';
 import { EMPTY_LABOUR_DATA } from '../labourMock';
-import type { LabourData, LabourPerson, LedgerRow } from '../labour.types';
+import type { LabourData, LabourPerson, LedgerCell, LedgerRow } from '../labour.types';
 
 afterEach(() => cleanup());
 
 // ---------------------------------------------------------------------------
 // Fixtures — 5 workers, zero marks (the exact scenario named in the brief).
 // ---------------------------------------------------------------------------
+
+/** Phase 4 — the five-axis cell builder (same pattern as HajeriLedgerTotals.test.tsx). */
+const cell = (over: Partial<LedgerCell>): LedgerCell => ({
+    day: null, night: null, hours: null, extraHours: null, ukte: false, work: null, ...over,
+});
 
 const person = (id: string, name: string): LabourPerson => ({
     id,
@@ -68,27 +73,28 @@ const FIVE_WORKERS: Record<string, LabourPerson> = {
 /** A ledger row for a worker who has not been marked on ANY day this week. */
 const unmarkedRow = (personId: string, name: string): LedgerRow => ({
     personId,
+    fieldOperatorId: personId,
     name,
     initial: name[0],
     tone: 'or',
+    // honest: zero REAL marks (null cells), not "defaulted to absent".
     cells: [null, null, null, null, null, null, null],
-    total: 0, // honest: zero REAL marks, not "zero because defaulted to absent".
 });
 
-describe('HajeriLedger cellClass/cellGlyph — Task 5 (P4): null is not absent', () => {
+describe('HajeriLedger cellDayClass/cellDayGlyph — Task 5 (P4): null is not absent', () => {
     it('renders a null day with a class distinct from a real absent day', () => {
-        expect(cellClass(null)).not.toBe(cellClass('absent'));
+        expect(cellDayClass(null)).not.toBe(cellDayClass(cell({ day: 'absent' })));
     });
 
     it('renders a null day with a glyph distinct from the absent "–" glyph', () => {
-        expect(cellGlyph(null)).not.toBe(cellGlyph('absent'));
+        expect(cellDayGlyph(null)).not.toBe(cellDayGlyph(cell({ day: 'absent' })));
         // Specifically: null must never be the same visible dash a real नाही tap uses.
-        expect(cellGlyph(null)).not.toBe('–');
+        expect(cellDayGlyph(null)).not.toBe('–');
     });
 
-    it('still renders the real present/half/absent glyphs unchanged', () => {
-        expect(cellGlyph('absent')).toBe('–');
-        expect(cellGlyph('half')).toBe('½');
+    it('still renders the real full/half/absent glyphs unchanged', () => {
+        expect(cellDayGlyph(cell({ day: 'absent' }))).toBe('–');
+        expect(cellDayGlyph(cell({ day: 'half' }))).toBe('½');
     });
 });
 
@@ -101,8 +107,7 @@ describe('HajeriLedger render — 5 workers, zero marks for the whole week', () 
             weekLabel: '७–१३ जुलै',
             days: ['सो', 'मं', 'बु', 'गु', 'शु', 'श', 'र'],
             rows: Object.entries(FIVE_WORKERS).map(([id, p]) => unmarkedRow(id, p.name)),
-            dailyTotals: [0, 0, 0, 0, 0, 0, 0],
-            weekTotal: 0,
+            crewRows: [],
         },
     });
 

@@ -20,13 +20,22 @@ import { render, screen, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import LabourHub from '../components/LabourHub';
 import { LABOUR_MOCK } from '../labourMock';
-import type { DailyLog } from '../../../types';
+import type { DailyLog, LedgerDefaults } from '../../../types';
 
 vi.mock('../../../i18n/LanguageContext', () => ({
     useLanguage: () => ({ language: 'mr', setLanguage: () => { }, t: (k: string) => k }),
 }));
 
-const ledgerDefaults = LABOUR_MOCK.ledgerDefaults ?? { labour: { defaultWage: 400, shifts: [] } };
+// Phase 4 tsc fix — this used to read `LABOUR_MOCK.ledgerDefaults`, a member
+// that never existed on `LabourData` (TS2339): the `??` fallback was the only
+// value ever used. Stated directly, properly typed; the test's intent (an
+// unpriced हजेरी shows an em-dash, never a confident ₹0) is untouched — the
+// just-logged card is LabourHub's, not the register's, and still shows money.
+const ledgerDefaults: LedgerDefaults = {
+    irrigation: { method: 'Drip', source: 'well', defaultDuration: 2 },
+    labour: { defaultWage: 400, defaultHours: 8, shifts: [] },
+    machinery: { defaultRentalCost: 0, defaultFuelCost: 0 },
+};
 
 const logWithLabour = (totalCost: number | null): DailyLog => ({
     id: 'log-1',

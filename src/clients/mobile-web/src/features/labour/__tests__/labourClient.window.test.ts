@@ -46,9 +46,10 @@ function buildDto(): LabourDataDto {
             plots: [],
             money: { recorded: null, paid: 0, advance: 0, owed: null },
         },
-        ledger: { weekLabel: '', days: [], rows: [], dailyTotals: [], weekTotal: null },
+        ledger: { weekLabel: '', days: [], rows: [], crewRows: [] },
         review: [],
         attendance: { plot: '', headcount: 0, rows: [] },
+        view: 'owner',
     };
 }
 

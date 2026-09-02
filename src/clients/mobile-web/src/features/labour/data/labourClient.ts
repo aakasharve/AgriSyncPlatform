@@ -42,6 +42,7 @@ import type {
     LabourPerson,
     DashboardData,
     LedgerRow,
+    LedgerCell,
     ReviewItem,
     PresenceStatus,
 } from '../labour.types';
@@ -67,9 +68,12 @@ export interface LabourPersonDto {
     //
     // R15 (Task 13) — `recordedWages`/`paid` are ALL-TIME, never the window's
     // slice: they are the two terms this worker's बाकी/देय is struck from.
+    //
+    // Phase 4 (D-H8) — `paid`/`advance` are also nullable: `null` = WITHHELD
+    // BY VIEW (मुकादम/worker projection). Never coerced to 0.
     recordedWages: number | null;
-    paid: number;
-    advance: number;
+    paid: number | null;
+    advance: number | null;
     todayStatus: string | null;
     daysThisWeek: number | null;
     memberIds: string[] | null;
@@ -111,38 +115,49 @@ export interface LabourDashboardDto {
     // to 0; passed straight through by `mapDashboard` below.
     manDays: number | null;
     manDaysTrend: number;
-    wages: number;
-    advances: number;
+    // Phase 4 (D-H8) — `wages`/`advances`/`money` are nullable: `null` =
+    // WITHHELD BY VIEW (मुकादम/worker projection), never coerced to 0.
+    wages: number | null;
+    advances: number | null;
     // Task 1 (P4) — `null` when zero job-card evidence exists farm-wide.
     owed: number | null;
     logs: number;
     pending: number;
     plots: LabourPlotBarDto[];
-    money: LabourMoneyDto;
+    money: LabourMoneyDto | null;
+}
+
+// Phase 4 (master review D4) — one register cell, the five approved axes.
+// Mirrors `LabourLedgerCellDto` (backend). All STATED facts; nothing is
+// summed or converted here or anywhere downstream.
+export interface LedgerCellDto {
+    day: string | null; night: string | null;
+    hours: number | null; extraHours: number | null;
+    ukte: boolean; work: string | null;
+}
+export interface LabourLedgerCrewRowDto {
+    throughFieldOperatorId: string; throughName: string; counts: (number | null)[];
 }
 
 export interface LabourLedgerRowDto {
     personId: string;
+    fieldOperatorId: string;
     name: string;
     initial: string;
     tone: string;
     // Task 5 (spec: 2026-08-28-labour-v2-release-1, P4) — one slot per ledger
     // day; `null` = no fact for that day (not yet reached / not marked),
     // never a real absence. Mirrors `LabourLedgerRowDto.Cells` (backend).
-    cells: (string | null)[];
-    // Task 6 (P4, D9.9) — a half day is 0.5; never `null` (an unmarked cell
-    // contributes 0 to this sum without making the row's own total unknown).
-    total: number;
+    // Phase 4 — `total` left this contract with the whole totals column
+    // (master review D4).
+    cells: (LedgerCellDto | null)[];
 }
 
 export interface LabourLedgerDto {
     weekLabel: string;
     days: string[];
     rows: LabourLedgerRowDto[];
-    dailyTotals: number[];
-    // Task 6 (P4) — mirrors `LabourDashboardDto.manDays`'s nullability; see
-    // that field and `LabourLedgerDto.WeekTotal` (backend DTO) for why.
-    weekTotal: number | null;
+    crewRows: LabourLedgerCrewRowDto[];
 }
 
 export interface LabourPointsDto {
@@ -193,6 +208,8 @@ export interface LabourDataDto {
     ledger: LabourLedgerDto;
     review: LabourReviewItemDto[];
     attendance: LabourAttendanceDraftDto;
+    // D-H8 — which projection the server sent: "owner" | "crew" | "own".
+    view: string;
 }
 
 /**
@@ -242,7 +259,9 @@ const mapDashboard = (d: LabourDashboardDto): DashboardData => ({
     logs: d.logs,
     pending: d.pending,
     plots: d.plots,
-    money: {
+    // Phase 4 (D-H8) — a `null` money card (withheld by view) passes straight
+    // through; never rebuilt from zeros.
+    money: d.money === null ? null : {
         recorded: d.money.recorded,
         paid: d.money.paid,
         advance: d.money.advance,
@@ -250,18 +269,25 @@ const mapDashboard = (d: LabourDashboardDto): DashboardData => ({
     },
 });
 
+const mapLedgerCell = (c: LedgerCellDto | null): LedgerCell | null =>
+    c === null
+        ? null // no mark that day — silence survives the wire untouched
+        : {
+            day: (c.day === 'full' || c.day === 'half' || c.day === 'absent') ? c.day : null,
+            night: (c.night === 'worked' || c.night === 'notworked') ? c.night : null,
+            hours: c.hours,
+            extraHours: c.extraHours,
+            ukte: c.ukte === true,
+            work: c.work,
+        };
+
 const mapLedgerRow = (r: LabourLedgerRowDto): LedgerRow => ({
     personId: r.personId,
+    fieldOperatorId: r.fieldOperatorId,
     name: r.name,
     initial: r.initial,
     tone: r.tone as LedgerRow['tone'],
-    // Task 5 (P4) — `null` (no fact for that day) passes straight through,
-    // never coerced/defaulted to a real status. The previous blind
-    // `as PresenceStatus[]` cast let a wire `null` silently masquerade as a
-    // valid status to the type checker; mapping element-by-element keeps the
-    // `| null` honest end to end.
-    cells: r.cells.map((c) => c as PresenceStatus | null),
-    total: r.total,
+    cells: r.cells.map(mapLedgerCell),
 });
 
 /**
@@ -350,9 +376,15 @@ export async function fetchLabourData(
             weekLabel: dto.ledger.weekLabel,
             days: dto.ledger.days,
             rows: dto.ledger.rows.map(mapLedgerRow),
-            dailyTotals: dto.ledger.dailyTotals,
-            weekTotal: dto.ledger.weekTotal,
+            crewRows: (dto.ledger.crewRows ?? []).map((c) => ({
+                throughFieldOperatorId: c.throughFieldOperatorId,
+                throughName: c.throughName,
+                counts: c.counts,
+            })),
         },
+        // `'owner'` fallback is display-alignment only — the SERVER strips;
+        // the client never adds back.
+        view: dto.view === 'crew' || dto.view === 'own' ? dto.view : 'owner',
         review: dto.review.map(mapReview),
         attendance: {
             plot: dto.attendance.plot,

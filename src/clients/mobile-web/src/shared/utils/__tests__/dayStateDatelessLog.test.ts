@@ -29,8 +29,11 @@ const dated = (id: string, date: string): DailyLog => ({
 } as unknown as DailyLog);
 
 // The row that caused it: everything a log should have, except a date.
+// (`as unknown as Record<...>` — TS2352 forbids the direct cast because
+// `DailyLog` has no index signature; the double cast is the sanctioned way
+// to build the deliberately-malformed row this suite exists to exercise.)
 const dateless = (id: string): DailyLog => {
-    const log = dated(id, '2026-09-01') as Record<string, unknown>;
+    const log = dated(id, '2026-09-01') as unknown as Record<string, unknown>;
     delete log.date;
     return log as unknown as DailyLog;
 };

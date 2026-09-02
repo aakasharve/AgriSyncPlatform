@@ -19,6 +19,9 @@ export type {
     LabourBalance,
     LabourPerson,
     LedgerRow,
+    LedgerCell,
+    LedgerCrewRow,
+    LabourView,
     ReviewItem,
     ReviewVerificationStatus,
     PlotBar,
@@ -27,7 +30,7 @@ export type {
 } from './labour.types';
 export { netBalance, inr } from './labour.types';
 
-import type { LabourData, LabourPerson } from './labour.types';
+import type { LabourData, LabourPerson, LedgerCell } from './labour.types';
 
 const P = (p: LabourPerson): LabourPerson => p;
 
@@ -67,7 +70,12 @@ const PEOPLE: Record<string, LabourPerson> = {
     }),
 };
 
-const p = (s: 'present' | 'half' | 'absent') => s;
+// Phase 4 (master review D4) — cell builder for the five-axis LedgerCell.
+// `p(null)` (no overrides) is the null CELL: no mark that day at all.
+const p = (day: 'full' | 'half' | 'absent' | null, over: Partial<LedgerCell> = {}): LedgerCell | null =>
+    day === null && Object.keys(over).length === 0
+        ? null
+        : { day, night: null, hours: null, extraHours: null, ukte: false, work: null, ...over };
 
 /**
  * MONEY-SAFETY — the honest empty state for a REAL farm.
@@ -97,15 +105,18 @@ export const EMPTY_LABOUR_DATA: LabourData = {
         insight: '',
         manDays: null,
         manDaysTrend: 0,
-        wages: 0,
-        advances: 0,
+        // Phase 4 — pre-fetch there is no evidence for ANY money figure;
+        // blank is not zero. Same R8 reasoning as manDays/owed above.
+        wages: null,
+        advances: null,
         owed: null,
         logs: 0,
         pending: 0,
         plots: [],
-        money: { recorded: null, paid: 0, advance: 0, owed: null },
+        money: null,
     },
-    ledger: { weekLabel: '', days: [], rows: [], dailyTotals: [], weekTotal: null },
+    ledger: { weekLabel: '', days: [], rows: [], crewRows: [] },
+    view: 'owner' as const,
     review: [],
     attendance: { plot: '', headcount: 0, rows: [], todaysLabourAssignmentId: '' },
 };
@@ -125,27 +136,25 @@ export const LABOUR_MOCK: LabourData = {
         ],
         money: { recorded: 16800, paid: 8400, advance: 3000, owed: 5400 },
     },
-    // Task 6 (spec: 2026-08-28-labour-v2-release-1, P4, D9.9 — supersedes D4)
-    // — this fixture is the "shipped design fixture" the brief names as
-    // ALREADY fabricating a half-day bug: `रमेश` (5 present + 1 half) was
-    // given `total: 6`, and `विलास` (2 present + 2 half) was given `total: 4`
-    // — both silently rounded every half day up to a whole one. Both totals
-    // below are now the real sum (present=1, half=0.5, absent/no-fact=0);
-    // `dailyTotals`/`weekTotal` are recomputed to match (the old `weekTotal:
-    // 28` did not even equal the sum of the old row totals — 6+5+4+7=22 — it
-    // was a stray copy of the unrelated `dashboard.manDays` figure above).
+    // Phase 4 (master review D4) — the CLEAN register fixture: the same four
+    // people and week shape, rewritten to five-axis cells. No totals of any
+    // kind (they left the contract with `LedgerRow.total`). Hand-drawn
+    // preview data, clearly mock — chosen so the preview exercises every
+    // approved axis: a split day/night cell, a night-only cell with stated
+    // hours, an उक्ते contract cell with tap-detail work context, extra
+    // hours, and a crew aggregate row with an unknown (blank) day.
     ledger: {
         weekLabel: '७–१३ जुलै',
         days: ['सो', 'मं', 'बु', 'गु', 'शु', 'श', 'र'],
         rows: [
-            { personId: 'ramesh', name: 'रमेश', initial: 'र', tone: 'or', cells: [p('present'), p('present'), p('half'), p('present'), p('present'), p('present'), p('absent')], total: 5.5 },
-            { personId: 'sunita', name: 'सुनीता', initial: 'सु', tone: 'em', cells: [p('present'), p('present'), p('present'), p('present'), p('present'), p('absent'), p('absent')], total: 5 },
-            { personId: 'vilas', name: 'विलास', initial: 'वि', tone: 'rs', cells: [p('absent'), p('half'), p('present'), p('present'), p('half'), p('absent'), p('absent')], total: 3 },
-            { personId: 'sandip', name: 'संदीप', initial: 'सं', tone: 'am', cells: [p('present'), p('present'), p('present'), p('present'), p('present'), p('present'), p('present')], total: 7 },
+            { personId: 'ramesh', fieldOperatorId: 'ramesh', name: 'रमेश', initial: 'र', tone: 'or', cells: [p('full', { night: 'worked' }), p('full'), p('half'), p(null, { night: 'worked', hours: 3 }), p('full', { ukte: true, work: 'द्राक्ष छाटणी' }), p('full'), p('absent')] },
+            { personId: 'sunita', fieldOperatorId: 'sunita', name: 'सुनीता', initial: 'सु', tone: 'em', cells: [p('full'), p('full'), p('full'), p('full'), p('full', { extraHours: 2 }), p('absent'), p('absent')] },
+            { personId: 'vilas', fieldOperatorId: 'vilas', name: 'विलास', initial: 'वि', tone: 'rs', cells: [p('absent'), p('half'), p('full'), p('full'), p('half'), p('absent'), p('absent')] },
+            { personId: 'sandip', fieldOperatorId: 'sandip', name: 'संदीप', initial: 'सं', tone: 'am', cells: [p('full'), p('full'), p('full'), p('full'), p('full'), p('full'), p('full')] },
         ],
-        dailyTotals: [3, 3.5, 3.5, 4, 3.5, 2, 1],
-        weekTotal: 20.5,
+        crewRows: [{ throughFieldOperatorId: 'shankar-crew', throughName: 'शंकर', counts: [8, 8, null, 8, null, 4, null] }],
     },
+    view: 'owner' as const,
     // ids are GUID-shaped (not literal "r1"/"r2"/"r3") so मंजूर/शंका in preview
     // exercise the SAME `VerifyLogPayload.dailyLogId` zod shape (`ZGuid`) a
     // real backend id has — a non-GUID id would fail client-side wire

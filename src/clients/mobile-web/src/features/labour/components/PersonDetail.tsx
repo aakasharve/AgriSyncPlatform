@@ -173,7 +173,7 @@ const PersonDetail: React.FC<Props> = ({ data, personId, onAdvance, onSettle, on
                 // line is omitted rather than under-explaining the number above
                 // it. Unreachable from the real server (advance is always 0m);
                 // reachable from `labourMock`, whose people carry demo उचल.
-                why={w.balance.recorded === null || w.balance.advance !== 0
+                why={w.balance.recorded === null || w.balance.paid === null || w.balance.advance !== 0
                     ? undefined
                     : `काम झालं ${inr(w.balance.recorded)} − दिलं ${inr(w.balance.paid)}`}
             />

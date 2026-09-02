@@ -74,7 +74,10 @@ describe('useLabourState — money safety', () => {
         expect(result.current.data).toBe(EMPTY_LABOUR_DATA);
         expect(result.current.data).not.toBe(LABOUR_MOCK);
         expect(Object.keys(result.current.data.people)).toHaveLength(0);
-        expect(result.current.data.dashboard.money).toEqual({ recorded: null, paid: 0, advance: 0, owed: null });
+        // Phase 4 — the honest empty state now withholds the whole money card
+        // (`money: null`): pre-fetch/outage there is no evidence for ANY money
+        // figure, so no card exists to carry even honest nulls.
+        expect(result.current.data.dashboard.money).toBeNull();
         expect(result.current.error).toBe(false);
         expect(result.current.loading).toBe(true);
         expect(mockFetchLabourData).not.toHaveBeenCalled();
@@ -107,7 +110,10 @@ describe('useLabourState — money safety', () => {
         expect(result.current.data).toBe(EMPTY_LABOUR_DATA);
         expect(result.current.data).not.toBe(LABOUR_MOCK);
         expect(Object.keys(result.current.data.people)).toHaveLength(0);
-        expect(result.current.data.dashboard.money).toEqual({ recorded: null, paid: 0, advance: 0, owed: null });
+        // Phase 4 — the honest empty state now withholds the whole money card
+        // (`money: null`): pre-fetch/outage there is no evidence for ANY money
+        // figure, so no card exists to carry even honest nulls.
+        expect(result.current.data.dashboard.money).toBeNull();
         expect(result.current.loading).toBe(false);
     });
 
@@ -219,7 +225,10 @@ describe('useLabourState — auth gate (BUG 1)', () => {
         expect(result.current.data).toBe(EMPTY_LABOUR_DATA);
         expect(result.current.data).not.toBe(LABOUR_MOCK);
         expect(Object.keys(result.current.data.people)).toHaveLength(0);
-        expect(result.current.data.dashboard.money).toEqual({ recorded: null, paid: 0, advance: 0, owed: null });
+        // Phase 4 — the honest empty state now withholds the whole money card
+        // (`money: null`): pre-fetch/outage there is no evidence for ANY money
+        // figure, so no card exists to carry even honest nulls.
+        expect(result.current.data.dashboard.money).toBeNull();
     });
 
     it('preview (no FarmContext provider) still shows LABOUR_MOCK regardless of auth', () => {

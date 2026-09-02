@@ -47,7 +47,9 @@ const baseProps = (timeWindow: LabourWindow = 'alltime') => ({
     onTimeWindowChange: vi.fn(),
 });
 
-type Money = LabourData['dashboard']['money'];
+// Phase 4 (D-H8) — the card can be null (withheld by view) on the contract;
+// this suite is about a PRESENT card adding up to its own header.
+type Money = NonNullable<LabourData['dashboard']['money']>;
 
 const withMoney = (money: Money): LabourData => ({
     ...LABOUR_MOCK,
@@ -230,7 +232,11 @@ describe('money card — a POSITION, so it never moves with the window (R15)', (
     });
 
     it('states the basis even when काम झालं itself is unknown — the basis is not a figure', () => {
-        render(<WeeklyDashboard {...baseProps('week')} data={EMPTY_LABOUR_DATA} />);
+        // Phase 4 — a PRESENT card with unknown recorded (EMPTY_LABOUR_DATA
+        // now withholds the card entirely, `money: null`, which is a
+        // different state: no card, no basis, just `—`).
+        render(<WeeklyDashboard {...baseProps('week')}
+            data={withMoney({ recorded: null, paid: 0, advance: 0, owed: null })} />);
 
         expect(screen.getByTestId('labour-money-basis')).toHaveTextContent(LABOUR_WINDOW_LABELS.alltime);
     });

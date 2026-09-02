@@ -26,6 +26,11 @@ import type { LabourData } from '../../labourMock';
 import { EMPTY_LABOUR_DATA, LABOUR_MOCK, inr } from '../../labourMock';
 import { LABOUR_WINDOW_ORDER, type LabourWindow } from '../../labourWindow';
 
+// Phase 4 (D-H8) — `dashboard.money` is now `… | null` (null = withheld by
+// view). LABOUR_MOCK is the owner-view fixture and always carries the card;
+// asserted once here so every fixture below can build on it without `?.`.
+const MOCK_MONEY = LABOUR_MOCK.dashboard.money!;
+
 const noop = () => {};
 // Task 11 (spec: 2026-08-28-labour-v2-release-1) — the screen now takes the
 // time window it is displaying. `alltime` is the founder-chosen default and
@@ -145,7 +150,7 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
             dashboard: {
                 ...LABOUR_MOCK.dashboard,
                 owed,
-                money: { ...LABOUR_MOCK.dashboard.money, recorded, owed },
+                money: { ...MOCK_MONEY, recorded, owed },
             },
         });
 
@@ -183,13 +188,13 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
 
         it('still renders the real recorded figure once it is known (LABOUR_MOCK: ₹16,800)', () => {
             render(<WeeklyDashboard {...baseProps()} data={LABOUR_MOCK} />);
-            expect(screen.getByText(inr(LABOUR_MOCK.dashboard.money.recorded as number))).toBeInTheDocument();
+            expect(screen.getByText(inr(MOCK_MONEY.recorded as number))).toBeInTheDocument();
         });
 
         it('does not render the money-bar बाकी segment/figure when money.owed is null', () => {
             render(<WeeklyDashboard {...baseProps()} data={withMoney(16800, null)} />);
             // The known दिलं figure (₹8,400 in LABOUR_MOCK) still renders...
-            expect(screen.getAllByText(inr(LABOUR_MOCK.dashboard.money.paid)).length).toBeGreaterThan(0);
+            expect(screen.getAllByText(inr(MOCK_MONEY.paid)).length).toBeGreaterThan(0);
             // ...but no ₹ figure exists anywhere for the unknown owed amount
             // (neither the stat tile nor the money-bar segment).
             expect(screen.queryByText(inr(5400))).toBeNull();
@@ -254,10 +259,15 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
             expect(label.previousElementSibling?.textContent).toBe('—');
         });
 
-        it('काम झालं (money.recorded) renders "—" for the real EMPTY_LABOUR_DATA fallback, never ₹0', () => {
+        it('काम झालं (money card) renders "—" for the real EMPTY_LABOUR_DATA fallback, never ₹0', () => {
+            // Phase 4 — EMPTY_LABOUR_DATA now carries `money: null` (pre-fetch
+            // there is no evidence for ANY money figure), so the whole card
+            // body is a single `—` — the same dash-not-zero intent, one level
+            // up: an absent card cannot fabricate an absent figure.
             render(<WeeklyDashboard {...baseProps()} data={EMPTY_LABOUR_DATA} />);
-            const label = screen.getByText('काम झालं · एकूण नोंदवलं');
-            expect(label.nextElementSibling?.textContent).toBe('—');
+            const card = screen.getByTestId('labour-money-card');
+            expect(card.textContent).toBe('—');
+            expect(card.textContent).not.toContain('₹');
         });
 
         it('omits the बाकी देणं/जास्त दिलं stat tile entirely for the real EMPTY_LABOUR_DATA fallback, never a fabricated ₹0/overpayment', () => {
@@ -293,7 +303,7 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
             dashboard: {
                 ...LABOUR_MOCK.dashboard,
                 owed,
-                money: { ...LABOUR_MOCK.dashboard.money, owed },
+                money: { ...MOCK_MONEY, owed },
             },
         });
 
@@ -324,7 +334,7 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
             expect(within(card).getByText('बाकी')).toBeInTheDocument();
             // ...and the bar segment itself carries the readable ₹ figure —
             // not merely an unlabelled block of colour.
-            expect(within(card).getByText(inr(LABOUR_MOCK.dashboard.money.owed as number))).toBeInTheDocument();
+            expect(within(card).getByText(inr(MOCK_MONEY.owed as number))).toBeInTheDocument();
         });
 
         it('absence stays absence — owed: null still renders no fabricated ₹0 anywhere, grid or card (Task 1 invariant preserved)', () => {

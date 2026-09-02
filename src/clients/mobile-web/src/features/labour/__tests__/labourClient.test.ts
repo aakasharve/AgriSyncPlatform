@@ -96,15 +96,25 @@ function buildDto(): LabourDataDto {
             plots: [{ name: 'द्राक्ष-२', days: 18, pct: 82 }],
             money: { recorded: 16800.75, paid: 8400.25, advance: 3000, owed: 5400.5 },
         },
+        // Phase 4 (master review D4) — the CLEAN grid wire shape: five-axis
+        // cell objects (null slot = no mark), crew aggregate rows, no totals.
         ledger: {
             weekLabel: '2026-07-06',
-            days: ['सो', 'मं'],
+            days: ['2026-07-06', '2026-07-07'],
             rows: [
-                { personId: 'p1', name: 'रमेश', initial: 'र', tone: 'or', cells: ['present', 'half'], total: 6 },
+                {
+                    personId: 'op:p1', fieldOperatorId: 'p1', name: 'रमेश', initial: 'र', tone: 'or',
+                    cells: [
+                        { day: 'full', night: 'worked', hours: null, extraHours: 2, ukte: true, work: 'द्राक्ष छाटणी' },
+                        null,
+                    ],
+                },
             ],
-            dailyTotals: [3, 4],
-            weekTotal: 28,
+            crewRows: [
+                { throughFieldOperatorId: 'p2', throughName: 'रोकडे', counts: [8, null] },
+            ],
         },
+        view: 'owner',
         review: [
             {
                 id: 'r1',
@@ -193,16 +203,59 @@ describe('labourClient.fetchLabourData', () => {
         const dto = buildDto();
         dto.people[0].recordedWages = null;
         dto.dashboard.owed = null;
-        dto.dashboard.money.recorded = null;
-        dto.dashboard.money.owed = null;
+        // `!` — the fixture always builds a money card; only its members go null here.
+        dto.dashboard.money!.recorded = null;
+        dto.dashboard.money!.owed = null;
         mockGet.mockResolvedValueOnce(mockOkResponse(dto));
 
         const data = await fetchLabourData('farm-123');
 
         expect(data.people['p1'].balance.recorded).toBeNull();
         expect(data.dashboard.owed).toBeNull();
-        expect(data.dashboard.money.recorded).toBeNull();
-        expect(data.dashboard.money.owed).toBeNull();
+        expect(data.dashboard.money!.recorded).toBeNull();
+        expect(data.dashboard.money!.owed).toBeNull();
+    });
+
+    // Phase 4 (D-H8) — a WITHHELD money card (`money: null` on the wire, the
+    // मुकादम/worker projection) passes straight through as null; the mapper
+    // must never rebuild the card from fabricated zeros.
+    it('passes a null (withheld-by-view) money card straight through', async () => {
+        const dto = buildDto();
+        dto.dashboard.money = null;
+        dto.dashboard.wages = null;
+        dto.dashboard.advances = null;
+        dto.people[0].paid = null;
+        dto.people[0].advance = null;
+        mockGet.mockResolvedValueOnce(mockOkResponse(dto));
+
+        const data = await fetchLabourData('farm-123');
+
+        expect(data.dashboard.money).toBeNull();
+        expect(data.dashboard.wages).toBeNull();
+        expect(data.dashboard.advances).toBeNull();
+        expect(data.people['p1'].balance.paid).toBeNull();
+        expect(data.people['p1'].balance.advance).toBeNull();
+    });
+
+    // Phase 4 (master review D4) — the CLEAN grid maps cell-by-cell: a null
+    // slot survives as null (silence, not absence), every stated axis passes
+    // through unchanged, and crewRows/view reach the screen.
+    it('maps ledger cells, crew rows and the D-H8 view through unchanged', async () => {
+        mockGet.mockResolvedValueOnce(mockOkResponse(buildDto()));
+
+        const data = await fetchLabourData('farm-123');
+
+        expect(data.view).toBe('owner');
+        const row = data.ledger.rows[0];
+        expect(row.personId).toBe('op:p1');
+        expect(row.fieldOperatorId).toBe('p1');
+        expect(row.cells[0]).toEqual({
+            day: 'full', night: 'worked', hours: null, extraHours: 2, ukte: true, work: 'द्राक्ष छाटणी',
+        });
+        expect(row.cells[1]).toBeNull();
+        expect(data.ledger.crewRows).toEqual([
+            { throughFieldOperatorId: 'p2', throughName: 'रोकडे', counts: [8, null] },
+        ]);
     });
 
     it('populates review[].points and review[].status from the DTO', async () => {

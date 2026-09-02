@@ -119,8 +119,11 @@ const MONEY_EPSILON = 0.005;
 const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow, onTimeWindowChange }) => {
     const d = data.dashboard;
     // See the money card's own note below for what each clause is defending.
+    // Phase 4 (D-H8) — `d.money === null` means the whole card was WITHHELD
+    // by view; no bar can be drawn from a card that was not sent.
     const drawsBar =
-        d.money.recorded !== null
+        d.money !== null
+        && d.money.recorded !== null
         && d.money.owed !== null
         && d.money.owed >= 0
         && Math.abs(d.money.recorded - (d.money.paid + d.money.advance + d.money.owed)) < MONEY_EPSILON;
@@ -186,9 +189,10 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
                   * `"null"` in JS — this would have PRINTED THE WORD "null" on
                   * screen instead of the house `—` pattern for an absent fact. */}
                 <StatTile icon={<Users size={17} />} tone="em" value={d.manDays === null ? '—' : String(d.manDays)} label="मजूर-दिवस" trend={d.manDaysTrend} />
-                <StatTile icon={<Wallet size={17} />} tone="em" value={inr(d.wages)} label="मजुरी" />
+                {/* Phase 4 (D-H8) — `null` = withheld by view: `—`, never ₹0. */}
+                <StatTile icon={<Wallet size={17} />} tone="em" value={d.wages === null ? '—' : inr(d.wages)} label="मजुरी" />
                 {SHOW_ADVANCE_STAT && (
-                    <StatTile icon={<ArrowUpRight size={17} />} tone="am" value={inr(d.advances)} label="उचल दिली" />
+                    <StatTile icon={<ArrowUpRight size={17} />} tone="am" value={d.advances === null ? '—' : inr(d.advances)} label="उचल दिली" />
                 )}
                 {/*
                   * TASK 14 / RULING R16 (spec: 2026-08-28-labour-v2-release-1)
@@ -344,43 +348,52 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
               */}
             <GroupLabel>पैसे · money</GroupLabel>
             <div data-testid="labour-money-card" className="rounded-[20px] border border-slate-100 bg-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
-                {/* The basis, stated. Without it the screen silently carries
-                  * two time bases — tiles on the slider's window, this card on
-                  * all time. `आजपर्यंत` is the founder-approved word the slider
-                  * itself is labelled with (`labourWindow.ts` owns it); this is
-                  * reuse in a new position, not a new string. Styled as the
-                  * card's existing labels are (11.5px semibold slate-500) so it
-                  * reads as a qualifier on the card, not as a figure. */}
-                <div data-testid="labour-money-basis" className="mb-2 text-[11.5px] font-semibold text-slate-500">{LABOUR_WINDOW_LABELS.alltime}</div>
-                <div className="mb-2.5 flex items-baseline justify-between">
-                    <span className="text-[11.5px] font-semibold text-slate-500">काम झालं · एकूण नोंदवलं</span>
-                    {/* TASK 1 (P4) — `null` = zero job-card evidence; the house
-                      * pattern for an absent fact is `—`, never a fabricated ₹0. */}
-                    <span data-testid="labour-money-total" className="text-[16px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">{d.money.recorded === null ? '—' : inr(d.money.recorded)}</span>
-                </div>
-                {drawsBar && (
+                {/* Phase 4 (D-H8) — a `null` money card was WITHHELD by view
+                  * (मुकादम/worker projection): the whole card body is `—`,
+                  * never rebuilt from fabricated zeros. Withheld ≠ absent. */}
+                {d.money !== null ? (
                     <>
-                        <div data-testid="labour-money-bar" className="flex h-7 gap-0.5 overflow-hidden rounded-lg">
-                            <span data-testid="labour-money-segment" className="flex items-center justify-center bg-emerald-600 text-[11px] font-extrabold text-white" style={{ flexGrow: Math.max(0, d.money.paid) }}>{inr(d.money.paid)}</span>
-                            {d.money.advance > 0 && (
-                                <span data-testid="labour-money-segment" className="flex items-center justify-center bg-amber-500 text-[11px] font-extrabold text-white" style={{ flexGrow: d.money.advance }}>{inr(d.money.advance)}</span>
-                            )}
-                            {/* TASK 1 — `d.money.owed` may be `null`; guarded
-                              * explicitly rather than `>= 0` alone, because JS
-                              * coerces `null >= 0` to `true` (Number(null) === 0),
-                              * which would render a segment/figure for an unknown
-                              * balance. Both conditions are already in `drawsBar`;
-                              * kept here so this segment can never outlive them. */}
-                            {d.money.owed !== null && d.money.owed >= 0 && (
-                                <span data-testid="labour-money-segment" className="flex items-center justify-center bg-slate-300 text-[11px] font-extrabold text-slate-600" style={{ flexGrow: d.money.owed }}>{inr(d.money.owed)}</span>
-                            )}
+                        {/* The basis, stated. Without it the screen silently carries
+                          * two time bases — tiles on the slider's window, this card on
+                          * all time. `आजपर्यंत` is the founder-approved word the slider
+                          * itself is labelled with (`labourWindow.ts` owns it); this is
+                          * reuse in a new position, not a new string. Styled as the
+                          * card's existing labels are (11.5px semibold slate-500) so it
+                          * reads as a qualifier on the card, not as a figure. */}
+                        <div data-testid="labour-money-basis" className="mb-2 text-[11.5px] font-semibold text-slate-500">{LABOUR_WINDOW_LABELS.alltime}</div>
+                        <div className="mb-2.5 flex items-baseline justify-between">
+                            <span className="text-[11.5px] font-semibold text-slate-500">काम झालं · एकूण नोंदवलं</span>
+                            {/* TASK 1 (P4) — `null` = zero job-card evidence; the house
+                              * pattern for an absent fact is `—`, never a fabricated ₹0. */}
+                            <span data-testid="labour-money-total" className="text-[16px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">{d.money.recorded === null ? '—' : inr(d.money.recorded)}</span>
                         </div>
-                        <div className="mt-2.5 flex flex-wrap gap-3.5">
-                            {([['दिलं', 'bg-emerald-600'], ...(d.money.advance > 0 ? [['उचल', 'bg-amber-500']] as [string, string][] : []), ['बाकी', 'bg-slate-300']] as [string, string][]).map(([l, c]) => (
-                                <span key={l} className="flex items-center gap-1.5 text-[11.5px] font-semibold text-slate-600"><span className={`inline-block h-2.5 w-2.5 rounded-sm ${c}`} />{l}</span>
-                            ))}
-                        </div>
+                        {drawsBar && (
+                            <>
+                                <div data-testid="labour-money-bar" className="flex h-7 gap-0.5 overflow-hidden rounded-lg">
+                                    <span data-testid="labour-money-segment" className="flex items-center justify-center bg-emerald-600 text-[11px] font-extrabold text-white" style={{ flexGrow: Math.max(0, d.money.paid) }}>{inr(d.money.paid)}</span>
+                                    {d.money.advance > 0 && (
+                                        <span data-testid="labour-money-segment" className="flex items-center justify-center bg-amber-500 text-[11px] font-extrabold text-white" style={{ flexGrow: d.money.advance }}>{inr(d.money.advance)}</span>
+                                    )}
+                                    {/* TASK 1 — `d.money.owed` may be `null`; guarded
+                                      * explicitly rather than `>= 0` alone, because JS
+                                      * coerces `null >= 0` to `true` (Number(null) === 0),
+                                      * which would render a segment/figure for an unknown
+                                      * balance. Both conditions are already in `drawsBar`;
+                                      * kept here so this segment can never outlive them. */}
+                                    {d.money.owed !== null && d.money.owed >= 0 && (
+                                        <span data-testid="labour-money-segment" className="flex items-center justify-center bg-slate-300 text-[11px] font-extrabold text-slate-600" style={{ flexGrow: d.money.owed }}>{inr(d.money.owed)}</span>
+                                    )}
+                                </div>
+                                <div className="mt-2.5 flex flex-wrap gap-3.5">
+                                    {([['दिलं', 'bg-emerald-600'], ...(d.money.advance > 0 ? [['उचल', 'bg-amber-500']] as [string, string][] : []), ['बाकी', 'bg-slate-300']] as [string, string][]).map(([l, c]) => (
+                                        <span key={l} className="flex items-center gap-1.5 text-[11.5px] font-semibold text-slate-600"><span className={`inline-block h-2.5 w-2.5 rounded-sm ${c}`} />{l}</span>
+                                    ))}
+                                </div>
+                            </>
+                        )}
                     </>
+                ) : (
+                    <div className="text-[16px] font-black text-slate-800">—</div>
                 )}
             </div>
 

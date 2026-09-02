@@ -252,9 +252,10 @@ export const BalanceCard: React.FC<{ balance: LabourBalance; why?: string; settl
     const net = netBalance(balance);
     const tiles: [string, string][] = [
         ['काम झालं', balance.recorded === null ? '—' : inr(balance.recorded)],
-        ['दिलं', inr(balance.paid)],
+        // Phase 4 (D-H8) — `null` = withheld by view; `—`, never a fabricated ₹0.
+        ['दिलं', balance.paid === null ? '—' : inr(balance.paid)],
     ];
-    if (balance.advance > 0) tiles.push(['उचल', inr(balance.advance)]);
+    if (balance.advance !== null && balance.advance > 0) tiles.push(['उचल', inr(balance.advance)]);
     if (net) {
         tiles.push([net.owe ? 'बाकी' : (net.isAdvance ? 'उचल बाकी' : 'जास्त दिलं'), inr(net.amount)]);
     }
