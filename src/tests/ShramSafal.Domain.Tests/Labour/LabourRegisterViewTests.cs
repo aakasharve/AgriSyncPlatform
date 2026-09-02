@@ -5,8 +5,10 @@ using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Labour.GetLabourData;
+using ShramSafal.Domain.Dfes;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Tests.Work.Handlers;
 using ShramSafal.Domain.Work;
 using Xunit;
@@ -142,12 +144,19 @@ public sealed class LabourRegisterViewTests
     /// DIRECTLY, and every other handler-level suite drives HandleAsync as an
     /// OWNER — for whom the projection is identity. Delete the
     /// ApplyRegisterView wrapper at the handler's single Result.Success site
-    /// and every one of them stays green while a मुकादम receives the whole
-    /// wage book. This fact closes that hole: a Mukadam-role caller drives
-    /// HandleAsync END TO END against seeded REAL money (recorded 3000, paid
-    /// 500, owed 2500 in the owner's book) and pins the RETURNED DTO.
-    /// Mutation-proved 2026-09-02: unwrapping the projection fails exactly
-    /// this fact while the four direct-call facts stay green.
+    /// — or re-attach any unprojected piece after it — and every one of them
+    /// stays green while a मुकादम receives the whole wage book. This fact
+    /// closes that hole: a Mukadam-role caller drives HandleAsync END TO END
+    /// against seeded REAL money the owner's book would show — recorded 3000
+    /// / paid 500 / owed 2500, AND (Task 8, D6) stated engagement money of
+    /// BOTH kinds on today's log (रोजंदारी 1200, उक्ते 12000) — and pins the
+    /// RETURNED DTO: every money member null, including Home's two cards,
+    /// while Home's आज कामावर headcounts survive non-null (so a wholly absent
+    /// Home can never fake this pass). Mutation-proved 2026-09-02 (unwrapping
+    /// the projection fails exactly this fact while the four direct-call
+    /// facts stay green) and 2026-09-03 for Home specifically (re-attaching
+    /// the unprojected home after ApplyRegisterView fails exactly this fact's
+    /// Home.RojandariStated pin while every direct-call fact stays green).
     /// </summary>
     [Fact]
     public async Task A_mukadam_caller_gets_crew_view_with_no_money_from_the_handler_itself()
@@ -160,6 +169,14 @@ public sealed class LabourRegisterViewTests
         // must WITHHOLD (null), never zero out and never leak.
         repo.SeedJobCard(BuildCompletedJobCard(DateOnly.FromDateTime(Now), total: 3000m));
         repo.SeedPayoutAttributedTo(BuildCostEntry(DateOnly.FromDateTime(Now), amount: 500m), WorkerGuid);
+        // Task 8 (D6) — stated engagement money of BOTH kinds on TODAY's log,
+        // so Home's two cards carry real figures in the owner's book and a
+        // leak is observable here (B001: without these seeds the Home money
+        // members were null on both sides and this pin could not bite).
+        var todayLog = BuildLog(Guid.NewGuid(), FarmLocalDay.From(Now));
+        repo.SeedDailyLog(todayLog);
+        repo.SeedAssignment(BuildEngagement(todayLog.Id, totalCost: 1200m, unit: null, count: 4));
+        repo.SeedAssignment(BuildEngagement(todayLog.Id, totalCost: 12000m, unit: ContractUnit.Acre, count: 8));
 
         var result = await new GetLabourDataHandler(repo, new FixedClock(Now)).HandleAsync(
             new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(MukadamGuid)));
@@ -177,9 +194,37 @@ public sealed class LabourRegisterViewTests
         Assert.Null(dto.Dashboard.Advances);
         Assert.Null(dto.Dashboard.Owed);          // 2500m in the owner's book
         Assert.Null(dto.Dashboard.Money);         // the whole card stays owner-only
+
+        // Task 8 (D6) — the home's TWO money truths are withheld end to end…
+        Assert.Null(dto.Home.RojandariStated);    //  1200m in the owner's book
+        Assert.Null(dto.Home.UkteAgreed);         // 12000m in the owner's book
+        // …and the आज कामावर headcounts SURVIVE, non-null — attendance is
+        // safe for anyone (D-H8), and their presence proves the projection
+        // carried Home rather than dropping it (a wholly absent Home would
+        // null the money members too and fake the two asserts above).
+        Assert.Equal(12, dto.Home.OnFarmToday);
+        Assert.Equal(4, dto.Home.RojandariToday);
+        Assert.Equal(8, dto.Home.UkteToday);
     }
 
     // ─── Builders + doubles (same idiom as LabourWindowScopingTests) ─────────
+
+    private static DailyLog BuildLog(Guid id, DateOnly logDate)
+        => DailyLog.CreateForFarm(
+            id: id,
+            farmId: new FarmId(FarmGuid),
+            operatorUserId: new UserId(OwnerGuid),
+            logDate: logDate,
+            idempotencyKey: null,
+            location: null,
+            createdAtUtc: Now);
+
+    private static LabourAssignment BuildEngagement(Guid dailyLogId, decimal? totalCost, ContractUnit? unit, int? count)
+        => LabourAssignment.Create(
+            id: Guid.NewGuid(), dailyLogId: dailyLogId, engagementType: LabourEngagementType.Hired,
+            maleCount: null, femaleCount: null, workerCount: count, wagePerPerson: null,
+            contractUnit: unit, contractQuantity: null, totalCost: totalCost,
+            linkedActivityId: null, createdAtUtc: Now, time: LabourTime.ServerAssumed());
 
     private static CostEntry BuildCostEntry(DateOnly entryDate, decimal amount)
         => CostEntry.Create(
@@ -216,11 +261,27 @@ public sealed class LabourRegisterViewTests
         private readonly List<FarmMembership> _memberships = [];
         private readonly List<JobCard> _jobCards = [];
         private readonly List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)> _payouts = [];
+        private readonly List<DailyLog> _dailyLogs = [];
+        private readonly List<LabourAssignment> _assignments = [];
+        private readonly Dictionary<Guid, DateOnly> _assignmentDates = new();
 
         public void SetRole(Guid farmId, Guid userId, AppRole role) => _roles[(farmId, userId)] = role;
         public void SeedMembership(FarmMembership m) => _memberships.Add(m);
         public void SeedJobCard(JobCard j) => _jobCards.Add(j);
         public void SeedPayoutAttributedTo(CostEntry e, Guid workerUserId) => _payouts.Add((e, workerUserId));
+        public void SeedDailyLog(DailyLog l) => _dailyLogs.Add(l);
+
+        public void SeedAssignment(LabourAssignment a)
+        {
+            _assignments.Add(a);
+            // Production joins LabourAssignment → DailyLog to reach a date; the
+            // fake resolves the same link from the logs already seeded.
+            var log = _dailyLogs.FirstOrDefault(l => l.Id == a.DailyLogId);
+            if (log is not null)
+            {
+                _assignmentDates[a.Id] = log.LogDate;
+            }
+        }
 
         public override Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
             => Task.FromResult(_roles.TryGetValue((farmId, userId), out var role) ? (AppRole?)role : null);
@@ -247,5 +308,16 @@ public sealed class LabourRegisterViewTests
         public override Task<List<FinanceCorrection>> GetCorrectionsForEntriesAsync(
             IEnumerable<Guid> costEntryIds, CancellationToken ct = default)
             => Task.FromResult(new List<FinanceCorrection>());
+
+        public override Task<List<DailyLog>> GetDailyLogsByFarmAsync(FarmId farmId, CancellationToken ct = default)
+            => Task.FromResult(_dailyLogs.Where(l => l.FarmId == farmId).ToList());
+
+        public override Task<List<LabourAssignment>> GetLabourAssignmentsForFarmInWindowAsync(
+            FarmId farmId, DateOnly? fromDate, DateOnly? toDateInclusive, CancellationToken ct = default)
+            => Task.FromResult(_assignments
+                .Where(a => _assignmentDates.TryGetValue(a.Id, out var date)
+                    && (fromDate is null || date >= fromDate.Value)
+                    && (toDateInclusive is null || date <= toDateInclusive.Value))
+                .ToList());
     }
 }
