@@ -265,7 +265,7 @@ function bucketColumns(): DataListColumn<CohortBucketDto>[] {
       render: (r) => (
         <Link
           to={`/farmer-health/${encodeURIComponent(r.farmId)}`}
-          className="rounded-chip border border-line px-2 py-1 text-caption font-semibold text-text-1 hover:bg-wash"
+          className="glass-quiet rounded-chip border-control-edge px-2.5 py-1.5 text-caption font-semibold text-text-1 hover:bg-wash"
           aria-label={`Open the drilldown for farm ${r.farmId}`}
         >
           Open
@@ -913,7 +913,7 @@ export default function FarmerHealthPage() {
 /* ═══════════════════════════════════════════════════════ small pieces ═══ */
 
 function Panel({ children }: { children: ReactNode }) {
-  return <div className="rounded-panel bg-page p-5 shadow-surface">{children}</div>;
+  return <div className="glass-panel rounded-panel p-5">{children}</div>;
 }
 
 /** The band a score bin sits in, read from its own label — '41-50' -> amber. */

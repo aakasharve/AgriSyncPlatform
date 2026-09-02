@@ -63,10 +63,10 @@ export default function ForbiddenPage() {
   const state = location.state as ForbiddenState | null;
 
   return (
-    <div className="grid min-h-screen place-items-center bg-ground p-6">
+    <div className="grid min-h-screen place-items-center p-6">
       <div
         data-print="panel"
-        className="w-full max-w-md rounded-panel bg-page p-8 text-center shadow-float"
+        className="glass-float w-full max-w-md rounded-panel p-8 text-center"
       >
         <div className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-panel bg-tint-red text-red">
           <ShieldOff size={28} strokeWidth={2.4} aria-hidden="true" />

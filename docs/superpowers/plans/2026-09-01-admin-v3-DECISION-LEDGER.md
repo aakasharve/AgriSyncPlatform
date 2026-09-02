@@ -210,6 +210,59 @@ Written to the honest-state rules; all live in one file each.
 | C9 | **The top-bar chip is relabelled "Fetched Nm ago"** | It means *your browser received this*; in-screen chips mean *the server calculated this* |
 | C10 | **`ja` indexed as both `dny` and `gy`; more spellings, not fewer** | A missing row costs a farmer a call that ends in "I can't find you" |
 | C11 | **`npm ci` stays strict in CI** | It failed *loudly* when the lockfile drifted — that is the check working |
+| C12 | 🔄 **REVERSAL — glassmorphism is UN-banned; the console is glass** | Founder, 2026-09-02, verbatim: *"the overall colour theme is too dark make it aesthetic and use the Glass morphism effect not theme to highlight the aesthetics and re design it all"*. **This overturns a decision he previously signed**, so it is written out below rather than left as a row |
+
+---
+
+## C12 detail — the glassmorphism reversal, written out because it overturns a signature
+
+**What the contract said.** `CONTRACT.md` §8 — the v3 design contract, written from the founder's
+own prototype — banned it outright:
+
+> *"Banned: … Glassmorphism, translucency, gradients. The single exception already in `theme.css`
+> is `.as-col-gap`, the hard-stop 45° hatch that marks a missing week in a chart."*
+
+Task 27 flagged the last surviving glass panel — a translucent, backdrop-filtered surface on
+`/403` — as a **live violation** of that ban, and the aesthetic pass of 2026-09-02 deleted it.
+
+**What the founder said, hours later.** *"the overall colour theme is too dark make it aesthetic
+and use the Glass morphism effect not theme to highlight the aesthetics and re design it all"*.
+
+**Why that is legitimate.** §8 is a design document, not a safety rule. Nothing in it protects a
+number, a permission or a reading. A founder may change his mind about how his own console looks.
+What he may not do — and did not ask for — is make an unmeasured value look measured.
+
+**Where the reversal is recorded, so it is as visible as the ban was:**
+
+1. `src/styles/globals.css` §A.12, at the place the old decision lived, with his words quoted.
+2. This entry.
+3. `tokens.contract.test.ts` and `preservation.register.test.ts`. **Both held the ban; both went
+   red; both were rewritten in the same commit as the code, not deleted.** The replacements are
+   strictly harder to satisfy than what they replace — a ban has no contrast floor and glass does.
+
+**The one thing that did NOT bend.** Glass over a busy background destroys text contrast, and
+Task 29's whole finding was a 2.60:1 failure. So:
+
+- `--color-ground` **is unchanged at #f4faf6**, and every bloom painted on `body` is *brighter*
+  than it. A composite always lands between its two colours, so **no point on the page is darker
+  than the old ground** — which means no text anywhere is less legible than before, by
+  construction rather than by survey. The prettier version (deeper, saturated blooms) was measured
+  and rejected: three of those stacked took the honesty grey from 2.82:1 to 2.48:1.
+- Body text on every glass surface holds ≥ 4.5:1 and control edges ≥ 3:1, measured against the
+  **actual** composite. `--color-control-edge` exists because the divider hairline measures 1.25:1
+  on glass, which is not a control edge, it is a rumour of one.
+- **The KPI tile is the one card that stayed opaque.** `--color-tint-grey` is the honesty tile and
+  "grey is not a tone"; a translucent grey tile picks up whatever hue is behind it, and the one
+  surface that must never look like a verdict would start to. It takes the glass *frame* — edge,
+  sheen, height — and keeps its exact tint.
+
+**Not one data colour moved.** §A.2 ink, §A.4 signal, §A.5 vivid, §A.6 tints and §A.7's two
+product constraints are byte-identical. `KpiCard` still forces grey when `state !== 'ok'`. The
+chart-gap hatch is byte-for-byte what it was, and it is still the only repeating gradient.
+
+**What reverting costs:** `globals.css` §A.12 plus six class names. The type scale, the
+disclosures and the copy rewrite are separate commits and survive it.
+
 
 ---
 

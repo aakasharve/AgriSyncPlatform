@@ -376,7 +376,7 @@ export default function FarmsListPage() {
                   'rounded-full border px-3.5 py-2 text-body transition-colors',
                   pressed
                     ? cn('border-transparent font-bold', TIER_CLASS[t])
-                    : 'border-line bg-page text-text-1 hover:border-blue hover:bg-wash',
+                    : 'glass-quiet border-control-edge text-text-1 hover:border-blue hover:bg-wash',
                 )}
               >
                 Tier {t}

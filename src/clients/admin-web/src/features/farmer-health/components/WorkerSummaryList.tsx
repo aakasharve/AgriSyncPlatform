@@ -53,7 +53,7 @@ export function WorkerSummaryList({ workers }: WorkerSummaryListProps) {
   return (
     <section
       data-band="workers"
-      className="rounded-panel bg-page p-5 shadow-surface"
+      className="glass-panel rounded-panel p-5"
       aria-label="Workers seen on this farm"
     >
       <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">

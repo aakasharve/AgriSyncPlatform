@@ -170,37 +170,55 @@ describe('quality floor (CONTRACT.md §10)', () => {
   });
 });
 
-describe('the legacy glass layer, re-counted 2026-09-02 — a count, not a comment', () => {
+describe('the glass layer, and the ban it reverses (§A.12, founder 2026-09-02)', () => {
   /*
-   * Task 3 scheduled the whole §B block for deletion in Task 27, conditional
-   * on the last consumer having moved. Task 27 counted instead of assuming:
-   * four classes were at zero and left; four still have named consumers and
-   * stayed.
+   * 🛑 THIS DESCRIBE BLOCK USED TO ASSERT THE OPPOSITE, AND THAT IS WHY IT IS
+   * WRITTEN OUT AT LENGTH RATHER THAN QUIETLY EDITED.
    *
-   * These assertions are two-sided ON PURPOSE. A class that is still USED
-   * must still be DEFINED (deleting it gives a console that builds green and
-   * renders unstyled, which no build gate catches); a class that is DEFINED
-   * must still be USED (leaving it behind gives dead CSS nobody dares touch,
-   * which is how §B reached 25 references in the first place).
+   * Until 2026-09-02 it read `.glass-panel is deleted — it had zero
+   * consumers`, and it belonged to a family of assertions enforcing
+   * CONTRACT.md §8: *"Banned: … Glassmorphism, translucency, gradients."*
+   * Task 27 named the last surviving glass panel as a LIVE VIOLATION on /403
+   * and the aesthetic pass deleted it.
+   *
+   * THE FOUNDER THEN OVERRULED §8, in these words:
+   *
+   *     "the overall colour theme is too dark make it aesthetic and use the
+   *      Glass morphism effect not theme to highlight the aesthetics and re
+   *      design it all"
+   *
+   * That is his call: §8 is a design document, not a safety rule. So the old
+   * assertions went red, correctly, and they were REWRITTEN IN THE SAME
+   * COMMIT AS THE CODE rather than deleted — which is the whole difference
+   * between a reversal and a silent weakening. What is below is not a smaller
+   * test than what it replaces; it is a test of the thing that is now true,
+   * and it is strictly harder to satisfy, because glass has a contrast floor
+   * and a ban does not.
+   *
+   * The reversal is recorded in three places, and this file asserts the first
+   * of them: globals.css §A.12, ledger entry C12, and the git history.
    */
 
-  /*
-   * `glass-panel` MOVED FROM KEPT TO GONE ON 2026-09-02, and the move is the
-   * whole reason this pair of lists is written two-sided.
-   *
-   * Task 27 could not delete it: ForbiddenPage was still rendering it, and a
-   * class deleted out from under a live consumer gives a console that builds
-   * green and renders unstyled, which no build gate catches. So it stayed,
-   * with its consumer named below, and the §B header recorded it as a LIVE
-   * CONTRACT.md §8 violation on /403 — translucent, backdrop-filtered, and
-   * carrying a three-stop gradient bar.
-   *
-   * The visual-boldness pass restyled ForbiddenPage onto §A, which took the
-   * consumer count to zero, and this list is what then says the class must go
-   * rather than linger as dead CSS nobody dares touch. Both halves landed in
-   * one commit for exactly the reason the two-sided shape exists.
-   */
-  const GONE = ['glass', 'glass-kpi', 'glass-sidebar', 'nav-active', 'glass-panel'] as const;
+  /** The v2 classes. Still gone, and their absence still matters: they came
+   *  from the old console, they carried decorative gradients, and none of
+   *  them is what §A.12 built. */
+  const V2_GONE = ['glass', 'glass-kpi', 'glass-sidebar', 'nav-active'] as const;
+
+  /** The seven §A.12 surfaces. Two-sided ON PURPOSE, exactly as the list
+   *  they replace was: a class that is USED must be DEFINED (deleting it
+   *  gives a console that builds green and renders unstyled, which no build
+   *  gate catches), and a class that is DEFINED must be USED (leaving it
+   *  behind gives dead CSS nobody dares touch, which is how the old §B
+   *  reached 25 references). */
+  const GLASS = [
+    'glass-panel',
+    'glass-float',
+    'glass-chrome',
+    'glass-nav',
+    'glass-quiet',
+    'glass-tile',
+  ] as const;
+
   const KEPT = ['chip-fresh', 'chip-live', 'chip-mat'] as const;
 
   /**
@@ -215,11 +233,98 @@ describe('the legacy glass layer, re-counted 2026-09-02 — a count, not a comme
   const exactly = (name: string) =>
     new RegExp(`(?<!${NOT_NAME_CHAR})${name}(?!${NOT_NAME_CHAR})`);
 
-  it.each(GONE)('.%s is deleted — it had zero consumers', (name) => {
+  it('carries the reversal in the stylesheet, in the founder’s own words', () => {
+    // Anyone deleting the glass has to first delete the sentence recording
+    // that a founder decision put it there — the same device the C7, C8 and
+    // §A.10 assertions use. The RAW text, because here the comment IS the
+    // artefact under test.
+    expect(css).toMatch(/§A\.12[\s\S]{0,3000}REVERSES A BAN/i);
+    expect(css).toContain('use the\n   *      Glass morphism effect');
+    expect(css).toMatch(/§A\.12[\s\S]{0,4000}DECISION-LEDGER/);
+  });
+
+  it('states its contrast floor as a rule, not as a hope', () => {
+    // The one constraint in this redesign that is not taste. If the sentence
+    // goes, the next person to thin out an alpha has nothing telling them
+    // what the alpha was for.
+    expect(css).toMatch(/BODY TEXT ON ANY GLASS SURFACE HOLDS ≥ 4\.5:1/);
+    expect(css).toMatch(/NO POINT ON THE PAGE IS DARKER THAN `--color-ground`/);
+    expect(css).toMatch(/A\s*\n?\s*\*\s*text colour is never lowered to rescue a background/);
+  });
+
+  it.each(GLASS)('.%s is declared', (name) => {
+    expect(cssRules).toContain(`.${name} {`);
+  });
+
+  it.each(GLASS)('.%s has at least one consumer', (name) => {
+    const consumers = Object.keys(SOURCES).filter((path) => exactly(name).test(code(path)));
+    expect(consumers.length).toBeGreaterThan(0);
+  });
+
+  it('every translucent surface declares a fill AND a backdrop-filter', () => {
+    /*
+     * A `backdrop-filter` with no fill is a blur with nothing to tint, and a
+     * fill with no `backdrop-filter` is a flat pale rectangle. Either alone
+     * is a broken pane, and neither fails a build. `glass-tile` is exempt and
+     * named: it is the FRAME without the frost, for the KPI tile, which stays
+     * opaque so the honesty tint cannot pick up the page behind it (§A.6).
+     */
+    /* `glass-quiet` is the one surface with NO shadow, and that is the
+       design rather than an omission: it is a chip or an inset sitting ON a
+       glass panel, so it is not above anything and a shadow would claim a
+       height it does not have. Named here so the exception cannot spread. */
+    for (const name of GLASS) {
+      const rule = cssRules.match(new RegExp(`\\.${name}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+      expect(`${name} has a shadow: ${rule.includes('box-shadow')}`).toBe(
+        `${name} has a shadow: ${name !== 'glass-quiet'}`
+      );
+      if (name === 'glass-tile') {
+        expect(`${name} frosts: ${rule.includes('backdrop-filter')}`).toBe(
+          `${name} frosts: false`
+        );
+        continue;
+      }
+      expect(`${name} frosts: ${rule.includes('backdrop-filter')}`).toBe(`${name} frosts: true`);
+      expect(`${name} has a fill: ${rule.includes('background-color: var(--color-')}`).toBe(
+        `${name} has a fill: true`
+      );
+      // Both spellings, or Safari renders the console unfrosted and nothing
+      // in the build says so.
+      expect(rule).toContain('-webkit-backdrop-filter');
+    }
+  });
+
+  it('no glass rule states a colour — chrome may not speak for data', () => {
+    /*
+     * The rule the whole token layer is organised around: colour on chrome
+     * asserts nothing. A glass class that set `color` would be a chrome class
+     * choosing the ink of whatever it wrapped, which is how an unmeasured
+     * value ends up looking measured.
+     */
+    for (const name of GLASS) {
+      const rule = cssRules.match(new RegExp(`\\.${name}\\s*\\{[^}]*\\}`))?.[0] ?? '';
+      expect(`${name} sets colour: ${/(^|[;{\s])color:/.test(rule)}`).toBe(
+        `${name} sets colour: false`
+      );
+      expect(rule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    }
+  });
+
+  it('the honesty tint is not translucent — §A.6, and it is asserted', () => {
+    // The one place the glass stops. A KPI tile floats its tint over the page
+    // if this ever changes, and `--color-tint-grey` — the colour of "we did
+    // not measure this" — would pick up whatever hue is behind it.
+    for (const tint of ['blue', 'green', 'red', 'amber', 'grey']) {
+      expect(cssRules).toMatch(new RegExp(`--color-tint-${tint}: #[0-9a-f]{6};`));
+    }
+    expect(cssRules).not.toMatch(/--color-tint-[a-z]+: rgba/);
+  });
+
+  it.each(V2_GONE)('the v2 class .%s is still deleted', (name) => {
     expect(cssRules).not.toMatch(exactly(`[.]${name}`));
   });
 
-  it.each(GONE)('.%s is referenced by no source file either', (name) => {
+  it.each(V2_GONE)('the v2 class .%s is referenced by no source file', (name) => {
     const consumers = Object.keys(SOURCES).filter((path) => exactly(name).test(code(path)));
     expect(consumers).toEqual([]);
   });
@@ -229,9 +334,16 @@ describe('the legacy glass layer, re-counted 2026-09-02 — a count, not a comme
   });
 
   /*
-   * The consumers, by name. If one of these files is restyled off §B, this
-   * list is what tells the next person the class may now go — rather than a
-   * comment claiming a number nobody re-counted.
+   * The consumers, by name. If FreshnessChip is ever restyled, this list is
+   * what tells the next person the classes may go — rather than a comment
+   * claiming a number nobody re-counted.
+   *
+   * These three were listed for two years as a §8 disagreement needing the
+   * founder: they are translucent `color-mix()` fills. HALF OF THAT OBJECTION
+   * RETIRED WITH THE REVERSAL — translucency is the house style now. What
+   * survives is the half that was always the real one: their green and their
+   * teal state where a number came from, which is data colour, and no styling
+   * pass restyles a colour that states a fact.
    */
   it('names every file still holding the three survivors alive', () => {
     const holders = (name: string) =>
@@ -239,37 +351,22 @@ describe('the legacy glass layer, re-counted 2026-09-02 — a count, not a comme
         .filter((path) => exactly(name).test(code(path)))
         .sort();
 
-    /*
-     * ONE file now, not two. `glass-panel`'s row was
-     *   expect(holders('glass-panel')).toEqual(['/src/pages/ForbiddenPage.tsx']);
-     * and it is gone because the page is: the assertion that replaces it is
-     * the GONE row above, which is strictly stronger — it requires the class
-     * to be absent from the stylesheet AND unreferenced by any source file.
-     *
-     * The three that remain are all FreshnessChip's, and they remain on
-     * purpose. Their colours are a claim about where a number came from —
-     * green for a live read, teal for last night's materialisation — and a
-     * styling pass does not restyle a colour that states a fact.
-     */
     for (const name of KEPT) {
       expect(holders(name)).toEqual(['/src/components/ui/FreshnessChip.tsx']);
     }
   });
 
   /*
-   * The §A.9 radius pair, and the same rule applied twice a task apart:
-   * a token whose only reader is a deleted class leaves with it.
    * `--radius-kpi` went with `.glass-kpi` in Task 27; `--radius-card` was
-   * read ONLY by `.glass-panel` and went with it on 2026-09-02. Verified by
-   * reading, not assumed: no other rule and no component names it.
-   *
-   * The assertion FLIPPED from `toContain` to `not.toContain`. That is not a
-   * weakened test — it is the same rule, now with both of its cases proven,
-   * and it still fails loudly if either token comes back without a consumer.
+   * read ONLY by the v2 `.glass-panel` and went with it. The NAME
+   * `.glass-panel` came back on 2026-09-02; the TOKEN did not, and that is
+   * the cleanest single proof that §A.12 is a new rule rather than the old
+   * one restored. §A.9's `--radius-panel` is what the new class uses.
    */
-  it('drops --radius-kpi with .glass-kpi and --radius-card with .glass-panel', () => {
+  it('neither radius token came back with the name', () => {
     expect(cssRules).not.toContain('--radius-kpi');
     expect(cssRules).not.toContain('--radius-card');
+    expect(cssRules).toContain('--radius-panel');
   });
 });
 
@@ -342,8 +439,24 @@ describe('the ONE gradient: the chart gap hatch (CONTRACT.md §8, added Task 9)'
   it('carries its reason in the file, not in someone’s memory', () => {
     // Anyone deleting the exception has to first delete the sentence saying
     // what it encodes — the same device the C7 and C8 assertions use.
-    expect(css).toMatch(/§A\.10[\s\S]{0,1200}data encoding/i);
-    expect(css).toMatch(/§A\.10[\s\S]{0,1600}Do not add a second one/i);
+    // Anchored on the BANNER, not on the section number: §A.10 is also named
+    // from inside §A.9 and §A.11, so a bare number anchor starts the window
+    // in the wrong block and the assertion becomes a distance measurement.
+    expect(css).toMatch(/THE ONE HATCH IN THIS STYLESHEET[\s\S]{0,1600}DATA ENCODING/i);
+    expect(css).toMatch(/THE ONE HATCH IN THIS STYLESHEET[\s\S]{0,1600}Do not add a second one/i);
+  });
+
+  it('is still the only REPEATING one, now that the ground has three radial', () => {
+    /*
+     * §8 banned gradients outright and the founder's reversal retired that
+     * ban: the luminous page ground is three `radial-gradient` blooms. The
+     * distinction the console actually depends on survived it — the blooms
+     * are CHROME and assert nothing, this hatch is a DATA ENCODING and
+     * asserts that a period was never measured. So the count that matters is
+     * the repeating one, and it is still exactly one.
+     */
+    expect((cssRules.match(/radial-gradient/g) ?? []).length).toBe(3);
+    expect((cssRules.match(/repeating-linear-gradient/g) ?? []).length).toBe(1);
   });
 
   it('no component hand-rolls its own hatch', () => {

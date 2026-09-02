@@ -648,7 +648,7 @@ export function DataList<T>(config: DataListConfig<T>) {
         </label>
         <select
           id={selectId}
-          className="rounded-chip border border-line bg-page px-2 py-1 text-caption font-medium text-text-1"
+          className="glass-quiet rounded-chip border-control-edge px-2.5 py-1.5 text-caption font-medium text-text-1"
           value={effectiveSortKey ?? ''}
           onChange={(event) => {
             const key = event.target.value;
@@ -689,7 +689,7 @@ export function DataList<T>(config: DataListConfig<T>) {
   function searchBox(): ReactNode {
     if (!search) return null;
     const inputClass =
-      'w-70 max-w-full rounded-chip border border-line bg-page px-3.5 py-2.5 text-body text-text-1 transition-colors placeholder:text-text-3 focus:border-blue';
+      'glass-quiet w-70 max-w-full rounded-chip border-control-edge px-4 py-3 text-body text-text-1 transition-colors placeholder:text-text-3 focus:border-blue';
     const inputLabel = search.label ?? `Search ${label}`;
 
     /* CONTRACT 2 — uncontrolled, trimmed, commits on blur AND Enter. API
@@ -812,7 +812,7 @@ export function DataList<T>(config: DataListConfig<T>) {
           <div className="flex flex-col gap-4">
             <div
               data-print="panel"
-              className="overflow-hidden rounded-panel bg-page shadow-surface"
+              className="glass-panel overflow-hidden rounded-panel"
             >
               <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4">
                 {chipText && <FilterChip text={chipText} onClear={clearFacetsToSummary} />}

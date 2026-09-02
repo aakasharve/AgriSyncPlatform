@@ -20,12 +20,13 @@
  *   the verdict". §A.2 ink, §A.4 signal, §A.5 vivid, §A.6 tints and §A.7's
  *   two product constraints are ALL of that kind. They are governed, they
  *   are asserted by `tokens.contract.test.ts` and `KpiCard.honesty.test.tsx`,
- *   and the boldness pass of 2026-09-02 CHANGED NOT ONE OF THEM.
+ *   and NEITHER the boldness pass of 2026-09-02 NOR the glass pass that
+ *   followed it CHANGED ONE OF THEM.
  *
  *   COLOUR ON CHROME ASSERTS NOTHING. The sidebar, the top bar, panel
  *   heads, the page ground, radii, shadows, brand identity and the six
  *   section accents say where you are and what you can click. That is
- *   §A.3, §A.8, §A.9 and §A.11, and that is where the boldness went.
+ *   §A.3, §A.8, §A.9, §A.11 and §A.12, and that is where the glass went.
  *
  *   If a change would make an UNMEASURED value look measured, or a
  *   measured value look like a different verdict, it does not belong here.
@@ -36,39 +37,24 @@
  *
  * Two blocks live below and they are NOT peers:
  *   §A  the v3 token layer   — what every screen is styled against.
- *   §B  the legacy glass layer — down to THREE classes and two tokens, all
- *       held by one component. What survives is listed by name, with its
- *       consumer, in the §B header below. Do not build on it.
+ *   §B  the legacy layer      — two tokens and three classes, all held by
+ *       one component. It is legacy because of WHERE it came from (the v2
+ *       console), not because it is translucent. New work goes on §A.12.
  * ===================================================================== */
 
 @theme {
   /* --- §A.1 type ------------------------------------------------------
    * The charter font rules outrank the prototype. v3's mock is drawn in
-   * IBM Plex; AgriSync's non-negotiable rule is DM Sans for English,
-   * brand and numbers, and Noto Sans Devanagari for Marathi body text.
-   * Devanagari sits second in the stack so a farmer's name in Marathi
-   * resolves to Noto Sans Devanagari without a per-component check —
-   * the console duplicates that check in four places today and Task 6
-   * removes all four in favour of this.
+   * IBM Plex; AgriSync's non-negotiable rule is DM Sans for English, brand
+   * and numbers, and Noto Sans Devanagari for Marathi body text. Devanagari
+   * sits second in the stack so a farmer's name in Marathi resolves to Noto
+   * Sans Devanagari without a per-component check.
    *
-   * `--font-mono` SURVIVES TASK 27, and the comment that said it would not
-   * was measured rather than trusted. It said 27 files, 92 times. The count
-   * on 2026-09-02, after all thirteen screens were ported, is SIX files and
-   * EIGHTEEN uses:
-   *   FarmerSearchBox.tsx:126        the phone/name search input
-   *   FarmerHealthPage.tsx           ×6, timestamps and tabular figures
-   *   ForbiddenPage.tsx:64,69        two <code> spans
-   *   LoginPage.tsx:135              the OTP input
-   *   OpsErrorsPage.tsx              ×5, timestamps, status codes, ids
-   *   ScheduleTemplatesPage.tsx      ×3, three <code> table names
-   * CONTRACT.md §8 bans monospace, and Tasks 14-26 chose it anyway on the
-   * three surfaces where a value is read character by character. That is a
-   * disagreement with the contract on live screens, not leftover scaffolding,
-   * and clearing it is a visual change to six shipped files. It is a
-   * founder decision, not a deletion — so the token stays and says so.
-   *
-   * THE BOLDNESS PASS DID NOT SWEEP IT EITHER. The six files are unchanged
-   * on this point for exactly that reason: it is his call, not a redraw. */
+   * `--font-mono` SURVIVES. Measured: SIX files, EIGHTEEN uses —
+   * FarmerSearchBox, FarmerHealthPage, ForbiddenPage, LoginPage,
+   * OpsErrorsPage, ScheduleTemplatesPage — every one a value read character
+   * by character. CONTRACT.md §8 bans monospace; that is a live disagreement
+   * on shipped screens and a founder decision, not a sweep. */
   --font-sans: 'DM Sans', 'Noto Sans Devanagari', sans-serif;
   --font-devanagari: 'Noto Sans Devanagari', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -77,15 +63,8 @@
    *
    * Before this, thirteen screens each wrote `text-[26px]`, `text-[17px]`,
    * `text-[15px]` by hand and the whole console sat inside an eleven-pixel
-   * band: a page title was 26, a section head 17, a panel title 15, a label
-   * 15. Nothing dominated anything, which is most of why the console read
-   * flat. Six steps, each a clear jump from the one below it, so a heading
-   * is visibly a heading and a KPI figure visibly outranks its own label.
-   *
-   * `figure` is the KPI number and it is deliberately enormous: it is the
-   * one thing on a tile a reader is there for. It also clears WCAG's
-   * large-text threshold (24px) by a wide margin, which is what lets the
-   * measured tones keep their existing tint pairings unchanged. */
+   * band. Six steps, each a clear jump from the one below it, so a heading
+   * is visibly a heading and a KPI figure visibly outranks its own label. */
   --text-figure: 52px;
   --text-figure--line-height: 1;
   --text-figure--letter-spacing: -0.03em;
@@ -112,27 +91,47 @@
   --color-text-3: #8a9990; /* EVERY honesty state. Never a semantic hue */
 
   /* --- §A.3 surfaces --------------------------------------------------- */
-  /* 🛑 WHY THE PAGE GROUND WAS NOT DARKENED, THOUGH IT WAS ASKED FOR.
+  /* 🛑 `--color-ground` IS UNCHANGED, AND THAT IS A PROOF RATHER THAN A
+   * PREFERENCE.
    *
-   * A deeper ground is the obvious way to make white panels sit ON the page
-   * instead of dissolving into it, and it was measured rather than assumed.
    * `--color-text-3` — the honesty grey, the colour of "we did not measure
-   * this" — is pinned at #8a9990 by contract and reads 2.81:1 against the
-   * old ground. Every candidate ground dark enough to matter took it down
-   * with it: #eff6f1 → 2.72, #eaf1ec → 2.60. 2.60:1 is the exact figure
+   * this" — is pinned at #8a9990 by contract and reads 2.82:1 on this
+   * ground. Every candidate ground even slightly deeper takes it down with
+   * it: #eff6f2 -> 2.72, #eaf1ec -> 2.60, and 2.60:1 is the exact figure
    * Task 29 called an accessibility FAILURE and fixed.
    *
-   * So the ground got WARMER, not darker — a greener paper at the same
-   * luminance (the honesty grey measures 2.82:1 on it, a hair better than
-   * before) — and the depth the founder asked for is drawn by §A.8's
-   * shadows, §A.11's navigation plane and the panel-head band below.
-   * Colour that costs an honesty state its legibility is not a trade this
-   * console makes. */
-  --color-page: #ffffff; /* panels, tiles, the top bar, the login card  */
-  --color-ground: #f4faf6; /* the page itself                           */
-  --color-panel-head: #f2f8f4; /* panel heads and table <thead> only     */
-  --color-wash: #ebf5ef; /* hover, quiet button hover, zebra           */
-  --color-line: #dbe7e0; /* every hairline: dividers, inputs, chips    */
+   * So the glass pass held the ground at its existing value and made the
+   * page luminous the other way: the blooms painted on `body` below are all
+   * BRIGHTER than this colour, so no point on the page is darker than
+   * #f4faf6 and no text anywhere can be less legible than it is today. That
+   * is a property of the construction, not a survey of call sites.
+   *
+   * `--color-page` stays pure white: it is the ink on a brand fill
+   * (`text-page` on a green button) as well as a surface. The surfaces
+   * themselves moved to §A.12's glass. */
+  --color-page: #ffffff; /* white ink on a brand fill; the print surface */
+  --color-ground: #f4faf6; /* the page itself — HOLD THIS VALUE          */
+  /* Translucent since the glass pass, so a panel head reads as a band of
+     frost within the panel rather than a second opaque rectangle painted on
+     top of it. Composites to #f2f9f5 on a glass panel: ink 15.73:1,
+     captions 5.78:1, honesty grey 2.80:1. */
+  --color-panel-head: rgba(233, 246, 239, 0.55);
+  /* Hover, zebra and the open-row band. Brand ink at 6%, so it tints
+     whatever it sits on instead of painting over it. On a glass panel it
+     composites to #eef4f1 — ink 15.04:1, captions 5.53:1 — within 0.02 of
+     the opaque #ebf5ef it replaces. */
+  --color-wash: rgba(15, 92, 61, 0.06);
+  --color-line: #dbe7e0; /* internal dividers: table rules, panel heads */
+  /* 🛑 THE EDGE OF ANYTHING YOU CAN CLICK OR TYPE INTO. Split out from
+     `--color-line` in the glass pass for one reason: WCAG 1.4.11 asks for
+     3:1 on the boundary of an interactive control, and #dbe7e0 measures
+     1.25:1 on a glass panel — a hairline a person with low vision cannot
+     find at all. This one measures 3.80:1 on a glass panel, 3.65:1 on the
+     page ground and 3.17:1 on the navigation plane, so it clears 3:1 on
+     every surface the console can put a control on. Dividers keep
+     `--color-line`: a rule between two table rows is not a control, and a
+     3:1 grid reads as a wireframe. */
+  --color-control-edge: #74867c;
 
   /* --- §A.4 signal colours (CONTRACT.md §7.7) — DATA COLOUR, UNCHANGED -
    * "If you cannot say what a colour means, remove it." These four are
@@ -152,11 +151,19 @@
   --color-edge-grey: #c7d2cb; /* the leading edge of a row with no verdict */
 
   /* --- §A.6 tint backgrounds — KPI tiles and badges. DATA COLOUR,
-   * UNCHANGED. The boldness pass USES these far more than before — chips
-   * and pills that were hairline outlines now carry a real tinted fill —
-   * but it did not restate one of the five values. `--color-tint-grey` is
-   * the honesty tile and it stays exactly as quiet as it was; a measured
-   * chip getting louder while the unmeasured one does not is the point. */
+   * UNCHANGED, AND DELIBERATELY OPAQUE.
+   *
+   * 🛑 WHY THE KPI TILE IS THE ONE CARD THAT IS NOT TRANSLUCENT. Every
+   * other surface in the console took §A.12's glass. A tile did not, and
+   * the reason is the rule at the top of this file: `--color-tint-grey` is
+   * the HONESTY tile, and "grey is not a tone". Float a grey tile on a
+   * green-tinted page and the backdrop bleeds through it — the tile that
+   * means "we did not measure this" picks up a hue, and the one surface in
+   * the console that must never look like a verdict starts to. So a tile
+   * keeps its exact opaque tint and takes the glass FRAME instead: the
+   * luminous top edge, the deeper shadow, the opened radius. It sits in the
+   * same family without its data surface being at the mercy of whatever
+   * happens to be behind it. */
   --color-tint-blue: #eef0fe;
   --color-tint-green: #e7f6ef;
   --color-tint-red: #feecf0;
@@ -176,33 +183,41 @@
   --color-ops-inset: rgba(100, 116, 139, 0.55);
 
   /* --- §A.8 depth: four levels, and there is no fifth ------------------
-   * The other half of the rule: nothing carries a border AND a shadow. An
-   * edge is drawn once, by one means. Panels and tiles are shadow-drawn;
-   * chips, inputs and buttons are border-drawn. Internal dividers are not
-   * edges and do not count. Level one — the ground — has no shadow at all
-   * and therefore has no token; write nothing.
+   * Level one — the ground — has no shadow at all and therefore has no
+   * token; write nothing.
    *
-   * DEEPENED 2026-09-02. `--shadow-surface` was `0 1px 2px rgba(…,0.05)`,
-   * which at 1px and 5% is not a shadow — it is a rumour of one, and on a
-   * near-white ground it was invisible. All three now carry a tight contact
-   * shadow AND a wide ambient one, which is what actually reads as height.
-   * The RHYTHM is the point: each level is a clear step above the last, so
-   * a tile, a panel and a menu are three distinguishable planes rather than
-   * three flat rectangles. The hue is the ink colour, not black — a neutral
-   * black shadow on a green ground goes grey and muddy. */
+   * RETUNED FOR GLASS 2026-09-02. The previous set was built for opaque
+   * white panels on a near-white ground, where the only thing that could
+   * say "this is above that" was a tight contact shadow. A translucent
+   * panel says it three ways at once — the blur behind it, the luminous
+   * edge on it, and the shadow under it — so the shadows got SOFTER AND
+   * WIDER rather than darker. A hard shadow under a frosted panel reads as
+   * a sticker; a wide ambient one reads as height.
+   *
+   * The hue is the ink colour, not black — a neutral black shadow on a
+   * green ground goes grey and muddy.
+   *
+   * 🛑 THE "AN EDGE IS DRAWN ONCE" RULE IS RELAXED FOR GLASS, DELIBERATELY.
+   * §A.8 used to end "nothing carries a border AND a shadow". That rule was
+   * written for opaque surfaces, where a border and a shadow are two ways of
+   * saying the same thing. A glass surface is DEFINED by its edge: without
+   * the hairline and the sheen it has no boundary at all, because its fill
+   * is most of the way to whatever is behind it. So a glass panel carries
+   * both, and only a glass panel does. Buttons, inputs and chips are still
+   * drawn by exactly one means. */
   --shadow-surface:
-    0 1px 1px rgba(20, 32, 26, 0.04), 0 3px 10px rgba(20, 32, 26, 0.06);
+    0 1px 2px rgba(20, 32, 26, 0.04), 0 8px 24px rgba(20, 32, 26, 0.06);
   --shadow-raised:
-    0 2px 4px rgba(20, 32, 26, 0.06), 0 10px 26px rgba(20, 32, 26, 0.09);
+    0 2px 6px rgba(20, 32, 26, 0.05), 0 16px 40px rgba(20, 32, 26, 0.09);
   --shadow-float:
-    0 10px 20px rgba(20, 32, 26, 0.12), 0 28px 56px rgba(20, 32, 26, 0.14);
+    0 8px 24px rgba(20, 32, 26, 0.1), 0 32px 72px rgba(20, 32, 26, 0.16);
 
   /* --- §A.9 geometry --------------------------------------------------- */
-  /* Both opened up on 2026-09-02. 12px on a 236px-wide panel reads as a
-     square with the corners knocked off; 16 reads as a card. The chip step
-     moved with it so a pill inside a panel keeps the same visual family. */
-  --radius-panel: 16px;
-  --radius-chip: 10px;
+  /* Opened again with the glass. A frosted surface reads as a physical
+     object, and a physical object with a 16px corner still looks cut rather
+     than moulded; 20 is what makes a panel look like a pane of something. */
+  --radius-panel: 20px;
+  --radius-chip: 12px;
 
   /* Layout constants the shell is built from (Task 10 consumes these).
      1280 is the design width: 236px sidebar, four KPIs across. */
@@ -211,16 +226,14 @@
   --spacing-topbar: 64px;
   --spacing-row: 52px;
 
-  /* --- §A.11 BRAND AND NAVIGATION CHROME (added 2026-09-02) ------------
+  /* --- §A.11 BRAND AND NAVIGATION CHROME -------------------------------
    * Numbered 11 because §A.10 is the chart-gap hatch, which lives outside
    * `@theme` beside the rule it draws.
    *
    * 🛑 EVERY TOKEN IN THIS BLOCK IS CHROME. Not one of them may be used to
    * state a reading. They colour the frame — the sidebar plane, the brand
    * mark, a primary action, the section you are standing in — and none of
-   * those is a claim about a number. That is the whole licence this block
-   * has, and it does not extend to a tile, a cell, a bar or a chip that
-   * carries a figure.
+   * those is a claim about a number.
    *
    * WHY BRAND GREEN IS DARKER THAN `--color-green`. #0f8a5f is the POSITIVE
    * VERDICT and it is data colour. A brand fill at the same lightness would
@@ -233,80 +246,153 @@
   --color-brand-press: #0b4630; /* its single hover state — white at 10.86:1 */
   --color-brand-wash: #e9f4ee; /* brand-tinted chrome band; brand on it 7.12 */
 
-  /* The navigation plane. A deep green column is the single largest thing
-     the founder sees, and turning it from #ffffff to this is most of what
-     stopped the console reading as grey. It is NOT dark mode: the page, the
-     top bar, every panel and every figure stay light, so no data surface
-     changed contrast at all (D1 holds). */
-  --color-nav: #0e3a2b; /* the sidebar plane — white text at 12.66:1   */
-  --color-nav-raise: #134432; /* the active pill and hover — white 11.05     */
-  --color-nav-line: #1d5942; /* dividers inside the sidebar                 */
-  --color-nav-text: #c5d9cf; /* idle nav label — 8.56:1 on the plane        */
-  --color-nav-muted: #a7c2b6; /* the sidebar's sub-labels — 6.65:1           */
+  /* THE NAVIGATION PLANE — RELIT 2026-09-02, founder: "the overall colour
+     theme is too dark".
+   *
+   * It was #0e3a2b: a column of deep forest down the left of every screen,
+   * the single largest thing on the page, and the thing he meant. It is now
+   * a MINT GLASS PLANE — translucent, frosted, brand-tinted — which keeps
+   * the brand exactly where it was and stops it being a dark field.
+   *
+   * The alpha matters and is not a taste setting. rgba(206,235,221,0.78)
+   * over the page ground composites to #d6eee3, and every label, sub-label
+   * and section accent below is measured against THAT colour and against
+   * the active pill drawn on top of it. Thin the plane out and those twelve
+   * measurements stop being true. */
+  --color-nav: rgba(206, 235, 221, 0.78); /* the plane — composites #d6eee3 */
+  --color-nav-raise: rgba(15, 92, 61, 0.13); /* active pill + hover — #bcdbcd */
+  --color-nav-line: rgba(15, 92, 61, 0.14); /* dividers inside the sidebar   */
+  --color-nav-text: #35483f; /* idle label — 8.02:1 plane · 6.60:1 pill    */
+  --color-nav-muted: #4a5f55; /* sub-labels — 5.63:1 plane · 4.64:1 pill   */
 
   /* THE SIX SECTION ACCENTS.
    *
-   * Task 10 stripped the per-ITEM icon colours because they "encoded
-   * nothing", and that judgement was right — a green Home icon beside a
-   * blue Users icon said nothing about either screen. A SECTION colour is a
-   * different claim and it is a true one: it says WHERE YOU ARE. Six groups,
-   * six accents, on the group heading and on the active item inside it.
+   * A SECTION colour says WHERE YOU ARE, and that is a true claim about the
+   * frame. Six groups, six accents, on the group heading and on the active
+   * item inside it.
    *
-   * They live only on the navigation plane, never on a data surface, and
-   * none of them is one of §A.4's four signal hues at §A.4's lightness — an
-   * operator can never mistake a section accent for a verdict, because a
-   * verdict is never drawn on the sidebar and an accent is never drawn off
-   * it. Every one measured against BOTH the plane and the active pill;
-   * the worst pair in the set is 4.91:1 and all twelve clear 4.5:1. */
-  --color-nav-overview: #5fe0a5; /* 7.65 on plane · 6.68 on pill  */
-  --color-nav-operations: #6cc8f0; /* 6.73 · 5.87                   */
-  --color-nav-product: #c7bafa; /* 7.13 · 6.23                   */
-  --color-nav-farms: #c8e06a; /* 8.64 · 7.54                   */
-  --color-nav-schedules: #f2c15c; /* 7.57 · 6.61                   */
-  --color-nav-admin: #a9c4b8; /* 6.80 · 5.93                   */
+   * REDRAWN FOR THE LIGHT PLANE. The previous six were bright pastels
+   * chosen to carry on a near-black column (#5fe0a5, #6cc8f0 …); on mint
+   * glass every one of them measures under 2:1 and would have been
+   * illegible. These six are their dark counterparts — same six hue
+   * families — re-measured against BOTH the plane (#d6eee3) and the active
+   * pill (#bcdbcd):
+   *
+   *   overview   6.04 · 4.97      farms      5.73 · 4.72
+   *   operations 6.49 · 5.34      schedules  6.04 · 4.97
+   *   product    6.69 · 5.51      admin      6.89 · 5.67
+   *
+   * Worst of the twelve: 4.72:1. All twelve clear AA for body text.
+   *
+   * They live only on the navigation plane, never on a data surface, so an
+   * operator can never mistake a section accent for a verdict: a verdict is
+   * never drawn on the sidebar and an accent is never drawn off it. */
+  --color-nav-overview: #0b6248;
+  --color-nav-operations: #0a5680;
+  --color-nav-product: #5334bb;
+  --color-nav-farms: #456213;
+  --color-nav-schedules: #7d4a05;
+  --color-nav-admin: #3d5249;
+
+  /* --- §A.12 THE GLASS LAYER (added 2026-09-02) ------------------------
+   *
+   * 🛑 THIS REVERSES A BAN THE FOUNDER HIMSELF SIGNED. Read this before
+   * touching anything below it.
+   *
+   * CONTRACT.md §8 — the v3 design contract, written from his own prototype
+   * — reads, verbatim:
+   *
+   *     "Banned: … Glassmorphism, translucency, gradients. The single
+   *      exception already in theme.css is `.as-col-gap`, the hard-stop 45°
+   *      hatch that marks a missing week in a chart."
+   *
+   * Task 27 flagged the last surviving glass panel — a translucent,
+   * backdrop-filtered surface on /403 — as a LIVE VIOLATION of that ban,
+   * and the aesthetic pass of 2026-09-02 deleted it hours before this one
+   * was written.
+   *
+   * ON 2026-09-02 THE FOUNDER OVERRULED §8, in these words:
+   *
+   *     "the overall colour theme is too dark make it aesthetic and use the
+   *      Glass morphism effect not theme to highlight the aesthetics and re
+   *      design it all"
+   *
+   * That is his call and it is legitimate: §8 is a design document, not a
+   * safety rule. It is recorded HERE, at the place the old decision lived,
+   * and as entry C12 in
+   * `docs/superpowers/plans/2026-09-01-admin-v3-DECISION-LEDGER.md`, so the
+   * reversal is exactly as visible as the ban was. The two assertions that
+   * held the ban — in `tokens.contract.test.ts` and
+   * `preservation.register.test.ts` — were rewritten in the same commit as
+   * this block, and they were not deleted: they now GOVERN the glass
+   * instead of forbidding it.
+   *
+   * 🛑 THE ONE THING HERE THAT IS NOT TASTE, AND DOES NOT BEND.
+   *
+   * Glass over a busy background destroys text contrast. That is the whole
+   * risk of this treatment, and it is why every alpha below is a measured
+   * value rather than a chosen one. Three rules:
+   *
+   *   1. BODY TEXT ON ANY GLASS SURFACE HOLDS ≥ 4.5:1, and the edge of any
+   *      control on one holds ≥ 3:1, measured against the ACTUAL composite —
+   *      the glass over whatever is really behind it, not over white.
+   *   2. NO POINT ON THE PAGE IS DARKER THAN `--color-ground`. The blooms
+   *      painted on `body` are all brighter than it, so the darkest possible
+   *      backdrop is #f4faf6 and every measurement below is a floor rather
+   *      than an average.
+   *   3. IF A TREATMENT CANNOT HOLD CONTRAST, THE TREATMENT IS WRONG. A
+   *      text colour is never lowered to rescue a background. That is why
+   *      the KPI tile stayed opaque (§A.6) and why `--color-control-edge`
+   *      exists (§A.3).
+   *
+   * MEASURED, at the darkest backdrop each surface can have:
+   *   panel   `--color-glass` over the ground -> #fcfefc
+   *           ink 16.65:1 · caption 6.12:1 · honesty grey 2.96:1
+   *   float   `--color-glass-strong` over the red KPI tint -> #fdfdfe
+   *           ink 16.60:1 · caption 6.10:1
+   *   nav     `--color-nav` over the ground -> #d6eee3
+   *           ink 13.78:1 · idle label 8.02:1 · worst accent 4.72:1
+   *
+   * Every one of those beats the 2.82:1 the honesty grey has on the bare
+   * page today, and the panel figures land within 0.15 of the opaque white
+   * they replace.
+   *
+   * WHAT EACH TOKEN IS FOR:
+   *   --color-glass         panels, cards, list surfaces, the top bar
+   *   --color-glass-strong  anything that floats over content it cannot
+   *                         predict — menus, the command palette, modals
+   *   --color-glass-quiet   a sub-surface sitting ON a glass panel
+   *   --color-glass-sheen   the 1px luminous highlight along a top edge
+   *   --color-glass-edge    the hairline that stops a pane dissolving
+   *   --blur-glass          the frost. Two steps, not five. */
+  --color-glass: rgba(255, 255, 255, 0.72);
+  --color-glass-strong: rgba(255, 255, 255, 0.88);
+  --color-glass-quiet: rgba(255, 255, 255, 0.55);
+  --color-glass-sheen: rgba(255, 255, 255, 0.9);
+  --color-glass-edge: rgba(20, 32, 26, 0.1);
+  --blur-glass: 18px;
+  --blur-glass-strong: 30px;
 
   /* --- §B legacy tokens — DOWN TO TWO -----------------------------------
-   * Task 3 scheduled this whole block for deletion in Task 27, conditional
-   * on the last consumer having moved. Task 27 counted instead of assuming
-   * and found four classes still held. The boldness pass of 2026-09-02
-   * moved four of the five holding FILES off it, so this is a count again,
-   * not a plan:
+   * Two tokens, one file:
+   *   brand-teal    .chip-mat   (components/ui/FreshnessChip.tsx)
+   *   success       .chip-live  (components/ui/FreshnessChip.tsx)
    *
-   * WHAT LEFT IN THIS PASS, and who moved so it could:
-   *   .glass-panel (+::before)  ForbiddenPage restyled onto §A. It was a
-   *                             LIVE CONTRACT.md §8 VIOLATION — a translucent
-   *                             backdrop-filtered panel with a three-stop
-   *                             gradient bar — sitting on /403, named as such
-   *                             by Task 27 and left standing because no
-   *                             screen task owned the page. This pass owned
-   *                             it.
-   *   --radius-card             read only by .glass-panel; left with it, the
-   *                             same way --radius-kpi left with .glass-kpi.
-   *   surface-panel/-border(-strong)   OrgSwitcher restyled onto §A.
-   *   text-primary/-secondary/-muted   ForbiddenPage, LoginPage, OrgSwitcher
-   *                             and App.tsx's Fallback all restyled. Three
-   *                             near-blacks that were not the console's ink.
-   *   brand-green/-sky/-leaf    LoginPage restyled. Its logo was a three-stop
-   *                             linear-gradient — the second banned gradient
-   *                             in the codebase — and its submit button a
-   *                             fourth. Both are flat brand fills now.
-   *   danger / warning          ForbiddenPage's icon badge, which was a
-   *                             red→amber gradient. It is `tint-red` + `red`
-   *                             now: a failure, said in the failure colour.
+   * 🛑 FRESHNESSCHIP IS STILL NOT TOUCHED, AND HALF THE REASON RETIRED ON
+   * 2026-09-02. It used to be listed as a CONTRACT.md §8 disagreement,
+   * because its three `.chip-*` rules are translucent colour-mixes and §8
+   * banned translucency. The founder's reversal above retires that half
+   * outright — translucency is the house style now, and these chips were
+   * early for it rather than wrong.
    *
-   * WHAT IS STILL HERE, AND WHO HOLDS IT — two tokens, one file:
-   *   brand-teal    .chip-mat   (components/ui/FreshnessChip.tsx:64)
-   *   success       .chip-live  (components/ui/FreshnessChip.tsx:64)
+   * What is left is the half that was always the real one: its two colours
+   * are DATA COLOUR. Green says this number came from a live read, teal
+   * says it came from last night's materialisation. That is a claim about
+   * provenance, restyling it changes what the claim looks like, and neither
+   * this pass nor the one before it changed a colour that states a fact.
    *
-   * 🛑 WHY FRESHNESSCHIP WAS NOT TOUCHED, THOUGH IT IS THE LAST HOLDER.
-   * Its two colours are DATA COLOUR: green says this number came from a live
-   * read, teal says it came from last night's materialisation. That is a
-   * claim about provenance, restyling it changes what the claim looks like,
-   * and this pass changed no colour that states a fact. The three `.chip-*`
-   * rules are translucent colour-mixes and remain a §8 disagreement — a real
-   * one, needing the founder, exactly as Task 27 recorded it.
-   *
-   * Do not style anything new against what remains. */
+   * They are "legacy" because of where they came from — the v2 console —
+   * not because they are see-through. New work goes on §A.12. */
   --color-brand-teal: #52c0be;
   --color-success: #00c853;
 }
@@ -337,10 +423,47 @@ body,
   min-height: 100%;
 }
 
+/* =====================================================================
+ * THE LUMINOUS GROUND (§A.12, added 2026-09-02)
+ *
+ * Glass needs something behind it. A frosted pane over a flat colour is
+ * just a slightly different flat colour — the blur has nothing to bend, and
+ * the whole treatment reads as a rounded rectangle. So the page carries
+ * three soft blooms, and every glass surface picks up their colour at its
+ * edges as content scrolls past.
+ *
+ * 🛑 EVERY BLOOM IS BRIGHTER THAN `--color-ground`, AND THAT IS THE SAFETY
+ * PROPERTY THE WHOLE REDESIGN RESTS ON.
+ *
+ *   #eefff4 luminance 0.9623   ·   #f2fbff 0.9509   ·   #fffaf2 0.9604
+ *   --color-ground #f4faf6     0.9426
+ *
+ * A composite of two colours always lands between them, so no point on this
+ * page — one bloom, two overlapping, or all three at full strength — can be
+ * darker than #f4faf6. That means no text anywhere on the console is less
+ * legible than it was before the redesign, and it means it by construction
+ * rather than by someone having checked each screen.
+ *
+ * The obvious version of this — deeper, more saturated blooms, the kind
+ * that make glass look dramatic in a mockup — was measured and rejected:
+ * three of those stacked took the honesty grey from 2.82:1 to 2.48:1, and
+ * lowering the legibility of the colour that means "we did not measure
+ * this" to make a background look good is the exact trade this console does
+ * not make.
+ *
+ * `background-attachment: fixed` keeps the blooms still while content
+ * scrolls, so the frost on a panel does not shimmer as it moves.
+ * ===================================================================== */
 body {
   margin: 0;
   padding: 0;
-  background: var(--color-ground);
+  background-color: var(--color-ground);
+  background-image:
+    radial-gradient(1100px 620px at 4% -10%, #eefff4 0%, transparent 60%),
+    radial-gradient(900px 560px at 98% 2%, #f2fbff 0%, transparent 58%),
+    radial-gradient(1000px 680px at 74% 104%, #fffaf2 0%, transparent 60%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
   color: var(--color-text-1);
   font-family: var(--font-sans);
   font-size: 15px;
@@ -372,16 +495,21 @@ body {
 }
 
 /* =====================================================================
- * §A.10 THE ONE GRADIENT IN THIS STYLESHEET — a gap in a chart.
+ * §A.10 THE ONE HATCH IN THIS STYLESHEET — a gap in a chart.
  *
- * CONTRACT.md §8 bans gradients outright, with a single named exception:
- * the hard-stop 45° hatch that marks a period with NO MEASUREMENT. It is
- * a DATA ENCODING, not decoration — it exists so a gap can never be read
- * as a trough — and the ban's own words are "Do not add a second one".
+ * CONTRACT.md §8 banned gradients outright with a single named exception:
+ * the hard-stop 45° hatch that marks a period with NO MEASUREMENT. The
+ * founder's reversal of 2026-09-02 (§A.12) retired the ban on decorative
+ * gradients — the page ground above is three of them — but it did NOT
+ * touch what this one IS, and the distinction is the point:
  *
- * It is still the only one. The boldness pass of 2026-09-02 DELETED two
- * others it found rather than adding a third: the `.glass-panel::before`
- * bar on /403 and the login screen's logo and submit-button fills.
+ *   the blooms on `body`  are CHROME. They assert nothing.
+ *   this hatch            is a DATA ENCODING. It asserts that a period was
+ *                         never measured, and it is still the ONLY
+ *                         repeating gradient in the console.
+ *
+ * Do not add a second one. A second hatch at a second frequency reads as a
+ * second state, which is the legend this console does not have.
  *
  * 🛑 WHY A HATCH AND NOT A ZERO-HEIGHT BAR.
  * A bar of height zero and a period that was never measured are drawn the
@@ -398,12 +526,6 @@ body {
  * in a semantic hue would break §9.4: an honesty state outranks any
  * semantic colour.
  *
- * Ported from the prototype's `.as-col-gap` / `.as-spark-bar[data-state=
- * "gap"]` (`theme.css:809-817,825-840`). The 4px/8px step is v3's
- * sparkline value; the column chart there uses 5px/10px. ONE step is
- * carried, not two: two hatches at two frequencies on one screen read as
- * two different states, which is the legend this console does not have.
- *
  * `.chart-gap-hatch` carries ONLY the fill. The border, the radius and
  * the height belong to the component (`GapBar.tsx`), so the fill stays
  * one rule with one reason rather than a family of near-copies.
@@ -419,31 +541,118 @@ body {
 }
 
 /* =====================================================================
- * §B LEGACY — what is LEFT of the glass utility classes.
+ * §A.12 THE GLASS SURFACES — six classes, and there is no seventh.
  *
- * TASK 27 DELETED FOUR OF THE EIGHT, on a per-class count:
- *   .glass, .glass-kpi, .glass-sidebar, .nav-active — all at 0 consumers.
+ * There were seven for about an hour. `.glass-raised` — the same pane at
+ * `--shadow-raised` — was written because the depth ladder has three rungs
+ * and it felt incomplete without one class per rung. It reached zero
+ * consumers, the two-sided assertion in `tokens.contract.test.ts` caught
+ * it, and it was deleted rather than given a home. A depth level with
+ * nothing at it is not a gap; `--shadow-raised` is spent by `.glass-tile`,
+ * which is the surface that actually needs to sit above the page.
  *
- * THE BOLDNESS PASS (2026-09-02) DELETED A FIFTH:
- *   .glass-panel (+ ::before)  — its only consumer, ForbiddenPage, was
- *   restyled onto §A. It was a translucent, backdrop-filtered panel with a
- *   three-stop gradient bar, which CONTRACT.md §8 bans three ways over, and
- *   Task 27 named it as a live violation on /403 rather than fixing it
- *   because no screen task owned that page.
+ * They live in `@layer components` so a Tailwind utility written in a
+ * component still wins over them. That is what lets `glass-tile
+ * bg-tint-grey` give the honesty tile the frame without the frost, which
+ * is exactly what §A.6 needs.
  *
- * THREE REMAIN, ALL HELD BY ONE FILE. This is a count, not a plan:
- *   .chip-fresh  (+ .dot)     components/ui/FreshnessChip.tsx:66
- *   .chip-live                components/ui/FreshnessChip.tsx:64
- *   .chip-mat                 components/ui/FreshnessChip.tsx:64
+ * `backdrop-filter` degrades safely. A browser without it renders the
+ * translucent fill and no blur, which is a slightly flatter panel — never
+ * an unreadable one, because THE CONTRAST FLOOR IS A PROPERTY OF THE FILL
+ * AND THE GROUND, not of the blur.
  *
- * They are translucent colour-mixes, so they remain a §8 disagreement.
- * They were left standing DELIBERATELY: the two colours are a claim about
- * where a number came from — live read versus overnight materialisation —
- * and this pass changed no colour that states a fact. That one is the
- * founder's, and it is still open.
+ * The `saturate()` is what makes frost read as glass rather than as fog:
+ * it pulls the colour of the bloom behind the pane forward through it. It
+ * applies to the BACKDROP, never to the content, so no data colour on any
+ * screen is altered by it.
+ * ===================================================================== */
+@layer components {
+  /* Panels, cards, list surfaces. The default. */
+  .glass-panel {
+    background-color: var(--color-glass);
+    -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(1.6);
+    backdrop-filter: blur(var(--blur-glass)) saturate(1.6);
+    border: 1px solid var(--color-glass-edge);
+    box-shadow:
+      inset 0 1px 0 0 var(--color-glass-sheen),
+      var(--shadow-surface);
+  }
+
+  /* Anything that floats over content it cannot predict — a menu, the
+     command palette, a modal. Denser on purpose: it may land on a red KPI
+     tint or on the mint navigation plane, and its text has to hold 4.5:1
+     over whichever it turns out to be. */
+  .glass-float {
+    background-color: var(--color-glass-strong);
+    -webkit-backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.8);
+    backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.8);
+    border: 1px solid var(--color-glass-edge);
+    box-shadow:
+      inset 0 1px 0 0 var(--color-glass-sheen),
+      var(--shadow-float);
+  }
+
+  /* The top bar. Content frosts as it scrolls underneath. */
+  .glass-chrome {
+    background-color: var(--color-glass);
+    -webkit-backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.7);
+    backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.7);
+    border-bottom: 1px solid var(--color-glass-edge);
+    box-shadow: inset 0 1px 0 0 var(--color-glass-sheen);
+  }
+
+  /* The navigation plane. Brand-tinted rather than white — this is where
+     the brand lives now that it is not a dark column. */
+  .glass-nav {
+    background-color: var(--color-nav);
+    -webkit-backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.5);
+    backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.5);
+    box-shadow: inset -1px 0 0 0 var(--color-glass-edge);
+  }
+
+  /* A small surface sitting ON a glass panel: a chip, a pill, an inset
+     block. No shadow — it is not above anything, it is part of the pane. */
+  .glass-quiet {
+    background-color: var(--color-glass-quiet);
+    -webkit-backdrop-filter: blur(calc(var(--blur-glass) / 2)) saturate(1.4);
+    backdrop-filter: blur(calc(var(--blur-glass) / 2)) saturate(1.4);
+    border: 1px solid var(--color-glass-edge);
+  }
+
+  /* THE FRAME WITHOUT THE FROST — for the one card that must stay opaque.
+     §A.6 says why: a KPI tile carries the honesty tint, and a tint that
+     lets the page bleed through it is a tint that can pick up a hue it did
+     not mean. This gives a tile the luminous edge and the height of the
+     glass family while its own background stays exactly the colour its
+     token says it is. */
+  .glass-tile {
+    border: 1px solid var(--color-glass-edge);
+    box-shadow:
+      inset 0 1px 0 0 var(--color-glass-sheen),
+      var(--shadow-raised);
+  }
+}
+
+/* =====================================================================
+ * §B LEGACY — what is LEFT of the v2 utility classes.
  *
- * Nothing new is built on this. It is a bridge, and it is shorter again
- * than it was.
+ * Task 27 deleted four of the eight at zero consumers (`.glass`,
+ * `.glass-kpi`, `.glass-sidebar`, `.nav-active`); the aesthetic pass of
+ * 2026-09-02 deleted `.glass-panel` when ForbiddenPage stopped rendering
+ * it. THAT NAME IS IN USE AGAIN, in §A.12 above, and it is NOT the old
+ * class back: the v2 rule carried a three-stop decorative gradient bar and
+ * a `--radius-card` token of its own, and neither exists in §A.12.
+ * `preservation.register.test.ts` asserts that difference by declaration
+ * rather than by anyone remembering it.
+ *
+ * THREE LEGACY CLASSES REMAIN, ALL HELD BY ONE FILE. A count, not a plan:
+ *   .chip-fresh  (+ .dot)     components/ui/FreshnessChip.tsx
+ *   .chip-live                components/ui/FreshnessChip.tsx
+ *   .chip-mat                 components/ui/FreshnessChip.tsx
+ *
+ * They stay for the reason in the §B token block: their two colours state
+ * a fact about where a number came from, and no styling pass restyles a
+ * colour that states a fact.
  * ===================================================================== */
 
 /* Freshness chip */
@@ -451,10 +660,10 @@ body {
   display: inline-flex;
   gap: 6px;
   align-items: center;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  padding: 4px 11px;
-  border-radius: 12px;
+  padding: 5px 12px;
+  border-radius: 999px;
   border: 1.5px solid;
 }
 .chip-fresh .dot {
@@ -480,9 +689,7 @@ body {
  * ===================================================================== */
 
 /* An admin who has asked their OS to stop moving things gets a console
-   that does not move. One rule, not a per-component opt-in — which is why
-   it kept working when Task 27 deleted the legacy hover lift it used to
-   name here by class. */
+   that does not move. One rule, not a per-component opt-in. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -497,18 +704,21 @@ body {
 /* A printed console is evidence. Chrome goes, content stays, and a panel
    or a tile is never split across a page break.
 
-   This rule used to name `.glass-sidebar`, `.glass`, `.glass-kpi` and then
-   `.glass-panel`, and each deletion left it thinner. It now names NO class
-   at all, and that is the repair: `[data-print="chrome"]` is what the shell
-   puts on its sidebar and top bar, and `[data-print="panel"]` is declared by
-   the five things that must not be cut in half — Card, KpiCard, DataList,
-   ChartShell and the /403 panel. Counted, not assumed.
-   A print rule that keys off an attribute the components declare cannot go
-   stale the next time a class is renamed — which is exactly how this rule
-   spent three tasks describing selectors that matched nothing. */
+   `[data-print="chrome"]` is what the shell puts on its sidebar and top
+   bar; `[data-print="panel"]` is declared by the things that must not be
+   cut in half — Card, KpiCard, DataList, ChartShell and the /403 panel. A
+   print rule that keys off an attribute the components declare cannot go
+   stale the next time a class is renamed, which is exactly how this rule
+   spent three tasks describing selectors that matched nothing.
+
+   THE FROST COMES OFF ON PAPER. A translucent panel over a background
+   image prints as a grey box on a printer that honours backgrounds and as
+   nothing at all on one that does not. On paper a panel is white, with a
+   real hairline so it still reads as a panel. */
 @media print {
   body {
-    background: var(--color-page);
+    background-color: var(--color-page);
+    background-image: none;
   }
   [data-print='chrome'] {
     display: none !important;
@@ -516,5 +726,9 @@ body {
   [data-print='panel'] {
     break-inside: avoid;
     box-shadow: none;
+    background-color: var(--color-page);
+    border: 1px solid var(--color-line);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }

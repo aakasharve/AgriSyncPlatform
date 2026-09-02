@@ -50,7 +50,7 @@ export function ErrorState({ error, onRetry, className }: ErrorStateProps) {
           <button
             type="button"
             onClick={onRetry}
-            className="rounded-chip border border-line bg-page px-2.5 py-1 text-[12px] font-bold text-text-1 hover:bg-wash"
+            className="glass-quiet rounded-chip border-control-edge px-3 py-1.5 text-caption font-bold text-text-1 hover:bg-wash"
           >
             Retry
           </button>

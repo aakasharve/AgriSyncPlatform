@@ -101,24 +101,36 @@ export default function LoginPage() {
   }
 
   const fieldClass =
-    'w-full rounded-chip border border-line bg-page px-4 py-3 text-[16px] font-medium text-text-1 transition-colors focus:border-brand';
+    'glass-quiet w-full rounded-chip border-control-edge px-4 py-3.5 text-body font-medium text-text-1 transition-colors focus:border-brand';
 
   return (
-    <div className="flex min-h-screen bg-page">
-      {/* ── LEFT PLANE — the brand, in the console's own navigation green ── */}
-      <div className="hidden w-[55%] flex-col items-start justify-between bg-nav p-14 lg:flex">
+    /* No background of its own any more. The luminous ground painted on
+       `body` (globals.css §A.12) shows through both planes, so the frosted
+       hero and the frosted form sit on the same field of light. */
+    <div className="flex min-h-screen">
+      {/* ── LEFT PLANE — the brand, on mint glass ──────────────────────────
+          It was `bg-nav`, which until 2026-09-02 was #0e3a2b: a near-black
+          green covering 55% of the sign-in screen. That is half of what the
+          founder meant by "the overall colour theme is too dark", and the
+          other half was the sidebar behind it. The plane is the same token,
+          relit — so the hero followed the console without a second decision.
+
+          Every word here is now dark ink on a light pane, and the numbers
+          are §A.11's: the plane resolves to #d6eee3, the heading ink reads
+          13.78:1 on it and the supporting line 8.02:1. */}
+      <div className="glass-nav relative hidden w-[55%] flex-col items-start justify-between p-14 lg:flex">
         <div className="flex items-center gap-3">
-          <span className="grid h-11 w-11 place-items-center rounded-chip bg-nav-overview text-nav">
-            <Leaf size={22} strokeWidth={2.4} aria-hidden="true" />
+          <span className="grid h-12 w-12 place-items-center rounded-chip bg-brand text-page shadow-surface">
+            <Leaf size={24} strokeWidth={2.4} aria-hidden="true" />
           </span>
-          <span className="text-h3 font-bold text-page">AgriSync Admin</span>
+          <span className="text-h3 font-bold text-text-1">AgriSync Admin</span>
         </div>
 
         <div className="max-w-[26ch]">
-          <h1 className="mb-5 text-[44px] leading-[1.08] font-bold tracking-[-0.03em] text-page">
+          <h1 className="mb-5 text-[48px] leading-[1.1] font-bold tracking-[-0.03em] text-text-1">
             Every signal your farm operation needs.
           </h1>
-          <p className="mb-10 max-w-[42ch] text-[17px] text-nav-text">
+          <p className="mb-10 max-w-[42ch] text-body text-nav-text">
             Live health, WVFD trends, farmer suffering watchlist, voice pipeline metrics — all in
             one place.
           </p>
@@ -130,8 +142,8 @@ export default function LoginPage() {
               { Icon: Shield, label: 'Live API health · auto-refresh 30s' },
             ].map(({ Icon, label }) => (
               <div key={label} className="flex items-center gap-3">
-                <span className="grid h-9 w-9 flex-none place-items-center rounded-chip bg-nav-raise text-nav-overview">
-                  <Icon size={17} strokeWidth={2.2} aria-hidden="true" />
+                <span className="grid h-11 w-11 flex-none place-items-center rounded-chip bg-nav-raise text-nav-overview">
+                  <Icon size={19} strokeWidth={2.2} aria-hidden="true" />
                 </span>
                 <span className="text-body font-medium text-nav-text">{label}</span>
               </div>
@@ -144,13 +156,13 @@ export default function LoginPage() {
         </p>
       </div>
 
-      {/* ── RIGHT PLANE — the form, on white ── */}
-      <div className="flex flex-1 items-center justify-center border-line px-6 lg:border-l">
-        <form onSubmit={onSubmit} className="w-full max-w-[420px] py-10">
+      {/* ── RIGHT PLANE — the form, on a frosted card ── */}
+      <div className="flex flex-1 items-center justify-center px-6 py-10">
+        <form onSubmit={onSubmit} className="glass-panel w-full max-w-[440px] rounded-panel p-8">
           {/* The mark again for anyone below lg, where the left plane is gone */}
           <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <span className="grid h-11 w-11 place-items-center rounded-chip bg-brand text-page">
-              <Leaf size={22} strokeWidth={2.4} aria-hidden="true" />
+            <span className="grid h-12 w-12 place-items-center rounded-chip bg-brand text-page">
+              <Leaf size={24} strokeWidth={2.4} aria-hidden="true" />
             </span>
             <span className="text-h3 font-bold text-text-1">AgriSync Admin</span>
           </div>
@@ -196,7 +208,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full rounded-chip bg-brand py-4 text-[16px] font-bold text-page transition-colors hover:bg-brand-press disabled:bg-line disabled:text-text-2"
+            className="w-full rounded-chip bg-brand py-4 text-body font-bold text-page shadow-surface transition-colors hover:bg-brand-press disabled:bg-line disabled:text-text-2"
           >
             {submitting ? 'Signing in…' : 'Sign in →'}
           </button>

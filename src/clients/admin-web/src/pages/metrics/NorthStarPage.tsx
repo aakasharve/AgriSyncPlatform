@@ -644,7 +644,7 @@ export default function NorthStarPage() {
       <section
         data-goal="wvfd"
         aria-labelledby="nsm-goal-title"
-        className="flex flex-col gap-3 rounded-panel bg-page px-5 py-4 shadow-surface"
+        className="glass-panel flex flex-col gap-3 rounded-panel px-5 py-4"
       >
         <h2 id="nsm-goal-title" className="text-h3 font-semibold text-text-1">
           Against the goal
@@ -712,7 +712,7 @@ export default function NorthStarPage() {
       <section
         data-note="verified"
         aria-labelledby="nsm-verified-title"
-        className="flex flex-col gap-2 rounded-panel border border-line bg-page px-5 py-4"
+        className="glass-panel flex flex-col gap-2 rounded-panel px-5 py-4"
       >
         <h2 id="nsm-verified-title" className="text-h3 font-semibold text-text-1">
           &ldquo;Verified&rdquo; does not yet mean independently verified

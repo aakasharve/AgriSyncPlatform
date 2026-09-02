@@ -96,7 +96,7 @@ export function OrgSwitcher({ memberships, fullPage = false, headline, subline }
                   className={`flex w-full items-center justify-between rounded-chip border p-4 text-left transition-colors ${
                     selected
                       ? 'border-brand bg-brand-wash'
-                      : 'border-line hover:border-brand hover:bg-wash'
+                      : 'border-control-edge hover:border-brand hover:bg-wash'
                   }`}
                 >
                   <div>

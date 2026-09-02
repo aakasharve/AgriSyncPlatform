@@ -37,18 +37,28 @@ const buttonVariants = cva(
            links, active facets, filter chips and the focus ring; what it
            stops being is the console's identity, which it never was. */
         default: 'bg-brand text-page hover:bg-brand-press',
-        /* v3 `.is-quiet` — a real edge, no fill until hover. */
-        outline: 'border border-line bg-page text-text-1 hover:bg-wash',
+        /* v3 `.is-quiet` — a real edge, no fill until hover. The edge is
+           `--color-control-edge` (3.80:1 on a glass panel), not the divider
+           hairline it used to be (1.25:1): WCAG 1.4.11 governs the boundary
+           of a control, and a button a low-vision reader cannot find is not
+           a quiet button, it is a missing one. The fill is `glass-quiet`, so
+           an outline button on a glass panel is part of the pane rather than
+           an opaque white rectangle sitting on it. */
+        outline: 'glass-quiet border-control-edge text-text-1 hover:bg-wash',
         ghost: 'text-text-1 hover:bg-wash',
         /* Red means a failure or something that needs a person. A
            destructive button is the second reading, so it is allowed. */
         destructive: 'bg-red text-page hover:bg-red/90',
       },
+      /* Every step grew with the type scale (globals.css §A.1). A 44px
+         button around 17px text is tight; these also clear the 44px pointer
+         target on the two smaller steps, which the old `sm` at 36px did
+         not. */
       size: {
-        default: 'h-11 px-4',
-        sm: 'h-9 px-3 text-caption',
-        lg: 'h-12 px-6',
-        icon: 'h-11 w-11',
+        default: 'h-12 px-5',
+        sm: 'h-10 px-4 text-caption',
+        lg: 'h-14 px-7',
+        icon: 'h-12 w-12',
       },
     },
     defaultVariants: { variant: 'default', size: 'default' },

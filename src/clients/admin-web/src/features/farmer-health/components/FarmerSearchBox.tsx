@@ -123,14 +123,14 @@ export function FarmerSearchBox({ onResolved }: FarmerSearchBoxProps) {
             /* Note 3, said on screen: three kinds of input, one box. */
             placeholder="farm ID, user ID, or phone"
             autoComplete="off"
-            className="h-9 w-72 rounded-chip border border-line bg-page pl-8 pr-3 font-mono text-caption text-text-1 focus:border-blue"
+            className="glass-quiet h-11 w-72 rounded-chip border-control-edge pl-9 pr-3 font-mono text-caption text-text-1 focus:border-blue"
           />
         </div>
         <button
           type="button"
           onClick={submit}
           disabled={!debounced || query.isFetching}
-          className="inline-flex h-9 items-center gap-1.5 rounded-chip border border-line bg-blue px-3 text-caption font-semibold text-white transition-colors hover:bg-blue-press disabled:opacity-50"
+          className="inline-flex h-11 items-center gap-1.5 rounded-chip bg-blue px-4 text-caption font-semibold text-page transition-colors hover:bg-blue-press disabled:opacity-50"
         >
           {query.isFetching ? (
             <Loader2 size={12} aria-hidden="true" className="animate-spin" />

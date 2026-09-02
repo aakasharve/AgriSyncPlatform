@@ -112,7 +112,7 @@ export function DwcScoreCard({ score }: DwcScoreCardProps) {
   return (
     <section
       data-band="score"
-      className="rounded-panel bg-page p-5 shadow-surface"
+      className="glass-panel rounded-panel p-5"
       aria-label="DWC v2 score breakdown"
     >
       <div className="flex flex-col gap-6 md:flex-row md:items-start">

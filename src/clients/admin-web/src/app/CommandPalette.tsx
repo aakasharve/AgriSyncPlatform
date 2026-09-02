@@ -610,7 +610,7 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-label="Search the console"
-        className="w-full max-w-xl overflow-hidden rounded-panel bg-page shadow-float"
+        className="glass-float w-full max-w-xl overflow-hidden rounded-panel"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={trapTab}
       >

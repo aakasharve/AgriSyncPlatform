@@ -81,7 +81,7 @@ export class ConsoleBootBoundary extends Component<Props, State> {
       <div
         role="alert"
         data-boot-failure="console"
-        className="grid min-h-screen place-items-center bg-page px-6 py-12"
+        className="grid min-h-screen place-items-center px-6 py-12"
       >
         <div className="flex max-w-[520px] flex-col items-center gap-3 text-center">
           <span className="text-red">
@@ -122,7 +122,7 @@ export class ConsoleBootBoundary extends Component<Props, State> {
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="mt-1 rounded-chip border border-line px-4 py-2 text-body font-medium text-text-1 hover:bg-wash"
+            className="glass-quiet mt-1 rounded-chip border-control-edge px-4 py-2.5 text-body font-medium text-text-1 hover:bg-wash"
           >
             Reload the console
           </button>

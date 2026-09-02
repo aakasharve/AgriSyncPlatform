@@ -239,7 +239,7 @@ function AlertBadge({ row }: { row: RuleRow }) {
     <div
       data-rule={row.id}
       data-rule-state={row.state}
-      className={cn('flex flex-col gap-1 rounded-panel px-5 py-4 shadow-raised', tone)}
+      className={cn('glass-tile flex flex-col gap-1 rounded-panel px-5 py-4', tone)}
     >
       <div className="flex items-baseline gap-3">
         <p className="min-w-0 flex-1 text-body font-semibold text-text-1">

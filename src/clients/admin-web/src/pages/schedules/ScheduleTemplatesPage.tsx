@@ -171,7 +171,7 @@ function templateCard(t: ScheduleTemplate, fields: RenderedField[]) {
          disagrees with the cells it runs beside is worse than no edge. Never on
          every card. */
       className={
-        'flex h-full flex-col gap-3 rounded-panel bg-page p-4 shadow-surface' +
+        'glass-panel flex h-full flex-col gap-3 rounded-panel p-4' +
         (unauthored ? ' border-l-4 border-l-text-3' : '')
       }
       data-template={t.id}

@@ -22,7 +22,14 @@ import { cn } from '@/lib/utils';
  * panel on the screen.
  */
 
-const OPS_EDGE = 'inset 4px 0 0 0 var(--color-ops-inset), var(--shadow-surface)';
+/* Three shadows in one declaration, and each is doing a different job:
+   the slate inset is C8's ops marker, the white inset is the glass sheen,
+   and `--shadow-surface` is the panel's depth level. They are written
+   together because an inline `boxShadow` REPLACES the class's shadow
+   outright — take any one out and this becomes the only flat, edgeless
+   panel on the screen. */
+const OPS_EDGE =
+  'inset 4px 0 0 0 var(--color-ops-inset), inset 0 1px 0 0 var(--color-glass-sheen), var(--shadow-surface)';
 
 export interface OpsPanelProps {
   title: string;
@@ -48,7 +55,7 @@ export function OpsPanel({ title, grant, denied, children, className }: OpsPanel
     <section
       data-ops-panel={denied ? undefined : grant}
       data-ops-denied={denied ? grant : undefined}
-      className={cn('rounded-panel bg-page p-5', className)}
+      className={cn('glass-panel rounded-panel p-5', className)}
       style={{ boxShadow: OPS_EDGE }}
       aria-label={`${title} (${grant})`}
     >

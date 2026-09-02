@@ -136,27 +136,37 @@ export function AdminShell() {
            is evidence, so the navigation goes and the content stays. */
         data-print="chrome"
         aria-label="Sections"
-        /* THE NAVIGATION PLANE IS DEEP GREEN (2026-09-02), and this is the
-           single largest visual change in the boldness pass. It was #ffffff
-           against an #f5f9f6 ground — 236px of the screen with nothing to
-           tell it apart from the page beside it, which is most of why the
-           console read as grey.
+        /* THE NAVIGATION PLANE IS MINT GLASS (2026-09-02).
 
-           IT IS NOT DARK MODE, and the distinction is not a quibble: D1
-           dropped a mode that repaints the whole console from an OS
-           preference, including every data surface. Nothing here reads a
-           preference and nothing here is a data surface. The page, the top
-           bar, every panel, every tile and every figure are exactly as light
-           as they were, so no reading changed contrast. This is a coloured
-           frame around an unchanged picture. */
-        className="flex flex-wrap items-center gap-x-2 gap-y-1 bg-nav px-4 py-3 lg:h-screen lg:flex-col lg:flex-nowrap lg:items-stretch lg:gap-0 lg:overflow-y-auto lg:px-3 lg:pt-5 lg:pb-8"
+           It was #0e3a2b — a deep-green column down the left of every
+           screen. The founder's note was "the overall colour theme is too
+           dark", and this was the thing he meant: it is the single largest
+           block of colour in the console. It is now a frosted, brand-tinted
+           pane. The brand did not leave; it stopped being a dark field.
+
+           WHY THIS IS STILL NOT DARK MODE, AND WAS NOT BEFORE. D1 dropped a
+           mode that repaints the whole console from an OS preference,
+           including every data surface. Nothing here reads a preference and
+           nothing here is a data surface. Every panel, tile and figure is
+           unchanged.
+
+           EVERY TEXT COLOUR ON THIS PLANE IS MEASURED AGAINST ITS COMPOSITE
+           rather than against white: the pane resolves to #d6eee3 over the
+           page ground, the idle label reads 8.02:1 on it, and the worst of
+           the six section accents reads 4.72:1 on the active pill.
+           globals.css §A.11 carries all twelve figures. */
+        className="glass-nav flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-3 lg:h-screen lg:flex-col lg:flex-nowrap lg:items-stretch lg:gap-0 lg:overflow-y-auto lg:px-4 lg:pt-6 lg:pb-8"
       >
-        <div className="mr-3 flex items-center gap-2.5 lg:mr-0 lg:mb-4 lg:border-b lg:border-nav-line lg:px-2 lg:pb-4">
-          <span className="grid size-9 flex-none place-items-center rounded-chip bg-nav-overview text-nav">
-            <Leaf size={20} strokeWidth={2.2} aria-hidden="true" />
+        <div className="mr-3 flex items-center gap-3 lg:mr-0 lg:mb-5 lg:border-b lg:border-nav-line lg:px-2 lg:pb-5">
+          {/* The mark is the one saturated thing on a light plane, and it is
+              the BRAND fill rather than a section accent: a leaf glyph is the
+              console's identity, not a statement about where you are. White
+              on #0f5c3d is 8.02:1. */}
+          <span className="grid size-10 flex-none place-items-center rounded-chip bg-brand text-page shadow-surface">
+            <Leaf size={22} strokeWidth={2.2} aria-hidden="true" />
           </span>
           <span className="leading-tight">
-            <span className="block text-h3 font-bold text-page">AgriSync</span>
+            <span className="block text-h3 font-bold text-text-1">AgriSync</span>
             <span className="block text-caption text-nav-muted">Admin console</span>
           </span>
         </div>
@@ -194,7 +204,7 @@ export function AdminShell() {
                          so there is only ever one. */
                       isActive
                         ? cn('bg-nav-raise font-semibold', accent)
-                        : 'text-nav-text hover:bg-nav-raise hover:text-page'
+                        : 'text-nav-text hover:bg-nav-raise hover:text-text-1'
                     )
                   }
                 >
@@ -217,17 +227,22 @@ export function AdminShell() {
       <div className="flex min-w-0 flex-col lg:h-screen lg:overflow-hidden">
         <header
           data-print="chrome"
-          className="flex h-[var(--spacing-topbar)] flex-none items-center gap-3 border-b border-line bg-page px-5 xl:px-8"
+          /* GLASS, AND STICKY, SO IT HAS SOMETHING TO FROST. A translucent
+             bar over a bar-height slice of nothing is just a paler bar; the
+             effect exists because content slides underneath it. */
+          className="glass-chrome sticky top-0 z-20 flex h-[var(--spacing-topbar)] flex-none items-center gap-3 px-5 xl:px-8"
         >
           {/* The breadcrumb now reads as a heading rather than as a caption.
               It is the only thing on the bar that says which screen this is,
               and at 15px medium in the caption grey it was the quietest text
               in the frame. */}
-          <span className="hidden text-h3 font-semibold text-text-1 sm:inline">{crumb}</span>
+          <span className="hidden text-h3 font-semibold text-text-1 sm:inline">
+            {crumb}
+          </span>
           <OrgScope />
           <div className="ml-auto flex items-center gap-3">
             <ScreenRefresh />
-            <span className="hidden items-center gap-2 rounded-chip border border-line px-2 py-1 text-caption text-text-2 md:inline-flex">
+            <span className="glass-quiet hidden items-center gap-2 rounded-chip px-2.5 py-1 text-caption text-text-2 md:inline-flex">
               <Search size={14} aria-hidden="true" />
               {/* Cmd-K and Escape are the only global bindings that exist
                   (CommandPalette.tsx:39-49). This is a HINT and not a button:
@@ -241,10 +256,10 @@ export function AdminShell() {
           </div>
         </header>
 
-        {/* More air, because everything inside it got bigger. A 30px page
-            title and a 52px KPI figure inside 24px gutters read as cramped
-            rather than as confident. */}
-        <main className="min-h-0 flex-1 px-5 pt-7 pb-20 lg:overflow-y-auto xl:px-10">
+        {/* More air again, because everything inside it got bigger again. A
+            34px page title and a 56px KPI figure inside 24px gutters read as
+            cramped rather than as confident. */}
+        <main className="min-h-0 flex-1 px-5 pt-8 pb-24 lg:overflow-y-auto xl:px-10">
           <Outlet />
         </main>
       </div>
@@ -386,8 +401,11 @@ function OrgScope() {
     qc.resetQueries();
   };
 
+  /* `border-control-edge`, not `border-line`: this is a control, and WCAG
+     1.4.11 asks 3:1 of a control's boundary. The hairline that draws a table
+     rule measures 1.25:1 on glass. globals.css §A.3 carries both numbers. */
   const chipClass =
-    'inline-flex h-9 max-w-[15rem] items-center gap-2 rounded-chip border border-line px-3 text-caption font-medium';
+    'inline-flex h-10 max-w-[16rem] items-center gap-2 rounded-chip border border-control-edge px-3.5 text-caption font-medium';
 
   return (
     <div ref={box} className="relative">
@@ -397,7 +415,7 @@ function OrgScope() {
           onClick={() => setOpen((o) => !o)}
           aria-haspopup="menu"
           aria-expanded={open}
-          className={cn(chipClass, 'bg-page text-text-1 hover:bg-wash')}
+          className={cn(chipClass, 'glass-quiet text-text-1 hover:bg-wash')}
         >
           <Building2 size={14} className="flex-none text-text-2" aria-hidden="true" />
           <span className="sr-only">Active organization: </span>
@@ -405,7 +423,7 @@ function OrgScope() {
           <ChevronDown size={14} className="flex-none text-text-2" aria-hidden="true" />
         </button>
       ) : (
-        <span className={cn(chipClass, 'bg-page text-text-1')}>
+        <span className={cn(chipClass, 'glass-quiet text-text-1')}>
           <Building2 size={14} className="flex-none text-text-2" aria-hidden="true" />
           <span className="sr-only">Active organization: </span>
           <span className={cn('truncate', !named && 'text-text-3')}>{label}</span>
@@ -416,7 +434,7 @@ function OrgScope() {
         <div
           role="menu"
           aria-label="Switch organization"
-          className="absolute top-full left-0 z-30 mt-2 w-72 rounded-panel border border-line bg-page p-1 shadow-float"
+          className="glass-float absolute top-full left-0 z-30 mt-2 w-80 rounded-panel p-1.5"
         >
           {memberships.map((m) => (
             <button
@@ -501,7 +519,7 @@ function ScreenRefresh() {
         onClick={() => qc.invalidateQueries({ type: 'active' })}
         disabled={fetching}
         aria-label={fetching ? 'Refreshing this screen' : 'Refresh this screen'}
-        className="inline-flex h-9 items-center gap-2 rounded-chip border border-line bg-page px-3 text-caption font-medium text-text-1 hover:bg-wash disabled:pointer-events-none disabled:opacity-50"
+        className="glass-quiet inline-flex h-10 items-center gap-2 rounded-chip border-control-edge px-3.5 text-caption font-medium text-text-1 hover:bg-wash disabled:pointer-events-none disabled:opacity-50"
       >
         <RefreshCw
           size={14}
@@ -579,7 +597,7 @@ function SignedIn() {
         type="button"
         onClick={signOut}
         aria-label="Sign out"
-        className="inline-flex h-9 items-center gap-2 rounded-chip border border-line bg-page px-3 text-caption font-medium text-text-1 hover:bg-wash"
+        className="glass-quiet inline-flex h-10 items-center gap-2 rounded-chip border-control-edge px-3.5 text-caption font-medium text-text-1 hover:bg-wash"
       >
         <LogOut size={14} className="flex-none" aria-hidden="true" />
         <span className="hidden lg:inline">Sign out</span>

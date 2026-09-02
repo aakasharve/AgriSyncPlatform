@@ -36,7 +36,7 @@ export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
       ref={ref}
       data-print="panel"
       className={cn(
-        'overflow-hidden rounded-panel bg-page p-5 text-text-1 shadow-surface',
+        'glass-panel overflow-hidden rounded-panel p-5 text-text-1',
         className
       )}
       {...props}

@@ -130,14 +130,14 @@ export function KpiCard({
       data-state={state}
       data-print="panel"
       className={cn(
-        'relative flex min-w-0 flex-col overflow-hidden rounded-panel py-5 pr-5 pl-6 shadow-raised',
+        'glass-tile relative flex min-w-0 flex-col overflow-hidden rounded-panel py-6 pr-6 pl-7',
         TONE_TILE[resolvedTone],
         className
       )}
     >
       {icon && (
         <div
-          className="absolute right-3.5 top-3.5 grid h-[30px] w-[30px] place-items-center rounded-chip bg-page"
+          className="glass-quiet absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-chip"
           style={{ color: iconColor }}
         >
           {icon}

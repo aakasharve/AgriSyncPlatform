@@ -172,7 +172,7 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
   return (
     <section
       data-band="timeline"
-      className="rounded-panel bg-page p-5 shadow-surface"
+      className="glass-panel rounded-panel p-5"
       aria-label="14-day activity"
     >
       <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">

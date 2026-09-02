@@ -124,7 +124,7 @@ export function SummaryFacets<T>({
                         'inline-flex items-baseline gap-2 rounded-full border px-3.5 py-2 text-left text-body transition-colors',
                         view.pressed
                           ? 'border-blue bg-tint-blue font-bold text-blue'
-                          : 'border-line bg-page hover:border-blue hover:bg-wash',
+                          : 'glass-quiet border-control-edge hover:border-blue hover:bg-wash',
                         empty && !view.pressed && 'text-text-3',
                       )}
                     >
@@ -165,7 +165,7 @@ export function SummaryFacets<T>({
             aria-controls={showAll.listId}
             aria-expanded={showAll.listOpen}
             onClick={showAll.onClick}
-            className="ml-auto rounded-chip border border-line bg-page px-3.5 py-2 text-caption font-semibold text-text-1 transition-colors hover:border-blue hover:bg-wash"
+            className="glass-quiet ml-auto rounded-chip border-control-edge px-4 py-2.5 text-caption font-semibold text-text-1 transition-colors hover:border-blue hover:bg-wash"
           >
             {showAll.label}
           </button>

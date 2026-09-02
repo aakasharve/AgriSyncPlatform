@@ -1055,20 +1055,24 @@ describe('what still needs the founder’s signature', () => {
    *
    *  1. A50 — @tanstack/react-table, removed outright (see the row above).
    *  2. The THREE surviving §B legacy classes: `.chip-fresh` / `.chip-live` /
-   *     `.chip-mat`, all on FreshnessChip. They are translucent `color-mix()`
-   *     fills, which §8 bans, and they are still unsigned.
+   *     `.chip-mat`, all on FreshnessChip.
    *
-   *     `.glass-panel` LEFT THIS LIST ON 2026-09-02. It was the live §8
-   *     violation on /403 — translucent, backdrop-filtered and carrying a
-   *     three-stop gradient bar — and the visual-boldness pass restyled
-   *     ForbiddenPage onto §A and deleted the class in the same commit. One
-   *     fewer thing needing a signature, recorded rather than dropped quietly.
+   *     HALF OF THIS ITEM CLOSED ON 2026-09-02, AND IT CLOSED BY REVERSAL.
+   *     They were listed here because they are translucent `color-mix()`
+   *     fills and CONTRACT.md §8 banned translucency. The founder overruled
+   *     §8 that day — "use the Glass morphism effect … to highlight the
+   *     aesthetics" — so translucency is now the house style and these three
+   *     stopped being a violation. `.glass-panel` came BACK with that
+   *     reversal, as one of §A.12's six new surfaces; the v2 class of the
+   *     same name, with its three-stop gradient bar and its `--radius-card`
+   *     token, is still gone, and the assertion below proves the difference
+   *     by declaration rather than by anyone remembering it.
    *
-   *     FreshnessChip was deliberately NOT swept with it. Its green and its
-   *     teal say where a number came from — a live read versus last night's
-   *     materialisation — which is a claim about data. That pass changed
-   *     chrome only and restyled no colour that states a fact, so this one is
-   *     still the founder's.
+   *     WHAT STILL NEEDS A SIGNATURE is the half that was always the real
+   *     one: FreshnessChip's green and teal say where a number came from — a
+   *     live read versus last night's materialisation — which is a claim
+   *     about data. No styling pass restyles a colour that states a fact, so
+   *     this one is still the founder's.
    *  3. `--font-mono`, six files and eighteen uses, every one a value read
    *     character by character — the OTP field, error timestamps, status
    *     codes. §8 bans monospace. Sweep, or amend §8.
@@ -1087,18 +1091,33 @@ describe('what still needs the founder’s signature', () => {
     for (const cls of ['chip-fresh', 'chip-live', 'chip-mat']) {
       expect(`${cls} declared: ${boundary(cls).test(css)}`).toBe(`${cls} declared: true`);
     }
-    /* FIVE deleted now, not four. `glass-panel` joined the list on 2026-09-02
-       when ForbiddenPage was restyled onto §A — the number moved because the
-       code did, which is the only reason a number in this file may move. The
-       hyphen is why this needs an explicit boundary: `\bglass\b` matches
-       inside `glass-panel`, which is the exact trap Task 28 caught. */
-    for (const cls of ['glass', 'glass-kpi', 'glass-sidebar', 'nav-active', 'glass-panel']) {
+    /* BACK TO FOUR, AND THE ONE THAT LEFT THE LIST LEFT BY REVERSAL.
+       `glass-panel` was on this list from 2026-09-02 morning, when
+       ForbiddenPage was restyled onto §A and the v2 class was deleted. The
+       founder reversed CONTRACT.md §8 the same day and the NAME is in use
+       again, so asserting it is absent would now be asserting something
+       false. The four below are the v2 classes proper: they are still gone,
+       they still have no consumer, and none of them is what §A.12 built.
+
+       The hyphen is why this needs an explicit boundary: `\bglass\b`
+       matches inside `glass-panel`, which is the exact trap Task 28 caught —
+       and it is exactly the trap that would let this assertion pass while
+       reporting on the wrong class. */
+    for (const cls of ['glass', 'glass-kpi', 'glass-sidebar', 'nav-active']) {
       expect(`${cls} declared: ${boundary(cls).test(css)}`).toBe(`${cls} declared: false`);
     }
 
-    /* The consumer that made the deletion legal, asserted from the other
-       side: /403 must no longer name the class it used to hold alive. */
-    expect(code('/src/pages/ForbiddenPage.tsx')).not.toContain('glass-panel');
+    /* THE PROOF THAT THE NAME CAME BACK WITHOUT THE CLASS. The v2 rule
+       carried a `::before` gradient bar and read a `--radius-card` token of
+       its own. §A.12's rule carries neither, and both of those are still
+       absent from the stylesheet. A name can be reused; a decorative
+       gradient bar on every panel was a separate decision and it was not
+       reversed. */
+    expect(`glass-panel declared: ${boundary('glass-panel').test(css)}`).toBe(
+      'glass-panel declared: true'
+    );
+    expect(css).not.toContain('.glass-panel::before');
+    expect(css).not.toContain('--radius-card');
     expect(code('/src/components/ui/FreshnessChip.tsx')).toContain('chip-fresh');
   });
 
