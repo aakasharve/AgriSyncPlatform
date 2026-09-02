@@ -765,6 +765,11 @@ public interface IShramSafalRepository
     /// compared against the entity-stored form (<see cref="DisturbanceEvent"/>
     /// trims on Create), so callers pass it trimmed. Default impl returns
     /// <c>null</c> so test doubles compile.
+    /// <para>B001 — this read is the dedup's whole enforcement (no DB unique),
+    /// so cross-device overlapping pushes can race it; the production impl is
+    /// also the residual's NAMED OBSERVER — it warns when the identity already
+    /// holds more than one live row. See the derivation-site comment in
+    /// <c>LedgerDerivationService</c> for the enforced boundary.</para>
     /// </summary>
     Task<DisturbanceEvent?> GetDisturbanceEventForFarmDayAsync(
         Guid farmId, DateOnly logDate, string reason, CancellationToken ct = default)

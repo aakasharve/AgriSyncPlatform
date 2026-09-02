@@ -458,11 +458,32 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                 // is_current_version / superseded_by), so "mark old superseded,
                 // insert new" is unrepresentable, and mutating or deleting the
                 // OTHER door's child would falsify its lineage (daily_log_id
-                // naming log A with content from log B). The half of the
-                // FarmOperation semantics that guards day truth — never a second
-                // live row for one identity — is exactly what skip preserves, and
-                // the identity contains the entire load-bearing free-text, so a
-                // skipped second arrival loses no farmer words.
+                // naming log A with content from log B). The identity contains
+                // the entire load-bearing free-text, so a skipped second arrival
+                // loses no farmer words.
+                //
+                // WHAT THIS ENFORCES, EXACTLY (B001 ruling — no over-promise).
+                // The lookup-before-write is application-level, not DB-enforced.
+                // SAME-DEVICE duplicates — the ruled defect, both doors on one
+                // phone — are closed DETERMINISTICALLY: the client's sync worker
+                // is single-flight and /sync/push applies a batch's mutations
+                // sequentially in one transaction, so the second derivation
+                // always runs after the first's write is visible to this
+                // transaction's reads. CROSS-DEVICE, two overlapping
+                // READ-COMMITTED pushes of the same (farm, day, byte-identical
+                // reason) can BOTH miss the lookup and BOTH commit — a duplicate
+                // identical row, i.e. exactly the pre-fix status quo, no worse.
+                // Tolerated deliberately: the window needs two devices voicing
+                // byte-identical free text in the same seconds (edge), the
+                // consequence is downstream-idempotent for the DeclaredNoWork
+                // read, and the schema cure (denormalizing parent farm/day onto
+                // the child for a unique index) is itself a two-truths shape
+                // this release forbids. The residual is NOT silent: the
+                // production lookup (ShramSafalRepository) counts live matches
+                // and logs a warning on >1 — the named observer — so a raced
+                // duplicate surfaces at the next same-day derivation. A
+                // DB-enforced unique (trigger or keyed child) is the Phase 6
+                // hardening if field data ever shows that warning.
                 //
                 // The failure mode stays LOUD: no catch here. A thrown lookup or
                 // write error propagates to PersistSideCarAsync's savepoint

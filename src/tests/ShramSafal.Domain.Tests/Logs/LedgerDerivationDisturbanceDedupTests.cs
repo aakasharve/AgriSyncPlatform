@@ -31,10 +31,19 @@ namespace ShramSafal.Domain.Tests.Logs;
 /// (farm, log-day, reason); every component is already a persisted column, so
 /// the lookup needs no key column and no migration. On a hit the second write
 /// is SKIPPED — this EXISTS-join child has no version chain, so FarmOperation's
-/// supersede half is unrepresentable; the half that matters for day truth
-/// (never a second live row for one identity) is what skip preserves. A
-/// DIFFERENT reason is a different identity and stays a second live event:
-/// dedup collapses identical derivations, never distinct facts.</para>
+/// supersede half is unrepresentable. A DIFFERENT reason is a different
+/// identity and stays a second live event: dedup collapses identical
+/// derivations, never distinct facts.</para>
+///
+/// <para><b>Enforcement boundary (B001).</b> What these tests pin is the
+/// same-transaction-visibility case — the ruled same-device defect, which the
+/// single-flight sync worker + sequential batch application make
+/// deterministic. The lookup is application-level, not DB-enforced: two
+/// DEVICES pushing the same identity in overlapping READ-COMMITTED
+/// transactions can still both commit (documented residual — consequence is
+/// the pre-fix status quo, one duplicate identical row). That residual has a
+/// named observer: the production lookup warns on &gt;1 live matches — pinned
+/// in <c>DisturbanceDedupObserverTests</c> (Sync.IntegrationTests).</para>
 /// </summary>
 public sealed class LedgerDerivationDisturbanceDedupTests
 {

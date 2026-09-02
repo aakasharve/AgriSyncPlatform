@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
@@ -21,7 +22,15 @@ using ShramSafal.Domain.Storage;
 
 namespace ShramSafal.Infrastructure.Persistence.Repositories;
 
-internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafalRepository
+// logger is OPTIONAL (defaulted) so the many direct `new ShramSafalRepository(db)`
+// constructions in tests and the backfill runner keep compiling; production DI
+// (AddScoped<IShramSafalRepository, ShramSafalRepository>) resolves the registered
+// ILogger<T> into the optional parameter, so the Task 8.5 duplicate-identity
+// observer below is always armed on the live path. A null logger is a test
+// harness's explicit acceptance of silence, not a production state.
+internal sealed class ShramSafalRepository(
+    ShramSafalDbContext db,
+    ILogger<ShramSafalRepository>? logger = null) : IShramSafalRepository
 {
     public async Task AddFarmAsync(Farm farm, CancellationToken ct = default)
     {
@@ -2405,7 +2414,20 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     /// AsNoTracking: existence decides a SKIP; nothing returned here is ever
     /// mutated (contrast <see cref="GetFarmOperationByKeyAsync"/>, whose result
     /// is tracked because supersession mutates it). Ordered oldest-first so a
-    /// pre-fix day that already holds duplicates answers deterministically.
+    /// day that already holds duplicates answers deterministically.
+    ///
+    /// <para><b>The named observer (B001 ruling).</b> This lookup-before-write is
+    /// not DB-enforced, so two DEVICES pushing the same identity in overlapping
+    /// READ-COMMITTED transactions can both miss it and both commit — the
+    /// documented residual (see the derivation-site comment in
+    /// <c>LedgerDerivationService</c>). Per this repo's law that a tolerated
+    /// failure must name its landing place, the landing place is HERE: the query
+    /// already materializes the identity's live matches, so more than one match
+    /// is NOTICED and logged as a warning — farm, day, count, and reason LENGTH
+    /// only (the reason is the farmer's free text and may be sensitive) — making
+    /// a raced duplicate visible at the next same-day derivation instead of
+    /// never. A DB-enforced unique (trigger or keyed child) is the Phase 6
+    /// hardening if field data ever shows this warning.</para>
     /// </summary>
     public async Task<DisturbanceEvent?> GetDisturbanceEventForFarmDayAsync(
         Guid farmId, DateOnly logDate, string reason, CancellationToken ct = default)
@@ -2416,13 +2438,27 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         }
 
         var typedFarmId = new FarmId(farmId);
-        return await db.DisturbanceEvents
+        // Materialized (not FirstOrDefault) so the duplicate-identity observer
+        // sees the true live count. Bounded tightly by the identity filter —
+        // one farm-day-reason holds one row, or a raced handful, never a table.
+        var matches = await db.DisturbanceEvents
             .AsNoTracking()
             .Where(e => e.Reason == reason && db.DailyLogs.Any(
                 l => l.Id == e.DailyLogId && l.FarmId == typedFarmId && l.LogDate == logDate))
             .OrderBy(e => e.CreatedAtUtc)
             .ThenBy(e => e.Id)
-            .FirstOrDefaultAsync(ct);
+            .ToListAsync(ct);
+
+        if (matches.Count > 1)
+        {
+            logger?.LogWarning(
+                "Duplicate live DisturbanceEvents for one derived identity: {DuplicateCount} rows for farm {FarmId} on {LogDate} " +
+                "(reason length {ReasonLength}). Cross-device overlapping pushes can race the Task 8.5 farm-day dedup lookup " +
+                "(documented residual); a DB-enforced unique is the Phase 6 hardening if this recurs.",
+                matches.Count, farmId, logDate, reason.Length);
+        }
+
+        return matches.FirstOrDefault();
     }
 
     /// <summary>

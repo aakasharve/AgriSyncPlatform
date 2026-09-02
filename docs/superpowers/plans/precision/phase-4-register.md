@@ -2821,6 +2821,15 @@ the 4.3 review (B001).
   decision at the founder gate (the long reverse-skew window; see above). Each row names its
   window.
 
+- **Task 8.5 documented residual (B001):** the disturbance farm-day dedup is
+  application-level — two DEVICES pushing the same (farm, day, byte-identical reason) in
+  overlapping READ-COMMITTED transactions can still both commit (consequence: the pre-fix
+  duplicate row, downstream-idempotent). Its named observer is the
+  `ShramSafalRepository.GetDisturbanceEventForFarmDayAsync` warning on >1 live matches
+  (farm/day/count/reason-length, never the reason text; pinned by
+  `DisturbanceDedupObserverTests`); a DB-enforced unique (trigger or keyed child) is the
+  Phase 6 hardening if field data ever shows that warning.
+
 ## Founder gate (before any deploy step)
 
 Phase 4 is code-complete when all eight tasks are committed and green. It is NOT approved, NOT
