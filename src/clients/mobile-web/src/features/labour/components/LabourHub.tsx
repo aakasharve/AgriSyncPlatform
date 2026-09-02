@@ -7,10 +7,10 @@
  * line, drill-in optional). Simple for a semi-literate farmer, in the app's
  * design.
  *
- * Decision 4b (2026-07-19, screen honesty): हजेरी घ्या's save button and
- * हजेरी वही both wired to nothing real for a production farm — see
- * `SHOW_ATTENDANCE_TILE` / `SHOW_LEDGER_TILE` below. Hidden (not deleted)
- * from this grid so a farmer can't reach either dead end.
+ * Decision 4b (2026-07-19, screen honesty): हजेरी घ्या's capture tile stays
+ * hidden behind `SHOW_ATTENDANCE_TILE` below until the capture work finishes.
+ * The हजेरी वही tile is NOT gated — Correction 5 (founder, 2026-09-01)
+ * deleted its switch once Phase 4 finished the register it opens.
  */
 import React from 'react';
 import { Mic, ClipboardCheck, Inbox, LayoutDashboard, BookText, Users } from 'lucide-react';
@@ -38,20 +38,6 @@ import { ATTENDANCE_COPY } from '../attendanceCopy';
 // (App.tsx), never for a real farmer. Preview mounts have no farm context, so
 // the screen's save renders disabled there (Attendance.tsx `saveDisabled`).
 const SHOW_ATTENDANCE_TILE = false;
-
-/**
- * हजेरी वही IS wired to a real endpoint, but the backend's per-worker
- * attendance ledger (Stage 5) isn't built yet — `GetLabourDataHandler`
- * returns `Rows: []` / `Days: []` unconditionally for every real farm today,
- * so the screen is structurally empty regardless of real data. Hidden until
- * Stage 5 ships; flip to `true` then.
- */
-// STAYS false for every real farm (Task 18). `isPreview` (see
-// SHOW_ATTENDANCE_TILE's comment above) is the one declared exception,
-// revealing this tile only inside `?preview=labour` for founder review — the
-// Stage-5 backend gap is unchanged: GetLabourDataHandler still returns
-// Rows: [] / Days: [] unconditionally on a real farm.
-const SHOW_LEDGER_TILE = false;
 
 interface Props {
     data: LabourData;
@@ -95,8 +81,8 @@ interface Props {
      * Task 18 (spec: 2026-08-28-labour-v2-release-1) — true only inside the
      * `?preview=labour` dev preview (threaded from `useLabourState`'s
      * `isPreview`, itself `farmCtx === null`). Reveals `SHOW_ATTENDANCE_TILE`
-     * / `SHOW_LEDGER_TILE` below for founder review WITHOUT flipping either
-     * constant for a real farm. Defaults to `false` so every existing
+     * below for founder review WITHOUT flipping the constant for a real
+     * farm. Defaults to `false` so every existing
      * real-app caller (and this component's own pre-Task-18 tests) is
      * unaffected.
      */
@@ -335,8 +321,8 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
           * The claim this button must keep backing is therefore: speak here
           * and the crew is recorded. It does. The one thing that would make
           * it a lie is shipping with the हजेरी वही unreachable, so a farmer
-          * takes हजेरी and has nowhere to see it — tracked against
-          * SHOW_ATTENDANCE_TILE, not against this headline.
+          * takes हजेरी and has nowhere to see it — closed by Correction 5:
+          * the हजेरी वही tile below renders unconditionally.
           */}
         <button type="button" disabled={heroInactive} onClick={heroInactive ? undefined : onGoToLog}
             className={`relative flex w-full items-center gap-4 overflow-hidden rounded-[24px] p-5 text-left transition-transform ${heroInactive
@@ -360,13 +346,16 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
 
         <div className="grid grid-cols-2 gap-2.5">
             {/* Task 18 — `isPreview` is the one declared exception to the
-                hard-`false` constants above; see their own comments. */}
+                hard-`false` SHOW_ATTENDANCE_TILE above; see its own comment. */}
             {(SHOW_ATTENDANCE_TILE || isPreview) && (
                 <QuickTile icon={<ClipboardCheck size={20} />} chip="bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100" label="हजेरी घ्या" sub="आज कोण आलं" onClick={onAttendance} />
             )}
-            {(SHOW_LEDGER_TILE || isPreview) && (
-                <QuickTile icon={<BookText size={20} />} chip="bg-blue-100 text-blue-600" label="हजेरी वही" sub="सर्व दिवस" onClick={onLedger} />
-            )}
+            {/* Correction 5 (founder, 2026-09-01): the हजेरी वही is NEVER gated —
+                not by capture state, not by a constant that can be flipped back.
+                The register draws its own blank week when nothing is recorded.
+                (SHOW_LEDGER_TILE and its || isPreview escape were DELETED, not
+                flipped — a flag is a gate wearing a comment.) */}
+            <QuickTile icon={<BookText size={20} />} chip="bg-blue-100 text-blue-600" label="हजेरी वही" sub="सर्व दिवस" onClick={onLedger} />
             <QuickTile icon={<Inbox size={20} />} chip="bg-amber-100 text-amber-700" label="तपासा" sub="मंजूर करा" badge={data.dashboard.pending} onClick={onReview} />
             {/*
               * TASK 11 (spec: 2026-08-28-labour-v2-release-1) — the sub-line

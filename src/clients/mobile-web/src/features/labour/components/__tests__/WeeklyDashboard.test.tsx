@@ -8,7 +8,8 @@
  *     outright, regardless of the data passed in.
  *   - The money-bar's उचल segment/legend only appears once there's a real
  *     (> 0) advance — it must not show a confident ₹0 for an untracked value.
- *   - हजेरी वही button removed (Stage 5 ledger not built; always empty).
+ *   - हजेरी वही button UNGATED (Correction 5, 2026-09-01) — the register is
+ *     finished and draws its own blank week; the door renders always.
  *   - Honest empty states for "insight" and "plots" instead of a heading
  *     floating over nothing.
  *
@@ -54,9 +55,9 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
         expect(screen.queryByText('उचल दिली')).toBeNull();
     });
 
-    it('hides the हजेरी वही button — Stage 5 attendance ledger not built, always empty for a real farm', () => {
+    it('renders the हजेरी वही button unconditionally — the register door is never gated (Correction 5)', () => {
         render(<WeeklyDashboard {...baseProps()} data={LABOUR_MOCK} />);
-        expect(screen.queryByText('हजेरी वही')).toBeNull();
+        expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
     });
 
     it('shows the money-bar उचल legend once there is a real advance (> 0)', () => {

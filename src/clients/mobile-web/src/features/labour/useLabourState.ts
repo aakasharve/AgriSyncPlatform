@@ -120,9 +120,10 @@ export interface UseLabourStateResult {
      * screen can distinguish the `?preview=labour` dev mount from a real
      * farm WITHOUT re-deriving the check itself or reaching for
      * `useOptionalFarmContext()` a second time. `LabourHub` uses this to
-     * reveal `SHOW_ATTENDANCE_TILE` / `SHOW_LEDGER_TILE` for founder review
-     * only inside preview — never a relaxation of that decision for a real
-     * farm, which always receives `false` here.
+     * reveal `SHOW_ATTENDANCE_TILE` for founder review only inside preview
+     * — never a relaxation of that decision for a real farm, which always
+     * receives `false` here. (`SHOW_LEDGER_TILE` no longer exists:
+     * Correction 5 deleted the ledger door outright.)
      */
     isPreview: boolean;
 }

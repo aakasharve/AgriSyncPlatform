@@ -235,7 +235,8 @@ describe('LabourHub — "just logged" labour summary (Task 3.5)', () => {
 
 // ---------------------------------------------------------------------------
 // Decision 4b (2026-07-19, screen honesty) — honest empty people-state with a
-// real QR "add a worker" CTA, and the हजेरी घ्या / हजेरी वही tiles hidden.
+// real QR "add a worker" CTA, and the हजेरी घ्या capture tile hidden. (The
+// हजेरी वही tile is UNGATED since Correction 5 — the register is finished.)
 // ---------------------------------------------------------------------------
 
 describe('LabourHub — screen honesty (Decision 4b)', () => {
@@ -273,19 +274,20 @@ describe('LabourHub — screen honesty (Decision 4b)', () => {
         expect(screen.queryByText('अजून कोणी कामगार जोडलेला नाही')).toBeNull();
     });
 
-    it('hides हजेरी घ्या and हजेरी वही — both wired to nothing real for a production farm', () => {
+    it('hides हजेरी घ्या (capture unfinished) — but the हजेरी वही is never gated (Correction 5)', () => {
         render(<LabourHub {...baseProps()} data={LABOUR_MOCK} />);
         expect(screen.queryByText('हजेरी घ्या')).toBeNull();
-        expect(screen.queryByText('हजेरी वही')).toBeNull();
-        // The tile that DOES work stays reachable.
+        expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
+        // The tiles that DO work stay reachable.
         expect(screen.getByText('आढावा')).toBeInTheDocument();
     });
 });
 
 // ---------------------------------------------------------------------------
 // Task 7 (labour-v2-release-1) — the two REACHABLE false attendance claims on
-// this hub. Neither is behind a SHOW_* flag (unlike हजेरी घ्या / हजेरी वही
-// above, which already ARE hidden and already covered by the test above).
+// this hub. Neither is behind a SHOW_* flag (unlike हजेरी घ्या above, which
+// IS hidden and covered by the test above; the हजेरी वही tile is ungated
+// since Correction 5 and needs no flag at all).
 // The hub hero is the ONE way in to speaking; the duplicate mic that used to
 // sit on the Attendance screen (LabourMic) was deleted 2026-08-31.
 // ---------------------------------------------------------------------------
@@ -412,15 +414,15 @@ describe('LabourHub — no auto-approve capability claim (Task 22)', () => {
 
 // ---------------------------------------------------------------------------
 // Task 18 (spec: 2026-08-28-labour-v2-release-1) — dev-preview review
-// exception. SHOW_ATTENDANCE_TILE / SHOW_LEDGER_TILE stay hard `false` for
-// every real farm (Decision 4b, above) — the founder still cannot review
-// either screen with the flags themselves flipped, because that would ship
-// the same dead ends to a real farmer. `isPreview` (threaded from
-// `useLabourState`'s `farmCtx === null`, itself only true inside the
-// `import.meta.env.DEV`-gated `?preview=labour` mount — see App.tsx) is the
-// ONE declared exception. The real-app case (isPreview false/absent) MUST
-// render byte-identical to Decision 4b's own test above — that is the test
-// that matters most here, more than the one proving preview reveals them.
+// exception. SHOW_ATTENDANCE_TILE stays hard `false` for every real farm
+// (Decision 4b, above) — the founder still cannot review the capture screen
+// with the flag itself flipped, because that would ship the same dead end to
+// a real farmer. `isPreview` (threaded from `useLabourState`'s
+// `farmCtx === null`, itself only true inside the `import.meta.env.DEV`-gated
+// `?preview=labour` mount — see App.tsx) is the ONE declared exception.
+// The हजेरी वही tile is no longer part of this exception: Correction 5
+// deleted its switch AND its || isPreview escape, so it renders on every
+// farm, real or preview — asserted below and in HajeriLedgerTotals.test.tsx.
 // ---------------------------------------------------------------------------
 
 describe('LabourHub — preview-only review exception (Task 18)', () => {
@@ -434,17 +436,17 @@ describe('LabourHub — preview-only review exception (Task 18)', () => {
         expect(screen.getByText('सर्व दिवस')).toBeInTheDocument();
     });
 
-    it('keeps both tiles hidden when isPreview is explicitly false — the real app must be unchanged', () => {
+    it('keeps हजेरी घ्या hidden when isPreview is explicitly false — but the हजेरी वही renders regardless', () => {
         render(<LabourHub {...baseProps()} data={LABOUR_MOCK} isPreview={false} />);
         expect(screen.queryByText('हजेरी घ्या')).toBeNull();
-        expect(screen.queryByText('हजेरी वही')).toBeNull();
+        expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
         expect(screen.getByText('आढावा')).toBeInTheDocument();
     });
 
-    it('keeps both tiles hidden when isPreview is omitted entirely (every existing real-app caller)', () => {
+    it('keeps हजेरी घ्या hidden when isPreview is omitted entirely (every existing real-app caller)', () => {
         render(<LabourHub {...baseProps()} data={LABOUR_MOCK} />);
         expect(screen.queryByText('हजेरी घ्या')).toBeNull();
-        expect(screen.queryByText('हजेरी वही')).toBeNull();
+        expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
     });
 });
 

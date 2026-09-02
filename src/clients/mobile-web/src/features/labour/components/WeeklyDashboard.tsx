@@ -24,10 +24,10 @@
  *   - Week heading — the server sends a machine date (`2026-08-24`) where a
  *     readable week range belongs, printed over "या आठवड्यात". Suppressed
  *     unless the label really is a range; see `isReadableWeekRange` below.
- *   - हजेरी वही button — see `LabourHub.tsx`'s `SHOW_LEDGER_TILE` doc
- *     comment (Stage 5 attendance ledger not built; always empty for a real
- *     farm). Hidden here too (`SHOW_LEDGER_BUTTON`) so this screen doesn't
- *     offer a second doorway to the same dead end.
+ *   - हजेरी वही button — UNGATED since Correction 5 (founder, 2026-09-01):
+ *     the register behind it is finished and draws its own blank week, so
+ *     the SHOW_LEDGER_BUTTON switch that hid this doorway was DELETED, not
+ *     flipped. The button renders unconditionally below.
  *
  * TASK 11 (spec: 2026-08-28-labour-v2-release-1) — this screen is no longer
  * about a week. `da07f668` gave the server four windows and made all-time the
@@ -59,9 +59,6 @@ import LabourWindowSlider from './LabourWindowSlider';
 import { LABOUR_WINDOW_LABELS, type LabourWindow } from '../labourWindow';
 
 const SHOW_ADVANCE_STAT = false;
-// TEMPORARILY true (2026-08-10) — the SECOND doorway to हजेरी वही. Must flip back
-// with LabourHub's SHOW_LEDGER_TILE; both gate the same structurally-empty screen.
-const SHOW_LEDGER_BUTTON = false;
 
 /**
  * TRUTH FIX (truth audit, question 2) — the week heading now renders only when
@@ -397,13 +394,12 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
                 )}
             </div>
 
-            {SHOW_LEDGER_BUTTON && (
-                <button type="button" onClick={onLedger} className="flex w-full items-center gap-3.5 rounded-[20px] border border-slate-100 bg-white p-3.5 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-transform active:scale-[0.98]">
-                    <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-blue-600"><BookText size={20} /></span>
-                    <span className="min-w-0 flex-1"><span className="block text-[15px] font-bold text-slate-800">हजेरी वही</span><span className="block text-[11.5px] text-slate-400">सर्व दिवसांची हजेरी पहा</span></span>
-                    <ChevronRight size={18} className="flex-shrink-0 text-slate-300" />
-                </button>
-            )}
+            {/* Correction 5: the हजेरी वही door is never gated — constant DELETED, not flipped. */}
+            <button type="button" onClick={onLedger} className="flex w-full items-center gap-3.5 rounded-[20px] border border-slate-100 bg-white p-3.5 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-transform active:scale-[0.98]">
+                <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-blue-600"><BookText size={20} /></span>
+                <span className="min-w-0 flex-1"><span className="block text-[15px] font-bold text-slate-800">हजेरी वही</span><span className="block text-[11.5px] text-slate-400">सर्व दिवसांची हजेरी पहा</span></span>
+                <ChevronRight size={18} className="flex-shrink-0 text-slate-300" />
+            </button>
         </div>
     );
 };

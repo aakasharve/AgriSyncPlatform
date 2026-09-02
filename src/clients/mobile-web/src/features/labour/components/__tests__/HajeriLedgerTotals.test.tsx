@@ -202,3 +202,28 @@ describe('HajeriLedger — the clean register (master review D4)', () => {
         expect(container.textContent).not.toContain('अजून हजेरी नोंदवली नाही');
     });
 });
+
+import LabourHub from '../LabourHub';
+import WeeklyDashboard from '../WeeklyDashboard';
+
+describe('Correction 5 — the ledger door is not a switch', () => {
+    it('the हजेरी वही tile renders on a real farm (no preview, no flag)', () => {
+        const { getAllByText } = render(
+            <LabourHub
+                data={LABOUR_MOCK}
+                onOpenMukadam={vi.fn()} onOpenPerson={vi.fn()} onAttendance={vi.fn()}
+                onDashboard={vi.fn()} onLedger={vi.fn()} onReview={vi.fn()} onGoToLog={vi.fn()}
+            />);
+        expect(getAllByText('हजेरी वही').length).toBeGreaterThan(0);
+    });
+
+    it('the dashboard हजेरी वही button renders unconditionally', () => {
+        const { getAllByText } = render(
+            <WeeklyDashboard
+                data={LABOUR_MOCK}
+                onReview={vi.fn()} onLedger={vi.fn()} onToast={vi.fn()}
+                timeWindow="alltime" onTimeWindowChange={vi.fn()}
+            />);
+        expect(getAllByText('हजेरी वही').length).toBeGreaterThan(0);
+    });
+});
