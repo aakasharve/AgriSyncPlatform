@@ -35,7 +35,7 @@
  */
 import React from 'react';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 
 const mockUseLabourState = vi.fn();
@@ -57,7 +57,7 @@ vi.mock('../../../../infrastructure/sync/BackgroundSyncWorker', () => ({
 }));
 
 import LabourFeature from '../LabourFeature';
-import { EMPTY_LABOUR_DATA } from '../../labourMock';
+import { EMPTY_LABOUR_DATA, EMPTY_WEEK_LABOUR_DATA } from '../../labourMock';
 
 const LOADING_LABEL = 'माहिती आणत आहोत…';
 const EMPTY_PEOPLE_LABEL = 'अजून कोणी कामगार जोडलेला नाही';
@@ -191,5 +191,38 @@ describe('LabourFeature — threads isPreview to LabourHub (Task 18)', () => {
 
         expect(screen.queryByText('हजेरी घ्या')).toBeNull();
         expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Correction 5 fix round (Task 4.5 review) — the REAL-ROUTE click-through
+// pin. The mount tests in HajeriLedgerTotals.test.tsx prove the tile exists
+// with no flag and no preview escape; THIS test proves the door OPENS:
+// through LabourFeature's real screen stack, on the realistic zero-marks
+// wire (`EMPTY_WEEK_LABOUR_DATA` — the backend-guaranteed blank 7-day week,
+// GetLabourDataHandler.cs:852-857), tapping हजेरी वही renders the register
+// itself. Blank cells, never zero — and the empty-claim card is correct
+// here because this IS the owner view (F1: any other view's empty rows are
+// withheld by projection, and the card must not render).
+// ---------------------------------------------------------------------------
+describe('LabourFeature — the हजेरी वही door opens on a zero-marks farm (Correction 5)', () => {
+    afterEach(() => {
+        cleanup();
+        mockUseLabourState.mockReset();
+    });
+
+    it('tapping the tile walks the real route into an empty register: 7 day heads, 0 rows, the owner claim card', () => {
+        mockUseLabourState.mockReturnValue({ data: EMPTY_WEEK_LABOUR_DATA, loading: false, error: false, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn(), isPreview: false });
+
+        const { container } = render(<LabourFeature onExit={() => {}} />);
+
+        fireEvent.click(screen.getByText('हजेरी वही'));
+
+        // The always-drawn grid: every day of the blank week has a head…
+        expect(container.querySelectorAll('[data-testid="ledger-day-head"]').length).toBe(7);
+        // …and no row of any kind (person or crew) exists to hang a mark on.
+        expect(container.querySelectorAll('[data-testid="ledger-row"]').length).toBe(0);
+        // Owner view, genuinely empty record → the claim card is TRUE (F1).
+        expect(screen.getByText('अजून हजेरी नोंदवली नाही')).toBeInTheDocument();
     });
 });
