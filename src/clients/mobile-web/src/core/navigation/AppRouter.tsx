@@ -25,7 +25,6 @@ import { useFarmContext } from '../session/FarmContext';
 import { useAppRouterDerivations } from './hooks/useAppRouterDerivations';
 import { useNudgeRouteEffect } from './hooks/useNudgeRouteEffect';
 import { useLabourLogArrivalScroll } from './hooks/useLabourLogArrivalScroll';
-import { toAttendanceOnlyDraft } from '../../features/logs/attendanceDraft';
 // spec: owner-oversight-loop (§P-I) — the SAME predicate `AppContent.tsx`
 // hands the tap path as `disabled`. Never re-write the expression here.
 import { isRecordingPathBusy } from '../../shared/utils/recordingPathBusy';
@@ -191,41 +190,12 @@ const AppRouter: React.FC = () => {
     // React hooks must run unconditionally on every render.
     useLabourLogArrivalScroll({ currentRoute, mainView, logIntent });
 
-    // FOUNDER RULING 2026-08-31 — "i dont want the first two screens after
-    // being logged from labour management ui, direct to third ui".
-    //
-    // Taking हजेरी is one act: he says who came, and he is done. The generic
-    // confirm screen belongs to the OTHER door, where a day has many buckets
-    // worth checking before it lands. Here it is a stop on the way to the
-    // screen he actually came from.
-    //
-    // THE REVIEW GATE IS NOT REMOVED, IT MOVES. useVoiceRecorder's "never
-    // skip to auto-save — user must see what was parsed" holds for the log
-    // door and is untouched. On this path the record lands in Labour
-    // Management's own approval inbox (तपासा), which is where a हजेरी is
-    // meant to be checked, and the just-logged card shows it immediately.
-    //
-    // Two guards, both load-bearing:
-    //  - the ref fires once per draft OBJECT, so a re-render cannot submit
-    //    the same speech twice. It clears when the draft does.
-    //  - NO labour in the parse means we do NOT auto-save. He said something
-    //    this door cannot record, and silently filing an empty attendance is
-    //    worse than showing him the screen. He sees it and decides.
-    const autoSubmittedLabourDraftRef = React.useRef<unknown>(null);
-    React.useEffect(() => {
-        if (logIntent !== 'labour') return;
-        if (!draftLog) {
-            autoSubmittedLabourDraftRef.current = null;
-            return;
-        }
-        if (autoSubmittedLabourDraftRef.current === draftLog) return;
-
-        const attendance = toAttendanceOnlyDraft(draftLog);
-        if (!attendance || attendance.labour.length === 0) return;
-
-        autoSubmittedLabourDraftRef.current = draftLog;
-        void handleManualSubmit(attendance);
-    }, [logIntent, draftLog, handleManualSubmit]);
+    // Labour V2 R1 Task 3.4a — the labour auto-submit that lived here was
+    // DELETED. A labour parse now lands on features/labour/components/
+    // AttendanceResult.tsx and is saved ONLY by the farmer pressing बरोबर
+    // (trust rule 5; useVoiceRecorder.ts's "never skip to auto-save" holds
+    // on this door again). The 2026-08-31 ruling it implemented is
+    // superseded by the founder's 2026-09-01 final direction §7 / D1–D3.
 
     if (!welcomeSeen) {
         return (
