@@ -32,7 +32,8 @@ public sealed class LabourAssignment : Entity<Guid>
         ContractUnit? contractUnit, decimal? contractQuantity, decimal? totalCost,
         Guid? linkedActivityId, DateTime createdAtUtc, LabourTime time,
         LabourShift? shift, string? task, string workerNamesJson, string? notes,
-        NumericCertainty? costCertainty, string? costSpokenText)
+        NumericCertainty? costCertainty, string? costSpokenText,
+        Guid? engagedThroughFieldOperatorId)
         : base(id)
     {
         DailyLogId = dailyLogId;
@@ -54,6 +55,7 @@ public sealed class LabourAssignment : Entity<Guid>
         Notes = notes;
         CostCertainty = costCertainty;
         CostSpokenText = costSpokenText;
+        EngagedThroughFieldOperatorId = engagedThroughFieldOperatorId;
     }
 
     public Guid DailyLogId { get; private set; }
@@ -132,6 +134,20 @@ public sealed class LabourAssignment : Entity<Guid>
     /// <summary>His own words for the cost, kept verbatim beside it.</summary>
     public string? CostSpokenText { get; private set; }
 
+    /// <summary>
+    /// Final direction §3 (2026-09-01) — THROUGH WHOM this crew was engaged: a
+    /// FieldOperatorId, never an AppRole (both may be the same human on the
+    /// same day and must remain two rows in two tables). ENGAGEMENT-scoped by
+    /// construction: Shankar with 8 on grapes and 4 on cane is two engagements,
+    /// never "12 unique people". NULL = nobody said through whom — never "no
+    /// mukadam". Set at Create only (R1): re-attributing a recorded engagement
+    /// is a correction story this release does not ship. The mukadam's own
+    /// presence stays his own AttendanceMark; this field has nowhere to
+    /// contradict it. Anonymous remainder stays arithmetic — no worker row is
+    /// ever minted from this link (D9.12; FieldOperatorSingleProducerRules).
+    /// </summary>
+    public Guid? EngagedThroughFieldOperatorId { get; private set; }
+
     public static LabourAssignment Create(
         Guid id, Guid dailyLogId, LabourEngagementType engagementType,
         int? maleCount, int? femaleCount, int? workerCount, decimal? wagePerPerson,
@@ -141,7 +157,11 @@ public sealed class LabourAssignment : Entity<Guid>
         string? notes = null,
         // wave-3.12 — trailing and OPTIONAL so every pre-existing call site keeps
         // compiling and keeps writing NULL, which is exactly "not asked, not stated".
-        NumericCertainty? costCertainty = null, string? costSpokenText = null)
+        NumericCertainty? costCertainty = null, string? costSpokenText = null,
+        // Task 3.6 (spec: 2026-08-28-labour-v2-release-1) — the crew link, trailing
+        // and OPTIONAL for the same reason: every pre-existing call site keeps
+        // compiling and keeps writing NULL = "nobody said through whom".
+        Guid? engagedThroughFieldOperatorId = null)
     {
         // Closes default(LabourTime): a readonly record struct always has an implicit
         // public parameterless constructor, so the zero value is reachable no matter how
@@ -181,7 +201,7 @@ public sealed class LabourAssignment : Entity<Guid>
                // "   " is not a note (see the Notes remarks). Trim the edges and
                // keep the farmer's words; blank becomes the honest null.
                string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
-               costCertainty, costSpokenText);
+               costCertainty, costSpokenText, engagedThroughFieldOperatorId);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

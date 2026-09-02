@@ -133,4 +133,37 @@ public sealed class LabourAssignmentTests
         Assert.Equal(1800m, withStatedTotal.TotalCost);    // stated total preserved exactly
         Assert.Equal(350m, withStatedTotal.WagePerPerson);
     }
+
+    // ── Task 3.6 (spec: 2026-08-28-labour-v2-release-1) — the crew link ──────
+    // Final direction §3: THROUGH WHOM this crew was engaged, ENGAGEMENT-scoped.
+    // NULL = "nobody said through whom" — never "no mukadam".
+
+    [Fact]
+    public void EngagedThroughDefaultsToNullMeaningNobodySaid()
+    {
+        var a = MinimalAssignment(); // the file's existing builder — reuse it
+        Assert.Null(a.EngagedThroughFieldOperatorId);
+    }
+
+    [Fact]
+    public void EngagedThroughIsStoredWhenStated()
+    {
+        var through = Guid.NewGuid();
+        var a = MinimalAssignment(engagedThroughFieldOperatorId: through);
+        Assert.Equal(through, a.EngagedThroughFieldOperatorId);
+    }
+
+    /// <summary>
+    /// Task 3.6 — the minimal valid engagement, for facts that probe one
+    /// property. This file had no builder before 3.6 (every earlier fact
+    /// inlines its own <c>Create</c> call, because each asserts on the very
+    /// fields it states); it exists from 3.6 onward and forwards only what a
+    /// caller states — everything else stays at the factory's own defaults.
+    /// </summary>
+    private static LabourAssignment MinimalAssignment(Guid? engagedThroughFieldOperatorId = null)
+        => LabourAssignment.Create(Guid.NewGuid(), Log, LabourEngagementType.Hired,
+            maleCount: null, femaleCount: null, workerCount: 4, wagePerPerson: null,
+            contractUnit: null, contractQuantity: null, totalCost: null, linkedActivityId: null,
+            createdAtUtc: DateTime.UtcNow, time: LabourTime.ServerAssumed(),
+            engagedThroughFieldOperatorId: engagedThroughFieldOperatorId);
 }

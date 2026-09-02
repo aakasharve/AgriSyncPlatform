@@ -523,6 +523,23 @@ public sealed class CreateDailyLogHandler(
             var labourCreatedAtUtc = clock.UtcNow;
             foreach (var item in labour)
             {
+                // Final direction §3 — the crew link's tenant boundary lives HERE,
+                // in the application (AttachFieldOperatorHandler.cs:112-117 idiom):
+                // p_tenant_labour_assignments is WITH CHECK (true), user-select
+                // policies are PERMISSIVE, and FK checks bypass RLS — so without
+                // this read a client could attribute a crew to another farm's
+                // mukadam. Forbidden, never NotFound. Placement: this loop runs
+                // before the Phase-1 SaveChangesAsync, so the refusal stages
+                // nothing and the log-and-labour unit of work stays atomic.
+                if (item.EngagedThroughFieldOperatorId is { } throughId)
+                {
+                    var through = await repository.GetFieldOperatorByIdAsync(throughId, ct);
+                    if (through is null || (Guid)through.OriginatingFarmId != command.FarmId)
+                    {
+                        return Result.Failure<DailyLogDto>(ShramSafalErrors.Forbidden);
+                    }
+                }
+
                 var assignment = LabourAssignmentFactory.FromParsed(
                     // The client owns the row id (it is also the retry identity for
                     // this row); the 6.1 guard above already rejected Guid.Empty.
@@ -563,7 +580,11 @@ public sealed class CreateDailyLogHandler(
                     // farmer typed it, the phone sent it, the server threw it
                     // away. It now reaches ssf.labour_assignments.notes and
                     // comes back on /sync/pull.
-                    notes: item.Notes);
+                    notes: item.Notes,
+                    // Task 3.6 (Final direction §3) — THROUGH WHOM this crew
+                    // came, guarded above: same farm or the whole submit is
+                    // Forbidden. NULL = nobody said, never "no mukadam".
+                    engagedThroughFieldOperatorId: item.EngagedThroughFieldOperatorId);
 
                 await repository.AddLabourAssignmentAsync(assignment, ct);
             }

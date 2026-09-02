@@ -71,7 +71,14 @@ public static class LabourAssignmentFactory
         Guid? linkedActivityId, DateTime createdAtUtc, LabourTime time,
         LabourShift? shift = null, string? task = null, IReadOnlyList<string>? workerNames = null,
         string? notes = null,
-        NumericCertainty? costCertainty = null, string? costSpokenText = null)
+        NumericCertainty? costCertainty = null, string? costSpokenText = null,
+        // Task 3.6 (spec: 2026-08-28-labour-v2-release-1) — Final direction §3, the
+        // crew link: THROUGH WHOM this engagement's crew came (a FieldOperatorId).
+        // Trailing and OPTIONAL like notes/costCertainty above, so every existing
+        // call site compiles and keeps writing NULL = "nobody said through whom".
+        // Pure pass-through: the farm guard lives in CreateDailyLogHandler, and no
+        // worker row is ever minted from this link (the remainder stays arithmetic).
+        Guid? engagedThroughFieldOperatorId = null)
         => LabourAssignment.Create(
             id: id,
             dailyLogId: dailyLogId,
@@ -97,7 +104,8 @@ public static class LabourAssignmentFactory
             workerNames: workerNames,
             notes: notes,
             costCertainty: costCertainty,
-            costSpokenText: costSpokenText);
+            costSpokenText: costSpokenText,
+            engagedThroughFieldOperatorId: engagedThroughFieldOperatorId);
 
     // ── tolerant string → enum maps (safe default; never throw) ────────────────
     // Moved verbatim from LedgerDerivationService so the manual path can map wire
