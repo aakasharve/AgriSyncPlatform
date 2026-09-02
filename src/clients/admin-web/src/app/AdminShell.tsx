@@ -224,12 +224,20 @@ export function AdminShell() {
         })}
       </aside>
 
-      <div className="flex min-w-0 flex-col lg:h-screen lg:overflow-hidden">
+      {/* THE CONTENT COLUMN IS THE SCROLLER, not the <main> inside it, and that
+          is what makes the top bar's frost mean something: a sticky element in
+          a scrolling flow keeps its box and the content that follows it slides
+          UNDERNEATH. With the scroll on <main>, the bar sat above a box that
+          never passed beneath it and the blur had nothing to bend but the page
+          ground. */}
+      <div className="flex min-w-0 flex-col lg:h-screen lg:overflow-y-auto">
         <header
           data-print="chrome"
           /* GLASS, AND STICKY, SO IT HAS SOMETHING TO FROST. A translucent
              bar over a bar-height slice of nothing is just a paler bar; the
-             effect exists because content slides underneath it. */
+             effect exists because content slides underneath it. That is why
+             the scroll moved up to the column wrapper above — see the note
+             there. It is one change, not two. */
           className="glass-chrome sticky top-0 z-20 flex h-[var(--spacing-topbar)] flex-none items-center gap-3 px-5 xl:px-8"
         >
           {/* The breadcrumb now reads as a heading rather than as a caption.
@@ -259,7 +267,7 @@ export function AdminShell() {
         {/* More air again, because everything inside it got bigger again. A
             34px page title and a 56px KPI figure inside 24px gutters read as
             cramped rather than as confident. */}
-        <main className="min-h-0 flex-1 px-5 pt-8 pb-24 lg:overflow-y-auto xl:px-10">
+        <main className="min-h-0 flex-1 px-5 pt-8 pb-24 xl:px-10">
           <Outlet />
         </main>
       </div>
