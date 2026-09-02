@@ -42,7 +42,7 @@ Everything else in this file is the evidence behind these.
 | 5 | **A database failure is reported as good news — 29 sites** | Several fabricate *complete, well-formed answers*, not empty ones | A3 |
 | 6 | **The Users screen has never returned a row** | Four column names that do not exist, swallowed into HTTP 200 + empty | A2 |
 | 7 | **No MIS endpoint filters by organisation** | And the 30s cache does not vary by header — **the day they are scoped, that cache is the leak** | A5 |
-| 8 | **The acceptance gate cannot be walked** | No local admin membership; every route lands on `/403`. **That is the fail-closed rule working** | D2 |
+| 8 | ~~**The acceptance gate cannot be walked**~~ **CLOSED 2026-09-02, by measurement** | The seeded local user now resolves as a Platform Owner with all 36 modules readable, so every screen opens. Nothing was loosened — see D2 | D2 |
 | 9 | **The Lighthouse budget is broken and has never run on a PR** | 404s on its own target; `workflow_dispatch` only. One flag, in `.github/` | E1 |
 | 10 | **Five signatures** | A50 (react-table dropped) · the four surviving `§B` classes · `font-mono` · A55 (chart now relatively scaled) · A43 (404 replaces the silent bounce) | §C, §D |
 
@@ -367,22 +367,42 @@ an identifier is a paraphrase nobody can act on.
 | | Item | Unblocked by |
 |---|---|---|
 | D1 | **Task 18 Steps 5–7** — error code, meaning, work-survived, app version on `/ops/errors` | The **error-capture-engine** plan merging and deploying. It is code-complete on an unmerged branch |
-| D2 | **The Founder Acceptance Gate cannot be walked locally** — the seeded user is a farmer; `/admin/me/scope` returns `Unauthorized`, so all sixteen routes land on `/403`. **The console is correct; the guard must not be loosened** | Seeding one admin membership locally (touches seed data only — no schema, no guard, no prod surface) |
+| D2 | ✅ **CLOSED 2026-09-02.** It said the seeded user is a farmer and every route lands on `/403`. **Re-measured against the running API today and that is no longer true** | Nothing — it is already unblocked. See the corrected detail below |
 | D3 | **Register row B16** | A4 above |
 | D4 | **Register row A50** — if Task 18 also drops TanStack Table for the pager | Founder tick in the Deliberately-Dropped table |
 
 ---
 
-## D2 detail — why the gate cannot be walked, and the one safe fix
+## D2 detail — CORRECTED 2026-09-02: the gate CAN be walked
 
-Measured: the seeded user logs in fine, then `/shramsafal/admin/me/scope` returns
-`{"outcome":"Unauthorized","scope":null,"memberships":[]}`, so all sixteen routes land on `/403`.
-**The console is correct** — that is the fail-closed property Task 2 pinned, and **the guard must not
-be loosened to make a preview work.** The only seeded local user is a farmer; `ssf.admin_users` does
-not exist anywhere in the repo, so there is no local path to an admin scope at all.
+**What this section used to say.** The seeded user logs in fine, then
+`/shramsafal/admin/me/scope` returns `{"outcome":"Unauthorized","scope":null,"memberships":[]}`,
+so all sixteen routes land on `/403`; `ssf.admin_users` does not exist anywhere in the repo, so
+there is no local path to an admin scope at all.
 
-**Recommendation: seed one admin membership locally.** Touches seed data only — no schema, no guard,
-no production surface.
+**What is true now, measured against the running API on 2026-09-02** — logging in as the one seeded
+user (`8888888888`) and calling the same endpoint:
+
+```
+outcome  Resolved
+scope    isPlatformAdmin true · orgType Platform · orgRole Owner
+modules  36 readable — admin.self, admin.orgs.read, admin.users, ops.live, ops.errors,
+         ops.voice, ops.alerts, metrics.nsm, metrics.retention, farms.list, farms.detail,
+         farms.silent-churn, farms.suffering, farmer.health, org.settings, audit.ledger, …
+```
+
+**Every screen in the console opens.** The Founder Acceptance Gate can be walked end to end at
+`http://localhost:4001`.
+
+**Nothing was loosened to achieve it, and that matters more than the closure.** The guard is
+untouched: `EntitlementGuard` still fails closed, `/403` is still where an unreadable route lands,
+and `tenancy.contract.test.tsx` still holds both halves. The scope resolves because the local seed
+now grants a Platform Owner membership — which is exactly the fix this entry recommended, and the
+only one it allowed.
+
+**Recorded rather than quietly dropped**, because a "blocked" entry that has silently unblocked is
+worse than one that is still blocked: it sends the next person looking for a problem that is not
+there, and it makes the eight other rows in this section look less trustworthy than they are.
 
 ---
 
