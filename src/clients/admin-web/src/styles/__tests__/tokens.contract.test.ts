@@ -170,7 +170,7 @@ describe('quality floor (CONTRACT.md §10)', () => {
   });
 });
 
-describe('the legacy glass layer after Task 27 — a count, not a comment', () => {
+describe('the legacy glass layer, re-counted 2026-09-02 — a count, not a comment', () => {
   /*
    * Task 3 scheduled the whole §B block for deletion in Task 27, conditional
    * on the last consumer having moved. Task 27 counted instead of assuming:
@@ -184,8 +184,24 @@ describe('the legacy glass layer after Task 27 — a count, not a comment', () =
    * which is how §B reached 25 references in the first place).
    */
 
-  const GONE = ['glass', 'glass-kpi', 'glass-sidebar', 'nav-active'] as const;
-  const KEPT = ['glass-panel', 'chip-fresh', 'chip-live', 'chip-mat'] as const;
+  /*
+   * `glass-panel` MOVED FROM KEPT TO GONE ON 2026-09-02, and the move is the
+   * whole reason this pair of lists is written two-sided.
+   *
+   * Task 27 could not delete it: ForbiddenPage was still rendering it, and a
+   * class deleted out from under a live consumer gives a console that builds
+   * green and renders unstyled, which no build gate catches. So it stayed,
+   * with its consumer named below, and the §B header recorded it as a LIVE
+   * CONTRACT.md §8 violation on /403 — translucent, backdrop-filtered, and
+   * carrying a three-stop gradient bar.
+   *
+   * The visual-boldness pass restyled ForbiddenPage onto §A, which took the
+   * consumer count to zero, and this list is what then says the class must go
+   * rather than linger as dead CSS nobody dares touch. Both halves landed in
+   * one commit for exactly the reason the two-sided shape exists.
+   */
+  const GONE = ['glass', 'glass-kpi', 'glass-sidebar', 'nav-active', 'glass-panel'] as const;
+  const KEPT = ['chip-fresh', 'chip-live', 'chip-mat'] as const;
 
   /**
    * WHY NOT A WORD-BOUNDARY ANCHOR. It reads as the obvious choice and it is
@@ -217,25 +233,43 @@ describe('the legacy glass layer after Task 27 — a count, not a comment', () =
    * list is what tells the next person the class may now go — rather than a
    * comment claiming a number nobody re-counted.
    */
-  it('names every file still holding the four survivors alive', () => {
+  it('names every file still holding the three survivors alive', () => {
     const holders = (name: string) =>
       Object.keys(SOURCES)
         .filter((path) => exactly(name).test(code(path)))
         .sort();
 
-    expect(holders('glass-panel')).toEqual(['/src/pages/ForbiddenPage.tsx']);
-    for (const name of ['chip-fresh', 'chip-live', 'chip-mat']) {
+    /*
+     * ONE file now, not two. `glass-panel`'s row was
+     *   expect(holders('glass-panel')).toEqual(['/src/pages/ForbiddenPage.tsx']);
+     * and it is gone because the page is: the assertion that replaces it is
+     * the GONE row above, which is strictly stronger — it requires the class
+     * to be absent from the stylesheet AND unreferenced by any source file.
+     *
+     * The three that remain are all FreshnessChip's, and they remain on
+     * purpose. Their colours are a claim about where a number came from —
+     * green for a live read, teal for last night's materialisation — and a
+     * styling pass does not restyle a colour that states a fact.
+     */
+    for (const name of KEPT) {
       expect(holders(name)).toEqual(['/src/components/ui/FreshnessChip.tsx']);
     }
   });
 
   /*
-   * The §A.9 radius pair: `--radius-kpi` was read only by `.glass-kpi` and
-   * left with it; `--radius-card` is read by `.glass-panel` and stayed.
+   * The §A.9 radius pair, and the same rule applied twice a task apart:
+   * a token whose only reader is a deleted class leaves with it.
+   * `--radius-kpi` went with `.glass-kpi` in Task 27; `--radius-card` was
+   * read ONLY by `.glass-panel` and went with it on 2026-09-02. Verified by
+   * reading, not assumed: no other rule and no component names it.
+   *
+   * The assertion FLIPPED from `toContain` to `not.toContain`. That is not a
+   * weakened test — it is the same rule, now with both of its cases proven,
+   * and it still fails loudly if either token comes back without a consumer.
    */
-  it('drops --radius-kpi with .glass-kpi and keeps --radius-card with .glass-panel', () => {
+  it('drops --radius-kpi with .glass-kpi and --radius-card with .glass-panel', () => {
     expect(cssRules).not.toContain('--radius-kpi');
-    expect(cssRules).toContain('--radius-card');
+    expect(cssRules).not.toContain('--radius-card');
   });
 });
 

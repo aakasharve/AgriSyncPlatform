@@ -25,6 +25,25 @@ import { useAdminAuth } from '@/app/AdminAuthProvider';
  * Both original message variants are unchanged, word for word. The new one
  * sits in front of them and claims less, not more.
  *
+ * ── RESTYLED OFF THE LEGACY LAYER, 2026-09-02 ─────────────────────────────
+ * This page was the last consumer of `.glass-panel` — a translucent panel
+ * under a 30px backdrop blur, with a three-stop gradient bar across its top
+ * edge, plus a red-to-amber gradient behind the shield. CONTRACT.md
+ * §8 bans glassmorphism, translucency and gradients, so /403 was a live
+ * violation on three counts at once. Task 27 FOUND it, named it in the
+ * stylesheet, and left it standing because no screen task owned this page and
+ * restyling it changes what the founder sees on one of the two routes he can
+ * reach on this machine. This pass owned it, so it is fixed: a flat white
+ * panel at the float depth, and the shield in `tint-red` + `red`.
+ *
+ * The colour is not decoration and it did not change meaning. Red is §A.4's
+ * "needs a person, or a failure", which is exactly what a denial is; the old
+ * gradient said failure AND warning at once, which are two different things.
+ *
+ * `.glass-panel`, its `::before`, `--radius-card` and five §B tokens were
+ * deleted in the same commit, because a class kept alive by one file is dead
+ * CSS the moment that file moves.
+ *
  * The five server denial codes are NOT branched on here. /403 has no producer
  * that carries one, and a branch with no producer is exactly the dead code
  * that gets deleted next year as unused. They are spent where they arrive
@@ -44,15 +63,18 @@ export default function ForbiddenPage() {
   const state = location.state as ForbiddenState | null;
 
   return (
-    <div className="relative z-10 grid min-h-screen place-items-center p-6">
-      <div className="glass-panel w-full max-w-md p-8 text-center">
-        <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-danger to-warning text-white">
-          <ShieldOff size={28} strokeWidth={2.5} />
+    <div className="grid min-h-screen place-items-center bg-ground p-6">
+      <div
+        data-print="panel"
+        className="w-full max-w-md rounded-panel bg-page p-8 text-center shadow-float"
+      >
+        <div className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-panel bg-tint-red text-red">
+          <ShieldOff size={28} strokeWidth={2.4} aria-hidden="true" />
         </div>
-        <h1 className="mb-2 text-xl font-extrabold tracking-tight text-text-primary">
+        <h1 className="mb-2 text-h2 font-bold text-text-1">
           {state?.scopeUnavailable ? 'We could not check your access' : '403 · Access denied'}
         </h1>
-        <p className="mb-6 text-sm text-text-secondary">
+        <p className="mb-6 text-body text-text-2">
           {state?.scopeUnavailable ? (
             <>
               This is not a permissions problem — the check itself failed to answer. Nothing about

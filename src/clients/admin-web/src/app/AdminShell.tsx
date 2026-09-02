@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useAdminAuth } from './AdminAuthProvider';
 import { useActiveOrg } from './ActiveOrgProvider';
-import { GROUP_ORDER, NAV } from './nav';
+import { GROUP_ORDER, NAV, type NavGroup } from './nav';
 import { useNavBadges } from './navBadges';
 import { ToastHost } from './ToastHost';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
@@ -73,6 +73,43 @@ import { cn } from '@/lib/utils';
  * every Windows operator — a small lie of exactly the D4 shape, in the one
  * hint that survived D4.
  */
+/**
+ * THE SIX SECTION ACCENTS — added 2026-09-02, and the distinction they rest
+ * on is worth stating where a reader will meet it.
+ *
+ * Task 10 STRIPPED the per-ITEM icon colours, and that judgement was right:
+ * a green Home icon beside a blue Users icon encoded nothing. Nothing about
+ * Home is green. The colour was decoration wearing a meaning's clothes, and
+ * CONTRACT.md §7.7's rule is "if you cannot say what a colour means, remove
+ * it."
+ *
+ * A SECTION colour survives that test where an item colour did not, because
+ * it says something true and useful: WHERE YOU ARE. Six groups, six accents,
+ * on the group heading and on the active item inside it — so the answer to
+ * "which part of the console am I in" is legible from the corner of the eye
+ * rather than by reading a label.
+ *
+ * 🛑 WHAT THIS IS NOT. It is not a verdict. These six live only on the
+ * navigation plane, which carries no readings; the four signal hues live only
+ * on data surfaces, which the sidebar is not. An accent can therefore never
+ * be mistaken for a measurement, because the two never appear on the same
+ * surface. The one exception is deliberate and goes the other way: `NavBadge`
+ * below is a READING — farms needing a person today — so it keeps §A.6's
+ * `tint-red`/`red` and takes no accent at all.
+ *
+ * Every value is measured against BOTH the plane (`--color-nav`) and the
+ * active pill (`--color-nav-raise`) in globals.css §A.11. Worst pair in the
+ * set: 4.91:1. All twelve clear AA.
+ */
+const GROUP_ACCENT: Record<NavGroup, string> = {
+  Overview: 'text-nav-overview',
+  Operations: 'text-nav-operations',
+  Product: 'text-nav-product',
+  Farms: 'text-nav-farms',
+  Schedules: 'text-nav-schedules',
+  Admin: 'text-nav-admin',
+};
+
 const IS_APPLE =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
 
@@ -99,26 +136,43 @@ export function AdminShell() {
            is evidence, so the navigation goes and the content stays. */
         data-print="chrome"
         aria-label="Sections"
-        className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-page px-4 py-3 lg:h-screen lg:flex-col lg:flex-nowrap lg:items-stretch lg:gap-0 lg:overflow-y-auto lg:border-r lg:border-b-0 lg:px-3 lg:pt-4 lg:pb-8"
+        /* THE NAVIGATION PLANE IS DEEP GREEN (2026-09-02), and this is the
+           single largest visual change in the boldness pass. It was #ffffff
+           against an #f5f9f6 ground — 236px of the screen with nothing to
+           tell it apart from the page beside it, which is most of why the
+           console read as grey.
+
+           IT IS NOT DARK MODE, and the distinction is not a quibble: D1
+           dropped a mode that repaints the whole console from an OS
+           preference, including every data surface. Nothing here reads a
+           preference and nothing here is a data surface. The page, the top
+           bar, every panel, every tile and every figure are exactly as light
+           as they were, so no reading changed contrast. This is a coloured
+           frame around an unchanged picture. */
+        className="flex flex-wrap items-center gap-x-2 gap-y-1 bg-nav px-4 py-3 lg:h-screen lg:flex-col lg:flex-nowrap lg:items-stretch lg:gap-0 lg:overflow-y-auto lg:px-3 lg:pt-5 lg:pb-8"
       >
-        <div className="mr-2 flex items-center gap-2 lg:mr-0 lg:mb-1 lg:px-2 lg:pb-4">
-          <span className="grid size-[30px] flex-none place-items-center rounded-[9px] bg-blue text-page">
-            <Leaf size={17} strokeWidth={1.7} aria-hidden="true" />
+        <div className="mr-3 flex items-center gap-2.5 lg:mr-0 lg:mb-4 lg:border-b lg:border-nav-line lg:px-2 lg:pb-4">
+          <span className="grid size-9 flex-none place-items-center rounded-chip bg-nav-overview text-nav">
+            <Leaf size={20} strokeWidth={2.2} aria-hidden="true" />
           </span>
           <span className="leading-tight">
-            <span className="block text-[16px] font-semibold tracking-[-0.01em] text-text-1">
-              AgriSync
-            </span>
-            <span className="block text-[13px] text-text-3">Admin console</span>
+            <span className="block text-h3 font-bold text-page">AgriSync</span>
+            <span className="block text-caption text-nav-muted">Admin console</span>
           </span>
         </div>
 
         {GROUP_ORDER.map((group) => {
           const items = NAV.filter((n) => n.group === group);
           if (items.length === 0) return null;
+          const accent = GROUP_ACCENT[group];
           return (
-            <div key={group} className="flex items-center gap-1 lg:mb-3 lg:block">
-              <div className="px-1 text-[12px] font-semibold tracking-[0.08em] text-text-3 uppercase lg:px-2 lg:pb-1">
+            <div key={group} className="flex items-center gap-1 lg:mb-4 lg:block">
+              <div
+                className={cn(
+                  'px-1 text-eyebrow font-bold uppercase lg:px-2 lg:pb-1.5',
+                  accent
+                )}
+              >
                 {group}
               </div>
               {items.map((n) => (
@@ -130,17 +184,23 @@ export function AdminShell() {
                   end={n.to === '/'}
                   className={({ isActive }) =>
                     cn(
-                      'flex items-center gap-3 rounded-chip px-3 py-2 text-[15px] font-medium text-text-1 transition-colors lg:mb-1',
+                      'flex items-center gap-3 rounded-chip px-3 py-2 text-body font-medium transition-colors lg:mb-1',
                       /* The active item is a TINTED PILL, not an underline and
-                         not a left bar (CONTRACT.md §2). Nothing else in the
-                         sidebar is tinted, so there is only ever one. */
-                      isActive ? 'bg-tint-blue font-semibold text-blue' : 'hover:bg-wash'
+                         not a left bar (CONTRACT.md §2) — unchanged. What
+                         changed is the tint: the pill is the plane one step
+                         lighter and the LABEL takes the section accent, so
+                         the sidebar says which group you are in as well as
+                         which screen. Nothing else in the sidebar is tinted,
+                         so there is only ever one. */
+                      isActive
+                        ? cn('bg-nav-raise font-semibold', accent)
+                        : 'text-nav-text hover:bg-nav-raise hover:text-page'
                     )
                   }
                 >
                   {({ isActive }) => (
                     <>
-                      <span className={cn('grid flex-none', isActive ? 'text-blue' : 'text-text-2')}>
+                      <span className={cn('grid flex-none', isActive ? accent : 'text-nav-muted')}>
                         <n.Icon size={18} aria-hidden="true" />
                       </span>
                       <span className="hidden sm:inline">{n.label}</span>
@@ -159,7 +219,11 @@ export function AdminShell() {
           data-print="chrome"
           className="flex h-[var(--spacing-topbar)] flex-none items-center gap-3 border-b border-line bg-page px-5 xl:px-8"
         >
-          <span className="hidden text-[15px] font-medium text-text-2 sm:inline">{crumb}</span>
+          {/* The breadcrumb now reads as a heading rather than as a caption.
+              It is the only thing on the bar that says which screen this is,
+              and at 15px medium in the caption grey it was the quietest text
+              in the frame. */}
+          <span className="hidden text-h3 font-semibold text-text-1 sm:inline">{crumb}</span>
           <OrgScope />
           <div className="ml-auto flex items-center gap-3">
             <ScreenRefresh />
@@ -230,7 +294,14 @@ function NavBadge({ count, label }: { count: number | undefined; label: string }
   return (
     <span
       data-nav-badge={label}
-      className="ml-auto rounded-full bg-tint-red px-2 text-[13px] font-semibold text-red"
+      /* 🛑 THE ONE THING IN THE SIDEBAR THAT IS NOT CHROME, so it is the one
+         thing that did NOT take a section accent. This is a READING — farms
+         needing a person today — and §A.6's `tint-red` on `red` is what a
+         reading that needs a person is drawn in everywhere else in the
+         console. It keeps that pairing exactly, on the dark plane as on a
+         white one, because a count means the same thing wherever it is
+         printed. */
+      className="ml-auto rounded-full bg-tint-red px-2 text-caption font-bold text-red"
     >
       <span aria-hidden="true">{count}</span>
       <span className="sr-only">
@@ -484,7 +555,7 @@ function SignedIn() {
   return (
     <>
       <span
-        className="grid size-8 flex-none place-items-center rounded-full bg-tint-blue text-[13px] font-semibold text-blue"
+        className="grid size-8 flex-none place-items-center rounded-full bg-brand-wash text-caption font-bold text-brand"
         title={displayName || undefined}
       >
         <span className="sr-only">

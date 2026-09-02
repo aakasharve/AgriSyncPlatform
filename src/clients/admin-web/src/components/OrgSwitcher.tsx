@@ -41,6 +41,18 @@ interface OrgSwitcherProps {
  * and the shell opens. A button that reloads the page to make something happen
  * that has already happened is an affordance describing a console that no
  * longer exists.
+ *
+ * ── RESTYLED OFF THE LEGACY LAYER, 2026-09-02 ─────────────────────────────
+ * This component held three §B tokens alive on its own — `surface-panel`,
+ * `surface-border` and `surface-border-strong`, all three `color-mix()`
+ * translucencies — plus two of the three legacy near-blacks. It is the gate a
+ * multi-org admin meets BEFORE the shell, so it is the second thing the
+ * console shows anyone, and it was drawn from a palette no other screen used.
+ * It is now brand green on the token layer: `border-brand` + `brand-wash` for
+ * the chosen organisation, a plain hairline for the rest.
+ *
+ * The border dropped from 2px to 1px because the selected state no longer
+ * needs weight to be legible — it has a fill.
  */
 export function OrgSwitcher({ memberships, fullPage = false, headline, subline }: OrgSwitcherProps) {
   const { activeOrgId, setActiveOrgId } = useActiveOrg();
@@ -72,7 +84,7 @@ export function OrgSwitcher({ memberships, fullPage = false, headline, subline }
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {subline && <p className="mb-4 text-sm text-text-muted">{subline}</p>}
+        {subline && <p className="mb-4 text-body text-text-2">{subline}</p>}
         <ul className="space-y-2">
           {memberships.map((m) => {
             const selected = activeOrgId === m.orgId;
@@ -81,19 +93,19 @@ export function OrgSwitcher({ memberships, fullPage = false, headline, subline }
                 <button
                   type="button"
                   onClick={() => choose(m.orgId)}
-                  className={`flex w-full items-center justify-between rounded-md border-2 p-4 text-left transition-colors ${
+                  className={`flex w-full items-center justify-between rounded-chip border p-4 text-left transition-colors ${
                     selected
-                      ? 'border-brand-teal bg-surface-panel'
-                      : 'border-surface-border hover:border-surface-border-strong hover:bg-surface-panel'
+                      ? 'border-brand bg-brand-wash'
+                      : 'border-line hover:border-brand hover:bg-wash'
                   }`}
                 >
                   <div>
-                    <div className="font-semibold text-text-primary">{m.orgName}</div>
-                    <div className="text-xs text-text-muted">
+                    <div className="text-h3 font-semibold text-text-1">{m.orgName}</div>
+                    <div className="text-caption text-text-2">
                       {m.orgType} &middot; {m.orgRole}
                     </div>
                   </div>
-                  {selected && <CheckCircle2 className="size-5 text-brand-teal" aria-label="Selected" />}
+                  {selected && <CheckCircle2 className="size-5 text-brand" aria-label="Selected" />}
                 </button>
               </li>
             );

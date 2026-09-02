@@ -1054,37 +1054,51 @@ describe('what still needs the founder’s signature', () => {
    * table does not yet cover. None of them is signed here.
    *
    *  1. A50 — @tanstack/react-table, removed outright (see the row above).
-   *  2. The four surviving §B legacy classes: `.glass-panel` on ForbiddenPage
-   *     and `.chip-fresh` / `.chip-live` / `.chip-mat` on FreshnessChip. §8
-   *     bans glassmorphism, translucency and gradients, so `.glass-panel` is a
-   *     LIVE VIOLATION on /403 — kept because neither file belonged to a
-   *     screen task, and restyling them would change what the founder sees on
-   *     two of the pages he can actually reach on this machine.
+   *  2. The THREE surviving §B legacy classes: `.chip-fresh` / `.chip-live` /
+   *     `.chip-mat`, all on FreshnessChip. They are translucent `color-mix()`
+   *     fills, which §8 bans, and they are still unsigned.
+   *
+   *     `.glass-panel` LEFT THIS LIST ON 2026-09-02. It was the live §8
+   *     violation on /403 — translucent, backdrop-filtered and carrying a
+   *     three-stop gradient bar — and the visual-boldness pass restyled
+   *     ForbiddenPage onto §A and deleted the class in the same commit. One
+   *     fewer thing needing a signature, recorded rather than dropped quietly.
+   *
+   *     FreshnessChip was deliberately NOT swept with it. Its green and its
+   *     teal say where a number came from — a live read versus last night's
+   *     materialisation — which is a claim about data. That pass changed
+   *     chrome only and restyled no colour that states a fact, so this one is
+   *     still the founder's.
    *  3. `--font-mono`, six files and eighteen uses, every one a value read
    *     character by character — the OTP field, error timestamps, status
    *     codes. §8 bans monospace. Sweep, or amend §8.
    *
    * The counts are asserted so the question cannot be closed by drift.
    */
-  it('counts the four §B classes still standing, with their named consumers', () => {
-    /* DECLARATIONS, not prose. The §B header LISTS the four deleted classes
-       by name in a comment explaining that they are gone, so reading the raw
+  it('counts the three §B classes still standing, with their named consumer', () => {
+    /* DECLARATIONS, not prose. The §B header LISTS the deleted classes by
+       name in a comment explaining that they are gone, so reading the raw
        file reports every one of them as still present — the register failing
        on its own explanation, which is how an explanation gets deleted. */
     const css = cssRules;
     const boundary = (cls: string) =>
       new RegExp(`(?<![A-Za-z0-9_-])\\.${cls}(?![A-Za-z0-9_-])`);
 
-    for (const cls of ['glass-panel', 'chip-fresh', 'chip-live', 'chip-mat']) {
+    for (const cls of ['chip-fresh', 'chip-live', 'chip-mat']) {
       expect(`${cls} declared: ${boundary(cls).test(css)}`).toBe(`${cls} declared: true`);
     }
-    // And the four that Task 27 DID delete stay deleted. The hyphen is why
-    // this needs an explicit boundary: `\bglass\b` matches inside `glass-panel`.
-    for (const cls of ['glass', 'glass-kpi', 'glass-sidebar', 'nav-active']) {
+    /* FIVE deleted now, not four. `glass-panel` joined the list on 2026-09-02
+       when ForbiddenPage was restyled onto §A — the number moved because the
+       code did, which is the only reason a number in this file may move. The
+       hyphen is why this needs an explicit boundary: `\bglass\b` matches
+       inside `glass-panel`, which is the exact trap Task 28 caught. */
+    for (const cls of ['glass', 'glass-kpi', 'glass-sidebar', 'nav-active', 'glass-panel']) {
       expect(`${cls} declared: ${boundary(cls).test(css)}`).toBe(`${cls} declared: false`);
     }
 
-    expect(code('/src/pages/ForbiddenPage.tsx')).toContain('glass-panel');
+    /* The consumer that made the deletion legal, asserted from the other
+       side: /403 must no longer name the class it used to hold alive. */
+    expect(code('/src/pages/ForbiddenPage.tsx')).not.toContain('glass-panel');
     expect(code('/src/components/ui/FreshnessChip.tsx')).toContain('chip-fresh');
   });
 

@@ -77,7 +77,7 @@ const queryClient = new QueryClient({
 
 function Fallback() {
   return (
-    <div className="grid min-h-[400px] place-items-center text-sm text-text-muted">Loading…</div>
+    <div className="grid min-h-[400px] place-items-center text-body text-text-2">Loading…</div>
   );
 }
 
