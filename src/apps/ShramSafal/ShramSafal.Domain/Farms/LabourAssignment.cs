@@ -156,9 +156,24 @@ public sealed class LabourAssignment : Entity<Guid>
                 "default(LabourTime) is not a valid duration.", nameof(time));
         }
 
-        var workerNamesJson = workerNames is null || workerNames.Count == 0
+        // B002 (Labour V2 R1, 3.3 review carried to 3.5): the name pipe is the
+        // write boundary, and it is SERVER-AUTHORITATIVE — trim each spoken
+        // name and drop whitespace-only entries, so 'गणेश ' and 'गणेश' can
+        // never become two people on the record or mask a contradiction the
+        // attendance check keys by name. Same posture as `notes` below: keep
+        // the farmer's words, shed the edges. No dedupe — identical names are
+        // legitimate (two real people called बाळू) and merging is identity
+        // resolution's job (rule 10), never serialization's.
+        var normalizedWorkerNames = workerNames is null
+            ? null
+            : workerNames
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Select(n => n.Trim())
+                .ToList();
+
+        var workerNamesJson = normalizedWorkerNames is null || normalizedWorkerNames.Count == 0
             ? "[]"
-            : JsonSerializer.Serialize(workerNames, WorkerNamesSerializerOptions);
+            : JsonSerializer.Serialize(normalizedWorkerNames, WorkerNamesSerializerOptions);
 
         return new(id, dailyLogId, engagementType, maleCount, femaleCount, workerCount,
                wagePerPerson, contractUnit, contractQuantity, totalCost, linkedActivityId, createdAtUtc, time,

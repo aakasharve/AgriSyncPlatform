@@ -25,18 +25,18 @@ import { NO_ANCHOR_TEST_IDS } from '../labourAnchor';
 import { ATTENDANCE_COPY } from '../attendanceCopy';
 
 /**
- * हजेरी घ्या's "जतन करा" claims "जतन झाले" (saved) but writes nothing
- * anywhere — the screen it opens is a dead end. Hide the tile itself (not
- * just the save button) rather than let a farmer fill in a form that goes
- * nowhere. Flip to `true` once attendance actually persists.
+ * Task 3.5c (Labour V2 R1) killed the lie this gate was hiding: हजेरी घ्या's
+ * save now enqueues REAL attendance.mark mutations through MutationQueue and
+ * toasts the honest offline vocabulary — nothing claims "saved" before
+ * acknowledgement (P10). The tile itself STAYS hidden: un-hiding is Phase 4's
+ * call, when the register that reads these marks back exists.
  */
 // STAYS false for every real farm (Task 18, spec: 2026-08-28-labour-v2-
 // release-1). This is NOT the founder-review switch — see `isPreview` in the
 // render below, which is the one declared exception: it reveals this tile
 // only inside the `import.meta.env.DEV`-gated `?preview=labour` mount
-// (App.tsx), never for a real farmer. The screen itself is unchanged and
-// still a dead end: onSave writes nothing, and its crop/plot picker is fed
-// hardcoded MOCK_CROPS, not the farm's real plots.
+// (App.tsx), never for a real farmer. Preview mounts have no farm context, so
+// the screen's save renders disabled there (Attendance.tsx `saveDisabled`).
 const SHOW_ATTENDANCE_TILE = false;
 
 /**

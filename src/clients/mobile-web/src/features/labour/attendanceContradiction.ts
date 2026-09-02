@@ -33,7 +33,12 @@ export function findDayContradictions(events: readonly LabourEvent[]): DayContra
         // engagement; a fact is listed once per engagement, so a duplicate can
         // neither pad the fact list nor mask anything. Exact-string only —
         // identity merging lives at resolution (rule 10), never here.
-        for (const name of new Set(event.workerNames ?? [])) {
+        // B002 (3.3 review, carried to 3.5): trimmed before keying, so
+        // 'गणेश ' and 'गणेश' spoken across two engagements are ONE person's
+        // two facts — an untrimmed key would file them apart and mask the
+        // very contradiction this module exists to surface. Exact-string
+        // beyond the trim; identity merging stays at resolution (rule 10).
+        for (const name of new Set((event.workerNames ?? []).map((n) => n.trim()).filter((n) => n.length > 0))) {
             const list = byName.get(name) ?? [];
             list.push({ shift: raw as DayShift, sourceEventId: event.id });
             byName.set(name, list);

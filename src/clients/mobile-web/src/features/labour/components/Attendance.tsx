@@ -22,7 +22,26 @@ import type { LabourData, PresenceStatus } from '../labourMock';
 import { Avatar } from './LabourUiKit';
 import { SHIFT_LABEL, type LabourShift } from '../labourParse';
 
-interface Props { data: LabourData; onSave: () => void; onToast: (m: string) => void }
+/**
+ * Labour V2 R1 Task 3.5c — one row of the manual save: WHO and WHAT WAS
+ * TAPPED, with the screen's global shift threaded through as stated. The
+ * status→mark mapping deliberately does NOT live here — it lives in ONE
+ * place, the LabourFeature onSave caller, so the wire vocabulary cannot
+ * fork between screens.
+ */
+export type ManualAttendanceMark = { fieldOperatorId: string; status: PresenceStatus; shift: LabourShift };
+
+interface Props {
+    data: LabourData;
+    onSave: (marks: ManualAttendanceMark[]) => void;
+    onToast: (m: string) => void;
+    /**
+     * Task 3.5c — true when no farm context is resolved: there is nothing a
+     * mark could be recorded AGAINST, so the save disables instead of
+     * toasting (no new farmer-facing Marathi exists for this case).
+     */
+    saveDisabled?: boolean;
+}
 
 const SEG: { k: PresenceStatus; label: string }[] = [
     { k: 'present', label: 'आला' },
@@ -34,7 +53,7 @@ const toMr = (n: number) => String(n).replace(/\d/g, (d) => '०१२३४५�
 
 const SHIFTS: LabourShift[] = ['full', 'half', 'night'];
 
-const Attendance: React.FC<Props> = ({ data, onSave, onToast }) => {
+const Attendance: React.FC<Props> = ({ data, onSave, onToast, saveDisabled }) => {
     // `headcount` is null when labour was logged today but nobody said how
     // many. The counter needs a number to start from, and 0 is the honest
     // starting point for a field he is about to fill in himself — it is his
@@ -100,7 +119,9 @@ const Attendance: React.FC<Props> = ({ data, onSave, onToast }) => {
             <div className="rounded-xl border border-amber-200 border-l-[3px] border-l-amber-600 bg-amber-50 p-2.5 text-[11.5px] leading-relaxed text-amber-800">
                 <b>किमान एक नाव आवश्यक.</b> बाकीचे "+ २ जण" म्हणून मोजले जातील. हिरवा ✓ = अ‍ॅप कामगार, राखाडी = फक्त नाव.
             </div>
-            <button type="button" onClick={onSave} className="flex w-full items-center justify-center gap-2 rounded-[14px] bg-emerald-600 py-3.5 text-[13px] font-extrabold text-white transition-transform active:scale-[0.98]">
+            <button type="button" disabled={saveDisabled}
+                onClick={() => onSave(Object.entries(status).map(([fieldOperatorId, s]) => ({ fieldOperatorId, status: s, shift })))}
+                className={`flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-[13px] font-extrabold text-white transition-transform active:scale-[0.98] ${saveDisabled ? 'bg-slate-300' : 'bg-emerald-600'}`}>
                 <Check size={16} /> जतन करा → मंजुरीसाठी
             </button>
         </div>

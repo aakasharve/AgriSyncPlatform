@@ -116,6 +116,7 @@ export type {
     AiProviderConfigResponse,
     AllowedTransitionsDto,
     AttachmentDto,
+    AttendanceMarkDto,
     AttentionBoardDto,
     AttentionCardDto,
     AttributedOperatorDto,

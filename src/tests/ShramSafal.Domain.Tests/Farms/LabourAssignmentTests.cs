@@ -24,6 +24,26 @@ public sealed class LabourAssignmentTests
         Assert.Equal(1750m, la.TotalCost);
     }
 
+    /// <summary>
+    /// B002 (Labour V2 R1, 3.3 review carried to 3.5) — the name pipe's
+    /// server-authoritative write boundary trims spoken names and drops
+    /// whitespace-only entries, so 'गणेश ' and 'गणेश' cannot become two
+    /// people on the record or mask a name-keyed contradiction. It must NOT
+    /// dedupe: identical names are legitimate (two real people called बाळू),
+    /// and merging is identity resolution's job, never serialization's.
+    /// </summary>
+    [Fact]
+    public void Create_trims_worker_names_and_drops_blanks_but_never_dedupes()
+    {
+        var la = LabourAssignment.Create(Guid.NewGuid(), Log, LabourEngagementType.Hired,
+            null, null, workerCount: 3, wagePerPerson: null,
+            contractUnit: null, contractQuantity: null, totalCost: null, linkedActivityId: null,
+            createdAtUtc: DateTime.UtcNow, time: LabourTime.ServerAssumed(),
+            workerNames: [" गणेश ", "गणेश", "   ", "बाळू", "बाळू"]);
+
+        Assert.Equal("[\"गणेश\",\"गणेश\",\"बाळू\",\"बाळू\"]", la.WorkerNamesJson);
+    }
+
     [Fact]
     public void Create_contract_sets_unit_and_quantity()
     {

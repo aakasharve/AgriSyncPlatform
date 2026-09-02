@@ -125,6 +125,12 @@ const PERMANENT_REJECTION_CODES: readonly string[] = [
 
     // (b) command shape — identical bytes, identical verdict, forever.
     'InvalidCommand',
+    // Labour V2 R1 — the attendance contradiction. The server's answer to
+    // these bytes can never change; the farmer's ANSWER travels as a NEW
+    // attendance.mark carrying resolvedLabourAssignmentId. Parking it is what
+    // surfaces the question; retrying it is re-asking a question already
+    // answered.
+    'AttendanceContradiction',
     'InvalidVerificationReason',
     'InvalidVerificationStatus',
     'ComplianceSignalNoteRequired',

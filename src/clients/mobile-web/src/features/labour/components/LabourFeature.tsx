@@ -19,6 +19,9 @@ import React, { useCallback, useRef, useState } from 'react';
 import { useLabourState } from '../useLabourState';
 import { resolveLabourAnchor } from '../labourAnchor';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
+import { MarkAttendanceCommand } from '../../../application/usecases/sync/MarkAttendanceCommand';
+import { t as translate } from '../../../i18n/translations';
+import { SYNC_HONESTY_I18N_KEYS } from '../../sync/status/syncHonestyState';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
 import type { DailyLog, LedgerDefaults } from '../../../types';
 import { BackHeader, LoadErrorBanner, LoadingState } from './LabourUiKit';
@@ -30,6 +33,14 @@ import WeeklyDashboard from './WeeklyDashboard';
 import HajeriLedger from './HajeriLedger';
 import ReviewSheet from './ReviewSheet';
 import FarmInviteQrSheet from '../../onboarding/qr/FarmInviteQrSheet';
+
+/**
+ * Labour V2 R1 Task 3.5c — the honest offline vocabulary for a queued mark,
+ * resolved from the ONE source at the pinned language (the ReviewSheet.tsx:226
+ * idiom): लक्षात ठेवलं ✓ — never transcribed, so a founder copy edit reaches
+ * this toast automatically.
+ */
+const ON_PHONE_MR = translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr');
 
 type ScreenName = 'hub' | 'mukadam' | 'person' | 'attendance' | 'dashboard' | 'ledger';
 interface ScreenState { name: ScreenName; id?: string }
@@ -208,7 +219,45 @@ export const LabourFeature: React.FC<{
                             />
                         )}
                         {cur.name === 'attendance' && (
-                            <Attendance data={data} onSave={() => { back(); showToast('जतन झाले → मंजुरीसाठी'); }} onToast={showToast} />
+                            <Attendance
+                                data={data}
+                                saveDisabled={!farm}
+                                onSave={(marks) => {
+                                    // Labour V2 R1 Task 3.5c — the REAL save. The "saved" lie that
+                                    // lived here (write nothing, claim saved) is dead; the toast is
+                                    // now the app's honest offline vocabulary, driven by the queue
+                                    // row actually written (P10: never rendered as saved before
+                                    // acknowledgement). The status→mark mapping lives HERE and only
+                                    // here: present+full → Full · present+half → Half ·
+                                    // present+night → Worked · half → Half · absent → Absent.
+                                    if (!farm) return; // button is disabled without a farm; no invented Marathi
+                                    const workDate = getDateKey();
+                                    void Promise.all(marks.map((m) => MarkAttendanceCommand.enqueue({
+                                        attendanceMarkId: crypto.randomUUID(),
+                                        farmId: farm.farmId,
+                                        fieldOperatorId: m.fieldOperatorId,
+                                        workDate,
+                                        ...(m.status === 'absent' ? { dayMark: 'Absent' as const }
+                                            : m.status === 'half' ? { dayMark: 'Half' as const }
+                                            : m.shift === 'night' ? { nightMark: 'Worked' as const }
+                                            : m.shift === 'half' ? { dayMark: 'Half' as const }
+                                            : { dayMark: 'Full' as const }),
+                                    }))).then(() => { back(); showToast(ON_PHONE_MR); })
+                                        .catch((error: unknown) => {
+                                            // Named landing place: nothing was queued for at least one
+                                            // mark, so neither navigate away nor claim remembering.
+                                            // 'पुन्हा प्रयत्न करा' is the feature's existing retry
+                                            // vocabulary (LabourUiKit.tsx) — no new Marathi.
+                                            console.error(JSON.stringify({
+                                                component: 'LabourFeature',
+                                                action: 'attendance_mark_enqueue_failed',
+                                                reason: error instanceof Error ? error.message : String(error),
+                                            }));
+                                            showToast('पुन्हा प्रयत्न करा');
+                                        });
+                                }}
+                                onToast={showToast}
+                            />
                         )}
                         {cur.name === 'dashboard' && (
                             <WeeklyDashboard

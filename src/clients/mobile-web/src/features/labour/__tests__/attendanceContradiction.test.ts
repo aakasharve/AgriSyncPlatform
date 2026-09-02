@@ -31,6 +31,15 @@ describe('findDayContradictions — deterministic, never AI-produced', () => {
         expect(out).toHaveLength(1);
         expect(out[0].facts).toHaveLength(3);
     });
+    it("B002 (carried to 3.5): 'गणेश ' and 'गणेश' are ONE person — a trailing space must not mask the contradiction", () => {
+        const out = findDayContradictions([ev('a', ['गणेश '], 'full'), ev('b', ['गणेश'], 'half')]);
+        expect(out).toHaveLength(1);
+        expect(out[0].name).toBe('गणेश');
+        expect(out[0].facts).toHaveLength(2);
+    });
+    it('B002: whitespace-only names make no claim at all', () => {
+        expect(findDayContradictions([ev('a', ['   '], 'full'), ev('b', ['   '], 'half')])).toEqual([]);
+    });
     it('a name duplicated INSIDE one engagement still lists its fact once per engagement (carried 3.2-review minor)', () => {
         const out = findDayContradictions([ev('a', ['गणेश', 'गणेश'], 'full'), ev('b', ['गणेश'], 'half')]);
         expect(out).toHaveLength(1);

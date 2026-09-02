@@ -331,6 +331,26 @@ internal static class DtoMappingExtensions
             fieldOperator.CreatedAtUtc,
             fieldOperator.IsActive);
 
+    /// <summary>
+    /// Labour V2 R1 Task 3.5c — the pull-carriage projection of a हजेरी
+    /// ruling. Unmarked → null (a silence, never a zero); hours as stated;
+    /// HoursBasis as its enum name; WorkDate as the farmer's day.
+    /// </summary>
+    public static AttendanceMarkDto ToDto(this AttendanceMark mark) =>
+        new(
+            mark.Id,
+            (Guid)mark.FarmId,
+            mark.FieldOperatorId,
+            mark.WorkDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            mark.Day == DayMark.Unmarked ? null : mark.Day.ToString(),
+            mark.Night == NightMark.Unmarked ? null : mark.Night.ToString(),
+            mark.HoursWorked,
+            mark.ExtraHours,
+            mark.HoursBasis.ToString(),
+            (Guid)mark.RecordedByUserId,
+            mark.RecordedAtUtc,
+            mark.ModifiedAtUtc);
+
     public static JobCardDto ToJobCardDto(this JobCard jobCard, string? workerDisplayName = null) =>
         new(
             jobCard.Id,

@@ -4,6 +4,7 @@
 // `import { X } from '.../DexieDatabase'` call sites keep working unchanged.
 
 import type { DailyLog } from '../../types';
+import type { AttendanceMarkDto } from '../api/dtos';
 import type { JobCard } from '../../domain/work/JobCard';
 import type { WorkerProfileData } from '../../domain/work/ReliabilityScore';
 import type {
@@ -541,6 +542,22 @@ export interface FinanceCorrectionCacheRecord {
     id: string;
     costEntryId: string;
     payload: unknown;
+    updatedAt: string;
+}
+
+/**
+ * Labour V2 R1 Task 3.5c — one server-acknowledged attendance ruling, as
+ * pulled. Grain matches ux_attendance_marks_farm_operator_day. This store is
+ * the ACKNOWLEDGED half only; unsynced intent lives in `mutationQueue`, and
+ * `features/labour/data/attendanceLocal.ts` is the one read that merges the
+ * two with a `source` label (P10: intent is never rendered as saved).
+ */
+export interface AttendanceMarkCacheRecord {
+    id: string;
+    farmId: string;
+    fieldOperatorId: string;
+    workDate: string;
+    payload: AttendanceMarkDto;
     updatedAt: string;
 }
 

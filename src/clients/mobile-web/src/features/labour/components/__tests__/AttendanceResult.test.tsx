@@ -11,11 +11,24 @@
 // says 'HIRED' and a direct `as` is a TS2352.
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import AttendanceResult from '../AttendanceResult';
 import type { AgriLogResponse } from '../../../../types';
 import type { LabourAnchor } from '../../labourAnchor';
+
+// Task 3.5c — the confirm now enqueues attendance.mark rows for
+// uniquely-resolved names. Both seams are mocked module-level (hoisted):
+// the roster fetch and the queue command. Existing tests render with
+// farmId={undefined}, so neither mock fires for them.
+const mockEnqueue = vi.fn(async (_payload: unknown) => 'client-request-id');
+const mockFetchOperators = vi.fn(async (_farmId: string): Promise<unknown[]> => []);
+vi.mock('../../../../application/usecases/sync/MarkAttendanceCommand', () => ({
+    MarkAttendanceCommand: { enqueue: (payload: unknown) => mockEnqueue(payload) },
+}));
+vi.mock('../../data/fieldOperatorClient', () => ({
+    fetchFieldOperators: (farmId: string) => mockFetchOperators(farmId),
+}));
 
 afterEach(cleanup);
 
@@ -141,5 +154,57 @@ describe('AttendanceResult — count attribution reflects its source', () => {
         draw([{ id: 'l1', type: 'hired', count: 12 } as unknown as AgriLogResponse['labour'][number]]);
         expect(screen.getByText('तुम्ही सांगितलं')).toBeInTheDocument();
         expect(screen.queryByText('स्पष्ट माहिती')).toBeNull();
+    });
+});
+
+describe('AttendanceResult — 3.5c: बरोबर enqueues marks for uniquely-resolved names only', () => {
+    const FARM = '22222222-2222-2222-2222-222222222222';
+
+    async function drawWithRoster(roster: unknown[], labour: AgriLogResponse['labour']) {
+        mockEnqueue.mockClear();
+        mockFetchOperators.mockClear();
+        mockFetchOperators.mockResolvedValueOnce(roster);
+        const onConfirm = vi.fn();
+        render(<AttendanceResult
+            draft={{ ...base, labour }} anchor={anchor} farmId={FARM}
+            onConfirm={onConfirm} renderEditSurface={() => <div data-testid="edit-surface" />}
+            onSpeakMore={vi.fn()} />);
+        await waitFor(() => expect(mockFetchOperators).toHaveBeenCalledWith(FARM));
+        return onConfirm;
+    }
+
+    it("a confirm with no ruling enqueues ONLY dayMark:'Full' — the register's own approved vocabulary (C4: voice cannot state Half today)", async () => {
+        const onConfirm = await drawWithRoster(
+            [
+                { id: 'op-1', displayName: 'गणेश', isActive: true },
+                { id: 'op-2', displayName: 'बाळू', isActive: true },
+                { id: 'op-3', displayName: 'बाळू', isActive: true }, // duplicates resolve to NOBODY (rule 10)
+            ],
+            // B002: the spoken name carries a trailing space — it must still
+            // resolve against the roster's trimmed 'गणेश'.
+            [{ id: 'l1', type: 'hired', count: 3, workerNames: ['गणेश ', 'बाळू', 'नवीन'] } as unknown as AgriLogResponse['labour'][number]],
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'बरोबर' }));
+        expect(onConfirm).toHaveBeenCalledTimes(1);          // the statement save always happens
+        expect(mockEnqueue).toHaveBeenCalledTimes(1);        // गणेश only: बाळू is duplicated, नवीन unknown
+        const payload = mockEnqueue.mock.calls[0][0] as Record<string, unknown>;
+        expect(payload.fieldOperatorId).toBe('op-1');
+        expect(payload.farmId).toBe(FARM);
+        expect(payload.dayMark).toBe('Full');
+        expect(payload.nightMark).toBeUndefined();
+        expect(payload.hoursWorked).toBeUndefined();
+    });
+
+    it('offline (roster never arrived): no marks, the statement still saves', () => {
+        mockEnqueue.mockClear();
+        const onConfirm = vi.fn();
+        render(<AttendanceResult
+            draft={{ ...base, labour: [{ id: 'l1', type: 'hired', count: 1, workerNames: ['गणेश'] } as unknown as AgriLogResponse['labour'][number]] }}
+            anchor={anchor} farmId={undefined}
+            onConfirm={onConfirm} renderEditSurface={() => <div data-testid="edit-surface" />}
+            onSpeakMore={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: 'बरोबर' }));
+        expect(onConfirm).toHaveBeenCalledTimes(1);
+        expect(mockEnqueue).not.toHaveBeenCalled();
     });
 });

@@ -111,10 +111,13 @@ function legacyRow(id: string): Record<string, unknown> {
 const DB_NAME = 'AgriLogDB_v24_upgrade_test';
 
 describe('§P0.4 — Dexie v24: version constant', () => {
-    it('DATABASE_VERSION is 24', () => {
+    it('DATABASE_VERSION is 25', () => {
         // Exact, not `>= 24`. 23 belongs to `feat/dfes-companion`; a silent
         // regression to it is the whole defect this renumber exists to remove.
-        expect(DATABASE_VERSION).toBe(24);
+        // 24 → 25 on Labour V2 R1 Task 3.5c: v25 adds the `attendanceMarks`
+        // store (the attendance pull carriage). The v24 strip below is
+        // unchanged and still asserted on the way THROUGH to 25.
+        expect(DATABASE_VERSION).toBe(25);
     });
 });
 
@@ -380,7 +383,9 @@ describe('§P0.4 — the renumber: a device already at 23 still gets stripped', 
         const verno = upgraded.verno;
         upgraded.close();
 
-        expect(verno).toBe(24);
+        // 25 since Labour V2 R1 Task 3.5c — the real chain now ends at v25
+        // (attendanceMarks store); everything else this test proves is unchanged.
+        expect(verno).toBe(25);
         // THE POINT OF THE RENUMBER. Had this branch also declared 23, Dexie
         // would have compared 23 to 23, run nothing, and left every one of these
         // rows carrying the farmer's raw speech and worker names for ever.
@@ -410,7 +415,9 @@ describe('§P0.4 — the renumber: a device already at 23 still gets stripped', 
         const verno = upgraded.verno;
         upgraded.close();
 
-        expect(verno).toBe(24);
+        // 25 since Labour V2 R1 Task 3.5c — the real chain now ends at v25
+        // (attendanceMarks store); everything else this test proves is unchanged.
+        expect(verno).toBe(25);
         expect(names).toContain('pendingInterpretations');
         // The ROWS, not just the store. A recreated-but-empty store would satisfy
         // a names-only assertion and would still have lost the farmer's captures.
@@ -432,7 +439,9 @@ describe('§P0.4 — the renumber: a device already at 23 still gets stripped', 
         const after = await upgraded.table('aiCorrectionEvents').get('corr-fresh') as Record<string, unknown>;
         upgraded.close();
 
-        expect(verno).toBe(24);
+        // 25 since Labour V2 R1 Task 3.5c — the real chain now ends at v25
+        // (attendanceMarks store); everything else this test proves is unchanged.
+        expect(verno).toBe(25);
         expect(rows).toBe(0);
         // And the strip still ran on the way through.
         expect(containsTranscriptText(after)).toBe(false);

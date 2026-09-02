@@ -440,6 +440,27 @@ export interface AttentionBoardDto {
     cards: AttentionCardDto[];
 }
 
+/**
+ * Labour V2 R1 Task 3.5c — one server-acknowledged attendance ruling on the
+ * pull wire. dayMark/nightMark are enum NAMES; null = Unmarked ("nobody
+ * said" survives the wire — never a zero). workDate is the farmer's day
+ * (YYYY-MM-DD), not a timestamp.
+ */
+export interface AttendanceMarkDto {
+    id: string;
+    farmId: string;
+    fieldOperatorId: string;
+    workDate: string;
+    dayMark: string | null;
+    nightMark: string | null;
+    hoursWorked: number | null;
+    extraHours: number | null;
+    hoursBasis: string | null;
+    recordedByUserId: string;
+    recordedAtUtc: string;
+    modifiedAtUtc: string;
+}
+
 export interface SyncPullResponse {
     serverTimeUtc: string;
     nextCursorUtc: string;
@@ -466,6 +487,9 @@ export interface SyncPullResponse {
     costCategories?: CostCategoryRef[];
     referenceDataVersionHash?: string;
     attentionBoard?: AttentionBoardDto | null;
+    // Labour V2 R1 Task 3.5c — optional: additive wire field, so a pull from
+    // an older server (field absent) stays a no-op, never an error.
+    attendanceMarks?: AttendanceMarkDto[];
 }
 
 export interface AiParseResponse {
