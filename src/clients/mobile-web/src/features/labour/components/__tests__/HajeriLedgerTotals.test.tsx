@@ -17,6 +17,14 @@ import HajeriLedger from '../HajeriLedger';
 import { LABOUR_MOCK } from '../../labourMock';
 import type { LabourData, LedgerCell } from '../../labour.types';
 
+// For the deploy-skew pin only: fetchLabourData through the mocked shared
+// client, so the wire-without-view case is exercised through the REAL mapper.
+const mockGet = vi.hoisted(() => vi.fn());
+vi.mock('../../../../infrastructure/api/AgriSyncClient', () => ({
+    agriSyncClient: { http: { get: mockGet } },
+}));
+import { fetchLabourData } from '../../data/labourClient';
+
 afterEach(() => cleanup());
 
 const cell = (over: Partial<LedgerCell>): LedgerCell => ({
@@ -154,5 +162,43 @@ describe('HajeriLedger — the clean register (master review D4)', () => {
             crewRows: [],
         })} onToast={vi.fn()} />);
         expect(twoPeople.container.querySelectorAll('[data-testid="ledger-row"]').length).toBe(2);
+    });
+
+    /**
+     * 4.3 review B001 (controller ruling), end-to-end: a wire WITHOUT `view`
+     * (a pre-projection API — forward deploy skew) + empty rows must NOT
+     * render the claim card. The mapper fails closed to 'own' (never
+     * 'owner', the only view allowed to CLAIM), so the bare week grid
+     * renders — true silence. On the real new stack View is always present
+     * and this path never runs.
+     */
+    it('a wire WITHOUT view and empty rows renders the bare grid and claims NOTHING', async () => {
+        mockGet.mockResolvedValueOnce({
+            status: 200,
+            data: {
+                topLevelIds: [],
+                people: [],
+                dashboard: {
+                    weekLabel: '', insight: '', manDays: null, manDaysTrend: 0,
+                    wages: null, advances: null, owed: null, logs: 0, pending: 0,
+                    plots: [], money: null,
+                },
+                ledger: {
+                    weekLabel: '',
+                    days: ['2026-08-24', '2026-08-25', '2026-08-26', '2026-08-27', '2026-08-28', '2026-08-29', '2026-08-30'],
+                    rows: [], crewRows: [],
+                },
+                review: [],
+                attendance: { plot: '', headcount: null, rows: [] },
+                // deliberately NO `view` member — the old wire's shape
+            },
+        });
+
+        const data = await fetchLabourData('farm-skew');
+        expect(data.view).toBe('own'); // fail closed — never the claiming view
+
+        const { container } = render(<HajeriLedger data={data} onToast={vi.fn()} />);
+        expect(container.querySelectorAll('[data-testid="ledger-day-head"]').length).toBe(7);
+        expect(container.textContent).not.toContain('अजून हजेरी नोंदवली नाही');
     });
 });

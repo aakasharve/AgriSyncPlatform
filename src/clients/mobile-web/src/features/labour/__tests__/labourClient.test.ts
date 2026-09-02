@@ -258,6 +258,24 @@ describe('labourClient.fetchLabourData', () => {
         ]);
     });
 
+    // 4.3 review B001 (controller ruling) — FAIL CLOSED on a skewed wire: a
+    // dto with NO view (a pre-projection API) or an unrecognised one maps to
+    // 'own', never 'owner' — 'owner' is the only view allowed to CLAIM (the
+    // register's empty-state card), and a default must not hand a skewed
+    // client the claiming view. The render half (bare grid, no claim card)
+    // is pinned end-to-end in HajeriLedgerTotals.test.tsx.
+    it("a wire with no/unknown view fails closed to 'own' — never the claiming view", async () => {
+        const noView = buildDto() as unknown as Record<string, unknown>;
+        delete noView.view;
+        mockGet.mockResolvedValueOnce(mockOkResponse(noView));
+        expect((await fetchLabourData('farm-123')).view).toBe('own');
+
+        const garbage = buildDto();
+        garbage.view = 'admin';
+        mockGet.mockResolvedValueOnce(mockOkResponse(garbage));
+        expect((await fetchLabourData('farm-123')).view).toBe('own');
+    });
+
     it('populates review[].points and review[].status from the DTO', async () => {
         mockGet.mockResolvedValueOnce(mockOkResponse(buildDto()));
 

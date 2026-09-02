@@ -2779,6 +2779,46 @@ git commit -m "feat(labour): labour-home money split — रोजंदार�
 - [ ] No migration, no grant, no RLS change in this phase.
 - [ ] The mic shell, ShramSathi processing screen, capture flows: untouched by every task here.
 
+## Deployment ordering (B001 — the wire changed shape in BOTH directions)
+
+Phase 4 changed the labour GET contract in both directions at once: the server GAINED `View`
+and projection (money withheld for non-owners) and LOST the grid aggregates
+(`Total`/`DailyTotals`/`WeekTotal`, string cells → cell objects). Neither half of the stack
+tolerates the other's old partner. Two skew windows exist and BOTH are named here so
+`DEPLOYMENT_TRACKER.md` can sequence them at release time; no artifact recorded this before
+the 4.3 review (B001).
+
+- **FORWARD SKEW (old API + new web) — must never occur. Control: API deploys BEFORE web,
+  always.** A pre-projection server sends full money members and NO `View` to every caller.
+  As shipped at 4.3 (before this fix round), `labourClient`'s `'owner'` fallback made the
+  skewed client render the wage book to ANY caller AND the owner-only claim card
+  ("अजून हजेरी नोंदवली नाही") over always-empty rows — a false claim built from absence.
+  The claim-card half is now closed client-side: the fallback FAILS CLOSED to `'own'`
+  (4.3 fix round), so a view-less wire renders the bare grid — true silence. The MONEY half
+  cannot be closed by the client: the server owns the projection (D-H8), and an old server
+  sends money to everyone. Ordering is therefore still the control; the fallback is
+  defence-in-depth for the claim only, never a licence to ship web first.
+
+- **REVERSE SKEW (new API + old web/APK) — a real window that ordering opens; keep it short
+  for web, and DECIDE it for the APK.** A projected response reaches old render code with no
+  guards: a non-owner's `wages: null` lands in the old unguarded `inr(d.wages)` →
+  `TypeError` (`toLocaleString` on null); the old register reads the deleted
+  `ledger.dailyTotals`/`weekTotal` → crash. The web half of this window closes minutes later
+  when web deploys. The APK half does NOT: the APK bundles web assets at BUILD time — web
+  deploys never reach APK users — so every installed APK keeps the old client until its users
+  install a new build. **Minimum APK version that tolerates the new wire: none shipped.**
+  Every APK up to v1.0.10 (versionCode 18, the current live build) bundles the pre-Phase-4
+  client; the first tolerant APK is the first build cut from a tree containing this phase
+  (versionCode ≥ 19, number assigned at release). The API change is therefore what FORCES the
+  APK bump decision at the founder gate — deploying this API is deciding that pre-Phase-4
+  APKs break on the labour screen until upgraded, and that decision is the founder's, not a
+  deploy-time default.
+
+- **Sequence for `DEPLOYMENT_TRACKER.md` at release time:** API first (forward skew must
+  never occur) → web immediately after (closes the web reverse-skew window) → APK bump
+  decision at the founder gate (the long reverse-skew window; see above). Each row names its
+  window.
+
 ## Founder gate (before any deploy step)
 
 Phase 4 is code-complete when all eight tasks are committed and green. It is NOT approved, NOT

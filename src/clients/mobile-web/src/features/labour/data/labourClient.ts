@@ -382,9 +382,17 @@ export async function fetchLabourData(
                 counts: c.counts,
             })),
         },
-        // `'owner'` fallback is display-alignment only — the SERVER strips;
-        // the client never adds back.
-        view: dto.view === 'crew' || dto.view === 'own' ? dto.view : 'owner',
+        // FAIL CLOSED (4.3 review B001, controller ruling): a wire with a
+        // missing/unknown `view` — a pre-projection API during deploy skew —
+        // maps to 'own', NEVER 'owner'. 'owner' is the ONLY view allowed to
+        // CLAIM (the register's "अजून हजेरी नोंदवली नाही" card), and
+        // defaulting to it would have a skewed client assert "nothing was
+        // recorded" over rows the old server simply never shaped. Under
+        // 'own' the bare grid renders — true silence — while money renders
+        // from whatever fields came: the client has no projection to close;
+        // the server owns that (D-H8). On the real new stack this branch
+        // never runs — View is always present on the wire.
+        view: dto.view === 'owner' || dto.view === 'crew' ? dto.view : 'own',
         review: dto.review.map(mapReview),
         attendance: {
             plot: dto.attendance.plot,
