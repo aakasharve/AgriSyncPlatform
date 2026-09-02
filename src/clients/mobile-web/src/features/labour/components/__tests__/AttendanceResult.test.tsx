@@ -60,6 +60,16 @@ describe('AttendanceResult — the Task 1.1 panel-2 screen', () => {
         draw([{ id: 'l1', type: 'hired', count: 12, workerNames: ['गणेश', 'शंकर'] } as unknown as AgriLogResponse['labour'][number]]);
         expect(screen.getByText('यांच्याशिवाय अजून कोण होते?')).toBeInTheDocument();
     });
+    // Phase 5 walk row 6 — the rung-4 render had no assertion of its own
+    // (AttendanceResult.tsx:106 was covered only through the save-path
+    // tests). Full composition asks ONLY हे बरोबर आहे का — never the WHO
+    // question, never the remainder question.
+    it('rung 4: only हे बरोबर आहे का? — neither WHO nor the remainder is re-asked', () => {
+        draw([{ id: 'l1', type: 'hired', count: 2, workerNames: ['गणेश', 'शंकर'] } as unknown as AgriLogResponse['labour'][number]]);
+        expect(screen.getByText('हे बरोबर आहे का?')).toBeInTheDocument();
+        expect(screen.queryByText('या 2 जणांमध्ये कोण होते?')).toBeNull();
+        expect(screen.queryByText('यांच्याशिवाय अजून कोण होते?')).toBeNull();
+    });
     it('nothing is saved until बरोबर; बरोबर saves exactly once', () => {
         const onConfirm = draw([{ id: 'l1', type: 'hired', count: 2, workerNames: ['गणेश', 'शंकर'] } as unknown as AgriLogResponse['labour'][number]]);
         expect(onConfirm).not.toHaveBeenCalled();
