@@ -2175,8 +2175,9 @@ export async function reconcileAttendance(
  * Labour V2 R1 — the ONE local read of attendance marks, both halves labelled.
  *
  * `source: 'server'` rows came down /sync/pull — acknowledged, reconstructable
- * without this device. `source: 'queue'` rows are PENDING/FAILED mutationQueue
- * intent — real, durable, and NOT SAVED YET. P10 binds every consumer: a
+ * without this device. `source: 'queue'` rows are LIVE mutationQueue intent
+ * (PENDING/SENDING/FAILED/REJECTED_USER_REVIEW) — real, durable, and NOT
+ * SAVED YET. P10 binds every consumer: a
  * queue-sourced fact must render with the existing unsynced treatment
  * (लक्षात ठेवलं ✓ family), never as server truth. Phase 4's register consumes
  * this; it must not read the two stores separately and lose the label.
@@ -2200,7 +2201,7 @@ export async function getLocalAttendanceMarks(farmId: string): Promise<LocalAtte
     const server = await db.attendanceMarks.where('farmId').equals(farmId).toArray();
     const queued = await db.mutationQueue
         .where('mutationType').equals(SyncMutationName.AttendanceMark)
-        .filter(row => row.status !== 'APPLIED')
+        .filter(row => LIVE_INTENT_STATUSES.has(row.status))
         .toArray();
     const out: LocalAttendanceMark[] = server.map(r => ({
         fieldOperatorId: r.fieldOperatorId,
@@ -2225,8 +2226,14 @@ export async function getLocalAttendanceMarks(farmId: string): Promise<LocalAtte
 }
 ```
   (Adapt the mutationQueue field/status names to `MutationQueueItem`'s actual members —
-  verify in `infrastructure/sync/MutationQueue.ts` before writing; `status !== 'APPLIED'`
-  is the honest filter: FAILED intent is still intent.)
+  verify in `infrastructure/sync/MutationQueue.ts` before writing. **Corrected at the
+  3.5 review (B001):** the filter is TO the live-intent set
+  `LIVE_INTENT_STATUSES = {PENDING, SENDING, FAILED, REJECTED_USER_REVIEW}`, never
+  away-from APPLIED alone — `!== 'APPLIED'` admitted REJECTED_DROPPED, the farmer's
+  EXPLICIT conflict-UI discard (MutationQueue soft-delete), which would surface as a
+  phantom mark forever. FAILED intent is still intent; REJECTED_USER_REVIEW shows
+  deliberately while the contradiction awaits the farmer's answer; REJECTED_DROPPED
+  never surfaces — pinned in `attendanceLocal.test.ts`.)
 - [ ] **3.5c.7 — conflict surface + rejection class.** `EditSurfaceRegistry.ts`: add `'labour'`
   to `EditSurfaceRoute` (:36-44) and register
   `registerEditSurface(SyncMutationName.AttendanceMark, makeRouteHandler('labour'));`
