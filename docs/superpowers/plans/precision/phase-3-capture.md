@@ -938,6 +938,18 @@ describe('AttendanceResult — the Task 1.1 panel-2 screen', () => {
         expect(screen.getByRole('button', { name: 'बरोबर' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'बदल करा' })).toBeInTheDocument();
     });
+    it('B001: anchored 0 with names spoken shows the conflict card — never a bare one-tap confirm', () => {
+        // The anchor says nobody worked; the farmer names two people. Both
+        // statements must be visible; the plain confirm (no conflict card)
+        // must NOT render. Ruled at the 3.2/3.3 reviews: 0-vs-names is
+        // 12-vs-10 at the extreme, same surface, never silent.
+        drawWithAnchor({ state: 'anchored', headcount: 0, logId: 'log-0' }, [
+            { id: 'l1', type: 'hired', workerNames: ['गणेश', 'रमेश'] } as AgriLogResponse['labour'][number],
+        ]);
+        expect(screen.getByTestId('headcount-disagreement')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'बरोबर' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'बदल करा' })).toBeInTheDocument();
+    });
     it('state D: the contradiction card with the approved copy, answered by the two facts', () => {
         draw([
             { id: 'a', type: 'hired', count: 2, workerNames: ['गणेश'], shiftId: 'full' } as AgriLogResponse['labour'][number],
@@ -1010,7 +1022,20 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
     const workerNames = draft.labour.flatMap((e) => e.workerNames ?? []);
     const rung = selectLadderRung({ anchorHeadcount, spokenCount, workerNames });
     const knownCount = spokenCount ?? anchorHeadcount;
-    const disagreement = spokenCount != null && anchorHeadcount != null && spokenCount !== anchorHeadcount;
+    // ── B001 (3.3 review, controller ruling) ─────────────────────────────
+    // Disagreement detection is NOT computed inline. The ruled gate is
+    // selectConfirmSurface (attendanceDisagreement.ts): it covers BOTH axes —
+    // spoken-vs-anchor (12-vs-10) AND count-vs-composition (0-with-names,
+    // superset, duplicate-masked) — and makes the plain 'confirm' kind
+    // structurally underivable while any conflict stands. Bypassing it here
+    // re-opens the exact one-tap-confirm-of-a-contradiction hole Task 3.3
+    // closed. Its module header carries the render contract this component
+    // must honour.
+    const surface = selectConfirmSurface({
+        anchor,
+        labour: draft.labour,
+    });
+    const disagreement = surface.kind === 'conflict' ? surface.disagreement : null;
     const contradictions: DayContradiction[] = findDayContradictions(draft.labour)
         .filter((c) => rulings[c.name] == null);
 
