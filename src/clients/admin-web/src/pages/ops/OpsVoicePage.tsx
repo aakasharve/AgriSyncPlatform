@@ -2,7 +2,7 @@ import { Mic } from 'lucide-react';
 import { metaRefreshedAt } from '@/lib/api';
 import { ChartShell, Sparkline, fillAxis, measuredSlots } from '@/components/data';
 import type { AxisPoint, ChartDataTable } from '@/components/data';
-import { NotMeasured, NotMeasuredPanel } from '@/components/state';
+import { NotMeasured, StandingNote } from '@/components/state';
 import { Button } from '@/components/ui/Button';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { KpiCard } from '@/components/ui/KpiCard';
@@ -528,7 +528,7 @@ export default function OpsVoicePage() {
         </div>
       </ChartShell>
 
-      <NotMeasuredPanel
+      <StandingNote
         title="What this screen cannot tell you"
         why={
           <>

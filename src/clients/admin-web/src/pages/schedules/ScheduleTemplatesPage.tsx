@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { CalendarDays } from 'lucide-react';
 import { DataList } from '@/components/data';
 import type { DataListColumn, RenderedField } from '@/components/data';
-import { NotMeasured, NotMeasuredPanel } from '@/components/state';
+import { NotMeasured, NotMeasuredPanel, StandingNote } from '@/components/state';
 import { fmt } from '@/lib/format';
 import { useScheduleTemplates } from '@/hooks/useScheduleTemplates';
 import type { ScheduleTemplate } from '@/hooks/useScheduleTemplates';
@@ -358,7 +358,7 @@ export default function ScheduleTemplatesPage() {
           Every claim below was read out of the backend on 2026-09-01. It is on
           the screen rather than only in this file because each one changes how
           a value above should be read, and an operator cannot open the C#. */}
-      <NotMeasuredPanel
+      <StandingNote
         title="What this list does not carry"
         why={
           <>

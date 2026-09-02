@@ -5,6 +5,7 @@ import type { DataListColumn } from '@/components/data';
 import { NotMeasured } from '@/components/state';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { KpiCard } from '@/components/ui/KpiCard';
+import { Disclosure } from '@/components/ui/Disclosure';
 import type { KpiState, KpiTone } from '@/components/ui/KpiCard';
 import { PersonName } from '@/components/ui/PersonName';
 import {
@@ -877,37 +878,60 @@ export default function HomePage() {
             skeleton={{ rows: 5, cells: 5 }}
           />
 
-          <div className="flex flex-col gap-2 text-caption text-text-3">
-            <p>
-              A farm is here because it is on the <b>suffering</b> watchlist — three or more failed
-              events in the last seven days — or on the <b>silent-churn</b> watchlist — no log
-              recorded for more than 14 days on a trialing, active or past-due subscription. The two
-              overlap, so a farm appears once and carries every reason. The full lists are on
-              Suffering and on Silent Churn. Each server sends at most 50 rows, so this is a
-              worklist rather than a total.
+          <div className="flex flex-col gap-3">
+            {/* 🛑 THIS ONE STAYS OPEN, AND IT IS THE EXCEPTION THE DISCLOSURE
+                rollout is allowed exactly one of per screen.
+
+                Everything else under this table folded on 2026-09-02. This did
+                not, because it is not background — it is a CORRECTION TO THE
+                COLUMN STANDING RIGHT BESIDE IT. "Events counted" is a number a
+                reader will otherwise take at face value, and taking it at face
+                value means ringing the busiest, happiest farmer on the
+                platform. A caveat that changes how the figure next to it should
+                be read cannot be one click away, because the misreading takes
+                no clicks at all. */}
+            <p className="max-w-[var(--text-measure)] text-caption text-text-2">
+              <b>The &ldquo;Events counted&rdquo; column is not a count of problems.</b> It counts
+              every AI action on that farm &mdash; the ones that worked as well as the ones that
+              failed &mdash; so a farm that uses voice a lot has a big number here whether or not
+              anything is wrong. That is why this list is <b>not</b> sorted by it. Being ON the list
+              is still trustworthy: a farm only gets here after real failures or real silence.
             </p>
-            <p>
-              <b>Why the order is not "most events first".</b> The events figure is a bare{' '}
-              <code>COUNT(*)</code> that admits successful AI calls as well as failures, so a farm
-              that uses voice heavily climbs a list headed "suffering". Ranking a call list by it
-              would put the heaviest, happiest users at the top. Membership is still trustworthy —
-              the entry condition counts only failures — so the figure is shown under the name it
-              deserves and is not what orders the list.
-            </p>
-            {call.mayReadSuffering !== call.mayReadChurn && (
+            <Disclosure
+              variant="inline"
+              name="how-this-list-is-built"
+              label="How this list is built"
+            >
               <p>
-                Your role includes one of the two watchlists, not both, so this list is what{' '}
-                {call.mayReadSuffering ? 'the suffering feed' : 'the silent-churn feed'} reports and
-                nothing else.
+                A farm appears here for one of two reasons. Either it is <b>struggling</b> &mdash;
+                three or more things failed for it in the last seven days &mdash; or it has gone{' '}
+                <b>quiet</b> &mdash; nobody has recorded anything on it for more than 14 days, while
+                it is still on a paying or trialling plan. A farm with both problems is listed once
+                and shows both reasons.
               </p>
-            )}
-            {call.heldOut.length > 0 && (
               <p>
-                {fmt.num(call.heldOut.length)} of these rows arrived with no last log, so their
-                silence is not measurable and they are marked apart rather than counted as silent
-                for zero weeks.
+                The full lists live on the Suffering and Silent Churn screens. Each of those sends
+                at most 50 farms, so treat this as today&rsquo;s worklist rather than a total.
               </p>
-            )}
+              <p>
+                The order is: farms flagged for both reasons first, then the longest silence, then
+                alphabetically. It is deliberately not the events column, for the reason above.
+              </p>
+              {call.mayReadSuffering !== call.mayReadChurn && (
+                <p>
+                  Your account can see one of the two lists, not both, so what you are looking at is
+                  what {call.mayReadSuffering ? 'the struggling-farms list' : 'the gone-quiet list'}{' '}
+                  reports and nothing else.
+                </p>
+              )}
+              {call.heldOut.length > 0 && (
+                <p>
+                  {fmt.num(call.heldOut.length)} of these farms arrived with no &ldquo;last
+                  log&rdquo; date at all, so we cannot say how long they have been quiet. They are
+                  marked apart rather than counted as quiet for zero weeks, which would not be true.
+                </p>
+              )}
+            </Disclosure>
           </div>
         </>
       )}

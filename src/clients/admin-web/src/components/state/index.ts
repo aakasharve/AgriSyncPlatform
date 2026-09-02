@@ -11,7 +11,8 @@
  *   The feed stopped                    -> FeedDown        (names WHEN)
  *   The filter excluded everything      -> NoMatch
  *   We looked and there is none         -> MeasuredZero    (names the window)
- *   There is no source at all           -> NotMeasuredPanel
+ *   There is no source at all           -> NotMeasuredPanel (always shown)
+ *   The screen's own standing caveats   -> StandingNote     (folded shut)
  *   One value is absent, in a cell      -> NotMeasured     (the ONLY component
  *                                                           allowed to print a
  *                                                           missing value)
@@ -49,6 +50,12 @@ export type {
   NoMatchProps,
   NotMeasuredPanelProps,
 } from './causes';
+
+/* the screen's own caveats, folded shut. Read its file header before
+   putting anything in one: a caveat that changes how the number beside it
+   should be read is NOT allowed in here. */
+export { StandingNote } from './StandingNote';
+export type { StandingNoteProps } from './StandingNote';
 
 /* the value-level forms */
 export { NotMeasured } from './NotMeasured';

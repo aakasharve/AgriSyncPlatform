@@ -1,7 +1,13 @@
 import type { ReactNode } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { LoadFailed, LoadingState, NotMeasured, NotMeasuredPanel } from '@/components/state';
+import {
+  LoadFailed,
+  LoadingState,
+  NotMeasured,
+  NotMeasuredPanel,
+  StandingNote,
+} from '@/components/state';
 import { useAdminScope } from '@/hooks/useAdminScope';
 
 /**
@@ -292,7 +298,7 @@ export default function SettingsAdminsPage() {
           write copy that implies the screen is protected. Silence would do the
           second thing — a screen headed "Admin Users" reads as privileged
           unless it says otherwise. */}
-      <NotMeasuredPanel
+      <StandingNote
         title="This screen is not permission-gated"
         why={
           <p>

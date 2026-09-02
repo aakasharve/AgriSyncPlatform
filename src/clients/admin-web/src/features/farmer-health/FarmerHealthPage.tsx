@@ -20,6 +20,7 @@ import {
   NotMeasured,
   NotMeasuredPanel,
   ScoringActiveBanner,
+  StandingNote,
   isRedacted,
 } from '@/components/state';
 import { PersonName } from '@/components/ui/PersonName';
@@ -879,7 +880,7 @@ export default function FarmerHealthPage() {
         )}
       </section>
 
-      <NotMeasuredPanel
+      <StandingNote
         title="What this screen cannot tell you"
         why={
           <>

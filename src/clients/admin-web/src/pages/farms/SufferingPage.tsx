@@ -2,7 +2,7 @@ import { metaRefreshedAt } from '@/lib/api';
 import { Frown } from 'lucide-react';
 import { DataList } from '@/components/data';
 import type { DataListColumn, FacetConfig, FacetOption } from '@/components/data';
-import { NotMeasured, NotMeasuredPanel } from '@/components/state';
+import { NotMeasured, StandingNote } from '@/components/state';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { PersonName } from '@/components/ui/PersonName';
 import { DATE_FORMATS, fmt } from '@/lib/format';
@@ -541,7 +541,7 @@ export default function SufferingPage() {
         skeleton={{ rows: 8, cells: 6 }}
       />
 
-      <NotMeasuredPanel
+      <StandingNote
         title="What this screen cannot tell you"
         why={
           <>

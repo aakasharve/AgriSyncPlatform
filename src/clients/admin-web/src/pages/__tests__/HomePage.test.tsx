@@ -379,7 +379,30 @@ describe('every feed answering', () => {
     expect(names[1]).toContain('Ozar Onion');
     expect(names[2]).toContain('Sinnar Tomato');
     expect(screen.getByText(/Ordered by how many watchlists flagged the farm/)).toBeInTheDocument();
-    expect(screen.getByText(/heaviest, happiest users at the top/)).toBeInTheDocument();
+
+    /* ── THE CORRECTION IS STILL ON SCREEN, AND STILL UNFOLDED ─────────────
+     *
+     * This used to assert the sentence "heaviest, happiest users at the top".
+     * The 2026-09-02 copy pass rewrote it in plain language, so the old string
+     * is gone — but what it was PROTECTING is not a string, it is a property:
+     * the reader must be told, without clicking anything, that the number in
+     * the "Events counted" column is not a count of problems. Without that,
+     * they ring the busiest, happiest farmer on the platform (defect A1).
+     *
+     * So the assertion moved from the wording to the property. Both halves
+     * matter: the sentence is present, AND it is not inside a disclosure. The
+     * same pass folded every other caveat on this screen; this is the one it
+     * was not allowed to fold, and this is what stops a later pass folding it
+     * for tidiness. */
+    const correction = screen.getByText(/is not a count of problems/);
+    expect(correction).toBeVisible();
+    expect(correction.closest('[data-disclosure]')).toBeNull();
+
+    /* And the detail that DID fold is still in the page — collapsed, not
+     * deleted. `Disclosure` renders its children whether open or shut. */
+    const built = screen.getByRole('button', { name: /how this list is built/i });
+    expect(built).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText(/treat this as today/i)).toBeInTheDocument();
     /* Task 16's name for the figure, carried onto this screen — never
        "Errors", which is what the column does not count. */
     expect(screen.getByRole('columnheader', { name: /Events counted/ })).toBeInTheDocument();

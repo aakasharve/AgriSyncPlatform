@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { DataList } from '@/components/data';
 import type { DataListColumn } from '@/components/data';
-import { NotMeasured, NotMeasuredPanel } from '@/components/state';
+import { NotMeasured, StandingNote } from '@/components/state';
 import { Button } from '@/components/ui/Button';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { metaRefreshedAt } from '@/lib/api';
@@ -587,7 +587,7 @@ export default function OpsErrorsPage() {
         skeleton={{ rows: 8, cells: 6 }}
       />
 
-      <NotMeasuredPanel
+      <StandingNote
         title="What this screen does not carry"
         why={
           <>

@@ -11,7 +11,7 @@ import {
   measuredSlots,
 } from '@/components/data';
 import type { AxisPoint, AxisSlot, ChartDataTable, DataListColumn } from '@/components/data';
-import { NotMeasured, NotMeasuredPanel } from '@/components/state';
+import { NotMeasured, NotMeasuredPanel, StandingNote } from '@/components/state';
 import { Button } from '@/components/ui/Button';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { KpiCard } from '@/components/ui/KpiCard';
@@ -892,7 +892,7 @@ export default function NorthStarPage() {
         skeleton={{ rows: 8, cells: 4 }}
       />
 
-      <NotMeasuredPanel
+      <StandingNote
         title="What this screen cannot tell you"
         why={
           <>

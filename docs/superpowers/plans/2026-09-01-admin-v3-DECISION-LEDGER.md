@@ -212,6 +212,7 @@ Written to the honest-state rules; all live in one file each.
 | C11 | **`npm ci` stays strict in CI** | It failed *loudly* when the lockfile drifted — that is the check working |
 | C12 | 🔄 **REVERSAL — glassmorphism is UN-banned; the console is glass** | Founder, 2026-09-02, verbatim: *"the overall colour theme is too dark make it aesthetic and use the Glass morphism effect not theme to highlight the aesthetics and re design it all"*. **This overturns a decision he previously signed**, so it is written out below rather than left as a row |
 | C13 | ⚠️ **A second Latin face — Nunito Sans for prose; DM Sans kept for headings, the brand, figures, table headers and Latin names** | Founder, same instruction: *"change the font make it more friendly to read"*, alongside *"font size must be increased"*. **This diverges from root `CLAUDE.md`'s brand-wide font rule** (English/brand/numbers → DM Sans) and it is his to revert. See the detail below |
+| C14 | **Every standing caveat is folded behind a disclosure — and not one is deleted** | Founder, same instruction: *"on each screen alot of text is tehre just make it expandable when user wants to know"*. **Two classes of caveat stay visible by exception** — see the detail below |
 
 ---
 
@@ -264,6 +265,52 @@ chart-gap hatch is byte-for-byte what it was, and it is still the only repeating
 **What reverting costs:** `globals.css` §A.12 plus six class names. The type scale, the
 disclosures and the copy rewrite are separate commits and survive it.
 
+
+
+---
+
+## C14 detail — what folded, what did not, and why the difference is a rule
+
+**The instruction.** *"on each screen alot of text is tehre just make it expandable when user wants
+to know"*.
+
+**The constraint it runs into.** The rule the whole rebuild rests on is that the console never
+claims more than it knows. Thirty tasks put an honest caveat on every screen and every word of it
+is true. **Hiding a caveat behind a click is fine. Deleting one is not.**
+
+**How the difference was made a property rather than a promise.** `Disclosure`
+(`src/components/ui/Disclosure.tsx`) renders its children unconditionally — there is no
+`{open && …}` in it — so a closed caveat is a *hidden region*, not an unmounted one. It is hidden
+with `hidden="until-found"`, so **Ctrl+F still finds the words inside a closed disclosure** and the
+browser opens it to show the reader where the match is. `Disclosure.test.tsx` asserts both, because
+both are invisible in a screenshot and in every other test in the repo.
+
+**What folded** — one shape, on every screen, closed by default, keyboard-operable, truthful
+`aria-expanded`:
+
+- the eleven screen-foot standing notes (`StandingNote`), on All Farms, Silent Churn, Suffering,
+  North Star, API Errors, Live Health, Voice Pipeline, Templates, Users, Farmer Health and Settings;
+- the "how this list is built" explanation under the Home call list, including the role-scope and
+  held-out paragraphs.
+
+**What did NOT fold, and the rule behind it:**
+
+> 🛑 **A caveat that changes how the number standing right beside it should be read stays visible.**
+> The misreading it prevents takes no clicks, so the correction cannot take one.
+
+| Where | What stays open | What would break if it folded |
+|---|---|---|
+| Home call list, and Suffering | *"The 'Events counted' column is not a count of problems… that is why this list is not sorted by it"* | The reader takes a bare count at face value and rings the busiest, happiest farmer on the platform — backend defect A1 |
+| Every `MeasuredZero` block | *"This is a measured zero, not a missing feed"* | It is the entire content of the state; a zero without it is the fabricated-zero defect this console exists to remove |
+| Every `FeedDown` block | *"…that is history, not today's count"* | It is the sentence that disowns the stale number printed inside it (§6.3, §9.3) |
+| Every `LoadFailed` block | *"Nothing is shown below because nothing was received"* | It separates a broken request from an empty result — defect D9, the seven screens that called a 500 good news |
+| `NotMeasuredPanel` | the whole panel | §6.4: it stands *in place of* data. It must be seen, which is why `StandingNote` is a **separate component** rather than a flag on this one |
+| Every list's page-scope line | *"the filter counts cover the 40 on this page, not all 312"* | It corrects the counts printed immediately above it |
+| `NotMeasured` cells, grey KPI tiles | the state word under the em dash | Already the shortest possible form — there is nothing left to fold |
+| Every `StandingNote` **title** | e.g. *"This screen is not permission-gated"* | The title is the headline of the caveat and is always visible; only the explanation folds |
+
+**What reverting costs:** `Disclosure.tsx`, `StandingNote.tsx`, and a component name on eleven
+screens. The words themselves are unchanged by this commit and survive it.
 
 ---
 

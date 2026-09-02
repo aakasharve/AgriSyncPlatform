@@ -2,7 +2,7 @@ import { metaRefreshedAt } from '@/lib/api';
 import { Wheat } from 'lucide-react';
 import { DataList } from '@/components/data';
 import type { DataListColumn } from '@/components/data';
-import { Masked, NotMeasured, NotMeasuredPanel } from '@/components/state';
+import { Masked, NotMeasured, StandingNote } from '@/components/state';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { PersonName } from '@/components/ui/PersonName';
 import { DATE_FORMATS, fmt } from '@/lib/format';
@@ -462,7 +462,7 @@ export default function FarmsListPage() {
         skeleton={{ rows: 8, cells: 7 }}
       />
 
-      <NotMeasuredPanel
+      <StandingNote
         title="What this list does not carry"
         why={
           <>

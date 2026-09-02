@@ -4,7 +4,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { QueryCache } from '@tanstack/react-query';
 import { DataList } from '@/components/data';
 import type { DataListColumn } from '@/components/data';
-import { FeedDown, LoadFailed, NotMeasured, NotMeasuredPanel } from '@/components/state';
+import {
+  FeedDown,
+  LoadFailed,
+  NotMeasured,
+  NotMeasuredPanel,
+  StandingNote,
+} from '@/components/state';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { KpiCard } from '@/components/ui/KpiCard';
 import {
@@ -1133,7 +1139,7 @@ export default function OpsLivePage() {
             />
           </section>
 
-          <NotMeasuredPanel
+          <StandingNote
             title="What this screen cannot tell you"
             why={
               <>

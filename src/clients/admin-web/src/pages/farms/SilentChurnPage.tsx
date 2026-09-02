@@ -2,7 +2,7 @@ import { metaRefreshedAt } from '@/lib/api';
 import { TrendingDown } from 'lucide-react';
 import { DataList, facetOptionsFrom } from '@/components/data';
 import type { DataListColumn, FacetConfig, FacetOption } from '@/components/data';
-import { Masked, NotMeasured, NotMeasuredPanel } from '@/components/state';
+import { Masked, NotMeasured, NotMeasuredPanel, StandingNote } from '@/components/state';
 import { FreshnessChip } from '@/components/ui/FreshnessChip';
 import { PersonName } from '@/components/ui/PersonName';
 import { DATE_FORMATS, fmt } from '@/lib/format';
@@ -480,7 +480,7 @@ export default function SilentChurnPage() {
         }
       />
 
-      <NotMeasuredPanel
+      <StandingNote
         title="What this screen cannot tell you"
         why={
           <>
