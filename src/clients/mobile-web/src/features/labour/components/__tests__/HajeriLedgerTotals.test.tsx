@@ -293,3 +293,37 @@ describe('Correction 5 — the ledger door is not a switch', () => {
         expect(getAllByText('हजेरी वही').length).toBeGreaterThan(0);
     });
 });
+
+describe('LabourHub — D6: two money truths, never one figure', () => {
+    const hub = (data: LabourData) => render(
+        <LabourHub
+            data={data}
+            onOpenMukadam={vi.fn()} onOpenPerson={vi.fn()} onAttendance={vi.fn()}
+            onDashboard={vi.fn()} onLedger={vi.fn()} onReview={vi.fn()} onGoToLog={vi.fn()}
+        />);
+
+    it('shows both cards separately and never a combined figure', () => {
+        const { container } = hub({ ...LABOUR_MOCK, home: { rojandariStated: 4650, ukteAgreed: 12000, onFarmToday: 12, rojandariToday: 4, ukteToday: 8 } });
+        expect(container.textContent).toContain('रोजंदारी');
+        expect(container.textContent).toContain('नोंदलेली');
+        expect(container.textContent).toContain('उक्ते काम');
+        expect(container.textContent).toContain('ठरलेली');
+        expect(container.textContent).not.toContain('16,650'); // the forbidden combined figure
+        expect(container.textContent).toContain('आज कामावर 12 जण');
+        expect(container.textContent).toContain('4 रोजंदारी');
+        expect(container.textContent).toContain('8 उक्ते');
+    });
+
+    it('a day with no stated money shows blanks, not zeros; unknown headcount says nothing', () => {
+        const { container } = hub({ ...LABOUR_MOCK, home: { rojandariStated: null, ukteAgreed: null, onFarmToday: null, rojandariToday: null, ukteToday: null } });
+        expect(container.textContent).toContain('—');
+        expect(container.textContent).not.toContain('₹0');
+        expect(container.textContent).not.toContain('आज कामावर');
+    });
+
+    it('a non-owner view renders no money cards at all', () => {
+        const { container } = hub({ ...LABOUR_MOCK, view: 'crew', home: { ...LABOUR_MOCK.home, rojandariStated: null, ukteAgreed: null } });
+        expect(container.textContent).not.toContain('नोंदलेली');
+        expect(container.textContent).not.toContain('ठरलेली');
+    });
+});

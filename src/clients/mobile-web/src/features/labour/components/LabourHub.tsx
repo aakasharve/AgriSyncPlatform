@@ -15,6 +15,7 @@
 import React from 'react';
 import { Mic, ClipboardCheck, Inbox, LayoutDashboard, BookText, Users } from 'lucide-react';
 import type { LabourData } from '../labourMock';
+import { inr } from '../labourMock';
 import type { DailyLog, LedgerDefaults } from '../../../types';
 import { generateDayWorkSummary } from '../../analysis/dayWorkSummary';
 import { formatCurrency } from '../../../shared/utils/currency';
@@ -341,6 +342,45 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
             <div data-testid={NO_ANCHOR_TEST_IDS.reason}
                 className="rounded-xl border border-amber-200 border-l-[3px] border-l-amber-600 bg-amber-50 p-3 text-[13.5px] leading-relaxed text-amber-800">
                 {ATTENDANCE_COPY.noAnchorReason}
+            </div>
+        )}
+
+        {/* D6 (master review 2026-09-02) — one Labour, TWO money truths, never
+            one figure. Owner view only: D-H8 keeps money off every non-owner
+            surface, and the server has already stripped it — this gate only
+            spares the owner-shaped empty shells. Blanks are '—', never ₹0. */}
+        {data.view === 'owner' && (
+            <div className="grid grid-cols-2 gap-2.5">
+                <div className="rounded-[20px] border border-stone-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+                    <span className="block text-[16px] font-bold text-stone-600">रोजंदारी</span>
+                    <span className="block text-[13px] font-semibold text-stone-400">नोंदलेली</span>
+                    <span className="mt-1 block text-[23px] font-black text-stone-800 [font-variant-numeric:tabular-nums]">{data.home.rojandariStated === null ? '—' : inr(data.home.rojandariStated)}</span>
+                </div>
+                <div className="rounded-[20px] border border-violet-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+                    <span className="block text-[16px] font-bold text-violet-700">उक्ते काम</span>
+                    <span className="block text-[13px] font-semibold text-stone-400">ठरलेली</span>
+                    <span className="mt-1 block text-[23px] font-black text-stone-800 [font-variant-numeric:tabular-nums]">{data.home.ukteAgreed === null ? '—' : inr(data.home.ukteAgreed)}</span>
+                </div>
+            </div>
+        )}
+
+        {/* आज कामावर N जण — x रोजंदारी · y उक्ते. Whole count first; the
+            arrangement is a breakdown, not a filter. Renders only when a count
+            was actually stated — an unknown day says nothing, never 0. All
+            views: attendance counts are safe for anyone (D-H8). Latin digits
+            (approved numeral convention). */}
+        {data.home.onFarmToday !== null && (
+            <div className="rounded-[20px] border border-stone-100 bg-white p-3.5 text-[19px] font-bold text-stone-800 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+                आज कामावर {data.home.onFarmToday} जण
+                {(data.home.rojandariToday !== null || data.home.ukteToday !== null) && (
+                    <span className="text-[16px] font-semibold text-stone-500">
+                        {' — '}
+                        {[
+                            data.home.rojandariToday !== null ? `${data.home.rojandariToday} रोजंदारी` : null,
+                            data.home.ukteToday !== null ? `${data.home.ukteToday} उक्ते` : null,
+                        ].filter((s) => s !== null).join(' · ')}
+                    </span>
+                )}
             </div>
         )}
 

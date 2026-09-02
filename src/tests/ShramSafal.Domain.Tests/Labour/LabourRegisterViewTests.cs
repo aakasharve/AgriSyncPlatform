@@ -56,7 +56,7 @@ public sealed class LabourRegisterViewTests
                 Plot: null, PlotScope: "Farm"),
         ],
         Attendance: new LabourAttendanceDraftDto("", null, [], ""),
-        View: "owner");
+        View: "owner", Home: new LabourHomeDto(1200m, 12000m, 12, 4, 8));
 
     [Fact]
     public void RolesResolveToTheThreeViews()
@@ -79,6 +79,7 @@ public sealed class LabourRegisterViewTests
         Assert.NotNull(dto.Dashboard.Money);
         Assert.Equal(850m, dto.Review[0].Points.Amount);
         Assert.Single(dto.Ledger.Rows);
+        Assert.Equal(1200m, dto.Home.RojandariStated);
     }
 
     /// <summary>
@@ -101,6 +102,9 @@ public sealed class LabourRegisterViewTests
         Assert.Null(dto.Dashboard.Owed);
         Assert.Null(dto.Dashboard.Money);
         Assert.Null(dto.Review[0].Points.Amount);
+        Assert.Null(dto.Home.RojandariStated);
+        Assert.Null(dto.Home.UkteAgreed);
+        Assert.Equal(12, dto.Home.OnFarmToday);               // attendance counts are safe for anyone
     }
 
     /// <summary>
@@ -120,6 +124,8 @@ public sealed class LabourRegisterViewTests
         Assert.Single(dto.Ledger.Days);                       // the page itself is still drawn
         Assert.Null(dto.People[0].Paid);
         Assert.Null(dto.Dashboard.Money);
+        Assert.Null(dto.Home.RojandariStated);
+        Assert.Null(dto.Home.UkteAgreed);
     }
 
     // ─── F2 (task 4.2 review): the handler-level backstop ───────────────────

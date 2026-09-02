@@ -117,6 +117,9 @@ export const EMPTY_LABOUR_DATA: LabourData = {
     },
     ledger: { weekLabel: '', days: [], rows: [], crewRows: [] },
     view: 'owner' as const,
+    // D6 — pre-evidence there is no money truth and no आज कामावर count to
+    // state: every member blank (—), never ₹0 / 0 जण.
+    home: { rojandariStated: null, ukteAgreed: null, onFarmToday: null, rojandariToday: null, ukteToday: null },
     review: [],
     attendance: { plot: '', headcount: 0, rows: [], todaysLabourAssignmentId: '' },
 };
@@ -180,6 +183,9 @@ export const LABOUR_MOCK: LabourData = {
         crewRows: [{ throughFieldOperatorId: 'shankar-crew', throughName: 'शंकर', counts: [8, 8, null, 8, null, 4, null] }],
     },
     view: 'owner' as const,
+    // D6 — hand-drawn preview home: the TWO money truths stay separate
+    // (never their sum anywhere) and the आज कामावर breakdown.
+    home: { rojandariStated: 4650, ukteAgreed: 12000, onFarmToday: 12, rojandariToday: 4, ukteToday: 8 },
     // ids are GUID-shaped (not literal "r1"/"r2"/"r3") so मंजूर/शंका in preview
     // exercise the SAME `VerifyLogPayload.dailyLogId` zod shape (`ZGuid`) a
     // real backend id has — a non-GUID id would fail client-side wire

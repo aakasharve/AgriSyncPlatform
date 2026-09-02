@@ -745,10 +745,12 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         var attendance = BuildAttendanceDraft(
             farmLogs, allAssignments, plotNameById, farmLocalToday, todaysWorkRows);
 
+        var home = BuildLabourHome(allAssignments, todaysLogIdSet);
+
         var topLevelIds = people.Select(p => p.Id).ToList();
 
         var built = new LabourDataDto(
-            topLevelIds, people, dashboard, ledger, review, attendance, View: "owner");
+            topLevelIds, people, dashboard, ledger, review, attendance, View: "owner", Home: home);
         return Result.Success(ApplyRegisterView(built, ResolveRegisterView(resolvedCallerRole)));
     }
 
@@ -797,6 +799,42 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         }
 
         return (byWorker, unattributed);
+    }
+
+    /// <summary>See <see cref="LabourHomeDto"/> — the two money truths and the आज कामावर counts.</summary>
+    internal static LabourHomeDto BuildLabourHome(
+        IReadOnlyList<LabourAssignment> allAssignments,
+        IReadOnlySet<Guid> todaysLogIds)
+    {
+        static decimal? SumStated(IEnumerable<LabourAssignment> source)
+        {
+            var stated = source
+                .Where(a => a.TotalCost is not null)
+                .Select(a => a.TotalCost!.Value)
+                .ToList();
+            return stated.Count == 0
+                ? null // nothing stated — blank, never ₹0
+                : decimal.Round(stated.Sum(), 2, MidpointRounding.AwayFromZero);
+        }
+
+        static int? SumKnownHeadcounts(IEnumerable<LabourAssignment> source)
+        {
+            var known = source
+                .Select(a => LabourHeadcount.Resolve(a.WorkerCount, a.MaleCount, a.FemaleCount))
+                .Where(h => h is not null)
+                .Select(h => h!.Value)
+                .ToList();
+            return known.Count == 0 ? null : known.Sum();
+        }
+
+        var todays = allAssignments.Where(a => todaysLogIds.Contains(a.DailyLogId)).ToList();
+
+        return new LabourHomeDto(
+            RojandariStated: SumStated(allAssignments.Where(a => a.ContractUnit is null)),
+            UkteAgreed: SumStated(allAssignments.Where(a => a.ContractUnit is not null)),
+            OnFarmToday: SumKnownHeadcounts(todays),
+            RojandariToday: SumKnownHeadcounts(todays.Where(a => a.ContractUnit is null)),
+            UkteToday: SumKnownHeadcounts(todays.Where(a => a.ContractUnit is not null)));
     }
 
     /// <summary>
@@ -1019,6 +1057,9 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         var ledger = view == LabourRegisterView.OwnRow
             ? dto.Ledger with { Rows = [], CrewRows = [] }
             : dto.Ledger;
+        // D6 home cards: money withheld for non-owners; the आज कामावर
+        // headcounts survive (attendance is safe for anyone — D-H8).
+        var home = dto.Home with { RojandariStated = null, UkteAgreed = null };
 
         return dto with
         {
@@ -1027,6 +1068,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             Dashboard = dashboard,
             Review = review,
             Ledger = ledger,
+            Home = home,
         };
     }
 

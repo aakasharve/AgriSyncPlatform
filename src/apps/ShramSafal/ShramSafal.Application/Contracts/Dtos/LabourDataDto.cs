@@ -18,7 +18,8 @@ public sealed record LabourDataDto(
     // (own row only; empty until an account↔FieldOperator link exists).
     // Resolved server-side from the caller's membership role; the client
     // renders what arrives and adds nothing back.
-    string View);
+    string View,
+    LabourHomeDto Home);
 
 public sealed record LabourPersonDto(
     string Id,
@@ -356,3 +357,29 @@ public sealed record LabourAttendanceDraftDto(
 public sealed record LabourAttendanceRowDto(
     string PersonId,
     string Status);
+
+/// <summary>
+/// Labour home (master review 2026-09-02, D6) — one Labour, TWO money truths,
+/// never combined: the system never says "₹16,650 खर्च".
+///
+/// <para><c>RojandariStated</c> (रोजंदारी · नोंदलेली) sums STATED TotalCost on
+/// non-contract engagements; <c>UkteAgreed</c> (उक्ते काम · ठरलेली) sums stated
+/// TotalCost on engagements with a stated ContractUnit. Same-kind aggregation
+/// under an honest label is display of what was recorded; blending the kinds,
+/// rate × days, or presenting agreed as spent is forbidden and has no member
+/// here to land in. Null = nothing stated — blank, never ₹0. Actually-paid
+/// money (दिलेली रक्कम) is the existing Paid surface, not this.</para>
+///
+/// <para>The headcount line ("आज कामावर N जण — x रोजंदारी · y उक्ते") reads
+/// STATED engagement headcounts (the engagement is the single source of HOW
+/// MANY — AttendanceMark's own contract); the arrangement split is a
+/// breakdown, never a filter, so x + y need not equal N and an unknown part
+/// stays null. Phase 6 (Contract V1) extends the उक्ते card from this seam
+/// without remodelling Labour/हजेरी — the founder's scope fence.</para>
+/// </summary>
+public sealed record LabourHomeDto(
+    decimal? RojandariStated,
+    decimal? UkteAgreed,
+    int? OnFarmToday,
+    int? RojandariToday,
+    int? UkteToday);

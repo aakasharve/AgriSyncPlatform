@@ -247,6 +247,15 @@ export interface DashboardData {
     money: { recorded: number | null; paid: number; advance: number; owed: number | null } | null;
 }
 
+/** Master review D6 — the Labour home's two money truths + आज कामावर. Never combined. */
+export interface LabourHome {
+    rojandariStated: number | null;
+    ukteAgreed: number | null;
+    onFarmToday: number | null;
+    rojandariToday: number | null;
+    ukteToday: number | null;
+}
+
 export interface LabourData {
     /** top-level people shown on the hub (owner's team). */
     topLevelIds: string[];
@@ -261,6 +270,8 @@ export interface LabourData {
     ledger: { weekLabel: string; days: string[]; rows: LedgerRow[]; crewRows: LedgerCrewRow[] };
     /** D-H8 — the projection the server sent (owner | crew | own). Display alignment only; the SERVER strips. */
     view: LabourView;
+    /** D6 — the two money truths and the आज कामावर counts; see LabourHome. */
+    home: LabourHome;
     review: ReviewItem[];
     /**
      * Attendance draft for "today" (a plot's gang). Task 5 (founder Global

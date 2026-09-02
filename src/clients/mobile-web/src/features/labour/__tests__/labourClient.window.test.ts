@@ -50,6 +50,7 @@ function buildDto(): LabourDataDto {
         review: [],
         attendance: { plot: '', headcount: 0, rows: [] },
         view: 'owner',
+        home: { rojandariStated: null, ukteAgreed: null, onFarmToday: null, rojandariToday: null, ukteToday: null },
     };
 }
 

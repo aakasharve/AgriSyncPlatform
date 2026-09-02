@@ -115,6 +115,8 @@ function buildDto(): LabourDataDto {
             ],
         },
         view: 'owner',
+        // D6 — the two money truths + आज कामावर, as the new backend serves them.
+        home: { rojandariStated: 1200.5, ukteAgreed: 12000, onFarmToday: 12, rojandariToday: 4, ukteToday: 8 },
         review: [
             {
                 id: 'r1',
