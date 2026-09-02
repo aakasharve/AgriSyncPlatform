@@ -37,14 +37,17 @@ const fullDraft = (): AgriLogResponse => ({
 } as unknown as AgriLogResponse);
 
 describe('toAttendanceOnlyDraft — the labour door writes only हजेरी', () => {
-    it('empties every bucket that belongs to the other door', () => {
+    it('empties every bucket that belongs to the other door — but never the disturbance', () => {
         const out = toAttendanceOnlyDraft(fullDraft())!;
         expect(out.cropActivities).toEqual([]);
         expect(out.irrigation).toEqual([]);
         expect(out.inputs).toEqual([]);
         expect(out.machinery).toEqual([]);
         expect(out.activityExpenses).toEqual([]);
-        expect(out.disturbance).toBeUndefined();
+        // D11 + founder Task 4.2: attendance says WHO, disturbance says WHAT
+        // blocked the day. Neither collapses into the other; dropping it here
+        // severed the no-work-day flow (the parse DOES produce it).
+        expect(out.disturbance).toEqual({ blockedSegments: [], reason: 'rain' });
     });
 
     // The half this helper must NEVER take away. If the parser ever stops
@@ -64,6 +67,8 @@ describe('toAttendanceOnlyDraft — the labour door writes only हजेरी'
         expect(out.fullTranscript).toBe(src.fullTranscript);
         expect(out.summary).toBe(src.summary);
         expect(out.dayOutcome).toBe('WORK_RECORDED');
+        expect(out.disturbance).toEqual(src.disturbance);
+        expect(out.dayOutcome).toBe(src.dayOutcome);
     });
 
     it('never reassigns another bucket into labour — no guessing', () => {

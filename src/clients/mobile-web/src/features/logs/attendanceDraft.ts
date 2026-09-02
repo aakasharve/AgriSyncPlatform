@@ -41,6 +41,9 @@ import type { AgriLogResponse } from '../../types';
  * Everything the farmer can still see and edit (transcript, summary, the
  * questions the parser asked) is deliberately preserved; only the operational
  * buckets that belong to the other door are emptied.
+ *
+ * The disturbance SURVIVES this filter (see below): on a no-work day it is the
+ * reason the day had no work, and the हजेरी confirm screen shows it beside WHO came.
  */
 export function toAttendanceOnlyDraft(draft: AgriLogResponse | null): AgriLogResponse | null {
     if (!draft) return null;
@@ -57,10 +60,15 @@ export function toAttendanceOnlyDraft(draft: AgriLogResponse | null): AgriLogRes
         inputs: [],
         machinery: [],
         activityExpenses: [],
-        // A disturbance is a blocker on the DAY, not on who turned up, and it
-        // has its own screen. Dropped here rather than shown under a हजेरी
-        // heading it does not belong to.
-        disturbance: undefined,
+        // PRESERVED — Phase 4 Task 4.2 (spec D11, no-work door "काम झालं नाही,
+        // पण मजूर आले"). Attendance says WHO was there; the disturbance says
+        // WHAT blocked the day. They are the two halves of ONE fact about a
+        // no-work day and neither collapses into the other — the earlier
+        // version dropped it here, which severed the flow the parse feeds
+        // (AgriLogResponseSchema.ts:731) from the day it describes. The sync
+        // payload carries it end to end (create_daily_log.zod.ts:126,130 →
+        // CreateDailyLogPayload.cs:83-84), verified 2026-09-02.
+        disturbance: draft.disturbance,
     };
 }
 
