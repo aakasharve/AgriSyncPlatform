@@ -1022,6 +1022,11 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
     const workerNames = draft.labour.flatMap((e) => e.workerNames ?? []);
     const rung = selectLadderRung({ anchorHeadcount, spokenCount, workerNames });
     const knownCount = spokenCount ?? anchorHeadcount;
+    // B001 SECOND CORRECTION (3.4b review): the landed 3.3 contract is
+    // selectConfirmSurface({ anchor, events }) returning
+    // 'confirm' | 'confirm-with-disagreement' — import it from
+    // '../attendanceDisagreement' (the first amendment wrote a signature that
+    // never existed; the shipped AttendanceResult.tsx is the authority).
     // ── B001 (3.3 review, controller ruling) ─────────────────────────────
     // Disagreement detection is NOT computed inline. The ruled gate is
     // selectConfirmSurface (attendanceDisagreement.ts): it covers BOTH axes —
@@ -1033,9 +1038,9 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
     // must honour.
     const surface = selectConfirmSurface({
         anchor,
-        labour: draft.labour,
+        events: draft.labour,
     });
-    const disagreement = surface.kind === 'conflict' ? surface.disagreement : null;
+    const disagreement = surface.kind === 'confirm-with-disagreement' ? surface.disagreement : null;
     const contradictions: DayContradiction[] = findDayContradictions(draft.labour)
         .filter((c) => rulings[c.name] == null);
 
