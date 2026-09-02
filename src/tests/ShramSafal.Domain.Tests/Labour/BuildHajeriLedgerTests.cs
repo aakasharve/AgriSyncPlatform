@@ -375,4 +375,34 @@ public sealed class BuildHajeriLedgerTests
         Assert.Equal(4, grapes.WorkerCount);            // reported quantities untouched
         Assert.Equal(6, cane.WorkerCount);
     }
+
+    /// <summary>
+    /// Phase 5 walk (Task 1 review carry) — DUPLICATE-MARK INPUT, pinned so
+    /// the degraded mode is a decision, not an accident. Two marks for the
+    /// same (operator, day) cannot exist through any production door: the
+    /// single producer (LabourAnchorRules PIN 3) amends-in-place on repeat,
+    /// and the partial unique index refuses a second canonical row with 23505
+    /// (AttendanceMarkUniqueIndexRealPostgresTests). If that invariant ever
+    /// broke anyway, the builder's <c>cells[index] = …</c> assignment makes
+    /// the LAST mark in repository order win — one row, one cell, silently.
+    /// This pin names that behaviour; changing it (throw, first-wins, both)
+    /// must be deliberate and must land next to the index it distrusts.
+    /// </summary>
+    [Fact]
+    public void ADuplicatePersonDayIsLastMarkWinsOneRowOneCellBehindTheIndex()
+    {
+        var ganesh = Guid.NewGuid();
+
+        var ledger = Build(
+            [
+                Mark(ganesh, Monday, DayMark.Full),
+                Mark(ganesh, Monday, DayMark.Absent), // unreachable in prod; last in list
+            ],
+            [Operator(ganesh, "गणेश")]);
+
+        var row = Assert.Single(ledger.Rows);   // never a doubled row
+        var cell = row.Cells[0]!;
+        Assert.Equal("absent", cell.Day);       // the later statement, whole
+        Assert.Single(row.Cells, c => c is not null); // and only one cell
+    }
 }

@@ -42,7 +42,12 @@ describe('HajeriLedger — the clean register (master review D4)', () => {
         // one header cell per day and nothing after them
         expect(container.querySelectorAll('[data-testid="ledger-day-head"]').length)
             .toBe(LABOUR_MOCK.ledger.days.length);
-        expect(container.querySelector('[data-testid="ledger-row-total"]')).toBeNull();
+        // Phase 5 (4.3-review carry): the old `ledger-row-total` null-query
+        // was DELETED here — that testid never existed on any component, so
+        // the query could never fail (a totals column added under any other
+        // testid sailed past it). The structural owner of "nothing trails
+        // the seventh cell" is HajeriLedgerClean.test.tsx, which fails on
+        // ANY trailing element regardless of what it is called.
     });
 
     it('a NIGHT-only cell renders the night marker and never the full-day tick', () => {
