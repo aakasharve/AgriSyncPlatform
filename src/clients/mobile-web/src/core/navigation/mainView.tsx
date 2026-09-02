@@ -41,6 +41,10 @@ import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
 // `mainViewComponents.tsx`'s header for why that hook rule forces the split.
 import SathiGuideCard from '../../features/oversight/components/SathiGuideCard';
 import { toAttendanceOnlyDraft } from '../../features/logs/attendanceDraft';
+// Labour V2 R1 Task 3.4b — the Labour-owned result surface + the anchor it
+// renders against. The invoking feature owns the meaning of a labour parse.
+import AttendanceResult from '../../features/labour/components/AttendanceResult';
+import { resolveLabourAnchor } from '../../features/labour/labourAnchor';
 import HelpBar from '../../features/oversight/components/HelpBar';
 import {
     LabourLogBanner,
@@ -114,6 +118,40 @@ const TaskCloseConfirmSlot: React.FC<{
             onDismiss={() => setDismissed(true)}
         />
     );
+};
+
+// Labour V2 R1 Task 3.4b — the labour door's stable frame. `renderLogView`
+// is a plain function (no hooks — see TaskCloseConfirmSlot above), so the one
+// piece of memory this branch needs lives here instead.
+//
+// WHY MEMORY IS NEEDED AT ALL: the बदल करा edit surface is the byte-for-byte
+// ManualEntry(attendanceOnly) call, and that call CONSUMES the draft on mount
+// (useManualEntryHydration → onDataConsumed → setDraftLog(null)). If the
+// landing decision read the live draftLog alone, that consumption would flip
+// the branch from <AttendanceResult> to a bare <ManualEntry> one commit after
+// बदल करा — React replaces the subtree on the type change, the freshly
+// hydrated form remounts EMPTY (initialData is null by then, and the parse is
+// in no saved log to rehydrate from), and the farmer's spoken हजेरी silently
+// evaporates on the CORRECTION button — a rule-1 / D9.6 violation. The latch
+// keeps the LAST result element standing once the draft is consumed, so
+// AttendanceResult — and the ManualEntry instance it hosts — stay mounted
+// until the save routes away (useLogCommands routes logIntent==='labour' back
+// to Labour, which unmounts this frame). While the draft is alive the
+// children are fresh each render; the frozen element only takes over after
+// consumption, when the edit surface is deliberately running on its own
+// internal state anyway (useManualEntryHydration's re-run guard).
+// Exported for labourResultOwnership.test.tsx's plain-node assertions (the
+// same reason NotQueuedForServerBadge/LabourLogBanner are re-exported above:
+// identity checks need THIS component, not a copy).
+export const LabourResultHost: React.FC<{
+    renderManualEntry: () => React.ReactNode;
+    children: React.ReactNode;
+}> = ({ renderManualEntry, children }) => {
+    const lastResult = React.useRef<React.ReactNode>(null);
+    // Ref write during render: idempotent (same element object on a
+    // StrictMode double-render), and its only reader is this render path.
+    if (children != null) lastResult.current = children;
+    return <>{children ?? lastResult.current ?? renderManualEntry()}</>;
 };
 
 export const renderReflectView = (ctx: AppRouterContext): React.ReactNode => {
@@ -478,6 +516,14 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                 </>
                             ) : (
                                 hasActiveLogContext ? (
+                                    (() => {
+                                        // Labour V2 R1 Task 3.4b — the invoking feature owns the
+                                        // result surface. The generic ManualEntry(attendanceOnly)
+                                        // branch below is KEPT as the बदल करा edit surface; it
+                                        // stopped being the landing. The call moved verbatim into
+                                        // this closure — it is NOT modified.
+                                        const attendanceDraft = logIntent === 'labour' ? toAttendanceOnlyDraft(draftLog) : null;
+                                        const renderManualEntry = () => (
                                     <ManualEntry
                                         context={currentLogContext}
                                         crops={crops}
@@ -548,6 +594,31 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                             );
                                         })()}
                                     />
+                                        );
+                                        if (logIntent === 'labour') {
+                                            // The labour door lands on the Labour-owned screen. A
+                                            // draft with no labour rows falls through to the empty
+                                            // ManualEntry — "he said something this door cannot
+                                            // record… He sees it and decides" survives as behaviour.
+                                            const anchorForDraft = resolveLabourAnchor(history, getDateKey());
+                                            const anchorLog = history.find((l) => anchorForDraft.state === 'anchored' && l.id === anchorForDraft.logId);
+                                            return (
+                                                <LabourResultHost renderManualEntry={renderManualEntry}>
+                                                    {attendanceDraft && attendanceDraft.labour.length > 0 ? (
+                                                        <AttendanceResult
+                                                            draft={attendanceDraft}
+                                                            anchor={anchorForDraft}
+                                                            farmId={anchorLog?.meta?.farmId ?? currentLogContext?.selection?.[0]?.farmId}
+                                                            onConfirm={(d) => { void handleManualSubmit(d); setDraftLog(null); }}
+                                                            renderEditSurface={renderManualEntry}
+                                                            onSpeakMore={() => { setRecordingSegment('labour'); setMode('voice'); }}
+                                                        />
+                                                    ) : null}
+                                                </LabourResultHost>
+                                            );
+                                        }
+                                        return renderManualEntry();
+                                    })()
                                 ) : (
                                     <div className="flex items-center justify-center h-64 text-slate-400">
                                         Select a plot to continue...
