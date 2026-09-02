@@ -772,7 +772,7 @@ export default function HomePage() {
           />
         </span>
         <div className="min-w-0">
-          <span className="block text-h2 font-bold tracking-[-0.02em] text-text-1">Shram Safal</span>
+          <span className="block text-h2 font-bold tracking-[-0.02em] text-text-1"><span className="text-word-shram">Shram</span>{' '}<span className="text-word-safal">Safal</span></span>
           <span className="block text-caption text-text-2">Admin console</span>
         </div>
       </div>

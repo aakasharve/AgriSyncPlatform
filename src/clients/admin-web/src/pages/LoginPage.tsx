@@ -142,7 +142,7 @@ export default function LoginPage() {
             />
           </span>
           <span className="leading-tight">
-            <span className="block text-h3 font-bold text-text-1">Shram Safal</span>
+            <span className="block text-h3 font-bold text-text-1"><span className="text-word-shram">Shram</span>{' '}<span className="text-word-safal">Safal</span></span>
             <span className="block text-caption text-text-2">Admin console</span>
           </span>
         </div>
@@ -201,7 +201,7 @@ export default function LoginPage() {
               />
             </span>
             <span className="leading-tight">
-              <span className="block text-h3 font-bold text-text-1">Shram Safal</span>
+              <span className="block text-h3 font-bold text-text-1"><span className="text-word-shram">Shram</span>{' '}<span className="text-word-safal">Safal</span></span>
               <span className="block text-caption text-text-2">Admin console</span>
             </span>
           </div>

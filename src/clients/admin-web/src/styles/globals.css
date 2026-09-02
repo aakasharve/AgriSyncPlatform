@@ -335,6 +335,20 @@ kbd,
      a smudge — the founder caught it on the built screen. Every plane this
      console puts the mark on (the mint sidebar, the login hero) is greenish,
      so the disc travels with it. Not decoration. */
+  /* THE WORDMARK IS TWO-TONE — "Shram" canopy green, "Safal" sky blue, the
+     founder's ask on 2026-09-02. Both come from the marketing palette
+     (tokens.css --brand-hover and the --farm-sky ramp) so the console, the
+     site and the farmer app read as one product.
+
+     THE BLUE IS NOT #0EA5E9. Measured, not chosen: the farm-sky blue reads
+     2.27:1 on the frosted mint plane and 2.73:1 on a glass panel — both far
+     under AA's 4.5:1, i.e. legible as a graphic and not as text. #0369A1 is
+     the next step down the SAME sky ramp and reads 4.86:1 / 5.85:1. It is the
+     same blue; it is the darkest one a reader can actually read.
+     Do not restore the brighter value for text. */
+  --color-word-shram: #0f3d22;
+  --color-word-safal: #0369a1;
+
   --color-mark-disc: #fbf5ec;
   --color-mark-ring: #d9b45b;
   --color-brand-press: #0b4630; /* its single hover state — white at 10.86:1 */

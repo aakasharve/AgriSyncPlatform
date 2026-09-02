@@ -33,8 +33,16 @@ const SURFACES = [
 describe('the console names itself Shram Safal', () => {
   it.each(SURFACES)('%s carries the name, not the platform name', (_where, file) => {
     const src = read(file);
-    expect(src).toContain('Shram Safal');
+    // The wordmark is two-tone, so the name is two spans rather than one string.
+    expect(src).toContain('>Shram</span>');
+    expect(src).toContain('>Safal</span>');
     expect(src).not.toMatch(/AgriSync Admin|>AgriSync</);
+  });
+
+  it.each(SURFACES)('%s tints the wordmark green-then-blue', (_where, file) => {
+    const src = read(file);
+    expect(src).toContain('text-word-shram');
+    expect(src).toContain('text-word-safal');
   });
 
   it('the browser tab says it too', () => {
@@ -64,6 +72,26 @@ describe('the mark keeps the ground that makes it legible', () => {
     expect(src).toContain('/brand/logo-mark.webp');
     expect(src).toContain('var(--color-mark-disc)');
     expect(src).toContain('var(--color-mark-ring)');
+  });
+
+  /**
+   * THE BLUE IS THE DARKEST ONE A READER CAN READ, AND THAT IS THE POINT.
+   *
+   * The founder asked for the brand's blue and green. The brand blue is
+   * #0EA5E9 (marketing `--farm-sky`) — and measured against the two backdrops
+   * this wordmark actually sits on it reads **2.27:1** on the frosted mint
+   * plane and **2.73:1** on a glass panel. AA wants 4.5:1 for text. At that
+   * ratio it is a graphic, not a word.
+   *
+   * #0369A1 is the next step down the same sky ramp: 4.86:1 and 5.85:1. Same
+   * blue, legible. This test exists so nobody "restores the real brand blue"
+   * and quietly makes the product's own name unreadable.
+   */
+  it('the wordmark blue is the legible step of the sky ramp, not the bright one', () => {
+    const css = read('src/styles/globals.css');
+    expect(css).toMatch(/--color-word-shram:\s*#0f3d22/i);
+    expect(css).toMatch(/--color-word-safal:\s*#0369a1/i);
+    expect(css).not.toMatch(/--color-word-safal:\s*#0ea5e9/i);
   });
 
   it('both disc tokens are declared, so no surface hand-rolls the colour', () => {

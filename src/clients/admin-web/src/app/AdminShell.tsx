@@ -188,7 +188,7 @@ export function AdminShell() {
             {/* The product is Shram Safal; this console lives at
                 admin.shramsafal.in. It said "AgriSync" — the platform — until
                 2026-09-02. */}
-            <span className="block text-h3 font-bold text-text-1">Shram Safal</span>
+            <span className="block text-h3 font-bold text-text-1"><span className="text-word-shram">Shram</span>{' '}<span className="text-word-safal">Safal</span></span>
             <span className="block text-caption text-nav-muted">Admin console</span>
           </span>
         </div>
