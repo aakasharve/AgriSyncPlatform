@@ -79,3 +79,17 @@ export function formatWindowRange(from: string, to: string): string {
     }
     return `${startDay} ${startMonth} – ${endDay} ${endMonth}`;
 }
+
+/**
+ * Full Marathi month forms, for sentence copy. The D5 confirmation line
+ * ("4 सप्टेंबरपर्यंत · नंतर जबाबदारी आपोआप संपेल", founder master review
+ * 2026-09-02) writes the month in full — सप्टेंबर is the founder's own
+ * spelling; the other eleven are the standard dictionary full forms of the
+ * months abbreviated above, surfaced at the Task 2.3 founder gate rather than
+ * silently invented. The abbreviated set stays the register/date-header
+ * vocabulary.
+ */
+export const MARATHI_MONTHS_FULL = [
+    'जानेवारी', 'फेब्रुवारी', 'मार्च', 'एप्रिल', 'मे', 'जून',
+    'जुलै', 'ऑगस्ट', 'सप्टेंबर', 'ऑक्टोबर', 'नोव्हेंबर', 'डिसेंबर',
+];

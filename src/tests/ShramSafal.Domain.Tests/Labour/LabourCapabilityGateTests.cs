@@ -482,6 +482,36 @@ public sealed class LabourCapabilityGateTests
         row.LabourGrantExpiresAtUtc.Should().BeNull("no ghost date on a lapsed grant");
     }
 
+    /// <summary>
+    /// Task 2.3 (review finding M1 from 2.2): the audit trail records what the
+    /// STORE holds, never what the request asked for. A revoke that carries a
+    /// date stores null (the domain clears expiry on revoke) — auditing the
+    /// sent date would put an instant into history that the store never held.
+    /// </summary>
+    [Fact]
+    public async Task A_revoke_that_carries_a_date_audits_the_stored_null_never_the_sent_date()
+    {
+        var repo = new FakeRepo();
+        repo.SetRole(FarmA, OwnerA, AppRole.PrimaryOwner);
+        repo.AddMembership(FarmA, WorkerA, AppRole.Worker);
+        var handler = new SetLabourPermissionHandler(repo, new FixedClock(Now));
+
+        var granted = await handler.HandleAsync(Set(FarmA, WorkerA, true, OwnerA, Now.AddDays(2)));
+        granted.IsSuccess.Should().BeTrue();
+
+        var revoked = await handler.HandleAsync(Set(FarmA, WorkerA, false, OwnerA, Now.AddDays(5)));
+        revoked.IsSuccess.Should().BeTrue();
+        revoked.Value!.LabourGrantExpiresAtUtc.Should().BeNull();
+
+        repo.Audits.Should().HaveCount(2);
+        repo.Audits[0].Payload.Should().Contain("\"labourGrantExpiresAtUtc\":\"2026-08-15",
+            "the grant DID store its expiry, so the grant audit names it");
+        repo.Audits[1].Action.Should().Be("LabourManagementRevoked");
+        repo.Audits[1].Payload.Should().Contain("\"labourGrantExpiresAtUtc\":null",
+            "the store never held the sent date on a revoke — history must say null, "
+            + "not an instant that never existed");
+    }
+
     // ═════════════════════════════════════════════════════════════════════════
     // Helpers
     // ═════════════════════════════════════════════════════════════════════════
@@ -583,6 +613,7 @@ public sealed class LabourCapabilityGateTests
         public int GrantReads { get; private set; }
         public int SaveCalls { get; private set; }
         public List<string> AuditActions { get; } = [];
+        public List<ShramSafal.Domain.Audit.AuditEvent> Audits { get; } = [];
         public bool LeakForeignMembershipsFromRoster { get; set; }
         public bool LeakForeignMembershipFromTrackedRead { get; set; }
 
@@ -657,6 +688,7 @@ public sealed class LabourCapabilityGateTests
         public override Task AddAuditEventAsync(ShramSafal.Domain.Audit.AuditEvent auditEvent, CancellationToken ct = default)
         {
             AuditActions.Add(auditEvent.Action);
+            Audits.Add(auditEvent);
             return Task.CompletedTask;
         }
 

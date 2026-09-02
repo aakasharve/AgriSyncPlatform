@@ -14,6 +14,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, Trash2, ClipboardList, CheckCircle2 } from 'lucide-react';
 import { OperatorCapability } from '../../../types';
+import { DURATION_CHIPS, expiryUtcForChip, responsibilityEndLine } from './responsibilityDuration';
 
 interface Member {
     id: string;
@@ -55,22 +56,31 @@ interface Member {
  */
 interface LabourAccessView {
     /**
-     * The EFFECTIVE answer. Never `hasExplicitGrant` — that is `false` for a
-     * Mukadam who can in fact do everything, so rendering it would show "off"
-     * beside someone with full authority.
+     * The EFFECTIVE answer, clock-evaluated by the server — an expired
+     * जबाबदारी reads `false` here even though the stored decision survives.
      */
     canManage: boolean;
     /**
-     * `false` for owner tier and Mukadam: the capability comes with the ROLE,
-     * the server refuses the write (409), and the row must render as a static
-     * state rather than as a switch. A switch that appears to move and does not
-     * is precisely the defect being removed (`P5`).
+     * `false` for owner tier ONLY (D5, 2026-09-02): the responsibility comes
+     * with ownership, the server refuses the write (409), and the row must
+     * render as a static state rather than as a switch. A switch that appears
+     * to move and does not is precisely the defect being removed (`P5`).
+     * A Mukadam is editable like anyone else — his authority is the owner's
+     * switch now, not the role's.
      */
     isEditable: boolean;
     /** A write for this member is in flight. */
     saving: boolean;
-    /** DESIRED state, not a toggle, so a retry on a bad line converges. */
-    onChange: (next: boolean) => void;
+    /**
+     * The UTC instant the जबाबदारी ends, or null = कायम (no end).
+     * Server truth — never computed locally for display.
+     */
+    expiresAtUtc: string | null;
+    /**
+     * DESIRED state, not a toggle, so a retry on a bad line converges.
+     * `expiresAtUtc` null = कायम.
+     */
+    onChange: (next: boolean, expiresAtUtc: string | null) => void;
 }
 
 interface TeamMemberCardProps {
@@ -86,6 +96,9 @@ interface TeamMemberCardProps {
 
 export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onDelete, labourAccess }) => {
     const [open, setOpen] = useState(false);
+    /** The जबाबदारी द्या flow is mid-choice: the door was tapped, a duration chip was not. */
+    const [choosingDuration, setChoosingDuration] = useState(false);
+    const [pickedDate, setPickedDate] = useState('');
     const isPartner = member.role === 'SECONDARY_OWNER';
 
     return (
@@ -115,7 +128,10 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onDelete
                     <span className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${open ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
                         <ChevronDown size={18} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
                     </span>
-                    <span className="whitespace-nowrap text-[9.5px] font-bold leading-none text-emerald-700">{open ? 'बंद करा' : 'प्रवेश ठरवा'}</span>
+                    {/* D5: no farmer-facing permission vocabulary — प्रवेश
+                        ("access") violated that; ठरवा is retained, प्रवेश is
+                        replaced with the founder's approved word. */}
+                    <span className="whitespace-nowrap text-[9.5px] font-bold leading-none text-emerald-700">{open ? 'बंद करा' : 'जबाबदारी ठरवा'}</span>
                 </div>
             </button>
 
@@ -135,39 +151,112 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onDelete
                         gating nothing anywhere in the first place. The divider
                         that separated them from this control went with them.
 
-                        ENGLISH ONLY, by founder ruling — no approved Marathi
-                        exists for these three labels and no agent may invent
-                        farmer-facing Marathi. They are on the founder-copy list.
+                        COPY: the D5 approved set, verbatim (master review
+                        2026-09-02). No permission vocabulary anywhere on this
+                        surface.
 
                         `isEditable: false` renders a STATIC state, not a
-                        disabled switch: an owner-tier member or a Mukadam
-                        carries this by role and the server refuses the write,
-                        so anything switch-shaped would be a control that looks
-                        functional and does nothing (`P5`). */}
+                        disabled switch: an owner-tier member carries this with
+                        ownership and the server refuses the write, so anything
+                        switch-shaped would be a control that looks functional
+                        and does nothing (`P5`). */}
                     {labourAccess && (
                         <div>
                             {labourAccess.isEditable ? (
-                                <button
-                                    type="button"
-                                    data-testid={`labour-access-${member.id}`}
-                                    onClick={() => labourAccess.onChange(!labourAccess.canManage)}
-                                    disabled={labourAccess.saving}
-                                    aria-pressed={labourAccess.canManage}
-                                    aria-busy={labourAccess.saving}
-                                    className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100 ${labourAccess.canManage ? 'border-emerald-200 bg-emerald-50/70 shadow-sm shadow-emerald-100' : 'border-slate-200 bg-white'}`}
-                                >
-                                    <span className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-colors ${labourAccess.canManage ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                                        <ClipboardList size={18} />
-                                    </span>
-                                    <span className="min-w-0 flex-1">
-                                        <span className="block text-sm font-bold text-slate-800">Fix labour records</span>
-                                        <span className="block text-[11px] leading-snug text-slate-400">Can change attendance, hours and names</span>
-                                    </span>
-                                    <span className={`relative h-6 w-11 flex-shrink-0 rounded-full transition-colors ${labourAccess.canManage ? 'bg-emerald-500' : 'bg-slate-300'}`}>
-                                        <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${labourAccess.canManage ? 'translate-x-5' : ''}`} />
-                                    </span>
-                                </button>
+                                labourAccess.canManage ? (
+                                    /* ON — the responsibility is stated, with its end.
+                                       Tapping revokes: PUT(false), no second control,
+                                       no new copy needed. */
+                                    <button
+                                        type="button"
+                                        data-testid={`labour-access-${member.id}`}
+                                        onClick={() => labourAccess.onChange(false, null)}
+                                        disabled={labourAccess.saving}
+                                        aria-pressed={true}
+                                        aria-busy={labourAccess.saving}
+                                        className="flex w-full items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-left shadow-sm shadow-emerald-100 transition-all active:scale-[0.98] disabled:opacity-60"
+                                    >
+                                        <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white">
+                                            <ClipboardList size={18} />
+                                        </span>
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block text-sm font-bold text-slate-800">कामगारांची जबाबदारी आहे</span>
+                                            {responsibilityEndLine(labourAccess.expiresAtUtc) !== '' && (
+                                                <span className="block text-[11px] leading-snug text-slate-500">
+                                                    {responsibilityEndLine(labourAccess.expiresAtUtc)}
+                                                </span>
+                                            )}
+                                        </span>
+                                        <span className="relative h-6 w-11 flex-shrink-0 rounded-full bg-emerald-500">
+                                            <span className="absolute left-0.5 top-0.5 h-5 w-5 translate-x-5 rounded-full bg-white shadow-sm" />
+                                        </span>
+                                    </button>
+                                ) : choosingDuration ? (
+                                    /* Duration chips — the D5 flow: pick the person is
+                                       done (this card), pick the duration, done. */
+                                    <div
+                                        data-testid={`labour-access-${member.id}`}
+                                        className="rounded-xl border border-emerald-200 bg-white p-3"
+                                    >
+                                        <p className="mb-2 text-sm font-bold text-slate-800">
+                                            {`${member.name}ला किती दिवस?`}
+                                        </p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {DURATION_CHIPS.map(({ chip, label }) => (
+                                                <button
+                                                    key={chip}
+                                                    type="button"
+                                                    disabled={labourAccess.saving}
+                                                    onClick={() => {
+                                                        if (chip === 'date') return; // the input below submits
+                                                        labourAccess.onChange(true, expiryUtcForChip(chip, new Date()));
+                                                        setChoosingDuration(false);
+                                                    }}
+                                                    className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[13px] font-bold text-emerald-800 transition-all active:scale-95 disabled:opacity-60"
+                                                >
+                                                    {label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <input
+                                            type="date"
+                                            aria-label="तारीख"
+                                            value={pickedDate}
+                                            onChange={(e) => {
+                                                const iso = e.target.value;
+                                                setPickedDate(iso);
+                                                if (iso) {
+                                                    labourAccess.onChange(true, expiryUtcForChip('date', new Date(), iso));
+                                                    setChoosingDuration(false);
+                                                }
+                                            }}
+                                            className="mt-2 w-full rounded-lg border border-slate-200 p-2 text-sm"
+                                        />
+                                    </div>
+                                ) : (
+                                    /* OFF — the door: जबाबदारी द्या. */
+                                    <button
+                                        type="button"
+                                        data-testid={`labour-access-${member.id}`}
+                                        onClick={() => setChoosingDuration(true)}
+                                        disabled={labourAccess.saving}
+                                        aria-pressed={false}
+                                        aria-busy={labourAccess.saving}
+                                        className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left transition-all active:scale-[0.98] disabled:opacity-60"
+                                    >
+                                        <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+                                            <ClipboardList size={18} />
+                                        </span>
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block text-sm font-bold text-slate-800">जबाबदारी द्या</span>
+                                        </span>
+                                        <span className="relative h-6 w-11 flex-shrink-0 rounded-full bg-slate-300">
+                                            <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm" />
+                                        </span>
+                                    </button>
+                                )
                             ) : (
+                                /* Owner-tier — permanently on, non-interactive (P5). */
                                 <div
                                     data-testid={`labour-access-${member.id}`}
                                     className="flex w-full items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-left"
@@ -176,8 +265,7 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onDelete
                                         <ClipboardList size={18} />
                                     </span>
                                     <span className="min-w-0 flex-1">
-                                        <span className="block text-sm font-bold text-slate-800">Fix labour records</span>
-                                        <span className="block text-[11px] leading-snug text-slate-400">Comes with their role</span>
+                                        <span className="block text-sm font-bold text-slate-800">कामगारांची जबाबदारी आहे</span>
                                     </span>
                                     <span className="flex-shrink-0 text-emerald-600"><CheckCircle2 size={22} /></span>
                                 </div>
@@ -197,3 +285,5 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onDelete
         </div>
     );
 };
+
+export default TeamMemberCard;

@@ -74,6 +74,18 @@ public sealed class SetLabourPermissionHandler(
             return Result.Failure<LabourPermissionDto>(ShramSafalErrors.InvalidCommand);
         }
 
+        // The wire contract for the expiry is a UTC instant ("...Z"). An ISO
+        // string with an offset ("+05:30") or no zone designator deserializes
+        // to Kind=Local/Unspecified, which Npgsql refuses on a timestamptz
+        // column as an unhandled 500 deep inside SaveChanges (2.2 review, M2).
+        // Refuse it here, before it can reach the store — and refuse rather
+        // than convert: silently reinterpreting an ambiguous instant could
+        // shift a farmer's chosen end-of-day by a timezone's width.
+        if (command.LabourGrantExpiresAtUtc is { Kind: not DateTimeKind.Utc })
+        {
+            return Result.Failure<LabourPermissionDto>(ShramSafalErrors.InvalidCommand);
+        }
+
         // ── 2. Nobody grants themselves ──────────────────────────────────────
         if (command.TargetUserId == command.CallerUserId)
         {
@@ -158,8 +170,12 @@ public sealed class SetLabourPermissionHandler(
                         targetRole = membership.Role.ToString(),
                         canManageLabourRecords = command.CanManageLabourRecords,
                         // A duration IS part of the decision (P3) — "till the
-                        // 4th" and "permanently" are different grants.
-                        labourGrantExpiresAtUtc = command.LabourGrantExpiresAtUtc,
+                        // 4th" and "permanently" are different grants. The
+                        // STORED value, never the requested one: on a revoke
+                        // that carries a date the domain clears the expiry, and
+                        // auditing the sent date would put an instant into
+                        // history that the store never held (2.2 review, M1).
+                        labourGrantExpiresAtUtc = membership.LabourGrantExpiresAtUtc,
                     },
                     farmId: command.FarmId.Value,
                     clientCommandId: null,

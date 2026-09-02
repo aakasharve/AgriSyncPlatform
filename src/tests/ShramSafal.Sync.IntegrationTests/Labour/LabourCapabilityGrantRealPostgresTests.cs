@@ -15,6 +15,7 @@ using Npgsql;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
+using ShramSafal.Application.UseCases.Labour.CreateFieldOperator;
 using ShramSafal.Application.UseCases.Memberships.GetLabourPermissions;
 using ShramSafal.Application.UseCases.Memberships.SetLabourPermission;
 using ShramSafal.Infrastructure;
@@ -486,6 +487,42 @@ public sealed class LabourCapabilityGrantRealPostgresTests(Xunit.Abstractions.IT
 
         var (rowA, _) = await ReadGrantRowsAsync();
         rowA.Should().BeTrue("expiry denies forward; the stored decision is not rewritten backward");
+    }
+
+    /// <summary>
+    /// Task 2.3 acceptance: a Mukadam with the switch OFF is REFUSED by
+    /// LabourManagementGate.IsAllowedAsync on the server, driving a REAL labour
+    /// handler as him under his own scope — not merely hidden in the UI.
+    /// </summary>
+    [Fact]
+    public async Task Switching_a_Mukadam_off_denies_his_next_labour_write_server_side()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        var mukadam = Guid.Parse("c9d77777-7777-7777-7777-777777777777");
+        await using (var seed = new NpgsqlConnection(_superuserConn))
+        {
+            await seed.OpenAsync();
+            await SeedMembershipAsync(seed, FarmA, mukadam, AccountA, "Mukadam");
+        }
+
+        // Round-trip the owner's switch: ON, then OFF — he stays a Mukadam throughout.
+        (await SetPermissionAsync(FarmA, OwnerA, mukadam, allowed: true)).IsSuccess.Should().BeTrue();
+        (await SetPermissionAsync(FarmA, OwnerA, mukadam, allowed: false)).IsSuccess.Should().BeTrue(
+            "the owner may keep him as Mukadam with the responsibility OFF");
+
+        var refused = await RunUnderScopeAsync(FarmA, mukadam, sp =>
+            new CreateFieldOperatorHandler(
+                sp.GetRequiredService<IShramSafalRepository>(),
+                sp.GetRequiredService<IIdGenerator>(),
+                sp.GetRequiredService<IClock>())
+            .HandleAsync(new CreateFieldOperatorCommand(
+                new FarmId(FarmA), "गणेश", null, new UserId(mukadam))));
+
+        refused.IsFailure.Should().BeTrue();
+        refused.Error.Code.Should().Be("ShramSafal.Forbidden",
+            "denied by the shared gate on the server — Forbidden, never NotFound, so a forged "
+            + "farm id cannot probe existence");
     }
 
     // ═════════════════════════════════════════════════════════════════════════

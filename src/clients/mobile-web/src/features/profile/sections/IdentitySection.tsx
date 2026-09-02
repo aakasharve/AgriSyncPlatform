@@ -494,8 +494,9 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                             canManage: row.canManageLabourRecords,
                                             isEditable: row.isGrantEditable,
                                             saving: labourPermissions.savingUserId === row.userId,
-                                            onChange: (next: boolean) =>
-                                                void labourPermissions.setPermission(row.userId, next),
+                                            expiresAtUtc: row.labourGrantExpiresAtUtc,
+                                            onChange: (next: boolean, expiresAtUtc: string | null) =>
+                                                void labourPermissions.setPermission(row.userId, next, expiresAtUtc),
                                         };
                                     })()}
                                     onToggleCap={(cap) => {

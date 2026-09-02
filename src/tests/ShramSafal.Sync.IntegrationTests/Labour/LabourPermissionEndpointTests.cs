@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Threading;
@@ -237,6 +238,38 @@ public sealed class LabourPermissionEndpointTests
         Assert.True(doc.RootElement.GetProperty("canManageLabourRecords").GetBoolean());
         Assert.Equal(end, doc.RootElement.GetProperty("labourGrantExpiresAtUtc").GetDateTime(),
             TimeSpan.FromSeconds(1));
+    }
+
+    /// <summary>
+    /// Task 2.3 (review finding M2 from 2.2): the wire contract for
+    /// <c>labourGrantExpiresAtUtc</c> is a UTC instant. An ISO string with an
+    /// offset ("+05:30") or with no zone designator at all deserializes to
+    /// <c>Kind=Local</c>/<c>Unspecified</c>, which Npgsql refuses on a
+    /// timestamptz column as an unhandled 500 deep inside SaveChanges. The
+    /// handler must refuse it cleanly as InvalidCommand before it can reach
+    /// the store — a 4xx the client can branch on, never a 500.
+    /// </summary>
+    [Theory]
+    [InlineData("2027-01-01T00:00:00+05:30")]
+    [InlineData("2027-01-01T00:00:00")]
+    public async Task An_expiry_that_is_not_a_UTC_instant_is_refused_as_InvalidCommand_never_a_500(
+        string expiry)
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        await PushCreateFarmAsync(harness.Client, "device-perm-6", "req-perm-6", farmId, "Permission Farm 6");
+        await harness.SeedFarmMembershipAsync(farmId, WorkerUserId, AppRole.Worker);
+
+        var response = await harness.Client.PutAsync(
+            $"/shramsafal/farms/{farmId}/labour-permissions/{WorkerUserId}",
+            new StringContent(
+                $"{{\"canManageLabourRecords\":true,\"labourGrantExpiresAtUtc\":\"{expiry}\"}}",
+                Encoding.UTF8,
+                "application/json"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("ShramSafal.InvalidCommand", doc.RootElement.GetProperty("error").GetString());
     }
 
     // ─────────────────────────────────────────────────────────────────────────
