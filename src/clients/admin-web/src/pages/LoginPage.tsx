@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Leaf, Wheat, BarChart3, Shield, TriangleAlert } from 'lucide-react';
+import { Wheat, BarChart3, Shield, TriangleAlert } from 'lucide-react';
 import { adminApi } from '@/lib/api';
 import { type AdminSession } from '@/lib/auth';
 import { safeReturnTo } from '@/lib/returnTo';
@@ -120,10 +120,31 @@ export default function LoginPage() {
           13.78:1 on it and the supporting line 8.02:1. */}
       <div className="glass-nav relative hidden w-[55%] flex-col items-start justify-between p-14 lg:flex">
         <div className="flex items-center gap-3">
-          <span className="grid h-12 w-12 place-items-center rounded-chip bg-brand text-page shadow-surface">
-            <Leaf size={24} strokeWidth={2.4} aria-hidden="true" />
+          {/* The mark rides a cream disc with a brass ring — see
+              --color-mark-disc. This hero plane is mint; the shield is green.
+              mobile-web already learned that the hard way. */}
+          <span
+            className="grid h-12 w-12 flex-none place-items-center rounded-full"
+            style={{
+              background: 'var(--color-mark-disc)',
+              boxShadow: '0 0 0 1.5px var(--color-mark-ring), var(--shadow-surface)',
+            }}
+          >
+            <img
+              src="/brand/logo-mark.webp"
+              alt=""
+              aria-hidden="true"
+              width={30}
+              height={30}
+              loading="eager"
+              decoding="async"
+              className="size-[30px] object-contain"
+            />
           </span>
-          <span className="text-h3 font-bold text-text-1">AgriSync Admin</span>
+          <span className="leading-tight">
+            <span className="block text-h3 font-bold text-text-1">Shram Safal</span>
+            <span className="block text-caption text-text-2">Admin console</span>
+          </span>
         </div>
 
         <div className="max-w-[26ch]">
@@ -161,10 +182,28 @@ export default function LoginPage() {
         <form onSubmit={onSubmit} className="glass-panel w-full max-w-[440px] rounded-panel p-8">
           {/* The mark again for anyone below lg, where the left plane is gone */}
           <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <span className="grid h-12 w-12 place-items-center rounded-chip bg-brand text-page">
-              <Leaf size={24} strokeWidth={2.4} aria-hidden="true" />
+          <span
+              className="grid h-12 w-12 flex-none place-items-center rounded-full"
+              style={{
+                background: 'var(--color-mark-disc)',
+                boxShadow: '0 0 0 1.5px var(--color-mark-ring), var(--shadow-surface)',
+              }}
+            >
+              <img
+                src="/brand/logo-mark.webp"
+                alt=""
+                aria-hidden="true"
+                width={30}
+                height={30}
+                loading="eager"
+                decoding="async"
+                className="size-[30px] object-contain"
+              />
             </span>
-            <span className="text-h3 font-bold text-text-1">AgriSync Admin</span>
+            <span className="leading-tight">
+              <span className="block text-h3 font-bold text-text-1">Shram Safal</span>
+              <span className="block text-caption text-text-2">Admin console</span>
+            </span>
           </div>
 
           <h2 className="mb-1 text-h1 font-bold text-text-1">Sign in</h2>

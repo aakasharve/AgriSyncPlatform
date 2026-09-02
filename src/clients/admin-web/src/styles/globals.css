@@ -328,6 +328,15 @@ kbd,
    * in the same family as the navigation plane, and it carries white text
    * at 8.02:1. */
   --color-brand: #0f5c3d; /* identity, and the one primary action fill   */
+
+  /* THE BRAND MARK'S OWN GROUND. `logo-mark.webp` is a GREEN shield with a
+     dark green outline. mobile-web's FarmNameBoard records what happens
+     without these: on a green ground the outline vanishes and the reader sees
+     a smudge — the founder caught it on the built screen. Every plane this
+     console puts the mark on (the mint sidebar, the login hero) is greenish,
+     so the disc travels with it. Not decoration. */
+  --color-mark-disc: #fbf5ec;
+  --color-mark-ring: #d9b45b;
   --color-brand-press: #0b4630; /* its single hover state — white at 10.86:1 */
   --color-brand-wash: #e9f4ee; /* brand-tinted chrome band; brand on it 7.12 */
 

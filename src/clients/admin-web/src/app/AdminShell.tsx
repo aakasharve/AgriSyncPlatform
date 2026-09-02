@@ -5,7 +5,6 @@ import {
   Building2,
   Check,
   ChevronDown,
-  Leaf,
   LogOut,
   RefreshCw,
   Search,
@@ -158,15 +157,38 @@ export function AdminShell() {
         className="glass-nav flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-3 lg:h-screen lg:flex-col lg:flex-nowrap lg:items-stretch lg:gap-0 lg:overflow-y-auto lg:px-4 lg:pt-6 lg:pb-8"
       >
         <div className="mr-3 flex items-center gap-3 lg:mr-0 lg:mb-5 lg:border-b lg:border-nav-line lg:px-2 lg:pb-5">
-          {/* The mark is the one saturated thing on a light plane, and it is
-              the BRAND fill rather than a section accent: a leaf glyph is the
-              console's identity, not a statement about where you are. White
-              on #0f5c3d is 8.02:1. */}
-          <span className="grid size-10 flex-none place-items-center rounded-chip bg-brand text-page shadow-surface">
-            <Leaf size={22} strokeWidth={2.2} aria-hidden="true" />
+          {/* THE MARK NEEDS ITS OWN GROUND — carried from the farmer app, not
+              rediscovered. `logo-mark.webp` is a GREEN shield with a dark green
+              outline. mobile-web's FarmNameBoard records that placing it
+              straight onto a green ground made the outline vanish and the
+              farmer saw a smudge; the founder caught it on the built screen.
+              The fix there was a cream disc with a brass ring.
+              This sidebar is a frosted MINT pane, so it is the same hazard.
+              The disc is what makes the logo legible; it is not decoration and
+              must not be dropped. */}
+          <span
+            className="grid size-10 flex-none place-items-center rounded-full"
+            style={{
+              background: 'var(--color-mark-disc)',
+              boxShadow: '0 0 0 1.5px var(--color-mark-ring), var(--shadow-surface)',
+            }}
+          >
+            <img
+              src="/brand/logo-mark.webp"
+              alt=""
+              aria-hidden="true"
+              width={26}
+              height={26}
+              loading="eager"
+              decoding="async"
+              className="size-[26px] object-contain"
+            />
           </span>
           <span className="leading-tight">
-            <span className="block text-h3 font-bold text-text-1">AgriSync</span>
+            {/* The product is Shram Safal; this console lives at
+                admin.shramsafal.in. It said "AgriSync" — the platform — until
+                2026-09-02. */}
+            <span className="block text-h3 font-bold text-text-1">Shram Safal</span>
             <span className="block text-caption text-nav-muted">Admin console</span>
           </span>
         </div>

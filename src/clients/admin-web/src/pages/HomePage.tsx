@@ -747,6 +747,36 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* THE MASTHEAD. Home is the page a reader lands on, so it is where the
+          product names itself. Everywhere else the sidebar carries the brand.
+          The mark keeps its cream disc here too — the ground behind this page
+          is a pale mint bloom, and a green shield on green is the smudge
+          mobile-web already shipped once. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-line pb-5">
+        <span
+          className="grid size-14 flex-none place-items-center rounded-full"
+          style={{
+            background: 'var(--color-mark-disc)',
+            boxShadow: '0 0 0 2px var(--color-mark-ring), var(--shadow-raised)',
+          }}
+        >
+          <img
+            src="/brand/logo-mark.webp"
+            alt=""
+            aria-hidden="true"
+            width={36}
+            height={36}
+            loading="eager"
+            decoding="async"
+            className="size-9 object-contain"
+          />
+        </span>
+        <div className="min-w-0">
+          <span className="block text-h2 font-bold tracking-[-0.02em] text-text-1">Shram Safal</span>
+          <span className="block text-caption text-text-2">Admin console</span>
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
           <h1 className="text-h1 font-bold text-text-1">Ops Now</h1>
