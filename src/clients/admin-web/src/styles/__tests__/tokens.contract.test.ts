@@ -355,6 +355,43 @@ describe('the glass layer, and the ban it reverses (§A.12, founder 2026-09-02)'
     }
   });
 
+  it('keeps the honesty grey OFF the navigation plane — the one surface it fails on', () => {
+    /*
+     * 🛑 THIS IS THE ONE PLACE THE GLASS CONTRAST FLOOR HAS A HOLE, AND IT IS
+     * HELD SHUT BY THIS ASSERTION RATHER THAN BY LUCK.
+     *
+     * The mint navigation plane composites to #d6eee3. Ink reads 13.78:1 on it
+     * and every nav label and section accent clears 4.5:1 — but
+     * `--color-text-3`, the honesty grey, reads 2.45:1, against 2.82:1 on the
+     * page ground. The rule for this redesign is that no text is made LESS
+     * legible than it was, so the grey may not be drawn there.
+     *
+     * It is not, today: measured on 2026-09-02, the sidebar uses `text-nav-text`,
+     * `text-nav-muted`, `text-text-1`, the six accents, and `text-page` on the
+     * brand-filled leaf mark — and nothing else. That measurement is what this
+     * test freezes. It fails the moment someone puts a "not measured" state, a
+     * `NotMeasured` cell or a `text-text-3` caption on the sidebar, which is the
+     * exact change that would otherwise land a 2.45:1 caption in production and
+     * be reviewed as fine, because it looks fine.
+     *
+     * The FIX if that is ever wanted is not to darken the grey — that is a
+     * governed data colour and it means "we did not measure this" everywhere in
+     * the console. It is to put the value on a `glass-quiet` chip, which
+     * composites to #fefefe and reads 2.96:1.
+     */
+    const shell = SOURCES['/src/app/AdminShell.tsx'] ?? '';
+    const aside = shell.slice(shell.indexOf('<aside'), shell.indexOf('</aside>'));
+    expect(aside.length).toBeGreaterThan(500);
+    expect(aside).not.toContain('text-text-3');
+    expect(aside).not.toContain('NotMeasured');
+
+    // Same plane, second consumer: the login hero is `glass-nav` too.
+    const login = SOURCES['/src/pages/LoginPage.tsx'] ?? '';
+    const hero = login.slice(login.indexOf('glass-nav'), login.indexOf('RIGHT PLANE'));
+    expect(hero.length).toBeGreaterThan(300);
+    expect(hero).not.toContain('text-text-3');
+  });
+
   it('the honesty tint is not translucent — §A.6, and it is asserted', () => {
     // The one place the glass stops. A KPI tile floats its tint over the page
     // if this ever changes, and `--color-tint-grey` — the colour of "we did
