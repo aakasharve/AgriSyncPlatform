@@ -14,8 +14,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import HajeriLedger from '../HajeriLedger';
+import HajeriCellDetail from '../HajeriCellDetail';
 import { LABOUR_MOCK } from '../../labourMock';
-import type { LabourData, LedgerCell } from '../../labour.types';
+import type { LabourData, LedgerCell, LedgerRow } from '../../labour.types';
 
 // For the deploy-skew pin only: fetchLabourData through the mocked shared
 // client, so the wire-without-view case is exercised through the REAL mapper.
@@ -200,6 +201,71 @@ describe('HajeriLedger — the clean register (master review D4)', () => {
         const { container } = render(<HajeriLedger data={data} onToast={vi.fn()} />);
         expect(container.querySelectorAll('[data-testid="ledger-day-head"]').length).toBe(7);
         expect(container.textContent).not.toContain('अजून हजेरी नोंदवली नाही');
+    });
+});
+
+/**
+ * Deferred acceptance halves from Task 5's fix round, CLOSED here (Task 6,
+ * brief 4.2 — the task where the no-work-day flow lands). The backend half is
+ * already pinned by `ANoWorkDayStillCarriesItsColumnAndItsMarks`: a declared
+ * no-work day (a NO_WORK_PLANNED DailyLog) keeps its column and its marks,
+ * and — having no engagements — contributes no work context to any cell.
+ * These are the FRONTEND halves of the same truth (rules 6/7): the register
+ * renders WHO came and NOTHING that concludes work happened, and it opens
+ * with no headcount at all — blank cells, never zero, never fabricated
+ * absence.
+ */
+describe('Deferred from Task 5 acceptance — the no-work day and the headcount-less open', () => {
+    /** The wire shape a declared no-work day produces: a mark, no work context. */
+    const noWorkDayRow: LedgerRow = {
+        personId: 'op:1', fieldOperatorId: '1', name: 'गणेश', initial: 'ग', tone: 'or',
+        cells: [null, null, null, null, cell({ day: 'full', work: null }), null, null],
+    };
+    const noWorkWeek = (): LabourData => withLedger({
+        weekLabel: '',
+        days: ['2026-08-24', '2026-08-25', '2026-08-26', '2026-08-27', '2026-08-28', '2026-08-29', '2026-08-30'],
+        rows: [noWorkDayRow],
+        crewRows: [],
+    });
+
+    it('a declared no-work day renders WHO came and nothing that claims work', () => {
+        const { container } = render(<HajeriLedger data={noWorkWeek()} onToast={vi.fn()} />);
+
+        // The day keeps its column and the mark renders — the हजेरी fact.
+        expect(container.querySelectorAll('[data-testid="ledger-day-head"]').length).toBe(7);
+        const cells = container.querySelectorAll('[data-testid="ledger-cell"]');
+        expect(cells.length).toBe(7);
+        expect(cells[4].querySelector('svg')).not.toBeNull(); // the ✓ tick
+
+        // Nothing concludes work happened: no work text in any cell (the ✓ is
+        // an svg — the cells carry NO text), no उक्ते dot, and the six
+        // unmarked days stay blank — never '–', never 0.
+        cells.forEach((c) => expect(c.textContent).toBe(''));
+        expect(container.querySelector('[data-testid="ledger-ukte-dot"]')).toBeNull();
+    });
+
+    it('tap-detail on the no-work-day mark says पूर्ण and shows no work — WHO without a WHAT', () => {
+        const { container } = render(
+            <HajeriCellDetail row={noWorkDayRow} dayIndex={4} dayIso="2026-08-28" onClose={vi.fn()} />);
+        expect(container.textContent).toContain('पूर्ण');
+        // No work chip renders: the string 'काम' reaches this surface only
+        // through a work context ('उक्ते काम' or the work string itself), and
+        // a declared no-work day has none to show.
+        expect(container.textContent).not.toContain('काम');
+    });
+
+    it('no headcount anywhere: the register opens from marks alone and blank stays blank', () => {
+        const { container } = render(<HajeriLedger data={{
+            ...noWorkWeek(),
+            attendance: { plot: '', headcount: null, rows: [], todaysLabourAssignmentId: '' },
+        }} onToast={vi.fn()} />);
+
+        expect(container.querySelectorAll('[data-testid="ledger-day-head"]').length).toBe(7);
+        expect(container.querySelectorAll('[data-testid="ledger-row"]').length).toBe(1);
+        container.querySelectorAll('[data-testid="ledger-cell"]').forEach((c) => {
+            expect(c.textContent).not.toBe('0'); // never a fabricated count
+            expect(c.textContent).not.toBe('–'); // never a fabricated absence
+        });
     });
 });
 
