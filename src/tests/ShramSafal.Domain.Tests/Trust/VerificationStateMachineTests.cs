@@ -201,10 +201,11 @@ public sealed class VerificationStateMachineTests
     [Fact]
     public void ConfirmedToVerified_WithMukadam_AndNoGrant_IsStillRejected()
     {
-        // THE REFUSAL THAT MUST SURVIVE. LabourManagementPermission.IsCarriedByRole
-        // carries the Mukadam by role (founder decision O-4) and he therefore passes
-        // ShramSafalAuthorizationEnforcer.EnsureCanVerify — but O-4 is about EDITING
-        // labour, not approving it. Without the owner's grant the edge stays shut.
+        // THE REFUSAL THAT MUST SURVIVE. Mukadam still holds the Draft→Confirmed
+        // edge INSIDE the FSM; since 2026-09-02 (D5) an ungranted Mukadam never
+        // reaches it, because the enforcer refuses on the shared gate first. The
+        // FSM is the second lock, not the door. Without the owner's grant the
+        // Confirmed→Verified edge stays shut.
         var allowed = VerificationStateMachine.CanTransitionWithRole(
             VerificationStatus.Confirmed,
             VerificationStatus.Verified,

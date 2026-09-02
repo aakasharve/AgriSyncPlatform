@@ -5,16 +5,16 @@
 /// the farm access-management surface needs to RENDER it (founder decision O-4).
 ///
 /// <para><b>Why <see cref="Source"/> exists and why the UI must honour it.</b>
-/// An owner-tier member and a Mukadam are allowed <i>by role</i>; their stored
-/// grant flag is <c>false</c> and switching it has no effect. A toggle rendered
-/// as interactive for those members would be a control that looks functional and
-/// does nothing (doctrine P5) — the same defect the existing
-/// <c>TeamMemberCard</c> toggles have today by being local state that reaches no
-/// server. So the read tells the client WHICH of the two reasons applies, and
-/// <see cref="IsGrantEditable"/> says plainly whether the switch may be
-/// interactive at all. The write endpoint independently REFUSES a request that
-/// would toggle a role-carried capability, so a client that ignores this cannot
-/// fake it either.</para>
+/// An owner-tier member is allowed <i>by role</i> (D5, 2026-09-02: owner-tier
+/// ONLY — a Mukadam no longer is); their stored grant flag is <c>false</c> and
+/// switching it has no effect. A toggle rendered as interactive for those
+/// members would be a control that looks functional and does nothing (doctrine
+/// P5) — the same defect the existing <c>TeamMemberCard</c> toggles have today
+/// by being local state that reaches no server. So the read tells the client
+/// WHICH reason applies, and <see cref="IsGrantEditable"/> says plainly whether
+/// the switch may be interactive at all. The write endpoint independently
+/// REFUSES a request that would toggle a role-carried capability, so a client
+/// that ignores this cannot fake it either.</para>
 /// </summary>
 /// <param name="UserId">The member.</param>
 /// <param name="Role">
@@ -38,12 +38,12 @@
 /// decision. Always <c>false</c> for roles that carry the capability anyway.
 /// </param>
 /// <param name="Source">
-/// Why: <c>"OwnerTier"</c> · <c>"MukadamDefault"</c> · <c>"ExplicitGrant"</c> ·
-/// <c>"NotGranted"</c>.
+/// Why: <c>"OwnerTier"</c> · <c>"ExplicitGrant"</c> · <c>"NotGranted"</c>.
+/// (<c>"MukadamDefault"</c> was deleted 2026-09-02 — D5 removed the role carry.)
 /// </param>
 /// <param name="IsGrantEditable">
-/// <c>false</c> for owner-tier and Mukadam — the switch must render as
-/// permanently on and non-interactive. <c>true</c> for every other role.
+/// <c>false</c> for owner-tier — the switch renders permanently on and
+/// non-interactive. <c>true</c> for every other role, a Mukadam included.
 /// </param>
 public sealed record LabourPermissionDto(
     Guid UserId,

@@ -57,18 +57,34 @@ public sealed class LabourCapabilityGateTests
     // ═════════════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task Owner_and_Mukadam_are_allowed_without_the_grant_ever_being_read()
+    public async Task An_owner_is_allowed_without_the_grant_ever_being_read()
     {
         var repo = new FakeRepo();
         repo.SetRole(FarmA, OwnerA, AppRole.PrimaryOwner);
-        repo.SetRole(FarmA, MukadamA, AppRole.Mukadam);
 
         (await LabourManagementGate.IsAllowedAsync(repo, FarmA, OwnerA)).Should().BeTrue();
-        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, MukadamA)).Should().BeTrue();
 
         repo.GrantReads.Should().Be(0,
-            "the role answers on its own for owner-tier and Mukadam; reaching for the grant would mean "
-            + "a database round trip on the dominant path, and would let a bad grant read deny an owner");
+            "the role answers on its own for owner-tier; reaching for the grant would mean a "
+            + "database round trip on the dominant path, and would let a bad grant read deny an owner");
+    }
+
+    [Fact]
+    public async Task An_ungranted_Mukadam_is_denied_and_the_denial_comes_from_the_grant_being_read()
+    {
+        var repo = new FakeRepo();
+        repo.SetRole(FarmA, MukadamA, AppRole.Mukadam);
+
+        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, MukadamA)).Should().BeFalse(
+            "founder master review 2026-09-02 (D5): one switch, owner-controlled — the Mukadam "
+            + "role no longer carries labour authority, and existing Mukadams start OFF");
+        repo.GrantReads.Should().Be(1,
+            "his answer now genuinely depends on the stored grant, so it IS read — a denial "
+            + "without the read would pass identically against code that ignores the switch");
+
+        repo.AddMembership(FarmA, MukadamA, AppRole.Mukadam).SetLabourRecordManagement(true, Now);
+        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, MukadamA)).Should().BeTrue(
+            "the same grant that admits a Worker admits him — one switch, no second permission model");
     }
 
     [Fact]
@@ -148,25 +164,30 @@ public sealed class LabourCapabilityGateTests
     // ═════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// THE Phase 5 regression. Approve/verify used to run
-    /// <c>OwnerRoles = [PrimaryOwner, SecondaryOwner]</c>, so this returned
-    /// Forbidden for a Mukadam while <c>CorrectLabourHandler</c> — same farm,
-    /// same person, same log — allowed them. Founder-approved change.
+    /// Inverted 2026-09-02 (founder master review, D5). O-4 let the role carry
+    /// the labour surface; D5 makes it the owner's switch. An UNGRANTED Mukadam
+    /// is refused at the enforcer — same layer, same predicate as an ungranted
+    /// Worker. DELIBERATE consequence, decided in Task 2.1: OFF also removes
+    /// Draft→Confirmed, because VerifyLogAuthorizer routes every verify_log_v2
+    /// through EnsureCanVerify. The five actions still agree — that is the
+    /// property this fact has always pinned.
     /// </summary>
     [Fact]
-    public async Task A_Mukadam_can_now_approve_and_verify_the_logs_they_already_could_correct()
+    public async Task An_ungranted_Mukadam_is_refused_by_the_enforcer_and_a_granted_one_is_admitted()
     {
         var repo = new FakeRepo();
         repo.SetRole(FarmA, MukadamA, AppRole.Mukadam);
         var log = NewLog(FarmA, MukadamA);
         repo.AddLog(log);
-
         var enforcer = new ShramSafalAuthorizationEnforcer(repo, new TenantContext());
 
+        (await enforcer.EnsureCanVerify(new UserId(MukadamA), log.Id)).IsSuccess.Should().BeFalse(
+            "an ungranted foreman cannot sign off his own day — and the refusal now happens one "
+            + "layer earlier, at the shared gate, exactly as for an ungranted Worker");
+
+        repo.AddMembership(FarmA, MukadamA, AppRole.Mukadam).SetLabourRecordManagement(true, Now);
         (await enforcer.EnsureCanVerify(new UserId(MukadamA), log.Id)).IsSuccess.Should().BeTrue(
-            "the Mukadam is the person in the field doing the verification; excluding them from "
-            + "approve/verify while permitting them to rewrite the same log's headcount was a "
-            + "contradiction, and O-4 closed it");
+            "the owner's switch is the one thing that changes the answer");
     }
 
     [Fact]
@@ -308,27 +329,41 @@ public sealed class LabourCapabilityGateTests
     }
 
     /// <summary>
-    /// The P5 guard. Storing <c>false</c> for a Mukadam would leave the owner
-    /// looking at a switch that did not work, because the role carries the
-    /// capability regardless.
+    /// The P5 guard on owner-tier, PLUS the Mukadam round-trip — the founder's
+    /// sentence made executable. Storing <c>false</c> for a co-owner would
+    /// leave the owner looking at a switch that did not work, because the role
+    /// carries the capability regardless; a Mukadam's switch is real now (D5).
     /// </summary>
     [Fact]
-    public async Task Toggling_the_grant_on_a_role_that_already_carries_it_is_refused_not_silently_stored()
+    public async Task Toggling_owner_tier_is_refused_and_a_Mukadam_toggle_now_works()
     {
         var repo = new FakeRepo();
         repo.SetRole(FarmA, OwnerA, AppRole.PrimaryOwner);
-        var membership = repo.AddMembership(FarmA, MukadamA, AppRole.Mukadam);
+        repo.AddMembership(FarmA, OwnerA, AppRole.PrimaryOwner);
+        var coOwner = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        var coOwnerMembership = repo.AddMembership(FarmA, coOwner, AppRole.SecondaryOwner);
+        var mukadam = repo.AddMembership(FarmA, MukadamA, AppRole.Mukadam);
         var handler = new SetLabourPermissionHandler(repo, new FixedClock(Now));
 
-        var result = await handler.HandleAsync(Set(FarmA, MukadamA, false, OwnerA));
+        // Owner-tier: the P5 refusal survives — that role genuinely carries it.
+        var refused = await handler.HandleAsync(Set(FarmA, coOwner, false, OwnerA));
+        refused.IsFailure.Should().BeTrue();
+        refused.Error.Code.Should().Be("ShramSafal.LabourManagementCarriedByRole");
+        coOwnerMembership.CanManageLabourRecords.Should().BeFalse("nothing was stored");
 
-        result.IsFailure.Should().BeTrue();
-        result.Error.Code.Should().Be("ShramSafal.LabourManagementCarriedByRole");
-        membership.CanManageLabourRecords.Should().BeFalse("nothing was stored");
-        repo.SaveCalls.Should().Be(0);
+        // Mukadam: the refusal is GONE — this is the owner's switch now (D5).
+        var granted = await handler.HandleAsync(Set(FarmA, MukadamA, true, OwnerA));
+        granted.IsSuccess.Should().BeTrue();
+        granted.Value!.Source.Should().Be("ExplicitGrant");
+        granted.Value!.IsGrantEditable.Should().BeTrue();
+        mukadam.CanManageLabourRecords.Should().BeTrue();
 
-        // ...and the Mukadam is still allowed, which is the point.
-        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, MukadamA)).Should().BeTrue();
+        var revoked = await handler.HandleAsync(Set(FarmA, MukadamA, false, OwnerA));
+        revoked.IsSuccess.Should().BeTrue(
+            "'the owner may keep him as mukadam with the authority OFF' — the exact sentence "
+            + "the shipped code made impossible");
+        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, MukadamA)).Should().BeFalse(
+            "denied by the gate, not merely hidden in a UI");
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -355,10 +390,11 @@ public sealed class LabourCapabilityGateTests
         rows[OwnerA].CanManageLabourRecords.Should().BeTrue();
         rows[OwnerA].IsGrantEditable.Should().BeFalse();
 
-        rows[MukadamA].Source.Should().Be("MukadamDefault");
-        rows[MukadamA].CanManageLabourRecords.Should().BeTrue();
-        rows[MukadamA].IsGrantEditable.Should().BeFalse(
-            "a switch the server will refuse to move must not render as interactive — P5");
+        rows[MukadamA].Source.Should().Be("NotGranted");
+        rows[MukadamA].CanManageLabourRecords.Should().BeFalse();
+        rows[MukadamA].IsGrantEditable.Should().BeTrue(
+            "the switch is real for a Mukadam now — the server will honour a move, so it must "
+            + "render interactive");
         rows[MukadamA].HasExplicitGrant.Should().BeFalse();
 
         rows[WorkerA].Source.Should().Be("ExplicitGrant");

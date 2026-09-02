@@ -54,6 +54,7 @@ public sealed class AttachFieldOperatorHandlerTests
     {
         var repo = new FakeRepo();
         repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
+        repo.GrantLabour(FarmAGuid, CallerGuid); // D5 2026-09-02: the acting foreman is GRANTED — role alone no longer admits
         var op = MakeOperator(Guid.NewGuid(), FarmAGuid);
         repo.SeedOperator(op);
         var handler = BuildHandler(repo);
@@ -74,6 +75,7 @@ public sealed class AttachFieldOperatorHandlerTests
         // FarmId is FarmB while the request established FarmA.
         var repo = new FakeRepo();
         repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
+        repo.GrantLabour(FarmAGuid, CallerGuid); // D5 2026-09-02: the acting foreman is GRANTED — role alone no longer admits
         var log = MakeLog(Guid.NewGuid(), FarmBGuid, new DateOnly(2026, 8, 10));
         var assignment = MakeAssignment(Guid.NewGuid(), log.Id);
         var op = MakeOperator(Guid.NewGuid(), FarmAGuid);
@@ -95,6 +97,7 @@ public sealed class AttachFieldOperatorHandlerTests
     {
         var repo = new FakeRepo();
         repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
+        repo.GrantLabour(FarmAGuid, CallerGuid); // D5 2026-09-02: the acting foreman is GRANTED — role alone no longer admits
         var log = MakeLog(Guid.NewGuid(), FarmAGuid, new DateOnly(2026, 8, 10));
         var assignment = MakeAssignment(Guid.NewGuid(), log.Id);
         repo.SeedLog(log);
@@ -116,6 +119,7 @@ public sealed class AttachFieldOperatorHandlerTests
         // makes the row loadable, but OriginatingFarmId is FarmB.
         var repo = new FakeRepo();
         repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
+        repo.GrantLabour(FarmAGuid, CallerGuid); // D5 2026-09-02: the acting foreman is GRANTED — role alone no longer admits
         var log = MakeLog(Guid.NewGuid(), FarmAGuid, new DateOnly(2026, 8, 10));
         var assignment = MakeAssignment(Guid.NewGuid(), log.Id);
         var op = MakeOperator(Guid.NewGuid(), FarmBGuid);
@@ -137,6 +141,7 @@ public sealed class AttachFieldOperatorHandlerTests
     {
         var repo = new FakeRepo();
         repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
+        repo.GrantLabour(FarmAGuid, CallerGuid); // D5 2026-09-02: the acting foreman is GRANTED — role alone no longer admits
         var logDate = new DateOnly(2026, 8, 10);
         var log = MakeLog(Guid.NewGuid(), FarmAGuid, logDate);
         var assignment = MakeAssignment(Guid.NewGuid(), log.Id);
@@ -166,6 +171,7 @@ public sealed class AttachFieldOperatorHandlerTests
     {
         var repo = new FakeRepo();
         repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
+        repo.GrantLabour(FarmAGuid, CallerGuid); // D5 2026-09-02: the acting foreman is GRANTED — role alone no longer admits
         var log = MakeLog(Guid.NewGuid(), FarmAGuid, new DateOnly(2026, 8, 10));
         var assignment = MakeAssignment(Guid.NewGuid(), log.Id);
         var op = MakeOperator(Guid.NewGuid(), FarmAGuid);
@@ -233,6 +239,7 @@ public sealed class AttachFieldOperatorHandlerTests
         private readonly Dictionary<Guid, LabourAssignment> _assignments = new();
         private readonly Dictionary<Guid, FieldOperator> _operators = new();
         private readonly Dictionary<(Guid farmId, Guid userId), AppRole> _roles = new();
+        private readonly HashSet<(Guid farmId, Guid userId)> _labourGrants = [];
 
         public List<FieldOperatorWorkRow> InsertedRows { get; } = [];
         public int WorkRowInsertAttempts { get; private set; }
@@ -242,9 +249,13 @@ public sealed class AttachFieldOperatorHandlerTests
         public void SeedAssignment(LabourAssignment a) => _assignments[a.Id] = a;
         public void SeedOperator(FieldOperator o) => _operators[o.Id] = o;
         public void SetRole(Guid farmId, Guid userId, AppRole role) => _roles[(farmId, userId)] = role;
+        public void GrantLabour(Guid farmId, Guid userId) => _labourGrants.Add((farmId, userId));
 
         public override Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
             => Task.FromResult(_roles.TryGetValue((farmId, userId), out var role) ? (AppRole?)role : null);
+
+        public override Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+            => Task.FromResult(_labourGrants.Contains((farmId, userId)));
 
         public override Task<DailyLog?> GetDailyLogByIdAsync(Guid dailyLogId, CancellationToken ct = default)
             => Task.FromResult(_logs.TryGetValue(dailyLogId, out var log) ? log : null);

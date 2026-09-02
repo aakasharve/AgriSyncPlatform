@@ -53,6 +53,7 @@ public sealed class RenameFieldOperatorHandlerTests
     {
         var repo = new FakeRepo();
         repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
+        repo.GrantLabour(FarmAGuid, CallerGuid); // D5 2026-09-02: the acting foreman is GRANTED — role alone no longer admits
         var handler = BuildHandler(repo);
 
         var result = await handler.HandleAsync(new RenameFieldOperatorCommand(
@@ -68,6 +69,7 @@ public sealed class RenameFieldOperatorHandlerTests
     {
         var repo = new FakeRepo();
         repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
+        repo.GrantLabour(FarmAGuid, CallerGuid); // D5 2026-09-02: the acting foreman is GRANTED — role alone no longer admits
         var op = MakeOperator(Guid.NewGuid(), FarmBGuid, "बाळू");
         repo.Seed(op);
         var handler = BuildHandler(repo);
@@ -86,6 +88,7 @@ public sealed class RenameFieldOperatorHandlerTests
     {
         var repo = new FakeRepo();
         repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
+        repo.GrantLabour(FarmAGuid, CallerGuid); // D5 2026-09-02: the acting foreman is GRANTED — role alone no longer admits
         var op = MakeOperator(Guid.NewGuid(), FarmAGuid, "बाळू");
         repo.Seed(op);
         var handler = BuildHandler(repo);
@@ -136,14 +139,19 @@ public sealed class RenameFieldOperatorHandlerTests
     {
         private readonly Dictionary<Guid, FieldOperator> _operators = new();
         private readonly Dictionary<(Guid farmId, Guid userId), AppRole> _roles = new();
+        private readonly HashSet<(Guid farmId, Guid userId)> _labourGrants = [];
 
         public int SaveCalls { get; private set; }
 
         public void Seed(FieldOperator o) => _operators[o.Id] = o;
         public void SetRole(Guid farmId, Guid userId, AppRole role) => _roles[(farmId, userId)] = role;
+        public void GrantLabour(Guid farmId, Guid userId) => _labourGrants.Add((farmId, userId));
 
         public override Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
             => Task.FromResult(_roles.TryGetValue((farmId, userId), out var role) ? (AppRole?)role : null);
+
+        public override Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+            => Task.FromResult(_labourGrants.Contains((farmId, userId)));
 
         public override Task<FieldOperator?> GetFieldOperatorByIdAsync(Guid id, CancellationToken ct = default)
             => Task.FromResult(_operators.TryGetValue(id, out var o) ? o : null);

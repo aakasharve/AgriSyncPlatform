@@ -62,6 +62,7 @@ public sealed class LabourPermissionEndpointTests
     private static readonly Guid OwnerUserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid WorkerUserId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid MukadamUserId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+    private static readonly Guid CoOwnerUserId = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
     [Fact]
     public async Task Owner_grants_a_worker_over_HTTP_and_the_roster_read_reports_it()
@@ -150,12 +151,12 @@ public sealed class LabourPermissionEndpointTests
     }
 
     /// <summary>
-    /// The P5 guard at the wire. A 409 with a NAMED code is what lets the UI
-    /// render those members as permanently-on instead of shipping a switch that
-    /// silently does nothing.
+    /// Inverted 2026-09-02 (D5): a Mukadam's switch is real at the wire now.
+    /// The P5 409 survives for owner-tier only (pinned by the sibling fact
+    /// below).
     /// </summary>
     [Fact]
-    public async Task Toggling_a_Mukadam_gets_409_with_a_code_the_client_can_branch_on()
+    public async Task Switching_a_Mukadam_lands_and_the_roster_reports_an_editable_switch()
     {
         await using var harness = await TestHarness.CreateAsync();
         var farmId = Guid.NewGuid();
@@ -164,6 +165,37 @@ public sealed class LabourPermissionEndpointTests
 
         var response = await harness.Client.PutAsJsonAsync(
             $"/shramsafal/farms/{farmId}/labour-permissions/{MukadamUserId}",
+            new { canManageLabourRecords = true });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(doc.RootElement.GetProperty("canManageLabourRecords").GetBoolean());
+        Assert.Equal("ExplicitGrant", doc.RootElement.GetProperty("source").GetString());
+
+        var get = await harness.Client.GetAsync($"/shramsafal/farms/{farmId}/labour-permissions");
+        using var roster = JsonDocument.Parse(await get.Content.ReadAsStringAsync());
+        var mukadam = FindMember(roster.RootElement, MukadamUserId);
+        Assert.True(mukadam.GetProperty("canManageLabourRecords").GetBoolean());
+        Assert.True(mukadam.GetProperty("isGrantEditable").GetBoolean());
+        Assert.Equal("ExplicitGrant", mukadam.GetProperty("source").GetString());
+    }
+
+    /// <summary>
+    /// The P5 guard at the wire, owner-tier edition — the pin the inverted fact
+    /// above may not lose. A 409 with a NAMED code is what lets the UI render
+    /// those members as permanently-on instead of shipping a switch that
+    /// silently does nothing.
+    /// </summary>
+    [Fact]
+    public async Task Toggling_a_SecondaryOwner_gets_409_with_a_code_the_client_can_branch_on()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        await PushCreateFarmAsync(harness.Client, "device-perm-5", "req-perm-5", farmId, "Permission Farm 5");
+        await harness.SeedFarmMembershipAsync(farmId, CoOwnerUserId, AppRole.SecondaryOwner);
+
+        var response = await harness.Client.PutAsJsonAsync(
+            $"/shramsafal/farms/{farmId}/labour-permissions/{CoOwnerUserId}",
             new { canManageLabourRecords = false });
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
@@ -172,14 +204,14 @@ public sealed class LabourPermissionEndpointTests
             "ShramSafal.LabourManagementCarriedByRole",
             doc.RootElement.GetProperty("error").GetString());
 
-        // The roster still says the Mukadam is allowed, and that the switch
+        // The roster still says the co-owner is allowed, and that the switch
         // must not be interactive.
         var get = await harness.Client.GetAsync($"/shramsafal/farms/{farmId}/labour-permissions");
         using var roster = JsonDocument.Parse(await get.Content.ReadAsStringAsync());
-        var mukadam = FindMember(roster.RootElement, MukadamUserId);
-        Assert.True(mukadam.GetProperty("canManageLabourRecords").GetBoolean());
-        Assert.False(mukadam.GetProperty("isGrantEditable").GetBoolean());
-        Assert.Equal("MukadamDefault", mukadam.GetProperty("source").GetString());
+        var coOwner = FindMember(roster.RootElement, CoOwnerUserId);
+        Assert.True(coOwner.GetProperty("canManageLabourRecords").GetBoolean());
+        Assert.False(coOwner.GetProperty("isGrantEditable").GetBoolean());
+        Assert.Equal("OwnerTier", coOwner.GetProperty("source").GetString());
     }
 
     // ─────────────────────────────────────────────────────────────────────────

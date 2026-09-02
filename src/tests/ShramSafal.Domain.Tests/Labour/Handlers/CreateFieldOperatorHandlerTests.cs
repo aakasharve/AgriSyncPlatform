@@ -34,6 +34,7 @@ public sealed class CreateFieldOperatorHandlerTests
     {
         var repo = new FakeRepo();
         repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
+        repo.GrantLabour(FarmAGuid, CallerGuid); // D5 2026-09-02: the acting foreman is GRANTED — role alone no longer admits
         var handler = BuildHandler(repo);
 
         var result = await handler.HandleAsync(new CreateFieldOperatorCommand(
@@ -63,6 +64,7 @@ public sealed class CreateFieldOperatorHandlerTests
     {
         var repo = new FakeRepo();
         repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
+        repo.GrantLabour(FarmAGuid, CallerGuid); // D5 2026-09-02: the acting foreman is GRANTED — role alone no longer admits
         var handler = BuildHandler(repo);
 
         var result = await handler.HandleAsync(new CreateFieldOperatorCommand(
@@ -87,11 +89,12 @@ public sealed class CreateFieldOperatorHandlerTests
     /// a convenience.</b> Until O-4 (2026-08-12) this handler admitted ANY member
     /// ("<c>callerRole is null</c>"), so a Worker could mint a work identity. The
     /// five governed labour actions now share one predicate — owner-tier always,
-    /// Mukadam by default, any other role only when the owner has explicitly
-    /// granted it — so a bare Worker is Forbidden here. The claim this test
-    /// exists for is untouched: the caller still holds TWO memberships with
-    /// DIFFERENT roles, and the operator must still originate on the farm the
-    /// REQUEST named. (A Worker who HAS been granted is covered separately in
+    /// any other role (Mukadam included, since D5 2026-09-02) only when the owner
+    /// has explicitly granted it — so a bare Worker is Forbidden here and the
+    /// Mukadam below carries the owner's grant. The claim this test exists for is
+    /// untouched: the caller still holds TWO memberships with DIFFERENT roles,
+    /// and the operator must still originate on the farm the REQUEST named. (A
+    /// Worker who HAS been granted is covered separately in
     /// <c>LabourCapabilityGateTests</c>.)</para>
     /// </summary>
     [Fact]
@@ -100,6 +103,7 @@ public sealed class CreateFieldOperatorHandlerTests
         var repo = new FakeRepo();
         repo.SetRole(FarmAGuid, CallerGuid, AppRole.PrimaryOwner);
         repo.SetRole(FarmBGuid, CallerGuid, AppRole.Mukadam);
+        repo.GrantLabour(FarmBGuid, CallerGuid); // D5 2026-09-02: granted on Farm B, where the request acts
         var handler = BuildHandler(repo);
 
         var result = await handler.HandleAsync(new CreateFieldOperatorCommand(
@@ -128,14 +132,19 @@ public sealed class CreateFieldOperatorHandlerTests
     private sealed class FakeRepo : StubShramSafalRepository
     {
         private readonly Dictionary<(Guid farmId, Guid userId), AppRole> _roles = new();
+        private readonly HashSet<(Guid farmId, Guid userId)> _labourGrants = [];
 
         public List<FieldOperator> Saved { get; } = [];
         public int SaveCalls { get; private set; }
 
         public void SetRole(Guid farmId, Guid userId, AppRole role) => _roles[(farmId, userId)] = role;
+        public void GrantLabour(Guid farmId, Guid userId) => _labourGrants.Add((farmId, userId));
 
         public override Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
             => Task.FromResult(_roles.TryGetValue((farmId, userId), out var role) ? (AppRole?)role : null);
+
+        public override Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+            => Task.FromResult(_labourGrants.Contains((farmId, userId)));
 
         public override Task AddFieldOperatorAsync(FieldOperator o, CancellationToken ct = default)
         {

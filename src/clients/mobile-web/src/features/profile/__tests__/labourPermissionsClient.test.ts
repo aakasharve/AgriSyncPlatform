@@ -46,8 +46,8 @@ const roster = (): LabourPermission[] => [
     },
     {
         userId: 'user-mukadam', role: 'Mukadam', status: 'Active',
-        canManageLabourRecords: true, hasExplicitGrant: false,
-        source: 'MukadamDefault', isGrantEditable: false,
+        canManageLabourRecords: false, hasExplicitGrant: false,
+        source: 'NotGranted', isGrantEditable: true,
     },
     {
         userId: 'user-worker', role: 'Worker', status: 'Active',
@@ -80,11 +80,12 @@ describe('fetchLabourPermissions', () => {
 
         // `isGrantEditable: false` is what makes a role-carried switch render
         // permanently on and non-interactive. Dropping it in a mapper would
-        // silently restore the mock behaviour.
+        // silently restore the mock behaviour. Since 2026-09-02 (D5) only
+        // owner-tier is role-carried — a Mukadam's switch is real and editable.
         expect(rows.find(r => r.userId === 'user-mukadam')).toMatchObject({
-            canManageLabourRecords: true,
-            isGrantEditable: false,
-            source: 'MukadamDefault',
+            canManageLabourRecords: false,
+            isGrantEditable: true,
+            source: 'NotGranted',
         });
         expect(rows.find(r => r.userId === 'user-worker')).toMatchObject({
             canManageLabourRecords: false,

@@ -30,7 +30,6 @@ internal static class LabourPermissionProjection
         {
             AgriSync.SharedKernel.Contracts.Roles.AppRole.PrimaryOwner
                 or AgriSync.SharedKernel.Contracts.Roles.AppRole.SecondaryOwner => "OwnerTier",
-            AgriSync.SharedKernel.Contracts.Roles.AppRole.Mukadam => "MukadamDefault",
             _ => hasExplicitGrant ? "ExplicitGrant" : "NotGranted",
         };
 

@@ -109,6 +109,10 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
     /// </code>
     /// <para>Same code, same role, same mutation; the stored flag is the only input
     /// that moved. That is the evidence the rule is permission-gated.</para>
+    /// <para><b>Update 2026-09-02 (D5):</b> the <c>grant = false</c> refusal now
+    /// lands one layer earlier, at the enforcer's shared gate, and its code is
+    /// <c>ShramSafal.Forbidden</c> — see proofs 2 and 3. The two-way mutation
+    /// evidence above is true history of the 2026-08-27 measurement.</para>
     /// </summary>
     private const bool GrantsLabourManagementToTheGrantedMukadam = true;
 
@@ -332,54 +336,17 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
 
         result.Status.Should().Be("failed",
             "a foreman approving his own work is the single thing the approval model exists to prevent");
-        // ── 2026-08-27: THE CODE MOVED. THE REFUSAL DID NOT. ────────────────────
-        // This asserted "ShramSafal.Forbidden" until the Wave-1 merge, and the old
-        // expectation encoded a MEMBERSHIP MODEL that Wave 1 replaced — it was never
-        // describing this scenario accurately.
-        //
-        // Then: ShramSafalAuthorizationEnforcer.EnsureCanVerify held a PRIVATE
-        // OwnerRoles = [PrimaryOwner, SecondaryOwner] set. A Mukadam failed that gate
-        // and never reached the FSM, so the pipeline answered Forbidden.
-        //
-        // Now: founder decision O-4 (LABOUR_PHASE2 Phase 5, 2026-08-13) deleted that
-        // private list and pointed EnsureCanVerify at LabourManagementGate, which
-        // carries the Mukadam by role (LabourManagementPermission.IsCarriedByRole).
-        // The Mukadam therefore PASSES the enforcer now and is refused one layer
-        // deeper, by VerificationStateMachine: Confirmed -> Verified is held by
-        // [PrimaryOwner, SecondaryOwner, Agronomist, FpcTechnicalManager] and by
-        // nobody else, so DailyLog.VerifyReachingTarget throws before it constructs
-        // a single VerificationEvent and the handler maps that to this code.
-        //
-        // NOTHING WAS WIDENED. The assertions below this line are the ones that say
-        // so, and they are unchanged: the log is still Draft and the ledger is still
-        // EMPTY. A Mukadam self-approving is still impossible; only the sentence the
-        // server uses to say no got more accurate.
-        result.ErrorCode.Should().Be("ShramSafal.VerificationTransitionNotAllowedForRole",
-            "the FSM, not the enforcer, is now the layer that refuses him — and it refuses him " +
-            "for the true reason: he holds no Confirmed->Verified edge");
+        // ── 2026-09-02: THE LAYER MOVED AGAIN. THE REFUSAL STILL DID NOT. ──────
+        // D5 removed the Mukadam from the role-carried set, so an ungranted
+        // Mukadam is now refused one layer EARLIER — by
+        // ShramSafalAuthorizationEnforcer.EnsureCanVerify on
+        // LabourManagementGate.IsAllowedAsync — before the FSM is consulted.
+        // "Forbidden" here means "no labour responsibility on this farm", and it
+        // is in the client's PERMANENT_REJECTION_CODES (RejectionPolicy.ts), so
+        // the device parks it for user review instead of retry-looping.
+        result.ErrorCode.Should().Be("ShramSafal.Forbidden");
 
-        // ── OPEN, AND NOT MINE TO CLOSE: the DEVICE no longer parks this refusal. ──
-        // The expectation this replaced carried a true statement that the code change
-        // has now falsified, and deleting it silently would be the papering-over this
-        // gate exists to prevent, so it is recorded here instead of dropped.
-        //
-        // RejectionPolicy.ts (mobile-web) classifies by the code's tail, upper-cased:
-        // "ShramSafal.Forbidden" -> FORBIDDEN, which is in PERMANENT_REJECTION_CODES,
-        // so the row went straight to REJECTED_USER_REVIEW and surfaced on
-        // OfflineConflictPage. "ShramSafal.VerificationTransitionNotAllowedForRole"
-        // -> VERIFICATIONTRANSITIONNOTALLOWEDFORROLE, which is in NO list, and the
-        // message "Transition not allowed for role." contains no permanent code as a
-        // substring either — so categorizeRejection falls through to RETRYABLE. The
-        // refused approval is then re-pushed every 15 s until the cap, and parks in
-        // FAILED, which ConflictResolutionService.list() does not read. That is the
-        // exact invisible-failure shape the P0.6 note in RejectionPolicy.ts describes,
-        // re-created by a different code.
-        //
-        // The SERVER is correct and is not the place to fix this — emitting
-        // "Forbidden" again to please a client list would throw away the accurate
-        // reason. The fix is one entry in PERMANENT_REJECTION_CODES, which lives under
-        // src/clients/** and belongs to implementor-frontend. Until it lands, this is a
-        // device-visible regression, not a cosmetic one.
+        // resolved 2026-09-02: the emitted code is Forbidden, which RejectionPolicy already parks.
 
         var pulled = await PullDailyLogAsync(MukadamUserId, dailyLogId);
         pulled.LastVerificationStatus.Should().Be("Draft",
@@ -418,12 +385,15 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
         result.Status.Should().Be("failed",
             "'a second pair of eyes' is not the rule — the rule is owner-tier eyes. Two foremen covering for " +
             "each other is the failure mode this farm hires an owner to prevent");
-        // Same layer move as proof 2 — see the long note there. A peer Mukadam is a
-        // MEMBER of this farm, so "Forbidden" (which on the sync path means "no
-        // membership at all") was never the semantically right answer for him; it was
-        // an artefact of the enforcer's old owner-only list. The proof that matters is
-        // the pair of assertions underneath: Draft, and no events.
-        result.ErrorCode.Should().Be("ShramSafal.VerificationTransitionNotAllowedForRole");
+        // ── 2026-09-02: THE LAYER MOVED AGAIN. THE REFUSAL STILL DID NOT. ──────
+        // D5 removed the Mukadam from the role-carried set, so an ungranted
+        // Mukadam is now refused one layer EARLIER — by
+        // ShramSafalAuthorizationEnforcer.EnsureCanVerify on
+        // LabourManagementGate.IsAllowedAsync — before the FSM is consulted.
+        // "Forbidden" here means "no labour responsibility on this farm", and it
+        // is in the client's PERMANENT_REJECTION_CODES (RejectionPolicy.ts), so
+        // the device parks it for user review instead of retry-looping.
+        result.ErrorCode.Should().Be("ShramSafal.Forbidden");
 
         var pulled = await PullDailyLogAsync(OwnerUserId, dailyLogId);
         pulled.LastVerificationStatus.Should().Be("Draft");

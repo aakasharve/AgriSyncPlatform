@@ -4,21 +4,27 @@ namespace ShramSafal.Domain.Farms;
 
 /// <summary>
 /// LABOUR_PHASE2 Phase 5 — <b>THE</b> rule for who may rewrite labour truth on
-/// a farm. Founder decision O-4, 2026-08-12:
+/// a farm:
 ///
 /// <code>
-/// PrimaryOwner / SecondaryOwner  -> always allowed
-/// Mukadam                        -> allowed by default (field verification IS the role)
-/// any other role                 -> allowed ONLY if explicitly granted
-/// not a member                   -> denied
+/// PrimaryOwner / SecondaryOwner        -> always allowed
+/// any other role — Mukadam included    -> allowed ONLY if explicitly granted
+/// not a member                         -> denied
 /// </code>
 ///
-/// <para><b>Scope, stated precisely — founder ruling 2026-08-27.</b> The table above
-/// governs the four labour-EDIT actions. APPROVING a log is a fifth action and does
-/// NOT read this table: <c>VerificationStateMachine</c> owns that edge and takes
-/// owner-tier OR the explicit grant, so a Mukadam approves only when the owner has
-/// given him that access. See <see cref="IsCarriedByRole"/> for why the two must not
-/// be collapsed back into one answer.</para>
+/// <para><b>SUPERSESSION, 2026-09-02 (founder master review, D5).</b> O-4 placed
+/// Mukadam in the carried set; D5 removes him: ONE owner-held switch
+/// ("जबाबदारी"), optionally time-bounded, governs every non-owner — a Mukadam
+/// included. Existing Mukadams start OFF; there is NO backfill — the deletion
+/// of the role carry IS the migration behaviour. History made while authorised
+/// is untouched: expiry and revocation deny forward, never rewrite backward.</para>
+///
+/// <para><b>Scope.</b> The table governs all five labour actions: the enforcer
+/// asks it (via <c>LabourManagementGate</c>) for the four labour-EDIT actions
+/// AND for approve/verify. <c>VerificationStateMachine</c> remains the second
+/// lock on the <c>Confirmed → Verified</c> edge — it takes owner-tier OR the
+/// STORED grant, never <see cref="IsCarriedByRole"/> — so a Mukadam approves
+/// only when the owner has given him that access (founder ruling 2026-08-27).</para>
 ///
 /// <para><b>Why this type exists at all.</b> Before Phase 5 the five governed
 /// actions obeyed THREE different rules: creating / renaming / attaching a
@@ -50,10 +56,10 @@ public static class LabourManagementPermission
     /// explicit grant required and no way for an owner to take it away short of
     /// changing the role itself.
     ///
-    /// <para><see cref="AppRole.Mukadam"/> is in this set BY FOUNDER DECISION
-    /// (O-4), and it genuinely changed the four labour-EDIT actions: correcting a
-    /// headcount, correcting a duration, changing attribution, and managing
-    /// FieldOperator identity.</para>
+    /// <para><b>Owner-tier only</b> (founder master review 2026-09-02, D5). For
+    /// every other role — Mukadam included — the stored
+    /// <c>can_manage_labour_records</c> grant (plus its expiry, Task 2.2) is the
+    /// whole answer, for all five governed actions.</para>
     ///
     /// <para><b>CORRECTION, 2026-08-27 — this comment used to claim more than the
     /// code did.</b> It said O-4 "closed" the contradiction that a Mukadam could
@@ -66,24 +72,16 @@ public static class LabourManagementPermission
     /// denial that passes for the wrong reason looks exactly like one that passes for
     /// the right one.</para>
     ///
-    /// <para><b>What is true now.</b> Founder ruling 2026-08-27, verbatim:
-    /// <i>"if the owner has given that access to him then yes"</i> — approval is
-    /// PERMISSION-gated, not role-gated. So:</para>
-    /// <code>
-    /// the four labour-EDIT actions  -> this set applies; a Mukadam needs no grant
-    /// approving a log (Confirmed->Verified) -> owner-tier, OR the EXPLICIT
-    ///                                          can_manage_labour_records grant
-    /// </code>
-    /// <para>An UNGRANTED Mukadam still cannot approve, and that is the ruling
-    /// working as intended rather than a leftover of the old bug — it is what stops a
-    /// foreman signing off his own day. The verification FSM therefore takes the
-    /// STORED grant flag, never <see cref="IsCarriedByRole"/>: feeding this predicate
-    /// to it would restore role-gating and hand the edge to every Mukadam on every
-    /// farm. Proofs: <c>OwnerCanApproveAMukadamsLogRealPostgresTests</c> — one
-    /// granted Mukadam approves, three ungranted callers are refused.</para>
+    /// <para>Founder ruling 2026-08-27, verbatim: <i>"if the owner has given that
+    /// access to him then yes"</i> — approval is PERMISSION-gated, not role-gated.
+    /// The verification FSM therefore takes the STORED grant flag, never
+    /// <see cref="IsCarriedByRole"/>: feeding this predicate to it would hand the
+    /// edge to owner-tier only and ignore a genuine grant. Proofs:
+    /// <c>OwnerCanApproveAMukadamsLogRealPostgresTests</c> — one granted Mukadam
+    /// approves, three ungranted callers are refused.</para>
     /// </summary>
     public static bool IsCarriedByRole(AppRole role) =>
-        role is AppRole.PrimaryOwner or AppRole.SecondaryOwner or AppRole.Mukadam;
+        role is AppRole.PrimaryOwner or AppRole.SecondaryOwner;
 
     /// <summary>
     /// The effective decision. <paramref name="role"/> is <c>null</c> when the
@@ -96,7 +94,7 @@ public static class LabourManagementPermission
 
     /// <summary>
     /// Who may hand the capability to someone else, or take it back: owner-tier
-    /// only. A Mukadam holds the capability but cannot spread it — O-4 says
+    /// only. Even a member the owner granted cannot spread it — O-4 says
     /// <i>"the owner decides who is trusted."</i>
     /// </summary>
     public static bool CanGrantOrRevoke(AppRole? role) =>
@@ -107,12 +105,13 @@ public static class LabourManagementPermission
     /// nothing, because the role already carries the capability.
     ///
     /// <para><b>This is a P5 guard, not a micro-optimisation.</b> An owner
-    /// switching "approve entries" OFF for a Mukadam would store
-    /// <c>can_manage_labour_records = false</c> and the Mukadam would carry
-    /// right on approving — a control that looks functional and does nothing.
-    /// The handler rejects that request with a distinct error instead, so the
-    /// UI is forced to render those members as permanently-on rather than as an
-    /// interactive switch that lies.</para>
+    /// switching the responsibility OFF for a SecondaryOwner would store
+    /// <c>false</c> and the co-owner would carry right on — a control that looks
+    /// functional and does nothing. The handler rejects that request with a
+    /// distinct error instead, so the UI is forced to render those members as
+    /// permanently-on rather than as an interactive switch that lies. A Mukadam
+    /// is NOT a redundant target any more — his switch is real (D5,
+    /// 2026-09-02).</para>
     /// </summary>
     public static bool IsRedundantGrantTarget(AppRole role) => IsCarriedByRole(role);
 }

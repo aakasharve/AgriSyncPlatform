@@ -68,10 +68,10 @@ public sealed class FarmMembership : Entity<Guid>
     /// <para><b>This is not the whole rule and must never be read as if it
     /// were.</b> The effective decision is
     /// <see cref="LabourManagementPermission.IsAllowed"/>: owner-tier is always
-    /// allowed and a <see cref="AppRole.Mukadam"/> is allowed by default, so
-    /// for those roles this flag is IRRELEVANT and stays <c>false</c>. Reading
-    /// this property alone would deny the two roles that are always permitted.
-    /// </para>
+    /// allowed, so for those two roles this flag is irrelevant and stays
+    /// <c>false</c>; for every other role — Mukadam included (D5, 2026-09-02) —
+    /// this flag IS the decision. Reading this property alone would deny the
+    /// two roles that are always permitted.</para>
     ///
     /// <para>Default <c>false</c>: a member gains nothing until an owner says
     /// so. That is also why the column ships <c>NOT NULL DEFAULT false</c> —

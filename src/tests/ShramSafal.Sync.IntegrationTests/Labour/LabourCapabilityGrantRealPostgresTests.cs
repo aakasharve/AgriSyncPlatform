@@ -360,22 +360,25 @@ public sealed class LabourCapabilityGrantRealPostgresTests(Xunit.Abstractions.IT
 
         var spread = await SetPermissionAsync(FarmA, mukadam, WorkerBoth, true);
         spread.IsFailure.Should().BeTrue(
-            "a Mukadam HOLDS the capability but may not spread it — O-4: 'the owner decides who is trusted'");
+            "granting is owner-tier only, whatever capability the caller holds — O-4: 'the owner "
+            + "decides who is trusted'");
         spread.Error.Code.Should().Be("ShramSafal.Forbidden");
 
         var (rowA, _) = await ReadGrantRowsAsync();
         rowA.Should().BeFalse("neither refused request wrote anything");
 
-        // And the P5 guard: toggling a role-carried capability is refused, not stored.
-        var redundant = await SetPermissionAsync(FarmA, OwnerA, mukadam, false);
-        redundant.IsFailure.Should().BeTrue();
-        redundant.Error.Code.Should().Be("ShramSafal.LabourManagementCarriedByRole");
-        (await IsAllowedAsync(FarmA, mukadam)).Should().BeTrue("the Mukadam is still allowed, which is the point");
+        // 2026-09-02 (D5): the P5 refusal now protects owner-tier ONLY. A
+        // Mukadam toggle is a real decision. Re-stating OFF on an already-OFF
+        // row converges idempotently and writes no history.
+        var mukadamOff = await SetPermissionAsync(FarmA, OwnerA, mukadam, false);
+        mukadamOff.IsSuccess.Should().BeTrue();
+        (await IsAllowedAsync(FarmA, mukadam)).Should().BeFalse(
+            "an ungranted Mukadam is denied — existing Mukadams start OFF, no backfill (founder ruling)");
 
         output.WriteLine("[EVIDENCE] === who may grant ===");
         output.WriteLine($"[EVIDENCE] self-grant            : {self.Error.Code}");
         output.WriteLine($"[EVIDENCE] mukadam grants another: {spread.Error.Code}");
-        output.WriteLine($"[EVIDENCE] toggle role-carried   : {redundant.Error.Code}");
+        output.WriteLine($"[EVIDENCE] mukadam OFF re-stated : success={mukadamOff.IsSuccess} (D5 — the switch is real, and it converges)");
     }
 
     [Fact]
@@ -428,6 +431,36 @@ public sealed class LabourCapabilityGrantRealPostgresTests(Xunit.Abstractions.IT
             "extra_hours|numeric|4|1|YES",
             "hours_basis|integer|32|0|NO",
             "hours_worked|numeric|4|1|YES");
+    }
+
+    /// <summary>
+    /// FOUNDER RULING (master review 2026-09-02, D5): existing Mukadams start
+    /// OFF, NO backfill — the one-token delete IS the whole migration
+    /// behaviour. Both halves pinned: the pre-existing row is untouched (read
+    /// below the app), and the gate reads that untouched row as OFF.
+    /// </summary>
+    [Fact]
+    public async Task An_existing_Mukadam_row_is_untouched_and_reads_as_OFF_no_backfill()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        var mukadam = Guid.Parse("c9d66666-6666-6666-6666-666666666666");
+        await using (var seed = new NpgsqlConnection(_superuserConn))
+        {
+            await seed.OpenAsync();
+            await SeedMembershipAsync(seed, FarmA, mukadam, AccountA, "Mukadam");
+        }
+
+        await using var read = new NpgsqlConnection(_superuserConn);
+        await read.OpenAsync();
+        var stored = Convert.ToBoolean(await ScalarAsync(read,
+            "SELECT can_manage_labour_records FROM ssf.farm_memberships WHERE farm_id = @f AND user_id = @u",
+            ("f", FarmA), ("u", mukadam)));
+        stored.Should().BeFalse(
+            "no backfill exists, by founder ruling — the row keeps its NOT NULL DEFAULT false");
+
+        (await IsAllowedAsync(FarmA, mukadam)).Should().BeFalse(
+            "the untouched row now MEANS off: an existing Mukadam starts OFF on deploy day");
     }
 
     // ═════════════════════════════════════════════════════════════════════════

@@ -45,8 +45,8 @@ const worker = (over: Partial<LabourPermission> = {}): LabourPermission => ({
 
 const mukadam = (): LabourPermission => ({
     userId: 'user-mukadam', role: 'Mukadam', status: 'Active',
-    canManageLabourRecords: true, hasExplicitGrant: false,
-    source: 'MukadamDefault', isGrantEditable: false,
+    canManageLabourRecords: false, hasExplicitGrant: false,
+    source: 'NotGranted', isGrantEditable: true,
 });
 
 const roster = () => [mukadam(), worker()];
