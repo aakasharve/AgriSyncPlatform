@@ -528,16 +528,23 @@ describe('the ONE gradient: the chart gap hatch (CONTRACT.md §8, added Task 9)'
     expect(css).toMatch(/THE ONE HATCH IN THIS STYLESHEET[\s\S]{0,1600}Do not add a second one/i);
   });
 
-  it('is still the only REPEATING one, now that the ground has three radial', () => {
+  it('is still the only REPEATING one, now that chrome has four radial', () => {
     /*
      * §8 banned gradients outright and the founder's reversal retired that
-     * ban: the luminous page ground is three `radial-gradient` blooms. The
-     * distinction the console actually depends on survived it — the blooms
-     * are CHROME and assert nothing, this hatch is a DATA ENCODING and
+     * ban: the luminous page ground is three `radial-gradient` blooms, and
+     * 2026-09-02 added a fourth — the halo under Home's brand hero. The
+     * distinction the console actually depends on survived all four — they
+     * are CHROME and assert nothing, while this hatch is a DATA ENCODING and
      * asserts that a period was never measured. So the count that matters is
      * the repeating one, and it is still exactly one.
+     *
+     * The exact number is pinned rather than bounded ON PURPOSE. A fifth
+     * gradient should be a decision someone makes and writes down here, not
+     * something that slips in behind a `toBeLessThan`. If you are reading this
+     * because the count went up: say which surface added one and why it is
+     * chrome, then change the number.
      */
-    expect((cssRules.match(/radial-gradient/g) ?? []).length).toBe(3);
+    expect((cssRules.match(/radial-gradient/g) ?? []).length).toBe(4);
     expect((cssRules.match(/repeating-linear-gradient/g) ?? []).length).toBe(1);
   });
 

@@ -70,6 +70,43 @@ describe('the console names itself Shram Safal', () => {
   });
 });
 
+describe('the hero moves, and stops moving when asked to', () => {
+  /**
+   * A console an operator reads all day must not tug at the eye. The hero is
+   * allowed to move for one reason only: the global reduced-motion block
+   * flattens it. If that block is ever narrowed, the animation stops being
+   * acceptable and this test is what says so.
+   */
+  it('flattens every animation under prefers-reduced-motion', () => {
+    const css = read('src/styles/globals.css');
+    const at = css.indexOf('@media (prefers-reduced-motion: reduce)');
+    expect(at, 'the reduced-motion block is gone').toBeGreaterThan(-1);
+    const block = css.slice(at, at + 400);
+    // It must reach EVERY element, not a named list — an animation added later
+    // would otherwise keep running for someone who asked for stillness.
+    expect(block).toMatch(/\*,/);
+    expect(block).toContain('animation-duration: 0.001ms !important');
+  });
+
+  it('the halo sits under the mark and behind no text', () => {
+    // The one property that keeps a decorative tint from becoming a contrast
+    // problem: nothing readable is drawn on top of it.
+    const src = read('src/pages/HomePage.tsx');
+    expect(src).toContain('brand-hero-halo');
+    expect(src).toContain('aria-hidden="true"');
+    expect(src).toMatch(/-z-10/);
+  });
+
+  it('the float is gentle — a hero that travels far is a distraction', () => {
+    const css = read('src/styles/globals.css');
+    const at = css.indexOf('@keyframes brand-float');
+    expect(at).toBeGreaterThan(-1);
+    const frames = css.slice(at, at + 220);
+    const px = Number(/translateY\(-(\d+)px\)/.exec(frames)?.[1] ?? 999);
+    expect(px, 'the hero should drift, not bounce').toBeLessThanOrEqual(14);
+  });
+});
+
 describe('the mark keeps the ground that makes it legible', () => {
   /**
    * `logo-mark.webp` is a GREEN shield with a DARK GREEN outline.

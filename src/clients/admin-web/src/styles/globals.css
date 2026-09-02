@@ -808,6 +808,59 @@ body {
 
 /* An admin who has asked their OS to stop moving things gets a console
    that does not move. One rule, not a per-component opt-in. */
+/* ── A.13  THE BRAND HERO ─────────────────────────────────────────────────
+   Home opens on the lockup, centred, floating over a soft halo.
+
+   THREE THINGS MAKE THIS SAFE RATHER THAN DECORATIVE NOISE:
+
+   1. It moves 10px over 7s. A hero that travels far or fast turns a console
+      an operator reads all day into something that tugs at the eye. The point
+      is that it feels alive, not that you notice it moving.
+
+   2. The halo is a radial tint UNDER the mark, never a fill behind text. It
+      cannot change the contrast of a word, because no word sits on it.
+
+   3. The global `prefers-reduced-motion` block below flattens both animations
+      to 0.001ms. Someone who has asked their machine to stop moving things
+      gets a still hero — the layout is identical, only the motion goes.
+      That rule is the reason this is allowed to exist at all. */
+.brand-hero-halo {
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--color-brand) 16%, transparent) 0%,
+    color-mix(in oklab, var(--color-brand) 6%, transparent) 55%,
+    transparent 100%
+  );
+  animation: brand-halo 7s ease-in-out infinite;
+}
+
+.brand-hero-mark {
+  animation: brand-float 7s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes brand-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes brand-halo {
+  0%,
+  100% {
+    opacity: 0.75;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

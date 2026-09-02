@@ -747,23 +747,29 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* THE MASTHEAD IS THE ASSET ITSELF.
-          `logo-full.webp` (1100x330) is the canonical lockup — the shield and
-          the wordmark drawn together, "Shram" in a green gradient and "Safal"
-          in a blue one, with the swoosh under both. Typed text cannot
-          reproduce it: it is italic, gradient-filled and kerned as artwork.
-          So the founder gets the artwork, not an imitation of it.
+      {/* THE HERO. Home opens on the lockup, centred and floating.
 
-          NO CREAM DISC HERE. That treatment exists because a green shield on a
-          DARK GREEN ground loses its outline (mobile-web's FarmNameBoard). The
-          lockup's own shield carries a white interior and sits on a pale mint
-          bloom, so the hazard does not apply — and boxing the full lockup
-          would crop the wordmark.
+          `logo-full.webp` (1100x330) is the canonical artwork — shield and
+          wordmark drawn together, "Shram" in a green gradient and "Safal" in a
+          blue one. Typed text cannot reproduce it, so the founder gets the
+          artwork rather than an imitation.
 
-          The alt text IS the accessible name. A logotype is exempt from the
-          contrast rule precisely because it is a picture of a name, so the
-          name has to reach a screen reader some other way. */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-line pb-5">
+          NO CREAM DISC HERE. That treatment exists because a bare green shield
+          loses its outline on a dark green ground (mobile-web's FarmNameBoard).
+          This lockup carries its own shield on a pale bloom, and boxing the
+          whole thing would crop the wordmark.
+
+          The alt IS the accessible name: an image of a name is silent, so the
+          name has to reach a screen reader some other way. A logotype is exempt
+          from the contrast rule precisely because it is a picture of a word. */}
+      <header className="relative flex flex-col items-center gap-4 pt-6 pb-9 text-center">
+        {/* The halo sits UNDER the mark and behind no text, so it cannot change
+            the contrast of anything a person has to read. */}
+        <span
+          aria-hidden="true"
+          className="brand-hero-halo pointer-events-none absolute top-0 left-1/2 -z-10 h-[260px] w-[min(560px,90%)] -translate-x-1/2 rounded-full"
+        />
+
         <img
           src="/brand/logo-full.webp"
           alt="Shram Safal"
@@ -771,10 +777,11 @@ export default function HomePage() {
           height={330}
           loading="eager"
           decoding="async"
-          className="h-14 w-auto object-contain"
+          className="brand-hero-mark h-[clamp(64px,9vw,104px)] w-auto object-contain drop-shadow-[0_10px_28px_rgba(15,92,61,0.16)]"
         />
-        <span className="text-caption text-text-2">Admin console</span>
-      </div>
+
+        <p className="text-caption tracking-[0.16em] text-text-2 uppercase">Admin console</p>
+      </header>
 
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
