@@ -2807,9 +2807,11 @@ the 4.3 review (B001).
   when web deploys. The APK half does NOT: the APK bundles web assets at BUILD time — web
   deploys never reach APK users — so every installed APK keeps the old client until its users
   install a new build. **Minimum APK version that tolerates the new wire: none shipped.**
-  Every APK up to v1.0.10 (versionCode 18, the current live build) bundles the pre-Phase-4
-  client; the first tolerant APK is the first build cut from a tree containing this phase
-  (versionCode ≥ 19, number assigned at release). The API change is therefore what FORCES the
+  Every shipped APK bundles a pre-Phase-4 client — the newest is v1.0.12
+  (versionCode 20, PR #74, merged 2026-09-01; this branch forked from a7784b18, BEFORE that
+  release, so no shipped build contains this phase). The first tolerant APK is the first build
+  cut from a tree containing this phase (versionCode ≥ 21, number assigned at release; verify
+  against origin/main at release time — this number went stale once already, caught by review). The API change is therefore what FORCES the
   APK bump decision at the founder gate — deploying this API is deciding that pre-Phase-4
   APKs break on the labour screen until upgraded, and that decision is the founder's, not a
   deploy-time default.
