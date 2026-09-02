@@ -1375,6 +1375,15 @@ describe('HajeriLedger — the clean register (master review D4)', () => {
             rows: [], crewRows: [],
         })} onToast={vi.fn()} />);
 
+> **F1 CORRECTION (4.2 review, binding on this task):** the empty-state CLAIM card below
+> ("अजून हजेरी नोंदवली नाही") may render for the OWNER view only. For `data.view !== 'owner'`
+> an empty register is empty BY PROJECTION — rows were WITHHELD, not absent — and rendering the
+> claim would present withholding as the fact "nothing was recorded" (the exact
+> absence-as-fact defect this release removes). Non-owner + empty renders the bare week grid
+> (day headers, no rows) and claims nothing. Do NOT invent Marathi for a withheld state — that
+> copy, if wanted, is a founder-gate item. PIN IT: a test with `view: 'own'` and empty rows
+> asserts the claim card is NOT rendered and the day headers ARE.
+
         expect(container.querySelectorAll('[data-testid="ledger-day-head"]').length).toBe(7);
         expect(container.textContent).toContain('अजून हजेरी नोंदवली नाही');
     });
