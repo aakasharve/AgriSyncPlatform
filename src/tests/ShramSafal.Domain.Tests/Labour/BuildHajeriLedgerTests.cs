@@ -339,4 +339,40 @@ public sealed class BuildHajeriLedgerTests
             new[] { "weekLabel", "window", "farmLocalToday", "marks", "operators", "workRows", "windowAssignments", "logDateByLogId" },
             parameterNames);
     }
+
+    /// <summary>
+    /// Brief Task 4.3, structural half: Ganesh on grape pruning AND cane work
+    /// the same day is TWO work rows and exactly ONE mark → one register row,
+    /// one cell, and both engagements' WorkerCount untouched (attribution never
+    /// changes reported quantity — P7). No reconciliation step exists or is
+    /// needed; the grain guarantees it.
+    /// </summary>
+    [Fact]
+    public void TwoWorksOneDayIsOneRowOneCellAndNoCountChanges()
+    {
+        var ganesh = Guid.NewGuid();
+        var grapeLog = Guid.NewGuid();
+        var caneLog = Guid.NewGuid();
+        var grapes = Assignment(Guid.NewGuid(), grapeLog, task: "द्राक्ष छाटणी", workerCount: 4);
+        var cane = Assignment(Guid.NewGuid(), caneLog, task: "ऊस तोडणी", workerCount: 6);
+        var logDates = new Dictionary<Guid, DateOnly> { [grapeLog] = Monday, [caneLog] = Monday };
+
+        var ledger = Build(
+            [Mark(ganesh, Monday)],
+            [Operator(ganesh, "गणेश")],
+            workRows:
+            [
+                WorkRow(ganesh, grapes.Id, Monday, "गणेश"),
+                WorkRow(ganesh, cane.Id, Monday, "गणेश"),
+            ],
+            assignments: [grapes, cane],
+            logDates: logDates);
+
+        var row = Assert.Single(ledger.Rows);           // one row
+        var cell = row.Cells[0]!;                       // one cell
+        Assert.Equal("full", cell.Day);
+        Assert.Equal("द्राक्ष छाटणी · ऊस तोडणी", cell.Work); // both contexts, ONE presence
+        Assert.Equal(4, grapes.WorkerCount);            // reported quantities untouched
+        Assert.Equal(6, cane.WorkerCount);
+    }
 }
