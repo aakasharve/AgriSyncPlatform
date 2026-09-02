@@ -208,7 +208,7 @@
      1280 is the design width: 236px sidebar, four KPIs across. */
   --spacing-sidebar: 236px;
   --spacing-sidebar-narrow: 212px;
-  --spacing-topbar: 60px;
+  --spacing-topbar: 64px;
   --spacing-row: 52px;
 
   /* --- §A.11 BRAND AND NAVIGATION CHROME (added 2026-09-02) ------------
@@ -500,8 +500,9 @@ body {
    This rule used to name `.glass-sidebar`, `.glass`, `.glass-kpi` and then
    `.glass-panel`, and each deletion left it thinner. It now names NO class
    at all, and that is the repair: `[data-print="chrome"]` is what the shell
-   puts on its sidebar and top bar, and `[data-print="panel"]` is what Card,
-   DataList and ChartShell put on a surface that must not be cut in half.
+   puts on its sidebar and top bar, and `[data-print="panel"]` is declared by
+   the five things that must not be cut in half — Card, KpiCard, DataList,
+   ChartShell and the /403 panel. Counted, not assumed.
    A print rule that keys off an attribute the components declare cannot go
    stale the next time a class is renamed — which is exactly how this rule
    spent three tasks describing selectors that matched nothing. */

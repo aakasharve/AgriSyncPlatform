@@ -36,7 +36,7 @@ export function ErrorState({ error, onRetry, className }: ErrorStateProps) {
     <div
       role="alert"
       className={cn(
-        'rounded-panel border border-amber/40 bg-tint-amber px-4 py-3 text-[13px] text-text-1',
+        'rounded-panel border border-amber/40 bg-tint-amber px-4 py-3 text-caption text-text-1',
         className
       )}
     >

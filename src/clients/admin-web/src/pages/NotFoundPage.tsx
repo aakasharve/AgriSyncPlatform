@@ -41,15 +41,15 @@ export default function NotFoundPage() {
   return (
     <div className="grid min-h-[60vh] place-items-center px-6 py-16">
       <div className="max-w-lg text-center">
-        <div className="mx-auto mb-5 grid size-14 place-items-center rounded-panel bg-wash text-text-2">
+        <div className="mx-auto mb-5 grid size-14 place-items-center rounded-panel bg-brand-wash text-brand">
           <Compass size={26} strokeWidth={2} aria-hidden="true" />
         </div>
 
-        <h1 className="mb-2 text-xl font-semibold tracking-tight text-text-1">
+        <h1 className="mb-3 text-h1 font-bold text-text-1">
           404 · No page at this address
         </h1>
 
-        <p className="mb-2 text-[15px] text-text-2">
+        <p className="mb-2 text-body text-text-2">
           This console has no route matching the address below. Nothing is broken and nothing was
           denied — the path simply does not exist here.
         </p>
@@ -61,7 +61,7 @@ export default function NotFoundPage() {
           ORGANISATION — and truncating it would hide the half most likely to
           be the actual mistake.
         */}
-        <p className="mb-6 text-[13px] break-all text-text-3">
+        <p className="mb-6 text-caption break-all text-text-3">
           <span className="sr-only">Requested address: </span>
           {location.pathname}
           {location.search}

@@ -631,7 +631,7 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
             }}
             onKeyDown={onKey}
             placeholder="Jump to a screen, a farm or a person"
-            className="flex-1 bg-transparent text-[15px] font-semibold text-text-1 placeholder:text-text-3"
+            className="flex-1 bg-transparent text-body font-semibold text-text-1 placeholder:text-text-3"
           />
           <kbd className="rounded-chip bg-wash px-1.5 py-0.5 text-[11px] text-text-3">ESC</kbd>
         </div>
@@ -678,22 +678,42 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
                 aria-selected={i === active}
                 onMouseEnter={() => setIdx(i)}
                 onClick={() => select(entry.to)}
-                className={`flex w-full items-center gap-3 rounded-chip px-3 py-2.5 text-left text-[15px] font-semibold transition-colors ${
-                  i === active ? 'bg-wash text-text-1' : 'text-text-1 hover:bg-wash'
+                /* The highlighted row was `bg-wash` and hover was ALSO
+                   `bg-wash`, so the keyboard cursor and the mouse cursor were
+                   the same colour and an operator arrowing down could not see
+                   where they were. Brand green for the selection, wash for
+                   hover: two states, two appearances. Chrome — a palette row
+                   is a destination, not a reading. */
+                className={`flex w-full items-center gap-3 rounded-chip px-3 py-2.5 text-left text-body font-semibold transition-colors ${
+                  i === active ? 'bg-brand text-page' : 'text-text-1 hover:bg-wash'
                 }`}
               >
-                <span className="grid size-7 flex-none place-items-center rounded-chip bg-wash text-text-3">
+                <span
+                  className={`grid size-7 flex-none place-items-center rounded-chip ${
+                    i === active ? 'bg-brand-press text-page' : 'bg-wash text-text-3'
+                  }`}
+                >
                   <entry.Icon size={16} aria-hidden="true" />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{entry.label}</span>
                   {entry.sub && (
-                    <span className="block truncate text-[13px] font-normal text-text-3">
+                    <span
+                      className={`block truncate text-caption font-normal ${
+                        i === active ? 'text-page' : 'text-text-3'
+                      }`}
+                    >
                       {entry.sub}
                     </span>
                   )}
                 </span>
-                <span className="flex-none text-[11px] font-normal text-text-3">{entry.group}</span>
+                <span
+                  className={`flex-none text-[11px] font-normal ${
+                    i === active ? 'text-page' : 'text-text-3'
+                  }`}
+                >
+                  {entry.group}
+                </span>
               </button>
             ))}
           </div>
@@ -702,7 +722,7 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
         {/* THE SCOPE OF THE SEARCH, STATED. It holds one page of each list,
             not the whole console, and a palette that does not say so tells an
             operator "no such farmer" when it means "not in the first 40". */}
-        <p className="border-t border-line px-4 py-2.5 text-[13px] text-text-3">
+        <p className="border-t border-line px-4 py-2.5 text-caption text-text-3">
           Searched {scopeParts.join(', ')}.
           {results.length > shown.length && ` Showing the first ${n(shown.length)} matches.`}{' '}
           Enter to open &middot; Esc to close.

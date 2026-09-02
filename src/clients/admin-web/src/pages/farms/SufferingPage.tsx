@@ -385,7 +385,7 @@ function sufferingDetail(row: SufferingItem) {
           ? ` ${fmt.num(spare)} of the ${events} match none of the three — that set includes AI calls that SUCCEEDED, which this figure counts.`
           : ''}
       </p>
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1 text-[13px]">
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1 text-caption">
         <dt className="text-text-3">Farm id</dt>
         {/* The identifier an operator files a ticket with, and the only value
             on this row that names nobody. */}
@@ -449,7 +449,7 @@ export default function SufferingPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
-          <h1 className="flex items-center gap-2 text-[26px] font-semibold tracking-[-0.01em] text-text-1">
+          <h1 className="flex items-center gap-2 text-h1 font-bold text-text-1">
             <Frown size={20} strokeWidth={2} aria-hidden="true" className="text-text-2" />
             Farmer Suffering Watchlist
           </h1>
@@ -461,7 +461,7 @@ export default function SufferingPage() {
               it never said what repeated meant. This is the only place either
               watchlist's rule is stated on screen (A57), so it is preserved —
               restated true, and now naming the cap. */}
-          <p className="mt-1 text-[15px] text-text-2">
+          <p className="mt-1 text-body text-text-2">
             Farms with three or more failed events in the last seven days &mdash; a server error, an
             error in the farmer&rsquo;s own app, or an AI call that failed. The server sends the 50
             with the most events and no more, so this is a worklist rather than a total. Select a

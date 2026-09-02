@@ -319,7 +319,7 @@ function farmColumns(goal: number | null): DataListColumn<WvfdFarmRow>[] {
          put there, so the header says what the cell actually holds rather
          than promising a name. Same call Task 14 made on "Owner phone". */
       label: 'Farm id',
-      render: (f) => <span className="text-[13px] [overflow-wrap:anywhere]">{f.farmId}</span>,
+      render: (f) => <span className="text-caption [overflow-wrap:anywhere]">{f.farmId}</span>,
       sortType: 'text',
       sortValue: (f) => f.farmId,
       defaultDir: 'asc',
@@ -331,7 +331,7 @@ function farmColumns(goal: number | null): DataListColumn<WvfdFarmRow>[] {
         <span
           data-tier={f.engagementTier}
           className={cn(
-            'inline-grid size-[26px] place-items-center rounded-chip text-[14px] font-semibold',
+            'inline-grid size-8 place-items-center rounded-chip text-[15px] font-bold',
             TIER_CLASS[f.engagementTier] ?? 'bg-tint-grey text-text-2',
           )}
         >
@@ -510,13 +510,13 @@ export default function NorthStarPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
-          <h1 className="flex items-center gap-2 text-[26px] font-semibold tracking-[-0.01em] text-text-1">
+          <h1 className="flex items-center gap-2 text-h1 font-bold text-text-1">
             <Star size={20} strokeWidth={2} aria-hidden="true" className="text-text-2" />
             North Star &middot; WVFD
           </h1>
           {/* Property (1) and the endpoint's scope, in the two sentences that
               stop every figure below from being read as something it is not. */}
-          <p className="mt-1 text-[15px] text-text-2">
+          <p className="mt-1 text-body text-text-2">
             Weekly Verified Farm-Days is the number the product is steered by: how many days in a
             week a farm closed with work that someone confirmed, averaged across{' '}
             <b>the farms that logged something that week</b> &mdash; platform-wide. A farm that
@@ -533,7 +533,7 @@ export default function NorthStarPage() {
       {/* ── A19 / B5 — the control v3 has no design for ─────────────────── */}
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[13px] font-semibold text-text-2" id="nsm-window-label">
+          <span className="text-caption font-semibold text-text-2" id="nsm-window-label">
             Window
           </span>
           <div
@@ -555,7 +555,7 @@ export default function NorthStarPage() {
             ))}
           </div>
         </div>
-        <p className="text-[13px] text-text-3">
+        <p className="text-caption text-text-3">
           {unusable === null ? (
             <>
               The window is in the address bar, so a link to this screen carries it. Weeks start on
@@ -572,7 +572,7 @@ export default function NorthStarPage() {
           )}
         </p>
         {windowMismatch && (
-          <p className="text-[13px] text-text-3">
+          <p className="text-caption text-text-3">
             The server says it measured <b>{serverWeeks} weeks</b> while this page asked for{' '}
             {weeks}. The figures below are the server&rsquo;s window, not this page&rsquo;s.
           </p>
@@ -644,9 +644,9 @@ export default function NorthStarPage() {
       <section
         data-goal="wvfd"
         aria-labelledby="nsm-goal-title"
-        className="flex flex-col gap-3 rounded-panel bg-page px-5 py-4 shadow-raised"
+        className="flex flex-col gap-3 rounded-panel bg-page px-5 py-4 shadow-surface"
       >
-        <h2 id="nsm-goal-title" className="text-[15px] font-semibold text-text-1">
+        <h2 id="nsm-goal-title" className="text-h3 font-semibold text-text-1">
           Against the goal
         </h2>
 
@@ -673,7 +673,7 @@ export default function NorthStarPage() {
           />
         ) : (
           <>
-            <p className="text-[15px] text-text-1">
+            <p className="text-body text-text-1">
               <b>{fmt.num(current, 1)}</b> verified farm-days per farm in the week of{' '}
               {currentWeekLabel}, against a goal of <b>{fmt.num(goal, 1)}</b>.
             </p>
@@ -691,14 +691,14 @@ export default function NorthStarPage() {
                 style={{ width: `${Math.min(100, goalPct ?? 0)}%` }}
               />
             </div>
-            <p className="text-[13px] text-text-3">
+            <p className="text-caption text-text-3">
               {fmt.pct(goalPct, 0)} of the goal. The bar is the share of the goal, so full width
               would be {fmt.num(goal, 1)}.
             </p>
           </>
         )}
 
-        <p className="text-[13px] text-text-3">
+        <p className="text-caption text-text-3">
           {/* Property (3), on screen rather than in a ticket. */}
           <b>Where the goal comes from.</b> It is a constant written into the API
           (<code>AdminMisRepository.cs:74</code>) &mdash; there is no setting for it, no table
@@ -714,10 +714,10 @@ export default function NorthStarPage() {
         aria-labelledby="nsm-verified-title"
         className="flex flex-col gap-2 rounded-panel border border-line bg-page px-5 py-4"
       >
-        <h2 id="nsm-verified-title" className="text-[15px] font-semibold text-text-1">
+        <h2 id="nsm-verified-title" className="text-h3 font-semibold text-text-1">
           &ldquo;Verified&rdquo; does not yet mean independently verified
         </h2>
-        <p className="text-[13px] text-text-2">
+        <p className="text-caption text-text-2">
           A day counts towards this number when a log is confirmed within 48 hours. That transition
           is gated on the confirming person&rsquo;s <b>role on the farm</b> and on nothing else
           &mdash; <code>VerificationStateMachine.cs</code> never reads who recorded the log, so a
@@ -734,7 +734,7 @@ export default function NorthStarPage() {
            if the title and the request ever disagree. */
         title={`WVFD — last ${weeks} weeks`}
         subtitle={
-          <span className="text-[13px] text-text-2">
+          <span className="text-caption text-text-2">
             {windowWords} &middot; read at {checkedAt}
           </span>
         }
@@ -762,14 +762,14 @@ export default function NorthStarPage() {
             size="lg"
             label={`Average verified farm-days for each of the ${axis.length} weeks in this window. The exact figures are in the data table below.`}
           />
-          <p className="text-[13px] text-text-3">
+          <p className="text-caption text-text-3">
             Bar height is in proportion to the highest reading in the window. Older weeks are drawn
             fainter; a hatched week has no row in the aggregate and takes no fade, because an
             absence has no recency worth reading. The newest bar is a week still in progress, so it
             is lower than a finished week for a reason that is not about the farms.
           </p>
           {offAxis > 0 && (
-            <p className="text-[13px] text-text-3">
+            <p className="text-caption text-text-3">
               The server also returned {fmt.num(offAxis)}{' '}
               {offAxis === 1 ? 'week that is' : 'weeks that are'} outside this axis, so{' '}
               {offAxis === 1 ? 'it is' : 'they are'} not drawn above and not counted in any figure
@@ -786,7 +786,7 @@ export default function NorthStarPage() {
           aria-labelledby="nsm-tiers-title"
           className="flex flex-col gap-2"
         >
-          <h2 id="nsm-tiers-title" className="text-[15px] font-semibold text-text-1">
+          <h2 id="nsm-tiers-title" className="text-h3 font-semibold text-text-1">
             Tiers among the farms this feed returns
           </h2>
           <div className="flex flex-wrap gap-2">
@@ -795,7 +795,7 @@ export default function NorthStarPage() {
                 key={tier}
                 data-tier={tier}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-chip px-3 py-1 text-[13px] font-semibold',
+                  'inline-flex items-center gap-1.5 rounded-chip px-3 py-1.5 text-caption font-bold',
                   TIER_CLASS[tier] ?? 'bg-tint-grey text-text-2',
                 )}
               >
@@ -807,7 +807,7 @@ export default function NorthStarPage() {
               </span>
             ))}
           </div>
-          <p className="text-[13px] text-text-3">
+          <p className="text-caption text-text-3">
             {capped ? (
               <>
                 {/* Property (7), stated as the provable thing rather than a hedge. */}

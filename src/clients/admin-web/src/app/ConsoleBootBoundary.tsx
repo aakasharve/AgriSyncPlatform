@@ -103,18 +103,18 @@ export class ConsoleBootBoundary extends Component<Props, State> {
             </svg>
           </span>
 
-          <p className="text-[17px] font-semibold text-text-1">
+          <p className="text-h2 font-bold text-text-1">
             This screen could not load its code
           </p>
 
-          <p className="text-[15px] text-text-2">
+          <p className="text-body text-text-2">
             Part of the console failed to load, so nothing below can be shown. Nothing here is a
             zero and nothing here is healthy &mdash; there is simply no reading. If the console was
             open across a deployment, reloading fetches the current version.
           </p>
 
           {this.state.message && (
-            <p className="text-[13px] text-text-3">
+            <p className="text-caption text-text-3">
               The browser reported: {this.state.message}
             </p>
           )}
@@ -122,7 +122,7 @@ export class ConsoleBootBoundary extends Component<Props, State> {
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="mt-1 rounded-chip border border-line px-4 py-2 text-[15px] font-medium text-text-1 hover:bg-wash"
+            className="mt-1 rounded-chip border border-line px-4 py-2 text-body font-medium text-text-1 hover:bg-wash"
           >
             Reload the console
           </button>

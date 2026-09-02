@@ -296,7 +296,7 @@ function churnDetail(row: SilentChurnItem) {
         {lastLog ? `. The last log landed ${lastLog}.` : `. ${NO_LAST_LOG}`} Weeks are counted in
         whole weeks from that date, so the true silence is that many weeks or a few days more.
       </p>
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1 text-[13px]">
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1 text-caption">
         <dt className="text-text-3">Farm id</dt>
         {/* The identifier an operator files a ticket with, and the only value
             on the row that names no person. */}
@@ -360,13 +360,13 @@ export default function SilentChurnPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
-          <h1 className="flex items-center gap-2 text-[26px] font-semibold tracking-[-0.01em] text-text-1">
+          <h1 className="flex items-center gap-2 text-h1 font-bold text-text-1">
             <TrendingDown size={20} strokeWidth={2} aria-hidden="true" className="text-text-2" />
             Silent Churn Watchlist
           </h1>
           {/* A57 — the rule, restated so it matches the query. See the file
               header for the three clauses that were false. */}
-          <p className="mt-1 text-[15px] text-text-2">
+          <p className="mt-1 text-body text-text-2">
             Farms on a trialing, active or past-due subscription that have recorded no log for more
             than 14 days, longest silence first. The server sends the 50 longest and no more, so
             this is a worklist rather than a total.

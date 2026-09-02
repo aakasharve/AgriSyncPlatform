@@ -227,7 +227,7 @@ export function AdminShell() {
           <OrgScope />
           <div className="ml-auto flex items-center gap-3">
             <ScreenRefresh />
-            <span className="hidden items-center gap-2 rounded-chip border border-line px-2 py-1 text-[13px] text-text-2 md:inline-flex">
+            <span className="hidden items-center gap-2 rounded-chip border border-line px-2 py-1 text-caption text-text-2 md:inline-flex">
               <Search size={14} aria-hidden="true" />
               {/* Cmd-K and Escape are the only global bindings that exist
                   (CommandPalette.tsx:39-49). This is a HINT and not a button:
@@ -241,7 +241,10 @@ export function AdminShell() {
           </div>
         </header>
 
-        <main className="min-h-0 flex-1 px-5 pt-6 pb-16 lg:overflow-y-auto xl:px-8">
+        {/* More air, because everything inside it got bigger. A 30px page
+            title and a 52px KPI figure inside 24px gutters read as cramped
+            rather than as confident. */}
+        <main className="min-h-0 flex-1 px-5 pt-7 pb-20 lg:overflow-y-auto xl:px-10">
           <Outlet />
         </main>
       </div>
@@ -384,7 +387,7 @@ function OrgScope() {
   };
 
   const chipClass =
-    'inline-flex h-9 max-w-[15rem] items-center gap-2 rounded-chip border border-line px-3 text-[13px] font-medium';
+    'inline-flex h-9 max-w-[15rem] items-center gap-2 rounded-chip border border-line px-3 text-caption font-medium';
 
   return (
     <div ref={box} className="relative">
@@ -424,10 +427,10 @@ function OrgScope() {
               className="flex w-full items-center gap-2 rounded-chip px-3 py-2 text-left hover:bg-wash"
             >
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[15px] font-medium text-text-1">
+                <span className="block truncate text-body font-medium text-text-1">
                   {m.orgName}
                 </span>
-                <span className="block truncate text-[13px] text-text-3">
+                <span className="block truncate text-caption text-text-3">
                   {m.orgType} · {m.orgRole}
                 </span>
               </span>
@@ -498,7 +501,7 @@ function ScreenRefresh() {
         onClick={() => qc.invalidateQueries({ type: 'active' })}
         disabled={fetching}
         aria-label={fetching ? 'Refreshing this screen' : 'Refresh this screen'}
-        className="inline-flex h-9 items-center gap-2 rounded-chip border border-line bg-page px-3 text-[13px] font-medium text-text-1 hover:bg-wash disabled:pointer-events-none disabled:opacity-50"
+        className="inline-flex h-9 items-center gap-2 rounded-chip border border-line bg-page px-3 text-caption font-medium text-text-1 hover:bg-wash disabled:pointer-events-none disabled:opacity-50"
       >
         <RefreshCw
           size={14}
@@ -576,7 +579,7 @@ function SignedIn() {
         type="button"
         onClick={signOut}
         aria-label="Sign out"
-        className="inline-flex h-9 items-center gap-2 rounded-chip border border-line bg-page px-3 text-[13px] font-medium text-text-1 hover:bg-wash"
+        className="inline-flex h-9 items-center gap-2 rounded-chip border border-line bg-page px-3 text-caption font-medium text-text-1 hover:bg-wash"
       >
         <LogOut size={14} className="flex-none" aria-hidden="true" />
         <span className="hidden lg:inline">Sign out</span>

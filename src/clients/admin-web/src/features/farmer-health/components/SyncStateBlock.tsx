@@ -77,8 +77,8 @@ export function SyncStateBlock({ state }: SyncStateBlockProps) {
     <OpsPanel title="Sync state" grant="ops.errors">
       <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div>
-          <dt className="text-[13px] text-text-2">Last device event</dt>
-          <dd className="mt-0.5 text-[15px] font-semibold tabular-nums text-text-1">
+          <dt className="text-caption text-text-2">Last device event</dt>
+          <dd className="mt-0.5 text-body font-semibold tabular-nums text-text-1">
             {lastSync === null ? (
               <NotMeasured
                 state="never"
@@ -88,38 +88,38 @@ export function SyncStateBlock({ state }: SyncStateBlockProps) {
               lastSync
             )}
           </dd>
-          <p className="mt-0.5 text-[13px] text-text-3">{LAST_SYNC_WHY}</p>
+          <p className="mt-0.5 text-caption text-text-3">{LAST_SYNC_WHY}</p>
         </div>
 
         <div>
-          <dt className="text-[13px] text-text-2">Pending pushes</dt>
+          <dt className="text-caption text-text-2">Pending pushes</dt>
           {/*
             THE ONE FIGURE ON THIS SCREEN THAT IS A CONSTANT. Rendering it as
             a number — any number — asserts that the server looked.
           */}
-          <dd data-pending="" className="mt-0.5 text-[15px] font-semibold text-text-1">
+          <dd data-pending="" className="mt-0.5 text-body font-semibold text-text-1">
             <NotMeasured state="unmeasured" why={PENDING_PUSHES_WHY} />
           </dd>
-          <p className="mt-0.5 text-[13px] text-text-3">{PENDING_PUSHES_WHY}</p>
+          <p className="mt-0.5 text-caption text-text-3">{PENDING_PUSHES_WHY}</p>
         </div>
 
         <div>
-          <dt className="text-[13px] text-text-2">Error events (7d)</dt>
+          <dt className="text-caption text-text-2">Error events (7d)</dt>
           <dd
             className={cn(
-              'mt-0.5 text-[15px] font-semibold tabular-nums',
+              'mt-0.5 text-body font-semibold tabular-nums',
               state.failedPushesLast7d > 0 ? 'text-red' : 'text-text-1'
             )}
           >
             {fmt.num(state.failedPushesLast7d)}
           </dd>
-          <p className="mt-0.5 text-[13px] text-text-3">{FAILED_PUSHES_WHY}</p>
+          <p className="mt-0.5 text-caption text-text-3">{FAILED_PUSHES_WHY}</p>
         </div>
       </dl>
 
       {shown.length > 0 && (
         <div className="mt-4">
-          <h4 className="mb-2 text-[13px] font-semibold text-text-2">
+          <h4 className="mb-2 text-caption font-semibold text-text-2">
             {withheld > 0 ? (
               <>
                 The {fmt.num(SYNC_ERRORS_SHOWN)} most recent of {fmt.num(errors.length)} returned
@@ -131,7 +131,7 @@ export function SyncStateBlock({ state }: SyncStateBlockProps) {
             )}
           </h4>
           <div className="overflow-x-auto">
-            <table data-sync-errors="" className="w-full text-[13px]">
+            <table data-sync-errors="" className="w-full text-caption">
               <caption className="sr-only">
                 The most recent api.error and client.error events for this farm in the last seven
                 days.
@@ -174,7 +174,7 @@ export function SyncStateBlock({ state }: SyncStateBlockProps) {
             </table>
           </div>
           {withheld > 0 && (
-            <p className="mt-2 text-[13px] text-text-3">
+            <p className="mt-2 text-caption text-text-3">
               {fmt.num(withheld)} older {withheld === 1 ? 'event was' : 'events were'} returned by
               the server and are not shown here.
             </p>
@@ -183,7 +183,7 @@ export function SyncStateBlock({ state }: SyncStateBlockProps) {
       )}
 
       {shown.length === 0 && state.failedPushesLast7d > 0 && (
-        <p className="mt-4 text-[13px] text-text-3">
+        <p className="mt-4 text-caption text-text-3">
           The count above is {fmt.num(state.failedPushesLast7d)} but no error rows came back. The
           count and the rows are two separate queries and either can fail on its own, so this is a
           disagreement inside one response rather than a farm with unlisted errors.

@@ -92,7 +92,7 @@ const COLUMNS: DataListColumn<ScheduleTemplate>[] = [
     label: 'Template',
     sortType: 'text',
     sortValue: (t) => t.name.trim(),
-    render: (t) => <span className="text-[15px] font-semibold text-text-1">{t.name}</span>,
+    render: (t) => <span className="text-body font-semibold text-text-1">{t.name}</span>,
   },
   {
     key: 'crop',
@@ -105,7 +105,7 @@ const COLUMNS: DataListColumn<ScheduleTemplate>[] = [
        without a hyphen reports its whole name here. Stated in the note below
        rather than in a tooltip, because it changes how the value should be
        read. */
-    render: (t) => <span className="text-[15px] text-text-1">{t.cropType}</span>,
+    render: (t) => <span className="text-body text-text-1">{t.cropType}</span>,
   },
   {
     key: 'activities',
@@ -120,7 +120,7 @@ const COLUMNS: DataListColumn<ScheduleTemplate>[] = [
       isUnauthored(t) ? (
         <NotMeasured state="unmeasured" why={UNAUTHORED_WHY} />
       ) : (
-        <span className="text-[15px] tabular-nums text-text-1">
+        <span className="text-body tabular-nums text-text-1">
           {fmt.num(t.activities.length)} {t.activities.length === 1 ? 'activity' : 'activities'}
         </span>
       ),
@@ -146,7 +146,7 @@ const COLUMNS: DataListColumn<ScheduleTemplate>[] = [
           why="The window is computed from the activity offsets of this crop's templates. With no activity authored anywhere on this template, the figure the server sends is its 60-day floor rather than a measurement."
         />
       ) : (
-        <span className="text-[15px] tabular-nums text-text-1">
+        <span className="text-body tabular-nums text-text-1">
           {fmt.num(t.totalDays)} days
         </span>
       ),
@@ -179,7 +179,7 @@ function templateCard(t: ScheduleTemplate, fields: RenderedField[]) {
     >
       <div className="min-w-0">{by.get('name')?.node}</div>
 
-      <dl className="flex flex-col gap-2 text-[13px]">
+      <dl className="flex flex-col gap-2 text-caption">
         {['crop', 'activities', 'window'].map((key) => {
           const field = by.get(key);
           if (!field) return null;
@@ -232,7 +232,7 @@ export default function ScheduleTemplatesPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
-          <h1 className="flex items-center gap-2 text-[26px] font-semibold tracking-[-0.01em] text-text-1">
+          <h1 className="flex items-center gap-2 text-h1 font-bold text-text-1">
             <CalendarDays size={20} strokeWidth={2} aria-hidden="true" className="text-text-2" />
             Schedule Templates
           </h1>
@@ -242,7 +242,7 @@ export default function ScheduleTemplatesPage() {
               "in this organisation" either: the handler takes no org parameter,
               so the org in the query key separates the cache and does not scope
               the data — the eighth endpoint checked that takes none. */}
-          <p className="mt-1 text-[15px] text-text-2">
+          <p className="mt-1 text-body text-text-2">
             The crop schedules the activity planner derives its plan from, platform-wide. Every
             template the server holds is here &mdash; this feed has no pages and no filter.
           </p>
@@ -254,7 +254,7 @@ export default function ScheduleTemplatesPage() {
             timestamp of any kind. The source is still named, because a reader
             is entitled to know where a figure came from even when nobody can
             tell them when. */}
-        <p className="text-[13px] text-text-3">Reference data &mdash; no timestamp available</p>
+        <p className="text-caption text-text-3">Reference data &mdash; no timestamp available</p>
       </div>
 
       <DataList<ScheduleTemplate>

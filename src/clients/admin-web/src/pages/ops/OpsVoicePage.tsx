@@ -340,13 +340,13 @@ export default function OpsVoicePage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
-          <h1 className="flex items-center gap-2 text-[26px] font-semibold tracking-[-0.01em] text-text-1">
+          <h1 className="flex items-center gap-2 text-h1 font-bold text-text-1">
             <Mic size={20} strokeWidth={2} aria-hidden="true" className="text-text-2" />
             Voice Pipeline
           </h1>
           {/* Property (1) and property (6), in the two sentences that stop
               every figure below from being read as something it is not. */}
-          <p className="mt-1 text-[15px] text-text-2">
+          <p className="mt-1 text-body text-text-2">
             Every AI call the platform made, by UTC date &mdash; platform-wide. It is not only
             voice: receipt photos and patti photos are the same kind of call and are counted here
             too, because the feed records the call and not what it was for.
@@ -361,7 +361,7 @@ export default function OpsVoicePage() {
       {/* ── A19 / B5 — the control v3 has no design for ─────────────────── */}
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[13px] font-semibold text-text-2" id="ops-voice-window-label">
+          <span className="text-caption font-semibold text-text-2" id="ops-voice-window-label">
             Window
           </span>
           <div
@@ -383,7 +383,7 @@ export default function OpsVoicePage() {
             ))}
           </div>
         </div>
-        <p className="text-[13px] text-text-3">
+        <p className="text-caption text-text-3">
           {unusable === null ? (
             <>
               The window is in the address bar, so a link to this screen carries it. The server
@@ -399,7 +399,7 @@ export default function OpsVoicePage() {
           )}
         </p>
         {windowMismatch && (
-          <p className="text-[13px] text-text-3">
+          <p className="text-caption text-text-3">
             The server says it measured <b>{serverDays} days</b> while this page asked for {days}.
             The figures below are the server&rsquo;s window, not this page&rsquo;s.
           </p>
@@ -462,7 +462,7 @@ export default function OpsVoicePage() {
            if the title and the request ever disagree. */
         title={`Voice success rate — last ${days} days`}
         subtitle={
-          <span className="text-[13px] text-text-2">
+          <span className="text-caption text-text-2">
             {windowWords} · read at {checkedAt}
           </span>
         }
@@ -491,7 +491,7 @@ export default function OpsVoicePage() {
       >
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
-            <p className="text-[13px] font-semibold text-text-2">Success rate, by date</p>
+            <p className="text-caption font-semibold text-text-2">Success rate, by date</p>
             <Sparkline<OpsVoiceDay>
               slots={slots}
               valueOf={rateOf}
@@ -501,7 +501,7 @@ export default function OpsVoicePage() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <p className="text-[13px] font-semibold text-text-2">Calls, by date</p>
+            <p className="text-caption font-semibold text-text-2">Calls, by date</p>
             <Sparkline<OpsVoiceDay>
               slots={slots}
               valueOf={(d) => (Number.isFinite(d.invocations) ? d.invocations : null)}
@@ -510,7 +510,7 @@ export default function OpsVoicePage() {
               label={`Number of AI calls on each of the ${axis.length} dates in this window.`}
             />
           </div>
-          <p className="text-[13px] text-text-3">
+          <p className="text-caption text-text-3">
             Both series are drawn on the same axis of dates, so a date missing from one is missing
             from the other. Bar height is in proportion to the highest reading in the window, which
             compresses small differences in a success rate &mdash; the exact figures are in the
@@ -518,7 +518,7 @@ export default function OpsVoicePage() {
             fade, because an absence has no recency worth reading.
           </p>
           {offAxis > 0 && (
-            <p className="text-[13px] text-text-3">
+            <p className="text-caption text-text-3">
               The server also returned {fmt.num(offAxis)}{' '}
               {offAxis === 1 ? 'date that is' : 'dates that are'} outside this axis, so{' '}
               {offAxis === 1 ? 'it is' : 'they are'} not drawn above and not counted in any figure

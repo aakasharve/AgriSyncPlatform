@@ -131,14 +131,14 @@ export function DwcScoreCard({ score }: DwcScoreCardProps) {
           <span
             data-bucket={score.bucket}
             className={cn(
-              'mt-2 inline-flex items-center rounded-chip px-2 py-0.5 text-[13px] font-semibold',
+              'mt-2 inline-flex items-center rounded-chip px-2 py-0.5 text-caption font-semibold',
               band.className
             )}
           >
             {band.label}
           </span>
 
-          <p className="mt-2 max-w-[15rem] text-[13px] text-text-3">
+          <p className="mt-2 max-w-[15rem] text-caption text-text-3">
             {week === null ? (
               <>
                 The week this score belongs to did not parse, so this figure cannot be dated.
@@ -151,7 +151,7 @@ export function DwcScoreCard({ score }: DwcScoreCardProps) {
             )}
           </p>
 
-          <p className="mt-2 max-w-[15rem] text-[13px] text-text-3">
+          <p className="mt-2 max-w-[15rem] text-caption text-text-3">
             One of the six pillars has never been computed, so the highest score any farm can
             currently reach is <b>{fmt.num(SCORE_REACHABLE)}</b>, not {fmt.num(SCORE_MAX)}. The
             bands are absolute — <b>{fmt.num(INTERVENTION_AT)} or below</b> is intervention,{' '}
@@ -180,7 +180,7 @@ export function DwcScoreCard({ score }: DwcScoreCardProps) {
             and has no way to find out why — the subtraction happens inside a
             matview and appears nowhere in the payload.
           */}
-          <p data-sum-note="" className="mt-3 text-[13px] text-text-3">
+          <p data-sum-note="" className="mt-3 text-caption text-text-3">
             {penalised ? (
               <>
                 The six pillars sum to <b className="tabular-nums">{fmt.num(sum, 1)}</b>.{' '}
@@ -239,10 +239,10 @@ function PillarRow({
           aria-hidden="true"
           className={cn('shrink-0 text-text-3 transition-transform', open && 'rotate-180')}
         />
-        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-text-1">
+        <span className="min-w-0 flex-1 truncate text-caption font-semibold text-text-1">
           {pillar.label}
         </span>
-        <span className="shrink-0 text-right text-[13px] font-semibold tabular-nums text-text-1">
+        <span className="shrink-0 text-right text-caption font-semibold tabular-nums text-text-1">
           {pillar.measurable && printed !== null ? (
             <>
               {printed}
@@ -274,7 +274,7 @@ function PillarRow({
       </div>
 
       {open && (
-        <p id={explainId} className="pl-5 text-[13px] leading-snug text-text-2">
+        <p id={explainId} className="pl-5 text-caption leading-snug text-text-2">
           {pillar.explain}
           {!pillar.weekly && (
             <span className="mt-1 block text-text-3">

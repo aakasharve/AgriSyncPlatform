@@ -33,7 +33,7 @@ export function ScoringActiveBanner({ deployDate }: ScoringActiveBannerProps) {
     <div
       role="status"
       aria-live="polite"
-      className="rounded-panel border border-line bg-tint-grey px-4 py-3 text-[13px] font-semibold text-text-1"
+      className="rounded-panel border border-line bg-tint-grey px-4 py-3 text-caption font-semibold text-text-1"
     >
       <span className="font-extrabold">Scoring active from {date};</span>{' '}
       <span className="text-text-2">data accumulating.</span>

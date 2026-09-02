@@ -126,13 +126,13 @@ export default function FarmerHealthDrilldown() {
       <div data-band="header" className="flex flex-col gap-2">
         <Link
           to="/farmer-health"
-          className="inline-flex w-fit items-center gap-1 rounded-chip text-[13px] font-semibold text-text-2 hover:text-text-1"
+          className="inline-flex w-fit items-center gap-1 rounded-chip text-caption font-semibold text-text-2 hover:text-text-1"
         >
           <ChevronLeft size={14} aria-hidden="true" /> All farmers
         </Link>
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <h1 className="min-w-0 text-[26px] font-semibold tracking-[-0.01em] text-text-1">
+          <h1 className="min-w-0 text-h1 font-bold text-text-1">
             {/*
               🔴 THE BUG THIS LINE EXISTED TO CARRY. It read
                 `farmer?.farmerName?.trim() || (farmId ?? 'Farmer Health')`
@@ -160,7 +160,7 @@ export default function FarmerHealthDrilldown() {
             <span
               data-bucket={farmer?.score.bucket}
               className={cn(
-                'inline-flex items-center rounded-chip px-2 py-0.5 text-[13px] font-semibold',
+                'inline-flex items-center rounded-chip px-2 py-0.5 text-caption font-semibold',
                 band.className
               )}
             >
@@ -169,7 +169,7 @@ export default function FarmerHealthDrilldown() {
           )}
         </div>
 
-        <p className="text-[13px] text-text-3">
+        <p className="text-caption text-text-3">
           Farm ID <span className="tabular-nums text-text-2">{farmId}</span>
         </p>
       </div>
@@ -182,7 +182,7 @@ export default function FarmerHealthDrilldown() {
           data-flag={flag}
           role={notice.role}
           className={cn(
-            'rounded-panel px-4 py-3 text-[13px]',
+            'rounded-panel px-4 py-3 text-caption',
             notice.role === 'alert' ? 'bg-tint-red text-text-1' : 'bg-tint-grey text-text-1'
           )}
         >
@@ -285,10 +285,10 @@ function OpsDenied({ canSeeSync, canSeeAi }: { canSeeSync: boolean; canSeeAi: bo
           <Lock size={14} strokeWidth={2.2} aria-hidden="true" />
         </span>
         <div className="min-w-0">
-          <p data-denial-copy="" className="text-[13px] text-text-1">
+          <p data-denial-copy="" className="text-caption text-text-1">
             {message}
           </p>
-          <p className="mt-1 text-[13px] text-text-3">
+          <p className="mt-1 text-caption text-text-3">
             The design calls this one <code>ops:read</code> claim; the server evaluates it as two
             separate grants, one per block, so ask for the ones named above rather than for
             &ldquo;ops&rdquo;.

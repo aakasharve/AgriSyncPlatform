@@ -250,7 +250,7 @@ function bucketColumns(): DataListColumn<CohortBucketDto>[] {
         return when === null ? (
           <NotMeasured state="never" why="No log has ever been recorded for this farm." />
         ) : (
-          <span className="font-mono text-[13px] tabular-nums text-text-2">{when}</span>
+          <span className="font-mono text-caption tabular-nums text-text-2">{when}</span>
         );
       },
       sortType: 'date',
@@ -265,7 +265,7 @@ function bucketColumns(): DataListColumn<CohortBucketDto>[] {
       render: (r) => (
         <Link
           to={`/farmer-health/${encodeURIComponent(r.farmId)}`}
-          className="rounded-chip border border-line px-2 py-1 text-[13px] font-semibold text-text-1 hover:bg-wash"
+          className="rounded-chip border border-line px-2 py-1 text-caption font-semibold text-text-1 hover:bg-wash"
           aria-label={`Open the drilldown for farm ${r.farmId}`}
         >
           Open
@@ -281,7 +281,7 @@ function ScorePill({ score }: { score: number }) {
     <span
       data-tone={tone}
       className={cn(
-        'inline-block rounded-chip px-2 py-0.5 font-mono text-[13px] font-semibold tabular-nums',
+        'inline-block rounded-chip px-2 py-0.5 font-mono text-caption font-semibold tabular-nums',
         tone === 'red' && 'bg-tint-red text-red',
         tone === 'amber' && 'bg-tint-amber text-amber',
         tone === 'green' && 'bg-tint-green text-green',
@@ -299,7 +299,7 @@ function Delta({ value }: { value: number }) {
   return (
     <span
       className={cn(
-        'font-mono text-[13px] font-semibold tabular-nums',
+        'font-mono text-caption font-semibold tabular-nums',
         value < 0 && 'text-red',
         value > 0 && 'text-green',
         value === 0 && 'text-text-2',
@@ -419,7 +419,7 @@ export default function FarmerHealthPage() {
       {/* ── band 1: who this is about, and what it is ─────────────────── */}
       <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
         <div className="min-w-0 flex-1">
-          <h1 className="flex items-center gap-2 text-[26px] font-semibold tracking-[-0.01em] text-text-1">
+          <h1 className="flex items-center gap-2 text-h1 font-bold text-text-1">
             <HeartPulse size={20} strokeWidth={2} aria-hidden="true" className="text-text-2" />
             Farmer Health
           </h1>
@@ -432,7 +432,7 @@ export default function FarmerHealthPage() {
             naming an organisation here would be false for exactly the reader
             most likely to be looking.
           */}
-          <p data-scope-line="" className="mt-1 text-[15px] text-text-2">
+          <p data-scope-line="" className="mt-1 text-body text-text-2">
             {platformWide ? (
               <>
                 Every scored farm <b>on the platform</b>. Your role is platform-level, so this feed
@@ -452,7 +452,7 @@ export default function FarmerHealthPage() {
               </>
             )}
           </p>
-          <p className="mt-1 text-[13px] text-text-3">
+          <p className="mt-1 text-caption text-text-3">
             A habit score out of {fmt.num(SCORE_MAX)} built from six pillars with unequal weights.{' '}
             <b>{fmt.num(INTERVENTION_AT)} or below</b> puts a farmer in the intervention queue;{' '}
             <b>
@@ -474,7 +474,7 @@ export default function FarmerHealthPage() {
         is no `meta.lastRefreshedUtc` to read — and a chip may only state an
         age it actually has.
       */}
-      <p data-no-clock="" className="text-[13px] text-text-3">
+      <p data-no-clock="" className="text-caption text-text-3">
         This feed sends no timestamp, so nothing on this screen can say how old it is. The scores
         come from a view rebuilt nightly, so they can be up to a day behind; the queue&rsquo;s
         last-active column is read live and is not.
@@ -527,10 +527,10 @@ export default function FarmerHealthPage() {
 
       {/* ── band 2: who needs a person ───────────────────────────────────── */}
       <section className="flex flex-col gap-3" aria-labelledby="fh-queue-head">
-        <h2 id="fh-queue-head" className="text-[17px] font-semibold text-text-1">
+        <h2 id="fh-queue-head" className="text-h2 font-bold text-text-1">
           Intervention queue
         </h2>
-        <p className="text-[13px] text-text-2">
+        <p className="text-caption text-text-2">
           Farms scoring {fmt.num(INTERVENTION_AT)} or below in the most recent scored week. A farm
           that did nothing at all is scored too &mdash; the view cross-joins every farm with every
           week and fills the missing inputs with zeros &mdash; so this list mixes farmers who are
@@ -584,7 +584,7 @@ export default function FarmerHealthPage() {
             },
           }}
         />
-        <p className="text-[13px] text-text-3">
+        <p className="text-caption text-text-3">
           &Delta; wk is the change against the previous scored week &mdash; but a farm with no
           previous row has its own score subtracted from itself, so <b>a delta of exactly 0 can
           mean &ldquo;no change&rdquo; or &ldquo;first week on this view&rdquo;</b>, and this feed
@@ -604,7 +604,7 @@ export default function FarmerHealthPage() {
 
       {/* ── band 3: the cohort ───────────────────────────────────────────── */}
       <section className="flex flex-col gap-4" aria-labelledby="fh-cohort-head">
-        <h2 id="fh-cohort-head" className="text-[17px] font-semibold text-text-1">
+        <h2 id="fh-cohort-head" className="text-h2 font-bold text-text-1">
           The cohort
         </h2>
 
@@ -615,7 +615,7 @@ export default function FarmerHealthPage() {
               id="fh-score-distribution"
               title="Score distribution"
               subtitle={
-                <span className="text-[13px] text-text-2">
+                <span className="text-caption text-text-2">
                   {fmt.num(scoredFarms)} scored {scoredFarms === 1 ? 'farm' : 'farms'}, in ten fixed
                   bins
                 </span>
@@ -669,7 +669,7 @@ export default function FarmerHealthPage() {
               id="fh-engagement-tiers"
               title="Engagement tiers"
               subtitle={
-                <span className="text-[13px] text-text-2">
+                <span className="text-caption text-text-2">
                   {fmt.num(tierTotal)} {tierTotal === 1 ? 'farm' : 'farms'} &middot; a different
                   view, at a different week
                 </span>
@@ -693,7 +693,7 @@ export default function FarmerHealthPage() {
             >
               <TierProportions slots={tierSlots} total={tierTotal} />
             </ChartShell>
-            <p className="mt-2 text-[13px] text-text-3">
+            <p className="mt-2 text-caption text-text-3">
               Tiers are read from the WVFD view at <i>its</i> newest week, while every other figure
               on this screen comes from the score view at <i>its</i> newest week &mdash; two views,
               two clocks. A farm with no tier recorded is counted as <b>D</b> by the query, so the
@@ -706,7 +706,7 @@ export default function FarmerHealthPage() {
               id="fh-pillars"
               title="Where the cohort loses points"
               subtitle={
-                <span className="text-[13px] text-text-2">
+                <span className="text-caption text-text-2">
                   {pillarsMeasured} of {PILLARS.length} pillars measured
                 </span>
               }
@@ -732,7 +732,7 @@ export default function FarmerHealthPage() {
             >
               <PillarBars slots={pillarSlots} />
             </ChartShell>
-            <p className="mt-2 text-[13px] text-text-3">
+            <p className="mt-2 text-caption text-text-3">
               <b>Investment has never been computed.</b> Its input in the scorer is a placeholder
               returning 0 for every farm, so the 0 the server sends is the placeholder and a
               &ldquo;failing&rdquo; count for it would be every farm on the platform. It is drawn as
@@ -748,7 +748,7 @@ export default function FarmerHealthPage() {
               id="fh-weekly-trend"
               title="Cohort average score, by week"
               subtitle={
-                <span className="text-[13px] text-text-2">
+                <span className="text-caption text-text-2">
                   {trendMeasured} of {trendSlots.length} weeks have a row
                 </span>
               }
@@ -777,7 +777,7 @@ export default function FarmerHealthPage() {
                 toneOf={(slot) => bandTone(slot.value.avgScore / SCORE_MAX)}
               />
             </ChartShell>
-            <p className="mt-2 text-[13px] text-text-3">
+            <p className="mt-2 text-caption text-text-3">
               The axis runs from the oldest week this feed returned to the newest, because the
               response carries no timestamp to anchor a window to. A week missing from either{' '}
               <i>end</i> therefore cannot be shown &mdash; only holes between two returned weeks
@@ -792,10 +792,10 @@ export default function FarmerHealthPage() {
 
       {/* ── band 4: the watchlist, collapsed ─────────────────────────────── */}
       <section className="flex flex-col gap-3" aria-labelledby="fh-watch-head">
-        <h2 id="fh-watch-head" className="text-[17px] font-semibold text-text-1">
+        <h2 id="fh-watch-head" className="text-h2 font-bold text-text-1">
           Watchlist
         </h2>
-        <p className="text-[13px] text-text-2">
+        <p className="text-caption text-text-2">
           Farms scoring {fmt.num(WATCHLIST_FROM)}&ndash;{fmt.num(WATCHLIST_TO)} &mdash; the band
           above the intervention queue.
         </p>
@@ -869,7 +869,7 @@ export default function FarmerHealthPage() {
           }}
         />
         {watchlist.length >= WATCHLIST_LIMIT && (
-          <p className="text-[13px] text-text-3">
+          <p className="text-caption text-text-3">
             The server caps this list at {fmt.num(WATCHLIST_LIMIT)} rows and sent{' '}
             {fmt.num(WATCHLIST_LIMIT)}, ordered by <i>score</i> ascending before the cap. So
             &ldquo;biggest drop first&rdquo; orders the lowest-scoring {fmt.num(WATCHLIST_LIMIT)}{' '}
@@ -1015,7 +1015,7 @@ function TierProportions({ slots, total }: { slots: readonly AxisSlot<number>[];
       </div>
       <ul className="flex flex-wrap gap-x-5 gap-y-1">
         {slots.map((slot) => (
-          <li key={slot.key} className="flex items-center gap-2 text-[13px] text-text-2">
+          <li key={slot.key} className="flex items-center gap-2 text-caption text-text-2">
             <span
               aria-hidden="true"
               className={cn('h-3 w-3 rounded-chip', TIER_FILL[slot.key] ?? 'bg-edge-grey')}
@@ -1051,7 +1051,7 @@ function PillarBars({ slots }: { slots: readonly AxisSlot<CohortPillarHeatmapDto
         const ratio = isGap(slot) || max <= 0 ? 0 : slot.value.avgScore / max;
         const tone = bandTone(ratio);
         return (
-          <li key={slot.key} className="flex items-center gap-3 text-[13px]">
+          <li key={slot.key} className="flex items-center gap-3 text-caption">
             <span className="w-36 shrink-0 font-semibold text-text-1">{slot.label}</span>
             <span className="relative flex h-3 flex-1 overflow-hidden rounded-chip bg-wash">
               {isGap(slot) ? (

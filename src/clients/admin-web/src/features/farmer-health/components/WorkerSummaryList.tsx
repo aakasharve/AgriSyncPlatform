@@ -57,7 +57,7 @@ export function WorkerSummaryList({ workers }: WorkerSummaryListProps) {
       aria-label="Workers seen on this farm"
     >
       <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-[15px] font-semibold text-text-1">
+        <h3 className="text-h3 font-semibold text-text-1">
           Workers seen on this farm{rows.length > 0 && <> — top {fmt.num(rows.length)}</>}
         </h3>
       </div>
@@ -83,9 +83,9 @@ export function WorkerSummaryList({ workers }: WorkerSummaryListProps) {
                 <div className="min-w-0 flex-1">
                   <PersonName
                     name={realName(w.name)}
-                    className="block truncate text-[15px] font-semibold text-text-1"
+                    className="block truncate text-body font-semibold text-text-1"
                   />
-                  <div className="text-[13px] text-text-3">
+                  <div className="text-caption text-text-3">
                     {since === null ? (
                       <NotMeasured
                         state="unmeasured"
@@ -97,7 +97,7 @@ export function WorkerSummaryList({ workers }: WorkerSummaryListProps) {
                   </div>
                 </div>
                 <span
-                  className="shrink-0 rounded-chip bg-wash px-2 py-0.5 text-[13px] font-semibold tabular-nums text-text-1"
+                  className="shrink-0 rounded-chip bg-wash px-2 py-0.5 text-caption font-semibold tabular-nums text-text-1"
                   aria-label={`${w.assignmentCount} mentions`}
                 >
                   {fmt.num(w.assignmentCount)}×
@@ -108,7 +108,7 @@ export function WorkerSummaryList({ workers }: WorkerSummaryListProps) {
         </ul>
       )}
 
-      <p className="mt-3 text-[13px] leading-snug text-text-3">
+      <p className="mt-3 text-caption leading-snug text-text-3">
         The count is how many times this name was picked out of a voice log on this farm — not
         shifts, not days worked and not payments. {WORKER_DISCLAIMER}
       </p>

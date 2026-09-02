@@ -81,7 +81,7 @@ export function AiHealthBlock({ health }: AiHealthBlockProps) {
         <Rate label="Voice parse" rate={health.voiceParseSuccessRate14d} measured={measured} />
         <Rate label="Receipt parse" rate={health.receiptParseSuccessRate14d} measured={measured} />
         <div>
-          <dt className="text-[13px] text-text-2">Invocations</dt>
+          <dt className="text-caption text-text-2">Invocations</dt>
           <dd className="mt-0.5 text-[18px] font-semibold tabular-nums text-text-1">
             {invocations === null ? (
               <NotMeasured state="unmeasured" why="The invocation count did not arrive as a number." />
@@ -89,13 +89,13 @@ export function AiHealthBlock({ health }: AiHealthBlockProps) {
               invocations
             )}
           </dd>
-          <p className="mt-0.5 text-[13px] text-text-3">
+          <p className="mt-0.5 text-caption text-text-3">
             Every <code>ai.invocation</code> event on this farm in fourteen days.
           </p>
         </div>
       </dl>
 
-      <p className="mt-3 text-[13px] text-text-3">
+      <p className="mt-3 text-caption text-text-3">
         {measured ? (
           <>
             Each rate divides successes by invocations <b>of that provider</b>, while the count
@@ -122,7 +122,7 @@ function Rate({ label, rate, measured }: { label: string; rate: number; measured
 
   return (
     <div>
-      <dt className="text-[13px] text-text-2">{label}</dt>
+      <dt className="text-caption text-text-2">{label}</dt>
       <dd
         data-rate={label}
         className="mt-0.5 text-[18px] font-semibold tabular-nums"

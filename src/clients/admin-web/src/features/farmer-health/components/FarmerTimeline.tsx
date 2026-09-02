@@ -176,22 +176,22 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
       aria-label="14-day activity"
     >
       <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-[15px] font-semibold text-text-1">14-day activity</h3>
-        <span className="text-[13px] text-text-3">
+        <h3 className="text-h3 font-semibold text-text-1">14-day activity</h3>
+        <span className="text-caption text-text-3">
           {fmt.num(days.length)} days, ending with the most recent
         </span>
       </div>
 
       {/* The scale, stated. Comparing two ROWS by shade is the one reading
           this grid cannot support, and the old caption invited it. */}
-      <p data-scale-note="" className="mb-3 text-[13px] text-text-3">
+      <p data-scale-note="" className="mb-3 text-caption text-text-3">
         Each row is shaded against its own busiest day, not against the other rows — a dark cell in
         Verifies and a dark cell in Started are not the same number. The figure is in the cell.
       </p>
 
       <div className="overflow-x-auto">
         <table
-          className="border-separate text-[13px]"
+          className="border-separate text-caption"
           style={{ borderSpacing: '3px' }}
           aria-label="Activity by event type and day"
         >
@@ -206,7 +206,7 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
                 <th
                   key={d.date}
                   scope="col"
-                  className="text-[13px] tabular-nums text-text-3"
+                  className="text-caption tabular-nums text-text-3"
                   title={d.date}
                 >
                   {fmt.date(d.date, DATE_FORMATS.timelineDay) ?? '??'}
@@ -219,7 +219,7 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
               <tr key={row.key}>
                 <th
                   scope="row"
-                  className="pr-2 text-left text-[13px] font-semibold text-text-1"
+                  className="pr-2 text-left text-caption font-semibold text-text-1"
                   title={`Counts ${row.source}`}
                 >
                   {row.label}
@@ -231,7 +231,7 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
                     <td key={`${row.key}-${d.date}`} className="p-0">
                       <div
                         data-cell={`${row.key}:${d.date}`}
-                        className="grid h-7 w-7 place-items-center rounded-chip bg-wash text-[13px] font-semibold tabular-nums"
+                        className="grid h-7 w-7 place-items-center rounded-chip bg-wash text-caption font-semibold tabular-nums"
                         style={cellStyle(row, pct)}
                         title={`${row.label} on ${d.date}: ${count}`}
                       >
@@ -251,10 +251,10 @@ export function FarmerTimeline({ timeline }: FarmerTimelineProps) {
         made this disclosure mandatory and sighted for the reason the donut
         taught: a table nobody can open is a table nobody reviews.
       */}
-      <details className="mt-3 text-[13px] text-text-2">
+      <details className="mt-3 text-caption text-text-2">
         <summary className="cursor-pointer text-text-1">Show data table</summary>
         <div className="mt-2 overflow-x-auto">
-          <table data-timeline-table="" className="w-full text-[13px] tabular-nums">
+          <table data-timeline-table="" className="w-full text-caption tabular-nums">
             <caption className="sr-only">
               The same fourteen days as exact counts, one row per day.
             </caption>

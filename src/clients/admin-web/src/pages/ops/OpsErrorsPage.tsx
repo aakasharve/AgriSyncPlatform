@@ -250,7 +250,7 @@ const COLUMNS: DataListColumn<OpsErrorRow>[] = [
        whole window is two hours; this screen's window is whatever `?since`
        says, and an operator may be looking days back. */
     render: (e) => (
-      <span className="font-mono text-[13px] tabular-nums text-text-2">
+      <span className="font-mono text-caption tabular-nums text-text-2">
         {fmt.dateTime(e.occurredAtUtc, DATE_FORMATS.opsErrorsRow) ?? (
           <NotMeasured why="This row carries no time. Every row the server writes has one, so a blank here is a value that did not survive the journey." />
         )}
@@ -292,7 +292,7 @@ const COLUMNS: DataListColumn<OpsErrorRow>[] = [
     render: (e) => {
       const endpoint = endpointOf(e);
       return endpoint ? (
-        <span className="font-mono text-[13px] break-all text-text-1">{endpoint}</span>
+        <span className="font-mono text-caption break-all text-text-1">{endpoint}</span>
       ) : (
         <NotMeasured why={NO_ENDPOINT} />
       );
@@ -318,7 +318,7 @@ const COLUMNS: DataListColumn<OpsErrorRow>[] = [
       ) : (
         <span
           className={cn(
-            'font-mono text-[13px] font-semibold',
+            'font-mono text-caption font-semibold',
             e.statusCode >= 500 ? 'text-red' : e.statusCode >= 400 ? 'text-amber' : 'text-text-2',
           )}
         >
@@ -432,7 +432,7 @@ export default function OpsErrorsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
-          <h1 className="flex items-center gap-2 text-[26px] font-semibold tracking-[-0.01em] text-text-1">
+          <h1 className="flex items-center gap-2 text-h1 font-bold text-text-1">
             <AlertTriangle size={20} strokeWidth={2} aria-hidden="true" className="text-text-2" />
             API Errors
           </h1>
@@ -441,7 +441,7 @@ export default function OpsErrorsPage() {
               (`AdminEndpoints.cs:109-117`) — the fifth admin endpoint checked
               and the fifth that is platform-wide. The org in the query key
               separates the cache; it does not scope the data. */}
-          <p className="mt-1 text-[15px] text-text-2">
+          <p className="mt-1 text-body text-text-2">
             Every call the API failed or refused, every write that succeeded but took over two
             seconds, and every error the farmer&rsquo;s own app reported — platform-wide, newest
             first. Three different things, and the Type column is what tells them apart.
@@ -453,7 +453,7 @@ export default function OpsErrorsPage() {
       {/* A16 — the control this param has never had. */}
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[13px] font-semibold text-text-2" id="ops-errors-window-label">
+          <span className="text-caption font-semibold text-text-2" id="ops-errors-window-label">
             Window
           </span>
           <div
@@ -484,7 +484,7 @@ export default function OpsErrorsPage() {
             )}
           </div>
         </div>
-        <p className="text-[13px] text-text-3">
+        <p className="text-caption text-text-3">
           Showing {windowWords}.{' '}
           {since
             ? 'A start time is a fixed instant, so a link that carried this window keeps its start and grows wider as time passes — which is what a saved link should do.'
@@ -499,7 +499,7 @@ export default function OpsErrorsPage() {
         /* The scope of the SORT, said once. Over a server-paginated list a
            column sort orders the rows in hand; the total beside it comes from
            the server and is exact for the window above. */
-        <p className="text-[13px] text-text-3">
+        <p className="text-caption text-text-3">
           Sorting a column orders the {fmt.num(rows.length)} calls on this page, not all{' '}
           {fmt.num(totalCount)}.
         </p>

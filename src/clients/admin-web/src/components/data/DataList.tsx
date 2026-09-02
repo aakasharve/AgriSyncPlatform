@@ -601,7 +601,7 @@ export function DataList<T>(config: DataListConfig<T>) {
                         <td
                           key={column.key}
                           className={cn(
-                            'h-13 px-4 py-2.5 align-middle text-[15px] text-text-1',
+                            'h-13 px-4 py-2.5 align-middle text-body text-text-1',
                             column.align === 'right' && 'text-right tabular-nums',
                           )}
                         >
@@ -812,7 +812,7 @@ export function DataList<T>(config: DataListConfig<T>) {
           <div className="flex flex-col gap-4">
             <div
               data-print="panel"
-              className="overflow-hidden rounded-panel bg-page shadow-raised"
+              className="overflow-hidden rounded-panel bg-page shadow-surface"
             >
               <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4">
                 {chipText && <FilterChip text={chipText} onClear={clearFacetsToSummary} />}

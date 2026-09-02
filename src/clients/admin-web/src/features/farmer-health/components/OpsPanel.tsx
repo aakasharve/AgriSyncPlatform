@@ -53,8 +53,8 @@ export function OpsPanel({ title, grant, denied, children, className }: OpsPanel
       aria-label={`${title} (${grant})`}
     >
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-[15px] font-semibold text-text-1">{title}</h3>
-        <span className="text-[13px] text-text-3">requires {grant}</span>
+        <h3 className="text-h3 font-semibold text-text-1">{title}</h3>
+        <span className="text-caption text-text-3">requires {grant}</span>
       </div>
       {children}
     </section>

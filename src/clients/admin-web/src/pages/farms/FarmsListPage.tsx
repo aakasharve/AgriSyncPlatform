@@ -191,7 +191,7 @@ const COLUMNS: DataListColumn<FarmSummary>[] = [
         <span
           data-tier={f.engagementTier}
           className={cn(
-            'inline-grid size-[26px] place-items-center rounded-chip text-[14px] font-semibold',
+            'inline-grid size-8 place-items-center rounded-chip text-[15px] font-bold',
             TIER_CLASS[f.engagementTier] ?? 'bg-tint-grey text-text-2',
           )}
         >
@@ -276,7 +276,7 @@ function farmDetail(farm: FarmSummary, checkedAt: string) {
         {lastLog ? `Last log ${lastLog}.` : NEVER_LOGGED}{' '}
         {farm.engagementTier === null || farm.wvfd7d === null ? NO_WEEKLY_ROW : ''}
       </p>
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1 text-[13px]">
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1 text-caption">
         <dt className="text-text-3">Farm id</dt>
         {/* The identifier an operator files a ticket with, and the only value
             on the row that names no person. */}
@@ -335,11 +335,11 @@ export default function FarmsListPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
-          <h1 className="flex items-center gap-2 text-[26px] font-semibold tracking-[-0.01em] text-text-1">
+          <h1 className="flex items-center gap-2 text-h1 font-bold text-text-1">
             <Wheat size={20} strokeWidth={2} aria-hidden="true" className="text-text-2" />
             All Farms
           </h1>
-          <p className="mt-1 text-[15px] text-text-2">
+          <p className="mt-1 text-body text-text-2">
             Every farm this feed returns, with the figures this console actually measures — and
             a grey em dash wherever it does not measure one.
           </p>
@@ -359,7 +359,7 @@ export default function FarmsListPage() {
         aria-label="Filter by tier"
         className="flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-line py-4"
       >
-        <span className="w-24 flex-none text-[13px] font-semibold text-text-2">By tier</span>
+        <span className="w-24 flex-none text-caption font-semibold text-text-2">By tier</span>
         <div className="flex flex-wrap gap-2">
           {TIERS.map((t) => {
             const pressed = tier === t;
@@ -373,10 +373,10 @@ export default function FarmsListPage() {
                    not left on page 5 of a filter that matched three rows. */
                 onClick={() => url.toggle('tier', t)}
                 className={cn(
-                  'rounded-full border px-3 py-2 text-[15px]',
+                  'rounded-full border px-3.5 py-2 text-body transition-colors',
                   pressed
-                    ? cn('border-transparent font-semibold', TIER_CLASS[t])
-                    : 'border-line bg-page text-text-1 hover:bg-wash',
+                    ? cn('border-transparent font-bold', TIER_CLASS[t])
+                    : 'border-line bg-page text-text-1 hover:border-blue hover:bg-wash',
                 )}
               >
                 Tier {t}
@@ -384,7 +384,7 @@ export default function FarmsListPage() {
             );
           })}
         </div>
-        <span className="text-[13px] text-text-3">
+        <span className="text-caption text-text-3">
           Applied by the server over every farm, not just this page.
         </span>
       </div>
@@ -394,7 +394,7 @@ export default function FarmsListPage() {
            column sort orders the rows in hand; the total above it comes from
            the server and is exact. Saying neither would leave a reader to
            assume the first row is the worst farm on the platform. */
-        <p className="text-[13px] text-text-3">
+        <p className="text-caption text-text-3">
           Sorting a column orders the {fmt.num(items.length)} farms on this page, not all{' '}
           {fmt.num(totalCount)}.
         </p>

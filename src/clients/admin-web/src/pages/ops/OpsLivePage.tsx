@@ -242,15 +242,15 @@ function AlertBadge({ row }: { row: RuleRow }) {
       className={cn('flex flex-col gap-1 rounded-panel px-5 py-4 shadow-raised', tone)}
     >
       <div className="flex items-baseline gap-3">
-        <p className="min-w-0 flex-1 text-[15px] font-semibold text-text-1">
+        <p className="min-w-0 flex-1 text-body font-semibold text-text-1">
           {row.id} · {row.name}
         </p>
-        <span className="flex-none text-[13px] font-semibold tabular-nums">
+        <span className="flex-none text-caption font-semibold tabular-nums">
           {RULE_WORD[row.state]}
         </span>
       </div>
-      <p className="text-[13px] text-text-2">{row.rule}</p>
-      <p className="text-[13px] text-text-3">{row.meta}</p>
+      <p className="text-caption text-text-2">{row.rule}</p>
+      <p className="text-caption text-text-3">{row.meta}</p>
     </div>
   );
 }
@@ -317,7 +317,7 @@ const EVENT_COLUMNS: DataListColumn<OpsErrorEvent>[] = [
       <span
         title={EVENT_MEANING[e.eventType]}
         className={cn(
-          'inline-block rounded-chip px-2 py-0.5 text-[13px] font-medium',
+          'inline-block rounded-chip px-2 py-0.5 text-caption font-medium',
           EVENT_TONE[e.eventType] ?? 'bg-tint-grey text-text-2',
         )}
       >
@@ -611,7 +611,7 @@ const SERVICE_COLUMNS: DataListColumn<ServiceRow>[] = [
     render: (s) => (
       <span
         className={cn(
-          'inline-block rounded-chip px-2 py-0.5 text-[13px] font-medium',
+          'inline-block rounded-chip px-2 py-0.5 text-caption font-medium',
           SERVICE_TONE[s.tone],
         )}
       >
@@ -635,12 +635,12 @@ const SERVICE_COLUMNS: DataListColumn<ServiceRow>[] = [
 function serviceDetail(row: ServiceRow) {
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-[15px] text-text-2">{row.detail}</p>
+      <p className="text-body text-text-2">{row.detail}</p>
       <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
         {row.facts.map(([term, value]) => (
           <div key={term}>
-            <dt className="text-[13px] text-text-3">{term}</dt>
-            <dd className="text-[15px] text-text-1">{value}</dd>
+            <dt className="text-caption text-text-3">{term}</dt>
+            <dd className="text-body text-text-1">{value}</dd>
           </div>
         ))}
       </dl>
@@ -853,11 +853,11 @@ export default function OpsLivePage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
-          <h1 className="flex items-center gap-2 text-[26px] font-semibold tracking-[-0.01em] text-text-1">
+          <h1 className="flex items-center gap-2 text-h1 font-bold text-text-1">
             <Activity size={20} strokeWidth={2} aria-hidden="true" className="text-text-2" />
             Live Health
           </h1>
-          <p className="mt-1 text-[15px] text-text-2">
+          <p className="mt-1 text-body text-text-2">
             The two rules this endpoint really reads, the AI pipeline over the last 24 hours, and
             the state of every feed behind them &mdash; platform-wide. This endpoint takes no
             organisation, so nothing here is scoped to one.
@@ -869,7 +869,7 @@ export default function OpsLivePage() {
         {serverStamp ? (
           <FreshnessChip source="live" lastRefreshed={serverStamp} />
         ) : (
-          <span className="text-[13px] text-text-3">no server timestamp</span>
+          <span className="text-caption text-text-3">no server timestamp</span>
         )}
       </div>
 
@@ -891,7 +891,7 @@ export default function OpsLivePage() {
         <>
           {/* ── D8: three states, and eight rules that say so ───────────── */}
           <section className="flex flex-col gap-3" aria-labelledby="ops-live-rules">
-            <h2 id="ops-live-rules" className="text-[17px] font-semibold text-text-1">
+            <h2 id="ops-live-rules" className="text-h2 font-bold text-text-1">
               Alert rules
             </h2>
             <div data-rules="ops-live" className="grid gap-4 lg:grid-cols-3">
@@ -917,7 +917,7 @@ export default function OpsLivePage() {
               }
             />
 
-            <p className="text-[13px] text-text-3">
+            <p className="text-caption text-text-3">
               {fmt.num(readHere.length)} of the {fmt.num(rules.length)} entries above are rules this
               endpoint reads, and {fmt.num(breached.length)} of those{' '}
               {breached.length === 1 ? 'is' : 'are'} breached.
@@ -936,7 +936,7 @@ export default function OpsLivePage() {
 
           {/* ── the four tiles ─────────────────────────────────────────── */}
           <section className="flex flex-col gap-3" aria-labelledby="ops-live-voice">
-            <h2 id="ops-live-voice" className="text-[17px] font-semibold text-text-1">
+            <h2 id="ops-live-voice" className="text-h2 font-bold text-text-1">
               AI pipeline &mdash; last 24 hours
             </h2>
             <div data-kpis="ops-live" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -980,7 +980,7 @@ export default function OpsLivePage() {
               />
             </div>
             {unreadable && (
-              <p className="text-[13px] text-text-3">
+              <p className="text-caption text-text-3">
                 All five figures came back as zero, which is also what this query returns when it
                 fails &mdash; its catch block substitutes zeroes and the request still succeeds. The
                 tiles report no reading rather than a quiet day.
@@ -990,10 +990,10 @@ export default function OpsLivePage() {
 
           {/* ── recent events ──────────────────────────────────────────── */}
           <section className="flex flex-col gap-3" aria-labelledby="ops-live-events">
-            <h2 id="ops-live-events" className="text-[17px] font-semibold text-text-1">
+            <h2 id="ops-live-events" className="text-h2 font-bold text-text-1">
               Recent events &mdash; last 2 hours
             </h2>
-            <p className="text-[13px] text-text-2">
+            <p className="text-caption text-text-2">
               Not all of these are failures. <b>api.slow</b> is a write that succeeded and took over
               two seconds, and <b>client.error</b> is the farmer&rsquo;s own device reporting a
               problem. A 200 in this table is a warning, not a failure.
@@ -1032,7 +1032,7 @@ export default function OpsLivePage() {
               }}
             />
             {eventsCapped && (
-              <p className="text-[13px] text-text-3">
+              <p className="text-caption text-text-3">
                 The server returns at most fifty rows and sent fifty, so this is the newest fifty
                 and not the whole window. API Errors pages through the wider window.
               </p>
@@ -1041,10 +1041,10 @@ export default function OpsLivePage() {
 
           {/* ── A52 / B10: kept, because it is not the other one ────────── */}
           <section className="flex flex-col gap-3" aria-labelledby="ops-live-suffering">
-            <h2 id="ops-live-suffering" className="text-[17px] font-semibold text-text-1">
+            <h2 id="ops-live-suffering" className="text-h2 font-bold text-text-1">
               Farmer suffering watchlist &mdash; last 24 hours
             </h2>
-            <p className="text-[13px] text-text-2">
+            <p className="text-caption text-text-2">
               Farms with two or more attributed error events in the last 24 hours, worst ten first,
               computed live on this request. This is <b>not</b> the Farmer Suffering screen: that
               one reads a nightly view over seven days, needs three events, counts failed AI calls
@@ -1083,7 +1083,7 @@ export default function OpsLivePage() {
                 },
               }}
             />
-            <p className="text-[13px] text-text-3">
+            <p className="text-caption text-text-3">
               Sync, Logs and Voice are <b>LIKE</b> matches on the endpoint text, not a split of the
               total: an endpoint containing two of those words counts twice, one containing none
               counts in the total only, and an event with no endpoint at all &mdash; which is what
@@ -1093,10 +1093,10 @@ export default function OpsLivePage() {
 
           {/* ── plan Step 8: additive, and it goes below ────────────────── */}
           <section className="flex flex-col gap-3" aria-labelledby="ops-live-services">
-            <h2 id="ops-live-services" className="text-[17px] font-semibold text-text-1">
+            <h2 id="ops-live-services" className="text-h2 font-bold text-text-1">
               Service health
             </h2>
-            <p className="text-[13px] text-text-2">
+            <p className="text-caption text-text-2">
               These feeds do not share a clock, so this section carries no single freshness chip.
               Each row states when that feed was last heard, and two of them have no timestamp this
               screen can read at all. Open a row for what it is and what it cannot say.

@@ -312,7 +312,7 @@ function userDetail(user: UserSummary) {
             ? 'It has never been used to sign in.'
             : 'Whether it has ever been used to sign in is not recorded by this product.'}
       </p>
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1 text-[13px]">
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1 text-caption">
         {/* The identifier an operator files a ticket with, and the only value
             on the row that names no person. */}
         <dt className="text-text-3">Account id</dt>
@@ -376,7 +376,7 @@ export default function UsersPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
-          <h1 className="flex items-center gap-2 text-[26px] font-semibold tracking-[-0.01em] text-text-1">
+          <h1 className="flex items-center gap-2 text-h1 font-bold text-text-1">
             <Users size={20} strokeWidth={2} aria-hidden="true" className="text-text-2" />
             Users
           </h1>
@@ -384,7 +384,7 @@ export default function UsersPage() {
               search, ct)` takes no org parameter (`IAdminMisRepository.cs:16`),
               exactly like the three MIS feeds Task 16 corrected — the org in
               the query key separates the cache, it does not scope the data. */}
-          <p className="mt-1 text-[15px] text-text-2">
+          <p className="mt-1 text-body text-text-2">
             Every account this feed returns, platform-wide. The phone number is the account: it is
             the login identity, not a contact detail.
           </p>
@@ -396,7 +396,7 @@ export default function UsersPage() {
         /* The scope of the SORT, said once. Over a server-paginated list a
            column sort orders the rows in hand; the total beside it comes from
            the server and is exact. */
-        <p className="text-[13px] text-text-3">
+        <p className="text-caption text-text-3">
           Sorting a column orders the {fmt.num(items.length)} accounts on this page, not all{' '}
           {fmt.num(totalCount)}.
         </p>

@@ -54,7 +54,7 @@ export function NotMeasured({ state = 'unmeasured', why, className }: NotMeasure
       <span aria-hidden="true" className="text-[17px] leading-none">
         &mdash;
       </span>
-      <span className="block text-[13px] text-text-3">{STATE_WORD[state]}</span>
+      <span className="block text-caption text-text-3">{STATE_WORD[state]}</span>
     </span>
   );
 }

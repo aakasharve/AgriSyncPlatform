@@ -161,7 +161,7 @@ export default function SettingsAdminsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="min-w-0">
-        <h1 className="flex items-center gap-2 text-[26px] font-semibold tracking-[-0.01em] text-text-1">
+        <h1 className="flex items-center gap-2 text-h1 font-bold text-text-1">
           <ShieldCheck size={20} strokeWidth={2} aria-hidden="true" className="text-text-2" />
           Admin Users
         </h1>
@@ -170,7 +170,7 @@ export default function SettingsAdminsPage() {
             this list is the second." The two gates are real and are kept. The
             word "list" is not: what decides is a membership row in the database,
             and this console cannot read who holds one. */}
-        <p className="mt-1 text-[15px] text-text-2">
+        <p className="mt-1 text-body text-text-2">
           Who can open this console, and what that grants them. Signing in is the first gate; holding
           an active organisation membership is the second. <b>This console cannot list who holds
           one</b> &mdash; nothing below is a roster.

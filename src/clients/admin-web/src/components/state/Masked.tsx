@@ -65,7 +65,7 @@ export function Masked({ value, fallback, className }: MaskedProps) {
         <span aria-hidden="true" className="text-[17px] leading-none">
           &mdash;
         </span>
-        <span className="block text-[13px] text-text-3">hidden</span>
+        <span className="block text-caption text-text-3">hidden</span>
       </span>
     );
   }

@@ -388,7 +388,13 @@ export function ChartShell<V>({
     <section
       data-chart={id}
       aria-labelledby={titleId}
-      className={cn('flex flex-col gap-2', className)}
+      /* A printed console is evidence, and a chart cut in half across a page
+         break is evidence of nothing. globals.css keys the print rule off
+         this attribute rather than a class, so it cannot go stale when a
+         class is renamed — which is exactly how that rule spent three tasks
+         naming selectors that matched nothing. */
+      data-print="panel"
+      className={cn('flex flex-col gap-3', className)}
     >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h3 id={titleId} className="text-h3 font-semibold text-text-1">

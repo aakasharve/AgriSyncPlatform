@@ -244,7 +244,7 @@ function SectionHead({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 pt-1" data-section={title}>
-      <h2 className="flex items-center gap-2 text-[17px] font-semibold text-text-1">
+      <h2 className="flex items-center gap-2 text-h2 font-bold text-text-1">
         {state && (
           <>
             <span
@@ -255,7 +255,14 @@ function SectionHead({
             <span className="sr-only">{words}</span>
           </>
         )}
-        <span className="text-text-2" aria-hidden="true">
+        {/* A constant brand badge, identical in every section, so it cannot
+            be read as encoding anything — the DOT beside it is the thing that
+            varies and the thing that means something. Chrome supplying weight
+            to a heading; the finding is still the dot plus the sentence. */}
+        <span
+          className="grid size-8 flex-none place-items-center rounded-chip bg-brand-wash text-brand"
+          aria-hidden="true"
+        >
           {icon}
         </span>
         {title}
@@ -317,7 +324,7 @@ const CALL_COLUMNS: DataListColumn<CallRow>[] = [
             key={reason.kind}
             data-flag={reason.kind}
             className={cn(
-              'rounded-chip px-2 py-0.5 text-[13px] font-semibold',
+              'rounded-chip px-2.5 py-1 text-caption font-bold',
               FLAG_TONE[reason.tone],
             )}
           >
@@ -438,7 +445,7 @@ function callDetail(row: CallRow) {
       'spoke to the farmer.',
   );
 
-  return <p className="text-[15px] text-text-2">{parts.join(' ')}</p>;
+  return <p className="text-body text-text-2">{parts.join(' ')}</p>;
 }
 
 /* ═════════════════════════════════════════════════════════ the screen ══ */
@@ -741,8 +748,8 @@ export default function HomePage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="min-w-0 flex-1">
-          <h1 className="text-[26px] font-semibold tracking-[-0.01em] text-text-1">Ops Now</h1>
-          <p className="mt-1 text-[15px] text-text-2">
+          <h1 className="text-h1 font-bold text-text-1">Ops Now</h1>
+          <p className="mt-1 text-body text-text-2">
             What the platform is doing right now, who needs a person today, and what it cannot tell
             you. Four of the eight figures below have no source at all and say so; none of the
             others is scoped to one organisation, because none of these endpoints takes one.
@@ -758,13 +765,13 @@ export default function HomePage() {
         words={opsWords}
         meta={
           !mayReadOps ? (
-            <span className="text-[13px] text-text-3">feed not requested at your role</span>
+            <span className="text-caption text-text-3">feed not requested at your role</span>
           ) : opsStamp ? (
             <FreshnessChip source="live" lastRefreshed={opsStamp} />
           ) : (
             /* NO CHIP WITHOUT A STAMP. This is the D5 deletion in one line: a
                chip here used to read "Live · 1s ago" off the browser's clock. */
-            <span className="text-[13px] text-text-3">no server timestamp</span>
+            <span className="text-caption text-text-3">no server timestamp</span>
           )
         }
       />
@@ -780,7 +787,7 @@ export default function HomePage() {
           wvfdStamp ? (
             <FreshnessChip source="materialized" lastRefreshed={wvfdStamp} />
           ) : (
-            <span className="text-[13px] text-text-3">no server timestamp</span>
+            <span className="text-caption text-text-3">no server timestamp</span>
           )
         }
       />
@@ -794,20 +801,20 @@ export default function HomePage() {
         words={attentionWords}
         meta={
           noWatchlistReadable ? (
-            <span className="text-[13px] text-text-3">feeds not requested at your role</span>
+            <span className="text-caption text-text-3">feeds not requested at your role</span>
           ) : churnStamp || sufferingStamp ? (
             <FreshnessChip
               source="materialized"
               lastRefreshed={churnStamp ?? sufferingStamp}
             />
           ) : (
-            <span className="text-[13px] text-text-3">no server timestamp</span>
+            <span className="text-caption text-text-3">no server timestamp</span>
           )
         }
       />
 
       {noWatchlistReadable ? (
-        <p className="rounded-panel bg-tint-grey px-5 py-4 text-[15px] text-text-2">
+        <p className="rounded-panel bg-tint-grey px-5 py-4 text-body text-text-2">
           This list merges the suffering watchlist and the silent-churn watchlist. Your role
           includes neither {ModuleKeys.FarmsSuffering} nor {ModuleKeys.FarmsSilentChurn}, so neither
           feed was requested. Nothing here is a count of zero.
@@ -870,7 +877,7 @@ export default function HomePage() {
             skeleton={{ rows: 5, cells: 5 }}
           />
 
-          <div className="flex flex-col gap-2 text-[13px] text-text-3">
+          <div className="flex flex-col gap-2 text-caption text-text-3">
             <p>
               A farm is here because it is on the <b>suffering</b> watchlist — three or more failed
               events in the last seven days — or on the <b>silent-churn</b> watchlist — no log
