@@ -117,7 +117,8 @@ public sealed class SetLabourPermissionHandler(
         bool changed;
         try
         {
-            changed = membership.SetLabourRecordManagement(command.CanManageLabourRecords, now);
+            changed = membership.SetLabourRecordManagement(
+                command.CanManageLabourRecords, command.LabourGrantExpiresAtUtc, now);
         }
         catch (InvalidOperationException)
         {
@@ -126,6 +127,12 @@ public sealed class SetLabourPermissionHandler(
             // reader that widens that read cannot turn a domain refusal into an
             // unhandled 500.
             return Result.Failure<LabourPermissionDto>(ShramSafalErrors.Forbidden);
+        }
+        catch (ArgumentException)
+        {
+            // A past expiry grants nothing; refusing keeps the switch honest
+            // (P5). Shape error, not an authorisation one.
+            return Result.Failure<LabourPermissionDto>(ShramSafalErrors.InvalidCommand);
         }
 
         // ── 7. History only when something moved ─────────────────────────────
@@ -150,6 +157,9 @@ public sealed class SetLabourPermissionHandler(
                         targetUserId = command.TargetUserId.Value,
                         targetRole = membership.Role.ToString(),
                         canManageLabourRecords = command.CanManageLabourRecords,
+                        // A duration IS part of the decision (P3) — "till the
+                        // 4th" and "permanently" are different grants.
+                        labourGrantExpiresAtUtc = command.LabourGrantExpiresAtUtc,
                     },
                     farmId: command.FarmId.Value,
                     clientCommandId: null,
@@ -164,6 +174,6 @@ public sealed class SetLabourPermissionHandler(
             await repository.SaveChangesAsync(ct);
         }
 
-        return Result.Success(LabourPermissionProjection.From(membership));
+        return Result.Success(LabourPermissionProjection.From(membership, now));
     }
 }

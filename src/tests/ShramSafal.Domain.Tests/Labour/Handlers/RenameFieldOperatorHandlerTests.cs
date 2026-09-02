@@ -150,7 +150,7 @@ public sealed class RenameFieldOperatorHandlerTests
         public override Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
             => Task.FromResult(_roles.TryGetValue((farmId, userId), out var role) ? (AppRole?)role : null);
 
-        public override Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+        public override Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, DateTime nowUtc, CancellationToken ct = default)
             => Task.FromResult(_labourGrants.Contains((farmId, userId)));
 
         public override Task<FieldOperator?> GetFieldOperatorByIdAsync(Guid id, CancellationToken ct = default)

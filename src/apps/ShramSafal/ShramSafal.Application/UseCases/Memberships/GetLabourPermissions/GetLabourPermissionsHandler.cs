@@ -1,4 +1,5 @@
-﻿using AgriSync.BuildingBlocks.Application;
+﻿using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
@@ -28,7 +29,7 @@ namespace ShramSafal.Application.UseCases.Memberships.GetLabourPermissions;
 /// has no authority to describe, and listing them would invite an owner to
 /// "revoke" a capability from someone who already has no membership.</para>
 /// </summary>
-public sealed class GetLabourPermissionsHandler(IShramSafalRepository repository)
+public sealed class GetLabourPermissionsHandler(IShramSafalRepository repository, IClock clock)
     : IHandler<GetLabourPermissionsQuery, IReadOnlyList<LabourPermissionDto>>
 {
     public async Task<Result<IReadOnlyList<LabourPermissionDto>>> HandleAsync(
@@ -57,10 +58,15 @@ public sealed class GetLabourPermissionsHandler(IShramSafalRepository repository
         // the CALLER'S OWN membership rows on every farm. Re-asserting the farm
         // here is what stops a foreign-farm row of the caller's own reaching this
         // list.
+        // R1 Task 2.2 — one instant for the whole roster, from the injected
+        // clock: the projection evaluates expiry through the SAME domain rule
+        // the gate's SQL predicate translates, so the list and the gate cannot
+        // disagree about whether a grant is still live.
+        var now = clock.UtcNow;
         var rows = memberships
             .Where(m => m.FarmId == query.FarmId && !m.IsTerminal)
             .OrderBy(m => m.GrantedAtUtc)
-            .Select(LabourPermissionProjection.From)
+            .Select(m => LabourPermissionProjection.From(m, now))
             .ToArray();
 
         return Result.Success<IReadOnlyList<LabourPermissionDto>>(rows);

@@ -96,7 +96,7 @@ public sealed class VerifyLogHandler(
             !VerificationStateMachine.CanTransitionWithRole(
                 VerificationStatus.Confirmed, VerificationStatus.Verified, resolvedCallerRole)
             && await LabourManagementGate.HasExplicitGrantAsync(
-                repository, (Guid)log.FarmId, command.VerifiedByUserId, ct);
+                repository, (Guid)log.FarmId, command.VerifiedByUserId, clock.UtcNow, ct);
 
         // Phase 5 entitlement gate (PaidFeature.RunVerification).
         var gate = await EntitlementGate.CheckAsync<DailyLogDto>(

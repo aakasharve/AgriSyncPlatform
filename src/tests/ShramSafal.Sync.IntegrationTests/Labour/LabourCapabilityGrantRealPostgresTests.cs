@@ -463,6 +463,31 @@ public sealed class LabourCapabilityGrantRealPostgresTests(Xunit.Abstractions.IT
             "the untouched row now MEANS off: an existing Mukadam starts OFF on deploy day");
     }
 
+    /// <summary>
+    /// R1 Task 2.2 — the EF-translation proof the clock-threading decision was
+    /// sized on: the expiry term is a PARAMETER, translated by EF to a
+    /// parameterised comparison, executed here on real Postgres.
+    /// </summary>
+    [Fact]
+    public async Task An_expired_grant_is_denied_by_the_real_SQL_predicate_and_nothing_is_rewritten()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        var granted = await SetPermissionAsync(FarmA, OwnerA, WorkerBoth, allowed: true,
+            expiresAtUtc: DateTime.UtcNow.AddHours(1));
+        granted.IsSuccess.Should().BeTrue();
+        granted.Value!.LabourGrantExpiresAtUtc.Should().NotBeNull();
+
+        (await IsAllowedAsync(FarmA, WorkerBoth)).Should().BeTrue(
+            "inside the window — and this executes the expiry predicate on real Postgres, "
+            + "which is the translation check the clock-threading decision was sized on");
+        (await IsAllowedAsync(FarmA, WorkerBoth, DateTime.UtcNow.AddHours(2))).Should().BeFalse(
+            "past the end the SAME stored row answers OFF");
+
+        var (rowA, _) = await ReadGrantRowsAsync();
+        rowA.Should().BeTrue("expiry denies forward; the stored decision is not rewritten backward");
+    }
+
     // ═════════════════════════════════════════════════════════════════════════
     // Harness
     // ═════════════════════════════════════════════════════════════════════════
@@ -525,22 +550,24 @@ public sealed class LabourCapabilityGrantRealPostgresTests(Xunit.Abstractions.IT
     }
 
     private Task<Result<LabourPermissionDto>> SetPermissionAsync(
-        Guid farmId, Guid caller, Guid target, bool allowed)
+        Guid farmId, Guid caller, Guid target, bool allowed, DateTime? expiresAtUtc = null)
         => RunUnderScopeAsync(farmId, caller, sp => new SetLabourPermissionHandler(
                 sp.GetRequiredService<IShramSafalRepository>(),
                 sp.GetRequiredService<IClock>())
             .HandleAsync(new SetLabourPermissionCommand(
                 new FarmId(farmId), new UserId(target), allowed, new UserId(caller),
-                "test", "device-test", "sha256:test")));
+                "test", "device-test", "sha256:test", expiresAtUtc)));
 
     private Task<Result<IReadOnlyList<LabourPermissionDto>>> GetPermissionsAsync(Guid farmId, Guid caller)
-        => RunUnderScopeAsync(farmId, caller, sp =>
-            new GetLabourPermissionsHandler(sp.GetRequiredService<IShramSafalRepository>())
-                .HandleAsync(new GetLabourPermissionsQuery(new FarmId(farmId), new UserId(caller))));
+        => RunUnderScopeAsync(farmId, caller, sp => new GetLabourPermissionsHandler(
+                sp.GetRequiredService<IShramSafalRepository>(),
+                sp.GetRequiredService<IClock>())
+            .HandleAsync(new GetLabourPermissionsQuery(new FarmId(farmId), new UserId(caller))));
 
-    private Task<bool> IsAllowedAsync(Guid farmId, Guid userId)
+    private Task<bool> IsAllowedAsync(Guid farmId, Guid userId, DateTime? nowUtc = null)
         => RunUnderScopeAsync(farmId, userId, sp => LabourManagementGate.IsAllowedAsync(
-            sp.GetRequiredService<IShramSafalRepository>(), farmId, userId));
+            sp.GetRequiredService<IShramSafalRepository>(), farmId, userId,
+            nowUtc ?? DateTime.UtcNow));
 
     /// <summary>Read below the application entirely, as the superuser — a data read, not a proof.</summary>
     private async Task<(bool FarmA, bool FarmB)> ReadGrantRowsAsync()

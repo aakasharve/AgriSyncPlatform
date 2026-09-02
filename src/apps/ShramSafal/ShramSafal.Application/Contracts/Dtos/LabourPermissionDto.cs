@@ -45,6 +45,10 @@
 /// <c>false</c> for owner-tier — the switch renders permanently on and
 /// non-interactive. <c>true</c> for every other role, a Mukadam included.
 /// </param>
+/// <param name="LabourGrantExpiresAtUtc">
+/// The instant the responsibility ends, <c>null</c> for कायम — and <c>null</c>
+/// once lapsed: an expired grant reports as NotGranted with no ghost date.
+/// </param>
 public sealed record LabourPermissionDto(
     Guid UserId,
     string Role,
@@ -52,4 +56,5 @@ public sealed record LabourPermissionDto(
     bool CanManageLabourRecords,
     bool HasExplicitGrant,
     string Source,
-    bool IsGrantEditable);
+    bool IsGrantEditable,
+    DateTime? LabourGrantExpiresAtUtc);

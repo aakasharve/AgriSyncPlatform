@@ -62,7 +62,7 @@ public sealed class LabourCapabilityGateTests
         var repo = new FakeRepo();
         repo.SetRole(FarmA, OwnerA, AppRole.PrimaryOwner);
 
-        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, OwnerA)).Should().BeTrue();
+        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, OwnerA, Now)).Should().BeTrue();
 
         repo.GrantReads.Should().Be(0,
             "the role answers on its own for owner-tier; reaching for the grant would mean a "
@@ -75,15 +75,15 @@ public sealed class LabourCapabilityGateTests
         var repo = new FakeRepo();
         repo.SetRole(FarmA, MukadamA, AppRole.Mukadam);
 
-        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, MukadamA)).Should().BeFalse(
+        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, MukadamA, Now)).Should().BeFalse(
             "founder master review 2026-09-02 (D5): one switch, owner-controlled — the Mukadam "
             + "role no longer carries labour authority, and existing Mukadams start OFF");
         repo.GrantReads.Should().Be(1,
             "his answer now genuinely depends on the stored grant, so it IS read — a denial "
             + "without the read would pass identically against code that ignores the switch");
 
-        repo.AddMembership(FarmA, MukadamA, AppRole.Mukadam).SetLabourRecordManagement(true, Now);
-        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, MukadamA)).Should().BeTrue(
+        repo.AddMembership(FarmA, MukadamA, AppRole.Mukadam).SetLabourRecordManagement(true, null, Now);
+        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, MukadamA, Now)).Should().BeTrue(
             "the same grant that admits a Worker admits him — one switch, no second permission model");
     }
 
@@ -93,7 +93,7 @@ public sealed class LabourCapabilityGateTests
         var repo = new FakeRepo();
         repo.Grant(FarmA, WorkerA); // a grant with no membership behind it
 
-        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, WorkerA)).Should().BeFalse(
+        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, WorkerA, Now)).Should().BeFalse(
             "a grant cannot outlive the membership that carries it");
         repo.GrantReads.Should().Be(0);
     }
@@ -112,7 +112,7 @@ public sealed class LabourCapabilityGateTests
         var handler = new SetLabourPermissionHandler(repo, new FixedClock(Now));
 
         // 1 — denied
-        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, WorkerA)).Should().BeFalse();
+        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, WorkerA, Now)).Should().BeFalse();
         repo.GrantReads.Should().Be(1, "a Worker's answer genuinely depends on the grant, so it IS read");
 
         // 2 — granted, by the owner, through the real handler
@@ -124,7 +124,7 @@ public sealed class LabourCapabilityGateTests
         membership.CanManageLabourRecords.Should().BeTrue("the domain entity carries the decision");
 
         // 3 — allowed
-        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, WorkerA)).Should().BeTrue();
+        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, WorkerA, Now)).Should().BeTrue();
 
         // 4 — revoked
         var revoked = await handler.HandleAsync(Set(FarmA, WorkerA, false, OwnerA));
@@ -133,7 +133,7 @@ public sealed class LabourCapabilityGateTests
         revoked.Value!.Source.Should().Be("NotGranted");
 
         // 5 — denied again
-        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, WorkerA)).Should().BeFalse();
+        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, WorkerA, Now)).Should().BeFalse();
 
         repo.AuditActions.Should().Equal(["LabourManagementGranted", "LabourManagementRevoked"],
             "each real change is explainable afterwards — and there are exactly two changes, not four");
@@ -179,13 +179,13 @@ public sealed class LabourCapabilityGateTests
         repo.SetRole(FarmA, MukadamA, AppRole.Mukadam);
         var log = NewLog(FarmA, MukadamA);
         repo.AddLog(log);
-        var enforcer = new ShramSafalAuthorizationEnforcer(repo, new TenantContext());
+        var enforcer = new ShramSafalAuthorizationEnforcer(repo, new TenantContext(), new FixedClock(Now));
 
         (await enforcer.EnsureCanVerify(new UserId(MukadamA), log.Id)).IsSuccess.Should().BeFalse(
             "an ungranted foreman cannot sign off his own day — and the refusal now happens one "
             + "layer earlier, at the shared gate, exactly as for an ungranted Worker");
 
-        repo.AddMembership(FarmA, MukadamA, AppRole.Mukadam).SetLabourRecordManagement(true, Now);
+        repo.AddMembership(FarmA, MukadamA, AppRole.Mukadam).SetLabourRecordManagement(true, null, Now);
         (await enforcer.EnsureCanVerify(new UserId(MukadamA), log.Id)).IsSuccess.Should().BeTrue(
             "the owner's switch is the one thing that changes the answer");
     }
@@ -194,7 +194,7 @@ public sealed class LabourCapabilityGateTests
     public async Task A_bare_Worker_is_refused_by_every_one_of_the_five_actions()
     {
         var repo = SeedWorkerScenario(granted: false, out var log, out var assignment, out var fieldOperator);
-        var enforcer = new ShramSafalAuthorizationEnforcer(repo, new TenantContext());
+        var enforcer = new ShramSafalAuthorizationEnforcer(repo, new TenantContext(), new FixedClock(Now));
 
         (await CreateAsync(repo, WorkerA)).IsFailure.Should().BeTrue();
         (await RenameAsync(repo, WorkerA, fieldOperator.Id)).IsFailure.Should().BeTrue();
@@ -211,7 +211,7 @@ public sealed class LabourCapabilityGateTests
     public async Task The_same_Worker_is_admitted_by_every_one_of_the_five_actions_once_granted()
     {
         var repo = SeedWorkerScenario(granted: true, out var log, out var assignment, out var fieldOperator);
-        var enforcer = new ShramSafalAuthorizationEnforcer(repo, new TenantContext());
+        var enforcer = new ShramSafalAuthorizationEnforcer(repo, new TenantContext(), new FixedClock(Now));
 
         (await CreateAsync(repo, WorkerA)).IsSuccess.Should().BeTrue();
         (await RenameAsync(repo, WorkerA, fieldOperator.Id)).IsSuccess.Should().BeTrue();
@@ -362,7 +362,7 @@ public sealed class LabourCapabilityGateTests
         revoked.IsSuccess.Should().BeTrue(
             "'the owner may keep him as mukadam with the authority OFF' — the exact sentence "
             + "the shipped code made impossible");
-        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, MukadamA)).Should().BeFalse(
+        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, MukadamA, Now)).Should().BeFalse(
             "denied by the gate, not merely hidden in a UI");
     }
 
@@ -378,9 +378,9 @@ public sealed class LabourCapabilityGateTests
         repo.AddMembership(FarmA, OwnerA, AppRole.PrimaryOwner);
         repo.AddMembership(FarmA, MukadamA, AppRole.Mukadam);
         var worker = repo.AddMembership(FarmA, WorkerA, AppRole.Worker);
-        worker.SetLabourRecordManagement(true, Now);
+        worker.SetLabourRecordManagement(true, null, Now);
 
-        var result = await new GetLabourPermissionsHandler(repo)
+        var result = await new GetLabourPermissionsHandler(repo, new FixedClock(Now))
             .HandleAsync(new GetLabourPermissionsQuery(new FarmId(FarmA), new UserId(OwnerA)));
 
         result.IsSuccess.Should().BeTrue();
@@ -410,7 +410,7 @@ public sealed class LabourCapabilityGateTests
         repo.SetRole(FarmA, MukadamA, AppRole.Mukadam);
         repo.AddMembership(FarmA, MukadamA, AppRole.Mukadam);
 
-        var result = await new GetLabourPermissionsHandler(repo)
+        var result = await new GetLabourPermissionsHandler(repo, new FixedClock(Now))
             .HandleAsync(new GetLabourPermissionsQuery(new FarmId(FarmA), new UserId(MukadamA)));
 
         result.IsFailure.Should().BeTrue("who else may rewrite labour is access-control information");
@@ -431,7 +431,7 @@ public sealed class LabourCapabilityGateTests
         // assertion is the thing under test (doctrine E4).
         repo.LeakForeignMembershipsFromRoster = true;
 
-        var result = await new GetLabourPermissionsHandler(repo)
+        var result = await new GetLabourPermissionsHandler(repo, new FixedClock(Now))
             .HandleAsync(new GetLabourPermissionsQuery(new FarmId(FarmA), new UserId(OwnerA)));
 
         result.IsSuccess.Should().BeTrue();
@@ -440,12 +440,56 @@ public sealed class LabourCapabilityGateTests
     }
 
     // ═════════════════════════════════════════════════════════════════════════
+    // 5. Time-bounded authority (R1 Task 2.2) — expiry denies forward at BOTH
+    //    evaluation sites, and never rewrites backward.
+    // ═════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task An_expired_grant_denies_forward_and_the_stored_decision_is_untouched()
+    {
+        var repo = new FakeRepo();
+        repo.SetRole(FarmA, OwnerA, AppRole.PrimaryOwner);
+        var membership = repo.AddMembership(FarmA, WorkerA, AppRole.Worker);
+        membership.SetLabourRecordManagement(true, Now.AddHours(6), Now);
+
+        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, WorkerA, Now.AddHours(1)))
+            .Should().BeTrue("inside the window the grant answers");
+        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, WorkerA, Now.AddHours(7)))
+            .Should().BeFalse("जबाबदारी आपोआप संपेल — past the end the SAME row answers OFF");
+
+        membership.CanManageLabourRecords.Should().BeTrue(
+            "expiry denies FORWARD only: nothing the person did while responsible is rewritten");
+    }
+
+    [Fact]
+    public async Task The_roster_never_reports_an_expired_grant_as_live()
+    {
+        var repo = new FakeRepo();
+        repo.SetRole(FarmA, OwnerA, AppRole.PrimaryOwner);
+        repo.AddMembership(FarmA, OwnerA, AppRole.PrimaryOwner);
+        repo.AddMembership(FarmA, WorkerA, AppRole.Worker)
+            .SetLabourRecordManagement(true, Now.AddDays(1), Now);
+
+        var later = new GetLabourPermissionsHandler(repo, new FixedClock(Now.AddDays(2)));
+        var result = await later.HandleAsync(
+            new GetLabourPermissionsQuery(new FarmId(FarmA), new UserId(OwnerA)));
+
+        var row = result.Value!.Single(r => r.UserId == WorkerA);
+        row.CanManageLabourRecords.Should().BeFalse(
+            "the projection evaluates the SAME clocked rule as the gate — Phase 0's second "
+            + "evaluation site, fixed rather than inherited");
+        row.Source.Should().Be("NotGranted");
+        row.LabourGrantExpiresAtUtc.Should().BeNull("no ghost date on a lapsed grant");
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
     // Helpers
     // ═════════════════════════════════════════════════════════════════════════
 
-    private static SetLabourPermissionCommand Set(Guid farmId, Guid target, bool allowed, Guid caller) =>
+    private static SetLabourPermissionCommand Set(
+        Guid farmId, Guid target, bool allowed, Guid caller, DateTime? expiresAtUtc = null) =>
         new(new FarmId(farmId), new UserId(target), allowed, new UserId(caller),
-            "test", "device-test", "sha256:test");
+            "test", "device-test", "sha256:test", expiresAtUtc);
 
     private static DailyLog NewLog(Guid farmId, Guid actor) => DailyLog.Create(
         id: Guid.NewGuid(),
@@ -562,17 +606,20 @@ public sealed class LabourCapabilityGateTests
         public override Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
             => Task.FromResult(_roles.TryGetValue((farmId, userId), out var role) ? (AppRole?)role : null);
 
-        public override Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+        public override Task<bool> GetLabourManagementGrantAsync(
+            Guid farmId, Guid userId, DateTime nowUtc, CancellationToken ct = default)
         {
             GrantReads++;
 
             // The stored flag lives on the membership when there is one, so the
-            // handler's write and this read cannot disagree.
+            // handler's write and this read cannot disagree — and the fake
+            // HONOURS nowUtc through the same domain rule the real predicate
+            // translates, so an expiry fact here proves the gate, not the fake.
             var membership = _memberships.FirstOrDefault(
                 m => m.FarmId == new FarmId(farmId) && m.UserId == new UserId(userId));
             if (membership is not null)
             {
-                return Task.FromResult(membership.CanManageLabourRecords);
+                return Task.FromResult(membership.HasEffectiveLabourGrant(nowUtc));
             }
 
             return Task.FromResult(_grants.Contains((farmId, userId)));

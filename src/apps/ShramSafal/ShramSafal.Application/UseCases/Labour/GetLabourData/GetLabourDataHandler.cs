@@ -183,7 +183,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // GRANTED approval authority to — the button would not merely be disabled, the
         // row would not exist. Same flag the decision path reads, one place.
         var hasLabourManagementGrant = await LabourManagementGate.HasExplicitGrantAsync(
-            repository, query.FarmId.Value, query.CallerUserId.Value, ct);
+            repository, query.FarmId.Value, query.CallerUserId.Value, clock.UtcNow, ct);
 
         // ── 1. Memberships → labour People (Worker / Mukadam only — owners
         //       and other roles are not "labour"). ──────────────────────────

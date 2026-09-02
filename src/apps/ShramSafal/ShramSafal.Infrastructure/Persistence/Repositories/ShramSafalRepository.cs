@@ -1671,7 +1671,7 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     /// membership counts.</para>
     /// </summary>
     public async Task<bool> GetLabourManagementGrantAsync(
-        Guid farmId, Guid userId, CancellationToken ct = default)
+        Guid farmId, Guid userId, DateTime nowUtc, CancellationToken ct = default)
     {
         var typedFarmId = new FarmId(farmId);
         var typedUserId = new UserId(userId);
@@ -1682,7 +1682,8 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
                 && m.UserId == typedUserId
                 && m.Status != MembershipStatus.Revoked
                 && m.Status != MembershipStatus.Exited
-                && m.CanManageLabourRecords, ct);
+                && m.CanManageLabourRecords
+                && (m.LabourGrantExpiresAtUtc == null || m.LabourGrantExpiresAtUtc > nowUtc), ct);
     }
 
     /// <summary>

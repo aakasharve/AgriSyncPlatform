@@ -67,8 +67,15 @@ export interface UseLabourPermissionsResult {
     /** English, from `LABOUR_PERMISSION_MESSAGES`. `null` when nothing is wrong. */
     error: string | null;
     reload: () => Promise<void>;
-    /** Desired state, not a toggle. */
-    setPermission: (targetUserId: string, canManageLabourRecords: boolean) => Promise<void>;
+    /**
+     * Desired state, not a toggle. `labourGrantExpiresAtUtc` is the ISO instant
+     * the responsibility ends (R1 Task 2.2); omitted/null = कायम, no end date.
+     */
+    setPermission: (
+        targetUserId: string,
+        canManageLabourRecords: boolean,
+        labourGrantExpiresAtUtc?: string | null,
+    ) => Promise<void>;
     dismissError: () => void;
 }
 
@@ -122,13 +129,15 @@ export function useLabourPermissions(farmId: string | null | undefined): UseLabo
     const setPermission = useCallback(async (
         targetUserId: string,
         canManageLabourRecords: boolean,
+        labourGrantExpiresAtUtc?: string | null,
     ) => {
         if (!farmId) return;
 
         setSavingUserId(targetUserId);
         setError(null);
         try {
-            const updated = await setLabourPermission(farmId, targetUserId, canManageLabourRecords);
+            const updated = await setLabourPermission(
+                farmId, targetUserId, canManageLabourRecords, labourGrantExpiresAtUtc ?? null);
             if (!mountedRef.current) return;
             // Adopt the SERVER's row, whole. Not the boolean we asked for.
             setRows(current => (current ?? []).map(

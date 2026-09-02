@@ -17,20 +17,20 @@ namespace ShramSafal.Application.UseCases.Memberships.SetLabourPermission;
 /// </summary>
 internal static class LabourPermissionProjection
 {
-    public static LabourPermissionDto From(FarmMembership membership)
+    public static LabourPermissionDto From(FarmMembership membership, DateTime nowUtc)
     {
         var carriedByRole = LabourManagementPermission.IsCarriedByRole(membership.Role);
 
-        // For a role-carried capability the stored flag is not consulted at all,
-        // so reporting it would invite a client to render a switch that cannot
-        // do anything (P5). Report the reason instead.
-        var hasExplicitGrant = !carriedByRole && membership.CanManageLabourRecords;
+        // For a role-carried capability the stored flag is not consulted at all;
+        // for everyone else the flag counts ONLY while unexpired — the SAME rule
+        // the gate's SQL predicate applies, via the same domain method.
+        var hasEffectiveGrant = !carriedByRole && membership.HasEffectiveLabourGrant(nowUtc);
 
         var source = membership.Role switch
         {
             AgriSync.SharedKernel.Contracts.Roles.AppRole.PrimaryOwner
                 or AgriSync.SharedKernel.Contracts.Roles.AppRole.SecondaryOwner => "OwnerTier",
-            _ => hasExplicitGrant ? "ExplicitGrant" : "NotGranted",
+            _ => hasEffectiveGrant ? "ExplicitGrant" : "NotGranted",
         };
 
         return new LabourPermissionDto(
@@ -38,9 +38,10 @@ internal static class LabourPermissionProjection
             Role: membership.Role.ToString(),
             Status: membership.Status.ToString(),
             CanManageLabourRecords: LabourManagementPermission.IsAllowed(
-                membership.Role, membership.CanManageLabourRecords),
-            HasExplicitGrant: hasExplicitGrant,
+                membership.Role, hasEffectiveGrant),
+            HasExplicitGrant: hasEffectiveGrant,
             Source: source,
-            IsGrantEditable: !carriedByRole);
+            IsGrantEditable: !carriedByRole,
+            LabourGrantExpiresAtUtc: hasEffectiveGrant ? membership.LabourGrantExpiresAtUtc : null);
     }
 }

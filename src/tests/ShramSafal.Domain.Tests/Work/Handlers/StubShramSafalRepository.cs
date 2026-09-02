@@ -153,7 +153,7 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
     // "grants" the capability would be silently ignored, every allow-case test
     // would fail, and — far worse — every DENY-case test would still pass while
     // proving nothing about the grant path.
-    public virtual Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, CancellationToken ct = default) => Task.FromResult(false);
+    public virtual Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, DateTime nowUtc, CancellationToken ct = default) => Task.FromResult(false);
     public virtual Task<FarmMembership?> GetTrackedFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default) => Task.FromResult<FarmMembership?>(null);
 
     // Task 1.2's roster read, restated `virtual` for the third time for the same

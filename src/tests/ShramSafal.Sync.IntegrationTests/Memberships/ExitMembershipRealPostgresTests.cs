@@ -508,7 +508,7 @@ public sealed class ExitMembershipRealPostgresTests(Xunit.Abstractions.ITestOutp
         var memberB = await repo.IsUserMemberOfFarmAsync(FarmB, userId);
         var roleA = await repo.GetUserRoleForFarmAsync(FarmA, userId);
         var (tenantA, _) = await repo.GetFarmMembershipForTenantAsync(FarmA, userId);
-        var labourA = await LabourManagementGate.IsAllowedAsync(repo, FarmA, userId);
+        var labourA = await LabourManagementGate.IsAllowedAsync(repo, FarmA, userId, DateTime.UtcNow);
         var syncFarmIds = await repo.GetFarmIdsForUserAsync(userId);
         var myFarms = await repo.GetMyFarmsAsync(userId);
 

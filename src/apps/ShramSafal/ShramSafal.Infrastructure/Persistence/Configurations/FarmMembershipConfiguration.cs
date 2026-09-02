@@ -112,6 +112,16 @@ internal sealed class FarmMembershipConfiguration : IEntityTypeConfiguration<Far
             .HasDefaultValue(false)
             .IsRequired();
 
+        // R1 Task 2.2 (founder master review 2026-09-02, D5) — when the grant
+        // stops answering. Nullable, no default, NO BACKFILL: every pre-existing
+        // grant means "no end date", which is exactly what was decided when it
+        // was given. Same no-index / no-RLS reasoning as the grant column above:
+        // read only beside (farm_id, user_id), covered by
+        // ix_farm_memberships_farm_user_nonterminal; policies name tables and
+        // rows, not columns. No GRANT needed — privileges are per-table.
+        builder.Property(x => x.LabourGrantExpiresAtUtc)
+            .HasColumnName("labour_grant_expires_at_utc");
+
         builder.HasIndex(x => x.FarmId);
         builder.HasIndex(x => x.UserId);
 

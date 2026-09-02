@@ -1033,8 +1033,12 @@ public interface IShramSafalRepository
     /// effective rule is <see cref="ShramSafal.Domain.Farms.LabourManagementPermission.IsAllowed"/>,
     /// resolved once in <c>LabourManagementGate</c>. Do not call this member
     /// directly from a handler.</para>
+    ///
+    /// <para><c>nowUtc</c> bounds the grant: a row whose
+    /// <c>labour_grant_expires_at_utc</c> is at or before it does not count.</para>
     /// </summary>
-    Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+    Task<bool> GetLabourManagementGrantAsync(
+        Guid farmId, Guid userId, DateTime nowUtc, CancellationToken ct = default)
         => Task.FromResult(false);
 
     /// <summary>

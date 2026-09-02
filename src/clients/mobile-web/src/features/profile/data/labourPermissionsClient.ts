@@ -98,6 +98,11 @@ export interface LabourPermission {
      * client that ignores this cannot fake it — it can only lie about it.
      */
     isGrantEditable: boolean;
+    /**
+     * ISO instant the responsibility ends, or null for कायम. Null once lapsed —
+     * the server never reports an expired window as a live one.
+     */
+    labourGrantExpiresAtUtc: string | null;
 }
 
 /** The server's error code when a role already carries the capability. */
@@ -144,10 +149,11 @@ export async function setLabourPermission(
     farmId: string,
     targetUserId: string,
     canManageLabourRecords: boolean,
+    labourGrantExpiresAtUtc: string | null = null,
 ): Promise<LabourPermission> {
     const response = await agriSyncClient.http.put<LabourPermission>(
         labourPermissionPath(farmId, targetUserId),
-        { canManageLabourRecords },
+        { canManageLabourRecords, labourGrantExpiresAtUtc },
     );
     return response.data;
 }

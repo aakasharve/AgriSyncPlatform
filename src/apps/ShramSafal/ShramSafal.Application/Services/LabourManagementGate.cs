@@ -50,11 +50,17 @@ public static class LabourManagementGate
     /// <c>ShramSafalErrors.Forbidden</c> — never <c>NotFound</c> — so a forged
     /// farm id cannot be used to probe existence, which is the posture every
     /// labour handler already takes.</para>
+    ///
+    /// <para><c>nowUtc</c> comes from the caller's <c>IClock</c> — expiry is
+    /// evaluated HERE and in the projection, never on
+    /// <see cref="LabourManagementPermission.IsCarriedByRole"/> (a role is not
+    /// a grant and has no end date).</para>
     /// </summary>
     public static async Task<bool> IsAllowedAsync(
         IShramSafalRepository repository,
         Guid farmId,
         Guid userId,
+        DateTime nowUtc,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(repository);
@@ -75,7 +81,7 @@ public static class LabourManagementGate
             return true;
         }
 
-        return await repository.GetLabourManagementGrantAsync(farmId, userId, ct);
+        return await repository.GetLabourManagementGrantAsync(farmId, userId, nowUtc, ct);
     }
 
     /// <summary>
@@ -100,11 +106,17 @@ public static class LabourManagementGate
     ///
     /// <para>Returns <c>false</c> for empty ids — fail-closed, same posture as
     /// <see cref="IsAllowedAsync"/>.</para>
+    ///
+    /// <para><c>nowUtc</c> comes from the caller's <c>IClock</c> — expiry is
+    /// evaluated HERE and in the projection, never on
+    /// <see cref="LabourManagementPermission.IsCarriedByRole"/> (a role is not
+    /// a grant and has no end date).</para>
     /// </summary>
     public static async Task<bool> HasExplicitGrantAsync(
         IShramSafalRepository repository,
         Guid farmId,
         Guid userId,
+        DateTime nowUtc,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(repository);
@@ -114,6 +126,6 @@ public static class LabourManagementGate
             return false;
         }
 
-        return await repository.GetLabourManagementGrantAsync(farmId, userId, ct);
+        return await repository.GetLabourManagementGrantAsync(farmId, userId, nowUtc, ct);
     }
 }

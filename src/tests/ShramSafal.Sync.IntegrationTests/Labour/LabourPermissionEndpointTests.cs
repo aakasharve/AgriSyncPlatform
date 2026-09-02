@@ -214,6 +214,31 @@ public sealed class LabourPermissionEndpointTests
         Assert.Equal("OwnerTier", coOwner.GetProperty("source").GetString());
     }
 
+    /// <summary>
+    /// R1 Task 2.2 — a duration-bounded grant (जबाबदारी with an end date)
+    /// survives the wire in both directions: the PUT carries the expiry, the
+    /// response reports the instant the server stored.
+    /// </summary>
+    [Fact]
+    public async Task A_duration_bounded_grant_round_trips_through_the_wire()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        await PushCreateFarmAsync(harness.Client, "device-perm-5", "req-perm-5", farmId, "Permission Farm 5");
+        await harness.SeedFarmMembershipAsync(farmId, MukadamUserId, AppRole.Mukadam);
+
+        var end = DateTime.UtcNow.AddDays(2);
+        var response = await harness.Client.PutAsJsonAsync(
+            $"/shramsafal/farms/{farmId}/labour-permissions/{MukadamUserId}",
+            new { canManageLabourRecords = true, labourGrantExpiresAtUtc = end });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(doc.RootElement.GetProperty("canManageLabourRecords").GetBoolean());
+        Assert.Equal(end, doc.RootElement.GetProperty("labourGrantExpiresAtUtc").GetDateTime(),
+            TimeSpan.FromSeconds(1));
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
 
     private static JsonElement FindMember(JsonElement roster, Guid userId)

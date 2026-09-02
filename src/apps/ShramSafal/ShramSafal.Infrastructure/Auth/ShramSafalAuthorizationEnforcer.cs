@@ -1,3 +1,4 @@
+using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Auth;
 using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.BuildingBlocks.Results;
@@ -89,7 +90,8 @@ namespace ShramSafal.Infrastructure.Auth;
 /// </summary>
 internal sealed class ShramSafalAuthorizationEnforcer(
     IShramSafalRepository repository,
-    TenantContext tenantContext) : IAuthorizationEnforcer
+    TenantContext tenantContext,
+    IClock clock) : IAuthorizationEnforcer
 {
     public async Task<Result> EnsureIsFarmMember(UserId userId, FarmId farmId)
     {
@@ -167,7 +169,7 @@ internal sealed class ShramSafalAuthorizationEnforcer(
         // Nothing else about this method moved: a missing log is still
         // DailyLogNotFound, a non-member is still Forbidden, and the tenant
         // claim is still published only after the decision is Success.
-        if (!await LabourManagementGate.IsAllowedAsync(repository, log.FarmId.Value, userId.Value))
+        if (!await LabourManagementGate.IsAllowedAsync(repository, log.FarmId.Value, userId.Value, clock.UtcNow))
         {
             return Result.Failure(ShramSafalErrors.Forbidden);
         }
