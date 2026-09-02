@@ -144,3 +144,21 @@ perspective — never draw the new हजेरी surface for them.
 
 If a screen asks for a plot, a crop, a count, or a name the farmer already gave, that screen
 has drifted and is wrong — no matter how good it looks.
+
+
+---
+
+# APPROVED 2026-09-02 — harvested from the founder's master review (no longer placeholders)
+
+आजच्या कामात किती जण होते ते अजून समजलं नाही. आधी आजचं काम सांगा. · यांच्याशिवाय अजून कोण होते?
+· हे बरोबर आहे का? · काम झालं नाही, पण मजूर आले · गणेश आज दोन कामांत दिसतोय — एकात पूर्ण,
+दुसऱ्यात अर्धा. आजची हजेरी कोणती? · एकदाच स्पष्ट करा; दोन्ही कामांच्या नोंदी तशाच राहतील. ·
+"बरोबर" दाबेपर्यंत काहीही जतन होणार नाही. · तुम्ही सांगितलं · स्पष्ट माहिती · जबाबदारी द्या ·
+प्रकाशला किती दिवस? · कामगारांची जबाबदारी आहे · जबाबदारी आपोआप संपेल · आज / 2 दिवस / 3 दिवस /
+तारीख / कायम · रोजंदारी · नोंदलेली · उक्ते काम · ठरलेली · आज कामावर · काम अंदाजे ¾ पूर्ण ·
+दिलेली रक्कम · रिकामं = कुणी माहिती नाही · 4त = 4 तास · +2 जादा · ◾ रात्र ·
+हा तपशील फक्त cell वर दाबल्यावर दिसतो.
+
+**Register is CLEAN (supersedes the money-placement rules above):** no ₹ in the grid, no
+totals column. Numerals: Devanagari digits in date headers, Latin digits (DM Sans) for
+quantities/hours/money.

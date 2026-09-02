@@ -84,6 +84,42 @@ the version bumps automatically (it is content-hashed) and a golden-set delta is
 
 ## Global Constraints
 
+**FOUNDER MASTER REVIEW — 2026-09-02. BINDING. Read `docs/superpowers/mockups/2026-09-01-labour-r1/DECISIONS-2026-09-02-founder-master-review.md` in full before any Phase 2–5
+work; where it differs from anything below or in the specs, IT WINS (later founder direction
+outranks earlier decisions, supersessions recorded there). The short form:**
+
+- **Phase 1 is APPROVED** (his D1–D3, D7 locked; D4/D5/D6 approved with deltas).
+- **The register is CLEAN: no money in the grid, no totals column of any kind.** Name +
+  seven day cells only; details only on tap. Supersedes D-H7 and the in-grid money display
+  of ruling (b). Never-CALCULATE still binds everywhere.
+- **Approved cell vocabulary:** ✓ · ½ · – · blank(dashed=unknown) · split day/night (◾ रात्र)
+  · +N जादा तास · Nत stated hours · violet dot = उक्ते engagement. Crew row carries per-day
+  counts, blank when unknown. All stated facts; no derived arithmetic.
+- **Money lives on the Labour home as TWO cards** — रोजंदारी नोंदलेली and उक्ते ठरलेली —
+  never combined into one figure. Same-kind stated amounts may aggregate under an honest
+  label; cross-kind blending, rate×days, and agreed-shown-as-spent are forbidden. Paid money
+  appears only as दिलेली रक्कम when a payment is recorded.
+- **Arrangement belongs to the engagement** and already exists in code (`ContractUnit`,
+  `ContractQuantity`, `WagePerPerson`, `TotalCost` on `LabourAssignment`, live in the
+  parse). R1 SURFACES it; the standing Contract entity is Phase 6, and R1 must not build
+  anything that would need remodelling to accept it.
+- **Contract progress is farmer-stated, never computed.**
+- **Authority handover ships as "जबाबदारी द्या"** with duration chips (आज · 2 दिवस · 3 दिवस ·
+  तारीख · कायम); zero permission vocabulary farmer-facing. Model unchanged: one switch +
+  expiry, existing Mukadams start OFF, history survives expiry.
+- **Hours provenance (stated vs derived) ships NOW** in the unshipped attendance migration.
+  The timer itself is Phase 7 — later; its times attach to the engagement, never to
+  attendance.
+- **D-H10 is resolved by consequence:** the approved cell is full (five axes), so future
+  worker confirmation lives on the row / tap-detail. The grid never gets rebuilt for it.
+- **Numerals:** Devanagari digits in date headers; Latin digits (DM Sans) for quantities,
+  hours and money.
+- **Marathi copy gaps are CLOSED** — his file supplied the missing strings; harvested list
+  in the record. No [FOUNDER COPY REQUIRED] remains for R1 surfaces.
+- **The post-mic waiting screen is the existing founder-approved ShramSathi screen
+  (character video + chalk blackboard), reused unchanged. Not a design question.**
+
+
 Every task's requirements implicitly include these. A change that violates one has drifted, however elegant.
 
 **The fifteen trust rules (founder, verbatim):**
@@ -483,6 +519,12 @@ resolves.
 ---
 
 # Phase 1 — UI mockups and founder approval
+
+> **STATUS: APPROVED 2026-09-02 via the founder's master review** (`docs/superpowers/mockups/2026-09-01-labour-r1/DECISIONS-2026-09-02-founder-master-review.md`). Tasks 1.1–1.8
+> are closed. Deltas from the drawn mockups that BIND the build: register carries no money
+> and no totals column; authority ships as the "जबाबदारी द्या" handover; the Labour home
+> splits रोजंदारी/उक्ते money; the missing Marathi is supplied. Executors build the APPROVED
+> versions, not the first drawings.
 
 **No product code in this phase.** Output is screens the founder judges by eye, at 390px,
 at true rendered size.
@@ -993,6 +1035,54 @@ trust rule in this release exists to prevent.
 
 **NOT in R1:** no `AcknowledgementKind` enum, no `direct/proxy/none` field, no channel, no
 scoring, no worker app. The dignity intent stays recorded in Appendix A (§8–13, §21).
+# Additions from the 2026-09-02 master review (to be integrated at implementation precision)
+
+### Task 2.5: Hours provenance in the creating migration
+
+**Deliverable:** `hours_worked numeric(4,1) NULL`, `extra_hours numeric(4,1) NULL` and an
+`hours_basis` (reusing `LabourTimeBasis {Unspecified, Assumed, Explicit}`) added by EDITING
+the unshipped `20260831180408_AddAttendanceMarks` CreateTable (absent from `origin/main`,
+zero prod rows — Phase 0 verified). Correction table gains the matching nullable fields.
+**Test:** "गणेश रात्री 3 तास होता" persists Night=Worked AND Hours=3 with basis=Explicit;
+nothing converts hours into day fractions. **Why now:** provenance added after hours start
+being recorded is unrecoverable for every earlier row.
+
+### Task 4.4: The clean register (amends Task 4.1)
+
+**Deliverable:** `BuildHajeriLedger` emits the APPROVED grid: name + day cells only. Cells
+carry day/night/hours/extra/arrangement-marker. `LabourLedgerRowDto.Total` and `WeekTotal`
+leave the grid contract. **Test:** no ₹ and no trailing column render in the register; a NIGHT
+engagement renders as the split cell, never as a full-day tick (kills the live defect at
+`GetLabourDataHandler.cs:827,:865`); the उक्ते dot appears exactly on cells whose engagement
+carries a contract arrangement.
+
+### Task 4.5: Tap-detail read
+
+**Deliverable:** person-day detail: marks + stated hours + arrangement + work context, in the
+approved card ("हा तपशील फक्त cell वर दाबल्यावर दिसतो"). The dimensional week read lives here,
+never as one number.
+
+### Task 4.6: Labour-home money split
+
+**Deliverable:** two cards from existing engagement data — `रोजंदारी · नोंदलेली ₹…` (same-kind
+stated wage amounts) and `उक्ते काम · ठरलेली ₹…` (agreed contract amounts) — plus
+"आज कामावर N जण — x रोजंदारी · y उक्ते". **Test:** the two figures never combine; a mixed day
+shows both cards; a day with no stated money shows blanks, not zeros.
+
+# Phase 6 — Contract V1 (उक्ते काम) — AFTER R1 core loop is stable
+
+Standing contract card (काम · प्लॉट · कोणाला · किती · मोजमाप · रक्कम · कधीपर्यंत), work-log
+linking, farmer-stated progress, completion/acceptance loop (काम पूर्ण सांगितलं → तपासलं /
+दुरुस्ती हवी → स्वीकारलं). Direction approved in D6; lifecycle detail designed then. R1's only
+obligation: don't foreclose it.
+
+# Phase 7 — Work timer — LATER
+
+काम सुरू → विश्रांती → पुन्हा सुरू → काम पूर्ण, attached to the engagement. R1's only
+obligations: hours provenance (Task 2.5) and the actor-vs-worker rule.
+
+---
+
 ## Appendix A — The 2026-09-01 founder lock
 
 Reproduced because it governs this plan and exists in no committed document. Sections referenced above by number: §1 five day realities · §2 ledger is a primary surface · §3 two Mukadam meanings · §4 attendance authority is owner-granted · §5 permission centre · §6 temporary responsibility is pilot scope · §7 owner resolves contradictions · §8–10 worker confirmation as a second signature on the same event · §11 direct/proxy/none stay distinct · §12 never a wage gate · §13 disagreement without accusation · §14 correctable never silently editable · §16 no account required · §17 no fake persistent people · §18 partial coverage is legitimate · §19 no trust score in R1 · §21 smallest meaningful slice · §22 three layers: authority, subject, verification.
