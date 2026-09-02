@@ -1,6 +1,14 @@
+using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Money;
+using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Labour.GetLabourData;
+using ShramSafal.Domain.Farms;
+using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Tests.Work.Handlers;
+using ShramSafal.Domain.Work;
 using Xunit;
 
 namespace ShramSafal.Domain.Tests.Labour;
@@ -112,5 +120,126 @@ public sealed class LabourRegisterViewTests
         Assert.Single(dto.Ledger.Days);                       // the page itself is still drawn
         Assert.Null(dto.People[0].Paid);
         Assert.Null(dto.Dashboard.Money);
+    }
+
+    // ─── F2 (task 4.2 review): the handler-level backstop ───────────────────
+
+    private static readonly DateTime Now = new(2026, 8, 28, 9, 0, 0, DateTimeKind.Utc);
+    private static readonly Guid FarmGuid = Guid.Parse("44444444-4444-4444-4444-444444444444");
+    private static readonly Guid OwnerGuid = Guid.Parse("55555555-5555-5555-5555-555555555555");
+    private static readonly Guid MukadamGuid = Guid.Parse("66666666-6666-6666-6666-666666666666");
+    private static readonly Guid WorkerGuid = Guid.Parse("77777777-7777-7777-7777-777777777777");
+    private static readonly Guid PlotGuid = Guid.Parse("88888888-8888-8888-8888-888888888888");
+
+    /// <summary>
+    /// The four facts above call ResolveRegisterView/ApplyRegisterView
+    /// DIRECTLY, and every other handler-level suite drives HandleAsync as an
+    /// OWNER — for whom the projection is identity. Delete the
+    /// ApplyRegisterView wrapper at the handler's single Result.Success site
+    /// and every one of them stays green while a मुकादम receives the whole
+    /// wage book. This fact closes that hole: a Mukadam-role caller drives
+    /// HandleAsync END TO END against seeded REAL money (recorded 3000, paid
+    /// 500, owed 2500 in the owner's book) and pins the RETURNED DTO.
+    /// Mutation-proved 2026-09-02: unwrapping the projection fails exactly
+    /// this fact while the four direct-call facts stay green.
+    /// </summary>
+    [Fact]
+    public async Task A_mukadam_caller_gets_crew_view_with_no_money_from_the_handler_itself()
+    {
+        var repo = new FakeRepo();
+        repo.SetRole(FarmGuid, MukadamGuid, AppRole.Mukadam);
+        repo.SeedMembership(FarmMembership.Create(
+            Guid.NewGuid(), new FarmId(FarmGuid), new UserId(WorkerGuid), AppRole.Worker, Now));
+        // Real money an owner's book would show — the values the projection
+        // must WITHHOLD (null), never zero out and never leak.
+        repo.SeedJobCard(BuildCompletedJobCard(DateOnly.FromDateTime(Now), total: 3000m));
+        repo.SeedPayoutAttributedTo(BuildCostEntry(DateOnly.FromDateTime(Now), amount: 500m), WorkerGuid);
+
+        var result = await new GetLabourDataHandler(repo, new FixedClock(Now)).HandleAsync(
+            new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(MukadamGuid)));
+
+        Assert.True(result.IsSuccess);
+        var dto = result.Value!;
+
+        Assert.Equal("crew", dto.View);
+
+        var person = Assert.Single(dto.People);
+        Assert.Null(person.RecordedWages);        // 3000m in the owner's book
+        Assert.Null(person.Paid);                 //  500m in the owner's book
+        Assert.Null(person.Advance);              //    0m in the owner's book — withheld is null, not 0
+        Assert.Null(dto.Dashboard.Wages);         //  500m in the owner's book
+        Assert.Null(dto.Dashboard.Advances);
+        Assert.Null(dto.Dashboard.Owed);          // 2500m in the owner's book
+        Assert.Null(dto.Dashboard.Money);         // the whole card stays owner-only
+    }
+
+    // ─── Builders + doubles (same idiom as LabourWindowScopingTests) ─────────
+
+    private static CostEntry BuildCostEntry(DateOnly entryDate, decimal amount)
+        => CostEntry.Create(
+            Guid.NewGuid(), new FarmId(FarmGuid), plotId: null, cropCycleId: null,
+            categoryId: "labour_misc", description: "मजुरी", amount: amount,
+            currencyCode: "INR", entryDate: entryDate,
+            createdByUserId: new UserId(OwnerGuid), location: null, createdAtUtc: Now);
+
+    private static JobCard BuildCompletedJobCard(DateOnly plannedDate, decimal total)
+    {
+        var card = JobCard.CreateDraft(
+            Guid.NewGuid(),
+            new FarmId(FarmGuid),
+            PlotGuid,
+            cropCycleId: null,
+            new UserId(OwnerGuid),
+            plannedDate,
+            [new JobCardLineItem("labour", 1m, new Money(total, Currency.Inr), null)],
+            Now);
+
+        card.Assign(new UserId(WorkerGuid), new UserId(OwnerGuid), AppRole.PrimaryOwner, Now);
+        card.CompleteWithLog(Guid.NewGuid(), new UserId(WorkerGuid), Now);
+        return card;
+    }
+
+    private sealed class FixedClock(DateTime utcNow) : IClock
+    {
+        public DateTime UtcNow { get; } = utcNow;
+    }
+
+    private sealed class FakeRepo : StubShramSafalRepository
+    {
+        private readonly Dictionary<(Guid farmId, Guid userId), AppRole> _roles = new();
+        private readonly List<FarmMembership> _memberships = [];
+        private readonly List<JobCard> _jobCards = [];
+        private readonly List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)> _payouts = [];
+
+        public void SetRole(Guid farmId, Guid userId, AppRole role) => _roles[(farmId, userId)] = role;
+        public void SeedMembership(FarmMembership m) => _memberships.Add(m);
+        public void SeedJobCard(JobCard j) => _jobCards.Add(j);
+        public void SeedPayoutAttributedTo(CostEntry e, Guid workerUserId) => _payouts.Add((e, workerUserId));
+
+        public override Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+            => Task.FromResult(_roles.TryGetValue((farmId, userId), out var role) ? (AppRole?)role : null);
+
+        public override Task<List<FarmMembership>> GetFarmMembershipsAsync(FarmId farmId, CancellationToken ct = default)
+            => Task.FromResult(_memberships.Where(m => m.FarmId == farmId).ToList());
+
+        public override Task<IReadOnlyList<SyncOperatorDto>> GetOperatorsByIdsAsync(
+            IEnumerable<Guid> userIds, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<SyncOperatorDto>>([]);
+
+        public override Task<List<JobCard>> GetJobCardsForFarmAsync(
+            FarmId farmId, JobCardStatus? statusFilter, CancellationToken ct = default)
+            => Task.FromResult(_jobCards.Where(j => j.FarmId == farmId).ToList());
+
+        public override Task<List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)>> GetLabourPayoutCostEntriesWithJobCardAsync(
+            FarmId farmId, DateOnly? fromDate, DateOnly? toDateInclusive, CancellationToken ct = default)
+            => Task.FromResult(_payouts
+                .Where(p => p.CostEntry.FarmId == farmId
+                    && (fromDate is null || p.CostEntry.EntryDate >= fromDate.Value)
+                    && (toDateInclusive is null || p.CostEntry.EntryDate <= toDateInclusive.Value))
+                .ToList());
+
+        public override Task<List<FinanceCorrection>> GetCorrectionsForEntriesAsync(
+            IEnumerable<Guid> costEntryIds, CancellationToken ct = default)
+            => Task.FromResult(new List<FinanceCorrection>());
     }
 }
