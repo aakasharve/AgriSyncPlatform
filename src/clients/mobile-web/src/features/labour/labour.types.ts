@@ -66,6 +66,16 @@ export interface LedgerCell {
     ukte: boolean;
     /** Tap-detail work context (e.g. 'द्राक्ष छाटणी'). The GRID never renders it. */
     work: string | null;
+    /**
+     * Task 9 (B001) — CLIENT-ONLY axis, never on the wire (`mapLedgerCell`
+     * must never set it): this cell carries LIVE queue intent from the local
+     * plane (`attendanceOverlay.ts`), real and durable but NOT SAVED YET.
+     * P10 binds every renderer: an unsynced cell draws visibly WEAKER than
+     * acknowledged truth (dashed amber + Clock + the resolved लक्षात ठेवलं ✓
+     * legend), never identical, never presented as saved. Absent = the fact
+     * is the server's own acknowledged row.
+     */
+    unsynced?: boolean;
 }
 
 /** A crew engaged through a Labour Mukadam — per-day STATED counts, null = unknown (blank violet cell). */

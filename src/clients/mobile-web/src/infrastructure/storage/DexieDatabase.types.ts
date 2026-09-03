@@ -92,6 +92,19 @@ export interface MutationQueueItem {
     retryCount: number;
     lastError?: string;
     /**
+     * Task 9 (B001, Labour V2 R1) — the SERVER'S error code for the verdict
+     * that parked this row (e.g. `ShramSafal.AttendanceContradiction`).
+     * `lastError` carries the human message; without the code no surface
+     * could tell one park from another except by matching English prose.
+     * Written by `markRejectedUserReview` when the worker has one.
+     *
+     * NOT INDEXED, deliberately — same rule and precedent as
+     * `nextRetryAfterMs` below: Dexie needs schema declarations only for
+     * indexed fields, so this needed no version bump, and a bump is one-way
+     * for APK users.
+     */
+    errorCode?: string;
+    /**
      * §P0.7 box 2c — epoch ms before which `getPending` will not offer this row.
      *
      * NOT INDEXED, deliberately: Dexie only needs a schema declaration for

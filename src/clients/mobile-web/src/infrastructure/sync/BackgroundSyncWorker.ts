@@ -459,7 +459,11 @@ export class BackgroundSyncWorker {
                 });
 
                 if (category === 'PERMANENT') {
-                    await mutationQueue.markRejectedUserReview(mutationId, errorMessage);
+                    // Task 9 (B001): the code travels WITH the park — it is
+                    // what lets a surface recognise the verdict (the labour
+                    // route reads AttendanceContradiction parks) without
+                    // matching the English message.
+                    await mutationQueue.markRejectedUserReview(mutationId, errorMessage, result.errorCode ?? undefined);
                     notifySync({
                         type: 'MUTATION_REJECTED',
                         mutationId: mutation.clientRequestId,
