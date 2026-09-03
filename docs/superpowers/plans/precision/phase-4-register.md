@@ -69,7 +69,11 @@ never re-opened here).
   tests in `ShramSafal.Domain.Tests` + one RealPostgres suite.
 - **Frontend:** `labour.types.ts`, `labourClient.ts`, `labourMock.ts`, `HajeriLedger.tsx`,
   new `HajeriCellDetail.tsx`, `LabourHub.tsx`, `WeeklyDashboard.tsx`, `LabourUiKit.tsx`,
-  `PersonDetail.tsx`, `attendanceDraft.ts`, Vitest suites.
+  `PersonDetail.tsx`, `attendanceDraft.ts`, Vitest suites. Task 9 (B001) adds
+  `attendanceOverlay.ts`, `data/attendanceParked.ts`, `AttendanceContradictionPrompt.tsx`,
+  touches `useLabourState.ts`, `LabourFeature.tsx`, and — infrastructure, client-only —
+  `MutationQueue.ts`/`DexieDatabase.types.ts` (non-indexed `errorCode` on the queue row,
+  no Dexie version bump) and `BackgroundSyncWorker.ts` (one argument at the park site).
 - **Cross-cutting:** the labour GET wire contract changes shape (ledger cells, view, home,
   nullable money). Backend and frontend halves land inside the same phase; the phase is not done
   until both halves are committed (transient drift between Task 1 and Task 3 commits is
@@ -79,7 +83,10 @@ never re-opened here).
 `[Fact]`s (the plan said 10 — counted in file 2026-09-02). All 8 are rewritten below; none is
 deleted; each old fact's intent is named next to its replacement.
 
-**Execution order:** Task 1 → Task 2 → Task 3 → Task 4 → Task 5 → Task 6 → Task 7 → Task 8.
+**Execution order:** Task 1 → Task 2 → Task 3 → Task 4 → Task 5 → Task 6 → Task 7 → Task 8 →
+Task 9. (Task 9 was AUTHORED at the final whole-branch review — B001: Phase 3 handed the local
+attendance plane over in bold and this phase was originally written without the consumption
+task. It runs last because it composes onto the register Tasks 1–5 built.)
 Task 5 (deleting the door switches, brief Task 4.0) deliberately runs AFTER the register is
 finished — Decision 4b: un-hiding a surface means finishing it first.
 
@@ -2766,10 +2773,207 @@ git commit -m "feat(labour): labour-home money split — रोजंदार�
 
 ---
 
+### Task 9 — consume the local plane (B001)
+
+**Why this task exists (the dropped hand-off, named):** Phase 3 built the local attendance
+plane and handed it over in bold — `attendanceLocal.ts`: *"`source: 'queue'` is unsynced
+intent; Phase 4's register must render it with the existing unsynced treatment, never as
+saved. (Phase 4 consumes this + the pull carriage.)"* (phase-3-capture.md:162-163). This
+phase was authored without the consumption task, so at the final whole-branch review:
+`getLocalAttendanceMarks` had ZERO production callers; an offline-spoken mark appeared
+NOWHERE until sync (offline, the labour GET fails into the outage dead-end); even online,
+बरोबर routed back to a register that refetches before the queue flushes, so the
+just-confirmed mark was missing with no covering label; a server-REFUSED mark
+(`REJECTED_USER_REVIEW`) was invisible forever — contradicting the release sentence "a mark
+REFUSED by the server never vanishes silently"; and the contradiction-answer loop had no
+client half (`MarkAttendanceCommand.resolvedLabourAssignmentId` written by NOBODY,
+`EditSurfaceRegistry` routing an `AttendanceContradiction` park to a Labour route where
+nothing rendered the question, `RejectionPolicy.ts:128-133` promising a surface that did not
+exist).
+
+**Files:**
+- Modify: `src/clients/mobile-web/src/infrastructure/storage/DexieDatabase.types.ts`
+  (`MutationQueueItem.errorCode?: string` — NON-INDEXED, so no Dexie version bump; the
+  `nextRetryAfterMs` precedent in the same interface states the rule)
+- Modify: `src/clients/mobile-web/src/infrastructure/sync/MutationQueue.ts`
+  (`markRejectedUserReview(id, error, errorCode?)` — trailing optional, every caller compiles)
+- Modify: `src/clients/mobile-web/src/infrastructure/sync/BackgroundSyncWorker.ts`
+  (the categorized park site passes `result.errorCode` through)
+- Modify: `src/clients/mobile-web/src/infrastructure/sync/RejectionPolicy.ts:128-133`
+  (comment corrected to name the REAL surface — see Step 7)
+- Modify: `src/clients/mobile-web/src/features/labour/data/attendanceLocal.ts`
+  (add `getLocalAttendanceNameHints`)
+- Add: `src/clients/mobile-web/src/features/labour/attendanceOverlay.ts` (pure compose)
+- Add: `src/clients/mobile-web/src/features/labour/data/attendanceParked.ts` (parked
+  contradiction: list / rebuild question / answer)
+- Add: `src/clients/mobile-web/src/features/labour/components/AttendanceContradictionPrompt.tsx`
+- Modify: `src/clients/mobile-web/src/features/labour/labour.types.ts` (`LedgerCell.unsynced?: boolean`)
+- Modify: `src/clients/mobile-web/src/features/labour/useLabourState.ts` (compose after fetch;
+  offline register on fetch failure)
+- Modify: `src/clients/mobile-web/src/features/labour/components/HajeriLedger.tsx` (the
+  unsynced cell treatment + conditional legend line)
+- Modify: `src/clients/mobile-web/src/features/labour/components/HajeriCellDetail.tsx`
+  (unsynced label on the detail sheet)
+- Modify: `src/clients/mobile-web/src/features/labour/components/LabourFeature.tsx` (render
+  the parked question; render the register in the outage state when local facts exist;
+  refresh after a manual attendance save)
+- Tests: `features/labour/__tests__/attendanceOverlay.test.ts`,
+  `features/labour/__tests__/attendanceParked.test.ts`,
+  `features/labour/components/__tests__/HajeriLedgerUnsynced.test.tsx`,
+  `features/labour/components/__tests__/LabourFeature.contradiction.test.tsx`,
+  additions to `features/labour/__tests__/useLabourState.test.ts` and
+  `infrastructure/sync/__tests__/MutationQueueDurability.test.ts`
+
+**Interfaces:**
+- Consumes: `getLocalAttendanceMarks` + `LocalAttendanceMark` (Phase 3's hand-off, verbatim);
+  `MutationQueue.replacePayload` (T-IGH-04-CONFLICT-EDIT — validate, swap payload, flip
+  REJECTED_USER_REVIEW→PENDING, clear backoff, in ONE existing method);
+  `MutationQueue.getRejectedUserReview`; `ATTENDANCE_COPY.contradiction*` + `.markWord`
+  (approved copy, Task 3.2); `SYNC_HONESTY_I18N_KEYS.ON_PHONE` resolved at `'mr'`
+  (= लक्षात ठेवलं ✓, the `ReviewSheet.tsx:226` / `LabourFeature.tsx:45` idiom — never
+  transcribed); `DailyLog.labour[].{labourAssignmentId, shiftId, attributedOperators}`
+  (the pull carriage — `labourAssignmentId` IS the client-minted id, `ValueGeneratedNever`
+  server-side, so the answer's `resolvedLabourAssignmentId` needs no mapping layer);
+  `RecordAttendanceMarkHandler`'s `ResolvedLabourAssignmentId` path (check 4 skipped when
+  present); the B002 halves contract (an omitted half says NOTHING; the server amend
+  preserves the stored fact).
+- Produces: `overlayLocalAttendance(data, marks, nameHints?)` and
+  `buildOfflineRegister(marks, nameHints)` (attendanceOverlay.ts);
+  `listParkedAttendanceContradictions(farmId)` / `buildContradictionQuestion(park, history)`
+  / `answerAttendanceContradiction(park, chosen)` (attendanceParked.ts);
+  `LedgerCell.unsynced` (client-only axis — the wire DTO does NOT carry it and
+  `mapLedgerCell` never sets it: only the local plane can).
+
+**Decisions this task fixes in place (each pinned by a named test):**
+
+1. **The unsynced cell treatment — reused, not invented.** The app's existing queue/pending
+   vocabulary is: the claim string `sync.onPhone` = **लक्षात ठेवलं ✓** (i18n, founder-reframed;
+   already resolved in this feature at `LabourFeature.tsx:45`) and the **amber + `Clock`**
+   pending iconography (`SyncStatusDrawer.tsx:211-218`, the "waiting to sync" card). There is
+   no pre-existing CELL-level unsynced treatment anywhere in the app (verified — the ledger is
+   the first grid to render queue intent), so the honest minimal treatment composes those two
+   existing pieces onto the register's own "weaker" vocabulary (dashed border, which the grid
+   already uses for not-server-truth states): an unsynced cell renders its stated fact with a
+   **dashed amber border, white fill, amber glyph, and a tiny amber `Clock` top-left**
+   (`data-testid="ledger-cell-pending"`), plus ONE conditional legend line
+   `[swatch] लक्षात ठेवलं ✓` (resolved from `SYNC_HONESTY_I18N_KEYS.ON_PHONE`, rendered only
+   when the grid actually carries an unsynced cell). P10 holds structurally: never the solid
+   emerald/amber/slate fills of acknowledged truth, never identical, never presented as saved.
+   No new Marathi anywhere.
+2. **The overlay merges PER-HALF, mirroring the server amend.** A queued amend speaks ONE half
+   (B002); overlaying the whole cell would erase an acknowledged stated half from the render.
+   So the compose starts from the acknowledged cell and applies queue marks in queue order,
+   half by half (`day`/`night`/`hours`/`extraHours` each `?? existing`), marking the cell
+   `unsynced`. Engagement context (`ukte`/`work`) stays the server's — still true of the day.
+3. **Only `source: 'queue'` marks overlay a SUCCESSFUL fetch.** A `'server'`-sourced Dexie row
+   is the pull's copy and may be STALER than the GET just answered; overlaying it could mask a
+   fresh amendment. Offline (GET failed) both sources render — `'server'` rows as normal
+   acknowledged cells (they are reconstructable truth), `'queue'` rows weaker.
+4. **A queue mark whose date has no drawn column gets one** (sorted insert). The server's own
+   unbounded posture is "every date that carries any fact"; skipping the date would re-create
+   the exact invisible-mark defect this task removes. For a bounded window this can draw one
+   honest extra column; the alternative is a hidden fact, and hidden facts are the defect.
+5. **A person with a queue mark but no server row gets a row.** Name resolution order:
+   existing ledger row → `data.people[fieldOperatorId].name` → the attach-time snapshot
+   (`displayNameAtAttach`) from local logs via `getLocalAttendanceNameHints` → `''` — the
+   server's own rename/erasure-race posture (`BuildHajeriLedger`: "never an invented name").
+6. **The park learns its errorCode.** The worker parks with `lastError = errorMessage`, and
+   the wire code (`ShramSafal.AttendanceContradiction`) was persisted NOWHERE — so no surface
+   could tell a contradiction park from a `SyncInvalidPayload` park without matching prose.
+   `markRejectedUserReview` gains a trailing optional `errorCode`, stored on the row
+   (non-indexed → no version bump), and the worker passes `result.errorCode` at the
+   categorized park site. `listParkedAttendanceContradictions` matches the code's dot-tail
+   (the `RejectionPolicy.normalizeCode` rule), never the English sentence. Rows parked before
+   this code exist only on unshipped branches — no legacy fallback is authored.
+7. **The question renders from LOCAL facts, or not at all.** The wire refusal carries no
+   candidates, so the client rebuilds them exactly as the server derived them — logs on
+   `workDate` for this farm, engagements whose `attributedOperators` carry the person, with a
+   known `shiftId` — and asks the approved question (`एक गोष्ट स्पष्ट करा` +
+   `contradictionBody(name, first, second)` + `contradictionReassurance`, `markWord` slots)
+   only when MORE than one distinct fact survives (the server's own Distinct>1 rule). When the
+   local rebuild cannot reproduce two facts (missing history, preview), NO question is
+   fabricated: the refused mark stays visible as weaker intent — never vanishing — and the
+   existing conflict page remains the fallback door.
+8. **Answering is `replacePayload`, and the resolution speaks ONLY the halves the ruling
+   decides.** The chosen fact maps `full→dayMark:'Full'`, `half→dayMark:'Half'`,
+   `night→nightMark:'Worked'`, plus `resolvedLabourAssignmentId` = the chosen engagement's id;
+   nothing else (B002 — the server amend preserves every unspoken half). `replacePayload` on
+   the parked row validates against the real zod schema, swaps the payload, flips the row to
+   PENDING and clears backoff — the re-enqueue and the park-clear are ONE atomic existing
+   method. Deliberately NOT `MarkAttendanceCommand.enqueue` + drop: the value-keyed
+   `clientRequestId` derivation does not include `resolvedLabourAssignmentId`, so a fresh
+   enqueue whose halves match the refused bytes would collide with the parked row's
+   `[deviceId+clientRequestId]` key and silently return the parked row untouched — the answer
+   would vanish. Reusing the parked row's id is safe on the wire: the server stores only
+   SUCCESSES in the idempotency store (`TryStoreSuccessAsync`), so the refused id was never
+   consumed.
+9. **The outage state renders the register when local facts exist.** `useLabourState`'s catch
+   path reads the local plane; when it holds ANY mark, `data` becomes the offline register
+   (`buildOfflineRegister`: days = every date carrying a local fact, sorted; `view: 'own'` —
+   the fail-closed projection, so no owner-only claim card can render; `weekLabel: ''` — no
+   fabricated period). `error` stays `true` and the existing outage banner stays up — that
+   banner IS the honest label for why money screens are withheld. `LabourFeature`'s error
+   branch renders `HajeriLedger` over that data instead of `null` when it has rows. No local
+   marks → the outage dead-end exactly as before.
+10. **The manual-attendance save refreshes the read.** `Attendance.tsx` → `onSave` enqueues
+    and popped back to a screen whose `data` predated the queue rows. `LabourFeature` now
+    calls `refresh()` after the enqueue settles, so the register's next render composes the
+    just-made marks (offline, that refresh fails into decision 9's register — the mark is
+    still visible). This closes the "बरोबर routes back to a register that refetches before
+    the queue flushes" half of B001 for the in-labour door; the voice door re-mounts the
+    feature and re-fetches by construction.
+
+- [ ] **Step 1: Failing tests — the pure overlay** (`attendanceOverlay.test.ts`): queue mark
+  merges into the existing row's day cell as `unsynced`; per-half merge never erases an
+  acknowledged half; unrowed person gains a row (name chain of decision 5); missing date
+  gains a sorted column; no queue marks → the SAME object back (identity — the hook's
+  money-safety tests pin `toBe`); `'server'`-sourced marks do not overlay a successful fetch;
+  `buildOfflineRegister` renders server-sourced normal + queue-sourced weaker, `view: 'own'`,
+  null when the plane is empty.
+- [ ] **Step 2: Failing tests — the parked loop** (`attendanceParked.test.ts`, real Dexie over
+  fake-indexeddb, the `attendanceLocal.test.ts` idiom): `markRejectedUserReview` stores the
+  code; list matches only the AttendanceContradiction dot-tail; question rebuild from seeded
+  logs (two attributed engagements, distinct shifts) carries the snapshot name + both facts;
+  no-facts → null, never a fabricated question; answer → row PENDING with EXACTLY
+  `{attendanceMarkId, farmId, fieldOperatorId, workDate, <decided half>,
+  resolvedLabourAssignmentId}` — the unspoken halves ABSENT (B002); the park no longer lists.
+- [ ] **Step 3: Failing render pins** (`HajeriLedgerUnsynced.test.tsx`): the unsynced cell
+  draws its fact + `ledger-cell-pending` marker + a class DIFFERENT from the acknowledged
+  cell of the same fact (P10: weaker, never identical); the legend line with the resolved
+  ON_PHONE string appears only when an unsynced cell exists; `HajeriCellDetail` labels an
+  unsynced cell with the same resolved string; the Clean-register DOM contract still holds
+  (cells per row unchanged — the marker lives INSIDE the cell button).
+- [ ] **Step 4: Failing hook + feature tests**: `useLabourState` composes the overlay after a
+  successful fetch and serves the offline register (error still true) on a failed one;
+  `LabourFeature.contradiction.test.tsx` renders the approved question copy when a park
+  exists, answering calls the answer function and clears the card, and the outage state with
+  local rows renders the register beside the banner.
+- [ ] **Step 5: Run and see each fail for the right reason** (missing exports, missing
+  testids, missing overlay — never typos).
+- [ ] **Step 6: Implement** — `errorCode` plumbing (types → queue → worker), attendanceLocal
+  name hints, attendanceOverlay, attendanceParked, `LedgerCell.unsynced`, HajeriLedger +
+  HajeriCellDetail treatment, useLabourState compose, LabourFeature prompt + outage register
+  + post-save refresh. Storage reads on the hook path are try/caught to `[]` — a throwing
+  storage access must degrade to "no overlay", never crash the labour screen (the
+  `readPersistedLabourWindow` posture).
+- [ ] **Step 7: Correct `RejectionPolicy.ts:128-133`** — the comment claimed "Parking it is
+  what surfaces the question" while nothing rendered it. It now names the real loop: parking
+  makes the mark render as weaker intent in the register (`attendanceOverlay`), the labour
+  route renders the question (`attendanceParked` + `AttendanceContradictionPrompt`), and the
+  answer travels via `replacePayload` with `resolvedLabourAssignmentId`.
+- [ ] **Step 8: Gate** — all new tests + `npx vitest run src/features/labour` +
+  the navigation suites + `npx tsc --noEmit` (0 errors). No server file changed in this task
+  → Domain/Architecture suites unaffected (run them anyway if any `src/apps` diff exists).
+- [ ] **Step 9: Commit** (Conventional Commits, body carries
+  `spec: 2026-08-28-labour-v2-release-1`).
+
+---
+
 ## Phase self-review checklist (run before handing to the checker)
 
 - [ ] Every brief item mapped: 4.0→Task 5, 4.1+4.4→Tasks 1+2+3, 4.2→Task 6, 4.3→Task 7,
-      4.5→Task 4, 4.6→Task 8, D-H8 views→Task 2.
+      4.5→Task 4, 4.6→Task 8, D-H8 views→Task 2, Phase 3's local-plane hand-off
+      (B001, final whole-branch review)→Task 9.
 - [ ] No money member, no numeric aggregate anywhere in the grid contract
       (`TheGridContractCarriesNoAggregateAndNoMoney` is the pin).
 - [ ] `AttendanceMark.Value` is `[Obsolete]` and consumed by nothing in production.
