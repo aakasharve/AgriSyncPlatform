@@ -17,10 +17,21 @@
  * tap-detail — the founder's resolved placement). Keep it a component.
  */
 import React from 'react';
-import { X } from 'lucide-react';
+import { Clock, X } from 'lucide-react';
 import type { LedgerRow } from '../labour.types';
 import { Avatar } from './LabourUiKit';
 import { formatLedgerDayHead } from '../marathiDate';
+import { t as translate } from '../../../i18n/translations';
+import { SYNC_HONESTY_I18N_KEYS } from '../../sync/status/syncHonestyState';
+
+/**
+ * Task 9 (B001) — the honest label for a queue-intent cell's detail,
+ * resolved from the ONE source at the pinned language (the
+ * ReviewSheet.tsx:226 idiom). A detail sheet that showed an unsynced fact
+ * without it would present intent as saved — the exact P10 violation the
+ * register's own weaker treatment exists to prevent.
+ */
+const ON_PHONE_MR = translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr');
 
 const DAY_WORD: Record<string, string> = { full: 'पूर्ण', half: 'अर्धा', absent: 'आला नाही' };
 
@@ -78,6 +89,12 @@ const HajeriCellDetail: React.FC<{
                         {!c.ukte && c.work !== null && (
                             <span className="rounded-full bg-stone-100 px-3 py-1.5 text-[16px] font-semibold text-stone-600">{c.work}</span>
                         )}
+                    </div>
+                )}
+
+                {c !== null && c.unsynced && (
+                    <div className="mt-2 flex items-center gap-1.5 text-[13px] font-bold text-amber-700">
+                        <Clock size={13} /> {ON_PHONE_MR}
                     </div>
                 )}
 

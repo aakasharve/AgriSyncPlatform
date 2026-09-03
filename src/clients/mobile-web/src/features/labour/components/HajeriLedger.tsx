@@ -19,17 +19,41 @@
  * card renders for the OWNER view only — for a non-owner view an empty
  * register is empty BY PROJECTION (rows withheld, not absent), so it draws
  * the bare week grid and claims nothing.
+ *
+ * Task 9 (B001) — a cell whose fact is LIVE QUEUE INTENT (`LedgerCell.
+ * unsynced`, laid on by attendanceOverlay.ts) renders visibly WEAKER (P10):
+ * dashed amber box, amber glyph, tiny Clock top-left, and the legend line
+ * with the resolved लक्षात ठेवलं ✓ — the app's existing queue vocabulary
+ * (SyncStatusDrawer's amber+Clock, sync.onPhone), never presented as saved.
  */
 import React from 'react';
-import { Check, BookText, Users } from 'lucide-react';
+import { Check, BookText, Clock, Users } from 'lucide-react';
 import type { LabourData, LedgerCell, LedgerRow } from '../labour.types';
 import { Avatar, EmptyState } from './LabourUiKit';
 import { isReadableWeekRange } from '../weekLabel';
 import { formatLedgerDayHead } from '../marathiDate';
+import { t as translate } from '../../../i18n/translations';
+import { SYNC_HONESTY_I18N_KEYS } from '../../sync/status/syncHonestyState';
+
+/**
+ * Task 9 (B001) — the honest vocabulary for a queue-intent cell, resolved
+ * from the ONE source at the pinned language (the ReviewSheet.tsx:226 /
+ * LabourFeature.tsx idiom): लक्षात ठेवलं ✓ — never transcribed, so a founder
+ * copy edit reaches this legend automatically.
+ */
+const ON_PHONE_MR = translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr');
 
 /** Day-half box style. Exported so AttendanceDefaultsBlank.test.tsx can pin the null branch. */
 export const cellDayClass = (c: LedgerCell | null) => {
     if (c === null) return 'border border-dashed border-slate-200 bg-white text-slate-200'; // कुणी माहिती नाही
+    if (c.unsynced) {
+        // Task 9 (B001) — LIVE QUEUE INTENT (P10): visibly WEAKER than
+        // acknowledged truth, never identical. Composed from the app's own
+        // pending vocabulary — amber (SyncStatusDrawer's waiting-to-sync
+        // card) on the register's own weaker device, the dashed border —
+        // never the solid fills acknowledged facts earn.
+        return 'border border-dashed border-amber-300 bg-white text-amber-700';
+    }
     if (c.day === 'full') return 'bg-emerald-50 text-emerald-700';
     if (c.day === 'half') return 'bg-amber-100 text-amber-700';
     if (c.day === 'absent') return 'bg-slate-100 text-slate-300';
@@ -68,6 +92,11 @@ const HajeriLedger: React.FC<{
     const rows = L.rows.filter((r, i, all) => all.findIndex((x) => x.personId === r.personId) === i);
     const crewRows = L.crewRows.filter(
         (c, i, all) => all.findIndex((x) => x.throughFieldOperatorId === c.throughFieldOperatorId) === i);
+    // Task 9 (B001) — the unsynced legend line renders only while the grid
+    // actually carries queue intent: a legend for a state not on screen would
+    // be noise, and one missing while the state IS on screen would leave the
+    // weaker treatment unexplained.
+    const hasUnsynced = rows.some((r) => r.cells.some((c) => c !== null && c.unsynced === true));
 
     return (
         <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2">
@@ -87,6 +116,12 @@ const HajeriLedger: React.FC<{
                 <span className="text-[12px] font-semibold text-slate-600">4त = 4 तास</span>
                 <span className="text-[12px] font-semibold text-slate-600">+2 जादा</span>
                 <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600"><span className="h-2 w-2 rounded-full bg-violet-500" />उक्ते काम</span>
+                {hasUnsynced && (
+                    <span className="flex items-center gap-1.5 text-[12px] font-semibold text-amber-700">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-md border border-dashed border-amber-300 bg-white text-amber-600"><Clock size={11} /></span>
+                        {ON_PHONE_MR}
+                    </span>
+                )}
             </div>
 
             <div className="overflow-x-auto rounded-[18px] border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
@@ -117,6 +152,7 @@ const HajeriLedger: React.FC<{
                                     className={`relative flex h-[34px] w-[26px] flex-none flex-col items-center justify-center rounded-lg text-[12px] font-extrabold [font-variant-numeric:tabular-nums] ${cellDayClass(c)}`}
                                 >
                                     {c !== null && c.ukte && <span data-testid="ledger-ukte-dot" className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-violet-500" />}
+                                    {c !== null && c.unsynced && <Clock size={7} data-testid="ledger-cell-pending" className="absolute left-0.5 top-0.5 text-amber-600" />}
                                     <span className="flex items-center justify-center leading-none">{cellDayGlyph(c)}</span>
                                     {c !== null && cellSubLine(c) !== '' && (
                                         <span className="mt-0.5 text-[8.5px] font-bold leading-none text-slate-500">{cellSubLine(c)}</span>
