@@ -15,11 +15,18 @@
  * omits the prop on purpose — the fallback below surfaces the feature's own
  * existing toast instead of crashing or attempting to navigate.
  */
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLabourState } from '../useLabourState';
 import { resolveLabourAnchor } from '../labourAnchor';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { MarkAttendanceCommand } from '../../../application/usecases/sync/MarkAttendanceCommand';
+import {
+    listParkedAttendanceContradictions,
+    buildContradictionQuestion,
+    answerAttendanceContradiction,
+    type ContradictionQuestion,
+    type ParkedAttendanceContradiction,
+} from '../data/attendanceParked';
 import { t as translate } from '../../../i18n/translations';
 import { SYNC_HONESTY_I18N_KEYS } from '../../sync/status/syncHonestyState';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
@@ -33,6 +40,7 @@ import Attendance from './Attendance';
 import WeeklyDashboard from './WeeklyDashboard';
 import HajeriLedger from './HajeriLedger';
 import HajeriCellDetail from './HajeriCellDetail';
+import AttendanceContradictionPrompt from './AttendanceContradictionPrompt';
 import ReviewSheet from './ReviewSheet';
 import FarmInviteQrSheet from '../../onboarding/qr/FarmInviteQrSheet';
 
@@ -131,6 +139,34 @@ export const LabourFeature: React.FC<{
      * state of its own to reset or preserve.
      */
 
+    /**
+     * Task 9 (B001) — the PARKED contradiction questions for this farm.
+     * EditSurfaceRegistry has routed attendance.mark conflicts here since
+     * 3.5c; this is the render that was missing at the end of that route.
+     * A park whose question the local rebuild cannot reproduce is filtered
+     * (never fabricated — attendanceParked.ts's own rule); the refused mark
+     * itself stays visible in the register as weaker intent either way.
+     */
+    const [parkedQuestions, setParkedQuestions] = useState<Array<{
+        park: ParkedAttendanceContradiction; question: ContradictionQuestion;
+    }>>([]);
+    const farmId = farm?.farmId;
+    const loadParkedQuestions = useCallback(async () => {
+        if (!farmId) { setParkedQuestions([]); return; }
+        try {
+            const parks = await listParkedAttendanceContradictions(farmId);
+            setParkedQuestions(parks.flatMap((park) => {
+                const question = buildContradictionQuestion(park, history ?? []);
+                return question === null ? [] : [{ park, question }];
+            }));
+        } catch {
+            // Storage unavailable (a dev shell without indexedDB): no parks
+            // can exist where no queue exists — render none, never crash.
+            setParkedQuestions([]);
+        }
+    }, [farmId, history]);
+    useEffect(() => { void loadParkedQuestions(); }, [loadParkedQuestions]);
+
     const push = useCallback((s: ScreenState) => setStack((st) => [...st, s]), []);
     const back = useCallback(() => setStack((st) => (st.length > 1 ? st.slice(0, -1) : st)), []);
     const handleBack = () => { if (stack.length > 1) back(); else onExit(); };
@@ -164,13 +200,53 @@ export const LabourFeature: React.FC<{
             <BackHeader title={title} onBack={handleBack} />
             {error && <LoadErrorBanner onRetry={refresh} />}
             <div className="flex-1">
+                {/* Task 9 (B001) — the parked contradiction question(s). The
+                    end of EditSurfaceRegistry's 'labour' route: rendered above
+                    whatever screen is open, because an unanswered question is
+                    what stands between a spoken mark and the register. */}
+                {!loading && parkedQuestions.map(({ park, question }) => (
+                    <AttendanceContradictionPrompt
+                        key={park.clientRequestId}
+                        question={question}
+                        onAnswer={(fact) => {
+                            void (async () => {
+                                const answered = await answerAttendanceContradiction(park, fact);
+                                if (answered) {
+                                    // The mark is PENDING again — remembered on
+                                    // the phone, not saved: the honest claim.
+                                    showToast(ON_PHONE_MR);
+                                }
+                                await loadParkedQuestions();
+                            })();
+                        }}
+                    />
+                ))}
                 {loading ? (
                     <LoadingState />
-                ) : error ? null : (
+                ) : error ? (
+                    /*
+                     * Task 9 (B001) — the outage is no longer a dead-end when
+                     * THIS DEVICE holds attendance facts: useLabourState
+                     * serves the offline register (view 'own', queue intent
+                     * weaker) and it renders here BESIDE the banner — the
+                     * banner stays the honest label for everything else this
+                     * screen cannot claim (money, workers, review). An empty
+                     * plane keeps rendering nothing, exactly as Task 6d ruled.
+                     */
+                    data.ledger.rows.length > 0 ? (
+                        <HajeriLedger
+                            data={data}
+                            onToast={showToast}
+                            onOpenCell={(row, dayIndex) => setCellDetail({ row, dayIndex })}
+                        />
+                    ) : null
+                ) : (
                     /*
                      * Task 6d (spec: 2026-08-28-labour-v2-release-1, P4/P5,
-                     * Ruling R8) — an outage renders ONLY the banner above,
-                     * nothing here. Before this, a failed fetch still fell
+                     * Ruling R8) — an outage withholds every CLAIM: the
+                     * banner above, plus (Task 9) only what the device can
+                     * evidence — the local-plane register, never the hub.
+                     * Before this, a failed fetch still fell
                      * through to this content switch over
                      * `EMPTY_LABOUR_DATA`, so the hub asserted "अजून कोणी
                      * कामगार जोडलेला नाही" (no worker added yet) and "0
@@ -245,7 +321,13 @@ export const LabourFeature: React.FC<{
                                             : m.shift === 'night' ? { nightMark: 'Worked' as const }
                                             : m.shift === 'half' ? { dayMark: 'Half' as const }
                                             : { dayMark: 'Full' as const }),
-                                    }))).then(() => { back(); showToast(ON_PHONE_MR); })
+                                    // Task 9 (B001) — refresh AFTER the queue rows
+                                    // exist, so the next register render composes
+                                    // the just-made marks (attendanceOverlay via
+                                    // useLabourState) instead of showing data that
+                                    // predates them; offline that refresh fails
+                                    // into the local-plane register, marks intact.
+                                    }))).then(() => { back(); showToast(ON_PHONE_MR); refresh(); })
                                         .catch((error: unknown) => {
                                             // Named landing place: nothing was queued for at least one
                                             // mark, so neither navigate away nor claim remembering.

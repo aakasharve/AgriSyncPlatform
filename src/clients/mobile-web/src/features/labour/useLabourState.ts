@@ -46,10 +46,34 @@
 import { useCallback, useEffect, useState } from 'react';
 import { LABOUR_MOCK, EMPTY_LABOUR_DATA, type LabourData } from './labourMock';
 import { fetchLabourData } from './data/labourClient';
+import { getLocalAttendanceMarks, getLocalAttendanceNameHints, type LocalAttendanceMark } from './data/attendanceLocal';
+import { overlayLocalAttendance, buildOfflineRegister, type AttendanceNameHints } from './attendanceOverlay';
 import { DEFAULT_LABOUR_WINDOW, isLabourWindow, type LabourWindow } from './labourWindow';
 import { useOptionalFarmContext } from '../../core/session/FarmContext';
 import { useOptionalAuth } from '../../app/providers/AuthProvider';
 import { SessionStore } from '../../infrastructure/storage/SessionStore';
+
+/**
+ * Task 9 (B001, spec: 2026-08-28-labour-v2-release-1) — the local attendance
+ * plane (Phase 3's hand-off: server-store rows + live queue intent, both
+ * labelled by `getLocalAttendanceMarks`), read for the compose below. A
+ * throwing storage access degrades to the EMPTY plane — no overlay, never a
+ * crash on the labour screen (the `readPersistedLabourWindow` posture); the
+ * register then simply shows what the wire alone answered.
+ */
+async function readLocalAttendancePlane(
+    farmId: string,
+): Promise<{ marks: LocalAttendanceMark[]; hints: AttendanceNameHints }> {
+    try {
+        const marks = await getLocalAttendanceMarks(farmId);
+        const hints = marks.length === 0
+            ? new Map<string, string>()
+            : await getLocalAttendanceNameHints(farmId, marks);
+        return { marks, hints };
+    } catch {
+        return { marks: [], hints: new Map() };
+    }
+}
 
 /**
  * TASK 17 (spec: 2026-08-28-labour-v2-release-1) — R14 SUPERSEDED. Reads the
@@ -264,8 +288,13 @@ export const useLabourState = (): UseLabourStateResult => {
         (async () => {
             try {
                 const real = await fetchLabourData(farmId, timeWindow);
+                // Task 9 (B001) — compose LIVE QUEUE INTENT over the wire's
+                // answer, so a just-confirmed mark renders (weaker, P10)
+                // instead of vanishing until the queue flushes. No queue
+                // marks → `overlayLocalAttendance` returns `real` itself.
+                const plane = await readLocalAttendancePlane(farmId);
                 if (!cancelled) {
-                    setData(real);
+                    setData(overlayLocalAttendance(real, plane.marks, plane.hints));
                     setError(false);
                 }
             } catch {
@@ -278,8 +307,16 @@ export const useLabourState = (): UseLabourStateResult => {
                 // its one 401-refresh-and-replay attempt, so this is a genuine
                 // failure (server down, session truly gone) — exactly the case
                 // the manual "पुन्हा प्रयत्न करा" button is for.
+                //
+                // Task 9 (B001) — but the outage is no longer allowed to hide
+                // what THIS DEVICE knows: when the local plane holds any mark,
+                // the register renders from it (`buildOfflineRegister` —
+                // acknowledged rows normal, queue intent weaker, view 'own')
+                // while `error` stays true and the banner stays up. An empty
+                // plane keeps the dead-end exactly as before. Never the mock.
+                const plane = await readLocalAttendancePlane(farmId);
                 if (!cancelled) {
-                    setData(EMPTY_LABOUR_DATA);
+                    setData(buildOfflineRegister(plane.marks, plane.hints) ?? EMPTY_LABOUR_DATA);
                     setError(true);
                 }
             } finally {

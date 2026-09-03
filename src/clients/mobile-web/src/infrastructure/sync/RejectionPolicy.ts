@@ -126,10 +126,15 @@ const PERMANENT_REJECTION_CODES: readonly string[] = [
     // (b) command shape — identical bytes, identical verdict, forever.
     'InvalidCommand',
     // Labour V2 R1 — the attendance contradiction. The server's answer to
-    // these bytes can never change; the farmer's ANSWER travels as a NEW
-    // attendance.mark carrying resolvedLabourAssignmentId. Parking it is what
-    // surfaces the question; retrying it is re-asking a question already
-    // answered.
+    // these bytes can never change; retrying them is re-asking a question
+    // already answered. Parking (Task 9 / B001) puts the row where the loop
+    // actually closes: the mark stays VISIBLE in the register as weaker
+    // intent (features/labour/data/attendanceLocal.ts → attendanceOverlay),
+    // the labour route renders the question from the parked row's persisted
+    // errorCode (attendanceParked.listParkedAttendanceContradictions →
+    // AttendanceContradictionPrompt), and the farmer's answer re-enqueues
+    // THIS row via MutationQueue.replacePayload with
+    // resolvedLabourAssignmentId — never a re-push of the refused bytes.
     'AttendanceContradiction',
     'InvalidVerificationReason',
     'InvalidVerificationStatus',

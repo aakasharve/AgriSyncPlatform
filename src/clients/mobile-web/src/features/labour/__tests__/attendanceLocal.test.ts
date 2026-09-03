@@ -18,7 +18,7 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MarkAttendanceCommand } from '../../../application/usecases/sync/MarkAttendanceCommand';
-import { getLocalAttendanceMarks } from '../data/attendanceLocal';
+import { getLocalAttendanceMarks, getLocalAttendanceNameHints } from '../data/attendanceLocal';
 import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
@@ -75,5 +75,46 @@ describe('getLocalAttendanceMarks — only LIVE intent surfaces from the queue',
         const marks = await getLocalAttendanceMarks(FARM);
         expect(marks).toHaveLength(1);
         expect(marks[0].source).toBe('queue');
+    });
+});
+
+describe('getLocalAttendanceNameHints — the attach-time snapshot, never an invented name (Task 9 / B001)', () => {
+    beforeEach(async () => {
+        await getDatabase().mutationQueue.clear();
+        await getDatabase().attendanceMarks.clear();
+        await getDatabase().logs.clear();
+    });
+
+    const seedLog = async (id: string, farmId: string, date: string, name: string) => {
+        await getDatabase().logs.add({
+            id, schemaVersion: 1, date, isDeleted: 0,
+            log: {
+                id, date, meta: { farmId },
+                labour: [{
+                    id: 'a-1', labourAssignmentId: 'a-1', type: 'HIRED',
+                    workerNames: [name],
+                    attributedOperators: [{ fieldOperatorId: GANESH, displayNameAtAttach: name }],
+                }],
+            } as never,
+        });
+    };
+
+    it('resolves a marked operator to the displayNameAtAttach on his work date, same farm only', async () => {
+        await seedLog('log-1', FARM, '2026-09-02', 'गणेश');
+        await seedLog('log-2', '99999999-9999-9999-9999-999999999999', '2026-09-02', 'दुसरा');
+
+        const hints = await getLocalAttendanceNameHints(FARM, [
+            { fieldOperatorId: GANESH, workDate: '2026-09-02' },
+        ]);
+
+        expect(hints.get(GANESH)).toBe('गणेश');
+        expect(hints.size).toBe(1); // the foreign farm's snapshot never crosses
+    });
+
+    it('returns no hint when no local log attributes the person — blank beats invention', async () => {
+        const hints = await getLocalAttendanceNameHints(FARM, [
+            { fieldOperatorId: GANESH, workDate: '2026-09-02' },
+        ]);
+        expect(hints.size).toBe(0);
     });
 });

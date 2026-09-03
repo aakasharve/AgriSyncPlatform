@@ -83,3 +83,39 @@ export async function getLocalAttendanceMarks(farmId: string): Promise<LocalAtte
     }
     return out;
 }
+
+/**
+ * Task 9 (B001) — attach-time snapshot names for the marks' operators, from
+ * the device's own log history: for each mark's workDate, this farm's logs'
+ * `attributedOperators` (`displayNameAtAttach`). This is the SERVER'S OWN
+ * fallback posture (BuildHajeriLedger: the attach-time snapshot for a
+ * rename/erasure race — "never an invented name"), applied where the wire
+ * could not name the person at all: an overlay row the GET never drew, and
+ * the whole offline register. Bounded by the `date` index — only the marks'
+ * own dates are read, the same person-day join the server's work-row read
+ * makes. No hint = blank name, never a guess.
+ */
+export async function getLocalAttendanceNameHints(
+    farmId: string,
+    marks: readonly Pick<LocalAttendanceMark, 'fieldOperatorId' | 'workDate'>[],
+): Promise<Map<string, string>> {
+    const hints = new Map<string, string>();
+    if (marks.length === 0) return hints;
+    const wanted = new Set(marks.map(m => m.fieldOperatorId));
+    const dates = [...new Set(marks.map(m => m.workDate))];
+    const db = getDatabase();
+    const records = await db.logs.where('date').anyOf(dates).toArray();
+    for (const record of records) {
+        if (record.isDeleted === 1) continue;
+        const log = record.log;
+        if (log?.meta?.farmId !== farmId) continue;
+        for (const event of log.labour ?? []) {
+            for (const attribution of event.attributedOperators ?? []) {
+                if (wanted.has(attribution.fieldOperatorId) && !hints.has(attribution.fieldOperatorId)) {
+                    hints.set(attribution.fieldOperatorId, attribution.displayNameAtAttach);
+                }
+            }
+        }
+    }
+    return hints;
+}
