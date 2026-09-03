@@ -2,12 +2,16 @@
 // shape mirrors PushSyncBatchHandler.HandleAttendanceMarkAsync's PayloadHasOnly
 // allow-list; set equality is enforced by tests/allowlist-parity.test.ts.
 //
-// ABSENCE IS UNMARKED. dayMark/nightMark deliberately have no 'Unmarked'
-// member: an omitted key means "nobody said" (AttendanceMark's fourth state),
-// and the server maps absence to the enum zero explicitly. A payload stating
-// NOTHING (all four fact keys absent) is refused server-side — "both halves
-// unmarked is the absence of a mark" (AttendanceMark.cs) — not refined here,
-// because a ZodEffects wrapper would blind the parity gate's key-set read.
+// ABSENCE SAYS NOTHING (B002). dayMark/nightMark deliberately have no
+// 'Unmarked' member: an omitted key means "this door said NOTHING about that
+// half" — every capture door speaks ONE half per mark. On a FIRST mark the
+// server stores the silence as Unmarked ("nobody said", AttendanceMark's
+// fourth state); on an AMEND it PRESERVES the stored half — a stated fact is
+// never erased by an unspoken one. Un-saying is unrepresentable on this wire
+// on purpose (R1 ships no un-say path). A payload stating NOTHING (all four
+// fact keys absent) is refused server-side — "both halves unmarked is the
+// absence of a mark" (AttendanceMark.cs) — not refined here, because a
+// ZodEffects wrapper would blind the parity gate's key-set read.
 //
 // NO hoursBasis on the wire: the server stamps Explicit when hours are stated,
 // Unspecified otherwise. Provenance is derived from the path, never claimed

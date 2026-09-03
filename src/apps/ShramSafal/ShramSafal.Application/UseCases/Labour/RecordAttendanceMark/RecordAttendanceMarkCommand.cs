@@ -4,9 +4,14 @@ namespace ShramSafal.Application.UseCases.Labour.RecordAttendanceMark;
 
 /// <summary>
 /// Labour V2 R1 Task 3.5 — record (or amend) the हजेरी ruling for one person
-/// on one farm-day. <see cref="DayMark.Unmarked"/> / <see cref="NightMark.Unmarked"/>
-/// mean "nobody said" (wire absence maps to the enum zero explicitly, never by
-/// guessing); a command in which ALL FOUR facts are absent is refused as
+/// on one farm-day. <b>B002 (final whole-branch review): a null half means
+/// "this door said NOTHING about that half"</b> — wire absence maps to null,
+/// never to the enum zero, because the stored silence Unmarked ("nobody
+/// said") and silence-in-this-command are different facts: on a FIRST mark a
+/// null half lands as Unmarked, on an AMEND it PRESERVES the stored half. An
+/// explicit <see cref="DayMark.Unmarked"/> / <see cref="NightMark.Unmarked"/>
+/// is an un-say, which the domain refuses over a stated half (R1 ships no
+/// un-say path). A command in which ALL FOUR facts are absent is refused as
 /// InvalidCommand before the domain would throw.
 /// </summary>
 /// <param name="ResolvedLabourAssignmentId">
@@ -20,8 +25,8 @@ public sealed record RecordAttendanceMarkCommand(
     Guid FarmId,
     Guid FieldOperatorId,
     DateOnly WorkDate,
-    DayMark Day,
-    NightMark Night,
+    DayMark? Day,
+    NightMark? Night,
     decimal? HoursWorked,
     decimal? ExtraHours,
     Guid? ResolvedLabourAssignmentId,

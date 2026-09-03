@@ -160,8 +160,12 @@ public sealed class AttendanceMarkSyncRealPostgresTests(Xunit.Abstractions.ITest
     /// Steps 1–4 of the 3.5d.1 journey, in dependency order on one scratch DB
     /// (the POSITIVE PROOF 1 idiom): push → row under RLS; identical
     /// clientRequestId → duplicate, still one row; changed ruling (new
-    /// value-key) → amend + append-only correction in the same commit; pull on
-    /// a fresh user-scoped context → the same fact, reconstructable without
+    /// value-key) → amend + append-only correction in the same commit; a
+    /// night-only push onto the same person-day → BOTH halves live (B002:
+    /// the unspoken day half is preserved, never degraded to Unmarked — the
+    /// blank-vs-absent rule holding at the seam between doors, and the
+    /// D-H3 two-fact day reachable through shipped doors); pull on
+    /// a fresh user-scoped context → the same facts, reconstructable without
     /// the originating device.
     /// </summary>
     [Fact]
@@ -225,14 +229,43 @@ public sealed class AttendanceMarkSyncRealPostgresTests(Xunit.Abstractions.ITest
         originalValue.Should().Be("Full");
         newValue.Should().Be("Half");
 
-        // ── 4. P10: a FRESH context with only the user GUC pulls the fact —
+        // ── 3b. B002 — the half-erasure seam, at the REAL boundary: a
+        //       night-only door (the payload's day key OMITTED, exactly as
+        //       AttendanceResult emits a ruling's half) amends the same
+        //       person-day. The STATED day must survive the UNSPOKEN one:
+        //       both facts live, and only the half that changed rows in the
+        //       correction table. ──
+        var nightPush = await RunSyncPushAsync(OwnerA, "owner", "d-A",
+            $"attendance.mark:{FarmA}:{Ganesh}:{WorkDate}:-:Worked:-:-", new()
+            {
+                ["attendanceMarkId"] = Guid.NewGuid(),
+                ["farmId"] = FarmA,
+                ["fieldOperatorId"] = Ganesh,
+                ["workDate"] = WorkDate,
+                ["nightMark"] = "Worked",
+            });
+        output.WriteLine($"[EVIDENCE] push 4 (night-only door): status='{nightPush.Status}' errorCode='{nightPush.ErrorCode}'");
+        nightPush.Status.Should().Be("applied");
+        (await CountMarksAsync()).Should().Be(1);
+        (await ReadDayMarkAsync(markId)).Should().Be(2,
+            "the stated day (Half) must never be erased by a door that said nothing about it (B002)");
+        (await ReadNightMarkAsync(markId)).Should().Be(1, "NightMark.Worked is stored as its enum value 1");
+
+        var (nightCorrections, nightField, nightOriginal, nightNew) = await ReadCorrectionAsync(markId);
+        output.WriteLine($"[EVIDENCE] correction rows={nightCorrections} latest field='{nightField}' '{nightOriginal}'→'{nightNew}'");
+        nightCorrections.Should().Be(2, "only the half that actually CHANGED may row — the carried day is not a correction");
+        nightField.Should().Be("night_mark");
+        nightOriginal.Should().Be("Unmarked");
+        nightNew.Should().Be("Worked");
+
+        // ── 4. P10: a FRESH context with only the user GUC pulls the facts —
         //       reconstructable without the originating device. ──
         var pulled = await PullAttendanceMarksAsync(OwnerA);
         var mark = pulled.Should().ContainSingle(m => m.Id == markId,
             "the acknowledged mark must come back down /sync/pull").Subject;
         output.WriteLine($"[EVIDENCE] pulled: day='{mark.DayMark}' night='{mark.NightMark ?? "NULL"}' date='{mark.WorkDate}'");
         mark.DayMark.Should().Be("Half", "the pull carries the AMENDED truth");
-        mark.NightMark.Should().BeNull("Unmarked survives the wire as null — a silence, never a zero");
+        mark.NightMark.Should().Be("Worked", "BOTH facts live — D-H3's Full+Night shape of day, reached door by door");
         mark.WorkDate.Should().Be(WorkDate);
         mark.FieldOperatorId.Should().Be(Ganesh);
         mark.FarmId.Should().Be(FarmA);
@@ -333,6 +366,14 @@ public sealed class AttendanceMarkSyncRealPostgresTests(Xunit.Abstractions.ITest
         await read.OpenAsync();
         return Convert.ToInt32(await ScalarAsync(read,
             "SELECT day_mark FROM ssf.attendance_marks WHERE \"Id\" = @id", ("id", markId)));
+    }
+
+    private async Task<int> ReadNightMarkAsync(Guid markId)
+    {
+        await using var read = new NpgsqlConnection(_superuserConn);
+        await read.OpenAsync();
+        return Convert.ToInt32(await ScalarAsync(read,
+            "SELECT night_mark FROM ssf.attendance_marks WHERE \"Id\" = @id", ("id", markId)));
     }
 
     private async Task<(long Count, string? ChangedField, string? OriginalValue, string? NewValue)> ReadCorrectionAsync(Guid markId)

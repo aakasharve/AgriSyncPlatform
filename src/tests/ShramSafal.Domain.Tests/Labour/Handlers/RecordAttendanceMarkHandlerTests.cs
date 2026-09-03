@@ -20,8 +20,10 @@ public sealed class RecordAttendanceMarkHandlerTests
     private static readonly Guid Ganesh = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
     private static readonly DateOnly Day = new(2026, 9, 2);
 
+    // null half = "this door said NOTHING about that half" (B002) — the
+    // wire's omitted key. The default night is silence, exactly as the doors emit.
     private static RecordAttendanceMarkCommand Cmd(
-        DayMark day = DayMark.Full, NightMark night = NightMark.Unmarked,
+        DayMark? day = DayMark.Full, NightMark? night = null,
         decimal? hours = null, decimal? extra = null, Guid? resolved = null) =>
         new(Guid.NewGuid(), Farm, Ganesh, Day, day, night, hours, extra, resolved, Caller);
 
@@ -62,9 +64,16 @@ public sealed class RecordAttendanceMarkHandlerTests
     public async Task A_command_stating_nothing_is_InvalidCommand_before_the_domain_throws()
     {
         var repo = Repo();
-        var result = await Build(repo).HandleAsync(Cmd(day: DayMark.Unmarked, night: NightMark.Unmarked));
-        result.IsFailure.Should().BeTrue();
-        result.Error.Code.Should().Contain("InvalidCommand");
+
+        // Wire silence: every fact key omitted.
+        var silent = await Build(repo).HandleAsync(Cmd(day: null, night: null));
+        silent.IsFailure.Should().BeTrue();
+        silent.Error.Code.Should().Contain("InvalidCommand");
+
+        // Explicit Unmarked states nothing either — it is not a fact.
+        var unmarked = await Build(repo).HandleAsync(Cmd(day: DayMark.Unmarked, night: NightMark.Unmarked));
+        unmarked.IsFailure.Should().BeTrue();
+        unmarked.Error.Code.Should().Contain("InvalidCommand");
     }
 
     [Fact]
@@ -83,7 +92,7 @@ public sealed class RecordAttendanceMarkHandlerTests
     public async Task Stated_hours_persist_as_stated_with_Explicit_basis_and_no_day_fraction()
     {
         var repo = Repo();
-        var result = await Build(repo).HandleAsync(Cmd(day: DayMark.Unmarked, night: NightMark.Worked, hours: 3m));
+        var result = await Build(repo).HandleAsync(Cmd(day: null, night: NightMark.Worked, hours: 3m));
         result.IsSuccess.Should().BeTrue();
         var mark = repo.AddedMarks.Single();
         mark.Night.Should().Be(NightMark.Worked);
@@ -184,6 +193,106 @@ public sealed class RecordAttendanceMarkHandlerTests
             c.ChangedField == AttendanceMarkCorrection.DayField
             && c.OriginalValue == "Full" && c.NewValue == "Half");
         repo.SaveCalls.Should().Be(1);
+    }
+
+    // ─── B002: the half-erasure interleaves (final whole-branch review) ─────
+    // Every capture door speaks ONE half per mark; the amend must treat the
+    // unspoken half as "this door said NOTHING", never as Unmarked-the-statement.
+
+    /// <summary>
+    /// (a) Mark गणेश's night, then confirm "गणेश आला" by voice the same day:
+    /// BOTH facts live. The stated night is preserved, not degraded to
+    /// Unmarked by the unspoken half — and Full+Night, D-H3's headline
+    /// two-day state, is reachable through shipped doors.
+    /// </summary>
+    [Fact]
+    public async Task Night_marked_then_day_voiced_keeps_both_facts_alive()
+    {
+        var repo = Repo();
+        var existing = AttendanceMark.Create(Guid.NewGuid(), new FarmId(Farm), Ganesh, Day,
+            DayMark.Unmarked, NightMark.Worked, new UserId(Caller), Now);
+        repo.SeedMark(existing);
+
+        var result = await Build(repo).HandleAsync(Cmd(day: DayMark.Full));
+
+        result.IsSuccess.Should().BeTrue("a stated fact must never be erased by an UNSPOKEN one");
+        result.Value!.Outcome.Should().Be(AttendanceDayOutcome.Recorded);
+        existing.Day.Should().Be(DayMark.Full);
+        existing.Night.Should().Be(NightMark.Worked, "the night was STATED; the voice door said nothing about it");
+        repo.AddedCorrections.Should().ContainSingle("only the half that actually CHANGED is a correction")
+            .Which.ChangedField.Should().Be(AttendanceMarkCorrection.DayField);
+    }
+
+    /// <summary>
+    /// (b) A mark holding stated hours, then the same day-fact re-voiced:
+    /// idempotent success, hours preserved — NOT the permanent InvalidCommand
+    /// park the full-replace produced (the unspoken-hours null hit Amend's
+    /// never-silently-drop guard on every retry, forever).
+    /// </summary>
+    [Fact]
+    public async Task Hours_stated_then_day_revoiced_is_idempotent_never_a_permanent_park()
+    {
+        var repo = Repo();
+        var existing = AttendanceMark.Create(Guid.NewGuid(), new FarmId(Farm), Ganesh, Day,
+            DayMark.Full, NightMark.Unmarked, new UserId(Caller), Now,
+            hoursWorked: 4m, hoursBasis: LabourTimeBasis.Explicit);
+        repo.SeedMark(existing);
+
+        var result = await Build(repo).HandleAsync(Cmd(day: DayMark.Full));
+
+        result.IsSuccess.Should().BeTrue("re-confirming a fact is not an un-say of the hours beside it");
+        result.Value!.Outcome.Should().Be(AttendanceDayOutcome.Recorded);
+        existing.HoursWorked.Should().Be(4m, "\"गणेश 4 तास होता\" was stated; the re-confirm said nothing about hours");
+        existing.HoursBasis.Should().Be(LabourTimeBasis.Explicit);
+        repo.AddedCorrections.Should().BeEmpty("nothing changed, so nothing was corrected");
+    }
+
+    /// <summary>
+    /// (b2) The day half CHANGES while hours stay unspoken: the day amends,
+    /// the stated hours ride along untouched, and the correction table gets
+    /// exactly the one row for the half that changed.
+    /// </summary>
+    [Fact]
+    public async Task A_changed_day_preserves_unspoken_hours_and_corrects_only_the_day()
+    {
+        var repo = Repo();
+        var existing = AttendanceMark.Create(Guid.NewGuid(), new FarmId(Farm), Ganesh, Day,
+            DayMark.Full, NightMark.Unmarked, new UserId(Caller), Now,
+            hoursWorked: 4m, hoursBasis: LabourTimeBasis.Explicit);
+        repo.SeedMark(existing);
+
+        var result = await Build(repo).HandleAsync(Cmd(day: DayMark.Half));
+
+        result.IsSuccess.Should().BeTrue();
+        existing.Day.Should().Be(DayMark.Half);
+        existing.HoursWorked.Should().Be(4m);
+        repo.AddedCorrections.Should().ContainSingle()
+            .Which.ChangedField.Should().Be(AttendanceMarkCorrection.DayField);
+        repo.SaveCalls.Should().Be(1, "the amend and its correction ride one commit");
+    }
+
+    /// <summary>
+    /// (c) An EXPLICIT Unmarked over a stated half is an un-say, and R1 ships
+    /// no un-say path: the domain refuses (never silently blank a stated
+    /// fact), the handler surfaces the refusal as InvalidCommand — and nothing
+    /// is staged. Unreachable from the wire (the payload enums have no
+    /// Unmarked member); pinned so a future producer cannot make it a door.
+    /// </summary>
+    [Fact]
+    public async Task An_explicit_unsay_of_a_stated_half_is_refused_not_erased()
+    {
+        var repo = Repo();
+        var existing = AttendanceMark.Create(Guid.NewGuid(), new FarmId(Farm), Ganesh, Day,
+            DayMark.Full, NightMark.Unmarked, new UserId(Caller), Now);
+        repo.SeedMark(existing);
+
+        var result = await Build(repo).HandleAsync(Cmd(day: DayMark.Unmarked, night: NightMark.Worked));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Contain("InvalidCommand");
+        existing.Day.Should().Be(DayMark.Full, "the refusal must change nothing");
+        repo.AddedCorrections.Should().BeEmpty();
+        repo.SaveCalls.Should().Be(0);
     }
 
     // ─── Test doubles ────────────────────────────────────────────────────────

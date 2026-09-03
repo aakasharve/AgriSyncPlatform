@@ -254,6 +254,58 @@ public sealed class AttendanceMarkTests
     }
 
     /// <summary>
+    /// B002 (final whole-branch review) — the half-erasure guard, DAY half.
+    /// Every capture door speaks ONE half per mark, so an amendment carrying
+    /// Unmarked where a half was STATED is an un-say, and R1 ships no un-say
+    /// path (the hours guards below say why: "nobody said" has no value a
+    /// correction row can record as the new side). Refuse — a stated fact must
+    /// never degrade to silence.
+    /// </summary>
+    [Fact]
+    public void AmendMayRestateAStatedDayButNeverBlankItToUnmarked()
+    {
+        var mark = Mark(DayMark.Full, NightMark.Unmarked);
+
+        Assert.Throws<ArgumentException>(() => mark.Amend(
+            DayMark.Unmarked, NightMark.Worked, null, null, LabourTimeBasis.Unspecified,
+            Actor, At.AddHours(1)));
+
+        Assert.Equal(DayMark.Full, mark.Day); // the refusal changed nothing
+    }
+
+    /// <summary>Same guard, NIGHT half: a stated night never degrades to Unmarked.</summary>
+    [Fact]
+    public void AmendMayRestateAStatedNightButNeverBlankItToUnmarked()
+    {
+        var mark = Mark(DayMark.Unmarked, NightMark.Worked);
+
+        Assert.Throws<ArgumentException>(() => mark.Amend(
+            DayMark.Full, NightMark.Unmarked, null, null, LabourTimeBasis.Unspecified,
+            Actor, At.AddHours(1)));
+
+        Assert.Equal(NightMark.Worked, mark.Night);
+    }
+
+    /// <summary>
+    /// Unmarked over an already-Unmarked half blanks nothing — it is the
+    /// carried silence, not an un-say. D-H3's Full+Night day is built exactly
+    /// this way: night marked first, day stated later.
+    /// </summary>
+    [Fact]
+    public void AmendCarryingUnmarkedOverAnUnmarkedHalfIsNotABlanking()
+    {
+        var mark = Mark(DayMark.Unmarked, NightMark.Worked);
+
+        var previous = mark.Amend(
+            DayMark.Full, NightMark.Worked, null, null, LabourTimeBasis.Unspecified,
+            Actor, At.AddHours(1));
+
+        Assert.Equal(DayMark.Unmarked, previous.Day);
+        Assert.Equal(DayMark.Full, mark.Day);
+        Assert.Equal(NightMark.Worked, mark.Night); // D-H3's headline state, reachable
+    }
+
+    /// <summary>
     /// The guard nuance Phase 0 demanded be decided in the domain shape:
     /// Amend may RESTATE stated hours, never silently blank them — "nobody said"
     /// has no value name a correction row could record, so a quiet null here

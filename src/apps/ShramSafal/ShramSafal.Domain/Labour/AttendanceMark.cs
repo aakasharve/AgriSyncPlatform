@@ -244,6 +244,27 @@ public sealed class AttendanceMark : Entity<Guid>
                 nameof(day));
         }
 
+        // B002 (final whole-branch review) — the halves get the same rule the
+        // hours already had. Every capture door speaks ONE half per mark, so an
+        // amendment carrying Unmarked where a half was STATED is an un-say:
+        // "nobody said" has no value a correction row can record as the new
+        // side, and R1 ships no un-say path. A stated fact must never degrade
+        // to silence; Unmarked over an already-Unmarked half blanks nothing
+        // and passes (that carried silence is how Full+Night is reached).
+        if (Day != DayMark.Unmarked && day == DayMark.Unmarked)
+        {
+            throw new ArgumentException(
+                "This mark holds a stated day. An amendment may restate it, never silently blank it to Unmarked.",
+                nameof(day));
+        }
+
+        if (Night != NightMark.Unmarked && night == NightMark.Unmarked)
+        {
+            throw new ArgumentException(
+                "This mark holds a stated night. An amendment may restate it, never silently blank it to Unmarked.",
+                nameof(night));
+        }
+
         // Null-ing a PRESENT hours value would blank a stated fact with no name
         // for the blanking — "nobody said" has no value a correction row can
         // record as the new side. Deletion of a stated fact is a different act

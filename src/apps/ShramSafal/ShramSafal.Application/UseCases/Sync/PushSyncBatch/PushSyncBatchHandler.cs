@@ -1655,13 +1655,17 @@ public sealed class PushSyncBatchHandler(
         }
 
         // Closed vocabularies, mapped TOTALLY like `direction` in
-        // HandleAddCostEntryAsync. Absence = Unmarked — "nobody said" is a
-        // fourth state, never a guess; an unrecognised value is a broken
-        // producer and is refused, never demoted to unknown.
-        DayMark day;
+        // HandleAddCostEntryAsync. Absence = null = "this door said NOTHING
+        // about that half" (B002): every capture door speaks ONE half per
+        // mark, so on a first mark a null half lands as Unmarked ("nobody
+        // said") and on an amend it PRESERVES the stored fact — never a
+        // full-replace that erases a stated half with an unspoken one. An
+        // unrecognised value is a broken producer and is refused, never
+        // demoted to unknown.
+        DayMark? day;
         switch (request.DayMark)
         {
-            case null or "": day = DayMark.Unmarked; break;
+            case null or "": day = null; break;
             case "Full": day = DayMark.Full; break;
             case "Half": day = DayMark.Half; break;
             case "Absent": day = DayMark.Absent; break;
@@ -1669,10 +1673,10 @@ public sealed class PushSyncBatchHandler(
                 return MutationExecutionOutcome.Failure(
                     "ShramSafal.SyncInvalidPayload", "attendance.mark payload carries an unrecognised dayMark.");
         }
-        NightMark night;
+        NightMark? night;
         switch (request.NightMark)
         {
-            case null or "": night = NightMark.Unmarked; break;
+            case null or "": night = null; break;
             case "Worked": night = NightMark.Worked; break;
             case "NotWorked": night = NightMark.NotWorked; break;
             default:

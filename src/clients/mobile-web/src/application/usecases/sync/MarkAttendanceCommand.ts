@@ -7,7 +7,9 @@ export interface AttendanceMarkPayload {
     fieldOperatorId: string;
     /** YYYY-MM-DD — the farmer's day, not a timestamp. */
     workDate: string;
-    /** Absent = Unmarked ("nobody said") — never a guess. */
+    /** Omitted = this door says NOTHING about that half (B002): a first mark
+     *  stores the silence as Unmarked ("nobody said"); an amend PRESERVES the
+     *  stored half — a stated fact is never erased by an unspoken one. */
     dayMark?: 'Full' | 'Half' | 'Absent';
     nightMark?: 'Worked' | 'NotWorked';
     hoursWorked?: number;

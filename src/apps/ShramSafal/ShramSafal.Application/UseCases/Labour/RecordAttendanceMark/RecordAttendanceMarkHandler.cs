@@ -47,7 +47,8 @@ public sealed class RecordAttendanceMarkHandler(
         // an ArgumentException on this path would surface as a 500, not a refusal.
         if (command.FarmId == Guid.Empty || command.FieldOperatorId == Guid.Empty
             || command.AttendanceMarkId == Guid.Empty || command.RecordedByUserId == Guid.Empty
-            || (command.Day == DayMark.Unmarked && command.Night == NightMark.Unmarked
+            || ((command.Day is null or DayMark.Unmarked)
+                && (command.Night is null or NightMark.Unmarked)
                 && command.HoursWorked is null && command.ExtraHours is null)
             || command.HoursWorked is <= 0 || command.ExtraHours is <= 0)
         {
@@ -130,9 +131,11 @@ public sealed class RecordAttendanceMarkHandler(
             AttendanceMark mark;
             try
             {
+                // A null half on a FIRST mark lands as the stored silence,
+                // Unmarked — "nobody said", never a guess.
                 mark = AttendanceMark.Create(
                     command.AttendanceMarkId, new FarmId(command.FarmId), command.FieldOperatorId,
-                    command.WorkDate, command.Day, command.Night,
+                    command.WorkDate, command.Day ?? DayMark.Unmarked, command.Night ?? NightMark.Unmarked,
                     new UserId(command.RecordedByUserId), now,
                     command.HoursWorked, command.ExtraHours, basis);
             }
@@ -152,8 +155,24 @@ public sealed class RecordAttendanceMarkHandler(
                 AttendanceDayOutcome.Recorded, mark.Id, Contradiction: null));
         }
 
-        if (existing.Day == command.Day && existing.Night == command.Night
-            && existing.HoursWorked == command.HoursWorked && existing.ExtraHours == command.ExtraHours)
+        // B002 (final whole-branch review) — PARTIAL-AMEND SEMANTICS. Every
+        // capture door speaks ONE half per mark, and the wire has no Unmarked
+        // member: silence is the omitted key. So an absent fact here is a door
+        // that said NOTHING, and the amend CARRIES the stored fact for every
+        // half the command does not state — a stated fact is never erased by
+        // an unspoken one (absence of a statement is not a statement). An
+        // EXPLICIT Unmarked — unrepresentable on the wire — is an un-say,
+        // which the domain refuses over a stated half (R1 ships no un-say path).
+        var day = command.Day ?? existing.Day;
+        var night = command.Night ?? existing.Night;
+        var hoursWorked = command.HoursWorked ?? existing.HoursWorked;
+        var extraHours = command.ExtraHours ?? existing.ExtraHours;
+        var amendBasis = hoursWorked is not null || extraHours is not null
+            ? LabourTimeBasis.Explicit
+            : LabourTimeBasis.Unspecified;
+
+        if (existing.Day == day && existing.Night == night
+            && existing.HoursWorked == hoursWorked && existing.ExtraHours == extraHours)
         {
             return Result.Success(new RecordAttendanceMarkResult(
                 AttendanceDayOutcome.Recorded, existing.Id, Contradiction: null));
@@ -163,18 +182,20 @@ public sealed class RecordAttendanceMarkHandler(
         try
         {
             previous = existing.Amend(
-                command.Day, command.Night, command.HoursWorked, command.ExtraHours,
-                basis, new UserId(command.RecordedByUserId), now);
+                day, night, hoursWorked, extraHours,
+                amendBasis, new UserId(command.RecordedByUserId), now);
         }
         catch (ArgumentException)
         {
-            // The domain refused the amendment (e.g. null-ing stated hours —
-            // "an amendment may restate them, never silently drop them", Task
-            // 2.5). A refusal, not our fault: InvalidCommand, never a 500.
+            // The domain refused the amendment (e.g. blanking a stated half,
+            // or null-ing stated hours — "an amendment may restate them,
+            // never silently drop them", Task 2.5 / B002). A refusal, not our
+            // fault: InvalidCommand, never a 500.
             return Result.Failure<RecordAttendanceMarkResult>(ShramSafalErrors.InvalidCommand);
         }
 
-        foreach (var row in BuildCorrections(existing.Id, command, previous, basis, now))
+        foreach (var row in BuildCorrections(
+            existing.Id, command, previous, day, night, hoursWorked, extraHours, amendBasis, now))
         {
             await repository.AddAttendanceMarkCorrectionAsync(row, ct);
         }
@@ -183,26 +204,31 @@ public sealed class RecordAttendanceMarkHandler(
             AttendanceDayOutcome.Recorded, existing.Id, Contradiction: null));
     }
 
+    // Correction rows are built from the EFFECTIVE facts (carried halves
+    // included), so a half the door did not speak — carried forward equal to
+    // its previous value — never rows: only halves that actually CHANGED are
+    // corrections (B002).
     private IEnumerable<AttendanceMarkCorrection> BuildCorrections(
-        Guid markId, RecordAttendanceMarkCommand command,
-        AttendanceMarkPreviousValues previous, LabourTimeBasis basis, DateTime now)
+        Guid markId, RecordAttendanceMarkCommand command, AttendanceMarkPreviousValues previous,
+        DayMark day, NightMark night, decimal? hoursWorked, decimal? extraHours,
+        LabourTimeBasis basis, DateTime now)
     {
         var by = new UserId(command.RecordedByUserId);
         var farm = new FarmId(command.FarmId);
-        if (previous.Day != command.Day)
+        if (previous.Day != day)
             yield return AttendanceMarkCorrection.Create(idGenerator.New(), markId, farm,
-                AttendanceMarkCorrection.DayField, previous.Day.ToString(), command.Day.ToString(), by, now);
-        if (previous.Night != command.Night)
+                AttendanceMarkCorrection.DayField, previous.Day.ToString(), day.ToString(), by, now);
+        if (previous.Night != night)
             yield return AttendanceMarkCorrection.Create(idGenerator.New(), markId, farm,
-                AttendanceMarkCorrection.NightField, previous.Night.ToString(), command.Night.ToString(), by, now);
-        if (previous.HoursWorked != command.HoursWorked)
+                AttendanceMarkCorrection.NightField, previous.Night.ToString(), night.ToString(), by, now);
+        if (previous.HoursWorked != hoursWorked)
             yield return AttendanceMarkCorrection.Create(idGenerator.New(), markId, farm,
                 AttendanceMarkCorrection.HoursWorkedField,
-                Format(previous.HoursWorked, previous.HoursBasis), Format(command.HoursWorked, basis), by, now);
-        if (previous.ExtraHours != command.ExtraHours)
+                Format(previous.HoursWorked, previous.HoursBasis), Format(hoursWorked, basis), by, now);
+        if (previous.ExtraHours != extraHours)
             yield return AttendanceMarkCorrection.Create(idGenerator.New(), markId, farm,
                 AttendanceMarkCorrection.ExtraHoursField,
-                Format(previous.ExtraHours, previous.HoursBasis), Format(command.ExtraHours, basis), by, now);
+                Format(previous.ExtraHours, previous.HoursBasis), Format(extraHours, basis), by, now);
     }
 
     // Values carry their basis (the LabourCorrection FieldDurationHours idiom,
