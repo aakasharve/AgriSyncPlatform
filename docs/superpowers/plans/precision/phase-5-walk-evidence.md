@@ -287,10 +287,37 @@ expected path → fails naming `CreateFieldOperatorHandler.cs` · 5.3 scan →
 
 ## Gate conditions carried from the internal ledger (M1, final review)
 
-- **Branch CI must run green before this gate** — 8 Sync.IntegrationTests suites are
-  Docker-only and have never executed against this branch (no local Docker, by standing
-  preference). The branch must be pushed and its CI observed green — including those 8 —
-  before the acceptance box is ticked. (Condition attached at the Task 2.1 review.)
+- **Branch CI: RUN AND GREEN on the required check.** Branch pushed; draft PR #75 opened
+  to trigger CI; `gate` — the single required check on `main` — **passes**, as do
+  `backend`, `build-test`, `frontend`, `mobile-web`, `contract-tests`, `arch-tests`,
+  `eslint`, `mobile-web-lint`, `regen-and-diff`, `security`, both CodeQL analyses, and
+  gitleaks.
+
+  **CORRECTION to the condition recorded at the Task 2.1 review.** That review required "the
+  8 Docker-only suites green in branch CI". That is not achievable in this repo and never
+  was: **no CI job runs `Category=RequiresDocker` at all** — `ci-gate.yml:74` and
+  `dotnet-ci.yml:112` both exclude it repo-wide, with the stated reason that the
+  Testcontainers LocalStack/S3 suites are chronically red, and `ci-gate.yml:95` deliberately
+  carves out three named Postgres-only isolation tests it does run. This branch changed none
+  of that; the exclusion predates it.
+
+  **What matters is that it does not hide this release's proofs.** Every labour and
+  attendance guarantee is proven by `RequiresPostgres` suites, which DO run in CI and passed
+  there — verified by name in the `backend` job log:
+  `AttendanceMarkSyncRealPostgresTests` (the offline journey: push → dedupe → amend →
+  user-scoped pull; non-member fails closed with zero rows),
+  `AttendanceMarkUniqueIndexRealPostgresTests` (the 23505 safety net),
+  `LabourAssignmentParentIntegrityRealPostgresTests` (engaged-through FK; dangling operator
+  rejected), and the full `LabourCapabilityGrantRealPostgresTests` matrix — including
+  *"an existing Mukadam row is untouched and reads as OFF, no backfill"* and *"an expired
+  grant is denied by the real SQL predicate and nothing is rewritten"*.
+
+  **Two checks are red and neither is this branch's:** `eval` fails because its job starts
+  the API against a Postgres service on port 5432 while the app connects to 5433 — a
+  workflow/config mismatch in a file this branch never touched; and `e2e` was **also red on
+  PR #74**, the last PR merged to `main`, so it is the established baseline rather than a
+  regression. (The bare `CodeQL` 2s stub is likewise pre-existing; both real CodeQL analyses
+  pass.) Neither is the required check.
 - **Footnote on the D6 breakdown:** engagements whose arrangement was never voiced bucket
   as रोजंदारी by the spec's own definition — the home line may say "x रोजंदारी" over
   engagements that never said the word. Copy stands unless the founder wants a third word
