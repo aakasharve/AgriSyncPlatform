@@ -932,7 +932,7 @@ Expected: PASS (this task adds no new construction sites; `LabourAnchorRules` PI
 `LabourAssignment.Create(` call sites in production code only — the new test-helper call sites
 live in the test tree, which `ProductionSourceFiles()` excludes).
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/apps/ShramSafal/ShramSafal.Application/Contracts/Dtos/LabourDataDto.cs \
@@ -2821,7 +2821,10 @@ exist).
   `features/labour/__tests__/attendanceParked.test.ts`,
   `features/labour/components/__tests__/HajeriLedgerUnsynced.test.tsx`,
   `features/labour/components/__tests__/LabourFeature.contradiction.test.tsx`,
-  additions to `features/labour/__tests__/useLabourState.test.ts` and
+  `features/labour/__tests__/useLabourState.localPlane.test.ts` (its own
+  file — the sibling `useLabourState.test.ts` pins data identity with `toBe`
+  and stays byte-relevant untouched), additions to
+  `features/labour/__tests__/attendanceLocal.test.ts` (name hints) and
   `infrastructure/sync/__tests__/MutationQueueDurability.test.ts`
 
 **Interfaces:**
@@ -2923,48 +2926,48 @@ exist).
     the queue flushes" half of B001 for the in-labour door; the voice door re-mounts the
     feature and re-fetches by construction.
 
-- [ ] **Step 1: Failing tests — the pure overlay** (`attendanceOverlay.test.ts`): queue mark
+- [x] **Step 1: Failing tests — the pure overlay** (`attendanceOverlay.test.ts`): queue mark
   merges into the existing row's day cell as `unsynced`; per-half merge never erases an
   acknowledged half; unrowed person gains a row (name chain of decision 5); missing date
   gains a sorted column; no queue marks → the SAME object back (identity — the hook's
   money-safety tests pin `toBe`); `'server'`-sourced marks do not overlay a successful fetch;
   `buildOfflineRegister` renders server-sourced normal + queue-sourced weaker, `view: 'own'`,
   null when the plane is empty.
-- [ ] **Step 2: Failing tests — the parked loop** (`attendanceParked.test.ts`, real Dexie over
+- [x] **Step 2: Failing tests — the parked loop** (`attendanceParked.test.ts`, real Dexie over
   fake-indexeddb, the `attendanceLocal.test.ts` idiom): `markRejectedUserReview` stores the
   code; list matches only the AttendanceContradiction dot-tail; question rebuild from seeded
   logs (two attributed engagements, distinct shifts) carries the snapshot name + both facts;
   no-facts → null, never a fabricated question; answer → row PENDING with EXACTLY
   `{attendanceMarkId, farmId, fieldOperatorId, workDate, <decided half>,
   resolvedLabourAssignmentId}` — the unspoken halves ABSENT (B002); the park no longer lists.
-- [ ] **Step 3: Failing render pins** (`HajeriLedgerUnsynced.test.tsx`): the unsynced cell
+- [x] **Step 3: Failing render pins** (`HajeriLedgerUnsynced.test.tsx`): the unsynced cell
   draws its fact + `ledger-cell-pending` marker + a class DIFFERENT from the acknowledged
   cell of the same fact (P10: weaker, never identical); the legend line with the resolved
   ON_PHONE string appears only when an unsynced cell exists; `HajeriCellDetail` labels an
   unsynced cell with the same resolved string; the Clean-register DOM contract still holds
   (cells per row unchanged — the marker lives INSIDE the cell button).
-- [ ] **Step 4: Failing hook + feature tests**: `useLabourState` composes the overlay after a
+- [x] **Step 4: Failing hook + feature tests**: `useLabourState` composes the overlay after a
   successful fetch and serves the offline register (error still true) on a failed one;
   `LabourFeature.contradiction.test.tsx` renders the approved question copy when a park
   exists, answering calls the answer function and clears the card, and the outage state with
   local rows renders the register beside the banner.
-- [ ] **Step 5: Run and see each fail for the right reason** (missing exports, missing
+- [x] **Step 5: Run and see each fail for the right reason** (missing exports, missing
   testids, missing overlay — never typos).
-- [ ] **Step 6: Implement** — `errorCode` plumbing (types → queue → worker), attendanceLocal
+- [x] **Step 6: Implement** — `errorCode` plumbing (types → queue → worker), attendanceLocal
   name hints, attendanceOverlay, attendanceParked, `LedgerCell.unsynced`, HajeriLedger +
   HajeriCellDetail treatment, useLabourState compose, LabourFeature prompt + outage register
   + post-save refresh. Storage reads on the hook path are try/caught to `[]` — a throwing
   storage access must degrade to "no overlay", never crash the labour screen (the
   `readPersistedLabourWindow` posture).
-- [ ] **Step 7: Correct `RejectionPolicy.ts:128-133`** — the comment claimed "Parking it is
+- [x] **Step 7: Correct `RejectionPolicy.ts:128-133`** — the comment claimed "Parking it is
   what surfaces the question" while nothing rendered it. It now names the real loop: parking
   makes the mark render as weaker intent in the register (`attendanceOverlay`), the labour
   route renders the question (`attendanceParked` + `AttendanceContradictionPrompt`), and the
   answer travels via `replacePayload` with `resolvedLabourAssignmentId`.
-- [ ] **Step 8: Gate** — all new tests + `npx vitest run src/features/labour` +
+- [x] **Step 8: Gate** — all new tests + `npx vitest run src/features/labour` +
   the navigation suites + `npx tsc --noEmit` (0 errors). No server file changed in this task
   → Domain/Architecture suites unaffected (run them anyway if any `src/apps` diff exists).
-- [ ] **Step 9: Commit** (Conventional Commits, body carries
+- [x] **Step 9: Commit** (Conventional Commits, body carries
   `spec: 2026-08-28-labour-v2-release-1`).
 
 ---

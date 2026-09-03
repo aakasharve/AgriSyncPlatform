@@ -126,6 +126,12 @@ goes red in CI before any farmer sees the change.
   release).
 - [x] Mobile-web labour scope (`src/features/labour` + the two labour
   navigation suites): **439 passed (439)**.
+  *Re-run 2026-09-03 after Task 9 (B001) landed: `npx vitest run
+  src/features/labour` alone = **468 passed (468, 41 files)**; the whole
+  `src/core/navigation` = **98 passed (98, 20 files)**; `src/infrastructure/
+  sync` + `src/features/sync` = **483 passed (483, 41 files)**; `npx tsc
+  --noEmit` = **0 errors**. The original 439 was true of the pre-Task-9
+  tree; both counts are kept so neither snapshot lies about its date.*
 - [x] Mobile-web full (`npm run test`, 332 files): **3333 passed, 2 failed
   (3335)** — both failures are 5000 ms timeouts under full-suite parallel load
   in files this release never touched
@@ -158,18 +164,69 @@ under any other name sailed past it). It was removed; the structural owner of
 on ANY trailing element regardless of what it is called.
 
 **3. The one transient the register can show (the acknowledged-but-unpulled
-window, from the 3.5 review).** A mark you speak while offline shows
-immediately, labelled with the honest "लक्षात ठेवलं ✓" treatment (queue
-intent, never presented as server truth). When the phone reconnects there is
-one brief window: the server has ACCEPTED the mark (the queue row flips to
-APPLIED and stops rendering) but the next pull has not yet delivered the
-server's own row. For those seconds — normally within the same sync cycle —
-that one mark can be absent from the register, then it returns permanently as
-server truth. Nothing is lost, nothing is double-shown, and a mark REFUSED by
-the server never vanishes silently (it stays visible as intent until you
-answer the conflict question). This is the only transient the register can
-show, and it is the honest ordering: we never show "saved" before the server's
-own copy is on the phone.
+window, from the 3.5 review).**
+
+> **CORRECTED at the final whole-branch review (B001), then BUILT as Phase 4
+> Task 9.** When this sheet was first written, the paragraph below described
+> behaviour that did not exist: `getLocalAttendanceMarks` had zero production
+> callers, an offline-spoken mark appeared NOWHERE until sync, and a
+> server-refused mark was invisible forever. Task 9 built the consumption
+> this sentence had been promising; every claim below now names the test that
+> pins it (all run green on this tree, 2026-09-03, after Task 9's commits).
+
+A mark you speak while offline shows immediately in the register as queue
+intent — its stated fact drawn in a dashed amber box with a small clock and
+an amber glyph, plus a legend line carrying the app's existing on-phone claim
+(`sync.onPhone`, resolved at Marathi: लक्षात ठेवलं ✓ — shipped i18n copy, not
+new Marathi) — visibly WEAKER than the solid fill an acknowledged mark earns,
+never presented as server truth (P10). The treatment is composed from the
+app's own queue vocabulary (the sync drawer's amber+Clock pending card and
+the resolved `sync.onPhone` string); no cell-level unsynced treatment existed
+anywhere before this, so composing those existing pieces IS the minimal
+honest treatment. Pinned by:
+`features/labour/__tests__/attendanceOverlay.test.ts` — **10 passed (10)**
+(the compose: per-half merge so an unspoken half never erases an acknowledged
+fact; a person or date the wire didn't draw still gets its row/column; the
+offline register), `features/labour/components/__tests__/
+HajeriLedgerUnsynced.test.tsx` — **5 passed (5)** (weaker-never-identical,
+the pending marker, the conditional legend, the tap-detail label), and
+`features/labour/__tests__/useLabourState.localPlane.test.ts` — **4 passed
+(4)** (the hook composes queue intent over a successful GET; a FAILED GET
+with local facts renders the register beside the outage banner instead of
+the dead-end, `view: 'own'`).
+
+When the phone reconnects there is one brief window: the server has ACCEPTED
+the mark (the queue row flips to APPLIED and stops rendering) but the next
+pull has not yet delivered the server's own row. For those seconds — normally
+within the same sync cycle — that one mark can be absent from the register,
+then it returns permanently as server truth. Nothing is lost, nothing is
+double-shown (`features/labour/__tests__/attendanceP10.test.ts` — **1 passed
+(1)**, the whole loop; `attendanceLocal.test.ts` — **5 passed (5)**, the
+live-intent statuses + the attach-time name snapshot).
+
+A mark REFUSED by the server never vanishes silently: a
+`REJECTED_USER_REVIEW` row keeps rendering as weaker intent, and the parked
+`AttendanceContradiction` now has its answering surface — the labour route
+renders the approved question (एक गोष्ट स्पष्ट करा + the `ATTENDANCE_COPY`
+body, State D's own card) rebuilt from the device's attributed engagements,
+and the answer re-enqueues the SAME queue row with
+`resolvedLabourAssignmentId`, speaking only the half the ruling decides
+(B002). Pinned by `features/labour/__tests__/attendanceParked.test.ts` —
+**9 passed (9)** (park-by-code, question-or-nothing, the exact resolution
+payload, the park clears) and `features/labour/components/__tests__/
+LabourFeature.contradiction.test.tsx` — **6 passed (6)** (the route renders
+the approved copy, answering clears the card, the outage register). The park
+carries the server's error CODE on the queue row now
+(`infrastructure/sync/__tests__/MutationQueueDurability.test.ts` — **10
+passed (10)**, incl. the two Task 9 pins).
+
+This — plus the outage register labelled by the existing banner — is the
+honest ordering: we never show "saved" before the server's own copy is on the
+phone. One residual, stated: the in-labour manual हजेरी sheet's post-save
+refresh (so the register composes the just-made marks) is wired but sits
+behind the hard-`false` `SHOW_ATTENDANCE_TILE` door, so no farmer-reachable
+surface exercises it today; the voice path re-mounts and re-fetches by
+construction.
 
 ---
 
