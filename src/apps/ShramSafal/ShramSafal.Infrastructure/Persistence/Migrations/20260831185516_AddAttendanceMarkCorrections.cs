@@ -42,7 +42,9 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                 table: "attendance_mark_corrections",
                 columns: new[] { "attendance_mark_id", "corrected_at_utc" });
 
-            // RLS mirrors ssf.attendance_marks. ENABLED and FORCED — enable alone
+            // RLS: tenant policy, ENABLED and FORCED (like ssf.attendance_marks —
+            // but deliberately WITHOUT its user-select policy: corrections are not
+            // pulled user-scoped in R1). Enable alone
             // leaves the table owner outside the policy.
             migrationBuilder.Sql(@"
 ALTER TABLE ssf.attendance_mark_corrections ENABLE ROW LEVEL SECURITY;

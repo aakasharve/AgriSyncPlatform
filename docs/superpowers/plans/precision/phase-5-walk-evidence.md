@@ -284,3 +284,14 @@ expected path → fails naming `CreateFieldOperatorHandler.cs` · 5.3 scan →
 - [ ] **Founder:** I walked this sheet, the claims match what I asked for in
   the master review, and the counts above are the pointers I verify against.
   (code-complete ≠ approved; nothing merges without this tick)
+
+## Gate conditions carried from the internal ledger (M1, final review)
+
+- **Branch CI must run green before this gate** — 8 Sync.IntegrationTests suites are
+  Docker-only and have never executed against this branch (no local Docker, by standing
+  preference). The branch must be pushed and its CI observed green — including those 8 —
+  before the acceptance box is ticked. (Condition attached at the Task 2.1 review.)
+- **Footnote on the D6 breakdown:** engagements whose arrangement was never voiced bucket
+  as रोजंदारी by the spec's own definition — the home line may say "x रोजंदारी" over
+  engagements that never said the word. Copy stands unless the founder wants a third word
+  for "unstated" (gate copy item, optional).
