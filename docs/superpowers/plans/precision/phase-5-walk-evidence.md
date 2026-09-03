@@ -333,3 +333,94 @@ no farmer can reach them today — and must be decided before that door ever ope
 - the **"आज किती लोक आली?"** counter collects a number the save silently discards —
   wire it or remove it;
 - **"नाव जोडा"** only shows a toast — build the add-person flow or remove the button.
+
+---
+
+# Closure round — 2026-09-03 (founder direction of the same date)
+
+Six closure commits sit on top of the release: `4c1bd756` `df2e9268` `21cbf661`
+`35087e6c` `af9fe23e` `83d012ec`. **This section describes the exact HEAD that will
+merge.**
+
+## 1. The economic model was WRONG and is now fixed
+
+The founder corrected the model: रोजंदारी and उक्ते describe the **basis on which the
+farmer owes money**, never the identity, frequency or naming of a person. He warned that
+`ContractUnit == null → रोजंदारी` might not be sufficient. **He was right — three of his
+seven cases failed.**
+
+| Case | Scenario | Before | After |
+|---|---|---|---|
+| A | 6 unnamed workers, no agreement | PASS | PASS |
+| B | worker appears once in a season | PASS | PASS |
+| C | मुकादम brings 8, no agreement | PASS | PASS |
+| **D** | मुकादम brings 8 **under an उक्ते agreement** (no unit) | **FAIL** — read as day-rate | **PASS** |
+| **E** | fixed **₹15,000 whole job, no measurement unit** | **FAIL** — ₹15,000 on the day-rate card | **PASS** |
+| **F** | 4 day-rate + 8 उक्ते, same plot & day | **FAIL** — 12 day-rate, ₹16,200 combined | **PASS** — 12 total, 4 + 8, never combined |
+| G | day-rate headcount, rate unknown | PASS — no ₹0, no invented amount | PASS |
+
+The fix is one predicate reusing `EngagementType`, a field that already exists, is NOT
+NULL on every row, and already travels on the wire: an engagement is उक्ते when it is
+typed as a contract **or** carries a measurement unit. **No new column, no migration, no
+wire change, no client change.** Pinned by `UkteDiscriminatorTests` — 7/7, measured at
+3-failed before the change.
+
+## 2. Farmer-facing vocabulary — the dignity rule applied
+
+Internal names are untouched by design. On screen: farmer-facing **"Labour" /
+"Labour Management" is gone**, and **रोजंदारी no longer appears as a category of person**.
+The day-rate half now reads `दिवसाच्या हिशोबाने` — the founder's own provisional
+illustration, explicitly **not** a naming decision. `उक्ते काम` stays. Nothing else was
+renamed; ambiguous `मजूर` / `कामगार` occurrences are **flagged, not replaced**, for the
+naming session. The Phase 5 vocabulary scan gained a farmer-facing `Labour` ban, proved by
+a negative control (re-inserting `· Labour` turns it red).
+
+Full audit — 453 farmer-facing strings, 259 unique terms, 15 founder decisions:
+`docs/superpowers/plans/precision/farmer-facing-vocabulary-audit.md`
+
+## 3. The membership read boundary — VERIFIED, NOT MET, and it is the founder's call
+
+All three gates between a caller and the register filter on **non-terminal**
+(`status NOT IN (5,6)`), none on **operationally active**. So `PendingOtpClaim`,
+`PendingApproval` and **`Suspended`** still reach the register today. The founder's stated
+expectation is therefore **not met**.
+
+**No behaviour was changed.** The smallest centrally-owned fix would alter **eight other
+feature areas plus the RLS layer** — far outside Labour V2, and not a change to make
+quietly at a release gate. What landed instead is a `RequiresPostgres` suite pinning all
+six statuses, so today's behaviour is documented and any drift breaks a test.
+**This is the one item genuinely awaiting a founder decision.**
+
+## 4. The unfinished manual door — proven shut
+
+`Attendance.tsx` is imported in exactly one place and rendered in exactly one place; the
+route trace found **no second door**. A test now fails if it opens for a real farm. The
+three unfinished controls are held in one named follow-up:
+`docs/superpowers/plans/precision/followup-manual-attendance-door.md`
+
+## 5. Release size — both numbers, reconciled
+
+| | PR base (`origin/main...HEAD`) | Historical base (`a7784b18..HEAD`) |
+|---|---|---|
+| Answers | what merging changes in `main` | how far the tree moved since work began |
+| Commits | **128** | **137** |
+| Files | **333** | **403** |
+| Matches GitHub PR #75 | **yes, exactly** | no |
+
+Use the PR base for the merge decision. Detail:
+`docs/superpowers/plans/precision/reports/closure-stats-report.md`
+
+## 6. Final CI, against the exact commit that will merge
+
+`83d012ec` — **`gate` PASSES** (the single required check on `main`), with `backend`,
+`build-test`, `frontend`, `mobile-web`, `contract-tests`, `.NET Architecture Tests`,
+`mobile-web-lint`, `admin-web-lint`, `marketing-web`, `regen-and-diff`, `scan`,
+`Frontend Layer Tests`, `Dependency Review`, gitleaks and **both** CodeQL analyses.
+
+Three red, none of them this release: `e2e` (**also red on PR #74**, the last merge to
+`main`), `eval` (its job starts the API against Postgres on 5432 while the app dials 5433 —
+a workflow this branch never touched), and the bare `CodeQL` 2s stub (the two real analyses
+pass). None is the required check.
+
+Local gates at the same commit: Domain **2005 passed / 1 skipped**, Architecture **107**,
+labour + related vitest **519**, `tsc` **0 errors**, RealPostgres labour set **100**.
