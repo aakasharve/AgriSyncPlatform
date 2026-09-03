@@ -41,11 +41,12 @@ public sealed class BuildHajeriLedgerTests
 
     private static LabourAssignment Assignment(
         Guid id, Guid logId, ContractUnit? contractUnit = null, string? task = null,
-        int? workerCount = null, Guid? engagedThrough = null)
+        int? workerCount = null, Guid? engagedThrough = null,
+        LabourEngagementType engagementType = LabourEngagementType.Hired)
         => LabourAssignment.Create(
             id: id,
             dailyLogId: logId,
-            engagementType: LabourEngagementType.Hired,
+            engagementType: engagementType,
             maleCount: null,
             femaleCount: null,
             workerCount: workerCount,
@@ -208,6 +209,34 @@ public sealed class BuildHajeriLedgerTests
         Assert.True(row.Cells[0]!.Ukte);
         Assert.Equal("द्राक्ष छाटणी", row.Cells[0]!.Work);
         Assert.False(row.Cells[1]!.Ukte);         // Tuesday's mark has no contract context
+    }
+
+    /// <summary>
+    /// Closure direction (2026-09-03), case E on this surface. A whole-job
+    /// उक्ते agreement ("ठरलं १५,००० ला") quotes no rate per anything, so it
+    /// carries NO ContractUnit. The dot must still appear: the discriminator is
+    /// whether an उक्ते agreement governs the work, never whether somebody
+    /// measured it. The cell and the उक्ते money card share one predicate
+    /// (GetLabourDataHandler.IsUkte) so they cannot disagree.
+    /// </summary>
+    [Fact]
+    public void UkteDotAppearsForAWholeJobAgreementThatHasNoUnit()
+    {
+        var ganesh = Guid.NewGuid();
+        var logId = Guid.NewGuid();
+        var wholeJob = Assignment(
+            Guid.NewGuid(), logId, contractUnit: null, task: "बाग छाटणी",
+            engagementType: LabourEngagementType.Contract);
+        var logDates = new Dictionary<Guid, DateOnly> { [logId] = Monday };
+
+        var ledger = Build(
+            [Mark(ganesh, Monday)],
+            [Operator(ganesh, "गणेश")],
+            workRows: [WorkRow(ganesh, wholeJob.Id, Monday, "गणेश")],
+            assignments: [wholeJob],
+            logDates: logDates);
+
+        Assert.True(Assert.Single(ledger.Rows).Cells[0]!.Ukte);
     }
 
     /// <summary>

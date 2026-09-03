@@ -801,6 +801,50 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         return (byWorker, unattributed);
     }
 
+    /// <summary>
+    /// THE रोजंदारी / उक्ते काम DISCRIMINATOR — one predicate, every reader.
+    ///
+    /// <para><b>Founder's corrected economic model (closure direction, 2026-09-03):</b>
+    /// "रोजंदारी and उक्ते काम describe the BASIS on which the farmer is obligated
+    /// to pay for that work. They do not describe worker identity, worker
+    /// frequency, or whether names were captured." So the only question this
+    /// predicate may ask is <i>is this engagement governed by a KNOWN उक्ते
+    /// agreement?</i> — no known agreement means ordinary day-rate work.</para>
+    ///
+    /// <para><see cref="LabourAssignment.EngagementType"/> is that fact.
+    /// It is the field whose whole job is "how labour was engaged", it is NOT
+    /// NULL on every row, it carries a <see cref="LabourEngagementType.Contract"/>
+    /// member, and both write paths already set it —
+    /// <c>LabourAssignmentFactory.MapLabourEngagement</c> from the voice
+    /// <c>engagementType</c>/legacy <c>type</c> and from the manual entry's own
+    /// wire field. That map is TOTAL and falls back to
+    /// <see cref="LabourEngagementType.Hired"/>, which lands unrecognised input on
+    /// the day-rate side — exactly the founder's safe direction ("no KNOWN
+    /// agreement → रोजंदारी"), never a contract nobody stated.</para>
+    ///
+    /// <para><see cref="LabourAssignment.ContractUnit"/> stays as a SECOND
+    /// signal, not the first: its own definition is "unit a contract rate is
+    /// quoted in", so a stated unit is evidence of the same agreement, and every
+    /// row already written with a unit keeps the meaning it was read with. But
+    /// it is not sufficient alone, and that was the defect this predicate
+    /// replaces: a whole-job fixed price ("ठरलं १५,००० ला") has no measurement
+    /// unit at all, so <c>ContractUnit is not null</c> silently filed real उक्ते
+    /// work — and its agreed money — under रोजंदारी.</para>
+    ///
+    /// <para><b>What deliberately does NOT decide this.</b>
+    /// <see cref="LabourAssignment.TotalCost"/>: day-rate work states totals too
+    /// ("६ जण, ३०० रुपये रोज"), so reading a total as an agreement would sweep
+    /// most of रोजंदारी into उक्ते.
+    /// <see cref="LabourAssignment.EngagedThroughFieldOperatorId"/>: the founder's
+    /// own bullet — "Mukadam involvement ≠ automatically contract"; the crew link
+    /// records through WHOM, never on what BASIS.
+    /// Worker names and headcount: "unnamed ≠ unknown payment model", and a
+    /// headcount never by itself produces rupees.</para>
+    /// </summary>
+    private static bool IsUkte(LabourAssignment assignment)
+        => assignment.EngagementType == LabourEngagementType.Contract
+            || assignment.ContractUnit is not null;
+
     /// <summary>See <see cref="LabourHomeDto"/> — the two money truths and the आज कामावर counts.</summary>
     internal static LabourHomeDto BuildLabourHome(
         IReadOnlyList<LabourAssignment> allAssignments,
@@ -830,11 +874,11 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         var todays = allAssignments.Where(a => todaysLogIds.Contains(a.DailyLogId)).ToList();
 
         return new LabourHomeDto(
-            RojandariStated: SumStated(allAssignments.Where(a => a.ContractUnit is null)),
-            UkteAgreed: SumStated(allAssignments.Where(a => a.ContractUnit is not null)),
+            RojandariStated: SumStated(allAssignments.Where(a => !IsUkte(a))),
+            UkteAgreed: SumStated(allAssignments.Where(IsUkte)),
             OnFarmToday: SumKnownHeadcounts(todays),
-            RojandariToday: SumKnownHeadcounts(todays.Where(a => a.ContractUnit is null)),
-            UkteToday: SumKnownHeadcounts(todays.Where(a => a.ContractUnit is not null)));
+            RojandariToday: SumKnownHeadcounts(todays.Where(a => !IsUkte(a))),
+            UkteToday: SumKnownHeadcounts(todays.Where(IsUkte)));
     }
 
     /// <summary>
@@ -853,7 +897,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
     ///
     /// <para><b>What engagements still contribute</b> — exactly two stated
     /// facts, joined via work rows, never presence: the उक्ते dot (a person-day
-    /// work row points at an engagement whose ContractUnit is stated) and the
+    /// work row points at an engagement <see cref="IsUkte"/> calls उक्ते) and the
     /// crew aggregate rows (engagements engaged-through a Labour Mukadam,
     /// per-day stated counts). Nothing here sums a mark, multiplies anything,
     /// or reads AttendanceMark.Value (which is [Obsolete]).</para>
@@ -937,6 +981,11 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                 .Distinct()
                 .ToList();
 
+            // `Ukte` below uses the SAME predicate the money cards use (IsUkte),
+            // so the dot on a हजेरी cell and the उक्ते money card can never
+            // disagree about what उक्ते means. A whole-job fixed price quotes no
+            // rate per anything, so the old `ContractUnit is not null` test
+            // dropped the dot on exactly the engagements the farmer is surest of.
             cells[index] = new LabourLedgerCellDto(
                 Day: mark.Day switch
                 {
@@ -953,7 +1002,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                 },
                 Hours: mark.HoursWorked,        // as stated — never converted to day fractions
                 ExtraHours: mark.ExtraHours,    // as stated
-                Ukte: contextAssignments.Any(a => a.ContractUnit is not null),
+                Ukte: contextAssignments.Any(IsUkte),
                 Work: tasks.Count == 0 ? null : string.Join(SeparatorMiddot, tasks));
         }
 

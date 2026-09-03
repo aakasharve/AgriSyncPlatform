@@ -363,8 +363,12 @@ public sealed record LabourAttendanceRowDto(
 /// never combined: the system never says "₹16,650 खर्च".
 ///
 /// <para><c>RojandariStated</c> (रोजंदारी · नोंदलेली) sums STATED TotalCost on
-/// non-contract engagements; <c>UkteAgreed</c> (उक्ते काम · ठरलेली) sums stated
-/// TotalCost on engagements with a stated ContractUnit. Same-kind aggregation
+/// engagements NOT governed by a known उक्ते agreement; <c>UkteAgreed</c>
+/// (उक्ते काम · ठरलेली) sums stated TotalCost on the ones that are. Which is
+/// which is decided in exactly ONE place — <c>GetLabourDataHandler.IsUkte</c>,
+/// whose remarks carry the founder's corrected economic model and name the
+/// facts (a stated total, a mukadam, worker names) that deliberately do NOT
+/// decide it. Same-kind aggregation
 /// under an honest label is display of what was recorded; blending the kinds,
 /// rate × days, or presenting agreed as spent is forbidden and has no member
 /// here to land in. Null = nothing stated — blank, never ₹0. Actually-paid
