@@ -7,8 +7,8 @@ android {
         applicationId "com.agrisync.shramsafal"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 17
-        versionName "1.0.9"
+        versionCode 20
+        versionName "1.0.12"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -31,6 +31,58 @@ android {
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+    }
+}
+
+// Release signing is deliberately NOT in git. The keystore comes from the
+// KEYSTORE_BASE64 secret in .github/workflows/android-release.yml, plus an
+// offline copy the founder holds. See android/README-RELEASE.md to build one
+// locally.
+//
+// Why this guard exists. `storePassword`/`keyPassword` above fall back to "" when
+// the env vars are unset, and an empty password is NOT rejected by Gradle's own
+// validateSigningRelease check — it passes, then the build fails hundreds of
+// tasks later with a message that blames the password rather than naming the
+// missing input. A missing keystore file is caught, but only after the full R8
+// pipeline has run. Both waste twenty minutes and point in the wrong direction.
+//
+// Gated on the task graph so `assembleDebug`, `clean` and IDE sync still work on
+// a machine that has no keystore at all. NEVER "fix" a missing keystore by
+// dropping signingConfig from the release buildType — that silently produces an
+// UNSIGNED release artifact instead of failing.
+gradle.taskGraph.whenReady { graph ->
+    if (!graph.hasTask("${project.path}:validateSigningRelease")) {
+        return
+    }
+
+    // Android Studio's "Generate Signed Bundle / APK" wizard and `npx cap build
+    // android` supply signing material through AGP's injected properties, not
+    // through the env vars this guard reads. Without this the guard fires on a
+    // build that HAS valid credentials and reports them missing — the exact
+    // "message points at the wrong input" failure it exists to prevent.
+    if (project.hasProperty('android.injected.signing.store.file')) {
+        return
+    }
+
+    def missing = []
+    def ks = android.signingConfigs.release.storeFile
+    if (ks == null || !ks.exists()) {
+        missing << "the keystore file (expected at app/${ks == null ? 'shramsafal-release.keystore' : ks.name})"
+    }
+    if (!System.getenv("KEYSTORE_PASSWORD")) {
+        missing << "the KEYSTORE_PASSWORD environment variable"
+    }
+    if (!System.getenv("KEY_PASSWORD")) {
+        missing << "the KEY_PASSWORD environment variable"
+    }
+
+    if (!missing.isEmpty()) {
+        throw new GradleException(
+            "Cannot build a signed release: missing ${missing.join(', ')}.\n" +
+            "The signing key is not stored in this repository. To build a release\n" +
+            "locally, see src/clients/mobile-web/android/README-RELEASE.md.\n" +
+            "To build without signing, use ./gradlew assembleDebug instead."
+        )
     }
 }
 

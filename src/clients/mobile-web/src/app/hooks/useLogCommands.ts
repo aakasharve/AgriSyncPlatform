@@ -1,9 +1,12 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps --
+/* eslint-disable react-hooks/exhaustive-deps --
  * PRE-EXISTING legacy debt, quarantined (NOT introduced by this change). This
  * hook was last committed 2026-04-25, before eslint.config.js was tightened
- * (2026-05-17) to warn on `any` and useCallback dep-omissions. The `any`s are
- * loose form-data payloads and the omitted deps (calculateLogSummary / isDemoMode)
- * are intentional memoization choices. Properly retyping/re-wiring them is an
+ * (2026-05-17) to warn on useCallback dep-omissions. The omitted deps
+ * (calculateLogSummary / isDemoMode) are intentional memoization choices.
+ * The `no-explicit-any` half of this directive MOVED to
+ * `useLogCommands.types.ts` with `UseLogCommandsResult`, which is where the
+ * `any`s it quarantined now live; leaving it here would have been an unused
+ * directive, which the ruleset also reports. Properly retyping/re-wiring them is an
  * out-of-scope refactor with real behavior risk; disabling here lets the DFES loop
  * gate (spec: dfes-companion-2026-07-11) — which only threads a typed `resolveDue`
  * boolean — pass the --max-warnings 0 pre-commit hook without touching unrelated
@@ -54,38 +57,14 @@ import { buildEditSavedMessage, buildSkippedSyncToast } from '../helpers/saveToa
 // comment lives there) to keep this file under the 800-line budget;
 // re-exported here so existing `from './useLogCommands'` imports (and any
 // future ones) keep working.
-import type { ManualSubmitOutcome } from './useLogCommands.types';
-export type { ManualSubmitOutcome };
+import type { ManualSubmitOutcome, UseLogCommandsResult } from './useLogCommands.types';
+export type { ManualSubmitOutcome, UseLogCommandsResult };
 
-export interface UseLogCommandsResult {
-    handleAutoSave: (logData: AgriLogResponse, provenance?: LogProvenance) => Promise<void>;
-    handleFinalConfirm: (editedData: AgriLogResponse | null, draftLog: AgriLogResponse | null) => Promise<void>;
-    // Pre-existing `any` (predates Task 3.5; tracked project-wide by
-    // Sub-plan 04 Task 10 per eslint.config.js) — not introduced by this
-    // change, left as-is to avoid retyping the ManualEntry payload contract
-    // out of scope.
-    //
-    // spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — return
-    // type widened from `Promise<void>` (round 0) to `Promise<boolean>`
-    // (round 1) to `Promise<ManualSubmitOutcome>` (round 2 — see the type's
-    // own doc comment for why boolean was not enough). The function ALWAYS
-    // resolves — no-context guard, the double-tap lock, and a thrown save
-    // error are each caught and turned into a toast/error state, never a
-    // rejection — so "the promise resolved" was never proof a log was
-    // written, and (round 2) "it returned false" was never proof it wasn't.
-    // No existing caller inspected the old `void`/`boolean` return, so this
-    // stays additive: `mainView.tsx` still passes this straight through as
-    // `ManualEntry`'s `onSubmit`, whose prop type returns `void` —
-    // TypeScript's void-return compatibility rule accepts a function that
-    // returns MORE than void there unchanged.
-     
-    handleManualSubmit: (data: any) => Promise<ManualSubmitOutcome>;
-    handleWizardSubmit: (logs: DailyLog[]) => Promise<void>;
-     
-    handleUpdateNote: (logId: string, noteId: string, updates: any) => void;
-    // Exposed for testing/advanced usage
-    service: LogCommandServiceImpl;
-}
+// `UseLogCommandsResult` moved to `useLogCommands.types.ts` for the same
+// reason `ManualSubmitOutcome` did: this file has to stay under the
+// mobile-web 800-line budget (`npm run check:file-sizes`). Pure code move,
+// re-exported below so every existing `from './useLogCommands'` import keeps
+// working unchanged.
 
 interface UseLogCommandsProps {
     hasActiveLogContext: boolean;

@@ -1,11 +1,9 @@
 import { useRef, useState } from 'react';
-import { AppStatus, LogSegment, AudioData, FarmContext, CropProfile, FarmerProfile, InputMode, AgriLogResponse, QuestionForUser } from '../../types';
+import { AppStatus, LogSegment, AudioData, AgriLogResponse, QuestionForUser } from '../../types';
 import { LogProvenance } from '../../domain/ai/LogProvenance';
 import { VoiceParserPort, VoiceParseResult } from '../../application/ports';
 import { parseVoiceToDraft } from '../../application/usecases/ParseVoiceToDraft';
 import { parseVoiceToDraftStream } from '../../application/usecases/ParseVoiceToDraftStream';
-import { LogScope } from '../../domain/types/log.types';
-import { VoicePreprocessor } from '../../infrastructure/voice/VoicePreprocessor';
 import { VoiceIdempotency } from '../../infrastructure/voice/VoiceIdempotency';
 import { DEFAULT_VOICE_CONFIG, VoiceSessionMetadata } from '../../infrastructure/voice/types';
 import { normalizeLegacyLogSegmentId } from '../../domain/ai/BucketId';
@@ -17,44 +15,10 @@ import { CoreConsentMissingError } from '../consent/separation/coreConsentGate';
 import type { PendingLadderLevel } from './continuity/pendingInterpretation';
 import { PendingInterpretationStore } from './continuity/PendingInterpretationStore';
 import { DeviceSpeechRecognizer } from '../../infrastructure/voice/DeviceSpeechRecognizer';
+import { yieldToPaint, hasSuccessfulIrrigation, type UseVoiceRecorderProps, type PreprocessedAudioResult } from './useVoiceRecorder.types';
 
-// TASK 3 (voice-live-captions-banner-2026-06-10) — yield to the browser so a
-// just-committed React state change can paint before heavy synchronous-ish
-// work runs on the same async stack. Prefers requestAnimationFrame (fires
-// right before the next paint); falls back to a setTimeout(0) macrotask when
-// rAF is unavailable (jsdom / non-browser). Resolves immediately if neither
-// exists. Kept out of the component so it's allocation-free per render.
-const yieldToPaint = (): Promise<void> =>
-    new Promise<void>((resolve) => {
-        if (typeof requestAnimationFrame === 'function') {
-            requestAnimationFrame(() => resolve());
-            return;
-        }
-        if (typeof setTimeout === 'function') {
-            setTimeout(() => resolve(), 0);
-            return;
-        }
-        resolve();
-    });
 
-const hasSuccessfulIrrigation = (events: Array<{ durationHours?: number; waterVolumeLitres?: number; method?: string; source?: string }>): boolean => {
-    return events.some(event => {
-        if ((event.durationHours || 0) > 0) return true;
-        if ((event.waterVolumeLitres || 0) > 0) return true;
-        return Boolean(event.method || event.source);
-    });
-};
 
-interface UseVoiceRecorderProps {
-    currentLogContext: FarmContext | null;
-    logScope: LogScope; // Needed for parser
-    hasActiveLogContext: boolean;
-    crops: CropProfile[];
-    farmerProfile: FarmerProfile;
-    setMode: (mode: InputMode) => void;
-    parser: VoiceParserPort;
-    voicePreprocessor: VoicePreprocessor;
-}
 
 export const useVoiceRecorder = ({
     currentLogContext,
@@ -138,15 +102,6 @@ export const useVoiceRecorder = ({
         });
     };
 
-    type PreprocessedAudioResult = {
-        base64: string;
-        mimeType: string;
-        inputSpeechDurationMs?: number;
-        inputRawDurationMs?: number;
-        segmentMetadataJson?: string;
-        idempotencyKey?: string;
-        requestPayloadHash?: string;
-    };
 
     const preprocessAudio = async (audioData: AudioData): Promise<PreprocessedAudioResult> => {
         const farmId = resolveFarmId();
@@ -890,3 +845,4 @@ export const useVoiceRecorder = ({
         setSavedPendingCaptureId,
     };
 };
+

@@ -1112,6 +1112,32 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         "20260816153300_AddDailyLogDayOutcome",
         "20260816155627_AddNumericCertainty",
         "20260816170524_AddConsentGateLedgers",
+        // SetTranscriberProviderToSarvam — reviewed 2026-08-31, added because this
+        // guard correctly refused to revert it unreviewed. (The migration itself is
+        // a recovery: it was written 2026-08-25 on a commit that ended up attached
+        // to no branch, and existed nowhere in the tree until it was restored.)
+        //
+        // Relevance to THIS proof: none. It names neither ssf.audit_events nor
+        // TRUNCATE in either direction. It touches exactly one table,
+        // ssf.ai_provider_configs, and within it one meaningful column,
+        // transcriber_provider, plus modified_at_utc. The fact this test asserts —
+        // the app role cannot truncate the audit ledger but can still append and
+        // read — is untouched by it going down and coming back up.
+        //
+        // Down() safety. Unlike the widen/narrow pair below, this one is symmetric
+        // and cheap in BOTH directions: each way is a single UPDATE over a config
+        // table that holds one row, with no schema change, no table rewrite, and no
+        // constraint that could reject a value. Nothing can fail on the way back up.
+        //
+        // Both directions are also guarded rather than blind. Up() only rewrites the
+        // row when transcriber IS NOT DISTINCT FROM structurer — the exact condition
+        // that collapses the pipeline — so an operator who has already split the pair
+        // keeps their choice. Down() only rewinds rows it would itself have moved
+        // (transcriber='Sarvam' AND structurer='Gemini'), so a transcriber chosen
+        // deliberately after this migration is not silently reverted. Within this
+        // scratch database the round trip is therefore exactly Gemini -> Sarvam ->
+        // Gemini, and it is idempotent in both directions.
+        "20260825130000_SetTranscriberProviderToSarvam",
         // WidenCorrectionEventPromptVersion — reviewed 2026-08-28, added because
         // this guard correctly refused to revert it unreviewed.
         //

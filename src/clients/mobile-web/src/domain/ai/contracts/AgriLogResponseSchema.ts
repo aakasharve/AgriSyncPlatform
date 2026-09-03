@@ -118,7 +118,15 @@ const CropActivityStatusSchema = z.enum([
     'gap_recorded',
 ]);
 
-const InputMethodSchema = z.enum(['Spray', 'Drip', 'Drenching', 'Soil', 'paste_manual']);
+// `fertigation` is emitted by the server's C5 WaterRoleClassifier
+// (`WaterRoleClassifier.cs:207`) when an NPK/WSF row is delivered through drip.
+// It was missing here while being first-class everywhere else in the system
+// (the irrigation `role` enum below, `IrrigationRole.Fertigation` in the backend
+// domain, and the `spray|fertigation|irrigation|activity` CompareEngine buckets).
+// The omission did NOT reject the row — `normalizeParsedLog` falls back to the raw
+// unvalidated payload for the WHOLE log — so it silently disarmed every other
+// guardrail on exactly the logs the domain layer had just enriched.
+const InputMethodSchema = z.enum(['Spray', 'Drip', 'Drenching', 'Soil', 'paste_manual', 'fertigation']);
 
 const InputReasonSchema = z.enum([
     'Preventive',

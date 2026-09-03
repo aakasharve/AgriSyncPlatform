@@ -118,6 +118,11 @@ vi.mock('../../../sync', () => ({
 
 import AppHeader from '../AppHeader';
 
+// The Setup Hub label the profile button now carries (founder ruling
+// 2026-08-30). Resolved from the table so a copy change moves the test with
+// it rather than leaving a literal to rot.
+const SETUP_HUB_LABEL = translate('profile.setupHub', 'mr');
+
 const farmContext = {
     farms: [
         { farmId: 'farm-1', name: 'Arve Farm', role: 'PrimaryOwner', farmCode: 'ABC123', subscription: null },
@@ -209,13 +214,13 @@ describe('AppHeader — the canonical strip renders on the log desk only', () =>
             renderHeader({ currentRoute: route, currentView: view });
         });
 
-        expect(screen.getByTestId('canonical-strip-farm-chip')).toBeInTheDocument();
+        expect(screen.getByTestId('farm-nameboard')).toBeInTheDocument();
         expect(screen.getByTestId('canonical-strip-waiting-button')).toBeInTheDocument();
-        // The farm chip carries the real farm name from `farmContext` — proves
-        // the strip is reading real data, not a static shell. Task 12: this
-        // fixture is single-farm, so the element is a LABEL and the name is
-        // real visible text again (CanonicalStrip.tsx's own header comment).
-        expect(screen.getByTestId('canonical-strip-farm-chip')).toHaveTextContent('Arve Farm');
+        // The nameboard carries the real farm name from `farmContext` — proves
+        // row 1 is reading real data, not a static shell. `FarmIdentityElement`
+        // used to answer this; the founder's 2026-08-30 ruling replaced it with
+        // `FarmNameBoard`, and the property it was protecting is unchanged.
+        expect(screen.getByTestId('farm-nameboard')).toHaveTextContent('Arve Farm');
     });
 });
 
@@ -384,10 +389,14 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
             });
         });
 
-        // 1. The farm chip's plot count is the REAL one, not the honest-zero
-        // fallback (proves the prop actually reached `FarmIdentityElement`).
-        // Task 12: real visible text again (single-farm fixture -> label).
-        expect(screen.getByTestId('canonical-strip-farm-chip')).toHaveTextContent('4');
+        // 1. FOUNDER RULING 2026-08-30 — the plot count has LEFT row 1. This
+        // used to assert the chip rendered the real `4`; a count is not a farm
+        // IDENTITY, and the nameboard carries the name alone. The number is not
+        // lost — it reaches the farm switcher this board opens — so what is
+        // pinned here is that row 1 states the name and nothing numeric.
+        const nameboard = screen.getByTestId('farm-nameboard');
+        expect(nameboard).toHaveTextContent('Arve Farm');
+        expect(nameboard).not.toHaveTextContent('4');
 
         // 2. The waiting count reflects one real PERSON (no decisions were
         // supplied), and opening the drawer proves the briefing itself —
@@ -496,11 +505,14 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
         //
         // Both numbers are pinned absent: `0` (the fabricated fallback) and
         // `4` (a stale echo of the fixture in the test above).
-        const chip = screen.getByTestId('canonical-strip-farm-chip');
-        expect(chip).toHaveTextContent('Arve Farm');
-        expect(chip).not.toHaveTextContent('0');
-        expect(chip).not.toHaveTextContent('4');
-        expect(chip.textContent).not.toContain(oversightTranslations.mr.plotsUnit);
+        // The nameboard renders identity only, so the fabricated `0` this test
+        // exists to forbid has no surface to appear on at all — a stronger
+        // outcome than the chip suppressing it. Both numbers stay pinned.
+        const board = screen.getByTestId('farm-nameboard');
+        expect(board).toHaveTextContent('Arve Farm');
+        expect(board).not.toHaveTextContent('0');
+        expect(board).not.toHaveTextContent('4');
+        expect(board.textContent).not.toContain(oversightTranslations.mr.plotsUnit);
         expect(screen.queryByTestId('canonical-strip-waiting-count')).not.toBeInTheDocument();
 
         // Finding F7(a) — the honest fallback for "no data was supplied at
@@ -552,7 +564,11 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
             // reshuffles when the data lands (spec §2.2).
             const button = screen.getByTestId('canonical-strip-waiting-button');
             expect(button, label).toBeInTheDocument();
-            expect(button, label).toHaveStyle({ minHeight: '52px' });
+            // The 52px floor this used to pin was removed by the founder's
+            // 2026-08-30 ruling — height is content now. What the test is
+            // actually about, the rest state never appearing before the data
+            // resolves, is asserted below and is untouched.
+            expect(button.getAttribute('style') ?? '', label).not.toContain('min-height');
 
             cleanup();
         }
@@ -654,11 +670,11 @@ describe('AppHeader — row 1 (task-11 founder restructure)', () => {
         expect(screen.getByTestId('compact-weather-chip')).toBeInTheDocument();
     });
 
-    it('the_farm_chip_and_the_avatar_share_row_1_ahead_of_the_row_2_waiting_strip', async () => {
-        // Structural proof of the founder's locked layout: the farm chip is
-        // a DOM ancestor-sibling of the profile button (both inside the
-        // header's first content row), and that whole row appears BEFORE
-        // the waiting button's row-2 wrapper in document order.
+    it('the_nameboard_and_the_setup_hub_share_row_1_ahead_of_the_row_2_waiting_strip', async () => {
+        // Structural proof of the founder's locked layout, carried across the
+        // 2026-08-30 nameboard ruling: row 1's identity element (now
+        // `FarmNameBoard`, formerly the farm chip) appears BEFORE the waiting
+        // button's row-2 wrapper in document order.
         await act(async () => {
             renderHeader();
         });
@@ -666,23 +682,24 @@ describe('AppHeader — row 1 (task-11 founder restructure)', () => {
         const header = document.querySelector('header');
         expect(header).not.toBeNull();
 
-        const farmChip = screen.getByTestId('canonical-strip-farm-chip');
+        const nameboard = screen.getByTestId('farm-nameboard');
         const waitingButton = screen.getByTestId('canonical-strip-waiting-button');
+        // The Setup Hub shares the row with it, on the left.
+        expect(screen.getByTestId('header-setup-hub')).toBeInTheDocument();
 
         // DOCUMENT_POSITION_FOLLOWING (4) means `waitingButton` comes AFTER
-        // `farmChip` in the tree — i.e. row 1's farm chip precedes row 2's
-        // waiting strip, never the reverse.
-        const position = farmChip.compareDocumentPosition(waitingButton);
+        // the board in the tree — row 1 precedes row 2's strip, never the
+        // reverse.
+        const position = nameboard.compareDocumentPosition(waitingButton);
         expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
-    it('the_avatar_name_label_is_no_longer_squeezed_to_9px_and_60px (Task 14, change 6)', async () => {
-        // Founder: "while enhancing the page selector you compromised the
-        // weather and profile navigation buttons." Measured cause: the
-        // name label under the avatar was `text-[9px]` truncated at
-        // `max-w-[60px]` — sized for when row 1 also fought Task 13's
-        // centre toggle for space. That toggle has since moved to its own
-        // row (`OversightNavCards`, below row 1), freeing the room back.
+    it('the_avatar_no_longer_repeats_the_farmer_name_beside_the_farm_name', async () => {
+        // FOUNDER RULING 2026-08-30. This label used to render
+        // `activeOperator.name.split(' ')[0]` — the FARMER's first name —
+        // directly beside the FARM's name on the board. He read "Arve" under
+        // the avatar and "Arve Farm" on the board and called it repetitive.
+        // The button now carries the name of the surface it opens.
         await act(async () => {
             renderHeader({
                 activeOperator: {
@@ -695,9 +712,11 @@ describe('AppHeader — row 1 (task-11 founder restructure)', () => {
             });
         });
 
-        const nameLabel = screen.getByText('Rokade');
-        expect(nameLabel.className).not.toContain('text-[9px]');
-        expect(nameLabel.className).not.toContain('max-w-[60px]');
+        // The farmer's name is NOT on this button any more...
+        expect(screen.queryByText('Rokade')).not.toBeInTheDocument();
+        // ...and the label that replaced it names the Setup Hub, resolved from
+        // the translation table rather than written as a literal.
+        expect(screen.getByTestId('header-setup-hub')).toHaveTextContent(SETUP_HUB_LABEL);
     });
 
     it('the_owner_chip_no_longer_collides_with_the_weather_chip_because_it_is_gone', async () => {
@@ -738,10 +757,15 @@ describe('AppHeader — row 1 (task-11 founder restructure)', () => {
         // The chip's own untranslated English word — the only piece of
         // English row 1 put in front of a Marathi-reading farmer.
         expect(screen.queryByText('Owner')).not.toBeInTheDocument();
-        // The name survives, once: under the avatar, where it always was.
-        expect(screen.getAllByText('Rokade')).toHaveLength(1);
-        // And the two elements it used to sit between are both still here.
-        expect(screen.getByAltText('Shram Safal')).toBeInTheDocument();
+        // FOUNDER RULING 2026-08-30 — the operator name is now absent from row
+        // 1 ENTIRELY, not merely de-duplicated. It was the chip's only content
+        // AND the avatar's label; both are gone, so the collision this test was
+        // written about cannot recur in any form.
+        expect(screen.queryByText('Rokade')).not.toBeInTheDocument();
+        // The Shram Safal LOCKUP left row 1 with the same ruling — the farm is
+        // the hero here. The brand survives on the board as its shield mark.
+        expect(screen.queryByAltText('Shram Safal')).not.toBeInTheDocument();
+        expect(screen.getByTestId('farm-nameboard')).toBeInTheDocument();
         expect(screen.getByTestId('compact-weather-chip')).toBeInTheDocument();
     });
 });
@@ -780,9 +804,13 @@ describe('AppHeader — the farm element is contextual on the real farm list (Ta
             renderHeader({ farmContext: singleFarmContext });
         });
 
-        const el = screen.getByTestId('canonical-strip-farm-chip');
+        // Task 12's rule, carried onto the nameboard. The founder removed the
+        // chevron and made the WHOLE board the target, which would have handed
+        // every single-farm farmer a control opening a sheet with one row in
+        // it. `canSwitch` keeps the board plain identity instead.
+        const el = screen.getByTestId('farm-nameboard');
         expect(el.tagName).not.toBe('BUTTON');
-        expect(screen.queryByTestId('canonical-strip-farm-count-badge')).not.toBeInTheDocument();
+        expect(el).toHaveAttribute('data-can-switch', 'false');
         expect(el).not.toHaveAttribute('tabindex');
         expect(el).toHaveTextContent('Arve Farm');
     });
@@ -792,11 +820,13 @@ describe('AppHeader — the farm element is contextual on the real farm list (Ta
             renderHeader({ farmContext: multiFarmContext });
         });
 
-        const el = screen.getByTestId('canonical-strip-farm-chip');
+        const el = screen.getByTestId('farm-nameboard');
         expect(el.tagName).toBe('BUTTON');
+        expect(el).toHaveAttribute('data-can-switch', 'true');
 
-        const badge = screen.getByTestId('canonical-strip-farm-count-badge');
-        expect(badge).toHaveTextContent('3');
+        // The farm COUNT badge left row 1 with the plot count — a number is not
+        // an identity, and the sheet itself lists the farms.
+        expect(screen.queryByTestId('canonical-strip-farm-count-badge')).not.toBeInTheDocument();
 
         // Still opens the SAME existing `FarmSwitcherSheet` (spec §2.1).
         fireEvent.click(el);
@@ -877,20 +907,27 @@ describe('AppHeader — the farm element is contextual on the real farm list (Ta
         await act(async () => {
             renderHeader({ farmContext: multiFarmContext, oversightData: resolvedFourPlots });
         });
-        const multi = screen.getByTestId('canonical-strip-farm-chip');
+        const multi = screen.getByTestId('farm-nameboard');
         expect(multi).toHaveTextContent('Arve Farm');
         expect(multi.textContent).not.toContain('4');
         expect(multi.textContent).not.toContain(oversightTranslations.mr.plotsUnit);
 
         cleanup();
 
-        // Control: one farm, everything else byte-identical -> the count is
-        // scopeable and renders. Without this the assertion above would pass
-        // against a chip that had lost its plot line entirely.
+        // FOUNDER RULING 2026-08-30 — the control case INVERTS. It used to prove
+        // that a single farm makes the count scopeable, so it renders. The count
+        // has now left row 1 for every account, so the honest control is that
+        // even the scopeable case shows no number here. The P4 rule this test
+        // exists for is now satisfied STRUCTURALLY rather than by a gate: there
+        // is no surface on this row for an unscopeable number to appear on.
+        // The count itself still reaches the farm switcher, which is scoped.
         await act(async () => {
             renderHeader({ farmContext: singleFarmContext, oversightData: resolvedFourPlots });
         });
-        expect(screen.getByTestId('canonical-strip-farm-chip')).toHaveTextContent('4');
+        const single = screen.getByTestId('farm-nameboard');
+        expect(single).toHaveTextContent('Arve Farm');
+        expect(single.textContent).not.toContain('4');
+        expect(single.textContent).not.toContain(oversightTranslations.mr.plotsUnit);
     });
 
     // The second half of the same rule: a single farm is not enough on its own
@@ -903,7 +940,7 @@ describe('AppHeader — the farm element is contextual on the real farm list (Ta
             renderHeader({ farmContext: singleFarmContext });
         });
 
-        const el = screen.getByTestId('canonical-strip-farm-chip');
+        const el = screen.getByTestId('farm-nameboard');
         expect(el).toHaveTextContent('Arve Farm');
         expect(el.textContent).not.toContain(oversightTranslations.mr.plotsUnit);
         expect(el.textContent).not.toContain('0');

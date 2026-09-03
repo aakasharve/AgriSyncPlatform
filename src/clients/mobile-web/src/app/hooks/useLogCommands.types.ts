@@ -1,3 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any --
+ * PRE-EXISTING legacy debt, moved here WITH the interface it covers.
+ * `handleManualSubmit` and `handleUpdateNote` take loose form-data
+ * payloads typed `any`; that predates the 2026-05-17 eslint tightening
+ * and retyping them is an out-of-scope refactor with real behaviour
+ * risk. The directive lived on `useLogCommands.ts` until this split;
+ * it belongs wherever the `any`s are, not wherever they used to be. */
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -9,6 +16,10 @@
  *
  * spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — fix round 3.
  */
+import type { AgriLogResponse, DailyLog } from '../../types';
+import type { LogProvenance } from '../../domain/ai/LogProvenance';
+import type { LogCommandServiceImpl } from '../../application/services/LogCommandService';
+
 
 /**
  * `handleManualSubmit`'s outcome, honestly. A plain boolean collapsed four
@@ -59,3 +70,33 @@
  *                              would contradict a save that is succeeding.
  */
 export type ManualSubmitOutcome = 'saved' | 'saved_with_warning' | 'not_saved' | 'already_saving';
+
+export interface UseLogCommandsResult {
+    handleAutoSave: (logData: AgriLogResponse, provenance?: LogProvenance) => Promise<void>;
+    handleFinalConfirm: (editedData: AgriLogResponse | null, draftLog: AgriLogResponse | null) => Promise<void>;
+    // Pre-existing `any` (predates Task 3.5; tracked project-wide by
+    // Sub-plan 04 Task 10 per eslint.config.js) — not introduced by this
+    // change, left as-is to avoid retyping the ManualEntry payload contract
+    // out of scope.
+    //
+    // spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — return
+    // type widened from `Promise<void>` (round 0) to `Promise<boolean>`
+    // (round 1) to `Promise<ManualSubmitOutcome>` (round 2 — see the type's
+    // own doc comment for why boolean was not enough). The function ALWAYS
+    // resolves — no-context guard, the double-tap lock, and a thrown save
+    // error are each caught and turned into a toast/error state, never a
+    // rejection — so "the promise resolved" was never proof a log was
+    // written, and (round 2) "it returned false" was never proof it wasn't.
+    // No existing caller inspected the old `void`/`boolean` return, so this
+    // stays additive: `mainView.tsx` still passes this straight through as
+    // `ManualEntry`'s `onSubmit`, whose prop type returns `void` —
+    // TypeScript's void-return compatibility rule accepts a function that
+    // returns MORE than void there unchanged.
+     
+    handleManualSubmit: (data: any) => Promise<ManualSubmitOutcome>;
+    handleWizardSubmit: (logs: DailyLog[]) => Promise<void>;
+     
+    handleUpdateNote: (logId: string, noteId: string, updates: any) => void;
+    // Exposed for testing/advanced usage
+    service: LogCommandServiceImpl;
+}

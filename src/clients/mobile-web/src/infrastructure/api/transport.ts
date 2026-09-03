@@ -41,6 +41,41 @@ export function resolveApiBaseUrl(): string {
     return '';
 }
 
+/**
+ * Join an API base and a path.
+ *
+ * Split out from `apiUrl` because it is the half that can actually be tested.
+ * `import.meta.env` is not stubbable under vitest here — `vi.stubEnv` leaves
+ * `VITE_AGRISYNC_API_URL` undefined, so `resolveApiBaseUrl()` always returns
+ * `''` in a test and the host branch would never be exercised. Taking the base
+ * as an argument makes every case reachable without mocking the module that
+ * defines it (which cannot intercept its own internal call anyway).
+ *
+ * An empty base returns the path unchanged — the local dev case, where Vite
+ * proxies it. Fixing the APK must not break `npm run dev`.
+ */
+export function joinApiUrl(base: string, path: string): string {
+    const suffix = path.startsWith('/') ? path : `/${path}`;
+    if (!base) {
+        return suffix;
+    }
+    return `${base.replace(/\/+$/, '')}${suffix}`;
+}
+
+/**
+ * Absolute URL for an API path.
+ *
+ * Lives HERE, not in `apiFetch.ts`, and that placement is load-bearing.
+ * `ClientErrorReporter` needs it, and `AgriSyncClient` imports
+ * `ClientErrorReporter` — so if this were exported from `apiFetch.ts` (which now
+ * imports `AgriSyncClient` to refresh a token), the graph would close into a
+ * cycle: ClientErrorReporter -> apiFetch -> AgriSyncClient -> ClientErrorReporter.
+ * `transport.ts` imports nothing that leads back, which is what makes it safe.
+ */
+export function apiUrl(path: string): string {
+    return joinApiUrl(resolveApiBaseUrl(), path);
+}
+
 export function normalizeSyncCursorForApi(sinceCursorIso?: string): string | undefined {
     if (!sinceCursorIso) {
         return undefined;
