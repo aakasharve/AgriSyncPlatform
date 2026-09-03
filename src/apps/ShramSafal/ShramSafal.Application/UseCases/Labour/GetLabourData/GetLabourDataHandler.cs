@@ -1165,14 +1165,15 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // One row per operator ATTACHED to today’s work, deduplicated: the same
         // person on two engagements today is one person present, not two.
         //
-        // Status is "present" and only "present". A work row records that someone
-        // DID the work; it carries no half-day and no absence, and there is no
-        // other source for either. Emitting "absent" for anyone unattached would
-        // be the fabrication this whole screen guards against — an unattached
-        // worker has no row at all, which is how "not yet said" is expressed
-        // here (see LabourAttendanceRowDto). Half-days remain unrepresentable
-        // until something can record one; that gap is real and stated, not
-        // papered over with a default.
+        // Status is "present" and only "present" ON THIS DRAFT. A work row
+        // records that someone DID the work; it carries no half-day and no
+        // absence. (Half-days and absences DO exist now — ssf.attendance_marks
+        // records them and the register reads them — but this preview-only
+        // capture draft deliberately does not consult the mark plane; it
+        // summarises work rows alone.) Emitting "absent" for anyone unattached
+        // would be the fabrication this whole screen guards against — an
+        // unattached worker has no row at all, which is how "not yet said" is
+        // expressed here (see LabourAttendanceRowDto).
         var rows = todaysWorkRows
             .Select(r => r.FieldOperatorId)
             .Distinct()

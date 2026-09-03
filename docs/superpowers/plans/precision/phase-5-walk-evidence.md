@@ -295,3 +295,14 @@ expected path → fails naming `CreateFieldOperatorHandler.cs` · 5.3 scan →
   as रोजंदारी by the spec's own definition — the home line may say "x रोजंदारी" over
   engagements that never said the word. Copy stands unless the founder wants a third word
   for "unstated" (gate copy item, optional).
+
+## Preview-door items awaiting the founder (C2, final re-verdict)
+
+All three sit behind the hard-`false` attendance-capture door (`SHOW_ATTENDANCE_TILE`) —
+no farmer can reach them today — and must be decided before that door ever opens:
+
+- the save button still reads **"जतन करा → मंजुरीसाठी"** though no approval step rides a
+  mark — keep the promise (build an approval step) or change the copy;
+- the **"आज किती लोक आली?"** counter collects a number the save silently discards —
+  wire it or remove it;
+- **"नाव जोडा"** only shows a toast — build the add-person flow or remove the button.
