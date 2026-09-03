@@ -56,7 +56,21 @@ type ScreenName = 'hub' | 'mukadam' | 'person' | 'attendance' | 'dashboard' | 'l
 interface ScreenState { name: ScreenName; id?: string }
 
 const TITLES: Record<ScreenName, string> = {
-    hub: 'कामगार व्यवस्थापन',
+    /*
+     * FOUNDER VOCABULARY RULE (2026-09-03) — farmer-facing copy may not say
+     * "Labour" / "Labour Management", and may not name a CLASS OF PERSON.
+     * `कामगार व्यवस्थापन` was both: it is literally "Labour Management", and
+     * `कामगार` classifies the human. Replaced with the smallest neutral
+     * WORK-CENTRED wording — `कामाच्या नोंदी`, "the records of the work" —
+     * which describes what the screen holds, not who the people are.
+     *
+     * This is PROVISIONAL and deliberately not a brand: the founder runs a
+     * dedicated naming session, which owns the permanent noun. Internal
+     * names (LabourFeature, LabourAssignment, the `labour` route) are
+     * UNTOUCHED by design — presentation and internal vocabulary are allowed
+     * to diverge.
+     */
+    hub: 'कामाच्या नोंदी',
     mukadam: 'मुकादम',
     person: 'कामगार',
     attendance: 'आजची हजेरी',

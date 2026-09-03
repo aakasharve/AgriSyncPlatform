@@ -84,10 +84,14 @@ describe('LabourReview — provenanceVerified flag', () => {
  * two pins are the ones with an already-shipped, founder-approved Marathi
  * equivalent (`workSummary.labour` — reused as-is in `QuickLogSheet.tsx` and
  * `ReviewInboxSheet.tsx`; the "{N} मजूर" convention — reused as-is from
- * `LabourHub.tsx`). The eyebrow header ("Labour Review") and the "Total
- * workers: N (breakdown)" summary line have NO existing equivalent and are
- * intentionally left in English pending a founder ruling — see the task
- * report; this file must not gain invented Marathi for them.
+ * `LabourHub.tsx`). The "Total workers: N (breakdown)" summary line has NO
+ * existing equivalent and is intentionally left in English pending a founder
+ * ruling — see the task report; this file must not gain invented Marathi for
+ * it. The eyebrow header, which said "Labour Review", left that PENDING list
+ * on 2026-09-03: the founder's vocabulary rule bans farmer-facing "Labour",
+ * and the already-shipped `workSummary.workBreakdown` ('कामाचा तपशील' /
+ * 'Work Breakdown') was reusable as-is, so nothing was invented there either.
+ * `farmerVocabulary.scan.test.ts` now scans this file for that ban.
  */
 describe('LabourReview — Marathi copy (reuse only, no invented strings)', () => {
     it('falls back to the already-shipped `workSummary.labour` chip label, never the English word "Labour", when the entry carries no activity name', () => {

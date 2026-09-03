@@ -95,14 +95,19 @@ export const LabourLogBanner: React.FC<{ onBackToLabour: () => void }> = ({ onBa
         type="button"
         onClick={onBackToLabour}
         data-testid="labour-log-banner"
-        aria-label="कामगार व्यवस्थापनाकडे परत जा — back to Labour Management"
+        aria-label="कामाच्या नोंदींकडे परत जा — back to the work records"
         className="relative mb-3 flex w-full items-center gap-3 overflow-hidden rounded-[20px] bg-gradient-to-br from-emerald-500 to-emerald-700 p-3.5 text-left shadow-[0_14px_28px_-12px_rgba(5,150,105,0.6)] transition-transform active:scale-[0.99] animate-in fade-in slide-in-from-top-2 duration-300"
     >
         <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white">
             <Users size={22} strokeWidth={2.4} />
         </span>
         <span className="min-w-0 flex-1">
-            <span className="block text-[14.5px] font-black text-white">कामगार व्यवस्थापनासाठी नोंद</span>
+            {/* FOUNDER VOCABULARY RULE (2026-09-03) — was
+                "कामगार व्यवस्थापनासाठी नोंद". The trailing `नोंद` is DELETED
+                rather than kept, because the provisional name already carries
+                it: "कामाच्या नोंदींसाठी नोंद" stutters. Deletion, not
+                invention — the same move Task 7 made on this banner. */}
+            <span className="block text-[14.5px] font-black text-white">कामाच्या नोंदींसाठी</span>
             {/* Task 7 (labour-v2-release-1) — DELETED "हजेरी · " from this
                 subtitle: it named attendance among what you can voice-log
                 here, but no attendance capture exists anywhere in the
@@ -111,7 +116,7 @@ export const LabourLogBanner: React.FC<{ onBackToLabour: () => void }> = ({ onBa
         </span>
         <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-white/20 px-3 py-1.5 text-[11px] font-extrabold text-white">
             <ArrowLeft size={13} strokeWidth={2.6} />
-            कामगार व्यवस्थापन
+            कामाच्या नोंदी
         </span>
     </button>
 );

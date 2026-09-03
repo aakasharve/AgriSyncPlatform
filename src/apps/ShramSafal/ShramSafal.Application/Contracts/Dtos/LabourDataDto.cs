@@ -362,7 +362,7 @@ public sealed record LabourAttendanceRowDto(
 /// Labour home (master review 2026-09-02, D6) — one Labour, TWO money truths,
 /// never combined: the system never says "₹16,650 खर्च".
 ///
-/// <para><c>RojandariStated</c> (रोजंदारी · नोंदलेली) sums STATED TotalCost on
+/// <para><c>RojandariStated</c> (दिवसाच्या हिशोबाने · नोंदलेली) sums STATED TotalCost on
 /// engagements NOT governed by a known उक्ते agreement; <c>UkteAgreed</c>
 /// (उक्ते काम · ठरलेली) sums stated TotalCost on the ones that are. Which is
 /// which is decided in exactly ONE place — <c>GetLabourDataHandler.IsUkte</c>,
@@ -374,12 +374,20 @@ public sealed record LabourAttendanceRowDto(
 /// here to land in. Null = nothing stated — blank, never ₹0. Actually-paid
 /// money (दिलेली रक्कम) is the existing Paid surface, not this.</para>
 ///
-/// <para>The headcount line ("आज कामावर N जण — x रोजंदारी · y उक्ते") reads
+/// <para>The headcount line ("आज कामावर N जण — x दिवसाच्या हिशोबाने · y उक्ते") reads
 /// STATED engagement headcounts (the engagement is the single source of HOW
 /// MANY — AttendanceMark's own contract); the arrangement split is a
 /// breakdown, never a filter, so x + y need not equal N and an unknown part
 /// stays null. Phase 6 (Contract V1) extends the उक्ते card from this seam
 /// without remodelling Labour/हजेरी — the founder's scope fence.</para>
+///
+/// <para>NAMING (founder vocabulary rule, 2026-09-03): the member names
+/// <c>RojandariStated</c> / <c>RojandariToday</c> are INTERNAL and stay. The
+/// farmer-facing card no longer reads रोजंदारी — it reads दिवसाच्या हिशोबाने,
+/// because रोजंदारी names the BASIS on which the farmer owes money and had
+/// begun to read as a KIND OF PERSON above a headcount. Presentation and
+/// internal vocabulary are allowed to diverge; that is the founder's explicit
+/// instruction. No wire field, column or migration changed.</para>
 /// </summary>
 public sealed record LabourHomeDto(
     decimal? RojandariStated,

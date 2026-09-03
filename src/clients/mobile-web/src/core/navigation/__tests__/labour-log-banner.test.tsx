@@ -63,7 +63,7 @@ describe('LabourLogBanner (component)', () => {
 
     it('carries no ✕ dismiss affordance — aria-label describes navigation, not dismissal', () => {
         const el = LabourLogBanner({ onBackToLabour: vi.fn() }) as BannerElement;
-        expect(el.props['aria-label']).toContain('कामगार व्यवस्थापन');
+        expect(el.props['aria-label']).toContain('कामाच्या नोंदी');
         expect(el.props['aria-label']).not.toMatch(/dismiss/i);
     });
 

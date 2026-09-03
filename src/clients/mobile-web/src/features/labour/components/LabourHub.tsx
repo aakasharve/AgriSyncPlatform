@@ -352,7 +352,16 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
         {data.view === 'owner' && (
             <div className="grid grid-cols-2 gap-2.5">
                 <div className="rounded-[20px] border border-stone-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
-                    <span className="block text-[16px] font-bold text-stone-600">रोजंदारी</span>
+                    {/* FOUNDER VOCABULARY RULE (2026-09-03) — was `रोजंदारी`.
+                        रोजंदारी names the BASIS on which the farmer owes money;
+                        as a card title standing over a headcount breakdown it
+                        had started to read as a KIND OF PERSON. `दिवसाच्या
+                        हिशोबाने` ("settled by the day") states the settlement
+                        basis and classifies nobody. Provisional — the founder's
+                        naming session owns the permanent word. `उक्ते काम`
+                        beside it is unchanged: it already describes the work
+                        arrangement, not the human. */}
+                    <span className="block text-[16px] font-bold leading-tight text-stone-600">दिवसाच्या हिशोबाने</span>
                     <span className="block text-[13px] font-semibold text-stone-400">नोंदलेली</span>
                     <span className="mt-1 block text-[23px] font-black text-stone-800 [font-variant-numeric:tabular-nums]">{data.home.rojandariStated === null ? '—' : inr(data.home.rojandariStated)}</span>
                 </div>
@@ -364,8 +373,11 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
             </div>
         )}
 
-        {/* आज कामावर N जण — x रोजंदारी · y उक्ते. Whole count first; the
-            arrangement is a breakdown, not a filter. Renders only when a count
+        {/* आज कामावर N जण — x दिवसाच्या हिशोबाने · y उक्ते. Whole count
+            first; the arrangement is a breakdown, not a filter. The breakdown
+            words name how the work is SETTLED, never what kind of human the
+            person is (founder vocabulary rule, 2026-09-03) — `रोजंदारी` used
+            to sit here counting people. Renders only when a count
             was actually stated — an unknown day says nothing, never 0. All
             views: attendance counts are safe for anyone (D-H8). Latin digits
             (approved numeral convention). */}
@@ -376,7 +388,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
                     <span className="text-[16px] font-semibold text-stone-500">
                         {' — '}
                         {[
-                            data.home.rojandariToday !== null ? `${data.home.rojandariToday} रोजंदारी` : null,
+                            data.home.rojandariToday !== null ? `${data.home.rojandariToday} दिवसाच्या हिशोबाने` : null,
                             data.home.ukteToday !== null ? `${data.home.ukteToday} उक्ते` : null,
                         ].filter((s) => s !== null).join(' · ')}
                     </span>
@@ -447,7 +459,12 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
             what="टीमची हजेरी, मजुरी व नोंदींची तपासणी — सगळं एका जागी."
             act="बोलून हजेरी घ्या · नोंदी तपासा."
             why="'टीम सेटअप'मध्ये कोण नोंद करू शकतो ते ठरतं; इथे त्यांनी काय केलं आणि त्यावर किती विश्वास — ते दिसतं व ठरतं."
-            label="कामगार व्यवस्थापन कसं वापरायचं?"
+            /* FOUNDER VOCABULARY RULE (2026-09-03) — was "कामगार
+               व्यवस्थापन कसं वापरायचं?". The subsystem noun is dropped rather
+               than replaced: the farmer is already on the screen, so "this"
+               is unambiguous and no provisional name has to be repeated here.
+               Smallest neutral wording; nothing invented. */
+            label="हे कसं वापरायचं?"
         />
 
         <GroupLabel>माणसं</GroupLabel>

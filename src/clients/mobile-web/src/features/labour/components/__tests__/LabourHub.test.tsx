@@ -345,7 +345,7 @@ describe('LabourHub — no attendance-capture claims (Task 7)', () => {
     // capture screen, only the speaking that really records the crew.
     it('the help note names हजेरी as something you SPEAK, never a separate capture screen', () => {
         render(<LabourHub {...baseProps()} />);
-        fireEvent.click(screen.getByText('कामगार व्यवस्थापन कसं वापरायचं?'));
+        fireEvent.click(screen.getByText('हे कसं वापरायचं?'));
         const body = screen.getByTestId('help-note-body').textContent ?? '';
         expect(body).toContain('बोलून हजेरी घ्या');
         // the capture screen the app does not have
@@ -354,7 +354,7 @@ describe('LabourHub — no attendance-capture claims (Task 7)', () => {
 
     it('the help note keeps its true neighbouring words after the surgical deletion (मजुरी / नोंदी तपासा)', () => {
         render(<LabourHub {...baseProps()} />);
-        fireEvent.click(screen.getByText('कामगार व्यवस्थापन कसं वापरायचं?'));
+        fireEvent.click(screen.getByText('हे कसं वापरायचं?'));
         expect(screen.getByText(/मजुरी/)).toBeInTheDocument();
         expect(screen.getByText(/नोंदी तपासा/)).toBeInTheDocument();
     });
@@ -372,13 +372,13 @@ describe('LabourHub — no उचल (advance) capability claim (Task 7b)', () =
 
     it('the "how to use" help note no longer claims उचल (advance) anywhere in its text', () => {
         render(<LabourHub {...baseProps()} />);
-        fireEvent.click(screen.getByText('कामगार व्यवस्थापन कसं वापरायचं?'));
+        fireEvent.click(screen.getByText('हे कसं वापरायचं?'));
         expect(screen.queryByText(/उचल/)).toBeNull();
     });
 
     it('keeps its true neighbouring words after the surgical deletion (मजुरी / नोंदींची तपासणी)', () => {
         render(<LabourHub {...baseProps()} />);
-        fireEvent.click(screen.getByText('कामगार व्यवस्थापन कसं वापरायचं?'));
+        fireEvent.click(screen.getByText('हे कसं वापरायचं?'));
         expect(screen.getByText(/मजुरी/)).toBeInTheDocument();
         expect(screen.getByText(/नोंदींची तपासणी/)).toBeInTheDocument();
     });
@@ -401,13 +401,13 @@ describe('LabourHub — no auto-approve capability claim (Task 22)', () => {
 
     it('the "how to use" help note no longer claims a trusted worker\'s entries auto-approve', () => {
         render(<LabourHub {...baseProps()} />);
-        fireEvent.click(screen.getByText('कामगार व्यवस्थापन कसं वापरायचं?'));
+        fireEvent.click(screen.getByText('हे कसं वापरायचं?'));
         expect(screen.queryByText(/आपोआप मंजूर/)).toBeNull();
     });
 
     it('keeps its true neighbouring words after the surgical deletion (नोंदी तपासा)', () => {
         render(<LabourHub {...baseProps()} />);
-        fireEvent.click(screen.getByText('कामगार व्यवस्थापन कसं वापरायचं?'));
+        fireEvent.click(screen.getByText('हे कसं वापरायचं?'));
         expect(screen.getByText(/नोंदी तपासा/)).toBeInTheDocument();
     });
 });

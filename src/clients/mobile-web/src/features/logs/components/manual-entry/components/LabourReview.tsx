@@ -57,14 +57,27 @@ const LabourReview: React.FC<LabourReviewProps> = ({ labourEntries, totalWorkerC
         <div className="mb-6 rounded-2xl border border-orange-200 bg-orange-50/60 p-4">
             <div className="flex items-center justify-between gap-3">
                 <div>
-                    {/* Task 21 — "Labour Review" and the "Total workers: N
-                        (breakdown)" line below have NO founder-approved Marathi
-                        equivalent anywhere in the codebase (searched
-                        i18n/oversightTranslations.ts, i18n/translations.ts,
-                        LabourUiKit.tsx, LabourHub.tsx, WeeklyDashboard.tsx).
-                        Left in English rather than inventing copy — see the
-                        task report's PENDING list for the proposed Marathi. */}
-                    <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700">Labour Review</p>
+                    {/* Task 21 — the "Total workers: N (breakdown)" line below
+                        has NO founder-approved Marathi equivalent anywhere in the
+                        codebase (searched i18n/oversightTranslations.ts,
+                        i18n/translations.ts, LabourUiKit.tsx, LabourHub.tsx,
+                        WeeklyDashboard.tsx). Still left in English rather than
+                        inventing copy — `workers` / `मजूर` is exactly the
+                        ambiguous human noun the founder's 2026-09-03 rule says to
+                        FLAG, not to replace. The eyebrow above it is no longer
+                        part of that PENDING list: it said "Labour Review", which
+                        the same rule bans outright, and it had an already-shipped
+                        replacement to move to. */}
+                    {/* FOUNDER VOCABULARY RULE (2026-09-03) — was the English
+                        eyebrow "Labour Review". Replaced with the ALREADY-SHIPPED,
+                        founder-approved `workSummary.workBreakdown`
+                        ('कामाचा तपशील' / 'Work Breakdown'), reused as-is exactly
+                        like `workSummary.labour` below — nothing invented, and it
+                        is work-centred rather than a class of person. The
+                        "Total workers: N" line beneath is LEFT AS IS: `workers` /
+                        `मजूर` is the ambiguous human noun the rule says to flag,
+                        not to replace. */}
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700">{t('workSummary.workBreakdown')}</p>
                     <p className="mt-1 text-sm font-semibold text-stone-700">
                         Total workers: {totalWorkerCount} ({labourEntries.map(entry => {
                             const c = resolveCount(entry);

@@ -309,13 +309,18 @@ describe('LabourHub — D6: two money truths, never one figure', () => {
 
     it('shows both cards separately and never a combined figure', () => {
         const { container } = hub({ ...LABOUR_MOCK, home: { rojandariStated: 4650, ukteAgreed: 12000, onFarmToday: 12, rojandariToday: 4, ukteToday: 8 } });
-        expect(container.textContent).toContain('रोजंदारी');
+        // FOUNDER VOCABULARY RULE (2026-09-03) — the day-rate half of the
+        // pair is now stated as a SETTLEMENT BASIS, never as a kind of person.
+        // `उक्ते काम` beside it is unchanged; it already described the work
+        // arrangement. The old word must not come back on either surface.
+        expect(container.textContent).toContain('दिवसाच्या हिशोबाने');
+        expect(container.textContent).not.toContain('रोजंदारी');
         expect(container.textContent).toContain('नोंदलेली');
         expect(container.textContent).toContain('उक्ते काम');
         expect(container.textContent).toContain('ठरलेली');
         expect(container.textContent).not.toContain('16,650'); // the forbidden combined figure
         expect(container.textContent).toContain('आज कामावर 12 जण');
-        expect(container.textContent).toContain('4 रोजंदारी');
+        expect(container.textContent).toContain('4 दिवसाच्या हिशोबाने');
         expect(container.textContent).toContain('8 उक्ते');
     });
 

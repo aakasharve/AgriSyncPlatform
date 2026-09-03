@@ -29,7 +29,29 @@ const AUTHORITY_SURFACES = [
     join(ROOT, 'src', 'features', 'profile', 'sections', 'IdentitySection.tsx'),
 ];
 
+/*
+ * The three farmer-reachable surfaces that name this subsystem from OUTSIDE
+ * `features/labour/` — the Setup Hub door, the log-page banner, and the
+ * manual-entry pre-save panel. Every one of them said "Labour" in English
+ * until 2026-09-03. They are scanned for the Labour ban ONLY, not for the
+ * permission ban: D5's handover copy is scoped to the authority surfaces
+ * above, and widening THAT scope is founder decision N10, not this release.
+ */
+const SUBSYSTEM_DOORS = [
+    join(ROOT, 'src', 'features', 'profile', 'components', 'SetupHubMenu.tsx'),
+    join(ROOT, 'src', 'core', 'navigation', 'mainViewComponents.tsx'),
+    join(ROOT, 'src', 'features', 'logs', 'components', 'manual-entry', 'components', 'LabourReview.tsx'),
+];
+
 const PERMISSION_VOCAB = /\b(permissions?|grants?|granted|roles?|claims?|polic(?:y|ies)|access)\b/i;
+/*
+ * FOUNDER VOCABULARY RULE (2026-09-03) — "farmer-facing copy must NOT show
+ * 'Labour' / 'Labour Management'". Internal identifiers, files, classes,
+ * tests and DB columns KEEP the word: this scan only ever reads Devanagari
+ * string literals and JSX text nodes, so `LabourHub`, `LabourAssignment` and
+ * every import path and data-testid are out of its reach by construction.
+ */
+const FARMER_FACING_LABOUR = /\blabour\b/i;
 const HARDCODED_ON_OFF = /(?<![A-Za-z])(?:ON|OFF)(?![A-Za-z])/; // uppercase only — 'on'/'off' prose stays legal
 const DEVANAGARI = /[ऀ-ॿ]/;
 
@@ -104,6 +126,40 @@ describe('farmer-facing labour vocabulary (D5: no permission words, no English O
         // permission, grant, role, claim, policy, access and hardcoded ON/OFF
         // are OUR words, and they may never reach his screen (founder master
         // review 2026-09-02, D5).
+        expect(offenders).toEqual([]);
+    });
+
+    /*
+     * FOUNDER VOCABULARY RULE (2026-09-03), pinned. "Labour" was live in
+     * three places a farmer could reach: the Setup Hub row
+     * ("कामगार व्यवस्थापन · Labour"), the log-page banner's aria-label
+     * ("back to Labour Management"), and the manual-entry eyebrow
+     * ("Labour Review").
+     *
+     * The Marathi half of the same problem — `कामगार व्यवस्थापन`, which is
+     * both "Labour Management" AND a class of person — is deliberately NOT
+     * pinned by a regex: the founder's naming session owns the permanent
+     * noun, and banning `कामगार` outright would also ban the role label, the
+     * day-ledger cost category and the empty states this release left alone
+     * on purpose (audit N2 / N15). What is banned here is the English word,
+     * which carries no such ambiguity.
+     */
+    const doorFiles = [...files, ...SUBSYSTEM_DOORS.filter(existsSync)];
+
+    it('every subsystem door is present in the scan', () => {
+        // A moved or renamed door must break the scan loudly, not hollow it out.
+        expect(SUBSYSTEM_DOORS.every(existsSync)).toBe(true);
+    });
+
+    it('no farmer-facing string says "Labour" — not in the feature, not on its doors', () => {
+        const offenders: string[] = [];
+        for (const file of doorFiles) {
+            for (const text of farmerFacingStrings(readFileSync(file, 'utf8'))) {
+                if (FARMER_FACING_LABOUR.test(text)) {
+                    offenders.push(`${file.slice(ROOT.length + 1)}: "${text}"`);
+                }
+            }
+        }
         expect(offenders).toEqual([]);
     });
 });
