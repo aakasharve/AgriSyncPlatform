@@ -239,9 +239,10 @@ describe('AppHeader — the oversight tray is off every non-log surface', () => 
         });
 
         expect(screen.queryByTestId('canonical-strip-waiting-button')).toBeNull();
-        // ...but the farm identity chip is a SEPARATE mount and must survive,
-        // so the farmer never loses sight of which farm he is looking at.
-        expect(screen.getByTestId('canonical-strip-farm-chip')).toBeInTheDocument();
+        // ...but the farm identity element is a SEPARATE mount and must survive,
+        // so the farmer never loses sight of which farm he is looking at (now
+        // `FarmNameBoard`, formerly the farm chip — 2026-08-30 nameboard ruling).
+        expect(screen.getByTestId('farm-nameboard')).toBeInTheDocument();
     });
 });
 

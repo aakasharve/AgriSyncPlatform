@@ -7,7 +7,7 @@
 import type { VisibleBucketId } from '../../domain/ai/BucketId';
 import type { CostCategoryId, CostCategoryRef } from '../../domain/finance/CostCategory';
 // LABOUR_PHASE2 Phase 3 — see the LABOUR ENGAGEMENT DTOS section below.
-import type { AttributedOperatorDto, LabourEngagementDto } from './labourDtos';
+import type { AttendanceMarkDto, AttributedOperatorDto, DayOutcomeDto, LabourEngagementDto } from './labourDtos';
 
 export type VerificationStatus =
     | 'draft'
@@ -150,8 +150,9 @@ export type DailyLogScope = 'Plot' | 'MultiPlot' | 'Farm';
 // adding them to this file put it over the 800-line cap
 // `scripts/check-file-sizes.mjs` enforces in CI. `DailyLogDto` below references
 // `LabourEngagementDto` directly, so it is imported at the top of this file as
-// well as re-exported here.
-export type { AttributedOperatorDto, LabourEngagementDto };
+// well as re-exported here. Labour V2 R1's `AttendanceMarkDto` and
+// `DayOutcomeDto` followed the same path for the same reason.
+export type { AttendanceMarkDto, AttributedOperatorDto, DayOutcomeDto, LabourEngagementDto };
 
 export interface DailyLogDto {
     id: string;
@@ -256,27 +257,9 @@ export interface DailyLogDto {
      */
     labour?: LabourEngagementDto[] | null;
 
-    /**
-     * task-0b (spec 2026-08-28-labour-v2-release-1) — the farmer's OWN
-     * statement about the day, read back verbatim from
-     * `ShramSafal.Application/Contracts/Dtos/DailyLogDto.cs` (`string?
-     * DayOutcome = null`). See the doctrine-P4 comment on
-     * `DailyLog.DayOutcome` (`ShramSafal.Domain/Logs/DailyLog.cs:792-811`):
-     * NULL on every ordinary work day, never inferred, never defaulted to
-     * `"WORK_RECORDED"` — "he did not say" and "he said work happened" are
-     * different facts.
-     *
-     * UNLIKE `labour` above, a present-but-`null` value here is NOT "the
-     * caller made no statement" — `DtoMappingExtensions.ToDto` reads this
-     * straight off the loaded entity on every endpoint that returns a
-     * `DailyLogDto`, so `null` IS the farmer's state whenever the field is
-     * present. Absence of the KEY (`undefined`) is the one genuinely silent
-     * case, reachable only from a server build that predates this member —
-     * this twin is hand-maintained and a device can outlive the server build
-     * it talks to. `logsReconciler.serverStatedDayOutcome` reads exactly that
-     * presence, mirroring `serverStatedContext` above.
-     */
-    dayOutcome?: 'WORK_RECORDED' | 'DISTURBANCE_RECORDED' | 'NO_WORK_PLANNED' | 'IRRELEVANT_INPUT' | null;
+    /** task-0b (spec 2026-08-28-labour-v2-release-1) — the farmer's OWN statement
+     * about the day. Provenance + null-vs-undefined reading: `DayOutcomeDto`. */
+    dayOutcome?: DayOutcomeDto | null;
 }
 
 export interface CostEntryDto {
@@ -440,27 +423,6 @@ export interface AttentionBoardDto {
     cards: AttentionCardDto[];
 }
 
-/**
- * Labour V2 R1 Task 3.5c — one server-acknowledged attendance ruling on the
- * pull wire. dayMark/nightMark are enum NAMES; null = Unmarked ("nobody
- * said" survives the wire — never a zero). workDate is the farmer's day
- * (YYYY-MM-DD), not a timestamp.
- */
-export interface AttendanceMarkDto {
-    id: string;
-    farmId: string;
-    fieldOperatorId: string;
-    workDate: string;
-    dayMark: string | null;
-    nightMark: string | null;
-    hoursWorked: number | null;
-    extraHours: number | null;
-    hoursBasis: string | null;
-    recordedByUserId: string;
-    recordedAtUtc: string;
-    modifiedAtUtc: string;
-}
-
 export interface SyncPullResponse {
     serverTimeUtc: string;
     nextCursorUtc: string;
@@ -487,8 +449,7 @@ export interface SyncPullResponse {
     costCategories?: CostCategoryRef[];
     referenceDataVersionHash?: string;
     attentionBoard?: AttentionBoardDto | null;
-    // Labour V2 R1 Task 3.5c — optional: additive wire field, so a pull from
-    // an older server (field absent) stays a no-op, never an error.
+    // Labour V2 R1 Task 3.5c — additive: absent from an older server = no-op.
     attendanceMarks?: AttendanceMarkDto[];
 }
 

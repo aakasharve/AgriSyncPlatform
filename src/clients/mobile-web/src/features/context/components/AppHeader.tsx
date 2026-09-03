@@ -366,8 +366,9 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   // your attention" is noise he cannot act on from that screen. It now shows
   // where the work it refers to is actually done: the log desk and reflect.
   //
-  // This hides the TRAY only. The farm identity chip is a separate mount
-  // (`FarmIdentityElement`, row 1 above) and still renders on every route —
+  // This hides the TRAY only. The farm identity element is a separate mount
+  // (`FarmNameBoard`, row 1 above — formerly `FarmIdentityElement`, replaced
+  // by the 2026-08-30 nameboard ruling) and still renders on every route —
   // the farmer never loses sight of which farm he is looking at.
   const showOversightStrip = currentRoute === 'main'
       && (currentView === 'log' || currentView === 'reflect');
