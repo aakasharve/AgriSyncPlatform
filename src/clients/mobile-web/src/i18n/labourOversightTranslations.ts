@@ -127,13 +127,13 @@ export const labourOversightTranslations: Record<Language, LabourOversightTransl
 
         // Task 15 (Labour V2 R1), category (d) — verbatim from the founder-
         // approved replacement table. See this file's header, "TASK 15".
-        readyToLogLabel: 'कामे सांगण्यासाठी तयार',
+        readyToLogLabel: 'कामं सांगायला तयार',
         entireFarmOverviewLabel: 'एकूण',
         // Same Marathi noun for both — the founder's table is explicit that
         // it does not inflect for plural; only the numeral in front does.
         plotCountUnitSingular: 'प्लॉट',
         plotCountUnitPlural: 'प्लॉट',
         selectedCountUnitSingular: 'निवडला',
-        selectedCountUnitPlural: 'निवडले',
+        selectedCountUnitPlural: 'निवडलेत',
     },
 };

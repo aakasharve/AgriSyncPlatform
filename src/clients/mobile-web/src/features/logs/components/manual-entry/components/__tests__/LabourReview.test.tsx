@@ -57,13 +57,13 @@ describe('LabourReview — provenanceVerified flag', () => {
     });
 
     it('does NOT render the flag for a verified AI item (provenanceVerified: true)', () => {
-        const entry = makeEntry({ sourceText: 'दोन मजूर तण काढत होते', provenanceVerified: true });
+        const entry = makeEntry({ sourceText: 'दोन जण तण काढत होते', provenanceVerified: true });
         render(<LabourReview labourEntries={[entry]} totalWorkerCount={2} />);
         expect(screen.queryByTestId('provenance-unverified-flag')).not.toBeInTheDocument();
     });
 
     it('does NOT render the flag when provenanceVerified is absent (pre-existing / post-normalization data)', () => {
-        const entry = makeEntry({ sourceText: 'दोन मजूर तण काढत होते' });
+        const entry = makeEntry({ sourceText: 'दोन जण तण काढत होते' });
         render(<LabourReview labourEntries={[entry]} totalWorkerCount={2} />);
         expect(screen.queryByTestId('provenance-unverified-flag')).not.toBeInTheDocument();
     });
@@ -83,7 +83,7 @@ describe('LabourReview — provenanceVerified flag', () => {
  * "2 workers" in English, unreadable to a low-literacy Marathi farmer. These
  * two pins are the ones with an already-shipped, founder-approved Marathi
  * equivalent (`workSummary.labour` — reused as-is in `QuickLogSheet.tsx` and
- * `ReviewInboxSheet.tsx`; the "{N} मजूर" convention — reused as-is from
+ * `ReviewInboxSheet.tsx`; the "{N} जण" convention — reused as-is from
  * `LabourHub.tsx`). The "Total workers: N (breakdown)" summary line has NO
  * existing equivalent and is intentionally left in English pending a founder
  * ruling — see the task report; this file must not gain invented Marathi for
@@ -101,11 +101,11 @@ describe('LabourReview — Marathi copy (reuse only, no invented strings)', () =
         expect(screen.getByText(translate('workSummary.labour', 'mr'))).toBeInTheDocument();
     });
 
-    it('renders the per-entry worker count as Devanagari digits + "मजूर" (LabourHub\'s own "{N} मजूर" convention via toMarathiNumber), never Latin digits + "workers"', () => {
+    it('renders the per-entry worker count as Devanagari digits + "मजूर" (LabourHub\'s own "{N} जण" convention via toMarathiNumber), never Latin digits + "workers"', () => {
         const entry = makeEntry({ count: 2, activity: 'तण काढणी' });
         render(<LabourReview labourEntries={[entry]} totalWorkerCount={2} />);
         expect(screen.queryByText('2 workers')).not.toBeInTheDocument();
-        expect(screen.getByText('२ मजूर')).toBeInTheDocument();
+        expect(screen.getByText('२ जण')).toBeInTheDocument();
     });
 });
 
@@ -115,7 +115,7 @@ describe('LabourReview — Marathi copy (reuse only, no invented strings)', () =
  * (both `LabourEvent` and the Zod schema) — a farmer who says "मजुरांनी
  * छाटणी केली" ("the workers did the pruning") without a headcount left it
  * unstated. The old `entry.count || ((entry.maleCount || 0) + (entry.femaleCount || 0))`
- * coerced that silence into a fabricated "० मजूर" (zero workers). Governing
+ * coerced that silence into a fabricated "० जण" (zero workers). Governing
  * rule: absence of any record means unknown (em-dash); a record that exists
  * containing nothing (a genuinely stated 0) is a real zero and must still
  * render as one — mirrors the server's `LabourHeadcount.Resolve`
@@ -123,23 +123,23 @@ describe('LabourReview — Marathi copy (reuse only, no invented strings)', () =
  * `ReviewFacts` (ReviewSheet.tsx: `count != null ? toMr(count) : '—'`).
  */
 describe('LabourReview — unstated headcount is unknown, not a fabricated 0 (Task 27, spec: 2026-08-28-labour-v2-release-1)', () => {
-    it('renders an em-dash, never "० मजूर", when count/maleCount/femaleCount are ALL unstated', () => {
+    it('renders an em-dash, never "० जण", when count/maleCount/femaleCount are ALL unstated', () => {
         const entry = makeEntry({ count: undefined, maleCount: undefined, femaleCount: undefined, activity: 'छाटणी' });
         render(<LabourReview labourEntries={[entry]} totalWorkerCount={0} />);
-        expect(screen.queryByText('० मजूर')).not.toBeInTheDocument();
-        expect(screen.getByText('— मजूर')).toBeInTheDocument();
+        expect(screen.queryByText('० जण')).not.toBeInTheDocument();
+        expect(screen.getByText('— जण')).toBeInTheDocument();
     });
 
-    it('still renders a genuinely stated 0 as "० मजूर" — a real fact, not collapsed into the em-dash', () => {
+    it('still renders a genuinely stated 0 as "० जण" — a real fact, not collapsed into the em-dash', () => {
         const entry = makeEntry({ count: 0, maleCount: undefined, femaleCount: undefined, activity: 'छाटणी' });
         render(<LabourReview labourEntries={[entry]} totalWorkerCount={0} />);
-        expect(screen.getByText('० मजूर')).toBeInTheDocument();
-        expect(screen.queryByText('— मजूर')).not.toBeInTheDocument();
+        expect(screen.getByText('० जण')).toBeInTheDocument();
+        expect(screen.queryByText('— जण')).not.toBeInTheDocument();
     });
 
     it('sums a stated gender split when the bare count is unstated (no em-dash when SOME evidence exists)', () => {
         const entry = makeEntry({ count: undefined, maleCount: 2, femaleCount: 1, activity: 'छाटणी' });
         render(<LabourReview labourEntries={[entry]} totalWorkerCount={3} />);
-        expect(screen.getByText('३ मजूर')).toBeInTheDocument();
+        expect(screen.getByText('३ जण')).toBeInTheDocument();
     });
 });

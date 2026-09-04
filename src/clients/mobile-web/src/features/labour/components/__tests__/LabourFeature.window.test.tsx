@@ -155,8 +155,8 @@ describe('LabourFeature — Task 17 (R14 superseded): the window is remembered, 
             },
         },
     });
-    const ALLTIME_LINE = '₹8,800 द्यायचे'; // 10000 − 1200 − 0
-    const TODAY_LINE = '₹1,800 द्यायचे'; // 3000 − 1200 − 0
+    const ALLTIME_LINE = '₹8,800 बाकी'; // 10000 − 1200 − 0
+    const TODAY_LINE = '₹1,800 बाकी'; // 3000 − 1200 − 0
 
     /** Renders with a hook fake whose `data`/`timeWindow` genuinely move
      *  together, the way `useLabourState.ts` really behaves. `rr()` re-runs

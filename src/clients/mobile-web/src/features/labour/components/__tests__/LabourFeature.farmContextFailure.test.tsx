@@ -6,7 +6,7 @@
  * TASK 6e (spec: 2026-08-28-labour-v2-release-1, P4/P5, Ruling R8) — the
  * SECOND DOOR to the false sentence Task 6d closed.
  *
- * Task 6d proved the labour screen withholds "अजून कोणी कामगार जोडलेला नाही"
+ * Task 6d proved the labour screen withholds "अजून कोणाचंही नाव जोडलेलं नाही"
  * (no worker has been added yet) when `useLabourState` reports `error`. It
  * did that with `useLabourState` mocked. This file deliberately does NOT
  * mock the hook: it drives the REAL `useLabourState` from a REAL-shaped
@@ -62,7 +62,7 @@ vi.mock('../../../../infrastructure/sync/BackgroundSyncWorker', () => ({
 
 import LabourFeature from '../LabourFeature';
 
-const EMPTY_PEOPLE_LABEL = 'अजून कोणी कामगार जोडलेला नाही';
+const EMPTY_PEOPLE_LABEL = 'अजून कोणाचंही नाव जोडलेलं नाही';
 const ERROR_LABEL = 'माहिती आणता आली नाही';
 const RETRY_LABEL = 'पुन्हा प्रयत्न करा';
 

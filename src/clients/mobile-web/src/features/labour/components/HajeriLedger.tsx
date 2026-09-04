@@ -110,7 +110,7 @@ const HajeriLedger: React.FC<{
             <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 p-1">
                 <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600"><span className="flex h-5 w-5 items-center justify-center rounded-md bg-emerald-50 text-emerald-700"><Check size={12} strokeWidth={3} /></span>आला</span>
                 <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600"><span className="flex h-5 w-5 items-center justify-center rounded-md bg-amber-100 text-[11px] font-extrabold text-amber-700">½</span>अर्धा</span>
-                <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600"><span className="flex h-5 w-5 items-center justify-center rounded-md bg-slate-100 text-[11px] font-extrabold text-slate-300">–</span>नाही</span>
+                <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600"><span className="flex h-5 w-5 items-center justify-center rounded-md bg-slate-100 text-[11px] font-extrabold text-slate-300">–</span>आला नाही</span>
                 <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600"><span className="h-5 w-5 rounded-md border border-dashed border-slate-200 bg-white" />रिकामं = कुणी माहिती नाही</span>
                 <span className="text-[12px] font-semibold text-slate-600">◾ रात्र</span>
                 <span className="text-[12px] font-semibold text-slate-600">4त = 4 तास</span>
@@ -127,7 +127,7 @@ const HajeriLedger: React.FC<{
             <div className="overflow-x-auto rounded-[18px] border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
                 {/* Header: name column + one cell per day. NOTHING trails (D4: no totals column). */}
                 <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-                    <span className="w-[82px] flex-none text-[12.5px] font-extrabold text-slate-700">दिवस</span>
+                    <span className="w-[82px] flex-none text-[12.5px] font-extrabold text-slate-700">नाव</span>
                     <span className="flex flex-1 gap-1.5">
                         {L.days.map((d, i) => (
                             <span key={`${d}-${i}`} data-testid="ledger-day-head" className="flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">{formatLedgerDayHead(d)}</span>
@@ -167,7 +167,7 @@ const HajeriLedger: React.FC<{
                     folded into the mukadam's own row (final direction §3). */}
                 {crewRows.map((crew) => (
                     <div key={crew.throughFieldOperatorId} data-testid="ledger-row" className="flex items-center gap-2 border-t border-dashed border-violet-100 py-1.5">
-                        <span className="flex w-[82px] flex-none items-center gap-1.5 text-[12px] font-bold text-violet-700"><Users size={13} />{crew.throughName}सोबत</span>
+                        <span className="flex w-[82px] flex-none items-center gap-1.5 text-[12px] font-bold text-violet-700"><Users size={13} />{crew.throughName}सोबत आलेले</span>
                         <span className="flex flex-1 gap-1.5">
                             {crew.counts.map((n, i) => (
                                 <span key={i} data-testid="ledger-crew-cell" className={`flex h-[34px] w-[26px] flex-none items-center justify-center rounded-lg text-[12px] font-extrabold [font-variant-numeric:tabular-nums] ${n === null ? 'border border-dashed border-violet-100 bg-white text-violet-200' : 'bg-violet-50 text-violet-700'}`}>{n === null ? '' : n}</span>
@@ -189,11 +189,11 @@ const HajeriLedger: React.FC<{
                 <EmptyState
                     icon={<BookText size={22} />}
                     title="अजून हजेरी नोंदवली नाही"
-                    subtitle="बोलून किंवा नोंद करून हजेरी घेतल्यावर ती इथे दिवसागणिक दिसेल."
+                    subtitle="बोलून किंवा नोंद करून हजेरी घेतली, की ती इथे रोजच्या रोज दिसेल."
                 />
             )}
 
-            <div className="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[11.5px] leading-relaxed text-slate-600">हिरवा = आला · पिवळा = अर्धा दिवस · राखाडी = नाही.</div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[11.5px] leading-relaxed text-slate-600">हिरवा = आला · पिवळा = अर्धा · राखाडी = आला नाही.</div>
         </div>
     );
 };

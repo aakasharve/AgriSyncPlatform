@@ -9,7 +9,7 @@
 export const ATTENDANCE_COPY = {
     /** State B — the reason under the inactive hero. Not a permission word anywhere. */
     noAnchorReason: 'आजच्या कामात किती जण होते ते अजून समजलं नाही. आधी आजचं काम सांगा.',
-    understoodHeading: 'ShramSafalला समजलं',
+    understoodHeading: 'श्रम सफलला समजलं',
     /** D9.5 provenance chips. */
     youSaidChip: 'तुम्ही सांगितलं',
     explicitChip: 'स्पष्ट माहिती',
@@ -27,7 +27,7 @@ export const ATTENDANCE_COPY = {
     contradictionTitle: 'एक गोष्ट स्पष्ट करा',
     contradictionBody: (name: string, first: string, second: string) =>
         `${name} आज दोन कामांत दिसतोय — एकात ${first}, दुसऱ्यात ${second}. आजची हजेरी कोणती?`,
-    contradictionReassurance: 'एकदाच स्पष्ट करा; दोन्ही कामांच्या नोंदी तशाच राहतील.',
+    contradictionReassurance: 'एकदाच स्पष्ट करा — दोन्ही कामांचं जे सांगितलं ते तसंच राहील.',
     /** Approved mark vocabulary — the only words the contradiction slots may hold. */
-    markWord: { full: 'पूर्ण', half: 'अर्धा', night: 'रात्र' } as const,
+    markWord: { full: 'आला', half: 'अर्धा', night: 'रात्र' } as const,
 } as const;

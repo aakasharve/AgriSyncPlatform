@@ -6,7 +6,7 @@
  * FOUNDER RULING 2026-08-31 — "look at uploaded image no names were there.
  * names marked here means attendance + identity recorded."
  *
- * He spoke four names, and both screens showed "४ मजूर" and nothing else. A
+ * He spoke four names, and both screens showed "४ जण" and nothing else. A
  * count is a headcount; the NAMES are what make it हजेरी. These pin that the
  * names reach the screen and that an unnamed crew still renders honestly.
  *
@@ -68,6 +68,6 @@ describe('LabourReview — the names are the हजेरी', () => {
             />,
         );
         expect(screen.getByTestId('labour-review-worker-names').children).toHaveLength(2);
-        expect(screen.getByText(/८ मजूर/)).toBeInTheDocument();
+        expect(screen.getByText(/८ जण/)).toBeInTheDocument();
     });
 });

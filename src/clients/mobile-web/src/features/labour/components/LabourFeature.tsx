@@ -70,7 +70,7 @@ const TITLES: Record<ScreenName, string> = {
      * UNTOUCHED by design — presentation and internal vocabulary are allowed
      * to diverge.
      */
-    hub: 'कामाच्या नोंदी',
+    hub: 'कामाचा हिशोब',
     mukadam: 'मुकादम',
     person: 'कामगार',
     attendance: 'आजची हजेरी',
@@ -191,7 +191,7 @@ export const LabourFeature: React.FC<{
     }, []);
     // No router available (e.g. bare `?preview=labour` mount) → surface the
     // existing toast instead of navigating or crashing.
-    const goToLog = onGoToLog ?? (() => showToast('🎙 आवाज नोंद लॉग स्क्रीनवर होते'));
+    const goToLog = onGoToLog ?? (() => showToast('🎙 बोलून नोंद करायची असेल तर कामाच्या पानावर जा.'));
 
     const title = cur.name === 'mukadam' && cur.id ? (data.people[cur.id]?.name ?? 'मुकादम')
         : cur.name === 'person' && cur.id ? (data.people[cur.id]?.name ?? 'कामगार')
@@ -299,7 +299,7 @@ export const LabourFeature: React.FC<{
                                 onOpenPerson={(id) => push({ name: 'person', id })}
                                 onOpenMukadam={(id) => push({ name: 'mukadam', id })}
                                 onAdvance={() => showToast('उचल — नमुना')}
-                                onSettle={() => showToast('सेटल — नमुना')}
+                                onSettle={() => showToast('पैसे द्या — नमुना')}
                             />
                         )}
                         {cur.name === 'person' && cur.id && (

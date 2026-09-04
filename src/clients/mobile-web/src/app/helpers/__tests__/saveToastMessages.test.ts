@@ -150,9 +150,9 @@ describe('buildEditSavedMessage — two true things, and no more', () => {
     });
 
     it('uses the approved Marathi clause at every count', () => {
-        // No singular Marathi form was approved and no agent may inflect one,
-        // so both counts render the approved plural. Listed for the founder.
-        expect(buildEditSavedMessage(1, 'mr')).toContain(t('sync.correctionsFiledTailMany', 'mr').replace('{count}', '1'));
+        // Superseded 2026-09-04: the founder approved a singular (#257), so count 1
+        // now renders it and only the higher counts take the plural.
+        expect(buildEditSavedMessage(1, 'mr')).toContain(t('sync.correctionsFiledTailOne', 'mr').replace('{count}', '1'));
         expect(buildEditSavedMessage(3, 'mr')).toContain(t('sync.correctionsFiledTailMany', 'mr').replace('{count}', '3'));
     });
 

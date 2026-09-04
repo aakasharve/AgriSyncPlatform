@@ -77,13 +77,13 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
 
     it('shows an honest empty state instead of a blank plots card', () => {
         render(<WeeklyDashboard {...baseProps()} data={EMPTY_LABOUR_DATA} />);
-        expect(screen.getByText('अजून प्लॉटनिहाय माहिती नाही')).toBeInTheDocument();
+        expect(screen.getByText('अजून प्लॉटची माहिती नाही')).toBeInTheDocument();
     });
 
     it('shows the real insight/plots content once the data has it (LABOUR_MOCK)', () => {
         render(<WeeklyDashboard {...baseProps()} data={LABOUR_MOCK} />);
         expect(screen.queryByText('अजून सुचवण्यासारखं काही नाही')).toBeNull();
-        expect(screen.queryByText('अजून प्लॉटनिहाय माहिती नाही')).toBeNull();
+        expect(screen.queryByText('अजून प्लॉटची माहिती नाही')).toBeNull();
         expect(screen.getByText(LABOUR_MOCK.dashboard.insight)).toBeInTheDocument();
     });
 
@@ -204,7 +204,7 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
 
     // TASK 6 (spec: 2026-08-28-labour-v2-release-1, P4) — Defect B: a log
     // where the farmer never stated a headcount used to contribute a
-    // confident zero to मजूर-दिवस. `d.manDays` is now `number | null`; `null`
+    // confident zero to एकूण हजेरी. `d.manDays` is now `number | null`; `null`
     // must render as `—`, never as the literal word "null"
     // (`String(null) === "null"` in JS — the exact bug this locks against).
     describe('Task 6 — Man-days unknown (P4), never the literal word "null" or a fabricated 0', () => {
@@ -213,14 +213,14 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
             dashboard: { ...LABOUR_MOCK.dashboard, manDays },
         });
 
-        it('renders "—" for मजूर-दिवस when manDays is unknown (null), never the string "null"', () => {
+        it('renders "—" for एकूण हजेरी when manDays is unknown (null), never the string "null"', () => {
             render(<WeeklyDashboard {...baseProps()} data={withManDays(null)} />);
             expect(screen.getByText('—')).toBeInTheDocument();
             expect(screen.queryByText('null')).toBeNull();
             expect(screen.queryByText('0')).toBeNull();
         });
 
-        it('still shows the real मजूर-दिवस figure once it is known (LABOUR_MOCK: 28)', () => {
+        it('still shows the real एकूण हजेरी figure once it is known (LABOUR_MOCK: 28)', () => {
             render(<WeeklyDashboard {...baseProps()} data={LABOUR_MOCK} />);
             expect(screen.getByText('28')).toBeInTheDocument();
         });
@@ -239,7 +239,7 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
     // site) — a state rural
     // connectivity makes common, not rare. That constant still hardcoded the
     // same five fields Tasks 1 and 6 made nullable to a fabricated `0`, so an
-    // outage rendered a confident "0 मजूर-दिवस" and "बाकी देणं ₹0" underneath
+    // outage rendered a confident "0 एकूण हजेरी" and "बाकी देणं ₹0" underneath
     // the "couldn't load" banner. (That last part is HISTORY as of Task 6d,
     // 2026-08-28: `LabourFeature.tsx` now withholds the whole content switch
     // on `error`, so an outage renders the banner and nothing else — this
@@ -254,9 +254,9 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
     // purpose: this locks the actual fallback object every real farm sees,
     // not a stand-in shaped like it.
     describe('Task 6c — the outage/loading fallback constant is not a fabricated zero', () => {
-        it('मजूर-दिवस renders "—" for the real EMPTY_LABOUR_DATA fallback, never "0" or the string "null"', () => {
+        it('एकूण हजेरी renders "—" for the real EMPTY_LABOUR_DATA fallback, never "0" or the string "null"', () => {
             render(<WeeklyDashboard {...baseProps()} data={EMPTY_LABOUR_DATA} />);
-            const label = screen.getByText('मजूर-दिवस');
+            const label = screen.getByText('एकूण हजेरी');
             expect(label.previousElementSibling?.textContent).toBe('—');
         });
 
@@ -288,7 +288,7 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
 
     // TASK 14 / RULING R16 (spec: 2026-08-28-labour-v2-release-1) — ONE CLEAN
     // MENTAL MODEL: the stat grid holds FLOWS that accrue over the selected
-    // window (मजूर-दिवस · मजुरी · नोंदी); the पैसे · money card holds
+    // window (एकूण हजेरी · मजुरी · नोंदी); the पैसे · money card holds
     // POSITIONS — where the farmer stands as of now, already labelled
     // आजपर्यंत (R15, Task 13). `बाकी देणं`/`जास्त दिलं` is a position (R13,
     // Task 10 already ruled this), so leaving it inside the WINDOWED grid was
@@ -347,14 +347,14 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
     });
 
     // TASK 16 (spec: 2026-08-28-labour-v2-release-1, founder option c) — the
-    // stat grid held exactly three tiles (मजूर-दिवस · मजुरी · नोंदी) in a
+    // stat grid held exactly three tiles (एकूण हजेरी · मजुरी · नोंदी) in a
     // 2-column grid, so the third sat alone beside a blank cell. Founder chose
-    // c: मजूर-दिवस and मजुरी stay side by side on the top row; नोंदी becomes a
+    // c: एकूण हजेरी and मजुरी stay side by side on the top row; नोंदी becomes a
     // full-width bar underneath them — no tile shrinks, nothing else moves.
     describe('Task 16 — नोंदी becomes a full-width bar, not a lone tile beside an empty cell', () => {
         afterEach(() => cleanup());
 
-        it('मजूर-दिवस and मजुरी stay plain top-row tiles; नोंदी is the only one spanning full width; no filler node fakes the old empty cell', () => {
+        it('एकूण हजेरी and मजुरी stay plain top-row tiles; नोंदी is the only one spanning full width; no filler node fakes the old empty cell', () => {
             render(<WeeklyDashboard {...baseProps()} data={LABOUR_MOCK} />);
 
             const grid = screen.getByTestId('labour-stat-grid');
@@ -362,7 +362,7 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
             // node was added to paper over the old empty cell.
             expect(grid.children).toHaveLength(3);
 
-            const manDaysItem = screen.getByText('मजूर-दिवस').closest('button');
+            const manDaysItem = screen.getByText('एकूण हजेरी').closest('button');
             const wagesItem = screen.getByText('मजुरी').closest('button');
             const logsLabel = screen.getByText('नोंदी');
             const logsItem = Array.from(grid.children).find((el) => el.contains(logsLabel));
@@ -390,7 +390,7 @@ describe('WeeklyDashboard — screen honesty (Decision 4b)', () => {
             const logsLabel = within(grid).getByText('नोंदी');
             const logsButton = logsLabel.closest('button');
             expect(logsButton).not.toBeNull();
-            // Same inert treatment as मजूर-दिवस/मजुरी — a StatTile with no
+            // Same inert treatment as एकूण हजेरी/मजुरी — a StatTile with no
             // onClick renders `disabled`, so it is not a real tap target.
             expect(logsButton).toBeDisabled();
             // Scoped to नोंदी's WHOLE grid item (wrapper + button), not just

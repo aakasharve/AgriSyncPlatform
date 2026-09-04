@@ -46,7 +46,7 @@ interface Props {
 const SEG: { k: PresenceStatus; label: string }[] = [
     { k: 'present', label: 'आला' },
     { k: 'half', label: 'अर्धा' },
-    { k: 'absent', label: 'नाही' },
+    { k: 'absent', label: 'आला नाही' },
 ];
 
 const toMr = (n: number) => String(n).replace(/\d/g, (d) => '०१२३४५६७८९'[Number(d)]);
@@ -74,13 +74,13 @@ const Attendance: React.FC<Props> = ({ data, onSave, onToast, saveDisabled }) =>
     return (
         <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2">
             <div className="rounded-2xl border border-slate-100 bg-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
-                <div className="text-[13px] font-extrabold text-slate-700">आज किती लोक आली?</div>
+                <div className="text-[13px] font-extrabold text-slate-700">आज किती जण होते?</div>
                 <div className="mt-2.5 flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 p-2">
                     <button type="button" onClick={() => setCount((c) => Math.max(1, c - 1))} className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-white text-[20px] font-bold text-emerald-700 active:scale-90">−</button>
-                    <b className="text-[24px] font-black text-emerald-700 [font-variant-numeric:tabular-nums]">{toMr(count)} लोक</b>
+                    <b className="text-[24px] font-black text-emerald-700 [font-variant-numeric:tabular-nums]">{toMr(count)} जण</b>
                     <button type="button" onClick={() => setCount((c) => c + 1)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-white text-[20px] font-bold text-emerald-700 active:scale-90">+</button>
                 </div>
-                <div className="mt-2 text-[10.5px] text-slate-400">🎙 "आज ४ लोक कामाला आली" — व्हॉइस लॉगमधून</div>
+                <div className="mt-2 text-[10.5px] text-slate-400">🎙 "आज ४ लोक कामाला आली" — तुम्ही बोललात त्यातून</div>
             </div>
 
             <div className="rounded-2xl border border-slate-100 bg-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
@@ -117,12 +117,12 @@ const Attendance: React.FC<Props> = ({ data, onSave, onToast, saveDisabled }) =>
                 <Plus size={16} /> नाव जोडा — इतिहासातून किंवा नवीन
             </button>
             <div className="rounded-xl border border-amber-200 border-l-[3px] border-l-amber-600 bg-amber-50 p-2.5 text-[11.5px] leading-relaxed text-amber-800">
-                <b>किमान एक नाव आवश्यक.</b> बाकीचे "+ २ जण" म्हणून मोजले जातील. हिरवा ✓ = अ‍ॅप कामगार, राखाडी = फक्त नाव.
+                <b>किमान एक नाव द्या.</b> बाकीचे "+ २ जण" असे मोजले जातील.
             </div>
             <button type="button" disabled={saveDisabled}
                 onClick={() => onSave(Object.entries(status).map(([fieldOperatorId, s]) => ({ fieldOperatorId, status: s, shift })))}
                 className={`flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-[13px] font-extrabold text-white transition-transform active:scale-[0.98] ${saveDisabled ? 'bg-slate-300' : 'bg-emerald-600'}`}>
-                <Check size={16} /> जतन करा → मंजुरीसाठी
+                <Check size={16} /> बरोबर — तपासणीसाठी
             </button>
         </div>
     );

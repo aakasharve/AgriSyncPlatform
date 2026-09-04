@@ -57,7 +57,7 @@ const TrustGraduationSection: React.FC<{ w: LabourPerson; onToast: (m: string) =
 
     return (
         <>
-            <GroupLabel>विश्वास · trust</GroupLabel>
+            <GroupLabel>विश्वास</GroupLabel>
             {granted ? (
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3.5">
                     <div className="flex items-center gap-2.5">
@@ -72,7 +72,7 @@ const TrustGraduationSection: React.FC<{ w: LabourPerson; onToast: (m: string) =
             ) : eligible ? (
                 <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
                     <div className="text-[10.5px] font-extrabold uppercase tracking-wide text-emerald-700">शिफारस · recommendation</div>
-                    <div className="mt-1 text-[15px] font-bold text-slate-800">{w.name}च्या नोंदींवर विश्वास ठेवायचा?</div>
+                    <div className="mt-1 text-[15px] font-bold text-slate-800">{w.name} सांगेल त्यावर विश्वास ठेवायचा?</div>
                     <div className="mt-1 text-[12px] leading-snug text-slate-500">{w.daysActive} दिवस · वाद नाही. विश्वास दिल्यावर याच्या नोंदी <b>आपोआप मंजूर</b> होतील — रोज तपासायची गरज नाही. निर्णय तुमचा.</div>
                     <button type="button" onClick={() => { setGranted(true); onToast('विश्वास दिला ✓ — नोंदी आपोआप मंजूर'); }} className="mt-3 flex w-full items-center justify-center gap-2 rounded-[14px] bg-emerald-600 py-3 text-[13px] font-extrabold text-white transition-transform active:scale-[0.98]">
                         <ShieldCheck size={16} /> विश्वास द्या
@@ -83,8 +83,8 @@ const TrustGraduationSection: React.FC<{ w: LabourPerson; onToast: (m: string) =
                     <div className="flex items-center gap-2.5">
                         <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700"><Clock size={18} /></span>
                         <div className="min-w-0 flex-1">
-                            <div className="text-[13.5px] font-bold text-amber-800">सध्या याच्या नोंदी तुम्ही तपासता</div>
-                            <div className="text-[11.5px] text-amber-700">{w.daysActive} दिवस झाले · २५ दिवस + स्वच्छ रेकॉर्ड नंतर विश्वास देता येईल</div>
+                            <div className="text-[13.5px] font-bold text-amber-800">सध्या याच्या नोंदी तुमच्याकडे मंजुरीसाठी येतात</div>
+                            <div className="text-[11.5px] text-amber-700">{w.daysActive} दिवस झाले · २५ दिवस आणि वाद नाही, मग विश्वास देता येईल</div>
                         </div>
                     </div>
                 </div>
@@ -92,7 +92,7 @@ const TrustGraduationSection: React.FC<{ w: LabourPerson; onToast: (m: string) =
             <HelpNote
                 what="याच्या रोजच्या नोंदी तुम्ही तपासायच्या, की आपोआप मंजूर व्हायच्या — हे इथे ठरतं."
                 act="सुरुवातीचे दिवस तुम्ही तपासा. २५ दिवस चांगलं काम व वाद नसेल, तेव्हा 'विश्वास द्या'."
-                why="टीम सेटअपमध्ये 'कोण नोंद करू शकतो' ठरतं. इथे 'त्याच्या नोंदींवर विश्वास' ठरतो — या दोन वेगळ्या गोष्टी आहेत."
+                why="'माझा शेत संघ'मध्ये कोणाला नोंद करता येईल ते ठरतं. इथे त्याच्या नोंदींवर विश्वास ठेवायचा का — हे वेगळं."
             />
         </>
     );
@@ -175,7 +175,7 @@ const PersonDetail: React.FC<Props> = ({ data, personId, onAdvance, onSettle, on
                 // reachable from `labourMock`, whose people carry demo उचल.
                 why={w.balance.recorded === null || w.balance.paid === null || w.balance.advance !== 0
                     ? undefined
-                    : `काम झालं ${inr(w.balance.recorded)} − दिलं ${inr(w.balance.paid)}`}
+                    : `कामाचे पैसे ${inr(w.balance.recorded)} − दिलं ${inr(w.balance.paid)}`}
             />
 
             {SHOW_TRUST_GRADUATION && (
@@ -207,7 +207,7 @@ const PersonDetail: React.FC<Props> = ({ data, personId, onAdvance, onSettle, on
             {SHOW_TRUST_SCORE && w.trust != null && (
                 <div className="flex items-center gap-3 rounded-2xl border border-stone-100 bg-white p-3 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
                     <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600"><Star size={18} /></span>
-                    <span className="text-[17px] font-bold text-stone-700">विश्वास {w.trust} — 30 दिवसांत वाद नाही</span>
+                    <span className="text-[17px] font-bold text-stone-700">30 दिवसांत वाद नाही</span>
                 </div>
             )}
         </div>

@@ -161,7 +161,7 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
                 <EmptyState
                     icon={<Star size={20} />}
                     title="अजून सुचवण्यासारखं काही नाही"
-                    subtitle="अधिक नोंदी झाल्यावर इथे उपयोगी माहिती दिसेल."
+                    subtitle="आणखी नोंदी झाल्यावर इथे उपयोगी माहिती दिसेल."
                 />
             )}
 
@@ -185,7 +185,7 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
                   * stated a headcount. `String(null)` is the literal text
                   * `"null"` in JS — this would have PRINTED THE WORD "null" on
                   * screen instead of the house `—` pattern for an absent fact. */}
-                <StatTile icon={<Users size={17} />} tone="em" value={d.manDays === null ? '—' : String(d.manDays)} label="मजूर-दिवस" trend={d.manDaysTrend} />
+                <StatTile icon={<Users size={17} />} tone="em" value={d.manDays === null ? '—' : String(d.manDays)} label="एकूण हजेरी" trend={d.manDaysTrend} />
                 {/* Phase 4 (D-H8) — `null` = withheld by view: `—`, never ₹0. */}
                 <StatTile icon={<Wallet size={17} />} tone="em" value={d.wages === null ? '—' : inr(d.wages)} label="मजुरी" />
                 {SHOW_ADVANCE_STAT && (
@@ -287,15 +287,15 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
                 <span className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-[19px] font-black [font-variant-numeric:tabular-nums] ${d.pending > 0 ? 'bg-amber-100 text-amber-800' : 'bg-stone-100 text-stone-500'}`}>
                     <span data-testid="labour-review-strip-count">{String(d.pending)}</span>
                 </span>
-                <span className={`min-w-0 flex-1 text-[17px] font-bold ${d.pending > 0 ? 'text-amber-900' : 'text-stone-700'}`}>तपासायचं</span>
+                <span className={`min-w-0 flex-1 text-[17px] font-bold ${d.pending > 0 ? 'text-amber-900' : 'text-stone-700'}`}>तपासा</span>
                 <ChevronRight size={22} className={`flex-shrink-0 ${d.pending > 0 ? 'text-amber-700' : 'text-stone-400'}`} />
             </button>
 
-            <GroupLabel>कुठे काम झालं · plots</GroupLabel>
+            <GroupLabel>कुठे काम झालं</GroupLabel>
             {d.plots.length === 0 ? (
                 <EmptyState
                     icon={<MapPin size={20} />}
-                    title="अजून प्लॉटनिहाय माहिती नाही"
+                    title="अजून प्लॉटची माहिती नाही"
                     subtitle="काम नोंदवल्यावर कोणत्या प्लॉटवर किती दिवस काम झालं ते इथे दिसेल."
                 />
             ) : (
@@ -343,7 +343,7 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
               * omitted outright: the same "leave the gap" treatment the
               * बाकी देणं stat tile above already gets, and no new copy.
               */}
-            <GroupLabel>पैसे · money</GroupLabel>
+            <GroupLabel>पैसे</GroupLabel>
             <div data-testid="labour-money-card" className="rounded-[20px] border border-slate-100 bg-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
                 {/* Phase 4 (D-H8) — a `null` money card was WITHHELD by view
                   * (मुकादम/worker projection): the whole card body is `—`,
@@ -359,7 +359,7 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
                           * reads as a qualifier on the card, not as a figure. */}
                         <div data-testid="labour-money-basis" className="mb-2 text-[11.5px] font-semibold text-slate-500">{LABOUR_WINDOW_LABELS.alltime}</div>
                         <div className="mb-2.5 flex items-baseline justify-between">
-                            <span className="text-[11.5px] font-semibold text-slate-500">काम झालं · एकूण नोंदवलं</span>
+                            <span className="text-[11.5px] font-semibold text-slate-500">काम झालं — त्याची मजुरी</span>
                             {/* TASK 1 (P4) — `null` = zero job-card evidence; the house
                               * pattern for an absent fact is `—`, never a fabricated ₹0. */}
                             <span data-testid="labour-money-total" className="text-[16px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">{d.money.recorded === null ? '—' : inr(d.money.recorded)}</span>

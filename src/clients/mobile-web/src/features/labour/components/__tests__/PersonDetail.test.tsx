@@ -91,7 +91,7 @@ describe('PersonDetail — screen honesty (Decision 4b)', () => {
 
     // Task 1 (spec: 2026-08-28-labour-v2-release-1, P4) — a worker with no
     // job-card evidence carries `balance.recorded: null`. BalanceCard must
-    // show "—" for काम झालं (never a fabricated ₹0) and must omit the
+    // show "—" for कामाचे पैसे (never a fabricated ₹0) and must omit the
     // द्यायचे/उचल बाकी/जास्त दिलं headline + tile entirely (never a balance
     // derived from an unknown). No new Marathi copy is introduced anywhere
     // in this fallback.
@@ -104,9 +104,9 @@ describe('PersonDetail — screen honesty (Decision 4b)', () => {
             },
         });
 
-        it('renders "—" for काम झालं instead of a fabricated ₹0', () => {
+        it('renders "—" for कामाचे पैसे instead of a fabricated ₹0', () => {
             render(<PersonDetail {...baseProps()} data={withUnknownRecorded()} personId="ramesh" />);
-            expect(screen.getByText('काम झालं')).toBeInTheDocument();
+            expect(screen.getByText('कामाचे पैसे')).toBeInTheDocument();
             expect(screen.getByText('—')).toBeInTheDocument();
         });
 
@@ -157,13 +157,13 @@ describe('PersonDetail — screen honesty (Decision 4b)', () => {
         });
 
         /*
-         * The reflow uses ONLY words already in that template — काम झालं,
+         * The reflow uses ONLY words already in that template — कामाचे पैसे,
          * −, दिलं and the two figures. Pinned as an exact string so a later
          * edit cannot quietly reintroduce a third term.
          */
-        it('keeps the surviving explanation to काम झालं − दिलं (सुनीता: ₹2,000 − ₹500)', () => {
+        it('keeps the surviving explanation to कामाचे पैसे − दिलं (सुनीता: ₹2,000 − ₹500)', () => {
             render(<PersonDetail {...baseProps()} personId="sunita" />);
-            expect(screen.getByText('काम झालं ₹2,000 − दिलं ₹500')).toBeInTheDocument();
+            expect(screen.getByText('कामाचे पैसे ₹2,000 − दिलं ₹500')).toBeInTheDocument();
         });
 
         /*
@@ -177,7 +177,7 @@ describe('PersonDetail — screen honesty (Decision 4b)', () => {
         it('omits the explanation entirely rather than under-explaining a balance that has an उचल term (रमेश)', () => {
             expect(LABOUR_MOCK.people.ramesh.balance.advance).toBeGreaterThan(0);
             render(<PersonDetail {...baseProps()} personId="ramesh" />);
-            expect(screen.queryByText(/काम झालं ₹/)).toBeNull();
+            expect(screen.queryByText(/कामाचे पैसे ₹/)).toBeNull();
         });
     });
 

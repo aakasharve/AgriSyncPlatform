@@ -60,7 +60,7 @@ import LabourFeature from '../LabourFeature';
 import { EMPTY_LABOUR_DATA, EMPTY_WEEK_LABOUR_DATA } from '../../labourMock';
 
 const LOADING_LABEL = 'माहिती आणत आहोत…';
-const EMPTY_PEOPLE_LABEL = 'अजून कोणी कामगार जोडलेला नाही';
+const EMPTY_PEOPLE_LABEL = 'अजून कोणाचंही नाव जोडलेलं नाही';
 const ERROR_LABEL = 'माहिती आणता आली नाही';
 const RETRY_LABEL = 'पुन्हा प्रयत्न करा';
 

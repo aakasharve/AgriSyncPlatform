@@ -33,7 +33,7 @@ import { SYNC_HONESTY_I18N_KEYS } from '../../sync/status/syncHonestyState';
  */
 const ON_PHONE_MR = translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr');
 
-const DAY_WORD: Record<string, string> = { full: 'पूर्ण', half: 'अर्धा', absent: 'आला नाही' };
+const DAY_WORD: Record<string, string> = { full: 'आला', half: 'अर्धा', absent: 'आला नाही' };
 
 const HajeriCellDetail: React.FC<{
     row: LedgerRow;
@@ -63,7 +63,7 @@ const HajeriCellDetail: React.FC<{
                         <Avatar tone={row.tone} initial={row.initial} size="sm" />{row.name}
                         <span className="text-[16px] font-semibold text-stone-500">{formatLedgerDayHead(dayIso)}</span>
                     </span>
-                    <button type="button" onClick={onClose} aria-label="बंद" className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-100 text-stone-500"><X size={18} /></button>
+                    <button type="button" onClick={onClose} aria-label="बंद करा" className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-100 text-stone-500"><X size={18} /></button>
                 </div>
 
                 {c === null ? (

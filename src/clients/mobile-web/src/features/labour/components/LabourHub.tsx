@@ -263,7 +263,7 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
                               * SAME `N मजूर` line. No new Marathi string.
                               */}
                             {labour.maleCount === 0 && labour.femaleCount === 0 && (labour.headcount == null || labour.headcount > 0) && (
-                                <div className="text-[16px] font-semibold text-stone-700">{labour.headcount != null ? toMr(labour.headcount) : '—'} मजूर</div>
+                                <div className="text-[16px] font-semibold text-stone-700">{labour.headcount != null ? toMr(labour.headcount) : '—'} जण</div>
                             )}
                             {/*
                               * Labour V1 Task 8.4 — "तास: ८ तास" was DELETED. It read
@@ -388,8 +388,8 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
                     <span className="text-[16px] font-semibold text-stone-500">
                         {' — '}
                         {[
-                            data.home.rojandariToday !== null ? `${data.home.rojandariToday} दिवसाच्या हिशोबाने` : null,
-                            data.home.ukteToday !== null ? `${data.home.ukteToday} उक्ते` : null,
+                            data.home.rojandariToday !== null ? `दिवसाच्या हिशोबाने ${data.home.rojandariToday} जण` : null,
+                            data.home.ukteToday !== null ? `उक्त्या कामावर ${data.home.ukteToday} जण` : null,
                         ].filter((s) => s !== null).join(' · ')}
                     </span>
                 )}
@@ -458,7 +458,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
         <HelpNote
             what="टीमची हजेरी, मजुरी व नोंदींची तपासणी — सगळं एका जागी."
             act="बोलून हजेरी घ्या · नोंदी तपासा."
-            why="'टीम सेटअप'मध्ये कोण नोंद करू शकतो ते ठरतं; इथे त्यांनी काय केलं आणि त्यावर किती विश्वास — ते दिसतं व ठरतं."
+            why="'माझा शेत संघ'मध्ये कोणाला नोंद करता येईल ते ठरतं. इथे त्यांनी काय केलं ते दिसतं."
             /* FOUNDER VOCABULARY RULE (2026-09-03) — was "कामगार
                व्यवस्थापन कसं वापरायचं?". The subsystem noun is dropped rather
                than replaced: the farmer is already on the screen, so "this"
@@ -471,14 +471,14 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
         {data.topLevelIds.length === 0 ? (
             <EmptyState
                 icon={<Users size={22} />}
-                title="अजून कोणी कामगार जोडलेला नाही"
+                title="अजून कोणाचंही नाव जोडलेलं नाही"
                 /*
                  * Was one 12px compound sentence naming QR, phone number and OTP
                  * at once — three unfamiliar ideas before any action. Now it is
                  * one short line saying what to do; the mechanics live inside the
                  * QR sheet, at the moment they are actually needed.
                  */
-                subtitle="खालचं बटण दाबा आणि कामगाराला QR दाखवा."
+                subtitle="खालचं बटण दाबा आणि समोरच्याला QR दाखवा."
                 action={onInviteWorker ? (
                     <button
                         type="button"

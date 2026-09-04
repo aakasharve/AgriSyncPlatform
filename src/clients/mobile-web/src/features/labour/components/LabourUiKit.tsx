@@ -114,7 +114,7 @@ export const MoneyLine: React.FC<{ balance: LabourBalance }> = ({ balance }) => 
     if (owe) {
         return (
             <span className="mt-1 block text-[17px] font-extrabold text-emerald-700">
-                {inr(amount)} द्यायचे
+                {inr(amount)} बाकी
             </span>
         );
     }
@@ -134,12 +134,12 @@ export const MoneyLine: React.FC<{ balance: LabourBalance }> = ({ balance }) => 
 
 export const MukadamBadge: React.FC<{ sub?: boolean }> = ({ sub }) => (
     <span className={`rounded-lg border px-2.5 py-1 text-[15px] font-bold ${sub ? 'border-blue-100 bg-blue-50 text-blue-700' : 'border-violet-100 bg-violet-50 text-violet-700'}`}>
-        {sub ? 'उप-मुकादम' : 'मुकादम'}
+        {sub ? 'उप-जबाबदार' : 'जबाबदार'}
     </span>
 );
 
 export const TaskBadge: React.FC<{ task: string }> = ({ task }) => (
-    <span className="rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1 text-[15px] font-bold text-blue-700">{task} टीम</span>
+    <span className="rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1 text-[15px] font-bold text-blue-700">फक्त {task}साठी</span>
 );
 
 export const TempBadge: React.FC = () => (
@@ -153,7 +153,7 @@ export const TempBadge: React.FC = () => (
  * much the app knows. Now says the thing plainly in Marathi.
  */
 export const NameOnlyBadge: React.FC = () => (
-    <span className="rounded-lg bg-stone-100 px-2.5 py-1 text-[15px] font-bold text-stone-500">फक्त नाव</span>
+    <span className="rounded-lg bg-stone-100 px-2.5 py-1 text-[15px] font-bold text-stone-500">फक्त नाव माहीत</span>
 );
 
 /** A tappable person card (hub + team lists). */
@@ -251,7 +251,7 @@ export const BackHeader: React.FC<{ title: string; onBack: () => void }> = ({ ti
 export const BalanceCard: React.FC<{ balance: LabourBalance; why?: string; settleLabel: string; onAdvance: () => void; onSettle: () => void; showActions?: boolean }> = ({ balance, why, settleLabel, onAdvance, onSettle, showActions = true }) => {
     const net = netBalance(balance);
     const tiles: [string, string][] = [
-        ['काम झालं', balance.recorded === null ? '—' : inr(balance.recorded)],
+        ['कामाचे पैसे', balance.recorded === null ? '—' : inr(balance.recorded)],
         // Phase 4 (D-H8) — `null` = withheld by view; `—`, never a fabricated ₹0.
         ['दिलं', balance.paid === null ? '—' : inr(balance.paid)],
     ];

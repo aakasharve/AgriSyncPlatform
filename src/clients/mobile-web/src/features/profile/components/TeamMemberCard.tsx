@@ -118,7 +118,7 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onDelete
                         summary can never clip off the right edge. */}
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                         <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${isPartner ? 'border-blue-100 bg-blue-50 text-blue-700' : 'border-orange-100 bg-orange-50 text-orange-700'}`}>
-                            {isPartner ? 'भागीदार · Partner' : 'कामगार · Worker'}
+                            {isPartner ? 'भागीदार' : 'कामाला येणारे'}
                         </span>
                     </div>
                 </div>
@@ -139,7 +139,7 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onDelete
                 <div className="animate-in fade-in slide-in-from-top-1 border-t border-slate-100 bg-slate-50/50 px-3 py-3 duration-200">
                     {labourAccess && (
                         <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">
-                            हा सदस्य काय करू शकतो? · What can they do?
+                            याला काय करता येईल?
                         </p>
                     )}
                     {/* LABOUR_PHASE2 Phase 5 — the real one, and now the only one.
@@ -180,7 +180,7 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onDelete
                                             <ClipboardList size={18} />
                                         </span>
                                         <span className="min-w-0 flex-1">
-                                            <span className="block text-sm font-bold text-slate-800">कामगारांची जबाबदारी आहे</span>
+                                            <span className="block text-sm font-bold text-slate-800">माणसांची जबाबदारी आहे</span>
                                             {responsibilityEndLine(labourAccess.expiresAtUtc) !== '' && (
                                                 <span className="block text-[11px] leading-snug text-slate-500">
                                                     {responsibilityEndLine(labourAccess.expiresAtUtc)}

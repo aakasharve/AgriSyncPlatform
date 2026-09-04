@@ -43,13 +43,13 @@ const MukadamDetail: React.FC<Props> = ({ data, personId, onOpenPerson, onOpenMu
                         {m.taskScope && <TaskBadge task={m.taskScope} />}
                         {m.temporary && <TempBadge />}
                     </div>
-                    <div className="mt-1.5 text-[11px] text-slate-500">{sub ? `${appointedBy} नी नेमला` : 'सर्व कारकुनी काम · तुम्ही नेमला'}</div>
+                    <div className="mt-1.5 text-[11px] text-slate-500">{sub ? `${appointedBy}नी नेमला` : 'सगळं काम · तुम्ही नेमला'}</div>
                 </div>
             </div>
 
             <BalanceCard
                 balance={m.balance}
-                settleLabel="सेटल"
+                settleLabel="पैसे द्या"
                 onAdvance={onAdvance}
                 onSettle={onSettle}
                 showActions={SHOW_MONEY_ACTIONS}
@@ -78,7 +78,7 @@ const MukadamDetail: React.FC<Props> = ({ data, personId, onOpenPerson, onOpenMu
               * it. The parenthetical count is now shown only when the value
               * is actually known; no new word is introduced.
               */}
-            <GroupLabel>याची माणसं · his team{m.memberIds != null ? ` (${members.length})` : ''}</GroupLabel>
+            <GroupLabel>याच्यासोबत आलेली माणसं{m.memberIds != null ? ` (${members.length})` : ''}</GroupLabel>
             {members.map((id) => {
                 const person = data.people[id];
                 const isMukadam = person.role !== 'worker';

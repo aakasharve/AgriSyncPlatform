@@ -32,9 +32,9 @@ describe('MukadamDetail — screen honesty (Decision 4b)', () => {
         expect(screen.queryByText('सेटल')).toBeNull();
     });
 
-    it('still shows the real balance figures (काम झालं / दिलं / बाकी)', () => {
+    it('still shows the real balance figures (कामाचे पैसे / दिलं / बाकी)', () => {
         render(<MukadamDetail {...baseProps()} personId="rokade" />);
-        expect(screen.getByText('काम झालं')).toBeInTheDocument();
+        expect(screen.getByText('कामाचे पैसे')).toBeInTheDocument();
         expect(screen.getByText('दिलं')).toBeInTheDocument();
     });
 
@@ -69,7 +69,7 @@ describe('MukadamDetail — "his team" count is honest about unknown vs. genuine
 
     it('shows the real count when memberIds is a known list (रोकडे: 3 real members)', () => {
         render(<MukadamDetail {...baseProps()} personId="rokade" />);
-        expect(screen.getByText(/his team \(3\)/)).toBeInTheDocument();
+        expect(screen.getByText(/याच्यासोबत आलेली माणसं \(3\)/)).toBeInTheDocument();
     });
 
     it('does not claim "his team (0)" when memberIds is unknown — the server always sends null, this is not a genuine zero', () => {
@@ -81,7 +81,7 @@ describe('MukadamDetail — "his team" count is honest about unknown vs. genuine
             },
         };
         render(<MukadamDetail {...baseProps()} data={dataWithUnknownTeam} personId="rokade" />);
-        expect(screen.queryByText(/his team \(0\)/)).toBeNull();
-        expect(screen.getByText(/his team/)).toBeInTheDocument();
+        expect(screen.queryByText(/याच्यासोबत आलेली माणसं \(0\)/)).toBeNull();
+        expect(screen.getByText(/याच्यासोबत आलेली माणसं/)).toBeInTheDocument();
     });
 });

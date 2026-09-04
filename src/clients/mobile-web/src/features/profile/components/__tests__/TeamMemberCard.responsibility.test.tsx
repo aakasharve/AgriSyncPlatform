@@ -58,10 +58,10 @@ describe('जबाबदारी द्या (D5)', () => {
         renderCard({ canManage: true, isEditable: true, saving: false, expiresAtUtc: end, onChange });
         openCard();
 
-        expect(screen.getByText('कामगारांची जबाबदारी आहे')).toBeTruthy();
+        expect(screen.getByText('माणसांची जबाबदारी आहे')).toBeTruthy();
         expect(screen.getByText('4 सप्टेंबरपर्यंत · नंतर जबाबदारी आपोआप संपेल')).toBeTruthy();
 
-        fireEvent.click(screen.getByText('कामगारांची जबाबदारी आहे'));
+        fireEvent.click(screen.getByText('माणसांची जबाबदारी आहे'));
         expect(onChange).toHaveBeenCalledWith(false, null);
     });
 

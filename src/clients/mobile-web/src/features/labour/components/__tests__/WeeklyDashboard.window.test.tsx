@@ -102,10 +102,10 @@ describe('WeeklyDashboard — the heading follows the window', () => {
     });
 });
 
-describe('WeeklyDashboard — तपासायचं is the approval inbox, not a statistic', () => {
+describe('WeeklyDashboard — तपासा is the approval inbox, not a statistic', () => {
     afterEach(() => cleanup());
 
-    // FOUNDER RULING (Task 11): तपासायचं is work waiting on HIM, so it follows
+    // FOUNDER RULING (Task 11): तपासा is work waiting on HIM, so it follows
     // the oversight design language — a full-width strip with a count and a
     // chevron — and it is deliberately NOT window-scoped server-side
     // (`GetLabourDataHandler`: "`Pending` deliberately does NOT move with the
@@ -115,11 +115,11 @@ describe('WeeklyDashboard — तपासायचं is the approval inbox, no
         dashboard: { ...LABOUR_MOCK.dashboard, pending },
     });
 
-    it('renders तपासायचं as a full-width strip, outside the stat tile grid', () => {
+    it('renders तपासा as a full-width strip, outside the stat tile grid', () => {
         render(<WeeklyDashboard {...baseProps()} data={LABOUR_MOCK} />);
 
         const strip = screen.getByTestId('labour-review-strip');
-        expect(strip).toHaveTextContent('तपासायचं');
+        expect(strip).toHaveTextContent('तपासा');
         // It is no longer one of the grid's tiles.
         expect(screen.getByTestId('labour-stat-grid')).not.toContainElement(strip);
     });
@@ -159,10 +159,10 @@ describe('WeeklyDashboard — absence stays absence under every window', () => {
         dashboard: { ...LABOUR_MOCK.dashboard, manDays },
     });
 
-    it.each(LABOUR_WINDOW_ORDER)('renders "—" for an unknown मजूर-दिवस under %s — never 0, never "null"', (window) => {
+    it.each(LABOUR_WINDOW_ORDER)('renders "—" for an unknown एकूण हजेरी under %s — never 0, never "null"', (window) => {
         render(<WeeklyDashboard {...baseProps(window)} data={withManDays(null)} />);
 
-        const label = screen.getByText('मजूर-दिवस');
+        const label = screen.getByText('एकूण हजेरी');
         expect(label.previousElementSibling?.textContent).toBe('—');
         expect(screen.queryByText('null')).toBeNull();
     });
@@ -170,7 +170,7 @@ describe('WeeklyDashboard — absence stays absence under every window', () => {
     it.each(LABOUR_WINDOW_ORDER)('still renders a genuine 0 as 0 under %s', (window) => {
         render(<WeeklyDashboard {...baseProps(window)} data={withManDays(0)} />);
 
-        const label = screen.getByText('मजूर-दिवस');
+        const label = screen.getByText('एकूण हजेरी');
         expect(label.previousElementSibling?.textContent).toBe('0');
     });
 });

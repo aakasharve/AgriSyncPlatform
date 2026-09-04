@@ -110,9 +110,9 @@ describe('AttendanceResult — the Task 1.1 panel-2 screen', () => {
             { id: 'b', type: 'hired', workerNames: ['गणेश'], shiftId: 'half' } as unknown as AgriLogResponse['labour'][number],
         ]);
         expect(screen.getByText('एक गोष्ट स्पष्ट करा')).toBeInTheDocument();
-        expect(screen.getByText('गणेश आज दोन कामांत दिसतोय — एकात पूर्ण, दुसऱ्यात अर्धा. आजची हजेरी कोणती?')).toBeInTheDocument();
-        expect(screen.getByText('एकदाच स्पष्ट करा; दोन्ही कामांच्या नोंदी तशाच राहतील.')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'पूर्ण' })).toBeInTheDocument();
+        expect(screen.getByText('गणेश आज दोन कामांत दिसतोय — एकात आला, दुसऱ्यात अर्धा. आजची हजेरी कोणती?')).toBeInTheDocument();
+        expect(screen.getByText('एकदाच स्पष्ट करा — दोन्ही कामांचं जे सांगितलं ते तसंच राहील.')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'आला' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'अर्धा' })).toBeInTheDocument();
     });
     it('बदल करा switches to the edit surface', () => {
@@ -140,7 +140,7 @@ describe('AttendanceResult — display dedup and the contradiction gate', () => 
         expect(confirm).toBeDisabled();
         fireEvent.click(confirm);
         expect(onConfirm).not.toHaveBeenCalled();
-        fireEvent.click(screen.getByRole('button', { name: 'पूर्ण' }));
+        fireEvent.click(screen.getByRole('button', { name: 'आला' }));
         expect(screen.queryByText('एक गोष्ट स्पष्ट करा')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'बरोबर' }));
         expect(onConfirm).toHaveBeenCalledTimes(1);

@@ -8,7 +8,7 @@
  *
  * Three contracts, in descending order of how much damage breaking them does:
  *
- *   13.3 — P9, THE SACRED ONE. A headcount-only log ("आज ८ मजूर होते")
+ *   13.3 — P9, THE SACRED ONE. A headcount-only log ("आज ८ जण होते")
  *          renders NO identity prompt of any kind. Asserted structurally
  *          (no warning role, no urgency colour, no number anywhere on the
  *          opt-in) and behaviourally (the roster is not even fetched), so
@@ -116,7 +116,7 @@ describe('Task 13.3 — headcount-only logging is untouched (P9, Scenario 1)', (
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     };
 
-    /** "आज ८ मजूर होते" — a headcount and nothing else. */
+    /** "आज ८ जण होते" — a headcount and nothing else. */
     const headcountOnlyData = (): LabourData => ({
         ...EMPTY_LABOUR_DATA,
         review: [{
@@ -152,8 +152,8 @@ describe('Task 13.3 — headcount-only logging is untouched (P9, Scenario 1)', (
     it('renders the headcount exactly as reported, and attribution never restates it', () => {
         renderHost();
 
-        // ८ मजूर — the farmer's own number, unchanged and unqualified.
-        expect(screen.getByText('८ मजूर')).toBeInTheDocument();
+        // ८ जण — the farmer's own number, unchanged and unqualified.
+        expect(screen.getByText('८ जण')).toBeInTheDocument();
 
         const card = screen.getByTestId(`review-card-${LOG_ID}`);
         // No "0/8", no "८ पैकी ०", no percentage — nothing that turns an
@@ -193,7 +193,7 @@ describe('Task 13.3 — headcount-only logging is untouched (P9, Scenario 1)', (
         // Any nag needs a number ("5 workers unidentified", "0/8", "37%").
         // This control has none, in either digit system.
         expect(trigger.textContent).not.toMatch(/[0-9०-९]/);
-        expect(trigger.textContent).toContain('ऐच्छिक');
+        expect(trigger.textContent).toContain('नावं जोडाहवं तर');
 
         // Nothing of the picker proper exists yet: no panel, no roster rows,
         // no text field, no already-attached strip.
@@ -224,7 +224,7 @@ describe('Task 13.3 — headcount-only logging is untouched (P9, Scenario 1)', (
         );
 
         expect(screen.queryByTestId('fo-picker')).toBeNull();
-        expect(screen.getByText('८ मजूर')).toBeInTheDocument();
+        expect(screen.getByText('८ जण')).toBeInTheDocument();
         expect(mockFetch).not.toHaveBeenCalled();
     });
 });
@@ -306,7 +306,7 @@ describe('Task 13.2 — duplicate names stay distinguishable, never merged', () 
         expect(screen.getAllByText('बाळू')).toHaveLength(3);
         expect(screen.getByText('बाळू शिंदे')).toBeInTheDocument();
         // The two with nothing but a name say so, and carry distinct tags.
-        expect(screen.getAllByText('सारखं नाव — वेगळी व्यक्ती')).toHaveLength(2);
+        expect(screen.getAllByText('सारखं नाव — माणूस वेगळा')).toHaveLength(2);
         expect(screen.getByTestId(`fo-tag-${BALU_NO_FULL.id}`).textContent)
             .not.toBe(screen.getByTestId(`fo-tag-${BALU_ALSO_NO_FULL.id}`).textContent);
     });
@@ -509,7 +509,7 @@ describe('Task 13.1 — add a person', () => {
         fireEvent.click(screen.getByTestId('fo-add'));
 
         await waitFor(() => expect(onToast).toHaveBeenCalledWith(
-            'बाळू ची नोंद झाली, पण या कामाला लावता आलं नाही — पुन्हा प्रयत्न करा',
+            'बाळूचं नाव यादीत आलं, पण या कामाला लावता आलं नाही — पुन्हा प्रयत्न करा',
         ));
         // The person still exists, so the row is there to retry against.
         expect(screen.getByTestId(`fo-row-${BALU_NO_FULL.id}`)).toBeInTheDocument();
@@ -702,7 +702,7 @@ describe('Phase 6 — the empty roster teaches by example, and creates nobody', 
         renderPicker();
         await openPicker();
 
-        expect(screen.getByText('माणसं आणत आहोत…')).toBeInTheDocument();
+        expect(screen.getByText('नावांची यादी येत आहे…')).toBeInTheDocument();
         expect(screen.queryByTestId('fo-example-names')).toBeNull();
 
         releaseRoster([]);

@@ -685,7 +685,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                         isTranscribing={voiceStreamingPhase === 'transcribing'}
                     />
                     {!liveCaption && voiceStreamingPhase !== 'transcribing' && (
-                        <div className="text-sm text-stone-400 max-w-xs mx-auto mt-2 italic">Listening carefully to your log...</div>
+                        <div className="text-sm text-stone-400 max-w-xs mx-auto mt-2 italic">श्रम साथी तुम्ही जे बोललात ते समजून घेत आहे</div>
                     )}
                 </div>
                 )

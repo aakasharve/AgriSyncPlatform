@@ -162,9 +162,9 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                             : <>{disagreement.uniqueNames.join(', ')}.</>}
                     </span>
                     {disagreement.anchored != null && (
-                        <> आजच्या कामाच्या नोंदीत {disagreement.anchored.headcount} जण आहेत.</>
+                        <> आजच्या कामात {disagreement.anchored.headcount} जण होते, असं आधी समजलं होतं.</>
                     )}
-                    {' '}दोन्ही नोंदी तशाच राहतील.
+                    {' '}दोन्ही गोष्टी तशाच राहतील.
                 </div>
             )}
 

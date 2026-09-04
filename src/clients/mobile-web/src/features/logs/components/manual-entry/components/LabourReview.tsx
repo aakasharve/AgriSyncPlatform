@@ -79,7 +79,7 @@ const LabourReview: React.FC<LabourReviewProps> = ({ labourEntries, totalWorkerC
                         not to replace. */}
                     <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700">{t('workSummary.workBreakdown')}</p>
                     <p className="mt-1 text-sm font-semibold text-stone-700">
-                        Total workers: {totalWorkerCount} ({labourEntries.map(entry => {
+                        {language === 'mr' ? `एकूण ${totalWorkerCount} जण` : `Total workers: ${totalWorkerCount}`} ({labourEntries.map(entry => {
                             const c = resolveCount(entry);
                             return c != null ? formatCount(c) : UNKNOWN;
                         }).join(' + ')})
@@ -104,7 +104,7 @@ const LabourReview: React.FC<LabourReviewProps> = ({ labourEntries, totalWorkerC
                                 reused as-is, not invented. */}
                             <span className="text-sm font-bold text-stone-800">
                                 {language === 'mr'
-                                    ? `${count != null ? formatCount(count) : UNKNOWN} मजूर`
+                                    ? `${count != null ? formatCount(count) : UNKNOWN} जण`
                                     : `${count != null ? count : UNKNOWN} workers`}
                             </span>
                         </div>

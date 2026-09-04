@@ -288,12 +288,12 @@ const EXPECTED_MR: Record<keyof OversightTranslations, string> = {
     // (d) founder-approved, Task 15 (Labour V2 R1) — verbatim from the
     // replacement table for `CropSelector.tsx`'s remaining English dev
     // copy. See `oversightTranslations.ts`'s header, "TASK 15".
-    readyToLogLabel: 'कामे सांगण्यासाठी तयार',
+    readyToLogLabel: 'कामं सांगायला तयार',
     entireFarmOverviewLabel: 'एकूण',
     plotCountUnitSingular: 'प्लॉट',
     plotCountUnitPlural: 'प्लॉट',
     selectedCountUnitSingular: 'निवडला',
-    selectedCountUnitPlural: 'निवडले',
+    selectedCountUnitPlural: 'निवडलेत',
 };
 
 // English is NOT founder-gated, so it is deliberately left unpinned —

@@ -30,7 +30,7 @@ describe('SetupHubMenu — Labour row honesty (Task 7)', () => {
 
     it('does not claim हजेरी (attendance) in the Labour row subtitle', () => {
         render(<SetupHubMenu {...baseProps()} onOpenLabour={vi.fn()} />);
-        expect(screen.getByText('कामाच्या नोंदी')).toBeInTheDocument();
+        expect(screen.getByText('कामाचा हिशोब')).toBeInTheDocument();
         expect(screen.queryByText(/हजेरी/)).toBeNull();
     });
 
@@ -46,7 +46,7 @@ describe('SetupHubMenu — Labour row honesty (Task 7)', () => {
     // claim Task 7 already removed from this same string.
     it('does not claim उचल (advance) in the Labour row subtitle', () => {
         render(<SetupHubMenu {...baseProps()} onOpenLabour={vi.fn()} />);
-        expect(screen.getByText('कामाच्या नोंदी')).toBeInTheDocument();
+        expect(screen.getByText('कामाचा हिशोब')).toBeInTheDocument();
         expect(screen.queryByText(/उचल/)).toBeNull();
     });
 });

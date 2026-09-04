@@ -375,7 +375,7 @@ describe('CropSelector — Task 15 (Labour V2 R1): remaining English literals re
         expect(screen.queryByText('Overview')).not.toBeInTheDocument();
     });
 
-    it('a selected plot in the tray shows "कामे सांगण्यासाठी तयार", never "Ready to Log"', () => {
+    it('a selected plot in the tray shows "कामं सांगायला तयार", never "Ready to Log"', () => {
         render(
             <CropSelector
                 mode="log"
@@ -387,7 +387,7 @@ describe('CropSelector — Task 15 (Labour V2 R1): remaining English literals re
             />,
         );
 
-        expect(screen.getByText('कामे सांगण्यासाठी तयार')).toBeInTheDocument();
+        expect(screen.getByText('कामं सांगायला तयार')).toBeInTheDocument();
         expect(screen.queryByText('Ready to Log')).not.toBeInTheDocument();
     });
 

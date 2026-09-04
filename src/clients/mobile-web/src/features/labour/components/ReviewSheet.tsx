@@ -65,7 +65,7 @@ interface Props {
     history?: DailyLog[];
 }
 
-const DISPUTE_REASON = 'मालकाने या नोंदीवर शंका घेतली आहे — कामगाराला विचारायचं आहे.';
+const DISPUTE_REASON = 'या नोंदीवर शंका आहे — एकदा विचारून घ्यायचं आहे.';
 
 // The on-card confirm animation (green fill + checkmark + collapse) plays
 // for CONFIRM_ANIM_MS, THEN the undo bar shows for UNDO_WINDOW_MS before the
@@ -315,7 +315,7 @@ const ReviewFacts: React.FC<{ item: ReviewItem }> = ({ item }) => {
                 testId={`review-fact-count-${item.id}`}
                 icon={<Users size={16} />}
                 known={count != null}
-                value={`${count != null ? toMr(count) : UNKNOWN} मजूर`}
+                value={`${count != null ? toMr(count) : UNKNOWN} जण`}
             />
             <Fact
                 testId={`review-fact-task-${item.id}`}
@@ -634,7 +634,7 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                 {/* Taller undo bar (below) needs more clearance so it never covers the last card. */}
                 <div className={`flex flex-col gap-2.5 overflow-y-auto p-3.5 ${topUndo ? 'pb-44' : ''}`}>
                     <HelpNote
-                        what="रोजच्या नोंदी इथे तुम्ही मंजूर करता — तुमच्या स्वतःच्या असोत वा तुमच्या माणसांच्या."
+                        what="रोजच्या नोंदी इथे तुम्ही मंजूर करता — स्वतःच्या किंवा तुमच्या माणसांच्या."
                         act="बरोबर असेल तर 'मंजूर', काही चुकलं असेल तर 'शंका' — नंतर विचारता येतं."
                         why="चुका आधीच पकडल्या जातात व हिशोब बरोबर राहतो. ज्याच्यावर विश्वास दिला, त्याच्या नोंदी इथे येत नाहीत — आपोआप मंजूर."
                         label="तपासणी म्हणजे काय?"
@@ -713,7 +713,7 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                     {items.length === 0 && (
                         <div className="py-8 text-center">
                             <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600"><Check size={30} /></div>
-                            <p className="text-[20px] font-bold text-stone-800">फार्म बुक अद्ययावत आहे</p>
+                            <p className="text-[20px] font-bold text-stone-800">सगळ्या नोंदी तपासून झाल्या</p>
                             <p className="mt-1.5 text-[17px] text-stone-500">तपासायला काही उरलं नाही.</p>
                         </div>
                     )}
@@ -744,7 +744,7 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                         <div className="flex flex-col gap-2.5">
                             <span className="text-[17px] font-bold">{undoLabel}</span>
                             <button type="button" data-testid="review-undo-button" onClick={() => undo(topUndo.batchId)} className="flex min-h-[60px] w-full items-center justify-center gap-2.5 rounded-xl bg-white/20 px-4 py-3.5 text-[19px] font-extrabold active:scale-95">
-                                <Undo2 size={22} /> पूर्ववत करा
+                                <Undo2 size={22} /> मागे घ्या
                             </button>
                         </div>
                         <div className="h-1 w-full overflow-hidden rounded-full bg-white/20">

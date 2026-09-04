@@ -52,7 +52,7 @@ const labourLog = (): DailyLog => ({
     financialSummary: { totalLabourCost: 1600, totalInputCost: 0, totalMachineryCost: 0, grandTotal: 1600 },
 } as unknown as DailyLog);
 
-// BUG 2 (2026-08-10): a COUNT-ONLY entry — the farmer said "सहा मजूर", no
+// BUG 2 (2026-08-10): a COUNT-ONLY entry — the farmer said "सहा जण", no
 // names, no gender split. The parser sets `count` and leaves
 // maleCount/femaleCount unset, which is exactly the shape
 // domain/logs/labourHeadcount.ts exists to resolve.
@@ -154,8 +154,8 @@ describe('LabourHub — "just logged" labour summary (Task 3.5)', () => {
         );
 
         expect(screen.getByTestId('labour-just-logged-card')).toBeInTheDocument();
-        // Devanagari digits, matching LabourDataPoints' `N मजूर` chip.
-        const people = screen.getByText('६ मजूर');
+        // Devanagari digits, matching LabourDataPoints' `N जण` chip.
+        const people = screen.getByText('६ जण');
         expect(people).toBeInTheDocument();
         // Farmer-readable sizing rule for this card: body text is 16px+.
         expect(people.className).toContain('text-[16px]');
@@ -194,14 +194,14 @@ describe('LabourHub — "just logged" labour summary (Task 3.5)', () => {
     /**
      * Task 29 (spec: 2026-08-28-labour-v2-release-1) — `sumLabourHeadcount`
      * returned `0` for a labour event that stated no headcount at all, so
-     * this card rendered "० मजूर": zero workers, with ₹1,800 paid to them.
+     * this card rendered "० जण": zero workers, with ₹1,800 paid to them.
      * Same defect BUG 2 fixed for the count-only shape, one shape further
      * out. Unknown renders as the em-dash — the existing "we were not told"
      * mark this codebase already uses (ReviewSheet's ReviewFacts,
-     * LabourReview.tsx @ 0a401294) — reusing the SAME `N मजूर` line, no new
+     * LabourReview.tsx @ 0a401294) — reusing the SAME `N जण` line, no new
      * Marathi string.
      */
-    it('renders "— मजूर", never "० मजूर", when the log states no headcount at all', () => {
+    it('renders "— जण", never "० जण", when the log states no headcount at all', () => {
         render(
             <LabourHub
                 {...baseProps()}
@@ -212,8 +212,8 @@ describe('LabourHub — "just logged" labour summary (Task 3.5)', () => {
         );
 
         expect(screen.getByTestId('labour-just-logged-card')).toBeInTheDocument();
-        expect(screen.queryByText('० मजूर')).toBeNull();
-        expect(screen.getByText('— मजूर')).toBeInTheDocument();
+        expect(screen.queryByText('० जण')).toBeNull();
+        expect(screen.getByText('— जण')).toBeInTheDocument();
         // The money is real and still shown — the headcount is what we lack.
         expect(screen.getByText('₹1,800')).toBeInTheDocument();
     });
@@ -229,7 +229,7 @@ describe('LabourHub — "just logged" labour summary (Task 3.5)', () => {
         );
 
         expect(screen.getByTestId('labour-just-logged-card')).toBeInTheDocument();
-        expect(screen.queryByText('— मजूर')).toBeNull();
+        expect(screen.queryByText('— जण')).toBeNull();
     });
 });
 
@@ -245,7 +245,7 @@ describe('LabourHub — screen honesty (Decision 4b)', () => {
     it('shows an honest empty state (not a heading over nothing) when topLevelIds is empty', () => {
         render(<LabourHub {...baseProps()} />);
 
-        expect(screen.getByText('अजून कोणी कामगार जोडलेला नाही')).toBeInTheDocument();
+        expect(screen.getByText('अजून कोणाचंही नाव जोडलेलं नाही')).toBeInTheDocument();
         // Farmer-readability pass (2026-08-10): the subtitle used to name QR,
         // phone number and OTP in one 12px sentence — three unfamiliar ideas
         // before any action. It now states only the next physical step.
@@ -271,7 +271,7 @@ describe('LabourHub — screen honesty (Decision 4b)', () => {
 
     it('does NOT show the empty state once real people exist', () => {
         render(<LabourHub {...baseProps()} data={LABOUR_MOCK} />);
-        expect(screen.queryByText('अजून कोणी कामगार जोडलेला नाही')).toBeNull();
+        expect(screen.queryByText('अजून कोणाचंही नाव जोडलेलं नाही')).toBeNull();
     });
 
     it('hides हजेरी घ्या (capture unfinished) — but the हजेरी वही is never gated (Correction 5)', () => {
