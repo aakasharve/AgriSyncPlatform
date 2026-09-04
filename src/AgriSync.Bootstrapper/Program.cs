@@ -429,6 +429,43 @@ try
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.AlertDispatcherJob>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.SubscriptionReconciliationJob>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.WorkerRetentionJob>();
+
+    // Spec 2026-09-04-independent-db-verification (Task 5.1/5.2), founder ruling
+    // 2026-09-05. Ships the sync-rejection counter to CloudWatch as
+    // ShramSafal/Api -> MutationRejected: "ShramSafal tried to save a farmer
+    // action and the system rejected it".
+    //
+    // WHY IT MATTERS: /sync/push answers HTTP 200 whether or not the mutations
+    // inside it were applied, so a release can pass /health and /version while
+    // farmers cannot save attendance, work logs or corrections. Until now nothing
+    // in src/ called PutMetricData at all, so the deploy gate's error-rate check
+    // queried a metric that had never existed, got an empty set, and scored it
+    // GREEN.
+    //
+    // NO SEPARATE FEATURE FLAG, on purpose. This project has already shipped a
+    // capability that sat switched off in production and was never noticed; a
+    // second switch to forget is exactly that failure mode. It follows the
+    // environment instead. AGRISYNC_PUBLISH_METRICS=true force-enables it
+    // elsewhere (staging rehearsal); dev and test stay quiet because they have no
+    // AWS credentials and a publish failure would only be log noise.
+    var publishMetrics =
+        builder.Environment.IsProduction()
+        || string.Equals(
+            Environment.GetEnvironmentVariable("AGRISYNC_PUBLISH_METRICS"),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+
+    if (publishMetrics)
+    {
+        builder.Services.AddSingleton(_ =>
+            new AgriSync.Bootstrapper.Observability.MutationRejectedMetricCollector(
+                builder.Environment.EnvironmentName));
+        builder.Services.AddSingleton<Amazon.CloudWatch.IAmazonCloudWatch>(
+            _ => new Amazon.CloudWatch.AmazonCloudWatchClient());
+        builder.Services.AddSingleton<AgriSync.Bootstrapper.Observability.IMetricSink,
+            AgriSync.Bootstrapper.Observability.CloudWatchMetricSink>();
+        builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.MutationRejectedMetricPublisher>();
+    }
     // CEI §4.5 — daily sweep at 02:00 UTC that transitions past-due TestInstance rows to Overdue
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.TestOverdueSweeper>();
     // CEI Phase 3 §4.6 — nightly compliance evaluation sweep at 03:00 UTC
