@@ -424,3 +424,89 @@ pass). None is the required check.
 
 Local gates at the same commit: Domain **2005 passed / 1 skipped**, Architecture **107**,
 labour + related vitest **519**, `tsc` **0 errors**, RealPostgres labour set **100**.
+
+
+---
+
+# MERGE GATE — rebound to the final HEAD, 2026-09-04
+
+Everything above was written against `83d012ec`. **That is no longer the tree that merges.**
+Two things happened after it: the founder's Marathi word calls landed, and `main` moved.
+
+## The SHA this receipt is bound to
+
+**`cee5eb0f`** — `feat/labour-v2-r1`, the tree that will land in `main`.
+
+| | |
+|---|---|
+| Marathi copy applied | `61fbc03b` |
+| Same words swept off 21 sites outside Labour V2 | `208f5b90` |
+| Decision record · change manifest · applied report | `ddab7d7b` `a622c4bc` `9343cb0c` |
+| **`main` merged in** (`94f81807`, Stage A0 #70) | `cee5eb0f` |
+
+**`main` had moved and the PR did not know it.** GitHub still recorded the PR base as
+`b33403a3`, so the CI that passed on `9343cb0c` tested this branch against the *old* `main`.
+Since Stage A0 #70 touches the audit ledger and sync — areas Labour V2 also writes to —
+`main` was merged in and the whole gate re-run, so that what CI proves is what actually lands.
+The merge was clean: **zero conflicts**, and `ops/stage-a0/check-labour-v2-isolation.sh` —
+Stage A0's own guard, which arrived with that merge — **exits 0**.
+
+## Evidence on the integrated tree
+
+| Check | Result |
+|---|---|
+| Frontend `tsc --noEmit` | **0 errors** |
+| Frontend tests | **3340 / 3340 passed**, 335 files |
+| `ShramSafal.Domain.Tests` | **2010 passed**, 0 failed, 1 skipped |
+| `AgriSync.ArchitectureTests` | **107 passed**, 0 failed |
+| Stage A0 isolation guard | **exit 0** |
+
+CI on `9343cb0c` (branch against the old base) had already returned the required check green:
+**`CI Gate` success**, with `dotnet-ci`, `frontend-ci`, `arch-tests`, `sync-contract`, `eslint`,
+`security`, `legal-review-gate` and `no-stale-artifacts` all success. The same suite re-ran on
+`cee5eb0f`; its result is recorded in the merge receipt handed to the founder.
+
+**Two checks are red and neither belongs to this branch — measured, not assumed:**
+
+- **`AI Prompt Eval`** — has *never* passed. Every run of that workflow is a failure back to
+  2026-08-27 on `feat/dfes-companion`, a different branch entirely. On this SHA it fails in
+  "Start backend (background)": Kestrel's `BindAsync` is cancelled and the job reports
+  `backend never came up on :5048`. Nothing in this release is a backend startup change.
+- **`e2e`** — red on `main` itself (`94f81807`) and on `task/farm-foundation-a0`. It is the
+  established baseline, not a regression.
+
+Neither is the required check. `CI Gate` is.
+
+## The one thing still OPEN, and it is deliberate
+
+**Membership relationship ≠ operational authorisation.** `PendingOtpClaim`, `PendingApproval`
+and `Suspended` still reach the register, because all three gates filter on *non-terminal*
+(`status NOT IN (5,6)`) rather than on *operationally active*. **Not fixed here, and not
+accidentally marked fixed:** `LabourReadMembershipStatusRealPostgresTests` pins all six
+statuses of `ShramSafal.Domain.Farms.MembershipStatus`
+(`PendingOtpClaim=1 · PendingApproval=2 · Active=3 · Suspended=4 · Revoked=5 · Exited=6`),
+so today's behaviour is documented and any drift breaks a test.
+
+It belongs to the shared access model, not to Labour, and is the first question for the
+Multi-User work. `docs/superpowers/plans/precision/reports/closure-membership-report.md` §4
+also records a *wrong comment* still standing at `ShramSafalRepository.cs:1181-1182` — it
+numbers the statuses `0..3,5,6`, which would mislead the next person writing a status
+predicate. The SQL beneath it is correct. Left deliberately for that session to fix with the
+boundary itself.
+
+## Merging deploys nothing — verified in the triggers
+
+- `web-release.yml` — `workflow_dispatch` only; the file carries an explicit
+  "🛑 WORKFLOW_DISPATCH ONLY. NEVER `on: push`."
+- `android-release.yml` — `workflow_dispatch` plus `push: tags: v*`. A merge commit creates no
+  tag, so no APK is built.
+- No workflow deploys the API on a push to `main`.
+
+Release order, when the founder chooses it, stays **API → web → APK** (first tolerant build
+≥ vc21). That decision is not part of this gate.
+
+## Founder merge gate
+
+- [ ] **Merge `feat/labour-v2-r1` (`cee5eb0f`) into `main`.**
+      Merging is not deploying; nothing reaches a farmer from this action.
+
