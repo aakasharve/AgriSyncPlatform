@@ -209,7 +209,9 @@ export type { AttributedOperator, LabourEvent };
 // INPUT EVENTS (Fertilizers, Pesticides, etc.)
 // =============================================================================
 
-export type InputMethod = 'Spray' | 'Drip' | 'Drenching' | 'Soil' | 'paste_manual';
+// `fertigation` — see the InputMethodSchema note in AgriLogResponseSchema.ts.
+// Kept in lockstep with that enum by the header invariant on that file.
+export type InputMethod = 'Spray' | 'Drip' | 'Drenching' | 'Soil' | 'paste_manual' | 'fertigation';
 export type InputReason = 'Preventive' | 'Disease' | 'Pest' | 'Growth' | 'Deficiency' | 'Seller Advice' | 'Other' | 'defoliation' | 'root_growth' | 'nutrient_correction' | 'fruit_sizing' | 'disease_control';
 
 export interface InputMixItem {

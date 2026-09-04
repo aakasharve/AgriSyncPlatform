@@ -137,7 +137,6 @@ const DFES_APPROVED_COPY = {
         dailyLoopCarriedOne: 'From yesterday: {title}',
         dailyLoopCarriedMany: '({count} of these carried over)',
         dailyLoopClarity: '{done} done, {left} left',
-        morningNotificationTitle: 'See today\'s tasks',
         unlockSpokenLine: 'Well done! Now I have truly come to know your farm.',
     },
     mr: {
@@ -223,7 +222,6 @@ const DFES_APPROVED_COPY = {
         dailyLoopCarriedOne: 'काल पासून: {title}',
         dailyLoopCarriedMany: '(यातील {count} काल पासून)',
         dailyLoopClarity: '{done} पूर्ण, {left} बाकी',
-        morningNotificationTitle: 'आजची कामे पाहा',
         unlockSpokenLine: 'शाब्बास !!! आता मला तुमचं शेत आणि तुमची काम करण्याची पद्धत सविस्तर समजू लागली आहे',
     },
 } as const;

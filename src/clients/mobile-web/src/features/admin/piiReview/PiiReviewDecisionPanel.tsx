@@ -14,6 +14,7 @@ import React, { useMemo, useState } from 'react';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { tPiiReview, toPiiReviewLocale } from '../../../i18n/piiReviewTranslations';
 import type { PiiReviewQueueEntryDto } from './PiiReviewQueuePage';
+import { apiFetch } from '../../../infrastructure/api/apiFetch';
 
 export interface PiiReviewDecisionPanelProps {
     entry: PiiReviewQueueEntryDto;
@@ -31,7 +32,13 @@ async function defaultPostDecision(
     action: 'approve' | 'reject',
     note: string | null,
 ): Promise<void> {
-    const response = await fetch(
+    // `apiFetch`, not `fetch`. This is the WRITE half of PII review; the read
+    // half one file over was fixed in the same pass and this was missed because
+    // a template-literal call did not match the grep used to find them. Same two
+    // defects: a relative path reaches the WebView instead of the API in the
+    // APK, and `credentials: 'include'` is not authentication here — the route
+    // is gated by PiiReviewerRequirement, which reads the JWT.
+    const response = await apiFetch(
         `/shramsafal/admin/pii-review/${entryId}/${action}`,
         {
             method: 'POST',

@@ -50,12 +50,10 @@ import { LedgerRecognitionPanel } from '../../features/logs/components/LedgerRec
 import {
     stashPendingQuestionAnswer, } from '../../features/logs/services/pendingQuestionAnswer';
 import DailyLoopClarity from '../../features/logs/components/shramsathi/DailyLoopClarity';
-import DailyLoopInsight from '../../features/logs/components/shramsathi/DailyLoopInsight';
 import DayUnderstandingCard from '../../features/logs/components/shramsathi/DayUnderstandingCard';
 import SathiSaidCard from '../../features/logs/components/shramsathi/SathiSaidCard';
 import SavedScreenBack from '../../features/logs/components/shramsathi/SavedScreenBack';
 import SurfaceSection from '../../features/logs/components/shramsathi/SurfaceSection';
-import { buildDailyInsight } from '../../features/logs/intelligence/buildDailyInsight';
 import { findConfirmableTaskCloses, type TaskCloseCandidate } from '../../features/logs/services/taskAutoClose';
 import TaskCloseConfirm from '../../features/logs/components/shramsathi/TaskCloseConfirm';
 import { logger } from '../../infrastructure/observability/Logger';
@@ -248,23 +246,6 @@ export const renderSavedView = (ctx: AppRouterContext): React.ReactNode => {
                                 left={todayDayState.pendingCount}
                             />
                         )}
-
-                        {/* Task 1B (spec: dfes-companion-2026-07-11) — ONE daily
-                            intelligence fact from the farmer's own history,
-                            sitting directly BELOW the clarity line. Flag-gated
-                            OFF by default (byte-equivalent no-op). savedLog is
-                            derived the same way the recognition panel below
-                            derives it (from lastSavedLogIds[0] via history.find). */}
-                        {FEATURE_FLAGS.intelligenceInsights && (() => {
-                            const savedLogId = lastSavedLogIds && lastSavedLogIds.length > 0
-                                ? lastSavedLogIds[0]
-                                : undefined;
-                            const savedLog = savedLogId
-                                ? history.find(l => l.id === savedLogId)
-                                : undefined;
-                            const insight = buildDailyInsight(history, savedLog, savedLog?.date ?? '');
-                            return insight && insight.render ? <DailyLoopInsight insight={insight} /> : null;
-                        })()}
 
                         {/* DFES recognition surface (dfes-companion-2026-07-11). The panel
                             renders unconditionally; each child self-gates on its flag

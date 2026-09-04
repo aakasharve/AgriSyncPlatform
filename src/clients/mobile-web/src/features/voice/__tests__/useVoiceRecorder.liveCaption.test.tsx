@@ -35,6 +35,22 @@ import { renderHook, act } from '@testing-library/react';
 
 // Hoisted mocks (Vitest requires module-scope variable for the factory).
 const mockConsume = vi.fn();
+// 2026-08-31 — `DEFAULT_VOICE_CONFIG.useStreamingParse` now ships OFF, because the
+// streaming path creates no AiJob and that zeroed DFES scoring in production (see
+// infrastructure/voice/types.ts and __tests__/streamingParseDisabled.test.ts).
+//
+// The streaming CODE still exists and must stay covered, so this suite turns the
+// flag on for itself instead of relying on the shipped default. Without this the
+// six tests below silently stop exercising Stage 1 and pass vacuously — they would
+// assert a fallback that ran for the wrong reason.
+vi.mock('../../../infrastructure/voice/types', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../../infrastructure/voice/types')>();
+    return {
+        ...actual,
+        DEFAULT_VOICE_CONFIG: { ...actual.DEFAULT_VOICE_CONFIG, useStreamingParse: true },
+    };
+});
+
 vi.mock('../../../infrastructure/ai/TranscribeStreamConsumer', () => ({
     TranscribeStreamConsumer: class {
         consume = mockConsume;

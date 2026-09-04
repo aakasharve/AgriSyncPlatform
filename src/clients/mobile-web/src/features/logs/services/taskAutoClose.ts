@@ -35,7 +35,7 @@
  * PURE: no Date.now(), no network, no React. `todayLocalDate` is passed in
  * by the caller (mirrors dfesScheduleWindow.ts's contract).
  *
- * FIX [CRITICAL, mirrors features/logs/intelligence/insights.ts's FIX 1]:
+ * FIX [CRITICAL, mirrored the since-removed intelligence insight module]:
  * an activity is only match EVIDENCE for "this task got done" when the
  * farmer's own record actually says so. `activity.status === 'completed'`
  * or `status == null` (legacy log written before status existed — no
