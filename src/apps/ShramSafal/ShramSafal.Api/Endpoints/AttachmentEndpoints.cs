@@ -51,15 +51,22 @@ public static class AttachmentEndpoints
             var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
             var clientAppVersion = ResolveClientAppVersion(httpContext);
 
+            // Stage A0 / A3 — named arguments, deliberately. These leading arguments were
+            // positional, and removing the ActorRole slot below survived only because
+            // ClientCommandId: null happened to sit on the next line and raise CS1744.
+            // That is adjacency, not a design guarantee - the same silent-rebind class the
+            // sync path was hardened against. Named, any future removal is a build error.
+            // CreatedByUserId is deliberately the token-derived actorUserId, never
+            // request.CreatedByUserId: trusting the client's claim of who created an
+            // attachment would be an attribution regression.
             var command = new CreateAttachmentCommand(
-                request.FarmId,
-                request.LinkedEntityId,
-                request.LinkedEntityType,
-                request.FileName,
-                request.MimeType,
-                actorUserId,
-                request.AttachmentId,
-                EndpointActorContext.GetActorRole(user),
+                FarmId: request.FarmId,
+                LinkedEntityId: request.LinkedEntityId,
+                LinkedEntityType: request.LinkedEntityType,
+                FileName: request.FileName,
+                MimeType: request.MimeType,
+                CreatedByUserId: actorUserId,
+                AttachmentId: request.AttachmentId,
                 ClientCommandId: null,
                 ClientAppVersion: clientAppVersion,
                 AuditDeviceId: auditDeviceId,
@@ -136,13 +143,13 @@ public static class AttachmentEndpoints
             var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
             var clientAppVersion = ResolveClientAppVersion(httpContext);
 
+            // Stage A0 / A3 — named arguments; see the create call above for why.
             var command = new UploadAttachmentCommand(
-                id,
-                stream,
-                actorUserId,
-                file.ContentType,
-                file.FileName,
-                EndpointActorContext.GetActorRole(user),
+                AttachmentId: id,
+                FileStream: stream,
+                UploadedByUserId: actorUserId,
+                UploadedMimeType: file.ContentType,
+                ClientFileName: file.FileName,
                 ClientCommandId: null,
                 ClientAppVersion: clientAppVersion,
                 AuditDeviceId: auditDeviceId,
