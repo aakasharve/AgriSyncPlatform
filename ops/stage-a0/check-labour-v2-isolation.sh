@@ -34,13 +34,52 @@ OURS="$( { git diff --name-only "${BASE}...HEAD"
            git ls-files --others --exclude-standard
          } | sort -u )"
 
+# ── REVIEWED EXCEPTIONS ──────────────────────────────────────────────────────
+# Founder-reviewed and accepted overlaps. NOT an allowlist to grow casually:
+# every entry needs a recorded reason and a merge-order decision. Everything not
+# listed here must remain zero-overlap.
+#
+#   PushSyncBatchHandler.cs  (founder ruling 2026-09-04)
+#     A0 changes provenance/call-site safety: two command constructions become
+#     fully named, then lose their ActorRole argument.
+#     Labour V2 adds an attendance write path (RecordAttendanceMarkHandler + an
+#     attendance.mark case), riding the existing sync pipeline.
+#     Different semantic regions. No migration, no authority change.
+#     A0 LANDS FIRST so Labour V2 inherits the hardened construction rather than
+#     A0 being applied on top of the larger addition.
+REVIEWED=(
+"src/apps/ShramSafal/ShramSafal.Application/UseCases/Sync/PushSyncBatch/PushSyncBatchHandler.cs"
+)
+
 OVERLAP="$(comm -12 <(echo "${LABOUR_FILES}") <(echo "${OURS}"))"
 
-if [ -n "${OVERLAP}" ]; then
-  echo "LABOUR V2 ISOLATION VIOLATION - these files are also modified by ${LABOUR_REF}:"
-  echo "${OVERLAP}"
+UNREVIEWED=""
+ACCEPTED=""
+while IFS= read -r f; do
+  [ -z "${f}" ] && continue
+  hit=""
+  for r in "${REVIEWED[@]}"; do
+    [ "${f}" = "${r}" ] && hit=1 && break
+  done
+  if [ -n "${hit}" ]; then
+    ACCEPTED="${ACCEPTED}${f}"$'\n'
+  else
+    UNREVIEWED="${UNREVIEWED}${f}"$'\n'
+  fi
+done <<< "${OVERLAP}"
+
+TOTAL="$(echo "${LABOUR_FILES}" | wc -l | tr -d ' ')"
+
+if [ -n "${ACCEPTED}" ]; then
+  echo "REVIEWED OVERLAP (founder-accepted 2026-09-04, A0 merges first):"
+  echo "${ACCEPTED}"
+fi
+
+if [ -n "${UNREVIEWED}" ]; then
+  echo "LABOUR V2 ISOLATION VIOLATION - unreviewed files also modified by ${LABOUR_REF}:"
+  echo "${UNREVIEWED}"
   exit 1
 fi
 
-echo "Isolation OK: 0 of $(echo "${LABOUR_FILES}" | wc -l | tr -d ' ') Labour V2 files touched."
+echo "Isolation OK: 0 UNREVIEWED of ${TOTAL} Labour V2 files touched."
 exit 0
