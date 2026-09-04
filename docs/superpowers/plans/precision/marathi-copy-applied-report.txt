@@ -3,12 +3,19 @@ MARATHI WORD CALLS — ALL DONE
 Your 116 calls are in the code. 3340 tests green, zero type errors, lint clean.
 Nothing is deployed. Branch feat/labour-v2-r1, commits 61fbc03b + 208f5b90.
 
-  changed ..................... 96
-  your own words .............. 1   (#15)
-  rewritten, not deleted ...... 1   (#277 — your answer 2-b)
-  NOT applied ................. 1   (#160 — your answer 3-b)
+  changed ..................... 95   (of your 96)
+  your own words .............. 1    (#15)
+  rewritten, not deleted ...... 1    (#277 — your answer 2-b)
   kept as they are ............ 18
-  same word swept app-wide .... 21  (your answer 1-a)
+  NOT applied ................. 1    (#160 — your own answer 3-b)
+                                ---
+  your calls, in the code ..... 115 of 116
+
+  same words swept app-wide ... 21   (your answer 1-a)
+
+That is 118 edits in code. Slightly more than the calls, because #267 is two
+keys (पुरुष and महिला) and slightly fewer, because #207 and #208 turned out to
+be the same line.
 
 ==============================================================================
 CHANGED (96)
