@@ -19,11 +19,12 @@ namespace ShramSafal.Domain.Tests.Labour.Handlers;
 /// <see cref="CorrectLabourHandler"/>.
 ///
 /// <para>Two things this file exists to pin, which no integration test can pin
-/// as cheaply: (1) the AUTHORIZATION predicate is exactly
-/// PrimaryOwner/SecondaryOwner/Mukadam — a farm Worker must not rewrite labour
-/// truth, and the Mukadam (the person actually doing field verification) must
-/// NOT be locked out the way <c>IsUserOwnerOfFarmAsync</c> would; and (2) every
-/// rejection stages ZERO writes, which cannot rely on a rollback because
+/// as cheaply: (1) the AUTHORIZATION predicate is exactly owner-tier OR the
+/// owner's stored grant (D5, 2026-09-02 — a Mukadam no longer carries it by
+/// role) — a farm Worker must not rewrite labour truth, and the GRANTED
+/// Mukadam (the person actually doing field verification) must NOT be locked
+/// out the way <c>IsUserOwnerOfFarmAsync</c> would; and (2) every rejection
+/// stages ZERO writes, which cannot rely on a rollback because
 /// <c>TenantTransactionMiddleware</c> COMMITS whenever the pipeline returns
 /// without throwing — a 403 body is not an exception.</para>
 /// </summary>
@@ -77,11 +78,21 @@ public sealed class CorrectLabourHandlerTests
             removals);
 
     private static (FakeRepo Repo, FakeMutationStore Store, LabourAssignment Assignment) Scenario(
-        AppRole role = AppRole.Mukadam, Guid farmGuid = default, int? workerCount = 8)
+        AppRole role = AppRole.Mukadam, Guid farmGuid = default, int? workerCount = 8, bool? granted = null)
     {
         var farm = farmGuid == default ? FarmAGuid : farmGuid;
         var repo = new FakeRepo();
         repo.SetRole(FarmAGuid, CallerGuid, role);
+
+        // D5 (2026-09-02): the Mukadam role no longer carries labour authority,
+        // so this suite's acting foreman is a GRANTED one — the owner's switch
+        // is ON. The grant is READ from the fake, so these allow-cases prove
+        // the gate genuinely consults it. Pass granted: false for the denial.
+        if (granted ?? role == AppRole.Mukadam)
+        {
+            repo.GrantLabour(FarmAGuid, CallerGuid);
+        }
+
         var log = MakeLog(Guid.NewGuid(), farm);
         var assignment = MakeAssignment(Guid.NewGuid(), log.Id, workerCount);
         repo.SeedLog(log);
@@ -95,7 +106,7 @@ public sealed class CorrectLabourHandlerTests
     [InlineData(AppRole.PrimaryOwner)]
     [InlineData(AppRole.SecondaryOwner)]
     [InlineData(AppRole.Mukadam)]
-    public async Task Owners_and_the_Mukadam_may_correct(AppRole role)
+    public async Task Owners_and_a_granted_Mukadam_may_correct(AppRole role)
     {
         var (repo, store, assignment) = Scenario(role);
 
@@ -103,9 +114,31 @@ public sealed class CorrectLabourHandlerTests
             Command(assignment.Id, quantity: new LabourQuantityCorrection(6, null, null)));
 
         result.IsSuccess.Should().BeTrue(
-            "the Mukadam is exactly the person doing field verification — IsUserOwnerOfFarmAsync "
-            + "would have locked them out");
+            "the granted Mukadam is exactly the person doing field verification — "
+            + "IsUserOwnerOfFarmAsync would have locked them out (Mukadam admitted via the "
+            + "owner's switch since D5, 2026-09-02)");
         assignment.WorkerCount.Should().Be(6);
+    }
+
+    /// <summary>
+    /// D5 (2026-09-02): the flip side of the theory above. The same foreman
+    /// with the owner's switch OFF is refused, and the refusal stages nothing —
+    /// the role alone no longer opens any of the five governed actions.
+    /// </summary>
+    [Fact]
+    public async Task An_ungranted_Mukadam_is_Forbidden_with_zero_mutation()
+    {
+        var (repo, store, assignment) = Scenario(AppRole.Mukadam, granted: false);
+
+        var result = await BuildHandler(repo, store).HandleAsync(
+            Command(assignment.Id, quantity: new LabourQuantityCorrection(6, null, null)));
+
+        result.IsFailure.Should().BeTrue(
+            "founder master review 2026-09-02 (D5): one switch, owner-controlled — OFF means OFF");
+        result.Error.Code.Should().Contain("Forbidden");
+        assignment.WorkerCount.Should().Be(8, "a rejected correction must not touch the record");
+        repo.Corrections.Should().BeEmpty();
+        store.Stored.Should().BeEmpty("not even the idempotency row may be written");
     }
 
     [Theory]
@@ -545,6 +578,7 @@ public sealed class CorrectLabourHandlerTests
         private readonly Dictionary<Guid, FieldOperator> _operators = new();
         private readonly List<FieldOperatorWorkRow> _workRows = [];
         private readonly Dictionary<(Guid farmId, Guid userId), AppRole> _roles = new();
+        private readonly HashSet<(Guid farmId, Guid userId)> _labourGrants = [];
 
         public List<LabourCorrection> Corrections { get; } = [];
         public List<FieldOperatorWorkRow> AddedRows { get; } = [];
@@ -555,9 +589,13 @@ public sealed class CorrectLabourHandlerTests
         public void SeedOperator(FieldOperator o) => _operators[o.Id] = o;
         public void SeedWorkRow(FieldOperatorWorkRow r) => _workRows.Add(r);
         public void SetRole(Guid farmId, Guid userId, AppRole role) => _roles[(farmId, userId)] = role;
+        public void GrantLabour(Guid farmId, Guid userId) => _labourGrants.Add((farmId, userId));
 
         public override Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
             => Task.FromResult(_roles.TryGetValue((farmId, userId), out var role) ? (AppRole?)role : null);
+
+        public override Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, DateTime nowUtc, CancellationToken ct = default)
+            => Task.FromResult(_labourGrants.Contains((farmId, userId)));
 
         public override Task<DailyLog?> GetDailyLogByIdAsync(Guid dailyLogId, CancellationToken ct = default)
             => Task.FromResult(_logs.TryGetValue(dailyLogId, out var log) ? log : null);

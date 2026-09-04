@@ -39,7 +39,7 @@ public sealed class CreateFieldOperatorHandler(
         // ICallerFarmTenantScope, but a handler invoked from any other surface
         // must stand on its own) is preserved, not replaced.
         if (!await LabourManagementGate.IsAllowedAsync(
-                repository, command.FarmId.Value, command.CallerUserId.Value, ct))
+                repository, command.FarmId.Value, command.CallerUserId.Value, clock.UtcNow, ct))
         {
             return Result.Failure<FieldOperatorDto>(ShramSafalErrors.Forbidden);
         }

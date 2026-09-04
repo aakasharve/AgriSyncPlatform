@@ -21,6 +21,56 @@ public sealed class AiPromptBuilderTests
     }
 
     /// <summary>
+    /// FOUNDER RULING 2026-08-31 — ATTENDANCE IS A RECORD.
+    ///
+    /// He spoke "संतु रोकडे, चंदू रोकडे, हळदाका आणि विलास जाधव आज आले होते"
+    /// and the app answered "आज कोणतेही शेतीचे काम नोंदवले गेले नाही". The
+    /// model had understood perfectly — it named all four and asked what work
+    /// they did — but the prompt's "vague movement/presence only" bullet sent
+    /// the day to IRRELEVANT_INPUT, so nothing saved, and because nothing
+    /// saved the existing return-to-Labour navigation never fired either.
+    ///
+    /// His ruling: naming who came IS the हजेरी. It does not require a task.
+    ///
+    /// These assertions pin the three places that had to agree — a rule the
+    /// classification list still contradicted would just move the failure.
+    /// </summary>
+    [Fact]
+    public void VoicePrompt_TreatsNamedPeoplePresentAsAttendance()
+    {
+        var prompt = _builder.BuildVoiceParsingPrompt(CreateContext());
+
+        // 1. the rule exists at all
+        Assert.Contains("ATTENDANCE IS A RECORD", prompt, StringComparison.Ordinal);
+        Assert.Contains("dayOutcome = \"WORK_RECORDED\". NEVER IRRELEVANT_INPUT.", prompt, StringComparison.Ordinal);
+
+        // 2. the IRRELEVANT_INPUT bullet no longer swallows named people.
+        //    The old text was an unqualified "vague movement/presence only";
+        //    if it ever returns, this fails.
+        Assert.Contains("vague movement/presence with NOBODY named and NO count", prompt, StringComparison.Ordinal);
+
+        // 3. the classification list agrees — otherwise the model gets two
+        //    instructions and picks one.
+        Assert.Contains("OR if any", prompt, StringComparison.Ordinal);
+        Assert.Contains("Labour extraction is ALSO mandatory when PEOPLE ARE NAMED", prompt, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The other half of the same ruling: a presence phrase with NOBODY named
+    /// stays irrelevant. Without this the fix reads as "any speech is a log",
+    /// which would fabricate a हजेरी out of "आज शेतात जाऊन फिरून आलो".
+    /// </summary>
+    [Fact]
+    public void VoicePrompt_StillRejectsPresenceWithNobodyNamed()
+    {
+        var prompt = _builder.BuildVoiceParsingPrompt(CreateContext());
+
+        Assert.Contains("set dayOutcome = \"IRRELEVANT_INPUT\"", prompt, StringComparison.Ordinal);
+        // the activity must never be invented to make the entry look complete
+        Assert.Contains("Never invent one", prompt, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Phase 1.12 / SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 — the modular
     /// voice-parsing prompt must surface the five new voice-spine fields
     /// (`english`, `english_redacted`, `referenced_date`,

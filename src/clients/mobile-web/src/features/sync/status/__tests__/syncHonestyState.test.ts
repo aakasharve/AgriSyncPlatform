@@ -500,7 +500,7 @@ describe('every state in the model has a label in both languages', () => {
         // headline, and L5b ruled the short form there instead. Pinned anyway,
         // so the day it does get a surface it is already the right sentence.
         // The founder's own sentence as of 2026-08-14.
-        expect(t('sync.onPhoneFull', 'mr')).toBe('श्रम साथी ने समजले व लक्षात ठेवले');
+        expect(t('sync.onPhoneFull', 'mr')).toBe('श्रम साथीने समजून घेतलं आणि लक्षात ठेवलं');
         expect(t('sync.onPhoneFull', 'en')).toBe('Shram Sathi understood and remembered it');
         expect(t('sync.onPhoneFull', 'mr')).not.toContain('शेतनोंदीत');
         expect(t('sync.onPhoneFull', 'en').toLowerCase()).not.toContain('farm records');
@@ -512,7 +512,7 @@ describe('every state in the model has a label in both languages', () => {
         // right the day something roomier asks for it. Until 2026-08-14 this
         // key did not exist at all, while `mainViewComponents.tsx` referred to
         // it by name.
-        expect(t('sync.onServerFull', 'mr')).toBe('श्रम सफल मध्ये साठवून ठेवले');
+        expect(t('sync.onServerFull', 'mr')).toBe('श्रम सफलमध्ये साठवून ठेवलं');
         expect(t('sync.onServerFull', 'en')).toBe('Stored in Shram Safal');
     });
 

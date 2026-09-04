@@ -42,8 +42,17 @@ public static class LabourEndpoints
         // extract, /ai/cove-reverify, and /ai/document-sessions/* are ALSO absent
         // from the skip list — every CallerFarmTenantScope consumer needs the
         // ambient transaction, not admin-elevate-without-a-transaction.
+        //
+        // Task 9 (spec: 2026-08-28-labour-v2-release-1) — `window` is an
+        // OPTIONAL plain query parameter (`?window=today|week|month|alltime`),
+        // declared and forwarded exactly the way FinanceEndpoints' /finance/
+        // summary declares `groupBy`/`fromDate`/`toDate`. Omitted means
+        // आजपर्यंत (all time), so a client shipped before this parameter
+        // existed keeps working with no change. An unrecognised value is
+        // rejected by the handler as an invalid command, not silently widened.
         group.MapGet("/farms/{farmId:guid}/labour", async Task<IResult> (
             Guid farmId,
+            string? window,
             ClaimsPrincipal user,
             IHandler<GetLabourDataQuery, LabourDataDto> handler,
             ICallerFarmTenantScope scope,
@@ -61,7 +70,7 @@ public static class LabourEndpoints
             }
 
             var result = await handler.HandleAsync(
-                new GetLabourDataQuery(new FarmId(farmId), new UserId(userId)),
+                new GetLabourDataQuery(new FarmId(farmId), new UserId(userId), window),
                 ct);
 
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);

@@ -19,13 +19,14 @@
  * ── TWO THINGS THAT WOULD RE-CREATE THE DEFECT ───────────────────────────────
  *
  * 1. **`isGrantEditable: false` MUST render permanently-on and non-interactive.**
- *    An owner-tier member and a Mukadam carry the capability BY ROLE; their
- *    stored grant flag is `false` and setting it changes nothing. The server
- *    refuses such a request outright (409
- *    `ShramSafal.LabourManagementCarriedByRole`), so a switch that appears to
- *    move and then does not is today's mock wearing a server's clothes. Render
- *    `canManageLabourRecords`, never `hasExplicitGrant` — the first is the
- *    effective answer, the second is only the stored column.
+ *    An owner-tier member carries the capability BY ROLE (owner-tier ONLY since
+ *    2026-09-02, D5 — a Mukadam's switch is real now); their stored grant flag
+ *    is `false` and setting it changes nothing. The server refuses such a
+ *    request outright (409 `ShramSafal.LabourManagementCarriedByRole`), so a
+ *    switch that appears to move and then does not is today's mock wearing a
+ *    server's clothes. Render `canManageLabourRecords`, never
+ *    `hasExplicitGrant` — the first is the effective answer, the second is only
+ *    the stored column.
  *
  * 2. **The roster MUST come from this read.** `profile.operators[].id` is a
  *    LOCAL profile id, not a server `userId`; `TeamMemberCard` keys on it
@@ -57,8 +58,6 @@ import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';
 export type LabourPermissionSource =
     /** Owner tier — carries the capability by role. Not editable. */
     | 'OwnerTier'
-    /** Mukadam — carries it by role. Not editable. */
-    | 'MukadamDefault'
     /** An owner granted it explicitly. Editable. */
     | 'ExplicitGrant'
     /** No grant, and the role does not carry it. Editable. */
@@ -86,17 +85,24 @@ export interface LabourPermission {
     canManageLabourRecords: boolean;
     /**
      * The stored column — the owner's explicit decision. Always `false` for
-     * roles that carry the capability anyway, which is precisely why rendering
-     * it would show a Mukadam as "off" while he can in fact do everything.
+     * owner-tier, the roles that carry the capability anyway, which is
+     * precisely why rendering it would show an owner as "off" while he can in
+     * fact do everything.
      */
     hasExplicitGrant: boolean;
     source: LabourPermissionSource;
     /**
-     * `false` for owner tier and Mukadam: the switch must render permanently on
-     * and NON-INTERACTIVE. The server refuses the write independently, so a
+     * `false` for owner tier ONLY: that switch must render permanently on and
+     * NON-INTERACTIVE. `true` for everyone else — a Mukadam included (D5,
+     * 2026-09-02). The server refuses a non-editable write independently, so a
      * client that ignores this cannot fake it — it can only lie about it.
      */
     isGrantEditable: boolean;
+    /**
+     * ISO instant the responsibility ends, or null for कायम. Null once lapsed —
+     * the server never reports an expired window as a live one.
+     */
+    labourGrantExpiresAtUtc: string | null;
 }
 
 /** The server's error code when a role already carries the capability. */
@@ -143,10 +149,11 @@ export async function setLabourPermission(
     farmId: string,
     targetUserId: string,
     canManageLabourRecords: boolean,
+    labourGrantExpiresAtUtc: string | null = null,
 ): Promise<LabourPermission> {
     const response = await agriSyncClient.http.put<LabourPermission>(
         labourPermissionPath(farmId, targetUserId),
-        { canManageLabourRecords },
+        { canManageLabourRecords, labourGrantExpiresAtUtc },
     );
     return response.data;
 }

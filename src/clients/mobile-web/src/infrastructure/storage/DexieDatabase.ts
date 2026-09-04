@@ -40,6 +40,7 @@ import { applyV21 } from './dexie/versions/v21';
 import { applyV22 } from './dexie/versions/v22';
 import { applyV23 } from './dexie/versions/v23';
 import { applyV24 } from './dexie/versions/v24';
+import { applyV25 } from './dexie/versions/v25';
 import { LEGACY_DATABASE_NAME } from './userDatabaseName';
 import { getActiveDatabaseName, clearResolvedDatabaseName } from './activeDatabaseName';
 import { recoverLegacyOwnershipClaim, settleOwnershipClaims } from './databaseOwnership';
@@ -66,6 +67,7 @@ import type {
     CropCycleCacheRecord,
     CostEntryCacheRecord,
     FinanceCorrectionCacheRecord,
+    AttendanceMarkCacheRecord,
     AttentionCardCacheRecord,
     DexieLogRecord,
     DexieComplianceSignal,
@@ -107,7 +109,7 @@ export interface PendingInterpretationDexieRow {
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 24; // §P0.4 — strip the raw transcript out of stored correction events; no index change. 23 is RESERVED for feat/dfes-companion — see versions/v24.ts.
+export const DATABASE_VERSION = 25; // Labour V2 R1 Task 3.5c — adds the attendanceMarks store (server-acknowledged हजेरी rulings from /sync/pull); see versions/v25.ts. 23 is RESERVED for feat/dfes-companion — see versions/v24.ts.
 /**
  * CEI Phase 1 schema version (now active — applied by Task 5.1.1).
  *
@@ -187,6 +189,9 @@ export class AgriLogDatabase extends Dexie {
     cropCycles!: Table<CropCycleCacheRecord, string>;
     costEntries!: Table<CostEntryCacheRecord, string>;
     financeCorrections!: Table<FinanceCorrectionCacheRecord, string>;
+
+    /** Labour V2 R1 Task 3.5c — server-acknowledged attendance marks (pull carriage). */
+    attendanceMarks!: Table<AttendanceMarkCacheRecord, string>;
 
     /** CEI Phase 1 — server-computed attention cards */
     attentionCards!: Table<AttentionCardCacheRecord, string>;
@@ -277,6 +282,7 @@ export class AgriLogDatabase extends Dexie {
         // a no-op and any divergence there surfaces as a real conflict.
         applyV23(this);
         applyV24(this);
+        applyV25(this);
     }
 }
 

@@ -145,6 +145,33 @@ const normalizeDateKey = (value: string | Date): string => {
     return value;
 };
 
+/**
+ * A LOG WITH NO DATE CANNOT BE PLACED ON ANY DAY, and until now it took the
+ * whole app down trying. `DailyLog.date` is REQUIRED by the type, so
+ * `normalizeDateKey` reads `.includes` on it unguarded — and one stored row
+ * violating that contract threw from `computeDayState`, which every screen
+ * reaches through `buildOversightHeaderInputs`. The founder saw it as a crash
+ * on merely opening the app.
+ *
+ * Applied at every PUBLIC entry that accepts logs, so the private helpers
+ * below can keep assuming a usable date. Guarding `normalizeDateKey` itself
+ * would be worse: the only value it could return is an empty string, and ""
+ * sorts BEFORE every real date, so the row would silently join every "logs up
+ * to this day" comparison as the oldest record on the farm.
+ *
+ * NAMED, never swallowed. A record the farmer created and cannot see is its
+ * own defect, and this is the only place that knows.
+ */
+const withUsableDates = (logs: DailyLog[], where: string): DailyLog[] =>
+    logs.filter((log) => {
+        if (typeof log?.date === 'string' && log.date.length > 0) return true;
+        console.warn(
+            `[${where}] a stored log has no date and cannot be placed on any day.`,
+            { logId: (log as { id?: unknown })?.id },
+        );
+        return false;
+    });
+
 const toDate = (dateKey: string): Date => {
     return new Date(`${dateKey}T12:00:00`);
 };
@@ -458,7 +485,9 @@ export const computeDayState = ({
 }: DayStateOptions): DayState => {
     const dateKey = normalizeDateKey(date);
     const scope: ScopeOptions = { selectedCropIds, selectedPlotIds };
-    const scopedLogs = logs.filter(log => logInScope(log, scope));
+
+    const datedLogs = withUsableDates(logs, 'computeDayState');
+    const scopedLogs = datedLogs.filter(log => logInScope(log, scope));
     const dayLogs = scopedLogs.filter(log => normalizeDateKey(log.date) === dateKey);
 
     const scopedPlots = getScopePlots(crops, scope);
@@ -606,7 +635,9 @@ export const computeDayState = ({
         riskSignals.push(`Irrigation gap increasing (${irrigationDaysAgo} days since last irrigation)`);
     }
 
-    const overdueStageSignal = getOverdueStageSignal(logs, crops, dateKey, scope);
+    // `datedLogs`, not `logs` — this reads log.date too, and handing it the
+    // unfiltered list would reopen the crash one call deeper.
+    const overdueStageSignal = getOverdueStageSignal(datedLogs, crops, dateKey, scope);
     if (overdueStageSignal) {
         riskSignals.push(overdueStageSignal);
     }
@@ -639,7 +670,8 @@ export const computeCostRunning = ({
 }: CostRunningOptions): CostRunningSnapshot => {
     const dateKey = normalizeDateKey(date);
     const scope: ScopeOptions = { selectedCropIds, selectedPlotIds };
-    const scopedLogs = logs.filter(log => logInScope(log, scope));
+    const scopedLogs = withUsableDates(logs, 'computeCostRunning')
+        .filter(log => logInScope(log, scope));
 
     const todayCost = scopedLogs
         .filter(log => normalizeDateKey(log.date) === dateKey)
@@ -683,7 +715,7 @@ export const computeVerificationMetrics = (
     const dateKey = normalizeDateKey(date);
     const dateMap = new Map<string, DailyLog[]>();
 
-    logs.forEach(log => {
+    withUsableDates(logs, 'computeVerificationMetrics').forEach(log => {
         const key = normalizeDateKey(log.date);
         const existing = dateMap.get(key) || [];
         existing.push(log);

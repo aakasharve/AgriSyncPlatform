@@ -708,7 +708,7 @@ public sealed class LabourPhaseOneDurabilityRealPostgresTests(Xunit.Abstractions
         // assert durability it never actually exercised.
         public Task<DerivationOutcome> DeriveFromManualDraftAsync(
             ShramSafal.Domain.Logs.DailyLog log, string manualWireJson, string? appVersion,
-            IIdGenerator ids, IClock clock, CancellationToken ct = default)
+            IIdGenerator ids, IClock clock, bool deriveLabour, CancellationToken ct = default)
             => throw new InvalidOperationException("Task 6.5 — forced side-car derivation failure.");
     }
 

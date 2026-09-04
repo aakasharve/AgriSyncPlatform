@@ -61,7 +61,7 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
 
     public Task<DerivationOutcome> DeriveFromManualDraftAsync(
         DailyLog log, string manualWireJson, string? appVersion,
-        IIdGenerator ids, IClock clock, CancellationToken ct = default)
+        IIdGenerator ids, IClock clock, bool deriveLabour, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(log);
 
@@ -79,19 +79,19 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         // came from, and it is stable across re-saves, so a second derivation of
         // the same log recomputes the same DerivedEventKey and SUPERSEDES rather
         // than duplicating the farmer's single application.
-        // The manual path derives labour. Its only source of labour rows is the
-        // draft's own labour[], normalised by ManualDraftNormalizer, so within this
-        // call there is nothing for it to be a second producer OF. Passed explicitly
-        // rather than defaulted, because Labour V1 Task 6.3 made "who produces this
-        // row" a decision every caller must take deliberately.
-        //
-        // Note what this deliberately does NOT do: it does not consult
-        // CreateDailyLogCommand.Labour. Suppressing on that would need the decision
-        // plumbed through ILedgerDerivationService.DeriveFromManualDraftAsync, which
-        // is a contract change, not a merge resolution.
+        // Labour V2 R1 Task 2 — the single-producer decision is the CALLER's here too,
+        // and is carried through untouched. It used to be hardcoded `true` on the
+        // reasoning that the draft's own labour[] was this call's only source of labour
+        // rows, so there was nothing here to be a second producer OF. That was true of
+        // this call and false of the request: the manual client builds BOTH arrays from
+        // one list (`buildManualDraft` sets `draft.labour = log.labour`;
+        // `buildLabourPayloads` maps the same `log.labour`), so the handler had already
+        // staged those rows as canonical Phase-1 data before reaching here, and this
+        // call added a second row for the same engagement — carrying the eight-hour
+        // server assumption over a duration the farmer had stated outright.
         return DeriveCoreAsync(
             log, manualWireJson, provenance, log.Id, ids, clock,
-            deriveLabour: true, ct);
+            deriveLabour, ct);
     }
 
     /// <summary>
@@ -346,7 +346,18 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
                     // Descriptive only (Task 2.3) — never touch money above.
                     shift: LabourAssignmentFactory.MapLabourShift(ReadString(item, "shift")),
                     task: ReadTrimmedString(item, "activity"),
-                    workerNames: ReadStringArray(item, "whoWorked"),
+                    // FOUNDER RULING 2026-08-31 — "names marked here means
+                    // attendance + identity recorded". This reader existed and
+                    // had never once received anything: it read "whoWorked",
+                    // which the CLIENT contract defines as an ENUM
+                    // (OWNER|OPERATOR|HIRED_LABOUR|UNKNOWN), and the prompt
+                    // never emitted it in any shape. ReadStringArray on a
+                    // string returns null, so WorkerNamesJson defaulted to "[]"
+                    // for every labour row ever written. The prompt now emits
+                    // an unambiguous `workerNames` array; `whoWorked` stays as a
+                    // fallback only so an older stored AiJob still resolves the
+                    // same way it did (namely: to null).
+                    workerNames: ReadStringArray(item, "workerNames") ?? ReadStringArray(item, "whoWorked"),
                     // wave-3.12 — how sure he was of the COST. Keyed on "totalCost", the
                     // sibling number it qualifies, so a farmer vague about the wage and
                     // exact about the dose is recorded as exactly that.
@@ -422,21 +433,82 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
             var reason = ReadString(disturbance, "reason");
             if (!string.IsNullOrWhiteSpace(reason))
             {
-                var evt = DisturbanceEvent.Create(
-                    id: ids.New(),
-                    dailyLogId: log.Id,
-                    scope: MapDisturbanceScope(ReadString(disturbance, "scope")),
-                    reason: reason!,
-                    severity: MapDisturbanceSeverity(ReadString(disturbance, "severity")),
-                    blockedSegmentsJson: ReadRawArray(disturbance, "blockedSegments"),
-                    weatherEventId: ReadGuid(disturbance, "weatherEventId"),
-                    createdAtUtc: now,
-                    cause: MapDisturbanceCause(ReadString(disturbance, "cause")),
-                    affectedScope: MapAffectedScope(ReadString(disturbance, "affectedScope")),
-                    impact: ReadString(disturbance, "impact"),
-                    resolvedStatus: MapResolvedStatus(ReadString(disturbance, "resolvedStatus")));
-                await repository.AddDisturbanceEventAsync(evt, ct);
-                children++;
+                // Labour V2 R1 Task 8.5 — the same dedup discipline the inputs
+                // branch has above (DerivedEventKey lookup-before-write), adapted
+                // to this child's shape.
+                //
+                // FarmOperation stores a hashed key because its identity span (the
+                // raw transcript text) is not a column. A disturbance's derived
+                // identity is (farm, log-day, reason) — and every component is
+                // already persisted: farm and day on the parent daily_logs row,
+                // the reason on the event itself. So the lookup-before-write idiom
+                // carries over with no key column and no migration: the query IS
+                // the key.
+                //
+                // The identity is the DAY, not the parse or the log, deliberately.
+                // The labour door (attendance-only draft — Task 6 preserves its
+                // disturbance) and the regular door produce TWO logs, hence two
+                // source ids, for one farm-day; "पाऊस आला" recorded through both
+                // doors is one fact, not two. A DIFFERENT reason is a different
+                // identity and stays a second live event: dedup collapses
+                // identical derivations, never distinct facts.
+                //
+                // On a hit we SKIP where FarmOperation SUPERSEDES — not an
+                // oversight. This EXISTS-join child has no version chain (no
+                // is_current_version / superseded_by), so "mark old superseded,
+                // insert new" is unrepresentable, and mutating or deleting the
+                // OTHER door's child would falsify its lineage (daily_log_id
+                // naming log A with content from log B). The identity contains
+                // the entire load-bearing free-text, so a skipped second arrival
+                // loses no farmer words.
+                //
+                // WHAT THIS ENFORCES, EXACTLY (B001 ruling — no over-promise).
+                // The lookup-before-write is application-level, not DB-enforced.
+                // SAME-DEVICE duplicates — the ruled defect, both doors on one
+                // phone — are closed DETERMINISTICALLY: the client's sync worker
+                // is single-flight and /sync/push applies a batch's mutations
+                // sequentially in one transaction, so the second derivation
+                // always runs after the first's write is visible to this
+                // transaction's reads. CROSS-DEVICE, two overlapping
+                // READ-COMMITTED pushes of the same (farm, day, byte-identical
+                // reason) can BOTH miss the lookup and BOTH commit — a duplicate
+                // identical row, i.e. exactly the pre-fix status quo, no worse.
+                // Tolerated deliberately: the window needs two devices voicing
+                // byte-identical free text in the same seconds (edge), the
+                // consequence is downstream-idempotent for the DeclaredNoWork
+                // read, and the schema cure (denormalizing parent farm/day onto
+                // the child for a unique index) is itself a two-truths shape
+                // this release forbids. The residual is NOT silent: the
+                // production lookup (ShramSafalRepository) counts live matches
+                // and logs a warning on >1 — the named observer — so a raced
+                // duplicate surfaces at the next same-day derivation. A
+                // DB-enforced unique (trigger or keyed child) is the Phase 6
+                // hardening if field data ever shows that warning.
+                //
+                // The failure mode stays LOUD: no catch here. A thrown lookup or
+                // write error propagates to PersistSideCarAsync's savepoint
+                // isolation exactly as every other derivation write's does.
+                var trimmedReason = reason!.Trim(); // the entity-stored form (DisturbanceEvent.Create trims)
+                var existingDisturbance = await repository.GetDisturbanceEventForFarmDayAsync(
+                    log.FarmId.Value, log.LogDate, trimmedReason, ct);
+                if (existingDisturbance is null)
+                {
+                    var evt = DisturbanceEvent.Create(
+                        id: ids.New(),
+                        dailyLogId: log.Id,
+                        scope: MapDisturbanceScope(ReadString(disturbance, "scope")),
+                        reason: reason!,
+                        severity: MapDisturbanceSeverity(ReadString(disturbance, "severity")),
+                        blockedSegmentsJson: ReadRawArray(disturbance, "blockedSegments"),
+                        weatherEventId: ReadGuid(disturbance, "weatherEventId"),
+                        createdAtUtc: now,
+                        cause: MapDisturbanceCause(ReadString(disturbance, "cause")),
+                        affectedScope: MapAffectedScope(ReadString(disturbance, "affectedScope")),
+                        impact: ReadString(disturbance, "impact"),
+                        resolvedStatus: MapResolvedStatus(ReadString(disturbance, "resolvedStatus")));
+                    await repository.AddDisturbanceEventAsync(evt, ct);
+                    children++;
+                }
             }
         }
 

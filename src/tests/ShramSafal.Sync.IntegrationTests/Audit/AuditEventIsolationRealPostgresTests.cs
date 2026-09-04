@@ -1163,6 +1163,37 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // change at all because a wider column accepts every value an older binary
         // can send.
         "20260828061500_WidenCorrectionEventPromptVersion",
+        // ── The five Labour V2 R1 migrations — reviewed 2026-09-03, final
+        // whole-branch review (branch feat/labour-v2-r1): the chain was walked
+        // end to end, Down() paths included, and each shape is pinned by a
+        // RealPostgres task-review fact. Relevance to THIS proof: none of the
+        // five names ssf.audit_events or TRUNCATE in either direction.
+        //
+        // GrantFieldOperatorWorkRowsToAppRole — pure privilege DDL. Up() GRANTs
+        // on ssf.field_operator_work_rows, Down() REVOKEs the same set; in this
+        // scratch database the revoke/regrant round trip is symmetric and
+        // rewrites nothing.
+        "20260831155124_GrantFieldOperatorWorkRowsToAppRole",
+        // AddAttendanceMarks — CreateTable + RLS (ENABLE+FORCE) + grants in the
+        // creating migration; Down() drops the table. Safe HERE because the
+        // scratch table is empty by construction — the drop loses nothing and
+        // the re-create is byte-identical. In PRODUCTION a populated drop is a
+        // data loss and rollback is redeploying the previous API instead.
+        "20260831180408_AddAttendanceMarks",
+        // AddAttendanceMarkCorrections — same shape as the marks table
+        // (create/drop; append-only enforced by GRANT SELECT, INSERT). Same
+        // scratch-empty argument, same production caveat.
+        "20260831185516_AddAttendanceMarkCorrections",
+        // AddLabourGrantExpiry — one NULLABLE timestamptz AddColumn on
+        // ssf.farm_memberships; Down() drops the column. Nullable + empty in
+        // this scratch database: nothing to reject going up, nothing to lose
+        // coming down.
+        "20260902103708_AddLabourGrantExpiry",
+        // AddEngagedThroughToLabourAssignments — one NULLABLE uuid AddColumn +
+        // index + FK (Restrict) on ssf.labour_assignments; Down() mirror-drops
+        // all three. Nullable and scratch-empty: the FK has no row to block and
+        // the drop rewrites nothing.
+        "20260902154713_AddEngagedThroughToLabourAssignments",
     ];
 
     /// <summary>

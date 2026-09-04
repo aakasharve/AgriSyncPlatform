@@ -10,6 +10,14 @@
  * `LABOUR_MOCK` (रोकडे/रमेश/सुनीता + their mock ₹ balances) — not on first
  * paint, not on a fetch error. Only the no-farm-context path (preview /
  * no provider) may show the mock.
+ *
+ * Task 6c (spec: 2026-08-28-labour-v2-release-1, P4) — the `dashboard.money`
+ * assertions below were updated from `{ recorded: 0, ..., owed: 0 }` to
+ * `{ recorded: null, ..., owed: null }`. That `0` was pinning the exact
+ * defect Task 6c fixes: `EMPTY_LABOUR_DATA` hardcoded a fabricated ₹0
+ * instead of the unknown `null` Task 1 already made these fields capable of
+ * expressing. The assertions still prove the same thing (no mock money
+ * leaks into this state) — only the honest shape of "no money" changed.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderHook, waitFor, act, cleanup } from '@testing-library/react';
@@ -66,7 +74,10 @@ describe('useLabourState — money safety', () => {
         expect(result.current.data).toBe(EMPTY_LABOUR_DATA);
         expect(result.current.data).not.toBe(LABOUR_MOCK);
         expect(Object.keys(result.current.data.people)).toHaveLength(0);
-        expect(result.current.data.dashboard.money).toEqual({ recorded: 0, paid: 0, advance: 0, owed: 0 });
+        // Phase 4 — the honest empty state now withholds the whole money card
+        // (`money: null`): pre-fetch/outage there is no evidence for ANY money
+        // figure, so no card exists to carry even honest nulls.
+        expect(result.current.data.dashboard.money).toBeNull();
         expect(result.current.error).toBe(false);
         expect(result.current.loading).toBe(true);
         expect(mockFetchLabourData).not.toHaveBeenCalled();
@@ -99,7 +110,10 @@ describe('useLabourState — money safety', () => {
         expect(result.current.data).toBe(EMPTY_LABOUR_DATA);
         expect(result.current.data).not.toBe(LABOUR_MOCK);
         expect(Object.keys(result.current.data.people)).toHaveLength(0);
-        expect(result.current.data.dashboard.money).toEqual({ recorded: 0, paid: 0, advance: 0, owed: 0 });
+        // Phase 4 — the honest empty state now withholds the whole money card
+        // (`money: null`): pre-fetch/outage there is no evidence for ANY money
+        // figure, so no card exists to carry even honest nulls.
+        expect(result.current.data.dashboard.money).toBeNull();
         expect(result.current.loading).toBe(false);
     });
 
@@ -211,7 +225,10 @@ describe('useLabourState — auth gate (BUG 1)', () => {
         expect(result.current.data).toBe(EMPTY_LABOUR_DATA);
         expect(result.current.data).not.toBe(LABOUR_MOCK);
         expect(Object.keys(result.current.data.people)).toHaveLength(0);
-        expect(result.current.data.dashboard.money).toEqual({ recorded: 0, paid: 0, advance: 0, owed: 0 });
+        // Phase 4 — the honest empty state now withholds the whole money card
+        // (`money: null`): pre-fetch/outage there is no evidence for ANY money
+        // figure, so no card exists to carry even honest nulls.
+        expect(result.current.data.dashboard.money).toBeNull();
     });
 
     it('preview (no FarmContext provider) still shows LABOUR_MOCK regardless of auth', () => {
@@ -222,5 +239,119 @@ describe('useLabourState — auth gate (BUG 1)', () => {
 
         expect(result.current.data).toBe(LABOUR_MOCK);
         expect(mockFetchLabourData).not.toHaveBeenCalled();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// TASK 6e (spec: 2026-08-28-labour-v2-release-1, P4/P5, Ruling R8) —
+// "we could not find out which farm this is" is not "this farmer has no farm".
+//
+// Task 6d stopped the hub asserting "अजून कोणी कामगार जोडलेला नाही" (no
+// worker has been added yet) when the LABOUR fetch fails. The same false
+// sentence stayed reachable through a second door: `FarmContext`'s `/me`
+// call swallows its own failure (`catch { // silently keep stale data }`)
+// and then clears `isLoading`, so on a fresh install — no cached
+// `currentFarmId` — the context settles at `currentFarmId: null` with no
+// failure visible anywhere. This hook read that as "genuinely no farm",
+// returned `error: false`, and the screen made the claim.
+//
+// The pilot scenario exactly: reinstall the APK, log in on weak rural
+// signal, `/me` fails, open कामगार — and the app tells a farmer with twelve
+// workers that he has none.
+//
+// `FarmContext` now surfaces `loadFailed` (purely additive; the swallow
+// itself is unchanged, because other screens legitimately keep stale data
+// on a failed refresh). The gate below is `loadFailed` — NEVER "farmId is
+// null", which is precisely the conflation Ruling R8 forbids.
+// ---------------------------------------------------------------------------
+
+describe('useLabourState — a failed farm-context lookup is not "no farm" (Task 6e)', () => {
+    it('farm context SETTLED with loadFailed → error true, so the screen withholds the "no workers" claim', () => {
+        mockUseOptionalFarmContext.mockReturnValue({
+            currentFarmId: null, isLoading: false, loadFailed: true,
+        });
+
+        const { result } = renderHook(() => useLabourState());
+
+        // The whole point: this state is an outage, not an answer.
+        expect(result.current.error).toBe(true);
+        expect(result.current.loading).toBe(false);
+        // Still money-safe: the honest empty fallback, never the mock.
+        expect(result.current.data).toBe(EMPTY_LABOUR_DATA);
+        expect(result.current.data).not.toBe(LABOUR_MOCK);
+        // There is no farm id to fetch for, so nothing is fetched.
+        expect(mockFetchLabourData).not.toHaveBeenCalled();
+    });
+
+    // Task 6f — the wiring, not just the state. The test above proves the
+    // banner SHOWS; this proves its "पुन्हा प्रयत्न करा" button actually
+    // DOES something. Without `refresh()` re-asking `/me`, bumping
+    // `retryToken` alone re-reads the same `loadFailed` FarmContext already
+    // has — the button re-renders the identical banner and the farmer taps
+    // forever. This is the one line (`if (!farmId) void farmCtxRefresh?.();`)
+    // that makes the affordance real; delete it and this test is the one
+    // that goes red, not the banner-visibility test above.
+    it('refresh() with no farm id re-asks FarmContext, not just the labour fetch (Task 6e retry wiring)', () => {
+        const mockFarmCtxRefresh = vi.fn();
+        mockUseOptionalFarmContext.mockReturnValue({
+            currentFarmId: null, isLoading: false, loadFailed: true, refresh: mockFarmCtxRefresh,
+        });
+
+        const { result } = renderHook(() => useLabourState());
+        expect(result.current.error).toBe(true);
+
+        act(() => { result.current.refresh(); });
+
+        expect(mockFarmCtxRefresh).toHaveBeenCalledTimes(1);
+        // Still no farm id to fetch labour data for — the retry targets the
+        // upstream `/me` lookup, not `fetchLabourData`.
+        expect(mockFetchLabourData).not.toHaveBeenCalled();
+    });
+
+    // THE COMPANION TEST THAT STOPS OVER-REACH (brief Step 4). `/me`
+    // SUCCEEDED and the account genuinely has zero farms: a record that
+    // exists and contains nothing is a real, honest empty (Ruling R8), and
+    // today's behaviour is already correct. Gating on `farmId === null`
+    // instead of on `loadFailed` would break exactly this case.
+    it('farm context settled, load SUCCEEDED, account genuinely has zero farms → error stays false (unchanged)', () => {
+        mockUseOptionalFarmContext.mockReturnValue({
+            currentFarmId: null, isLoading: false, loadFailed: false,
+        });
+
+        const { result } = renderHook(() => useLabourState());
+
+        expect(result.current.error).toBe(false);
+        expect(result.current.loading).toBe(false);
+        expect(result.current.data).toBe(EMPTY_LABOUR_DATA);
+        expect(result.current.data).not.toBe(LABOUR_MOCK);
+        expect(mockFetchLabourData).not.toHaveBeenCalled();
+    });
+
+    // The gate requires the context to have SETTLED. A refresh in flight
+    // after an earlier failure is a genuine "loading", not an outage to
+    // report — the spinner is the honest answer while the retry runs.
+    it('a retry still in flight (isLoading true) after an earlier failure → loading, not error', () => {
+        mockUseOptionalFarmContext.mockReturnValue({
+            currentFarmId: null, isLoading: true, loadFailed: true,
+        });
+
+        const { result } = renderHook(() => useLabourState());
+
+        expect(result.current.loading).toBe(true);
+        expect(result.current.error).toBe(false);
+        expect(result.current.data).toBe(EMPTY_LABOUR_DATA);
+    });
+
+    // Pre-Task-6e consumers/tests that never supplied `loadFailed` (and the
+    // no-provider preview path) must keep behaving identically — an absent
+    // flag is not a failure.
+    it('a farm context that reports no loadFailed field at all behaves exactly as before', () => {
+        mockUseOptionalFarmContext.mockReturnValue({ currentFarmId: null, isLoading: false });
+
+        const { result } = renderHook(() => useLabourState());
+
+        expect(result.current.error).toBe(false);
+        expect(result.current.loading).toBe(false);
+        expect(result.current.data).toBe(EMPTY_LABOUR_DATA);
     });
 });

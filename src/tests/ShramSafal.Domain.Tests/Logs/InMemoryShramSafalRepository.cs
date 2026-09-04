@@ -155,12 +155,43 @@ internal sealed class InMemoryShramSafalRepository : IShramSafalRepository
     public Task AddObservationEventAsync(ObservationEvent o, CancellationToken ct = default)
     { CapturedObservations.Add(o); return Task.CompletedTask; }
 
+    /// <summary>
+    /// Task 8.5 (labour-v2-r1) — fault-injection hook fired at the START of
+    /// <see cref="AddDisturbanceEventAsync"/>, mirroring
+    /// <see cref="OnAddFarmOperation"/>: a throw simulates a DB failure on the
+    /// disturbance write, proving the dedup path never swallows a real write
+    /// error. Null (default) keeps the plain capture behaviour.
+    /// </summary>
+    public Action? OnAddDisturbanceEvent { get; set; }
+
     public Task AddDisturbanceEventAsync(DisturbanceEvent d, CancellationToken ct = default)
-    { CapturedDisturbances.Add(d); return Task.CompletedTask; }
+    {
+        OnAddDisturbanceEvent?.Invoke();
+        CapturedDisturbances.Add(d);
+        return Task.CompletedTask;
+    }
 
     public Task<FarmOperation?> GetFarmOperationByKeyAsync(string derivedEventKey, CancellationToken ct = default)
         => Task.FromResult(CapturedOperations.FirstOrDefault(
             o => o.IsCurrentVersion && o.DerivedEventKey.Value == derivedEventKey));
+
+    /// <summary>
+    /// Task 8.5 — mirrors the production farm-day join: the event carries no
+    /// farm or date, so its (farm, log-day, reason) identity resolves through
+    /// the parent log in <c>_logs</c>. A captured disturbance whose parent log
+    /// was never <see cref="AddLog"/>'d cannot claim a farm-day and is invisible
+    /// here — tests exercising dedup must AddLog their logs first, exactly as
+    /// production guarantees the log row is durable before the side-car runs.
+    /// </summary>
+    public Task<DisturbanceEvent?> GetDisturbanceEventForFarmDayAsync(
+        Guid farmId, DateOnly logDate, string reason, CancellationToken ct = default)
+        => Task.FromResult(CapturedDisturbances
+            .Where(e => _logs.TryGetValue(e.DailyLogId, out var l)
+                && l.FarmId.Value == farmId
+                && l.LogDate == logDate
+                && e.Reason == reason)
+            .OrderBy(e => e.CreatedAtUtc)
+            .FirstOrDefault());
 
     // ── WP-2d (D5) RoutineMemory upsert ──────────────────────────────────────
     // Captures the routine_patterns the derivation upserts so the reinforce

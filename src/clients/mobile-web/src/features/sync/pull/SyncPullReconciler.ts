@@ -26,6 +26,7 @@ import { reconcileAttachments } from './reconcilers/attachmentsReconciler';
 import { reconcileReferenceData } from './reconcilers/referenceDataReconciler';
 import { reconcileDayLedgersAndPlannedTasks } from './reconcilers/dayLedgersAndPlannedTasksReconciler';
 import { reconcileFinance } from './reconcilers/financeReconciler';
+import { reconcileAttendance } from './reconcilers/attendanceReconciler';
 import { reconcileFarmsPlotsCycles } from './reconcilers/farmsPlotsCyclesReconciler';
 import { reconcileAttentionBoard } from './reconcilers/attentionBoardReconciler';
 import { finalizeReconciliation } from './reconcilers/finalizeReconciliation';
@@ -69,7 +70,7 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
     await db.transaction('rw', [
         db.logs, db.attachments, db.uploadQueue, db.appMeta, db.referenceData,
         db.farms, db.plots, db.cropCycles, db.costEntries, db.financeCorrections,
-        db.dayLedgers, db.plannedTasks, db.attentionCards,
+        db.dayLedgers, db.plannedTasks, db.attentionCards, db.attendanceMarks,
     ], async () => {
         if (pendingLogIds) {
             importedLogs = await reconcileLogs(db, payload, plotLookup, pendingLogIds);
@@ -80,6 +81,7 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
         dayLedgersCount = ledgerSummary.dayLedgersCount;
         plannedTasksCount = ledgerSummary.plannedTasksCount;
         await reconcileFinance(db, payload, receivedAtUtc);
+        await reconcileAttendance(db, payload, receivedAtUtc);
         await reconcileFarmsPlotsCycles(db, payload, receivedAtUtc);
         await reconcileAttentionBoard(db, payload);
 

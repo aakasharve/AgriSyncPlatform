@@ -183,4 +183,16 @@ describe('T4 — the approval screen claims only what a local enqueue can eviden
         expect(mockEnqueue).not.toHaveBeenCalled();
         expect(onToast).not.toHaveBeenCalled();
     });
+
+    // Task 7 (labour-v2-release-1) — the toast form of this claim was already
+    // fixed above (T4). A SECOND, STATIC copy of the same claim sat in the
+    // sheet's own markup — always on screen, no click required — and this
+    // one survived T4 untouched: "मंजूर केल्यावर हजेरीही निश्चित होते."
+    // ("approving also settles attendance"). No attendance record exists
+    // (`attendance_marks` is Phase 1 of THIS release, not yet landed), so
+    // approving settles nothing about attendance. P5.
+    it('never shows the static note claiming approving also settles attendance — no attendance record exists', () => {
+        mount([makeItem('s10', 'Confirmed')]);
+        expect(screen.queryByText(/हजेरीही निश्चित/)).not.toBeInTheDocument();
+    });
 });

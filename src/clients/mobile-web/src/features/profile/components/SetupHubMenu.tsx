@@ -273,8 +273,27 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                         onClick={() => setShowFarmSwitcher(true)}
                     />
                 )}
-                {onOpenLabour && <RowCard icon={<Users size={20} />} label="कामगार व्यवस्थापन · Labour" subtitle="हजेरी · मजुरी · उचल" tone="emerald" onClick={onOpenLabour} />}
-                <RowCard icon={<BarChart3 size={20} />} label="पैसे व हिशोब · Finance" onClick={onOpenFinance} />
+                {/* Task 7 (labour-v2-release-1) — DELETED "हजेरी · " from the
+                    subtitle below: this row's live/reachable Marathi claimed
+                    "attendance" as a headline capability of Labour
+                    Management, but no attendance capture exists in that
+                    feature.
+                    Task 7b (labour-v2-release-1) — DELETED " · उचल" too:
+                    उचल (advance) does not exist as a system either — no
+                    table, no write path, no engine
+                    (GetLabourDataHandler.cs:205 hardcodes `advance = 0m`
+                    server-side). */}
+                {/* FOUNDER VOCABULARY RULE (2026-09-03) — was
+                    "कामगार व्यवस्थापन · Labour". Both halves were banned: the
+                    English "Labour", and `कामगार`, which names a class of
+                    person. Now `कामाच्या नोंदी` — the same provisional
+                    work-centred wording the hub title uses, so the door and
+                    the room agree. The English pair is DROPPED rather than
+                    translated: any English noun here would be a new name, and
+                    the founder's naming session owns that. The subtitle
+                    `मजुरी` is untouched (Task 7 / 7b honesty deletions stand). */}
+                {onOpenLabour && <RowCard icon={<Users size={20} />} label="कामाचा हिशोब" subtitle="मजुरी" tone="emerald" onClick={onOpenLabour} />}
+                <RowCard icon={<BarChart3 size={20} />} label="पैसे व हिशोब" onClick={onOpenFinance} />
                 {onOpenReferrals && <RowCard icon={<Medal size={20} />} label="रेफरल्स · Referrals" onClick={onOpenReferrals} />}
             </div>
 

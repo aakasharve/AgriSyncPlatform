@@ -40,13 +40,15 @@ const worker = (over: Partial<LabourPermission> = {}): LabourPermission => ({
     userId: 'user-worker', role: 'Worker', status: 'Active',
     canManageLabourRecords: false, hasExplicitGrant: false,
     source: 'NotGranted', isGrantEditable: true,
+    labourGrantExpiresAtUtc: null,
     ...over,
 });
 
 const mukadam = (): LabourPermission => ({
     userId: 'user-mukadam', role: 'Mukadam', status: 'Active',
-    canManageLabourRecords: true, hasExplicitGrant: false,
-    source: 'MukadamDefault', isGrantEditable: false,
+    canManageLabourRecords: false, hasExplicitGrant: false,
+    source: 'NotGranted', isGrantEditable: true,
+    labourGrantExpiresAtUtc: null,
 });
 
 const roster = () => [mukadam(), worker()];
@@ -117,7 +119,7 @@ describe('changing a permission', () => {
 
         await act(async () => { await result.current.setPermission('user-worker', true); });
 
-        expect(mockSet).toHaveBeenCalledWith('farm-123', 'user-worker', true);
+        expect(mockSet).toHaveBeenCalledWith('farm-123', 'user-worker', true, null);
         // Adopted WHOLE — `source` moved to ExplicitGrant, which only the
         // server could have decided.
         expect(result.current.rows?.find(r => r.userId === 'user-worker')).toEqual(granted);

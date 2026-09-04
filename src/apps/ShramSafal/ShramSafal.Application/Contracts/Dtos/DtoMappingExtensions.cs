@@ -124,7 +124,13 @@ internal static class DtoMappingExtensions
             // so what the device sends is what the device reads back.
             log.Scope.ToString(),
             log.PlotIds.ToList(),
-            labour);
+            labour,
+            // task-0b — read back VERBATIM. `log.DayOutcome` is a plain
+            // property read off the loaded entity, never a caller-supplied
+            // default, so there is no `??` here to defend against: NULL on
+            // the entity produces NULL on the wire, exactly as doctrine P4
+            // requires (see the remarks on DailyLogDto.DayOutcome).
+            log.DayOutcome);
 
     /// <summary>
     /// LABOUR_PHASE2 Phase 3 — the ONE place a <see cref="LabourEngagementDto"/> is
@@ -324,6 +330,26 @@ internal static class DtoMappingExtensions
             fieldOperator.CreatedByUserId.Value,
             fieldOperator.CreatedAtUtc,
             fieldOperator.IsActive);
+
+    /// <summary>
+    /// Labour V2 R1 Task 3.5c — the pull-carriage projection of a हजेरी
+    /// ruling. Unmarked → null (a silence, never a zero); hours as stated;
+    /// HoursBasis as its enum name; WorkDate as the farmer's day.
+    /// </summary>
+    public static AttendanceMarkDto ToDto(this AttendanceMark mark) =>
+        new(
+            mark.Id,
+            (Guid)mark.FarmId,
+            mark.FieldOperatorId,
+            mark.WorkDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            mark.Day == DayMark.Unmarked ? null : mark.Day.ToString(),
+            mark.Night == NightMark.Unmarked ? null : mark.Night.ToString(),
+            mark.HoursWorked,
+            mark.ExtraHours,
+            mark.HoursBasis.ToString(),
+            (Guid)mark.RecordedByUserId,
+            mark.RecordedAtUtc,
+            mark.ModifiedAtUtc);
 
     public static JobCardDto ToJobCardDto(this JobCard jobCard, string? workerDisplayName = null) =>
         new(

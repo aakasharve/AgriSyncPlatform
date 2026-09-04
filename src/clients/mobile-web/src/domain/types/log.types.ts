@@ -640,7 +640,16 @@ export interface DailyLog {
     id: string;
     date: string;
     context: FarmContext;
-    dayOutcome: DayOutcome;
+    /**
+     * task-0b (spec 2026-08-28-labour-v2-release-1) — widened from `DayOutcome`
+     * (required) to `DayOutcome | null`. A LOCALLY-created log (LogFactory)
+     * always supplies a concrete value, exactly as before. A log rebuilt from
+     * `/sync/pull` (`logsReconciler.toDailyLog`) may now genuinely hold `null`
+     * — the honest "he did not say" state the server itself carries
+     * (`DailyLog.DayOutcome`, doctrine P4) — instead of the fabricated
+     * `'WORK_RECORDED'` this field used to be hardcoded to on every pulled log.
+     */
+    dayOutcome: DayOutcome | null;
     phaseAtLogTime?: CropPhase;
     dayNumberAtLogTime?: number | null;
     weatherSnapshot?: WeatherSnapshot; // @deprecated - use weatherStamp

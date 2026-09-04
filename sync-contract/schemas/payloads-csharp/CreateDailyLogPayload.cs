@@ -53,7 +53,8 @@ public sealed record LabourItem(
     string? Shift = null,
     string? Task = null,
     string? Notes = null,
-    decimal? DurationHours = null
+    decimal? DurationHours = null,
+    Guid? EngagedThroughFieldOperatorId = null
 );
 
 public sealed record DisturbanceItem(

@@ -470,6 +470,15 @@ export const LabourEventSchema = z.object({
     notes: z.string().optional(),
     detectedCrop: z.string().optional(),
     whoWorked: LabourWhoWorkedSchema.optional(),
+    /**
+     * FOUNDER RULING 2026-08-31 — the people named as present, each exactly as
+     * spoken ("names marked here means attendance + identity recorded"). NOT
+     * `whoWorked`, the ENUM of labour KIND a server names reader once mistook
+     * for names. Declared so this object schema does not strip the key (the
+     * confirm screen needs names); the server persists from its OWN stored
+     * parse, never from this round-trip.
+     */
+    workerNames: z.array(z.string()).optional(),
     activity: z.string().optional(),
     targetPlotName: z.string().optional(),
     // Track B Wave-2 (B2.4) — richer labour capture (optional, back-compat; legacy fields retained)

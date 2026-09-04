@@ -201,13 +201,15 @@ afterEach(() => {
     unqueueableRef.current = 0;
 });
 
-describe('AppHeader — the canonical strip renders on every route', () => {
+// FOUNDER RULING 2026-08-31 — SUPERSEDES "renders on every route". The tray
+// followed the farmer onto the Setup Hub, where the work it names cannot be
+// acted on. It is now a log-desk instrument: log and reflect only. `compare`
+// is excluded too — a reading surface, and he named log and reflect.
+describe('AppHeader — the canonical strip renders on the log desk only', () => {
     it.each([
         ['main', 'log'],
         ['main', 'reflect'],
-        ['main', 'compare'],
-        ['attention', 'log'],
-    ] as const)('the_header_renders_the_canonical_strip_on_every_route (%s / %s)', async (route, view) => {
+    ] as const)('the_header_renders_the_canonical_strip_on_the_log_desk (%s / %s)', async (route, view) => {
         await act(async () => {
             renderHeader({ currentRoute: route, currentView: view });
         });
@@ -219,6 +221,28 @@ describe('AppHeader — the canonical strip renders on every route', () => {
         // used to answer this; the founder's 2026-08-30 ruling replaced it with
         // `FarmNameBoard`, and the property it was protecting is unchanged.
         expect(screen.getByTestId('farm-nameboard')).toHaveTextContent('Arve Farm');
+    });
+});
+
+// The founder's actual ask, as a test: the tray is OFF the Setup Hub. Revert
+// the `showOversightStrip` gate and every case here fails.
+describe('AppHeader — the oversight tray is off every non-log surface', () => {
+    it.each([
+        ['profile', 'log'],      // Setup Hub — the founder's named surface
+        ['main', 'compare'],
+        ['attention', 'log'],
+        ['settings', 'log'],
+        ['income', 'log'],
+    ] as const)('the_tray_does_not_render_off_the_log_desk (%s / %s)', async (route, view) => {
+        await act(async () => {
+            renderHeader({ currentRoute: route, currentView: view });
+        });
+
+        expect(screen.queryByTestId('canonical-strip-waiting-button')).toBeNull();
+        // ...but the farm identity element is a SEPARATE mount and must survive,
+        // so the farmer never loses sight of which farm he is looking at (now
+        // `FarmNameBoard`, formerly the farm chip — 2026-08-30 nameboard ruling).
+        expect(screen.getByTestId('farm-nameboard')).toBeInTheDocument();
     });
 });
 

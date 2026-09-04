@@ -129,7 +129,11 @@ const AppRouter: React.FC = () => {
         setStatus('idle');
 
         const agriLogFormat: AgriLogResponse = {
-            dayOutcome: log.dayOutcome,
+            // task-0b — `log.dayOutcome` is `DayOutcome | null`; the editable
+            // draft's shape (`AgriLogResponse.dayOutcome`) is unchanged and
+            // still required, so this falls back exactly as this edit-draft
+            // conversion already did for every pulled log before task-0b.
+            dayOutcome: log.dayOutcome ?? 'WORK_RECORDED',
             cropActivities: log.cropActivities || [],
             irrigation: log.irrigation || [],
             labour: log.labour || [],
@@ -185,6 +189,13 @@ const AppRouter: React.FC = () => {
     // NOTE: this hook call must stay ABOVE every conditional return below —
     // React hooks must run unconditionally on every render.
     useLabourLogArrivalScroll({ currentRoute, mainView, logIntent });
+
+    // Labour V2 R1 Task 3.4a — the labour auto-submit that lived here was
+    // DELETED. A labour parse now lands on features/labour/components/
+    // AttendanceResult.tsx and is saved ONLY by the farmer pressing बरोबर
+    // (trust rule 5; useVoiceRecorder.ts's "never skip to auto-save" holds
+    // on this door again). The 2026-08-31 ruling it implemented is
+    // superseded by the founder's 2026-09-01 final direction §7 / D1–D3.
 
     if (!welcomeSeen) {
         return (

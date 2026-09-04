@@ -222,7 +222,11 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
         setMode('manual');
         setStatus('idle');
         setDraftLog({
-            dayOutcome: log.dayOutcome,
+            // task-0b — `log.dayOutcome` is `DayOutcome | null`; `draftLog`'s
+            // shape (`AgriLogResponse`) is unchanged and still required, so
+            // this falls back exactly as this preview edit-draft conversion
+            // already did for every pulled log before task-0b.
+            dayOutcome: log.dayOutcome ?? 'WORK_RECORDED',
             cropActivities: log.cropActivities || [],
             irrigation: log.irrigation || [],
             labour: log.labour || [],

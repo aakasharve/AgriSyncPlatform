@@ -169,13 +169,18 @@ public sealed class FieldOperatorRlsRealPostgresTests(Xunit.Abstractions.ITestOu
             await SeedPlotAsync(raw, PlotA, FarmA, "Plot A");
             await SeedCropCycleAsync(raw, CycleA, FarmA, PlotA);
             await SeedMembershipAsync(raw, FarmA, OwnerAUserId, FarmAAccount, "PrimaryOwner");
-            await SeedMembershipAsync(raw, FarmA, MukadamUserId, FarmAAccount, "Mukadam");
+            // D5 (2026-09-02): the Mukadam role no longer carries labour
+            // authority, so the attacker is seeded GRANTED — on BOTH farms,
+            // exactly as the role used to reach both. The cross-farm Forbidden
+            // proofs below therefore keep meaning "farm scope refused him",
+            // never "he lacked the grant".
+            await SeedMembershipAsync(raw, FarmA, MukadamUserId, FarmAAccount, "Mukadam", canManageLabourRecords: true);
 
             await SeedFarmAsync(raw, FarmB, OwnerBUserId, FarmBAccount, "Task 14 Farm B");
             await SeedPlotAsync(raw, PlotB, FarmB, "Plot B");
             await SeedCropCycleAsync(raw, CycleB, FarmB, PlotB);
             await SeedMembershipAsync(raw, FarmB, OwnerBUserId, FarmBAccount, "PrimaryOwner");
-            await SeedMembershipAsync(raw, FarmB, MukadamUserId, FarmBAccount, "Mukadam");
+            await SeedMembershipAsync(raw, FarmB, MukadamUserId, FarmBAccount, "Mukadam", canManageLabourRecords: true);
         }
 
         var services = new ServiceCollection();
@@ -1123,19 +1128,21 @@ public sealed class FieldOperatorRlsRealPostgresTests(Xunit.Abstractions.ITestOu
     }
 
     private static async Task SeedMembershipAsync(
-        NpgsqlConnection db, Guid farmId, Guid userId, Guid ownerAccountId, string role)
+        NpgsqlConnection db, Guid farmId, Guid userId, Guid ownerAccountId, string role,
+        bool canManageLabourRecords = false)
     {
         await using var cmd = db.CreateCommand();
         cmd.CommandText = """
             INSERT INTO ssf.farm_memberships
-                ("Id", farm_id, user_id, role, granted_at_utc, modified_at_utc, owner_account_id, status)
-            VALUES (@id, @farm, @user, @role, NOW(), NOW(), @account, 3);
+                ("Id", farm_id, user_id, role, granted_at_utc, modified_at_utc, owner_account_id, status, can_manage_labour_records)
+            VALUES (@id, @farm, @user, @role, NOW(), NOW(), @account, 3, @grant);
             """;
         cmd.Parameters.AddWithValue("id", Guid.NewGuid());
         cmd.Parameters.AddWithValue("farm", farmId);
         cmd.Parameters.AddWithValue("user", userId);
         cmd.Parameters.AddWithValue("role", role);
         cmd.Parameters.AddWithValue("account", ownerAccountId);
+        cmd.Parameters.AddWithValue("grant", canManageLabourRecords);
         await cmd.ExecuteNonQueryAsync();
     }
 

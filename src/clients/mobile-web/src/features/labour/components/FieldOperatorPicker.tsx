@@ -255,7 +255,7 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
         setNewFullName('');
         const outcome = await runAttach(created);
         setAdding(false);
-        if (outcome === 'failed') onToast?.(`${created.displayName} ची नोंद झाली, पण या कामाला लावता आलं नाही — पुन्हा प्रयत्न करा`);
+        if (outcome === 'failed') onToast?.(`${created.displayName}चं नाव यादीत आलं, पण या कामाला लावता आलं नाही — पुन्हा प्रयत्न करा`);
         else onToast?.(`${created.displayName} ✓ जोडलं`);
     };
 
@@ -301,16 +301,16 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
                 >
                     <UserPlus size={20} className="flex-shrink-0 text-stone-400" />
                     <span className="flex-1 text-[17px] font-bold text-stone-600">{attached.length ? 'आणखी नाव जोडा' : 'नावं जोडा'}</span>
-                    <span className="flex-shrink-0 rounded-lg bg-white px-2 py-1 text-[15px] font-bold text-stone-400">ऐच्छिक</span>
+                    <span className="flex-shrink-0 rounded-lg bg-white px-2 py-1 text-[15px] font-bold text-stone-400">हवं तर</span>
                 </button>
             ) : (
                 <div data-testid="fo-picker-panel" className="rounded-xl border border-stone-100 bg-stone-50 p-3">
                     {/* Constraint 3, said out loud: attaching a name does not
                         touch the number the farmer reported. */}
-                    <p className="text-[16px] leading-snug text-stone-600">कोण काम करत होतं ते इथे नोंदवता येतं. मजुरांची संख्या यानं बदलत नाही.</p>
+                    <p className="text-[16px] leading-snug text-stone-600">कोण काम करत होतं ते इथे सांगता येतं. किती जण होते, ते यानं बदलत नाही.</p>
 
                     <GroupLabel>माणूस निवडा</GroupLabel>
-                    {loading && <LoadingState label="माणसं आणत आहोत…" compact />}
+                    {loading && <LoadingState label="नावांची यादी येत आहे…" compact />}
                     {loadFailed && <LoadErrorBanner onRetry={() => void load()} compact />}
                     {!loading && !loadFailed && rows.length === 0 && (
                         /*
@@ -386,7 +386,7 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
                                         {row.ambiguous && !row.fullName && <NameOnlyBadge />}
                                     </span>
                                     {row.fullName && <span className="mt-0.5 block truncate text-[16px] text-stone-500">{row.fullName}</span>}
-                                    {row.ambiguous && <span className="mt-0.5 block text-[16px] text-stone-500">सारखं नाव — वेगळी व्यक्ती</span>}
+                                    {row.ambiguous && <span className="mt-0.5 block text-[16px] text-stone-500">सारखं नाव — माणूस वेगळा</span>}
                                 </span>
                                 <span className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full ${isAttached ? 'bg-emerald-50 text-emerald-600' : 'bg-stone-100 text-stone-400'}`}>
                                     {isAttached ? <Check size={20} strokeWidth={3} /> : <Plus size={20} strokeWidth={2.6} />}
@@ -435,7 +435,7 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
                             maxLength={200}
                             disabled={loadFailed}
                             aria-label="पूर्ण नाव किंवा ओळख — ऐच्छिक"
-                            placeholder="पूर्ण नाव / ओळख — ऐच्छिक"
+                            placeholder="पूर्ण नाव किंवा ओळख — हवं तर"
                             data-testid="fo-new-full-name"
                             className="min-h-[56px] w-full rounded-xl border border-stone-200 bg-white px-3.5 text-[17px] font-semibold text-stone-700 placeholder:font-normal placeholder:text-stone-400 focus:border-emerald-500 focus:outline-none disabled:bg-stone-100 disabled:text-stone-400"
                         />

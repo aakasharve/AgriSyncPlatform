@@ -182,7 +182,7 @@ public sealed class GetLabourDataHandlerTests : IAsyncLifetime
             "Owed = RecordedWages - Paid - Advance (derived, never stored); for an unsettled worker Owed == RecordedWages");
 
         // Dashboard rollups mirror the per-person sums (never re-derived).
-        data.Dashboard.Money.Paid.Should().Be(300m);
+        data.Dashboard.Money!.Paid.Should().Be(300m);
         data.Dashboard.Money.Recorded.Should().Be(700m);
         data.Dashboard.Money.Owed.Should().Be(400m);
     }
@@ -245,7 +245,7 @@ public sealed class GetLabourDataHandlerTests : IAsyncLifetime
         result.IsSuccess.Should().BeTrue();
         var data = result.Value!;
 
-        data.Dashboard.Money.Owed.Should().BeGreaterThanOrEqualTo(0m,
+        data.Dashboard.Money!.Owed.Should().BeGreaterThanOrEqualTo(0m,
             "a paid-then-departed worker must never drive the dashboard Owed negative");
         data.Dashboard.Money.Paid.Should().Be(data.People.Sum(p => p.Paid),
             "Dashboard.Money.Paid must reconcile with the SAME population as the People rows displayed beneath it");

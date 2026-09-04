@@ -4,6 +4,7 @@
 // `import { X } from '.../DexieDatabase'` call sites keep working unchanged.
 
 import type { DailyLog } from '../../types';
+import type { AttendanceMarkDto } from '../api/dtos';
 import type { JobCard } from '../../domain/work/JobCard';
 import type { WorkerProfileData } from '../../domain/work/ReliabilityScore';
 import type {
@@ -90,6 +91,19 @@ export interface MutationQueueItem {
      */
     retryCount: number;
     lastError?: string;
+    /**
+     * Task 9 (B001, Labour V2 R1) — the SERVER'S error code for the verdict
+     * that parked this row (e.g. `ShramSafal.AttendanceContradiction`).
+     * `lastError` carries the human message; without the code no surface
+     * could tell one park from another except by matching English prose.
+     * Written by `markRejectedUserReview` when the worker has one.
+     *
+     * NOT INDEXED, deliberately — same rule and precedent as
+     * `nextRetryAfterMs` below: Dexie needs schema declarations only for
+     * indexed fields, so this needed no version bump, and a bump is one-way
+     * for APK users.
+     */
+    errorCode?: string;
     /**
      * §P0.7 box 2c — epoch ms before which `getPending` will not offer this row.
      *
@@ -541,6 +555,22 @@ export interface FinanceCorrectionCacheRecord {
     id: string;
     costEntryId: string;
     payload: unknown;
+    updatedAt: string;
+}
+
+/**
+ * Labour V2 R1 Task 3.5c — one server-acknowledged attendance ruling, as
+ * pulled. Grain matches ux_attendance_marks_farm_operator_day. This store is
+ * the ACKNOWLEDGED half only; unsynced intent lives in `mutationQueue`, and
+ * `features/labour/data/attendanceLocal.ts` is the one read that merges the
+ * two with a `source` label (P10: intent is never rendered as saved).
+ */
+export interface AttendanceMarkCacheRecord {
+    id: string;
+    farmId: string;
+    fieldOperatorId: string;
+    workDate: string;
+    payload: AttendanceMarkDto;
     updatedAt: string;
 }
 

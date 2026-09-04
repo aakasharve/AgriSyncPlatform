@@ -161,7 +161,7 @@ public sealed class CorrectLabourHandler(
         // Owner-tier and Mukadam are unchanged; what is new is that any OTHER
         // role the owner has explicitly granted (O-4) is now allowed here too.
         if (!await LabourManagementGate.IsAllowedAsync(
-                repository, command.FarmId.Value, command.CallerUserId.Value, ct))
+                repository, command.FarmId.Value, command.CallerUserId.Value, clock.UtcNow, ct))
         {
             return Result.Failure<CorrectLabourResult>(ShramSafalErrors.Forbidden);
         }

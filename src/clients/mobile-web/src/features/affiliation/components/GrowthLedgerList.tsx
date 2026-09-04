@@ -35,7 +35,7 @@ const EVENT_CONFIG: Record<GrowthEventItem['eventType'], {
     },
     WorkerActivated: {
         icon: <Users size={18} />,
-        mr: 'कामगार सक्रिय',
+        mr: 'कामावर आला',
         en: 'Worker activated',
         colorClass: 'bg-orange-100 text-orange-600',
     },

@@ -6,10 +6,9 @@
  * Uses the MeContext farms + membership data passed via props.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import type { JobCard } from '../../../domain/work/JobCard';
 import type { AssignWorkerRequest } from '../data/jobCardsClient';
-import { useFarmContext } from '../../../core/session/FarmContext';
 import { getRoleLabel } from '../../../shared/roles/roleLabels';
 
 interface FarmMember {
@@ -40,7 +39,7 @@ const ASSIGNABLE_ROLES = ['Worker', 'Mukadam'];
 
 const AssignWorkerSheet: React.FC<AssignWorkerSheetProps> = ({
     card,
-    farmId,
+    farmId: _farmId,
     members = [],
     onClose,
     onAssigned,
@@ -79,7 +78,7 @@ const AssignWorkerSheet: React.FC<AssignWorkerSheetProps> = ({
                     style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
                     className="text-lg font-black text-stone-900 mb-1"
                 >
-                    कामगार नेमणूक
+                    कामाची नेमणूक
                 </h2>
                 <p
                     style={{ fontFamily: "'DM Sans', sans-serif" }}
@@ -94,7 +93,7 @@ const AssignWorkerSheet: React.FC<AssignWorkerSheetProps> = ({
                             style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
                             className="text-sm text-stone-500"
                         >
-                            कोणतेही कामगार उपलब्ध नाहीत
+                            अजून कोणाचंही नाव जोडलेलं नाही
                         </p>
                         <p
                             style={{ fontFamily: "'DM Sans', sans-serif" }}

@@ -32,7 +32,8 @@ public sealed class LabourAssignment : Entity<Guid>
         ContractUnit? contractUnit, decimal? contractQuantity, decimal? totalCost,
         Guid? linkedActivityId, DateTime createdAtUtc, LabourTime time,
         LabourShift? shift, string? task, string workerNamesJson, string? notes,
-        NumericCertainty? costCertainty, string? costSpokenText)
+        NumericCertainty? costCertainty, string? costSpokenText,
+        Guid? engagedThroughFieldOperatorId)
         : base(id)
     {
         DailyLogId = dailyLogId;
@@ -54,6 +55,7 @@ public sealed class LabourAssignment : Entity<Guid>
         Notes = notes;
         CostCertainty = costCertainty;
         CostSpokenText = costSpokenText;
+        EngagedThroughFieldOperatorId = engagedThroughFieldOperatorId;
     }
 
     public Guid DailyLogId { get; private set; }
@@ -132,6 +134,20 @@ public sealed class LabourAssignment : Entity<Guid>
     /// <summary>His own words for the cost, kept verbatim beside it.</summary>
     public string? CostSpokenText { get; private set; }
 
+    /// <summary>
+    /// Final direction §3 (2026-09-01) — THROUGH WHOM this crew was engaged: a
+    /// FieldOperatorId, never an AppRole (both may be the same human on the
+    /// same day and must remain two rows in two tables). ENGAGEMENT-scoped by
+    /// construction: Shankar with 8 on grapes and 4 on cane is two engagements,
+    /// never "12 unique people". NULL = nobody said through whom — never "no
+    /// mukadam". Set at Create only (R1): re-attributing a recorded engagement
+    /// is a correction story this release does not ship. The mukadam's own
+    /// presence stays his own AttendanceMark; this field has nowhere to
+    /// contradict it. Anonymous remainder stays arithmetic — no worker row is
+    /// ever minted from this link (D9.12; FieldOperatorSingleProducerRules).
+    /// </summary>
+    public Guid? EngagedThroughFieldOperatorId { get; private set; }
+
     public static LabourAssignment Create(
         Guid id, Guid dailyLogId, LabourEngagementType engagementType,
         int? maleCount, int? femaleCount, int? workerCount, decimal? wagePerPerson,
@@ -141,7 +157,11 @@ public sealed class LabourAssignment : Entity<Guid>
         string? notes = null,
         // wave-3.12 — trailing and OPTIONAL so every pre-existing call site keeps
         // compiling and keeps writing NULL, which is exactly "not asked, not stated".
-        NumericCertainty? costCertainty = null, string? costSpokenText = null)
+        NumericCertainty? costCertainty = null, string? costSpokenText = null,
+        // Task 3.6 (spec: 2026-08-28-labour-v2-release-1) — the crew link, trailing
+        // and OPTIONAL for the same reason: every pre-existing call site keeps
+        // compiling and keeps writing NULL = "nobody said through whom".
+        Guid? engagedThroughFieldOperatorId = null)
     {
         // Closes default(LabourTime): a readonly record struct always has an implicit
         // public parameterless constructor, so the zero value is reachable no matter how
@@ -156,9 +176,24 @@ public sealed class LabourAssignment : Entity<Guid>
                 "default(LabourTime) is not a valid duration.", nameof(time));
         }
 
-        var workerNamesJson = workerNames is null || workerNames.Count == 0
+        // B002 (Labour V2 R1, 3.3 review carried to 3.5): the name pipe is the
+        // write boundary, and it is SERVER-AUTHORITATIVE — trim each spoken
+        // name and drop whitespace-only entries, so 'गणेश ' and 'गणेश' can
+        // never become two people on the record or mask a contradiction the
+        // attendance check keys by name. Same posture as `notes` below: keep
+        // the farmer's words, shed the edges. No dedupe — identical names are
+        // legitimate (two real people called बाळू) and merging is identity
+        // resolution's job (rule 10), never serialization's.
+        var normalizedWorkerNames = workerNames is null
+            ? null
+            : workerNames
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Select(n => n.Trim())
+                .ToList();
+
+        var workerNamesJson = normalizedWorkerNames is null || normalizedWorkerNames.Count == 0
             ? "[]"
-            : JsonSerializer.Serialize(workerNames, WorkerNamesSerializerOptions);
+            : JsonSerializer.Serialize(normalizedWorkerNames, WorkerNamesSerializerOptions);
 
         return new(id, dailyLogId, engagementType, maleCount, femaleCount, workerCount,
                wagePerPerson, contractUnit, contractQuantity, totalCost, linkedActivityId, createdAtUtc, time,
@@ -166,7 +201,7 @@ public sealed class LabourAssignment : Entity<Guid>
                // "   " is not a note (see the Notes remarks). Trim the edges and
                // keep the farmer's words; blank becomes the honest null.
                string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
-               costCertainty, costSpokenText);
+               costCertainty, costSpokenText, engagedThroughFieldOperatorId);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -198,16 +233,20 @@ public sealed class LabourAssignment : Entity<Guid>
     /// resolved to a fabricated <c>0</c>. This mirrors
     /// <c>LabourAssignmentFactory.FromParsed</c> exactly, so a corrected row and
     /// a freshly recorded row obey the same rule. An explicitly stated 0 still
-    /// stores 0 and stays distinguishable from silence.</para>
+    /// stores 0 and stays distinguishable from silence.
+    /// Task 6 (spec: 2026-08-28-labour-v2-release-1) — <see cref="LabourHeadcount.Resolve"/>
+    /// now preserves that same all-silent-is-null rule itself, so calling it
+    /// directly is sufficient; the explicit outer null-check this method used
+    /// to need before that change is gone (it was equivalent, and duplicating
+    /// the same predicate in two places invites the two copies drifting apart
+    /// later).</para>
     /// </summary>
     public void CorrectHeadcount(int? workerCount, int? maleCount, int? femaleCount)
     {
         // The split is stored exactly as stated; only the total is resolved.
         MaleCount = maleCount;
         FemaleCount = femaleCount;
-        WorkerCount = (workerCount ?? maleCount ?? femaleCount) is null
-            ? null
-            : LabourHeadcount.Resolve(workerCount, maleCount, femaleCount);
+        WorkerCount = LabourHeadcount.Resolve(workerCount, maleCount, femaleCount);
     }
 
     /// <summary>

@@ -267,8 +267,8 @@ export interface NoticeCopy {
 // ── मराठी ───────────────────────────────────────────────────────────────────────────
 const mr: NoticeCopy = {
     title: 'सुरू करण्याआधी',
-    intro: 'तुमच्या शेताची माहिती तुमच्याच ताब्यात राहते. ॲप चालण्यासाठी फक्त खालील माहिती वापरतो.',
-    brandLine: 'श्रम सफल हे Agriryot Value Enterprises Private Limited चं ॲप आहे; ते AgriSync प्लॅटफॉर्मवर चालतं.',
+    intro: 'तुमच्या शेताची माहिती तुमच्याच ताब्यात राहते. श्रम सफल चालण्यासाठी फक्त खालची माहिती वापरली जाते.',
+    brandLine: 'श्रम सफल — Agriryot Value Enterprises Private Limited यांची सेवा. ती AgriSync वर चालते.',
     purposeCardsHeading: 'कोणती माहिती, कशासाठी',
     cards: [
         {
@@ -282,7 +282,7 @@ const mr: NoticeCopy = {
         {
             id: 'farmWork',
             title: 'शेतातलं काम',
-            data: 'शेत, प्लॉट, पीक, कामं, मजूर, खर्च, उत्पन्न, टीम',
+            data: 'शेत, प्लॉट, पीक, कामं, हजेरी, खर्च, उत्पन्न, टीम',
             purpose: 'रोजचं काम समजून हिशोब स्पष्ट दाखवण्यासाठी',
             purposes: ['FARM_OPERATIONS', 'OFFLINE_SYNC'],
             dataCategories: ['FARM_WORK_RECORDS'],
@@ -306,7 +306,7 @@ const mr: NoticeCopy = {
         {
             id: 'technical',
             title: 'तांत्रिक माहिती',
-            data: 'फोन, ॲप, सिंक आणि सुरक्षेची मर्यादित माहिती',
+            data: 'फोन, वापर, माहिती पाठवणं आणि सुरक्षा — यांची मर्यादित माहिती',
             purpose: 'नेटवर्क नसताना काम सुरक्षित ठेवून नंतर सिंक करण्यासाठी आणि गैरवापर शोधण्यासाठी',
             purposes: ['SECURITY', 'OFFLINE_SYNC'],
             dataCategories: ['DEVICE_TECHNICAL'],

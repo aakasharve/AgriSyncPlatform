@@ -159,6 +159,14 @@ const FOUNDER_APPROVED_KEYS: (keyof OversightTranslations)[] = [
     'helpTitle',
     'helpSubtitle',
     'helpButtonLabel',
+    // Task 15 (Labour V2 R1) — six more, from the replacement table for
+    // `CropSelector.tsx`'s remaining English dev copy.
+    'readyToLogLabel',
+    'entireFarmOverviewLabel',
+    'plotCountUnitSingular',
+    'plotCountUnitPlural',
+    'selectedCountUnitSingular',
+    'selectedCountUnitPlural',
 ];
 
 // The keys whose `mr` is `''` BY DESIGN — category (c), the honest encoding
@@ -262,6 +270,13 @@ const EXPECTED_MR: Record<keyof OversightTranslations, string> = {
     guideLine1: 'एक किंवा अनेक प्लॉट निवडा.',
     guideLine2: 'एकाच कामासाठी एकापेक्षा जास्त प्लॉट निवडू शकता.',
     guideLine3: 'काम प्लॉटशी संबंधित नसेल, तरच खाली ‘संपूर्ण शेत’ निवडा.',
+    // FOUNDER RULING 2026-08-31 — the LABOUR arrival variant of the guide
+    // card. His own three sentences, corrected for grammar only. Pinned here
+    // for the same reason as the four above: they are his words, so a silent
+    // reword by anyone else has to fail a test rather than just ship.
+    labourGuideHeadline: 'आज कोणत्या प्लॉटवर कोणी काम केलं, त्यांची हजेरी घ्या किंवा ओळख पटवून द्या.',
+    labourGuideLine1: 'तुमच्या शेतातले रोजचे कामगार असू शकतात, किंवा मुकादमाकडून आलेले सुद्धा असू शकतात.',
+    labourGuideLine2: 'शक्य तेवढ्या सगळ्यांची नावं घ्या — म्हणजे नंतर तुम्हाला माहीत असेल, कोणतं काम कोणी केलं.',
     plotSectionHeader: 'प्लॉट निवडा',
     plotSectionHint: 'एकापेक्षा जास्त प्लॉट निवडू शकता',
     entireFarmLabel: 'संपूर्ण शेत',
@@ -269,6 +284,16 @@ const EXPECTED_MR: Record<keyof OversightTranslations, string> = {
     helpTitle: 'काही अडचण आहे का?',
     helpSubtitle: 'मी मदत करतो.',
     helpButtonLabel: 'श्रम साथीशी बोला',
+
+    // (d) founder-approved, Task 15 (Labour V2 R1) — verbatim from the
+    // replacement table for `CropSelector.tsx`'s remaining English dev
+    // copy. See `oversightTranslations.ts`'s header, "TASK 15".
+    readyToLogLabel: 'कामं सांगायला तयार',
+    entireFarmOverviewLabel: 'एकूण',
+    plotCountUnitSingular: 'प्लॉट',
+    plotCountUnitPlural: 'प्लॉट',
+    selectedCountUnitSingular: 'निवडला',
+    selectedCountUnitPlural: 'निवडलेत',
 };
 
 // English is NOT founder-gated, so it is deliberately left unpinned —
@@ -487,10 +512,16 @@ describe('oversightTranslations — every_mr_value_is_byte_pinned (finding F7b)'
         //
         // NINETEEN as of 2026-08-26: `approximately` ('अंदाजे') joins them —
         // his word, from the coordinator message that overruled `aacdd16c`'s
-        // deletion of the day-count tail. The COUNT is asserted, not just
-        // the loop, so a key added to his list without a matching oracle
-        // entry fails here rather than passing vacuously.
-        expect(FOUNDER_APPROVED_KEYS).toHaveLength(19);
+        // deletion of the day-count tail.
+        //
+        // TWENTY-FIVE as of Task 15 (Labour V2 R1): six more join —
+        // `readyToLogLabel`, `entireFarmOverviewLabel`,
+        // `plotCountUnitSingular/Plural`, `selectedCountUnitSingular/Plural`
+        // — verbatim from the replacement table for `CropSelector.tsx`'s
+        // remaining English dev copy. The COUNT is asserted, not just the
+        // loop, so a key added to his list without a matching oracle entry
+        // fails here rather than passing vacuously.
+        expect(FOUNDER_APPROVED_KEYS).toHaveLength(25);
         for (const key of FOUNDER_APPROVED_KEYS) {
             expect(oversightTranslations.mr[key], `mr.${key} drifted from the founder's own words`).toBe(EXPECTED_MR[key]);
             expect(oversightTranslations.mr[key].length, `mr.${key} must not be empty`).toBeGreaterThan(0);

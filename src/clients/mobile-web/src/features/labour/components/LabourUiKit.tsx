@@ -94,9 +94,18 @@ export const EmptyState: React.FC<{ icon: React.ReactNode; title: string; subtit
  * advance outstanding), or — Decision 3a (2026-07-19) — a plain "₹X जास्त
  * दिलं" when Paid exceeds Recorded with NO advance given at all (never call
  * that an outstanding उचल — the worker was never advanced anything).
+ *
+ * Task 1 (P4) — renders NOTHING when `balance.recorded` is unknown
+ * (`netBalance` returns `null`): with no job-card evidence, owe/overpaid/
+ * advance are all equally unfounded claims. The honest render is the line's
+ * absence, not a fabricated ₹0 or a fabricated "जास्त दिलं".
  */
 export const MoneyLine: React.FC<{ balance: LabourBalance }> = ({ balance }) => {
-    const { owe, amount, isAdvance } = netBalance(balance);
+    const net = netBalance(balance);
+    if (!net) {
+        return null;
+    }
+    const { owe, amount, isAdvance } = net;
     // The `IndianRupee` icon that used to lead these lines rendered a ₹ glyph
     // immediately before `inr()`'s own ₹, so every worker row literally read
     // "₹ ₹2,200 द्यायचे". Dropped — the figure carries its own symbol. `Wallet`
@@ -105,7 +114,7 @@ export const MoneyLine: React.FC<{ balance: LabourBalance }> = ({ balance }) => 
     if (owe) {
         return (
             <span className="mt-1 block text-[17px] font-extrabold text-emerald-700">
-                {inr(amount)} द्यायचे
+                {inr(amount)} बाकी
             </span>
         );
     }
@@ -125,12 +134,12 @@ export const MoneyLine: React.FC<{ balance: LabourBalance }> = ({ balance }) => 
 
 export const MukadamBadge: React.FC<{ sub?: boolean }> = ({ sub }) => (
     <span className={`rounded-lg border px-2.5 py-1 text-[15px] font-bold ${sub ? 'border-blue-100 bg-blue-50 text-blue-700' : 'border-violet-100 bg-violet-50 text-violet-700'}`}>
-        {sub ? 'उप-मुकादम' : 'मुकादम'}
+        {sub ? 'उप-जबाबदार' : 'जबाबदार'}
     </span>
 );
 
 export const TaskBadge: React.FC<{ task: string }> = ({ task }) => (
-    <span className="rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1 text-[15px] font-bold text-blue-700">{task} टीम</span>
+    <span className="rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1 text-[15px] font-bold text-blue-700">फक्त {task}साठी</span>
 );
 
 export const TempBadge: React.FC = () => (
@@ -144,7 +153,7 @@ export const TempBadge: React.FC = () => (
  * much the app knows. Now says the thing plainly in Marathi.
  */
 export const NameOnlyBadge: React.FC = () => (
-    <span className="rounded-lg bg-stone-100 px-2.5 py-1 text-[15px] font-bold text-stone-500">फक्त नाव</span>
+    <span className="rounded-lg bg-stone-100 px-2.5 py-1 text-[15px] font-bold text-stone-500">फक्त नाव माहीत</span>
 );
 
 /** A tappable person card (hub + team lists). */
@@ -231,22 +240,34 @@ export const BackHeader: React.FC<{ title: string; onBack: () => void }> = ({ ti
  * showing them would let a farmer believe cash was recorded when it wasn't.
  * Hidden, not deleted — flip back to `true` once these post to a real
  * endpoint.
+ *
+ * Task 1 (P4) — when `balance.recorded` is unknown (`netBalance` returns
+ * `null`), the काम झालं tile reads `—` (the house pattern for an absent
+ * fact) and the headline amount/label plus the बाकी/जास्त-दिलं tile are
+ * omitted outright rather than showing a fabricated ₹0/owe/overpaid claim.
+ * The card falls back to a neutral (non-owe, non-overpaid) style in that
+ * case — no new copy is introduced anywhere in this fallback.
  */
 export const BalanceCard: React.FC<{ balance: LabourBalance; why?: string; settleLabel: string; onAdvance: () => void; onSettle: () => void; showActions?: boolean }> = ({ balance, why, settleLabel, onAdvance, onSettle, showActions = true }) => {
-    const { owe, amount, isAdvance } = netBalance(balance);
+    const net = netBalance(balance);
     const tiles: [string, string][] = [
-        ['काम झालं', inr(balance.recorded)],
-        ['दिलं', inr(balance.paid)],
+        ['कामाचे पैसे', balance.recorded === null ? '—' : inr(balance.recorded)],
+        // Phase 4 (D-H8) — `null` = withheld by view; `—`, never a fabricated ₹0.
+        ['दिलं', balance.paid === null ? '—' : inr(balance.paid)],
     ];
-    if (balance.advance > 0) tiles.push(['उचल', inr(balance.advance)]);
-    tiles.push([owe ? 'बाकी' : (isAdvance ? 'उचल बाकी' : 'जास्त दिलं'), inr(amount)]);
+    if (balance.advance !== null && balance.advance > 0) tiles.push(['उचल', inr(balance.advance)]);
+    if (net) {
+        tiles.push([net.owe ? 'बाकी' : (net.isAdvance ? 'उचल बाकी' : 'जास्त दिलं'), inr(net.amount)]);
+    }
 
     return (
-        <div className={`rounded-[24px] border p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)] ${owe ? 'border-emerald-100 bg-gradient-to-br from-emerald-50 to-white' : 'border-amber-200 bg-gradient-to-br from-amber-50 to-white'}`}>
-            <div className="flex items-baseline justify-between gap-2">
-                <span className={`font-black leading-none tracking-tight [font-variant-numeric:tabular-nums] text-[40px] ${owe ? 'text-emerald-700' : 'text-amber-700'}`}>{inr(amount)}</span>
-                <span className="text-right text-[18px] font-bold text-stone-600">{owe ? 'द्यायचे' : (isAdvance ? 'उचल बाकी' : 'जास्त दिलं')}</span>
-            </div>
+        <div className={`rounded-[24px] border p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)] ${net === null ? 'border-stone-100 bg-white' : net.owe ? 'border-emerald-100 bg-gradient-to-br from-emerald-50 to-white' : 'border-amber-200 bg-gradient-to-br from-amber-50 to-white'}`}>
+            {net && (
+                <div className="flex items-baseline justify-between gap-2">
+                    <span className={`font-black leading-none tracking-tight [font-variant-numeric:tabular-nums] text-[40px] ${net.owe ? 'text-emerald-700' : 'text-amber-700'}`}>{inr(net.amount)}</span>
+                    <span className="text-right text-[18px] font-bold text-stone-600">{net.owe ? 'द्यायचे' : (net.isAdvance ? 'उचल बाकी' : 'जास्त दिलं')}</span>
+                </div>
+            )}
             {/*
               * These four labels (काम झालं / दिलं / उचल / बाकी) were 9px — the
               * smallest text on the screen was the text telling the farmer WHICH
@@ -293,7 +314,7 @@ export const HelpNote: React.FC<{ what: string; act: string; why: string; label?
                 <ChevronDown size={24} className={`flex-shrink-0 text-stone-400 transition-transform ${open ? 'rotate-180' : ''}`} />
             </button>
             {open && (
-                <div className="mt-1.5 rounded-[13px] border border-emerald-100 bg-emerald-50 p-4">
+                <div data-testid="help-note-body" className="mt-1.5 rounded-[13px] border border-emerald-100 bg-emerald-50 p-4">
                     {([['काय आहे', what], ['काय करायचं', act], ['का?', why]] as [string, string][]).map(([k, v], i) => (
                         // Stacked, not a 76px side column: at 17px the Marathi
                         // heading no longer fits a narrow gutter, and stacking

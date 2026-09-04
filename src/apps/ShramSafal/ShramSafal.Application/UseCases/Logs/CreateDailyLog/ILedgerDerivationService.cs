@@ -58,9 +58,26 @@ public interface ILedgerDerivationService
     /// a parse job id: deterministic and stable across re-saves, so re-derivation
     /// supersedes the current row instead of duplicating it.</para>
     /// </summary>
+    /// <param name="deriveLabour">
+    /// Labour V2 R1 Task 2 — the SAME single-producer guard <see cref="DeriveAsync"/>
+    /// carries, for the same reason and against a live duplication. The manual client
+    /// builds both labour arrays from ONE list: <c>buildManualDraft</c> sets
+    /// <c>draft.labour = log.labour</c> and <c>buildLabourPayloads</c> maps that same
+    /// <c>log.labour</c> onto the structured <c>labour[]</c>. So a manual save puts one
+    /// engagement on the wire twice, the handler stages the canonical Phase-1 rows from
+    /// <c>command.Labour</c>, and deriving the draft's copy as well recorded one
+    /// morning's work as two — with a fabricated eight-hour default over a duration the
+    /// farmer had actually stated. Passing <c>false</c> suppresses the labour branch
+    /// ONLY: farm operations, inputs, irrigation, machinery, observations and
+    /// disturbance still derive. A labour-shaped scalpel, never an off-switch for the
+    /// side-car.
+    ///
+    /// <para>Required (no default), mirroring <c>DeriveCoreAsync</c>: neither caller may
+    /// acquire this behaviour by omission.</para>
+    /// </param>
     Task<DerivationOutcome> DeriveFromManualDraftAsync(
         DailyLog log, string manualWireJson, string? appVersion,
-        IIdGenerator ids, IClock clock, CancellationToken ct = default);
+        IIdGenerator ids, IClock clock, bool deriveLabour, CancellationToken ct = default);
 }
 
 /// <summary>Small tally of what a derivation staged, for the audit / log line.</summary>

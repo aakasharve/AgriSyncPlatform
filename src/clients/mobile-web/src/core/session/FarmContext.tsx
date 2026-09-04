@@ -34,7 +34,47 @@ interface FarmContextValue {
     currentFarm: MeFarm | null;
     farms: MeFarm[];
     switchFarm: (farmId: string) => void;
+    /**
+     * Task 6f (spec: 2026-08-28-labour-v2-release-1) — this reference is NOT
+     * memo-stable: it is rebuilt inside the `value` `useMemo` below, whose
+     * deps include `isLoading` and `meContext`, both of which change at
+     * least twice per `/me` call (once when the fetch starts, again when it
+     * settles). So `refresh` gets a new identity on every fetch cycle, not
+     * just on the renders that actually change what it does.
+     *
+     * That must stay true for every consumer to call it imperatively
+     * (`onClick`, or — per Task 6e — from inside `useLabourState`'s own
+     * `refresh`) and NEVER put it in a `useEffect` dependency array: an
+     * effect keyed on this identity would re-fire on every fetch it
+     * triggers, i.e. loop. Nothing does that today, but `useLabourState`'s
+     * retry wiring now reads this reference to make its own retry work
+     * (Task 6e) — so an accidental future stabilisation of this into a
+     * fixed reference is not a free simplification either; anything that
+     * changes when this identity changes needs re-checking against both
+     * directions.
+     */
     refresh: () => Promise<void>;
+    /**
+     * Task 6e (spec: 2026-08-28-labour-v2-release-1, P5, Ruling R8) — true
+     * when the LAST `/me` attempt threw. PURELY ADDITIVE: the swallow below
+     * is unchanged and deliberate (other screens legitimately keep stale
+     * data through a failed refresh), so no existing consumer's behaviour
+     * moves. This only makes the failure *visible* to the consumers that
+     * need to tell "we could not find out" apart from "there is nothing".
+     *
+     * Why that distinction is not cosmetic: on a fresh install there is no
+     * cached `currentFarmId`, so a failed `/me` settles as
+     * `currentFarmId: null, isLoading: false` — indistinguishable from an
+     * account that genuinely has no farm. The labour screen read that as an
+     * answer and told a farmer he had no workers when he may have twelve
+     * (see `useLabourState.ts`). Absence of any record means unknown; a
+     * record that exists and contains nothing is a real, honest empty.
+     *
+     * NOT a general "is the app offline" flag, and not a licence to blank a
+     * screen: consumers that are content with stale data should keep
+     * ignoring it.
+     */
+    loadFailed: boolean;
 }
 
 const FarmCtx = createContext<FarmContextValue | null>(null);
@@ -46,12 +86,15 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const [currentFarmId, setCurrentFarmId] = useState<string | null>(
         () => SessionStore.getCurrentFarmId(),
     );
+    // Task 6e — see the `loadFailed` note on FarmContextValue.
+    const [loadFailed, setLoadFailed] = useState(false);
 
     const refresh = useCallback(async (force = false) => {
         if (!isAuthenticated) return;
         setIsLoading(true);
         try {
             const ctx = await fetchMeContext({ force });
+            setLoadFailed(false);
             setMeContext(ctx);
             const ids = ctx.farms.map(f => f.farmId);
             setCurrentFarmId(prev => {
@@ -60,7 +103,12 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
                 return valid;
             });
         } catch {
-            // silently keep stale data
+            // silently keep stale data — UNCHANGED (Task 6e touched nothing
+            // here but the flag): consumers that are happy with a stale farm
+            // list must not be blanked by a failed refresh. The flag simply
+            // stops the failure from being invisible to the ones that must
+            // not mistake it for an answer.
+            setLoadFailed(true);
         } finally {
             setIsLoading(false);
         }
@@ -94,7 +142,8 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
         farms,
         switchFarm,
         refresh: () => refresh(true),
-    }), [meContext, isLoading, currentFarmId, currentFarm, farms, switchFarm, refresh]);
+        loadFailed,
+    }), [meContext, isLoading, currentFarmId, currentFarm, farms, switchFarm, refresh, loadFailed]);
 
     return <FarmCtx.Provider value={value}>{children}</FarmCtx.Provider>;
 };

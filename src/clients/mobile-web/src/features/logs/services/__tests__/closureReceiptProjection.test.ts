@@ -112,7 +112,11 @@ describe('buildClosureReceipt', () => {
         // the two must agree exactly — this is what flips it DEAD -> LIVE.
         const expected = deriveVisibleBucketsFromParseResult({
             summary: '',
-            dayOutcome: log.dayOutcome,
+            // task-0b — `log.dayOutcome` is `DayOutcome | null`; this mirrors
+            // the SAME fallback `asParseResult` (closureReceiptProjection.ts)
+            // applies at the identical boundary, so parity with the shared
+            // derivation still holds byte-for-byte.
+            dayOutcome: log.dayOutcome ?? 'WORK_RECORDED',
             cropActivities: log.cropActivities,
             irrigation: log.irrigation,
             labour: log.labour,

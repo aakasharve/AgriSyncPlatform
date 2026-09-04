@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="mr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>State C — already understood, confirm only</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700;800;900&family=Noto+Sans+Devanagari:wght@400;600;700;800&family=Noto+Serif+Devanagari:wght@600;700&display=swap">
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          mr:  ["'Noto Sans Devanagari'", 'sans-serif'],
+          mrh: ["'Noto Serif Devanagari'", 'serif'],
+          dm:  ["'DM Sans'", 'sans-serif'],
+        },
+      },
+    },
+  };
+</script>
+<style>
+  html, body { overflow-x: hidden; }
+  body { font-family: 'Noto Sans Devanagari', sans-serif; background: #eef1f4; margin: 0; }
+  /* DM Sans carries no Devanagari — the Noto fallback keeps Marathi inside
+     the approved family while every numeral still resolves to DM Sans. */
+  .dm { font-family: 'DM Sans', 'Noto Sans Devanagari', sans-serif; }
+  .mrh { font-family: 'Noto Serif Devanagari', serif; }
+  /* the 390px phone frame stays 390px; it scrolls inside its own box so the PAGE never scrolls sideways */
+  .fw { max-width: 100%; overflow-x: auto; }
+  .frame {
+    width: 390px;
+    border: 1px solid #cbd5e1;
+    border-radius: 26px;
+    overflow: hidden;
+    background: #f8fafc;
+    box-shadow: 0 18px 40px -24px rgba(15, 40, 30, .55);
+  }
+  .frameBar {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: #475569;
+    background: #e2e8f0;
+    padding: 7px 12px;
+    border-bottom: 1px solid #cbd5e1;
+  }
+  .page { max-width: 780px; margin: 0 auto; padding: 20px 16px 72px; }
+  .note { font-family: 'DM Sans', 'Noto Sans Devanagari', sans-serif; }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- ────────────────────────────────────────────────────────────────
+       HONESTY BANNER — this is not the app, and nothing here is wired.
+       ──────────────────────────────────────────────────────────────── -->
+  <div class="note rounded-xl border border-amber-300 bg-amber-50 p-4 text-[13px] leading-relaxed text-amber-900">
+    <b class="block text-[14px]">This is a MOCKUP. It is not the live app.</b>
+    Drawn at a 390&nbsp;px reference width. Nothing on this page is connected to data: every name,
+    number and transcript below is invented sample content used to show the layout. No button does
+    anything. No screen here exists in the product yet. All farmer-facing Marathi is either an
+    already-approved string or a visible
+    <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+    placeholder — never invented wording.
+  </div>
+
+  <!-- Title block -->
+  <div class="note mt-7">
+    <div class="text-[11px] font-bold uppercase tracking-[.14em] text-slate-500">Screen 3 of 7 · Labour R1 capture states</div>
+    <h1 class="mt-1 text-[26px] font-black leading-tight text-slate-900">State C — already understood, confirm only</h1>
+    <p class="mt-2 text-[14px] leading-relaxed text-slate-600">
+      The Main Log already captured the <b>full composition</b> — the count <i>and</i> who was there.
+      There is nothing left to ask. Labour opens straight onto what it understood and offers
+      <b>बरोबर</b> / <b>बदल करा</b>. No mic. No question. No form.
+    </p>
+    <div class="mt-4 rounded-xl border-l-[3px] border-l-slate-900 border border-slate-200 bg-white p-4">
+      <div class="text-[11px] font-bold uppercase tracking-[.12em] text-slate-500">The test every screen must pass (founder, verbatim)</div>
+      <div class="mt-1.5 text-[16px] font-bold text-slate-900">“Where is ShramSafal asking me for something I already told it?”</div>
+      <div class="mt-2 text-[13px] leading-relaxed text-slate-600">
+        This screen is the purest expression of that test. On State C the farmer has already stated the
+        count, the names and the crew. So this screen asks him for <b>exactly one thing he has not yet
+        given: his agreement.</b>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       FRAME 1
+       ══════════════════════════════════════════════════════════════════ -->
+  <div class="note mt-10">
+    <div class="flex items-baseline gap-2.5">
+      <span class="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-slate-900 text-[13px] font-black text-white">1</span>
+      <h2 class="text-[18px] font-extrabold text-slate-900">The hub — the hero is now a confirm, not a recorder</h2>
+    </div>
+    <p class="mt-1.5 pl-[38px] text-[14px] leading-relaxed text-slate-600">
+      The farmer is not asked to talk: the mic hero is replaced by a lighter, quieter card that says
+      everything is already understood and asks only to be opened.
+    </p>
+  </div>
+
+  <div class="fw mt-4">
+  <div class="frame">
+    <div class="frameBar">Mockup · 390px · sample data · not the live app</div>
+    <div class="bg-slate-50">
+      <div class="flex flex-col gap-2.5 px-4 pb-24 pt-2">
+
+        <!-- ── CONFIRM HERO (replaces the emerald gradient mic hero of State A) ── -->
+        <button type="button" class="relative flex w-full items-center gap-4 overflow-hidden rounded-[24px] border-2 border-emerald-200 bg-white p-5 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] active:scale-[0.99]">
+          <span class="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="block text-[23px] font-black leading-tight text-stone-800">
+              <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+            </span>
+            <span class="mt-1 block text-[11px] italic leading-snug text-slate-500">English meaning: “Today’s people are already understood — just confirm.”</span>
+            <span class="mt-1.5 block text-[16px] font-medium leading-snug text-stone-500"><span class="dm">12</span> पैकी <span class="dm">12</span> समजले</span>
+          </span>
+          <span class="flex-shrink-0 rounded-full bg-emerald-50 px-4 py-3 text-[17px] font-extrabold text-emerald-700">उघडा</span>
+        </button>
+
+        <!-- ── the shipped tiles ── हजेरी घ्या is deliberately absent: this state has nothing left to capture (see the never-do list). हजेरी वही is LIVE, never gated ── -->
+        <div class="grid grid-cols-2 gap-2.5">
+          <button type="button" class="flex min-h-[92px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] active:scale-[0.98]">
+            <span class="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[16px] bg-blue-100 text-blue-600">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>
+            </span>
+            <span class="min-w-0">
+              <span class="flex items-center gap-2 text-[19px] font-bold leading-tight text-stone-800">हजेरी वही</span>
+              <span class="mt-0.5 block truncate text-[16px] text-stone-500">सर्व दिवस</span>
+            </span>
+          </button>
+          <button type="button" class="flex min-h-[92px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] active:scale-[0.98]">
+            <span class="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[16px] bg-amber-100 text-amber-700">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+            </span>
+            <span class="min-w-0">
+              <span class="flex items-center gap-2 text-[19px] font-bold leading-tight text-stone-800">तपासा<span class="dm rounded-full bg-amber-600 px-2 py-0.5 text-[15px] font-extrabold text-white">2</span></span>
+              <span class="mt-0.5 block truncate text-[16px] text-stone-500">मंजूर करा</span>
+            </span>
+          </button>
+          <button type="button" class="flex min-h-[92px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] active:scale-[0.98]">
+            <span class="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[16px] bg-violet-100 text-violet-600">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+            </span>
+            <span class="min-w-0">
+              <span class="flex items-center gap-2 text-[19px] font-bold leading-tight text-stone-800">आढावा</span>
+            </span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <div class="note mt-3 rounded-xl border border-slate-200 bg-white p-4 text-[13px] leading-relaxed text-slate-600">
+    <b class="text-slate-900">What changed from State A, and why it is visible.</b>
+    In State A the hero is the shipped emerald <i>gradient</i> mic card with a heavy drop shadow
+    (<span class="dm">shadow-[0_16px_32px_-12px_rgba(5,150,105,0.65)]</span>) — the loudest object on the
+    screen, because it is asking for effort. Here it is white with a thin emerald ring and a flat
+    card shadow: same footprint, same corner radius, same <span class="dm">उघडा</span> chip, a
+    fraction of the visual weight. The ask is smaller, so the object is smaller.
+    The icon is a <b>check</b>, not a mic — there is no doorway to a recorder anywhere on this screen,
+    because there is nothing left to say.
+    <span class="mt-2 block"><b class="text-slate-900">The हजेरी घ्या / आज कोण आलं tile is gone from this hub.</b>
+    It was the one surviving doorway back to “tell me who came today” — the exact re-ask this screen's own
+    never-do list forbids. In State C the day's people are already understood, so a capture tile is not a
+    shortcut, it is the app asking again for what it was already given. State A drops <span class="dm">तपासा</span>
+    from its hub for the same reason; the grid simply carries the tiles that still have a job.</span>
+    <span class="mt-2 block">The <b>हजेरी वही</b> tile stays live and openable on every state: gating capture never gates memory.</span>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       FRAME 2
+       ══════════════════════════════════════════════════════════════════ -->
+  <div class="note mt-12">
+    <div class="flex items-baseline gap-2.5">
+      <span class="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-slate-900 text-[13px] font-black text-white">2</span>
+      <h2 class="text-[18px] font-extrabold text-slate-900">The confirmation panel — the people, by name, and two buttons</h2>
+    </div>
+    <p class="mt-1.5 pl-[38px] text-[14px] leading-relaxed text-slate-600">
+      Everyone ShramSafal already understood is listed by <b>name</b>, never as a headcount — names
+      marked here mean attendance <i>and</i> identity are recorded. The only actions are बरोबर and बदल करा.
+    </p>
+  </div>
+
+  <div class="fw mt-4">
+  <div class="frame">
+    <div class="frameBar">Mockup · 390px · sample data · not the live app</div>
+    <div class="bg-slate-50">
+      <div class="flex flex-col gap-2.5 px-4 pb-24 pt-2">
+
+        <!-- header pill -->
+        <div class="flex items-center justify-center rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+          <span class="text-[13px] font-extrabold text-slate-800">ShramSafalला समजलं</span>
+        </div>
+
+        <!-- provenance line — FOUNDER GATE (see gate 1 below): keep or drop -->
+        <div class="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[11.5px] leading-relaxed text-slate-600">
+          <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+          <span class="mt-1 block text-[11px] italic text-slate-500">English meaning: “What you said:”</span>
+          <span class="mt-1.5 block text-[12.5px] font-semibold leading-relaxed text-slate-700">“आज गणेश, रमेश आणि विठ्ठल आले, शंकर आठ जण घेऊन आला. गणेश रात्री <span class="dm">३</span> तास होता.”</span>
+        </div>
+
+        <!-- the people card -->
+        <div class="rounded-[18px] border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+
+          <!-- गणेश — with the two preserved duration facts, side by side, never merged -->
+          <div class="flex items-center gap-3 border-b border-slate-100 py-2.5">
+            <span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[9px] bg-emerald-50 text-[12px] font-black text-emerald-700">ग</span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-[15px] font-extrabold text-slate-800">गणेश</span>
+              <span class="mt-1 flex flex-wrap items-center gap-1.5">
+                <span class="flex items-center gap-1 rounded-lg border border-orange-300 bg-orange-50 px-2 py-0.5 text-[12px] font-bold text-orange-700">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                  रात्र
+                </span>
+                <span class="flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-[12px] font-bold text-slate-600">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  <span class="dm">3</span> तास
+                </span>
+              </span>
+            </span>
+            <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            </span>
+          </div>
+
+          <!-- रमेश -->
+          <div class="flex items-center gap-3 border-b border-slate-100 py-2.5">
+            <span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[9px] bg-blue-100 text-[12px] font-black text-blue-600">र</span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-[15px] font-extrabold text-slate-800">रमेश</span>
+            </span>
+            <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            </span>
+          </div>
+
+          <!-- विठ्ठल — known by name only; the identity ladder stated honestly -->
+          <div class="flex items-center gap-3 border-b border-slate-100 py-2.5">
+            <span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[9px] bg-orange-100 text-[12px] font-black text-orange-600">वि</span>
+            <span class="min-w-0 flex-1">
+              <span class="flex flex-wrap items-center gap-2">
+                <span class="text-[15px] font-extrabold text-slate-800">विठ्ठल</span>
+                <span class="rounded-lg bg-stone-100 px-2.5 py-1 text-[15px] font-bold text-stone-500">फक्त नाव</span>
+              </span>
+            </span>
+            <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            </span>
+          </div>
+
+          <!-- शंकर — the mukadam is a PERSON; his crew is a separate aggregate fact -->
+          <div class="py-2.5">
+            <div class="flex items-center gap-3">
+              <span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[9px] bg-violet-100 text-[12px] font-black text-violet-600">श</span>
+              <span class="min-w-0 flex-1">
+                <span class="flex flex-wrap items-center gap-2">
+                  <span class="text-[15px] font-extrabold text-slate-800">शंकर</span>
+                  <span class="rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-1 text-[15px] font-bold text-violet-700">मुकादम</span>
+                </span>
+              </span>
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              </span>
+            </div>
+            <div class="ml-10 mt-2 flex items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50 p-2.5">
+              <span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[9px] bg-white text-slate-400 ring-1 ring-slate-200">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block text-[13px] font-extrabold text-slate-700">Shankarसोबत <span class="dm">8</span></span>
+                <span class="mt-0.5 block text-[11px] italic leading-snug text-slate-500">English meaning of this row: eight accompanying workers, counted but not named — Shankar himself is the row above.</span>
+              </span>
+              <span class="dm w-9 flex-none text-center text-[15px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">8</span>
+            </div>
+
+            <!-- D9.5 · sourceText + systemInterpretation, VISIBLE inside the confirm — never a separate blocking question -->
+            <div class="ml-10 mt-2 rounded-xl border border-slate-100 bg-white p-2.5">
+              <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+              <span class="mt-1 block text-[11px] italic leading-snug text-slate-500">English meaning of the two labels below: “You said” · “ShramSafal understood it as”</span>
+              <div class="mt-1.5 border-l-[3px] border-slate-200 pl-2.5 text-[12.5px] font-semibold leading-snug text-slate-700">“शंकर आठ जण घेऊन आला”</div>
+              <div class="mt-1.5 border-l-[3px] border-emerald-300 pl-2.5">
+                <span class="block text-[12.5px] font-extrabold leading-snug text-emerald-800">Shankarसोबत <span class="dm">8</span></span>
+                <span class="mt-0.5 block text-[11px] italic leading-snug text-slate-500">English: taken as Shankar <b>plus</b> eight others — not eight in total with Shankar counted inside. If that reading is wrong, <span class="dm">बदल करा</span> changes it; the screen never asks this as a separate question.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- totals row, in the ledger's own language -->
+          <div class="mt-1 flex items-center gap-2 border-t border-slate-100 pt-2">
+            <span class="w-[82px] flex-none text-[12.5px] font-extrabold text-slate-700">एकूण</span>
+            <span class="flex-1 text-[13px] font-extrabold text-emerald-700"><span class="dm">12</span> पैकी <span class="dm">12</span> समजले</span>
+          </div>
+        </div>
+
+        <!-- the confirm pair — and NOTHING else -->
+        <div class="grid grid-cols-2 gap-2.5">
+          <button type="button" class="w-full rounded-[14px] border border-slate-200 bg-white py-3.5 text-[13px] font-extrabold text-slate-700 active:scale-[0.98]">बदल करा</button>
+          <button type="button" class="flex w-full items-center justify-center gap-2 rounded-[14px] bg-emerald-600 py-3.5 text-[13px] font-extrabold text-white active:scale-[0.98]">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            बरोबर
+          </button>
+        </div>
+
+        <div class="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[11.5px] leading-relaxed text-slate-600">
+          <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+          <span class="mt-1 block text-[11px] italic text-slate-500">English meaning: “Nothing is recorded until you press बरोबर.”</span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <div class="note mt-3 rounded-xl border border-slate-200 bg-white p-4 text-[13px] leading-relaxed text-slate-600">
+    <b class="text-slate-900">Why this is a statement, not a checklist.</b>
+    The green ✓ beside each name is the हजेरी वही’s own <span class="dm">present</span> cell
+    (<span class="dm">bg-emerald-50 text-emerald-700</span>, lucide Check at 13px / stroke 3.2) — the
+    exact mark the register uses to say <b>आला</b>. It is not a tick-box: it is already true, it is
+    identical on every row, and nothing on this panel is unset. There is no per-person confirm to work
+    through, because working through it would be re-stating what he already said.
+    <span class="mt-2 block"><b class="text-slate-900">गणेश’s two chips are two preserved facts, not one derived number.</b>
+    <span class="dm">रात्र</span> and <span class="dm">3 तास</span> sit side by side exactly as the founder
+    ruled. They are never merged into <span class="dm">1.5 दिवस</span>, never turned into a clock range,
+    and never priced.</span>
+    <span class="mt-2 block"><b class="text-slate-900">शंकर is a person; his eight are an aggregate.</b>
+    Two distinct facts on two rows, so <span class="dm">12</span> can be read back as
+    <span class="dm">3 named + शंकर + 8 accompanying</span> without hiding him inside a count.</span>
+    <span class="mt-2 block"><b class="text-slate-900">The reading of his ambiguous sentence is shown, not asked.</b>
+    Under शंकर sit his own words and, beneath them, what ShramSafal took them to mean — spec <b>D9.5</b>’s
+    <span class="dm">sourceText</span> + <span class="dm">systemInterpretation</span>, drawn where he can see both.
+    D9.5 forbids resolving it by assumption <i>and</i> says confirmation is what settles it, so
+    <span class="dm">बरोबर</span> accepts the reading and <span class="dm">बदल करा</span> corrects it.
+    It is not a third button and not a question on top of the confirm.</span>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       FRAME 3
+       ══════════════════════════════════════════════════════════════════ -->
+  <div class="note mt-12">
+    <div class="flex items-baseline gap-2.5">
+      <span class="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-slate-900 text-[13px] font-black text-white">3</span>
+      <h2 class="text-[18px] font-extrabold text-slate-900">What बदल करा opens — the same list, still full, one thing tappable</h2>
+    </div>
+    <p class="mt-1.5 pl-[38px] text-[14px] leading-relaxed text-slate-600">
+      Not a blank re-entry form and not the mic again: every control arrives already holding what
+      ShramSafal understood, so he touches only the one thing that is wrong and presses बरोबर.
+    </p>
+  </div>
+
+  <div class="fw mt-4">
+  <div class="frame">
+    <div class="frameBar">Mockup · 390px · sample data · not the live app</div>
+    <div class="bg-[#f6f7f5]">
+
+      <!-- shipped BackHeader pattern -->
+      <div class="sticky top-0 z-20 flex items-center gap-3 bg-[#f6f7f5] px-4 pb-3 pt-2 shadow-[0_8px_14px_-12px_rgba(20,40,30,0.35)]">
+        <button type="button" class="flex min-h-[56px] items-center gap-2 rounded-full bg-white py-3 pl-4 pr-5 text-[18px] font-bold text-stone-700 shadow-sm ring-1 ring-stone-100 active:scale-95">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+          मागे
+        </button>
+        <div class="flex-1 pr-2 text-center">
+          <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+          <span class="mt-0.5 block text-[10.5px] italic leading-snug text-slate-500">English meaning: “Change what is wrong”</span>
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-2.5 px-4 pb-24 pt-1">
+
+        <!-- गणेश -->
+        <div class="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+          <span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[9px] bg-emerald-50 text-[12px] font-black text-emerald-700">ग</span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-[15px] font-bold text-slate-800">गणेश</span>
+            <span class="mt-1 flex flex-wrap items-center gap-1.5">
+              <span class="flex items-center gap-1 rounded-lg border border-orange-300 bg-orange-50 px-2 py-0.5 text-[12px] font-bold text-orange-700">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                रात्र
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+              </span>
+              <span class="flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-[12px] font-bold text-slate-600">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span class="dm">3</span> तास
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+              </span>
+            </span>
+          </span>
+          <div class="flex flex-shrink-0 gap-1 rounded-xl bg-slate-100 p-1">
+            <button type="button" class="rounded-lg bg-white px-2.5 py-1.5 text-[11px] font-extrabold text-emerald-700 shadow-sm">आला</button>
+            <button type="button" class="rounded-lg px-2.5 py-1.5 text-[11px] font-extrabold text-slate-400">अर्धा</button>
+            <button type="button" class="rounded-lg px-2.5 py-1.5 text-[11px] font-extrabold text-slate-400">नाही</button>
+          </div>
+        </div>
+
+        <!-- रमेश -->
+        <div class="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+          <span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[9px] bg-blue-100 text-[12px] font-black text-blue-600">र</span>
+          <span class="min-w-0 flex-1 truncate text-[15px] font-bold text-slate-800">रमेश</span>
+          <div class="flex flex-shrink-0 gap-1 rounded-xl bg-slate-100 p-1">
+            <button type="button" class="rounded-lg bg-white px-2.5 py-1.5 text-[11px] font-extrabold text-emerald-700 shadow-sm">आला</button>
+            <button type="button" class="rounded-lg px-2.5 py-1.5 text-[11px] font-extrabold text-slate-400">अर्धा</button>
+            <button type="button" class="rounded-lg px-2.5 py-1.5 text-[11px] font-extrabold text-slate-400">नाही</button>
+          </div>
+        </div>
+
+        <!-- विठ्ठल -->
+        <div class="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+          <span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[9px] bg-orange-100 text-[12px] font-black text-orange-600">वि</span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-[15px] font-bold text-slate-800">विठ्ठल</span>
+            <span class="mt-0.5 inline-block rounded-lg bg-stone-100 px-2 py-0.5 text-[12px] font-bold text-stone-500">फक्त नाव</span>
+          </span>
+          <div class="flex flex-shrink-0 gap-1 rounded-xl bg-slate-100 p-1">
+            <button type="button" class="rounded-lg bg-white px-2.5 py-1.5 text-[11px] font-extrabold text-emerald-700 shadow-sm">आला</button>
+            <button type="button" class="rounded-lg px-2.5 py-1.5 text-[11px] font-extrabold text-slate-400">अर्धा</button>
+            <button type="button" class="rounded-lg px-2.5 py-1.5 text-[11px] font-extrabold text-slate-400">नाही</button>
+          </div>
+        </div>
+
+        <!-- शंकर -->
+        <div class="rounded-2xl border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+          <div class="flex items-center gap-3">
+            <span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[9px] bg-violet-100 text-[12px] font-black text-violet-600">श</span>
+            <span class="min-w-0 flex-1">
+              <span class="flex flex-wrap items-center gap-2">
+                <span class="text-[15px] font-bold text-slate-800">शंकर</span>
+                <span class="rounded-lg border border-violet-100 bg-violet-50 px-2 py-0.5 text-[12px] font-bold text-violet-700">मुकादम</span>
+              </span>
+            </span>
+            <div class="flex flex-shrink-0 gap-1 rounded-xl bg-slate-100 p-1">
+              <button type="button" class="rounded-lg bg-white px-2.5 py-1.5 text-[11px] font-extrabold text-emerald-700 shadow-sm">आला</button>
+              <button type="button" class="rounded-lg px-2.5 py-1.5 text-[11px] font-extrabold text-slate-400">अर्धा</button>
+              <button type="button" class="rounded-lg px-2.5 py-1.5 text-[11px] font-extrabold text-slate-400">नाही</button>
+            </div>
+          </div>
+
+          <!-- D9.5 · the same interpretation the confirm panel showed, still visible while correcting -->
+          <div class="ml-10 mt-2.5 rounded-xl border border-slate-100 bg-slate-50 p-2.5">
+            <div class="text-[11.5px] leading-relaxed text-slate-600">“शंकर आठ जण घेऊन आला”</div>
+            <div class="mt-1.5 flex items-center gap-2">
+              <span class="rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-1 text-[12.5px] font-bold text-violet-700">Shankarसोबत <span class="dm">8</span></span>
+              <span class="dm flex-none text-center text-[15px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">8</span>
+            </div>
+            <span class="mt-1.5 block text-[10.5px] italic leading-snug text-slate-500">English: the understood reading, editable here like every other row. Changing it to “eight in total, Shankar counted inside” is a correction on this screen — not a separate question stacked on top of the confirm.</span>
+          </div>
+        </div>
+
+        <!-- shipped add-a-name affordance -->
+        <button type="button" class="flex items-center justify-center gap-2 rounded-[18px] border-[1.5px] border-dashed border-emerald-200 bg-emerald-50 p-3 text-[13px] font-extrabold text-emerald-700 active:scale-[0.98]">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+          नाव जोडा — इतिहासातून किंवा नवीन
+        </button>
+
+        <!-- one save event, the same word as the panel -->
+        <button type="button" class="flex w-full items-center justify-center gap-2 rounded-[14px] bg-emerald-600 py-3.5 text-[13px] font-extrabold text-white active:scale-[0.98]">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          बरोबर
+        </button>
+
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <div class="note mt-3 rounded-xl border border-slate-200 bg-white p-4 text-[13px] leading-relaxed text-slate-600">
+    <b class="text-slate-900">Correcting is cheaper than re-stating — that is the whole design.</b>
+    Every row arrives with <span class="dm">आला</span> already selected, in the app’s own shipped
+    three-way control (<span class="dm">Attendance.tsx</span>, आला / अर्धा / नाही). Doing nothing
+    changes nothing. Removing a person is <b>one tap</b> on नाही. Fixing a shift is one tap on अर्धा.
+    There is no “start again”, no re-recording, and no re-parse: the same understood draft is edited in
+    place, and the save word is still <span class="dm">बरोबर</span>, so the flow has exactly one save
+    event whether or not he changed anything.
+    <span class="mt-2 block"><b class="text-slate-900">There is no question block on this screen any more.</b>
+    “शंकर आठ जण घेऊन आला” is genuinely two-way in Marathi (+8 others, or 8 including him), and spec <b>D9.5</b>
+    settles how to handle it: carry <span class="dm">sourceText</span> and <span class="dm">systemInterpretation</span>,
+    do not resolve it by undocumented assumption, and <b>let confirmation settle it</b>. So the reading is shown
+    beside his own words — on the confirm panel in frame 2, and again here while correcting — and
+    <span class="dm">बरोबर</span> / <span class="dm">बदल करा</span> is what settles it. An amber
+    <span class="dm">एक गोष्ट स्पष्ट करा</span> strip belongs to State D, where the day itself contradicts
+    itself; borrowing it here turned a visible interpretation into a second, blocking ask. A headcount stepper
+    would be wrong for the same reason: he never stated a total, he stated a crew.</span>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       FOUNDER GATES
+       ══════════════════════════════════════════════════════════════════ -->
+  <div class="note mt-12 rounded-2xl border border-violet-200 bg-violet-50 p-5">
+    <h2 class="text-[17px] font-extrabold text-violet-900">Open — needs a founder ruling before this is built</h2>
+    <ol class="mt-3 space-y-3 text-[13.5px] leading-relaxed text-violet-950">
+      <li><b>1. The transcript line in frame 2 — keep it, or is silence-plus-बरोबर enough?</b>
+        It is drawn here because “where did these names come from?” is the first thing a suspicious
+        owner asks. But it is also the one element on the panel that could read as the app
+        re-presenting what he said. Deleting it is a one-line change.</li>
+      <li><b>2. Three strings are unwritten</b> — the confirm hero headline, the “nothing is saved
+        until बरोबर” footnote, and the correction screen’s title. English meanings are drawn in place;
+        the Marathi is yours.</li>
+      <li><b>3. Can hour-facts be corrected in R1?</b> गणेश’s <span class="dm">रात्र</span> /
+        <span class="dm">3 तास</span> chips are drawn with a chevron, i.e. tappable. If they are not
+        editable in R1, the chevrons come off and the chips stay as read-only facts — but then a wrong
+        hour count can only be fixed by speaking again, which is the thing this screen exists to avoid.</li>
+    </ol>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       THE NEVER-DO LIST
+       ══════════════════════════════════════════════════════════════════ -->
+  <div class="note mt-8 rounded-2xl border border-rose-200 bg-rose-50 p-5">
+    <h2 class="text-[17px] font-extrabold text-rose-900">What this screen must never do</h2>
+    <p class="mt-1 text-[13px] text-rose-800">Check the rule, not only the picture. Any one of these appearing means State C has failed.</p>
+    <ul class="mt-3 space-y-2.5 text-[13.5px] leading-relaxed text-rose-950">
+      <li><b>✗ Never offer a mic, or ask him to speak the same people again.</b> He already said who was there. There is no recorder on any of these three frames, and no doorway to one.</li>
+      <li><b>✗ Never show a headcount stepper.</b> The count is known (<span class="dm">12</span>). A −/+ counter would be the app asking for a number it was already given.</li>
+      <li><b>✗ Never show an empty form.</b> बदल करा opens a <i>populated</i> list with every control pre-set. A blank field on this path is a bug.</li>
+      <li><b>✗ Never ask <span class="dm">या 12 जणांमध्ये कोण होते?</span></b> That is State A’s question and it is already answered here.</li>
+      <li><b>✗ Never show a per-person confirm checklist.</b> The green ✓ marks are statements of what is understood, not boxes to work through.</li>
+      <li><b>✗ Never show a Work Log bucket, crop picker or plot picker.</b> This screen answers WHO. The work, the crop and the plot came from the Main Log and are not re-asked.</li>
+      <li><b>✗ Never re-parse.</b> बदल करा edits the understood draft in place; it never throws it away and starts the parse over.</li>
+      <li><b>✗ Never show money.</b> No rate, no wage, no total, no ₹ anywhere. Money lives in the register.</li>
+      <li><b>✗ Never show a clock range or derived day-arithmetic.</b> No <span class="dm">7:00–11:00</span>, no from/to picker, no <span class="dm">0.5 दिवस</span> / <span class="dm">1.5 दिवस</span>. रात्र and 3 तास stay two separate stated facts.</li>
+      <li><b>✗ Never render an unknown as <span class="dm">–</span> or <span class="dm">0</span>.</b> A blank dashed cell means nobody said; <span class="dm">–</span> means he did not come. The eight accompanying workers are counted, never silently named.</li>
+      <li><b>✗ Never hide the हजेरी वही.</b> Gating capture must never gate memory — the register tile stays live in every state.</li>
+      <li><b>✗ Never stack a separate question on top of the confirm.</b> “शंकर आठ जण घेऊन आला” is shown with the reading ShramSafal took — spec D9.5 — and <span class="dm">बरोबर</span> / <span class="dm">बदल करा</span> settles it. <span class="dm">एक गोष्ट स्पष्ट करा</span> is State D’s instrument, not this screen’s.</li>
+      <li><b>✗ Never auto-save.</b> <span class="dm">बरोबर</span> is the only save event on this screen, on both frame 2 and frame 3.</li>
+    </ul>
+  </div>
+
+  <div class="note mt-8 text-center text-[11.5px] text-slate-500">
+    Mockup only · 390&nbsp;px reference width · not the live app · no data behind anything on this page.
+  </div>
+
+</div>
+</body>
+</html>

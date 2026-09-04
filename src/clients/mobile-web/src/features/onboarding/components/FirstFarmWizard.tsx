@@ -402,7 +402,7 @@ const FirstFarmWizard: React.FC<FirstFarmWizardProps> = ({
                                         )}
                                     </div>
                                     <div className="mt-1 text-[11px] text-stone-500">
-                                        कामगारांशी शेअर करण्यासाठी तयार · ready to share with workers
+                                        कामाला येणाऱ्यांना दाखवण्यासाठी तयार · ready to share with workers
                                     </div>
                                 </button>
                             </div>

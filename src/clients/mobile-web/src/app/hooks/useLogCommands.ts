@@ -554,6 +554,12 @@ export const useLogCommands = ({
                         persistedCorrections,
                         language,
                         result.hasUnsentChanges ?? false,
+                        // V2 R1 TASK 23 — does the PHONE claim hold? An added or
+                        // removed engagement reaches no server AND is deleted
+                        // again by the next pull, so the reassurance is dropped
+                        // for that shape and kept for every other. Why, and why
+                        // narrow: `saveToastMessages.buildEditSavedMessage`.
+                        !(result.labourEngagementSetChanged ?? false),
                     ),
                     // THE OUTCOME DECIDES THE COLOUR, not the branch.
                     //

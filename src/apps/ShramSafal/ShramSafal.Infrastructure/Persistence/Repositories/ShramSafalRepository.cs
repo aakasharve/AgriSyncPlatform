@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
@@ -21,7 +22,15 @@ using ShramSafal.Domain.Storage;
 
 namespace ShramSafal.Infrastructure.Persistence.Repositories;
 
-internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafalRepository
+// logger is OPTIONAL (defaulted) so the many direct `new ShramSafalRepository(db)`
+// constructions in tests and the backfill runner keep compiling; production DI
+// (AddScoped<IShramSafalRepository, ShramSafalRepository>) resolves the registered
+// ILogger<T> into the optional parameter, so the Task 8.5 duplicate-identity
+// observer below is always armed on the live path. A null logger is a test
+// harness's explicit acceptance of silence, not a production state.
+internal sealed class ShramSafalRepository(
+    ShramSafalDbContext db,
+    ILogger<ShramSafalRepository>? logger = null) : IShramSafalRepository
 {
     public async Task AddFarmAsync(Farm farm, CancellationToken ct = default)
     {
@@ -1070,41 +1079,51 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
                 .ToList();
         }
 
-        var operators = new List<SyncOperatorDto>(ids.Count);
-        foreach (var id in ids)
-        {
-            var row = await db.Database
-                .SqlQueryRaw<OperatorDirectoryRow>(
-                    """
-                    select
-                        u."Id" as "UserId",
-                        u.display_name as "DisplayName",
-                        case lower(coalesce(m.role, 'worker'))
-                            when 'primaryowner' then 'PRIMARY_OWNER'
-                            when 'secondaryowner' then 'SECONDARY_OWNER'
-                            when 'mukadam' then 'MUKADAM'
-                            else 'WORKER'
-                        end as "Role"
-                    from public.users u
-                    left join public.memberships m
-                        on m.user_id = u."Id"
-                        and m.app_id = 'shramsafal'
-                        and m.is_revoked = false
-                    where u."Id" = {0}
-                    limit 1
-                    """,
-                    id)
-                .FirstOrDefaultAsync(ct);
+        // Task 24 (spec: 2026-08-28-labour-v2-release-1) — ONE batched round
+        // trip for all ids, not one SqlQueryRaw per id. This method's own
+        // SIGNATURE already looked batched (a list of ids in, one list out);
+        // the per-id `foreach` below it was the audit's "one separate
+        // database round trip per person simply to resolve display names" —
+        // hidden a layer under GetLabourDataHandler (whose own per-person
+        // loop makes zero repository calls) and under PullSyncChangesHandler,
+        // which calls this SAME method on every sync pull. `= ANY(@ids)`
+        // mirrors UserDirectoryService.GetDisplayNamesAsync's established
+        // pattern for a batched cross-schema (public.*) read from this
+        // DbContext.
+        //
+        // RLS is unaffected: public.users carries no policy (global
+        // directory), and public.memberships' `p_user_memberships` policy
+        // (`user_id = current_setting('agrisync.user_id')`) is evaluated PER
+        // ROW by Postgres regardless of whether the driving id list has one
+        // id or many — batching the ids does not change which rows the LEFT
+        // JOIN (or the policy guarding it) can see. No `limit 1` is needed
+        // here (unlike the old per-id query): `IX_memberships_user_id_app_id`
+        // is a UNIQUE index on (user_id, app_id) WHERE is_revoked = false, so
+        // the join can never produce more than one membership row per user.
+        var rows = await db.Database
+            .SqlQueryRaw<OperatorDirectoryRow>(
+                """
+                select
+                    u."Id" as "UserId",
+                    u.display_name as "DisplayName",
+                    case lower(coalesce(m.role, 'worker'))
+                        when 'primaryowner' then 'PRIMARY_OWNER'
+                        when 'secondaryowner' then 'SECONDARY_OWNER'
+                        when 'mukadam' then 'MUKADAM'
+                        else 'WORKER'
+                    end as "Role"
+                from public.users u
+                left join public.memberships m
+                    on m.user_id = u."Id"
+                    and m.app_id = 'shramsafal'
+                    and m.is_revoked = false
+                where u."Id" = ANY(@ids)
+                """,
+                new Npgsql.NpgsqlParameter("ids", ids.ToArray()))
+            .ToListAsync(ct);
 
-            if (row is null)
-            {
-                continue;
-            }
-
-            operators.Add(new SyncOperatorDto(row.UserId, row.DisplayName, row.Role));
-        }
-
-        return operators
+        return rows
+            .Select(row => new SyncOperatorDto(row.UserId, row.DisplayName, row.Role))
             .OrderBy(op => op.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -1412,7 +1431,7 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     }
 
     public async Task<List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)>> GetLabourPayoutCostEntriesWithJobCardAsync(
-        FarmId farmId, CancellationToken ct = default)
+        FarmId farmId, DateOnly? fromDate, DateOnly? toDateInclusive, CancellationToken ct = default)
     {
         // Decision 3a (2026-07-19, spec: 2026-07-13-labour-attendance-approval-design):
         // दिलं = ALL labour money paid out, not just job-card settlements.
@@ -1421,8 +1440,22 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
         // same pair the frontend's mapCategory() buckets into "Labour" for the
         // finance page. Widening this filter (rather than adding a second
         // query) keeps ONE derivation for both categories.
+        //
+        // Task 9 (spec: 2026-08-28-labour-v2-release-1) — the date window. Both
+        // bounds are INCLUSIVE and either may be null (unbounded), so the
+        // all-time window emits exactly the predicate this method carried
+        // before the window existed. Pushed to SQL rather than filtered in the
+        // handler because (farm_id, entry_date) is already indexed and a
+        // "today" view must not drag years of rows into memory to discard them.
+        // RLS is unchanged and still the outer gate: the ambient per-request
+        // transaction's agrisync.farm_id GUC scopes ss.cost_entries exactly as
+        // it does for every sibling read here — the farm_id predicate below is
+        // the same defence-in-depth filter the original carried, not the
+        // tenant boundary.
         var entries = await db.CostEntries
             .Where(c => c.FarmId == farmId && (c.CategoryId == "labour_payout" || c.CategoryId == "labour_misc"))
+            .Where(c => (fromDate == null || c.EntryDate >= fromDate.Value)
+                && (toDateInclusive == null || c.EntryDate <= toDateInclusive.Value))
             .OrderBy(c => c.EntryDate)
             .ToListAsync(ct);
 
@@ -1454,13 +1487,25 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToList();
     }
 
-    public async Task<List<LabourAssignment>> GetLabourAssignmentsForFarmSinceAsync(
-        FarmId farmId, DateOnly weekStart, CancellationToken ct = default)
+    /// <summary>
+    /// Task 9 (spec: 2026-08-28-labour-v2-release-1) — replaces
+    /// <c>GetLabourAssignmentsForFarmSinceAsync</c>. Same join, same tenant
+    /// scoping (the ambient transaction's <c>agrisync.farm_id</c> GUC gates
+    /// BOTH <c>ss.labour_assignments</c> and <c>ss.daily_logs</c>; the
+    /// <c>log.FarmId</c> predicate is the same defence-in-depth filter the
+    /// original carried). The only change is that the date bound is now a
+    /// two-sided, optional window instead of an open-ended
+    /// <c>&gt;= weekStart</c>.
+    /// </summary>
+    public async Task<List<LabourAssignment>> GetLabourAssignmentsForFarmInWindowAsync(
+        FarmId farmId, DateOnly? fromDate, DateOnly? toDateInclusive, CancellationToken ct = default)
     {
         return await (
             from la in db.LabourAssignments
             join log in db.DailyLogs on la.DailyLogId equals log.Id
-            where log.FarmId == farmId && log.LogDate >= weekStart
+            where log.FarmId == farmId
+                && (fromDate == null || log.LogDate >= fromDate.Value)
+                && (toDateInclusive == null || log.LogDate <= toDateInclusive.Value)
             select la)
             .ToListAsync(ct);
     }
@@ -1538,6 +1583,83 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<AttendanceMark>> GetAttendanceMarksForFarmInWindowAsync(
+        FarmId farmId, DateOnly? from, DateOnly? toInclusive, CancellationToken ct = default)
+    {
+        // AsNoTracking: the register is a read model. Amending a mark goes
+        // through GetAttendanceMarkAsync below, which tracks.
+        var q = db.AttendanceMarks.AsNoTracking().Where(m => m.FarmId == farmId);
+
+        if (from is { } f)
+        {
+            q = q.Where(m => m.WorkDate >= f);
+        }
+
+        if (toInclusive is { } t)
+        {
+            q = q.Where(m => m.WorkDate <= t);
+        }
+
+        return await q.OrderBy(m => m.WorkDate).ThenBy(m => m.FieldOperatorId).ToListAsync(ct);
+    }
+
+    public async Task<AttendanceMark?> GetAttendanceMarkAsync(
+        FarmId farmId, Guid fieldOperatorId, DateOnly workDate, CancellationToken ct = default)
+    {
+        // TRACKED: the caller amends what it finds, in the same unit of work.
+        return await db.AttendanceMarks.SingleOrDefaultAsync(
+            m => m.FarmId == farmId && m.FieldOperatorId == fieldOperatorId && m.WorkDate == workDate,
+            ct);
+    }
+
+    public async Task AddAttendanceMarkAsync(AttendanceMark mark, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(mark);
+        await db.AttendanceMarks.AddAsync(mark, ct);
+    }
+
+    public async Task<IReadOnlyList<AttendanceEngagementFact>> GetAttendanceEngagementFactsAsync(
+        FarmId farmId, Guid fieldOperatorId, DateOnly workDate, CancellationToken ct = default)
+    {
+        // Projection-only, AsNoTracking — the same discipline as
+        // GetLabourAssignmentOwnerLogIdsAsync (IShramSafalRepository.cs:705-715):
+        // this read exists so RecordAttendanceMarkHandler can refuse the
+        // contradiction BEFORE anything is staged, and name it. The explicit
+        // farm Where is mandatory: p_user_select_* policies are PERMISSIVE and
+        // OR past the tenant policy (Phase 0, UNKNOWN 5).
+        return await (
+            from row in db.FieldOperatorWorkRows.AsNoTracking()
+            join a in db.LabourAssignments.AsNoTracking() on row.LabourAssignmentId equals a.Id
+            join log in db.DailyLogs.AsNoTracking() on a.DailyLogId equals log.Id
+            where row.FieldOperatorId == fieldOperatorId
+                  && log.FarmId == farmId
+                  && log.LogDate == workDate
+            select new AttendanceEngagementFact(a.Id, a.Task, a.Shift)
+        ).ToListAsync(ct);
+    }
+
+    public async Task AddAttendanceMarkCorrectionAsync(
+        AttendanceMarkCorrection correction, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(correction);
+        // Staged only — the caller commits it with the amendment it explains,
+        // so the change can never land without its record (same contract as
+        // AddLabourCorrectionAsync / RemoveFieldOperatorWorkRowAsync).
+        await db.AttendanceMarkCorrections.AddAsync(correction, ct);
+    }
+
+    public async Task<List<AttendanceMark>> GetAttendanceMarksChangedSinceAsync(
+        IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0) return [];
+        return await db.AttendanceMarks
+            .AsNoTracking()
+            .Where(m => ids.Contains((Guid)m.FarmId) && m.ModifiedAtUtc > sinceUtc)
+            .OrderBy(m => m.ModifiedAtUtc)
+            .ToListAsync(ct);
+    }
+
     public Task RemoveFieldOperatorWorkRowAsync(FieldOperatorWorkRow r, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(r);
@@ -1600,7 +1722,7 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     /// membership counts.</para>
     /// </summary>
     public async Task<bool> GetLabourManagementGrantAsync(
-        Guid farmId, Guid userId, CancellationToken ct = default)
+        Guid farmId, Guid userId, DateTime nowUtc, CancellationToken ct = default)
     {
         var typedFarmId = new FarmId(farmId);
         var typedUserId = new UserId(userId);
@@ -1611,7 +1733,8 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
                 && m.UserId == typedUserId
                 && m.Status != MembershipStatus.Revoked
                 && m.Status != MembershipStatus.Exited
-                && m.CanManageLabourRecords, ct);
+                && m.CanManageLabourRecords
+                && (m.LabourGrantExpiresAtUtc == null || m.LabourGrantExpiresAtUtc > nowUtc), ct);
     }
 
     /// <summary>
@@ -2281,6 +2404,61 @@ internal sealed class ShramSafalRepository(ShramSafalDbContext db) : IShramSafal
     public async Task AddDisturbanceEventAsync(DisturbanceEvent d, CancellationToken ct = default)
     {
         await db.DisturbanceEvents.AddAsync(d, ct);
+    }
+
+    /// <summary>
+    /// Labour V2 R1 Task 8.5 — dedup lookup for the derivation's disturbance
+    /// branch. The event carries no farm or date of its own (EXISTS-join child),
+    /// so the (farm, log-day, reason) identity resolves through the parent
+    /// <c>daily_logs</c> row — the same join shape the RLS policies use.
+    /// AsNoTracking: existence decides a SKIP; nothing returned here is ever
+    /// mutated (contrast <see cref="GetFarmOperationByKeyAsync"/>, whose result
+    /// is tracked because supersession mutates it). Ordered oldest-first so a
+    /// day that already holds duplicates answers deterministically.
+    ///
+    /// <para><b>The named observer (B001 ruling).</b> This lookup-before-write is
+    /// not DB-enforced, so two DEVICES pushing the same identity in overlapping
+    /// READ-COMMITTED transactions can both miss it and both commit — the
+    /// documented residual (see the derivation-site comment in
+    /// <c>LedgerDerivationService</c>). Per this repo's law that a tolerated
+    /// failure must name its landing place, the landing place is HERE: the query
+    /// already materializes the identity's live matches, so more than one match
+    /// is NOTICED and logged as a warning — farm, day, count, and reason LENGTH
+    /// only (the reason is the farmer's free text and may be sensitive) — making
+    /// a raced duplicate visible at the next same-day derivation instead of
+    /// never. A DB-enforced unique (trigger or keyed child) is the Phase 6
+    /// hardening if field data ever shows this warning.</para>
+    /// </summary>
+    public async Task<DisturbanceEvent?> GetDisturbanceEventForFarmDayAsync(
+        Guid farmId, DateOnly logDate, string reason, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return null;
+        }
+
+        var typedFarmId = new FarmId(farmId);
+        // Materialized (not FirstOrDefault) so the duplicate-identity observer
+        // sees the true live count. Bounded tightly by the identity filter —
+        // one farm-day-reason holds one row, or a raced handful, never a table.
+        var matches = await db.DisturbanceEvents
+            .AsNoTracking()
+            .Where(e => e.Reason == reason && db.DailyLogs.Any(
+                l => l.Id == e.DailyLogId && l.FarmId == typedFarmId && l.LogDate == logDate))
+            .OrderBy(e => e.CreatedAtUtc)
+            .ThenBy(e => e.Id)
+            .ToListAsync(ct);
+
+        if (matches.Count > 1)
+        {
+            logger?.LogWarning(
+                "Duplicate live DisturbanceEvents for one derived identity: {DuplicateCount} rows for farm {FarmId} on {LogDate} " +
+                "(reason length {ReasonLength}). Cross-device overlapping pushes can race the Task 8.5 farm-day dedup lookup " +
+                "(documented residual); a DB-enforced unique is the Phase 6 hardening if this recurs.",
+                matches.Count, farmId, logDate, reason.Length);
+        }
+
+        return matches.FirstOrDefault();
     }
 
     /// <summary>

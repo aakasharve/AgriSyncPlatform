@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Threading;
@@ -62,6 +63,7 @@ public sealed class LabourPermissionEndpointTests
     private static readonly Guid OwnerUserId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid WorkerUserId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid MukadamUserId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+    private static readonly Guid CoOwnerUserId = Guid.Parse("44444444-4444-4444-4444-444444444444");
 
     [Fact]
     public async Task Owner_grants_a_worker_over_HTTP_and_the_roster_read_reports_it()
@@ -150,12 +152,12 @@ public sealed class LabourPermissionEndpointTests
     }
 
     /// <summary>
-    /// The P5 guard at the wire. A 409 with a NAMED code is what lets the UI
-    /// render those members as permanently-on instead of shipping a switch that
-    /// silently does nothing.
+    /// Inverted 2026-09-02 (D5): a Mukadam's switch is real at the wire now.
+    /// The P5 409 survives for owner-tier only (pinned by the sibling fact
+    /// below).
     /// </summary>
     [Fact]
-    public async Task Toggling_a_Mukadam_gets_409_with_a_code_the_client_can_branch_on()
+    public async Task Switching_a_Mukadam_lands_and_the_roster_reports_an_editable_switch()
     {
         await using var harness = await TestHarness.CreateAsync();
         var farmId = Guid.NewGuid();
@@ -164,6 +166,37 @@ public sealed class LabourPermissionEndpointTests
 
         var response = await harness.Client.PutAsJsonAsync(
             $"/shramsafal/farms/{farmId}/labour-permissions/{MukadamUserId}",
+            new { canManageLabourRecords = true });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(doc.RootElement.GetProperty("canManageLabourRecords").GetBoolean());
+        Assert.Equal("ExplicitGrant", doc.RootElement.GetProperty("source").GetString());
+
+        var get = await harness.Client.GetAsync($"/shramsafal/farms/{farmId}/labour-permissions");
+        using var roster = JsonDocument.Parse(await get.Content.ReadAsStringAsync());
+        var mukadam = FindMember(roster.RootElement, MukadamUserId);
+        Assert.True(mukadam.GetProperty("canManageLabourRecords").GetBoolean());
+        Assert.True(mukadam.GetProperty("isGrantEditable").GetBoolean());
+        Assert.Equal("ExplicitGrant", mukadam.GetProperty("source").GetString());
+    }
+
+    /// <summary>
+    /// The P5 guard at the wire, owner-tier edition — the pin the inverted fact
+    /// above may not lose. A 409 with a NAMED code is what lets the UI render
+    /// those members as permanently-on instead of shipping a switch that
+    /// silently does nothing.
+    /// </summary>
+    [Fact]
+    public async Task Toggling_a_SecondaryOwner_gets_409_with_a_code_the_client_can_branch_on()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        await PushCreateFarmAsync(harness.Client, "device-perm-5", "req-perm-5", farmId, "Permission Farm 5");
+        await harness.SeedFarmMembershipAsync(farmId, CoOwnerUserId, AppRole.SecondaryOwner);
+
+        var response = await harness.Client.PutAsJsonAsync(
+            $"/shramsafal/farms/{farmId}/labour-permissions/{CoOwnerUserId}",
             new { canManageLabourRecords = false });
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
@@ -172,14 +205,71 @@ public sealed class LabourPermissionEndpointTests
             "ShramSafal.LabourManagementCarriedByRole",
             doc.RootElement.GetProperty("error").GetString());
 
-        // The roster still says the Mukadam is allowed, and that the switch
+        // The roster still says the co-owner is allowed, and that the switch
         // must not be interactive.
         var get = await harness.Client.GetAsync($"/shramsafal/farms/{farmId}/labour-permissions");
         using var roster = JsonDocument.Parse(await get.Content.ReadAsStringAsync());
-        var mukadam = FindMember(roster.RootElement, MukadamUserId);
-        Assert.True(mukadam.GetProperty("canManageLabourRecords").GetBoolean());
-        Assert.False(mukadam.GetProperty("isGrantEditable").GetBoolean());
-        Assert.Equal("MukadamDefault", mukadam.GetProperty("source").GetString());
+        var coOwner = FindMember(roster.RootElement, CoOwnerUserId);
+        Assert.True(coOwner.GetProperty("canManageLabourRecords").GetBoolean());
+        Assert.False(coOwner.GetProperty("isGrantEditable").GetBoolean());
+        Assert.Equal("OwnerTier", coOwner.GetProperty("source").GetString());
+    }
+
+    /// <summary>
+    /// R1 Task 2.2 — a duration-bounded grant (जबाबदारी with an end date)
+    /// survives the wire in both directions: the PUT carries the expiry, the
+    /// response reports the instant the server stored.
+    /// </summary>
+    [Fact]
+    public async Task A_duration_bounded_grant_round_trips_through_the_wire()
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        await PushCreateFarmAsync(harness.Client, "device-perm-5", "req-perm-5", farmId, "Permission Farm 5");
+        await harness.SeedFarmMembershipAsync(farmId, MukadamUserId, AppRole.Mukadam);
+
+        var end = DateTime.UtcNow.AddDays(2);
+        var response = await harness.Client.PutAsJsonAsync(
+            $"/shramsafal/farms/{farmId}/labour-permissions/{MukadamUserId}",
+            new { canManageLabourRecords = true, labourGrantExpiresAtUtc = end });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(doc.RootElement.GetProperty("canManageLabourRecords").GetBoolean());
+        Assert.Equal(end, doc.RootElement.GetProperty("labourGrantExpiresAtUtc").GetDateTime(),
+            TimeSpan.FromSeconds(1));
+    }
+
+    /// <summary>
+    /// Task 2.3 (review finding M2 from 2.2): the wire contract for
+    /// <c>labourGrantExpiresAtUtc</c> is a UTC instant. An ISO string with an
+    /// offset ("+05:30") or with no zone designator at all deserializes to
+    /// <c>Kind=Local</c>/<c>Unspecified</c>, which Npgsql refuses on a
+    /// timestamptz column as an unhandled 500 deep inside SaveChanges. The
+    /// handler must refuse it cleanly as InvalidCommand before it can reach
+    /// the store — a 4xx the client can branch on, never a 500.
+    /// </summary>
+    [Theory]
+    [InlineData("2027-01-01T00:00:00+05:30")]
+    [InlineData("2027-01-01T00:00:00")]
+    public async Task An_expiry_that_is_not_a_UTC_instant_is_refused_as_InvalidCommand_never_a_500(
+        string expiry)
+    {
+        await using var harness = await TestHarness.CreateAsync();
+        var farmId = Guid.NewGuid();
+        await PushCreateFarmAsync(harness.Client, "device-perm-6", "req-perm-6", farmId, "Permission Farm 6");
+        await harness.SeedFarmMembershipAsync(farmId, WorkerUserId, AppRole.Worker);
+
+        var response = await harness.Client.PutAsync(
+            $"/shramsafal/farms/{farmId}/labour-permissions/{WorkerUserId}",
+            new StringContent(
+                $"{{\"canManageLabourRecords\":true,\"labourGrantExpiresAtUtc\":\"{expiry}\"}}",
+                Encoding.UTF8,
+                "application/json"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("ShramSafal.InvalidCommand", doc.RootElement.GetProperty("error").GetString());
     }
 
     // ─────────────────────────────────────────────────────────────────────────

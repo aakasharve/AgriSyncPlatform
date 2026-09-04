@@ -12,7 +12,15 @@
  *   Cancelled     — rose, collapsed
  *
  * Filter chips: Draft / Assigned / In progress / Completed / Verified / Paid / All
- * Default active: Assigned
+ * Default active: All
+ *
+ * TASK 8b — was "Assigned". A farm whose cards are all Draft (or all
+ * Completed, etc.) then showed zero rows under that filter and fell through
+ * to "कोणते काम कार्ड नाही" over a load that had fully succeeded. The founder
+ * ruled that sentence stays as-is (no new Marathi) — the only honest fix is
+ * making the empty state reachable only when it is genuinely true, which
+ * means opening unfiltered. The filter chips themselves are unchanged; only
+ * which one starts selected.
  */
 
 import React, { useState, useCallback } from 'react';
@@ -23,6 +31,12 @@ import CreateJobCardSheet from '../components/CreateJobCardSheet';
 import AssignWorkerSheet from '../components/AssignWorkerSheet';
 import PayoutConfirmationSheet from '../components/PayoutConfirmationSheet';
 import type { JobCard, JobCardStatus } from '../../../domain/work/JobCard';
+// TASK 8 — the honest load-failure banner, reused as-is. It already carries
+// approved Marathi ("माहिती आणता आली नाही" / "पुन्हा प्रयत्न करा") and is
+// already shared beyond its own screen (`FieldOperatorPicker.tsx:314`). NO NEW
+// COPY is written for this fix: the change is subtractive — stop asserting a
+// sentence that is false, show the affordance that already exists.
+import { LoadErrorBanner } from '../../labour/components/LabourUiKit';
 
 type FilterChip = 'Draft' | 'Assigned' | 'InProgress' | 'Completed' | 'VerifiedForPayout' | 'PaidOut' | 'All';
 
@@ -60,9 +74,12 @@ interface JobCardsPageProps {
 
 const JobCardsPage: React.FC<JobCardsPageProps> = ({ onNavigateToDetail }) => {
     const { currentFarmId } = useFarmContext();
-    const { jobCards, isLoading, assignJobCard, startJobCard, settleJobCard, cancelJobCard, refresh } = useJobCards({ farmId: currentFarmId });
+    // `cancelJobCard` is deliberately NOT destructured: nothing on this screen
+    // cancels a card (`handleAction` covers assign/start/settle only), and the
+    // repo's pre-commit lint runs at zero warnings on staged files.
+    const { jobCards, isLoading, loadFailed, assignJobCard, startJobCard, settleJobCard, refresh } = useJobCards({ farmId: currentFarmId });
 
-    const [activeFilter, setActiveFilter] = useState<FilterChip>('Assigned');
+    const [activeFilter, setActiveFilter] = useState<FilterChip>('All');
     const [expandedBands, setExpandedBands] = useState<Record<string, boolean>>(
         Object.fromEntries(BANDS.map(b => [b.labelEn, b.defaultExpanded]))
     );
@@ -160,7 +177,20 @@ const JobCardsPage: React.FC<JobCardsPageProps> = ({ onNavigateToDetail }) => {
                     </div>
                 )}
 
-                {!isLoading && visibleCards.length === 0 && (
+                {loadFailed && <LoadErrorBanner onRetry={refresh} compact />}
+
+                {/*
+                 * TASK 8 (spec: 2026-08-28-labour-v2-release-1, P4/P5, Ruling
+                 * R8) — this used to read `!isLoading && visibleCards.length
+                 * === 0`, so a 401/403/500 (which `jobCardsClient` handed up
+                 * as an empty list) made the screen STATE, as fact, that the
+                 * farmer has no job cards. The gate is now the FETCH HAVING
+                 * FAILED, never "the list looks empty": when the server
+                 * genuinely answers 200 with no cards, `loadFailed` is false
+                 * and this same sentence is TRUE and must still render —
+                 * which is exactly what the added clause preserves.
+                 */}
+                {!isLoading && !loadFailed && visibleCards.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-16 text-center">
                         <p
                             style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}

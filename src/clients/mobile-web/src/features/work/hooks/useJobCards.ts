@@ -33,6 +33,20 @@ interface UseJobCardsOptions {
 interface UseJobCardsResult {
     jobCards: JobCard[];
     isLoading: boolean;
+    /**
+     * TASK 8 (spec: 2026-08-28-labour-v2-release-1, P4/P5, Ruling R8) — true
+     * when the LAST server read failed, so the screen knows it could not find
+     * out what is true. `jobCards` still carries whatever Dexie had cached
+     * (those rows really do exist, and blanking them would be its own
+     * falsehood) — what this flag buys is the right to WITHHOLD the claim
+     * "कोणते काम कार्ड नाही".
+     *
+     * NOT "the list is empty". A server that answers 200 with no cards has
+     * given a real answer and that sentence is TRUE; this stays `false` there.
+     * Keying the suppression on emptiness instead of on failure would swap one
+     * lie for another.
+     */
+    loadFailed: boolean;
     createJobCard: (req: CreateJobCardRequest) => Promise<JobCard>;
     assignJobCard: (id: string, req: AssignWorkerRequest) => Promise<JobCard>;
     startJobCard: (id: string) => Promise<JobCard>;
@@ -45,18 +59,25 @@ interface UseJobCardsResult {
 export function useJobCards({ farmId, statusFilter }: UseJobCardsOptions): UseJobCardsResult {
     const [jobCards, setJobCards] = useState<JobCard[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadFailed, setLoadFailed] = useState(false);
     const [tick, setTick] = useState(0);
 
     const refresh = useCallback(() => setTick(t => t + 1), []);
 
     useEffect(() => {
         if (!farmId) {
+            // No farm to read for — nothing was asked of the server, so there
+            // is no failure to report either.
             setJobCards([]);
             setIsLoading(false);
+            setLoadFailed(false);
             return;
         }
 
         let cancelled = false;
+        // A fresh attempt starts from "we have not failed", so a retry that
+        // succeeds clears the banner.
+        setLoadFailed(false);
 
         const loadCached = async () => {
             const db = getDatabase();
@@ -77,9 +98,17 @@ export function useJobCards({ farmId, statusFilter }: UseJobCardsOptions): UseJo
                 if (cancelled) return;
                 const db = getDatabase();
                 await db.jobCards.bulkPut(fresh as unknown as DexieJobCard[]);
-                if (!cancelled) setJobCards(fresh);
+                if (!cancelled) {
+                    setJobCards(fresh);
+                    setLoadFailed(false);
+                }
             } catch {
-                // Server unavailable — show cached data
+                // Server unavailable — cached data stays on screen (it is real),
+                // but the failure is no longer silent: Task 8 needs the screen
+                // to tell "we could not find out" apart from "there is
+                // nothing". Reachable at all only because the client now
+                // THROWS on a non-OK response instead of returning `[]`.
+                if (!cancelled) setLoadFailed(true);
             }
         };
 
@@ -138,6 +167,7 @@ export function useJobCards({ farmId, statusFilter }: UseJobCardsOptions): UseJo
     return {
         jobCards,
         isLoading,
+        loadFailed,
         createJobCard: doCreate,
         assignJobCard: doAssign,
         startJobCard: doStart,

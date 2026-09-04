@@ -15,6 +15,7 @@ using Npgsql;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
+using ShramSafal.Application.UseCases.Labour.CreateFieldOperator;
 using ShramSafal.Application.UseCases.Memberships.GetLabourPermissions;
 using ShramSafal.Application.UseCases.Memberships.SetLabourPermission;
 using ShramSafal.Infrastructure;
@@ -360,22 +361,25 @@ public sealed class LabourCapabilityGrantRealPostgresTests(Xunit.Abstractions.IT
 
         var spread = await SetPermissionAsync(FarmA, mukadam, WorkerBoth, true);
         spread.IsFailure.Should().BeTrue(
-            "a Mukadam HOLDS the capability but may not spread it — O-4: 'the owner decides who is trusted'");
+            "granting is owner-tier only, whatever capability the caller holds — O-4: 'the owner "
+            + "decides who is trusted'");
         spread.Error.Code.Should().Be("ShramSafal.Forbidden");
 
         var (rowA, _) = await ReadGrantRowsAsync();
         rowA.Should().BeFalse("neither refused request wrote anything");
 
-        // And the P5 guard: toggling a role-carried capability is refused, not stored.
-        var redundant = await SetPermissionAsync(FarmA, OwnerA, mukadam, false);
-        redundant.IsFailure.Should().BeTrue();
-        redundant.Error.Code.Should().Be("ShramSafal.LabourManagementCarriedByRole");
-        (await IsAllowedAsync(FarmA, mukadam)).Should().BeTrue("the Mukadam is still allowed, which is the point");
+        // 2026-09-02 (D5): the P5 refusal now protects owner-tier ONLY. A
+        // Mukadam toggle is a real decision. Re-stating OFF on an already-OFF
+        // row converges idempotently and writes no history.
+        var mukadamOff = await SetPermissionAsync(FarmA, OwnerA, mukadam, false);
+        mukadamOff.IsSuccess.Should().BeTrue();
+        (await IsAllowedAsync(FarmA, mukadam)).Should().BeFalse(
+            "an ungranted Mukadam is denied — existing Mukadams start OFF, no backfill (founder ruling)");
 
         output.WriteLine("[EVIDENCE] === who may grant ===");
         output.WriteLine($"[EVIDENCE] self-grant            : {self.Error.Code}");
         output.WriteLine($"[EVIDENCE] mukadam grants another: {spread.Error.Code}");
-        output.WriteLine($"[EVIDENCE] toggle role-carried   : {redundant.Error.Code}");
+        output.WriteLine($"[EVIDENCE] mukadam OFF re-stated : success={mukadamOff.IsSuccess} (D5 — the switch is real, and it converges)");
     }
 
     [Fact]
@@ -395,6 +399,130 @@ public sealed class LabourCapabilityGrantRealPostgresTests(Xunit.Abstractions.IT
         output.WriteLine("[EVIDENCE] === roster read ===");
         output.WriteLine($"[EVIDENCE] owner sees   : [{string.Join(", ", asOwner.Value!.Select(r => r.Role))}]");
         output.WriteLine($"[EVIDENCE] worker gets  : {asWorker.Error.Code}");
+    }
+
+    /// <summary>
+    /// Task 2.5 — the edited-in-place CreateTable actually lands the three
+    /// hours columns with the declared types. information_schema, superuser
+    /// read: a data check, not an RLS proof.
+    /// </summary>
+    [Fact]
+    public async Task The_attendance_hours_columns_exist_with_the_declared_types()
+    {
+        await using var read = new NpgsqlConnection(_superuserConn);
+        await read.OpenAsync();
+        await using var cmd = read.CreateCommand();
+        cmd.CommandText = """
+            SELECT column_name, data_type,
+                   COALESCE(numeric_precision::text, ''), COALESCE(numeric_scale::text, ''),
+                   is_nullable
+            FROM information_schema.columns
+            WHERE table_schema = 'ssf' AND table_name = 'attendance_marks'
+              AND column_name IN ('hours_worked', 'extra_hours', 'hours_basis')
+            ORDER BY column_name
+            """;
+        var rows = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            rows.Add(string.Join("|", Enumerable.Range(0, 5).Select(reader.GetString)));
+        }
+
+        rows.Should().Equal(
+            "extra_hours|numeric|4|1|YES",
+            "hours_basis|integer|32|0|NO",
+            "hours_worked|numeric|4|1|YES");
+    }
+
+    /// <summary>
+    /// FOUNDER RULING (master review 2026-09-02, D5): existing Mukadams start
+    /// OFF, NO backfill — the one-token delete IS the whole migration
+    /// behaviour. Both halves pinned: the pre-existing row is untouched (read
+    /// below the app), and the gate reads that untouched row as OFF.
+    /// </summary>
+    [Fact]
+    public async Task An_existing_Mukadam_row_is_untouched_and_reads_as_OFF_no_backfill()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        var mukadam = Guid.Parse("c9d66666-6666-6666-6666-666666666666");
+        await using (var seed = new NpgsqlConnection(_superuserConn))
+        {
+            await seed.OpenAsync();
+            await SeedMembershipAsync(seed, FarmA, mukadam, AccountA, "Mukadam");
+        }
+
+        await using var read = new NpgsqlConnection(_superuserConn);
+        await read.OpenAsync();
+        var stored = Convert.ToBoolean(await ScalarAsync(read,
+            "SELECT can_manage_labour_records FROM ssf.farm_memberships WHERE farm_id = @f AND user_id = @u",
+            ("f", FarmA), ("u", mukadam)));
+        stored.Should().BeFalse(
+            "no backfill exists, by founder ruling — the row keeps its NOT NULL DEFAULT false");
+
+        (await IsAllowedAsync(FarmA, mukadam)).Should().BeFalse(
+            "the untouched row now MEANS off: an existing Mukadam starts OFF on deploy day");
+    }
+
+    /// <summary>
+    /// R1 Task 2.2 — the EF-translation proof the clock-threading decision was
+    /// sized on: the expiry term is a PARAMETER, translated by EF to a
+    /// parameterised comparison, executed here on real Postgres.
+    /// </summary>
+    [Fact]
+    public async Task An_expired_grant_is_denied_by_the_real_SQL_predicate_and_nothing_is_rewritten()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        var granted = await SetPermissionAsync(FarmA, OwnerA, WorkerBoth, allowed: true,
+            expiresAtUtc: DateTime.UtcNow.AddHours(1));
+        granted.IsSuccess.Should().BeTrue();
+        granted.Value!.LabourGrantExpiresAtUtc.Should().NotBeNull();
+
+        (await IsAllowedAsync(FarmA, WorkerBoth)).Should().BeTrue(
+            "inside the window — and this executes the expiry predicate on real Postgres, "
+            + "which is the translation check the clock-threading decision was sized on");
+        (await IsAllowedAsync(FarmA, WorkerBoth, DateTime.UtcNow.AddHours(2))).Should().BeFalse(
+            "past the end the SAME stored row answers OFF");
+
+        var (rowA, _) = await ReadGrantRowsAsync();
+        rowA.Should().BeTrue("expiry denies forward; the stored decision is not rewritten backward");
+    }
+
+    /// <summary>
+    /// Task 2.3 acceptance: a Mukadam with the switch OFF is REFUSED by
+    /// LabourManagementGate.IsAllowedAsync on the server, driving a REAL labour
+    /// handler as him under his own scope — not merely hidden in the UI.
+    /// </summary>
+    [Fact]
+    public async Task Switching_a_Mukadam_off_denies_his_next_labour_write_server_side()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        var mukadam = Guid.Parse("c9d77777-7777-7777-7777-777777777777");
+        await using (var seed = new NpgsqlConnection(_superuserConn))
+        {
+            await seed.OpenAsync();
+            await SeedMembershipAsync(seed, FarmA, mukadam, AccountA, "Mukadam");
+        }
+
+        // Round-trip the owner's switch: ON, then OFF — he stays a Mukadam throughout.
+        (await SetPermissionAsync(FarmA, OwnerA, mukadam, allowed: true)).IsSuccess.Should().BeTrue();
+        (await SetPermissionAsync(FarmA, OwnerA, mukadam, allowed: false)).IsSuccess.Should().BeTrue(
+            "the owner may keep him as Mukadam with the responsibility OFF");
+
+        var refused = await RunUnderScopeAsync(FarmA, mukadam, sp =>
+            new CreateFieldOperatorHandler(
+                sp.GetRequiredService<IShramSafalRepository>(),
+                sp.GetRequiredService<IIdGenerator>(),
+                sp.GetRequiredService<IClock>())
+            .HandleAsync(new CreateFieldOperatorCommand(
+                new FarmId(FarmA), "गणेश", null, new UserId(mukadam))));
+
+        refused.IsFailure.Should().BeTrue();
+        refused.Error.Code.Should().Be("ShramSafal.Forbidden",
+            "denied by the shared gate on the server — Forbidden, never NotFound, so a forged "
+            + "farm id cannot probe existence");
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -459,22 +587,24 @@ public sealed class LabourCapabilityGrantRealPostgresTests(Xunit.Abstractions.IT
     }
 
     private Task<Result<LabourPermissionDto>> SetPermissionAsync(
-        Guid farmId, Guid caller, Guid target, bool allowed)
+        Guid farmId, Guid caller, Guid target, bool allowed, DateTime? expiresAtUtc = null)
         => RunUnderScopeAsync(farmId, caller, sp => new SetLabourPermissionHandler(
                 sp.GetRequiredService<IShramSafalRepository>(),
                 sp.GetRequiredService<IClock>())
             .HandleAsync(new SetLabourPermissionCommand(
                 new FarmId(farmId), new UserId(target), allowed, new UserId(caller),
-                "test", "device-test", "sha256:test")));
+                "test", "device-test", "sha256:test", expiresAtUtc)));
 
     private Task<Result<IReadOnlyList<LabourPermissionDto>>> GetPermissionsAsync(Guid farmId, Guid caller)
-        => RunUnderScopeAsync(farmId, caller, sp =>
-            new GetLabourPermissionsHandler(sp.GetRequiredService<IShramSafalRepository>())
-                .HandleAsync(new GetLabourPermissionsQuery(new FarmId(farmId), new UserId(caller))));
+        => RunUnderScopeAsync(farmId, caller, sp => new GetLabourPermissionsHandler(
+                sp.GetRequiredService<IShramSafalRepository>(),
+                sp.GetRequiredService<IClock>())
+            .HandleAsync(new GetLabourPermissionsQuery(new FarmId(farmId), new UserId(caller))));
 
-    private Task<bool> IsAllowedAsync(Guid farmId, Guid userId)
+    private Task<bool> IsAllowedAsync(Guid farmId, Guid userId, DateTime? nowUtc = null)
         => RunUnderScopeAsync(farmId, userId, sp => LabourManagementGate.IsAllowedAsync(
-            sp.GetRequiredService<IShramSafalRepository>(), farmId, userId));
+            sp.GetRequiredService<IShramSafalRepository>(), farmId, userId,
+            nowUtc ?? DateTime.UtcNow));
 
     /// <summary>Read below the application entirely, as the superuser — a data read, not a proof.</summary>
     private async Task<(bool FarmA, bool FarmB)> ReadGrantRowsAsync()

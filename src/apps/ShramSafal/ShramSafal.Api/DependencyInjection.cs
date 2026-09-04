@@ -845,6 +845,12 @@ public static class DependencyInjection
                 ShramSafal.Application.UseCases.Labour.CorrectLabour.CorrectLabourResult>,
             ShramSafal.Application.UseCases.Labour.CorrectLabour.CorrectLabourHandler>();
 
+        // Labour V2 R1 Task 3.5b — the attendance write path's ONE production
+        // construction site. Raw registration (no pipeline wrapper): it is
+        // invoked only from PushSyncBatchHandler, which owns idempotency and
+        // the transaction.
+        services.AddScoped<ShramSafal.Application.UseCases.Labour.RecordAttendanceMark.RecordAttendanceMarkHandler>();
+
         // T-IGH-03-PIPELINE-ROLLOUT (CompleteJobCard): caller-shape
         // validation + job-card-existence + farm-membership authorization.
         // The endpoint (POST /job-cards/{id}/complete) AND the sync entry

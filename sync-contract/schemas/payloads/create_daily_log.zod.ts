@@ -74,6 +74,11 @@ const LabourItemSchema = z.object({
     task: z.string().optional(),
     notes: z.string().optional(),
     durationHours: z.number().optional(),
+    // Final direction §3 — THROUGH WHOM this crew came (a FieldOperator id).
+    // Absent/null = nobody said. Engagement-scoped: two crews on one day are
+    // two labour items. Rides the existing create_daily_log mutation — the
+    // engagement id is already client-minted, so no new mutation type exists.
+    engagedThroughFieldOperatorId: ZGuid.optional(),
 });
 
 // LABOUR_PHASE2 P2.2 — what the farmer actually asserted about WHERE the work

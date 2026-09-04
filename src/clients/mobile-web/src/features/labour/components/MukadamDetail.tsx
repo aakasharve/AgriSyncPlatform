@@ -43,20 +43,42 @@ const MukadamDetail: React.FC<Props> = ({ data, personId, onOpenPerson, onOpenMu
                         {m.taskScope && <TaskBadge task={m.taskScope} />}
                         {m.temporary && <TempBadge />}
                     </div>
-                    <div className="mt-1.5 text-[11px] text-slate-500">{sub ? `${appointedBy} नी नेमला` : 'सर्व कारकुनी काम · तुम्ही नेमला'}</div>
+                    <div className="mt-1.5 text-[11px] text-slate-500">{sub ? `${appointedBy}नी नेमला` : 'सगळं काम · तुम्ही नेमला'}</div>
                 </div>
             </div>
 
             <BalanceCard
                 balance={m.balance}
-                settleLabel="सेटल"
+                settleLabel="पैसे द्या"
                 onAdvance={onAdvance}
                 onSettle={onSettle}
                 showActions={SHOW_MONEY_ACTIONS}
-                why={sub ? 'फक्त छाटणीसाठी · काम संपलं की बंद' : `तुम्ही ${'₹'}${m.balance.advance.toLocaleString('en-IN')} उचल दिली`}
+                // Task 7b (labour-v2-release-1) — उचल (advance) does not
+                // exist as a system: no table, no write path, no engine
+                // (GetLabourDataHandler.cs:205 hardcodes `advance = 0m`
+                // server-side). This branch asserted "तुम्ही ₹0 उचल दिली"
+                // (you gave ₹0 advance) as a narrative fact about a real
+                // farmer action. Same treatment as `PersonDetail.tsx`'s
+                // `recorded === null` branch: `undefined` lets `BalanceCard`
+                // skip the line entirely, rather than inventing new copy.
+                why={sub ? 'फक्त छाटणीसाठी · काम संपलं की बंद' : undefined}
             />
 
-            <GroupLabel>याची माणसं · his team ({members.length})</GroupLabel>
+            {/*
+              * TASK 22 (spec: 2026-08-28-labour-v2-release-1) — this used to
+              * read `his team ({members.length})` unconditionally, with
+              * `members = m.memberIds ?? []` coalescing an UNKNOWN team into
+              * a confident "(0)". `GetLabourDataHandler.cs` hardcodes
+              * `MemberIds: null` for every worker today, so on a real farm
+              * this is never a genuine zero — it is an absent record, same
+              * as every other "no evidence yet" field this release fixed.
+              * `LabourUiKit.tsx`'s own `PersonRow` already gets this right
+              * for the exact same field (`teamCount != null`) two lines
+              * away in `LabourHub.tsx` — this header just hadn't matched
+              * it. The parenthetical count is now shown only when the value
+              * is actually known; no new word is introduced.
+              */}
+            <GroupLabel>याच्यासोबत आलेली माणसं{m.memberIds != null ? ` (${members.length})` : ''}</GroupLabel>
             {members.map((id) => {
                 const person = data.people[id];
                 const isMukadam = person.role !== 'worker';

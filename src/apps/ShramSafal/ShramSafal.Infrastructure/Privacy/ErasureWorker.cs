@@ -193,6 +193,50 @@
 //     founder Decision 5 ("5b — ship names, but do the erasure work FIRST")
 //     gates on. Stating otherwise here would be a knowingly false compliance
 //     claim, which this file holds to be worse than a tracked gap.
+//   - ssf.attendance_marks — ADDED 2026-08-31 (founder decision D-H3: what somebody
+//     RULED about a person on a farm-day; day mark full/half/absent/unmarked plus
+//     night mark worked/not-worked/unmarked).
+//     NO PII COLUMN OF ITS OWN, and that is a deliberate design choice rather than
+//     an accident: farm_id, field_operator_id, work_date, two enums, two
+//     numeric(4,1) hour counts plus an integer basis (quantities, not text — no
+//     PII), a recorder id and two timestamps. The identifying TEXT lives entirely
+//     on the referenced ssf.field_operators row, which AnonymizeFieldOperatorAsync
+//     below already sentinel-replaces.
+//     THE NAME IS DELIBERATELY NOT SNAPSHOTTED HERE, unlike
+//     field_operator_work_rows.display_name_at_attach. That snapshot exists so a
+//     payout approved for "बाळू" still reads "बाळू" after a rename — history that
+//     must stay explainable. A हजेरी mark is not a payout: the register is read
+//     live, and showing the person by their CURRENT name is the correct answer
+//     there. Not copying the name is therefore both the right read semantics and
+//     one fewer place a worker erasure has to reach.
+//     KEEP the row unchanged on creator erasure; do NOT delete it. Same reasoning
+//     as field_operator_work_rows above — CREATOR IS NOT THE DATA SUBJECT, and the
+//     mark is co-owned work history. On an explicit WORKER erasure the person is
+//     anonymized at ssf.field_operators and this row needs no action, because it
+//     names nobody. Anonymize the person, never the work. Conscious gate-4
+//     disposition, no independent scrub action on this table.
+//   - ssf.attendance_mark_corrections — ADDED 2026-08-31 alongside
+//     ssf.attendance_marks. The append-only record of what a mark used to say,
+//     who changed it and when (founder ruling: corrections are fine, silent ones
+//     are not).
+//     NO PII COLUMN OF ITS OWN: a mark id, a farm id, which half changed, and the
+//     enum NAMES or hours values either side of the change ("Half" -> "Full",
+//     null -> "3.5|Explicit") — still names nobody: the person is reachable only
+//     through the mark it points at, and from there ssf.field_operators, which
+//     AnonymizeFieldOperatorAsync already scrubs.
+//     corrected_by_user_id identifies the FARMER who made the change, and on
+//     creator erasure that farmer is the data subject — but see below.
+//     KEEP, AND IT CANNOT BE OTHERWISE. The table is append-only enforced at the
+//     GRANT: agrisync_app holds SELECT and INSERT and no UPDATE or DELETE, so
+//     neither a scrub nor a delete is executable by the application at all. That
+//     is deliberate and it is the point of the table — a history that can be
+//     edited answers nothing. An erasure that could rewrite the audit of its own
+//     corrections would defeat the ruling this table exists to satisfy.
+//     DISCLOSED LIMIT: that makes corrected_by_user_id a farmer identifier which
+//     account deletion does not reach. It is a bare uuid with no name, phone or
+//     free text beside it, and it is load-bearing for provenance. Flagged here
+//     rather than quietly scrubbed, and it needs the same founder + counsel
+//     sign-off the field_operators retention policy is already gated on.
 //   - ssf.machinery_usages — Track B daily_logs-child (ADR 0023 §2 / D-T6-ERASURE).
 //     NO user_id/PII column: machine type/ownership, hours/costs, and the structured
 //     equipment config (implement, nozzles_active, fan_state, fuel) are de-identified

@@ -360,6 +360,19 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   // row below row 1, not inside it — see `PAGE_TOGGLE_ROUTES`'s comment).
   const showNavCards = PAGE_TOGGLE_ROUTES.includes(currentRoute);
 
+  // FOUNDER RULING 2026-08-31 — the oversight tray is a LOG-DESK instrument,
+  // not a global banner. It rode on `farmContext` alone, so it followed the
+  // farmer onto every route including the Setup Hub, where "5 things need
+  // your attention" is noise he cannot act on from that screen. It now shows
+  // where the work it refers to is actually done: the log desk and reflect.
+  //
+  // This hides the TRAY only. The farm identity element is a separate mount
+  // (`FarmNameBoard`, row 1 above — formerly `FarmIdentityElement`, replaced
+  // by the 2026-08-30 nameboard ruling) and still renders on every route —
+  // the farmer never loses sight of which farm he is looking at.
+  const showOversightStrip = currentRoute === 'main'
+      && (currentView === 'log' || currentView === 'reflect');
+
   // FOUNDER RULING 2026-08-27 — THE STRIP'S COUNT NO LONGER LEAVES THIS FILE,
   // BECAUSE NOTHING OUTSIDE IT MAKES A CLAIM ABOUT IT ANY MORE.
   //
@@ -523,7 +536,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
           above it, but with Tailwind's `px-3` (12px) instead of
           `.page-content`'s hardcoded 16px — deliberate, not a rounding
           error, per the task-12 brief's "inset ~12px from both edges". */}
-      {farmContext && (
+      {farmContext && showOversightStrip && (
         <div className="mx-auto w-full max-w-[480px] px-3 pb-3 md:max-w-[600px] xl:max-w-[640px]">
           <CanonicalStrip
             language={language}

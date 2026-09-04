@@ -281,7 +281,8 @@ public static class MembershipEndpoints
                     new UserId(userId),
                     clientAppVersion,
                     auditDeviceId,
-                    auditIpHash),
+                    auditIpHash,
+                    request?.LabourGrantExpiresAtUtc),
                 ct);
 
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -377,10 +378,16 @@ public sealed record ClaimJoinRequest(string? Token, string? FarmCode);
 /// LABOUR_PHASE2 Phase 5 — body of
 /// <c>PUT /shramsafal/farms/{farmId}/labour-permissions/{targetUserId}</c>.
 ///
-/// <para>One field, and it is the DESIRED STATE, not a toggle: the caller says
-/// what it wants to be true, so a retry on a bad connection converges instead of
-/// oscillating. An absent/`null` body is read as <c>false</c> (revoke) — the
-/// fail-closed direction, since the alternative would let a malformed request
-/// hand out a capability.</para>
+/// <para>The DESIRED STATE, not a toggle: the caller says what it wants to be
+/// true, so a retry on a bad connection converges instead of oscillating. An
+/// absent/`null` body is read as <c>false</c> (revoke) — the fail-closed
+/// direction, since the alternative would let a malformed request hand out a
+/// capability.</para>
+///
+/// <para><c>LabourGrantExpiresAtUtc</c> (R1 Task 2.2, D5): the UTC instant the
+/// responsibility ends; absent/<c>null</c> = कायम, no end date. Ignored
+/// (cleared) on a revoke, refused when already past.</para>
 /// </summary>
-public sealed record SetLabourPermissionRequest(bool CanManageLabourRecords);
+public sealed record SetLabourPermissionRequest(
+    bool CanManageLabourRecords,
+    DateTime? LabourGrantExpiresAtUtc = null);

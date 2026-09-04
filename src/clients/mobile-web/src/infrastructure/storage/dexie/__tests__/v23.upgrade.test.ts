@@ -190,8 +190,12 @@ async function deleteDb(): Promise<void> {
 // user, so the number is pinned literally and on purpose — anyone changing
 // it has to come here and say why.
 describe('DATABASE_VERSION tracks the top of the merged version chain', () => {
-    it('DATABASE_VERSION is 24 — dfes v23 plus main v24, both declared', () => {
-        expect(DATABASE_VERSION).toBe(24);
+    it('DATABASE_VERSION is 25 — dfes v23, main v24, labour v25, all declared', () => {
+        // WHY 25 (the constant's contract says come here and say why):
+        // Labour V2 R1 Task 3.5c added the `attendanceMarks` store in v25 —
+        // the pull carriage of the attendance write path. v23 stays DFES's,
+        // v24 stays the transcript strip; both remain declared beneath it.
+        expect(DATABASE_VERSION).toBe(25);
     });
 });
 

@@ -23,8 +23,8 @@ const json = JSON.parse(
 };
 
 describe('mutation-types.json', () => {
-  it('declares 32 mutations', () => {
-    expect(json.mutationTypes).toHaveLength(32);
+  it('declares 33 mutations', () => {
+    expect(json.mutationTypes).toHaveLength(33);
   });
 
   it('has unique mutation names', () => {

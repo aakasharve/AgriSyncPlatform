@@ -64,14 +64,17 @@ describe('the tails a save sentence ends in — approved wording', () => {
         expect(t('sync.unsentEditTail', 'en')).toContain('will not reach your farm records');
     });
 
-    it('Marathi has ONE corrections form, because no singular was approved', () => {
-        // The CTO supplied the plural clause only. Inflecting a singular from it
-        // would be an agent inventing farmer-facing Marathi, which no
-        // implementer in this phase has done and none may start doing. The
-        // approved plural is used at every count and is on the founder-copy
-        // list. If this assertion ever fails, someone invented a form.
+    it('Marathi now has BOTH forms, because the founder approved the singular', () => {
+        // Superseded 2026-09-04. The original premise was that no singular had
+        // been approved, so one form served every count. The founder supplied
+        // the singular himself in his Marathi word calls (#257), which is the
+        // one source that may introduce farmer-facing Marathi. The forms must
+        // therefore DIFFER now — and if they ever collapse back into one, that
+        // is an agent flattening his words, which is what this test still guards.
         expect(t('sync.correctionsFiledTailOne', 'mr'))
-            .toBe(t('sync.correctionsFiledTailMany', 'mr'));
+            .not.toBe(t('sync.correctionsFiledTailMany', 'mr'));
+        expect(t('sync.correctionsFiledTailOne', 'mr')).toBe('{count} दुरुस्ती शेतनोंदीत गेली.');
+        expect(t('sync.correctionsFiledTailMany', 'mr')).toBe('{count} दुरुस्त्या शेतनोंदीत गेल्या.');
 
         // English keeps the split the shipped code already had, so the two must
         // NOT be equal there — proving the single Marathi form is a deliberate

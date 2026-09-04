@@ -7,11 +7,13 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using Microsoft.Extensions.Logging.Abstractions;
 using ShramSafal.Application.Contracts.Dtos;
+using ShramSafal.Application.Contracts.Sync.Payloads;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
+using ShramSafal.Domain.Labour;
 using Xunit;
 
 namespace ShramSafal.Domain.Tests.Logs;
@@ -213,6 +215,61 @@ public sealed class CreateDailyLogPipelineTests
         Assert.Equal(AnalyticsEventType.LogCreated, analytics.Events[0].EventType);
     }
 
+    // ---- Task 3.6 (spec: 2026-08-28-labour-v2-release-1) — the crew link ----
+    // Final direction §3: a labour item may state THROUGH WHOM the crew came.
+    // The tenant boundary for that link lives in the APPLICATION, in this
+    // handler (p_tenant_labour_assignments is WITH CHECK (true), user-select
+    // policies are PERMISSIVE, and FK checks bypass RLS), so these two facts
+    // pin both sides: same-farm carries, cross-farm refuses Forbidden.
+
+    [Fact]
+    public async Task A_labour_item_engaged_through_this_farms_operator_stages_the_link()
+    {
+        var (pipeline, repo, _) = BuildPipeline(seedAll: true);
+        var mukadam = FieldOperator.Create(
+            Guid.NewGuid(), "शंकर", null, new FarmId(FarmGuid), new UserId(OperatorUserId),
+            new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc));
+        await repo.AddFieldOperatorAsync(mukadam);
+
+        var result = await pipeline.HandleAsync(MakeCommand(labour:
+        [
+            new LabourItem(
+                LabourAssignmentId: Guid.NewGuid(),
+                EngagementType: "HIRED",
+                WorkerCount: 8,
+                EngagedThroughFieldOperatorId: mukadam.Id),
+        ]));
+
+        Assert.True(result.IsSuccess);
+        var staged = Assert.Single(repo.CapturedLabour);
+        Assert.Equal(mukadam.Id, staged.EngagedThroughFieldOperatorId);
+    }
+
+    [Fact]
+    public async Task A_labour_item_engaged_through_another_farms_operator_is_Forbidden_and_stages_nothing()
+    {
+        var (pipeline, repo, _) = BuildPipeline(seedAll: true);
+        var otherFarmsMukadam = FieldOperator.Create(
+            Guid.NewGuid(), "शंकर", null, new FarmId(Guid.NewGuid()), new UserId(OperatorUserId),
+            new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc));
+        await repo.AddFieldOperatorAsync(otherFarmsMukadam);
+
+        var result = await pipeline.HandleAsync(MakeCommand(labour:
+        [
+            new LabourItem(
+                LabourAssignmentId: Guid.NewGuid(),
+                EngagementType: "HIRED",
+                WorkerCount: 8,
+                EngagedThroughFieldOperatorId: otherFarmsMukadam.Id),
+        ]));
+
+        // Forbidden, never NotFound — the same posture as every labour guard:
+        // a cross-farm reference must not leak whether the operator exists.
+        Assert.True(result.IsFailure);
+        Assert.Equal(ShramSafalErrors.Forbidden, result.Error);
+        Assert.Empty(repo.CapturedLabour);
+    }
+
     // ---- helpers ----
 
     private static CreateDailyLogCommand MakeCommand(
@@ -221,7 +278,8 @@ public sealed class CreateDailyLogPipelineTests
         Guid? cropCycleId = null,
         Guid? requestedByUserId = null,
         Guid? operatorUserId = null,
-        Guid? dailyLogId = null)
+        Guid? dailyLogId = null,
+        IReadOnlyList<LabourItem>? labour = null)
         => new(
             FarmId: farmId ?? FarmGuid,
             PlotId: plotId ?? PlotGuid,
@@ -233,7 +291,8 @@ public sealed class CreateDailyLogPipelineTests
             DeviceId: "device-1",
             ClientRequestId: $"req-{Guid.NewGuid():N}",
             DailyLogId: dailyLogId,
-            ActorRole: "worker");
+            ActorRole: "worker",
+            Labour: labour);
 
     private static Farm MakeFarm() =>
         Farm.Create(FarmGuid, "Patil Farm", OperatorUserId,

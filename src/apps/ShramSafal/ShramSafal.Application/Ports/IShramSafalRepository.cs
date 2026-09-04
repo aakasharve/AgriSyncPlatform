@@ -31,6 +31,14 @@ public sealed record MyFarmProjection(
     Guid OwnerAccountId,
     AppRole? Role);
 
+/// <summary>
+/// Labour V2 R1 Task 3.5b — one engagement's day-fact about a person, as read
+/// by <c>RecordAttendanceMarkHandler</c>'s pre-persistence contradiction
+/// check. <c>Shift</c> is <c>null</c> when the engagement made no day claim
+/// ("no claim → no question", GetLabourDataHandler.cs agreement idiom).
+/// </summary>
+public sealed record AttendanceEngagementFact(Guid LabourAssignmentId, string? Task, LabourShift? Shift);
+
 public interface IShramSafalRepository
 {
     Task AddFarmAsync(Farm farm, CancellationToken ct = default);
@@ -744,6 +752,30 @@ public interface IShramSafalRepository
         => Task.FromResult<FarmOperation?>(null);
 
     /// <summary>
+    /// Labour V2 R1 Task 8.5 — the disturbance analogue of
+    /// <see cref="GetFarmOperationByKeyAsync"/>: the live
+    /// <see cref="DisturbanceEvent"/> for one derived identity, or <c>null</c>.
+    /// A disturbance's derived identity is (farm, log-day, reason) — the DAY,
+    /// not the parse, because the labour door and the regular door produce two
+    /// logs (two source ids) for one farm-day and "पाऊस आला" through both doors
+    /// is one fact. Every component is already a persisted column (farm and day
+    /// on the parent <c>daily_logs</c> row, reason on the event), so unlike
+    /// FarmOperation no key column is stored — production resolves the identity
+    /// with a join through <c>daily_log_id</c>. <paramref name="reason"/> is
+    /// compared against the entity-stored form (<see cref="DisturbanceEvent"/>
+    /// trims on Create), so callers pass it trimmed. Default impl returns
+    /// <c>null</c> so test doubles compile.
+    /// <para>B001 — this read is the dedup's whole enforcement (no DB unique),
+    /// so cross-device overlapping pushes can race it; the production impl is
+    /// also the residual's NAMED OBSERVER — it warns when the identity already
+    /// holds more than one live row. See the derivation-site comment in
+    /// <c>LedgerDerivationService</c> for the enforced boundary.</para>
+    /// </summary>
+    Task<DisturbanceEvent?> GetDisturbanceEventForFarmDayAsync(
+        Guid farmId, DateOnly logDate, string reason, CancellationToken ct = default)
+        => Task.FromResult<DisturbanceEvent?>(null);
+
+    /// <summary>
     /// RoutineMemory upsert lookup — the existing <see cref="RoutinePattern"/>
     /// for (<paramref name="farmId"/>, <paramref name="plotId"/>,
     /// <paramref name="operationType"/>) or <c>null</c> on first sighting.
@@ -790,23 +822,37 @@ public interface IShramSafalRepository
     /// </para>
     /// Default impl returns empty so in-tree test doubles keep compiling;
     /// production <c>ShramSafalRepository</c> overrides.
+    /// <para>
+    /// Task 9 (spec: 2026-08-28-labour-v2-release-1) — bounded by
+    /// <c>CostEntry.EntryDate</c>, the farm-local calendar date the money is
+    /// booked against. Both bounds are INCLUSIVE and either may be
+    /// <c>null</c> for unbounded, so the all-time window (the default) reads
+    /// exactly what this method read before the window existed.
+    /// </para>
     /// </summary>
     Task<List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)>> GetLabourPayoutCostEntriesWithJobCardAsync(
-        FarmId farmId, CancellationToken ct = default)
+        FarmId farmId, DateOnly? fromDate, DateOnly? toDateInclusive, CancellationToken ct = default)
         => Task.FromResult(new List<(CostEntry, Guid?)>());
 
     /// <summary>
     /// <see cref="LabourAssignment"/> rows (voice-derived, NO-MULTIPLY
     /// descriptive attendance — count/shift/task/names only) for daily logs
-    /// on this farm dated on/after <paramref name="weekStart"/>. Interim
-    /// source for <c>Dashboard.ManDays</c> (sum of
+    /// on this farm whose <c>LogDate</c> falls inside the given window.
+    /// Interim source for <c>Dashboard.ManDays</c> (sum of
     /// <see cref="LabourAssignment.WorkerCount"/>) until the Stage 5
     /// per-worker attendance ledger lands — <c>Ledger.Rows</c> stays empty
     /// until then. Default impl returns empty so in-tree test doubles keep
     /// compiling; production <c>ShramSafalRepository</c> overrides.
+    /// <para>
+    /// Task 9 (spec: 2026-08-28-labour-v2-release-1) — replaces
+    /// <c>GetLabourAssignmentsForFarmSinceAsync</c>, which had a lower bound
+    /// only. Both bounds are INCLUSIVE and either may be <c>null</c> for
+    /// unbounded. The upper bound is the substantive addition: without it a
+    /// day dated ahead of today counted inside "this week".
+    /// </para>
     /// </summary>
-    Task<List<LabourAssignment>> GetLabourAssignmentsForFarmSinceAsync(
-        FarmId farmId, DateOnly weekStart, CancellationToken ct = default)
+    Task<List<LabourAssignment>> GetLabourAssignmentsForFarmInWindowAsync(
+        FarmId farmId, DateOnly? fromDate, DateOnly? toDateInclusive, CancellationToken ct = default)
         => Task.FromResult(new List<LabourAssignment>());
 
     // --- Field Operator identity (Task 11, spec: 2026-07-13-labour-attendance-approval-design) ---
@@ -890,6 +936,77 @@ public interface IShramSafalRepository
     Task<IReadOnlyList<FieldOperatorWorkRow>> GetFieldOperatorWorkRowsForAssignmentAsync(
         Guid labourAssignmentId, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<FieldOperatorWorkRow>>([]);
+
+    /// <summary>
+    /// The हजेरी marks for a farm across a window (D-H3). Both bounds are
+    /// inclusive; <c>null</c> means unbounded at that end.
+    /// </summary>
+    /// <remarks>
+    /// THE DEFAULT THROWS, deliberately, and does not return an empty list like
+    /// its neighbours above. An empty register is a POSITIVE claim — "nobody was
+    /// marked" — and an implementation that simply has not implemented this
+    /// would be making that claim silently. Failing loudly is the only honest
+    /// default for a read whose empty answer is itself a statement.
+    /// </remarks>
+    Task<IReadOnlyList<AttendanceMark>> GetAttendanceMarksForFarmInWindowAsync(
+        FarmId farmId, DateOnly? from, DateOnly? toInclusive, CancellationToken ct = default)
+        => throw new NotSupportedException(
+            "GetAttendanceMarksForFarmInWindowAsync is not implemented by this repository. "
+            + "Returning an empty register would assert that nobody was marked.");
+
+    /// <summary>
+    /// The existing ruling for one person on one farm-day, or <c>null</c> when
+    /// nobody has ruled yet. <c>null</c> is NOT absence — see
+    /// <see cref="AttendanceMark"/>, where unmarked is a fourth state.
+    /// </summary>
+    Task<AttendanceMark?> GetAttendanceMarkAsync(
+        FarmId farmId, Guid fieldOperatorId, DateOnly workDate, CancellationToken ct = default)
+        => throw new NotSupportedException(
+            "GetAttendanceMarkAsync is not implemented by this repository.");
+
+    /// <summary>Adds a new ruling. Amending an existing one goes through the entity.</summary>
+    Task AddAttendanceMarkAsync(AttendanceMark mark, CancellationToken ct = default)
+        => throw new NotSupportedException(
+            "AddAttendanceMarkAsync is not implemented by this repository.");
+
+    /// <summary>
+    /// The engagement day-facts for one person on one farm-day — the input to
+    /// <c>RecordAttendanceMarkHandler</c>'s pre-persistence contradiction
+    /// check (Labour V2 R1 Task 3.5b).
+    /// </summary>
+    /// <remarks>
+    /// THE DEFAULT THROWS, like <see cref="GetAttendanceMarksForFarmInWindowAsync"/>
+    /// and unlike the staging members around it: "no contradiction found" is a
+    /// POSITIVE claim, and an implementation that simply has not implemented
+    /// this would be making it silently.
+    /// </remarks>
+    Task<IReadOnlyList<AttendanceEngagementFact>> GetAttendanceEngagementFactsAsync(
+        FarmId farmId, Guid fieldOperatorId, DateOnly workDate, CancellationToken ct = default)
+        => throw new NotSupportedException(
+            "GetAttendanceEngagementFactsAsync is not implemented by this repository. "
+            + "Returning an empty list would assert that no contradiction exists.");
+
+    /// <summary>
+    /// Stage an APPEND-ONLY <see cref="AttendanceMarkCorrection"/> row. No
+    /// SaveChanges — the caller commits it in the SAME unit of work as the
+    /// in-place amendment of the <see cref="AttendanceMark"/> it explains, so
+    /// the change can never land without its record. Same contract as
+    /// <see cref="AddLabourCorrectionAsync"/> — deliberately no update or
+    /// delete counterpart.
+    /// </summary>
+    Task AddAttendanceMarkCorrectionAsync(AttendanceMarkCorrection correction, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Pull carriage (Labour V2 R1 Task 3.5c): every mark on the caller's
+    /// farms whose <c>ModifiedAtUtc</c> is after <paramref name="sinceUtc"/>.
+    /// Empty default mirrors <see cref="GetFinanceCorrectionsChangedSinceAsync(IEnumerable{Guid}, DateTime, CancellationToken)"/>:
+    /// a pull that misses rows retries on the frozen cursor, so an empty
+    /// answer here is recoverable in a way the facts read above is not.
+    /// </summary>
+    Task<List<AttendanceMark>> GetAttendanceMarksChangedSinceAsync(
+        IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+        => Task.FromResult(new List<AttendanceMark>());
 
     /// <summary>
     /// Stage the removal of one attribution row. No SaveChanges — the caller
@@ -987,8 +1104,12 @@ public interface IShramSafalRepository
     /// effective rule is <see cref="ShramSafal.Domain.Farms.LabourManagementPermission.IsAllowed"/>,
     /// resolved once in <c>LabourManagementGate</c>. Do not call this member
     /// directly from a handler.</para>
+    ///
+    /// <para><c>nowUtc</c> bounds the grant: a row whose
+    /// <c>labour_grant_expires_at_utc</c> is at or before it does not count.</para>
     /// </summary>
-    Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+    Task<bool> GetLabourManagementGrantAsync(
+        Guid farmId, Guid userId, DateTime nowUtc, CancellationToken ct = default)
         => Task.FromResult(false);
 
     /// <summary>

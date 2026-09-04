@@ -46,16 +46,110 @@
 import { useCallback, useEffect, useState } from 'react';
 import { LABOUR_MOCK, EMPTY_LABOUR_DATA, type LabourData } from './labourMock';
 import { fetchLabourData } from './data/labourClient';
+import { getLocalAttendanceMarks, getLocalAttendanceNameHints, type LocalAttendanceMark } from './data/attendanceLocal';
+import { overlayLocalAttendance, buildOfflineRegister, type AttendanceNameHints } from './attendanceOverlay';
+import { DEFAULT_LABOUR_WINDOW, isLabourWindow, type LabourWindow } from './labourWindow';
 import { useOptionalFarmContext } from '../../core/session/FarmContext';
 import { useOptionalAuth } from '../../app/providers/AuthProvider';
+import { SessionStore } from '../../infrastructure/storage/SessionStore';
+
+/**
+ * Task 9 (B001, spec: 2026-08-28-labour-v2-release-1) — the local attendance
+ * plane (Phase 3's hand-off: server-store rows + live queue intent, both
+ * labelled by `getLocalAttendanceMarks`), read for the compose below. A
+ * throwing storage access degrades to the EMPTY plane — no overlay, never a
+ * crash on the labour screen (the `readPersistedLabourWindow` posture); the
+ * register then simply shows what the wire alone answered.
+ */
+async function readLocalAttendancePlane(
+    farmId: string,
+): Promise<{ marks: LocalAttendanceMark[]; hints: AttendanceNameHints }> {
+    try {
+        const marks = await getLocalAttendanceMarks(farmId);
+        const hints = marks.length === 0
+            ? new Map<string, string>()
+            : await getLocalAttendanceNameHints(farmId, marks);
+        return { marks, hints };
+    } catch {
+        return { marks: [], hints: new Map() };
+    }
+}
+
+/**
+ * TASK 17 (spec: 2026-08-28-labour-v2-release-1) — R14 SUPERSEDED. Reads the
+ * founder's last-chosen window for this hook's lazy `useState` initializer.
+ * Mirrors `SessionStore.getCurrentFarmId`'s own contract at every edge this
+ * app runs on:
+ *   - absent (first run, cleared storage) -> `null` -> falls back below;
+ *   - corrupt/unrecognised (an old build's retired value, a hand-edited
+ *     store) -> rejected by `isLabourWindow` -> falls back below, and is
+ *     therefore never the value handed to `fetchLabourData`;
+ *   - a throwing storage access -> already caught inside `SessionStore`
+ *     itself, surfaces here as `null` -> falls back below.
+ * All three collapse to the SAME one fallback, `DEFAULT_LABOUR_WINDOW`
+ * (आजपर्यंत) — never a fabricated or guessed window.
+ */
+function readPersistedLabourWindow(): LabourWindow {
+    const stored = SessionStore.getLabourWindow();
+    return isLabourWindow(stored) ? stored : DEFAULT_LABOUR_WINDOW;
+}
 
 export interface UseLabourStateResult {
     data: LabourData;
     loading: boolean;
-    /** true only when a REAL farm's fetch failed — `data` is `EMPTY_LABOUR_DATA`, never mock. */
+    /**
+     * True when the screen could not find out what is true — a REAL farm's
+     * labour fetch failed, or (Task 6e) the `/me` farm-context lookup itself
+     * failed so there is no farm id to fetch for. `data` is
+     * `EMPTY_LABOUR_DATA` in both cases, never the mock. NOT true for a
+     * successful lookup that returns nothing: that is a real, honest empty.
+     */
     error: boolean;
-    /** Re-runs the fetch for the current farm (retry affordance). No-op in preview. */
+    /**
+     * Retry affordance. Re-runs the fetch for the current farm; when there
+     * is no farm id it re-asks `/me` instead (Task 6e), because that is
+     * where the failure actually was. No-op in preview.
+     */
     refresh: () => void;
+    /**
+     * TASK 11 (spec: 2026-08-28-labour-v2-release-1) — the time window the
+     * data currently on screen ANSWERS FOR. It lives here, not in a screen,
+     * because it is a property of the question asked of the server and this
+     * hook is the only thing that asks.
+     *
+     * TASK 17 — R14 SUPERSEDED. It used to always open on
+     * `DEFAULT_LABOUR_WINDOW`; it now opens on whatever `SessionStore`
+     * remembers from the farmer's last visit (`readPersistedLabourWindow`
+     * above), falling back to `DEFAULT_LABOUR_WINDOW` (आजपर्यंत) only when
+     * nothing valid was stored — see that function's own doc-comment for the
+     * three cases that count as "nothing valid".
+     */
+    timeWindow: LabourWindow;
+    /**
+     * Selects a different window. Re-asks the server for the SAME farm — the
+     * period is never re-derived on the device (see `labourWindow.ts`).
+     * Selecting the window already in force is a no-op: `useState` bails out
+     * on an identical value, so the effect below does not re-run and no
+     * request is issued.
+     *
+     * TASK 17 — also PERSISTS the choice (`SessionStore.setLabourWindow`)
+     * before updating state, so it survives this hook's own unmount —
+     * leaving आढावा unmounts `LabourFeature`, and with it this hook; nothing
+     * else here lives long enough to remember the choice otherwise.
+     */
+    setTimeWindow: (window: LabourWindow) => void;
+    /**
+     * Task 18 (spec: 2026-08-28-labour-v2-release-1) — `farmCtx === null`
+     * verbatim (see the field below this hook returns from). Exposed so a
+     * screen can distinguish the `?preview=labour` dev mount from a real
+     * farm WITHOUT re-deriving the check itself or reaching for
+     * `useOptionalFarmContext()` a second time. `LabourHub` uses this to
+     * reveal `SHOW_ATTENDANCE_TILE` for founder review only inside preview
+     * — never a relaxation of that decision for a real farm, which always
+     * receives `false` here. (`SHOW_LEDGER_TILE` no longer exists:
+     * Correction 5 deleted the ledger door outright.)
+     */
+    isPreview: boolean;
 }
 
 export const useLabourState = (): UseLabourStateResult => {
@@ -63,6 +157,15 @@ export const useLabourState = (): UseLabourStateResult => {
     const isPreview = farmCtx === null; // no provider at all — the ONLY mock case
     const farmId = farmCtx?.currentFarmId ?? null;
     const farmCtxLoading = farmCtx?.isLoading ?? false;
+    /**
+     * Task 6e — did the LAST `/me` attempt fail? `FarmContext` swallows that
+     * failure by design (other screens keep stale data through it) and only
+     * surfaces this flag; see the `!farmId` branch below for why the labour
+     * screen cannot treat "no farm id" as an answer on its own.
+     */
+    const farmCtxLoadFailed = farmCtx?.loadFailed ?? false;
+    /** `undefined` only outside a provider (preview) — see `refresh` below. */
+    const farmCtxRefresh = farmCtx?.refresh;
 
     // --- Auth gate (see the AUTH GATE note in this file's header) ----------
     // `auth === null` means there is no AuthProvider ABOVE this hook at all.
@@ -91,6 +194,29 @@ export const useLabourState = (): UseLabourStateResult => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(false);
     const [retryToken, setRetryToken] = useState(0);
+    /**
+     * TASK 11 — the window every fetch below is scoped to.
+     *
+     * TASK 17 (R14 superseded) — PERSISTED across visits, per the founder's
+     * reversal: "returning to आढावा shows the window he last picked." The
+     * lazy initializer reads `SessionStore` (via `readPersistedLabourWindow`
+     * above) exactly once, on this hook's first mount for a farmer opening
+     * आढावा; the wrapped `setTimeWindow` below is the only way this value
+     * ever changes afterwards, and it writes through to storage every time.
+     */
+    const [timeWindow, setTimeWindowState] = useState<LabourWindow>(readPersistedLabourWindow);
+
+    /**
+     * TASK 17 — wraps the raw `useState` setter so every explicit choice is
+     * written to `SessionStore` BEFORE state updates, not after: the write is
+     * synchronous and cheap, and ordering it first means even an unmount
+     * triggered by the very same interaction (e.g. a screen change bundled
+     * with the selection) can never race ahead of the save.
+     */
+    const setTimeWindow = useCallback((nextWindow: LabourWindow) => {
+        SessionStore.setLabourWindow(nextWindow);
+        setTimeWindowState(nextWindow);
+    }, []);
 
     useEffect(() => {
         if (isPreview) {
@@ -104,11 +230,35 @@ export const useLabourState = (): UseLabourStateResult => {
 
         if (!farmId) {
             // Real app, but no farm resolved yet — FarmContext may still be
-            // loading, or the farmer genuinely has no farm. Either way: the
-            // honest empty state, NEVER the mock.
+            // loading, the `/me` lookup may have FAILED, or the farmer
+            // genuinely has no farm. Either way: the honest empty state,
+            // NEVER the mock.
+            //
+            // TASK 6e (spec: 2026-08-28-labour-v2-release-1, P5, Ruling R8)
+            // — those last two are not the same thing, and this branch used
+            // to report both as `error: false`. On a fresh install there is
+            // no cached `currentFarmId`, so a failed `/me` settles here with
+            // `farmCtxLoading` already false: the screen rendered the hub
+            // over EMPTY_LABOUR_DATA and stated "अजून कोणी कामगार जोडलेला
+            // नाही" (no worker has been added yet) to a farmer who may have
+            // twelve — the identical falsehood Task 6d removed from the
+            // labour-fetch path, reached through the farm-context door
+            // instead. Reinstall + weak rural signal is the pilot's normal
+            // condition, not an edge case.
+            //
+            // Once the context has SETTLED (`!farmCtxLoading`) and reports
+            // `loadFailed`, this is an outage: `error` sends it to Task 6d's
+            // render gate, which withholds every claim and shows the
+            // existing banner + retry. Nothing new is rendered or
+            // translated for it.
+            //
+            // The gate is `loadFailed`, NEVER "farmId is null": a `/me` that
+            // SUCCEEDS for an account with zero farms is a real answer, and
+            // its empty-state message is true — that path keeps returning
+            // `error: false` exactly as before (locked by its own test).
             setData(EMPTY_LABOUR_DATA);
             setLoading(farmCtxLoading);
-            setError(false);
+            setError(!farmCtxLoading && farmCtxLoadFailed);
             return;
         }
 
@@ -137,9 +287,14 @@ export const useLabourState = (): UseLabourStateResult => {
         setError(false);
         (async () => {
             try {
-                const real = await fetchLabourData(farmId);
+                const real = await fetchLabourData(farmId, timeWindow);
+                // Task 9 (B001) — compose LIVE QUEUE INTENT over the wire's
+                // answer, so a just-confirmed mark renders (weaker, P10)
+                // instead of vanishing until the queue flushes. No queue
+                // marks → `overlayLocalAttendance` returns `real` itself.
+                const plane = await readLocalAttendancePlane(farmId);
                 if (!cancelled) {
-                    setData(real);
+                    setData(overlayLocalAttendance(real, plane.marks, plane.hints));
                     setError(false);
                 }
             } catch {
@@ -152,8 +307,16 @@ export const useLabourState = (): UseLabourStateResult => {
                 // its one 401-refresh-and-replay attempt, so this is a genuine
                 // failure (server down, session truly gone) — exactly the case
                 // the manual "पुन्हा प्रयत्न करा" button is for.
+                //
+                // Task 9 (B001) — but the outage is no longer allowed to hide
+                // what THIS DEVICE knows: when the local plane holds any mark,
+                // the register renders from it (`buildOfflineRegister` —
+                // acknowledged rows normal, queue intent weaker, view 'own')
+                // while `error` stays true and the banner stays up. An empty
+                // plane keeps the dead-end exactly as before. Never the mock.
+                const plane = await readLocalAttendancePlane(farmId);
                 if (!cancelled) {
-                    setData(EMPTY_LABOUR_DATA);
+                    setData(buildOfflineRegister(plane.marks, plane.hints) ?? EMPTY_LABOUR_DATA);
                     setError(true);
                 }
             } finally {
@@ -162,9 +325,28 @@ export const useLabourState = (): UseLabourStateResult => {
         })();
 
         return () => { cancelled = true; };
-    }, [isPreview, farmId, farmCtxLoading, authReady, authPending, retryToken]);
+        // TASK 11 — `timeWindow` is a dependency, so selecting a window
+        // re-runs this effect exactly as changing farms does. That means a
+        // window change also passes through the `setData(EMPTY_LABOUR_DATA)`
+        // + `setLoading(true)` reset above, and `LabourFeature` renders the
+        // spinner for it. That is deliberate, not a cost to route around: the
+        // alternative is last window's numbers sitting under the new window's
+        // heading for the length of the request — a period label over figures
+        // that answer a different period, which is the exact defect this task
+        // exists to remove, reintroduced one layer lower.
+    }, [isPreview, farmId, farmCtxLoading, farmCtxLoadFailed, authReady, authPending, retryToken, timeWindow]);
 
-    const refresh = useCallback(() => setRetryToken((t) => t + 1), []);
+    const refresh = useCallback(() => {
+        // Task 6e — when there is no farm id, the failure is UPSTREAM (the
+        // `/me` lookup), and re-running this effect on its own can only
+        // reach the same conclusion. Re-ask `/me` as well, or the banner's
+        // "पुन्हा प्रयत्न करा" is an affordance that cannot do what it
+        // offers — a fresh falsehood in place of the one just removed.
+        // No-op outside a provider (preview), and untouched for the farm-id
+        // path, which re-fetches labour data exactly as before.
+        if (!farmId) void farmCtxRefresh?.();
+        setRetryToken((t) => t + 1);
+    }, [farmId, farmCtxRefresh]);
 
-    return { data, loading, error, refresh };
+    return { data, loading, error, refresh, timeWindow, setTimeWindow, isPreview };
 };

@@ -42,17 +42,17 @@ const roster = (): LabourPermission[] => [
     {
         userId: 'user-owner', role: 'PrimaryOwner', status: 'Active',
         canManageLabourRecords: true, hasExplicitGrant: false,
-        source: 'OwnerTier', isGrantEditable: false,
+        source: 'OwnerTier', isGrantEditable: false, labourGrantExpiresAtUtc: null,
     },
     {
         userId: 'user-mukadam', role: 'Mukadam', status: 'Active',
-        canManageLabourRecords: true, hasExplicitGrant: false,
-        source: 'MukadamDefault', isGrantEditable: false,
+        canManageLabourRecords: false, hasExplicitGrant: false,
+        source: 'NotGranted', isGrantEditable: true, labourGrantExpiresAtUtc: null,
     },
     {
         userId: 'user-worker', role: 'Worker', status: 'Active',
         canManageLabourRecords: false, hasExplicitGrant: false,
-        source: 'NotGranted', isGrantEditable: true,
+        source: 'NotGranted', isGrantEditable: true, labourGrantExpiresAtUtc: null,
     },
 ];
 
@@ -80,11 +80,12 @@ describe('fetchLabourPermissions', () => {
 
         // `isGrantEditable: false` is what makes a role-carried switch render
         // permanently on and non-interactive. Dropping it in a mapper would
-        // silently restore the mock behaviour.
+        // silently restore the mock behaviour. Since 2026-09-02 (D5) only
+        // owner-tier is role-carried — a Mukadam's switch is real and editable.
         expect(rows.find(r => r.userId === 'user-mukadam')).toMatchObject({
-            canManageLabourRecords: true,
-            isGrantEditable: false,
-            source: 'MukadamDefault',
+            canManageLabourRecords: false,
+            isGrantEditable: true,
+            source: 'NotGranted',
         });
         expect(rows.find(r => r.userId === 'user-worker')).toMatchObject({
             canManageLabourRecords: false,
@@ -128,11 +129,13 @@ describe('setLabourPermission', () => {
         // must land on the state he chose, not oscillate back out of it.
         mockPut.mockResolvedValueOnce(ok(roster()[2]));
         await setLabourPermission('farm-123', 'user-worker', true);
-        expect(mockPut.mock.calls[0][1]).toEqual({ canManageLabourRecords: true });
+        expect(mockPut.mock.calls[0][1]).toEqual(
+            { canManageLabourRecords: true, labourGrantExpiresAtUtc: null });
 
         mockPut.mockResolvedValueOnce(ok(roster()[2]));
         await setLabourPermission('farm-123', 'user-worker', false);
-        expect(mockPut.mock.calls[1][1]).toEqual({ canManageLabourRecords: false });
+        expect(mockPut.mock.calls[1][1]).toEqual(
+            { canManageLabourRecords: false, labourGrantExpiresAtUtc: null });
     });
 
     it('resending the same desired state sends the same body — it is idempotent', async () => {
@@ -151,7 +154,7 @@ describe('setLabourPermission', () => {
         const granted: LabourPermission = {
             userId: 'user-worker', role: 'Worker', status: 'Active',
             canManageLabourRecords: true, hasExplicitGrant: true,
-            source: 'ExplicitGrant', isGrantEditable: true,
+            source: 'ExplicitGrant', isGrantEditable: true, labourGrantExpiresAtUtc: null,
         };
         mockPut.mockResolvedValueOnce(ok(granted));
 

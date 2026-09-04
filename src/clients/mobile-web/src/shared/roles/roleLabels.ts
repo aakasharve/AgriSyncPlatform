@@ -89,13 +89,13 @@ export const ROLE_LABELS: Record<FarmRole, RoleLabel> = {
     Mukadam: make(
         'Mukadam',
         'Mukadam',
-        'मुकादम',
+        'जबाबदार',
         'bg-orange-50 text-orange-700 border-orange-200',
     ),
     Worker: make(
         'Worker',
         'Worker',
-        'कामगार',
+        'कामाला येणारे',
         'bg-stone-100 text-stone-700 border-stone-200',
     ),
 

@@ -153,7 +153,7 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
     // "grants" the capability would be silently ignored, every allow-case test
     // would fail, and — far worse — every DENY-case test would still pass while
     // proving nothing about the grant path.
-    public virtual Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, CancellationToken ct = default) => Task.FromResult(false);
+    public virtual Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, DateTime nowUtc, CancellationToken ct = default) => Task.FromResult(false);
     public virtual Task<FarmMembership?> GetTrackedFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default) => Task.FromResult<FarmMembership?>(null);
 
     // Task 1.2's roster read, restated `virtual` for the third time for the same
@@ -161,4 +161,85 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
     // on it changes — it simply becomes overridable, which the Phase 5
     // labour-permission roster read needs.
     public virtual Task<List<FarmMembership>> GetFarmMembershipsAsync(FarmId farmId, CancellationToken ct = default) => Task.FromResult(new List<FarmMembership>());
+
+    // Task 1 (spec: 2026-08-28-labour-v2-release-1) — restated `virtual` for the
+    // SAME reason as every block above: an interface DEFAULT implementation is
+    // not a virtual class member, so a FakeRepo subclass could not override it
+    // — every override would silently no-op instead of failing to compile.
+    // Same default (empty) as the interface body. EarnedIsUnknownNotZeroTests
+    // needs this overridable to prove a farm can carry real labour-money
+    // CostEntry rows while GetJobCardsForFarmAsync stays at its (already
+    // overridable) empty default — the exact "money paid, zero job cards"
+    // shape production is in today.
+    public virtual Task<List<(CostEntry CostEntry, Guid? AssignedWorkerUserId)>> GetLabourPayoutCostEntriesWithJobCardAsync(
+        FarmId farmId, DateOnly? fromDate, DateOnly? toDateInclusive, CancellationToken ct = default)
+        => Task.FromResult(new List<(CostEntry, Guid?)>());
+
+    // Task 6 (spec: 2026-08-28-labour-v2-release-1) — restated `virtual` for the
+    // SAME reason as every block above: an interface DEFAULT implementation is
+    // not a virtual class member, so a FakeRepo subclass could not override it
+    // — every override would silently no-op instead of failing to compile.
+    // Same default (empty) as the interface body. UnknownHeadcountIsNotZeroTests
+    // needs this overridable to seed a LabourAssignment whose headcount was
+    // never stated (all three of WorkerCount/MaleCount/FemaleCount null) — the
+    // exact row shape that used to sum to a fabricated 0 man-days.
+    // Task 9 (spec: 2026-08-28-labour-v2-release-1) — renamed from
+    // ...ForFarmSinceAsync and given an optional, two-sided date window. Same
+    // default (empty), same `virtual` reason as above.
+    public virtual Task<List<LabourAssignment>> GetLabourAssignmentsForFarmInWindowAsync(
+        FarmId farmId, DateOnly? fromDate, DateOnly? toDateInclusive, CancellationToken ct = default)
+        => Task.FromResult(new List<LabourAssignment>());
+
+    // Task 6 fix round 1/5 (spec: 2026-08-28-labour-v2-release-1) — restated
+    // `virtual` for the SAME reason as every block above. UnknownHeadcountIsNotZeroTests
+    // needs this overridable to distinguish "no daily log at all this week" from
+    // "logs exist this week but none carries labour" — the three-case split the
+    // review required (Fix round 1/5): absence of any record is UNKNOWN, a
+    // recorded day with no labour is a genuine 0.
+    public virtual Task<List<DailyLog>> GetDailyLogsByFarmAsync(FarmId farmId, CancellationToken ct = default)
+        => Task.FromResult(new List<DailyLog>());
+
+    // Task 3.5b (spec: 2026-08-28-labour-v2-release-1) — restated `virtual`
+    // for the SAME reason as every block above: an interface DEFAULT
+    // implementation is not a virtual class member, so a FakeRepo subclass
+    // could not override it — every override would silently no-op instead of
+    // failing to compile. Bodies MATCH the interface defaults exactly: the
+    // facts read and the mark read/add THROW (a "no contradiction found" or
+    // "nothing recorded" answer is a positive claim an unimplemented double
+    // must not make silently); the correction add stages benignly like
+    // AddLabourCorrectionAsync.
+    public virtual Task<IReadOnlyList<AttendanceEngagementFact>> GetAttendanceEngagementFactsAsync(
+        FarmId farmId, Guid fieldOperatorId, DateOnly workDate, CancellationToken ct = default)
+        => throw new NotSupportedException(
+            "GetAttendanceEngagementFactsAsync is not implemented by this test double. "
+            + "Returning an empty list would assert that no contradiction exists.");
+
+    public virtual Task<AttendanceMark?> GetAttendanceMarkAsync(
+        FarmId farmId, Guid fieldOperatorId, DateOnly workDate, CancellationToken ct = default)
+        => throw new NotSupportedException("GetAttendanceMarkAsync is not implemented by this test double.");
+
+    public virtual Task AddAttendanceMarkAsync(AttendanceMark mark, CancellationToken ct = default)
+        => throw new NotSupportedException("AddAttendanceMarkAsync is not implemented by this test double.");
+
+    public virtual Task AddAttendanceMarkCorrectionAsync(AttendanceMarkCorrection correction, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Phase 4 (Labour V2 R1) — the register read. Seedable, NOT throwing,
+    /// deliberately unlike the single-mark read above: this stub IS the whole
+    /// data universe of a handler test, so an unseeded store answering "no
+    /// marks" is a TRUE emptiness (the fixture created nobody's marks), not an
+    /// unimplemented double silently claiming nobody was marked. Filters by
+    /// the window exactly like the production read so windowed suites stay
+    /// honest.
+    /// </summary>
+    public List<AttendanceMark> AttendanceMarks { get; } = [];
+
+    public virtual Task<IReadOnlyList<AttendanceMark>> GetAttendanceMarksForFarmInWindowAsync(
+        FarmId farmId, DateOnly? from, DateOnly? toInclusive, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<AttendanceMark>>(AttendanceMarks
+            .Where(m => m.FarmId == farmId
+                && (from is null || m.WorkDate >= from.Value)
+                && (toInclusive is null || m.WorkDate <= toInclusive.Value))
+            .ToList());
 }

@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Decision — can the हजेरी register still be the wage book?</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700;800;900&family=Noto+Sans+Devanagari:wght@400;600;700;800&family=Noto+Serif+Devanagari:wght@600;700&display=swap">
+<style>
+  html, body { overflow-x: hidden; }
+  body { background: #eef1f4; font-family: 'DM Sans', 'Noto Sans Devanagari', sans-serif; color: #1e293b; }
+  .mr  { font-family: 'Noto Sans Devanagari', sans-serif; }
+  .mrh { font-family: 'Noto Serif Devanagari', serif; }
+  .num { font-family: 'DM Sans', sans-serif; font-variant-numeric: tabular-nums; }
+  h2 { font-family: 'DM Sans', 'Noto Sans Devanagari', sans-serif; }
+  code { font-family: 'DM Sans', 'Noto Sans Devanagari', monospace; font-size: 12px;
+         background: #f1f5f9; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<div class="bg-yellow-100 px-4 py-3 text-center text-[12px] font-bold text-yellow-900">
+  WORKING DOCUMENT — a decision brief, not the live app. The screens below are mockups at 390px
+  reference width. Nothing here is wired to data.
+</div>
+
+<div class="mx-auto flex max-w-[860px] flex-col gap-4 px-4 pb-24 pt-6">
+
+  <!-- ───────────────────────────── 0. WHO THIS IS FOR ───────────────────────────── -->
+  <div class="rounded-[18px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+    <h1 class="mrh text-[22px] font-bold text-slate-900">Can the हजेरी register still be the wage book?</h1>
+    <p class="mt-2 text-[14px] leading-relaxed text-slate-600">
+      One decision is blocking a UI approval. This file explains it from zero — you need no prior
+      context, no access to the codebase, and no knowledge of earlier design decisions. Everything
+      needed is on this page.
+    </p>
+    <p class="mt-3 rounded-xl border border-slate-100 bg-slate-50 p-3 text-[13px] leading-relaxed text-slate-600">
+      <span class="font-bold text-slate-700">The short version:</span> a design decision called
+      <strong>D-H6</strong> said the attendance register and the wage book are the same book. That
+      was decided while thinking only about <em>daily-wage</em> labour. A second kind of farm work —
+      fixed-price contract work — has now entered the picture, and under it the app
+      <strong>cannot know</strong> what any individual worker earned. So the money column would have
+      to print a number nobody knows. This page asks how to resolve that.
+    </p>
+  </div>
+
+  <!-- ───────────────────────────── 1. VOCABULARY ───────────────────────────── -->
+  <div class="rounded-[18px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+    <h2 class="text-[17px] font-extrabold text-slate-800">1 · The words you need</h2>
+    <p class="mt-1 text-[13px] text-slate-500">This is an app for smallholder farmers in Maharashtra, India. The interface is in Marathi.</p>
+
+    <dl class="mt-3 flex flex-col gap-3 text-[13.5px] leading-relaxed">
+      <div class="rounded-xl border border-slate-100 bg-slate-50 p-3">
+        <dt class="mr font-extrabold text-slate-800">हजेरी <span class="text-[12px] font-normal text-slate-500">(hajeri) — attendance</span></dt>
+        <dd class="text-slate-600">Who physically turned up to work on a given day. The <span class="mr">हजेरी वही</span> (<em>hajeri vahi</em>) is the muster register — the paper book a farm keeps, with names down the side and days across the top.</dd>
+      </div>
+      <div class="rounded-xl border border-slate-100 bg-slate-50 p-3">
+        <dt class="mr font-extrabold text-slate-800">मुकादम <span class="text-[12px] font-normal text-slate-500">(mukadam) — labour organiser / foreman</span></dt>
+        <dd class="text-slate-600">A person who brings a group of workers to a farm. He may work himself, or only organise. The farmer often deals with him, not with each worker. He may bring 8 people to one farm on Monday and 4 to another on Tuesday.</dd>
+      </div>
+      <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-3">
+        <dt class="mr font-extrabold text-emerald-900">रोजंदारी <span class="text-[12px] font-normal text-emerald-700">(rojandari) — daily wage</span></dt>
+        <dd class="text-emerald-800">Paid per person per day. <em>6 workers × a full day × ₹500 each.</em> More days worked means more money owed. <strong>Attendance and money are tightly linked.</strong></dd>
+      </div>
+      <div class="rounded-xl border border-violet-100 bg-violet-50 p-3">
+        <dt class="mr font-extrabold text-violet-900">उक्ते काम <span class="text-[12px] font-normal text-violet-700">(ukte kaam) — contract / piece work</span></dt>
+        <dd class="text-violet-800">A whole job agreed for a fixed amount, before it starts. <em>“Prune these 2 acres for ₹12,000.”</em> Whether the crew finishes in one day or three, the farmer owes ₹12,000. <strong>Attendance is evidence of effort, but it is not the basis of payment.</strong></dd>
+      </div>
+    </dl>
+
+    <div class="mt-3 rounded-xl border border-amber-100 bg-amber-50 p-3 text-[13px] leading-relaxed text-amber-900">
+      <span class="font-bold">Critical point, already settled:</span> these are not two kinds of
+      <em>worker</em>. They are two ways of agreeing how a <em>job</em> will be paid for. The same
+      Shankar can work on daily wage on Monday and take a contract on Wednesday — and both can
+      happen on the same farm, the same plot, on the same day.
+    </div>
+  </div>
+
+  <!-- ───────────────────────────── 2. THE DESIGN DECISIONS ───────────────────────────── -->
+  <div class="rounded-[18px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+    <h2 class="text-[17px] font-extrabold text-slate-800">2 · The three prior decisions this touches</h2>
+    <p class="mt-1 text-[13px] text-slate-500">Quoted from the design spec. “D-H” = हजेरी Design decision.</p>
+
+    <div class="mt-3 flex flex-col gap-3">
+      <div class="rounded-xl border border-rose-200 bg-rose-50 p-3.5">
+        <p class="text-[14px] font-extrabold text-rose-900">D-H6 — The register IS the wage book</p>
+        <p class="mt-1 border-l-2 border-rose-300 pl-3 text-[13px] italic leading-relaxed text-rose-800">
+          “Asked: on the farms he knows, is the हजेरी book the same book as the payment record, or two
+          different books? <strong>Answered: the same book.</strong> Consequence, which is larger than
+          the layout: the PDF is a <strong>proof of payment</strong>, not a proof of attendance.”
+        </p>
+        <p class="mt-2 text-[12.5px] font-bold text-rose-900">This is the decision now in question.</p>
+      </div>
+
+      <div class="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+        <p class="text-[14px] font-extrabold text-slate-800">D-H7 — Money appears only where the day was unusual</p>
+        <p class="mt-1 border-l-2 border-slate-300 pl-3 text-[13px] italic leading-relaxed text-slate-700">
+          “Normal days show only the attendance marks. A day paid differently from the standard rate
+          shows its amount. <strong>Every row ends in the week's money, and so does the bottom line.</strong>
+          Rejected: an amount in <em>every</em> cell — it renders at 8.5px, smaller than anything else in
+          the app, on the screen a man reads in sunlight to check his own pay.”
+        </p>
+      </div>
+
+      <div class="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+        <p class="text-[14px] font-extrabold text-slate-800">D-H8 — Same book, different pages</p>
+        <p class="mt-1 border-l-2 border-slate-300 pl-3 text-[13px] italic leading-relaxed text-slate-700">
+          “<strong>An attendance register is safe to show anyone on the farm. A wage book is not.</strong>
+          The moment money enters the grid, showing the हजेरी वही to a मुकादम shows him what every man in
+          his crew earns.” Resolved as three views — Owner sees the whole book; मुकादम sees his crew's
+          attendance but no wage roster; Worker sees his own row only.
+        </p>
+      </div>
+    </div>
+
+    <div class="mt-3 rounded-xl border border-slate-100 bg-white p-3 text-[13px] leading-relaxed text-slate-600">
+      <span class="font-bold text-slate-800">One more rule, and it is absolute:</span> the app displays
+      money the farmer <em>stated</em> and never calculates one. No rate × days. No derived totals. This
+      is enforced in the code itself — the amount field is documented as
+      <code>stored as-given, never computed</code>. A number the app invents is the one thing this
+      product may not do.
+    </div>
+  </div>
+
+  <!-- ───────────────────────────── 3. HOW TO READ THE REGISTER ───────────────────────────── -->
+  <div class="rounded-[18px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+    <h2 class="text-[17px] font-extrabold text-slate-800">3 · How to read the register</h2>
+    <p class="mt-1 text-[13px] leading-relaxed text-slate-600">Names down the side, seven days across, one cell per person per day. Four cell states:</p>
+    <div class="mt-3 flex flex-wrap justify-center gap-4 rounded-xl border border-slate-100 bg-slate-50 p-3">
+      <span class="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600"><span class="flex h-5 w-5 items-center justify-center rounded-md bg-emerald-50 text-emerald-700"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span><span class="mr">आला</span> · came</span>
+      <span class="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600"><span class="flex h-5 w-5 items-center justify-center rounded-md bg-amber-100 text-[11px] font-extrabold text-amber-700">½</span><span class="mr">अर्धा</span> · half day</span>
+      <span class="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600"><span class="flex h-5 w-5 items-center justify-center rounded-md bg-slate-100 text-[11px] font-extrabold text-slate-300">–</span><span class="mr">नाही</span> · did not come</span>
+      <span class="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600"><span class="flex h-5 w-5 items-center justify-center rounded-md border border-dashed border-slate-200 bg-white"></span>blank · <strong>nobody said</strong></span>
+    </div>
+    <p class="mt-3 rounded-xl border border-amber-100 bg-amber-50 p-3 text-[12.5px] leading-relaxed text-amber-900">
+      <span class="font-bold">The blank cell matters more than it looks.</span> A dashed empty cell means
+      <em>nobody has told the app anything about that day</em>. The grey <span class="mr">–</span> means
+      <em>someone said he did not come</em>. Those are different facts and the app must never confuse
+      them — an absence of information is not evidence of absence.
+    </p>
+  </div>
+
+  <!-- ───────────────────────────── 4. THE DESIGN AS IT STANDS ───────────────────────────── -->
+  <div class="rounded-[18px] border border-emerald-200 bg-white p-5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+    <h2 class="text-[17px] font-extrabold text-slate-800">4 · The design as approved — daily wage</h2>
+    <p class="mt-1 text-[13px] leading-relaxed text-slate-600">
+      This works. Six people, paid per day. Money sits at the end of each row, exactly as D-H7 says.
+      Tuesday was paid off the standard rate, so that day carries its own amount. Every figure here is
+      a number the farmer said out loud.
+    </p>
+
+    <div class="mt-4 flex justify-center">
+      <div class="w-[390px] rounded-[26px] border-[6px] border-slate-800 bg-[#eef1f4] p-3">
+        <div class="flex items-center justify-center rounded-2xl border border-slate-100 bg-white p-2">
+          <span class="mr text-[13px] font-extrabold text-slate-800">२४–३० ऑग · हजेरी वही</span>
+        </div>
+        <div class="mt-2.5 overflow-x-auto rounded-[18px] border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+          <div class="flex items-center gap-2 border-b border-slate-100 pb-2">
+            <span class="mr w-[82px] flex-none text-[12.5px] font-extrabold text-slate-700">दिवस</span>
+            <span class="flex flex-1 gap-1.5">
+              <span class="mr flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">र</span>
+              <span class="mr flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">सो</span>
+              <span class="mr flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">मं</span>
+              <span class="mr flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">बु</span>
+              <span class="mr flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">गु</span>
+            </span>
+            <span class="w-14 flex-none text-right text-[10px] font-bold text-slate-400">₹</span>
+          </div>
+
+          <!-- rows -->
+          <div class="flex items-center gap-2 py-1.5">
+            <span class="w-[82px] flex-none items-center gap-2 text-[12.5px] font-extrabold text-slate-700 flex"><span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[9px] bg-orange-100 text-[12px] font-black text-orange-600 mr">ग</span><span class="mr">गणेश</span></span>
+            <span class="flex flex-1 gap-1.5">
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-amber-100 text-[12px] font-extrabold text-amber-700">½</span>
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white"></span>
+            </span>
+            <span class="num w-14 flex-none text-right text-[13px] font-black text-slate-800">₹1,800</span>
+          </div>
+
+          <div class="flex items-center gap-2 py-1.5">
+            <span class="w-[82px] flex-none items-center gap-2 text-[12.5px] font-extrabold text-slate-700 flex"><span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[9px] bg-blue-100 text-[12px] font-black text-blue-600 mr">र</span><span class="mr">रमेश</span></span>
+            <span class="flex flex-1 gap-1.5">
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-slate-100 text-[12px] font-extrabold text-slate-300">–</span>
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white"></span>
+            </span>
+            <span class="num w-14 flex-none text-right text-[13px] font-black text-slate-800">₹1,500</span>
+          </div>
+
+          <div class="mt-1 flex items-center gap-2 border-t border-slate-100 pt-2">
+            <span class="mr w-[82px] flex-none text-[12.5px] font-extrabold text-slate-700">एकूण</span>
+            <span class="flex flex-1 gap-1.5"></span>
+            <span class="num w-14 flex-none text-right text-[13px] font-black text-slate-800">₹3,300</span>
+          </div>
+        </div>
+        <div class="mr mt-2 rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[11.5px] leading-relaxed text-slate-600">
+          हिरवा = आला · पिवळा = अर्धा दिवस · राखाडी = नाही
+        </div>
+      </div>
+    </div>
+    <p class="mt-3 text-center text-[12px] italic text-slate-500">Daily wage. Days → money. The register really is the wage book here.</p>
+  </div>
+
+  <!-- ───────────────────────────── 5. THE COLLISION ───────────────────────────── -->
+  <div class="rounded-[18px] border-2 border-rose-300 bg-white p-5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+    <h2 class="text-[17px] font-extrabold text-rose-900">5 · The collision — the same register, contract work</h2>
+    <p class="mt-1 text-[13.5px] leading-relaxed text-slate-700">
+      Now Shankar takes the pruning of Plot 2 for a fixed <strong>₹12,000</strong>. He brings eight
+      people. They work Monday to Thursday. The farmer records who came, as always.
+    </p>
+    <p class="mt-2 rounded-xl border border-rose-100 bg-rose-50 p-3 text-[13.5px] leading-relaxed text-rose-900">
+      <span class="font-bold">Now ask: what goes in Ganesh's money column?</span><br>
+      The farmer owes <strong>Shankar</strong> ₹12,000. What Shankar pays Ganesh is a private
+      arrangement between them — it might be ₹1,400, it might be nothing this week, and Shankar keeps
+      a margin for organising, transport and risk. <strong>The farmer does not know this number, so
+      the app does not know it either.</strong>
+    </p>
+
+    <div class="mt-4 grid gap-4 md:grid-cols-2">
+      <div>
+        <p class="mb-2 text-center text-[12px] font-extrabold uppercase tracking-wide text-rose-700">✗ What we must never do</p>
+        <div class="rounded-[18px] border-2 border-rose-300 bg-white p-2.5">
+          <div class="flex items-center gap-2 py-1.5">
+            <span class="w-[70px] flex-none text-[12.5px] font-extrabold text-slate-700 mr">गणेश</span>
+            <span class="flex flex-1 gap-1.5">
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+            </span>
+            <span class="num w-14 flex-none text-right text-[13px] font-black text-rose-600">₹1,500</span>
+          </div>
+          <p class="mt-2 border-t border-rose-100 pt-2 text-[12px] leading-relaxed text-rose-800">
+            ₹12,000 ÷ 8 people = ₹1,500. <strong>An invented number.</strong> Nobody said it. It would
+            be the app splitting a contract into wages it has no knowledge of — and it would appear
+            in a document described as <em>proof of payment</em>.
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <p class="mb-2 text-center text-[12px] font-extrabold uppercase tracking-wide text-emerald-700">✓ The honest render</p>
+        <div class="rounded-[18px] border-2 border-emerald-300 bg-white p-2.5">
+          <div class="flex items-center gap-2 py-1.5">
+            <span class="w-[70px] flex-none text-[12.5px] font-extrabold text-slate-700 mr">गणेश</span>
+            <span class="flex flex-1 gap-1.5">
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+            </span>
+            <span class="num w-14 flex-none text-right text-[15px] font-black text-slate-300">—</span>
+          </div>
+          <p class="mt-2 border-t border-emerald-100 pt-2 text-[12px] leading-relaxed text-emerald-800">
+            His attendance is fully known and fully recorded. His pay is not the farmer's to state.
+            The dash already means <em>nobody said</em> — the register's existing word for an
+            unknown. <strong>The ₹12,000 is shown once, against the job.</strong>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────────────────── 6. THE HARD CASE ───────────────────────────── -->
+  <div class="rounded-[18px] border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+    <h2 class="text-[17px] font-extrabold text-slate-800">6 · The case that rules out the easy answers</h2>
+    <p class="mt-1 text-[13.5px] leading-relaxed text-slate-600">
+      It is tempting to say “contract weeks get a different screen.” But both arrangements can run on
+      the <strong>same plot, on the same day</strong>:
+    </p>
+    <div class="mt-3 grid gap-3 sm:grid-cols-2">
+      <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-[13px] leading-relaxed text-emerald-900">
+        <p class="font-extrabold"><span class="mr">तण काढणे</span> · weeding</p>
+        <p>4 workers · <span class="mr font-bold">रोजंदारी</span> · ₹450 each, stated by the farmer</p>
+      </div>
+      <div class="rounded-xl border border-violet-100 bg-violet-50 p-3 text-[13px] leading-relaxed text-violet-900">
+        <p class="font-extrabold"><span class="mr">छाटणी</span> · pruning</p>
+        <p>Shankar's 8 · <span class="mr font-bold">उक्ते काम</span> · ₹12,000 for the job</p>
+      </div>
+    </div>
+    <p class="mt-3 text-[13.5px] leading-relaxed text-slate-700">
+      Same farm. Same plot. Same date. So <strong>neither the farm, nor the plot, nor the day, nor the
+      person</strong> can decide which money rule applies. It is decided by the <em>job</em> — which
+      means <strong>one register can contain rows of both kinds at once</strong>, and the money column
+      may mean different things on adjacent rows.
+    </p>
+  </div>
+
+  <!-- ───────────────────────────── 7. THE DECISION ───────────────────────────── -->
+  <div class="rounded-[18px] border-2 border-amber-300 bg-amber-50 p-5">
+    <h2 class="text-[18px] font-extrabold text-amber-900">7 · The decision</h2>
+    <p class="mt-1 text-[14px] font-bold text-amber-900">
+      When Shankar's crew works <span class="mr">उक्ते</span> and you open the <span class="mr">हजेरी</span>
+      for that week — what do you expect to see against each of those eight names?
+    </p>
+
+    <div class="mt-4 flex flex-col gap-3">
+      <label class="flex cursor-pointer gap-3 rounded-xl border-2 border-emerald-300 bg-white p-4">
+        <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-emerald-600 text-[13px] font-black text-white">A</span>
+        <span>
+          <span class="block text-[14.5px] font-extrabold text-slate-800">One book. The dash carries the unknown. <span class="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-bold text-emerald-800">RECOMMENDED</span></span>
+          <span class="mt-1 block text-[13px] leading-relaxed text-slate-600">
+            Contract rows show their days normally and <strong>—</strong> where money would be. The
+            agreed ₹12,000 appears once, against the job. D-H6 survives, qualified: the register is
+            the wage book, and it says plainly what it does not know.
+          </span>
+          <span class="mt-1.5 block text-[12px] leading-relaxed text-emerald-800">
+            <strong>Why I recommend it:</strong> it is the only option that handles section 6 — both
+            arrangements in one week — without splitting the screen. It reuses a convention the
+            register already has. And it needs no new screen.
+          </span>
+        </span>
+      </label>
+
+      <label class="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-white p-4">
+        <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-slate-700 text-[13px] font-black text-white">B</span>
+        <span>
+          <span class="block text-[14.5px] font-extrabold text-slate-800">Money column only where wages exist</span>
+          <span class="mt-1 block text-[13px] leading-relaxed text-slate-600">
+            The money column disappears entirely for contract work, and a separate contract card
+            carries the ₹12,000 and its progress. D-H6 narrows to: <em>the register is the wage book
+            where wages exist.</em>
+          </span>
+          <span class="mt-1.5 block text-[12px] leading-relaxed text-slate-500">
+            <strong>Cost:</strong> section 6 becomes awkward — in a mixed week the column would have
+            to appear for some rows and not others.
+          </span>
+        </span>
+      </label>
+
+      <label class="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-white p-4">
+        <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-slate-700 text-[13px] font-black text-white">C</span>
+        <span>
+          <span class="block text-[14.5px] font-extrabold text-slate-800">Retire D-H6 — the register is the attendance book</span>
+          <span class="mt-1 block text-[13px] leading-relaxed text-slate-600">
+            Money leaves the grid entirely and lives on its own surface, one worker at a time. The
+            register becomes purely <span class="mr">हजेरी</span>.
+          </span>
+          <span class="mt-1.5 block text-[12px] leading-relaxed text-slate-500">
+            <strong>Cost:</strong> reverses a decision made from real farm practice — that the muster
+            book and the payment record are the same book. Also weakens the downloadable record,
+            which was meant to be a proof of payment.
+          </span>
+        </span>
+      </label>
+    </div>
+
+    <div class="mt-4 rounded-xl border border-amber-200 bg-white p-3.5 text-[13px] leading-relaxed text-amber-900">
+      <span class="font-bold">Why this is being asked now and not later:</span> the attendance table
+      has <strong>never received a single row in production</strong>. Changing what the money column
+      means is free today and expensive the moment real farm data exists. A closely-related decision
+      earlier in this project carried the warning <em>“adding a fourth axis after the grid ships means
+      rebuilding it.”</em> This is the same shape of decision.
+    </div>
+  </div>
+
+  <!-- ───────────────────────────── 8. DECISION RECORD ───────────────────────────── -->
+  <div id="decision-record" class="rounded-[18px] border-2 border-dashed border-slate-300 bg-white p-5">
+    <h2 class="text-[17px] font-extrabold text-slate-800">8 · Decision record</h2>
+    <p class="mt-1 text-[13px] text-slate-500">
+      To be completed after the founder decides. This section becomes the permanent visual reference
+      for why the register looks the way it does.
+    </p>
+    <dl class="mt-3 flex flex-col gap-2 text-[13.5px]">
+      <div class="flex gap-2"><dt class="w-36 flex-none font-bold text-slate-600">Chosen option</dt><dd class="font-bold text-emerald-700">A FOURTH WAY, better than all three offered: the register goes fully clean — no money in any cell, row or total, and no totals column at all. Money lives on the Labour home as two separate cards (रोजंदारी नोंदलेली / उक्ते ठरलेली, never combined) and in tap-detail.</dd></div>
+      <div class="flex gap-2"><dt class="w-36 flex-none font-bold text-slate-600">Decided on</dt><dd class="text-slate-700">2 September 2026, via the founder's integrated master review file.</dd></div>
+      <div class="flex gap-2"><dt class="w-36 flex-none font-bold text-slate-600">Effect on D-H6</dt><dd class="text-slate-700">D-H7 (money in unusual-day cells + row-end money) is SUPERSEDED. D-H6's intent survives one level up: attendance and money remain one Labour surface, reached by tap — but the grid itself is purely attendance. The mixed-week problem disappears entirely.</dd></div>
+      <div class="flex gap-2"><dt class="w-36 flex-none font-bold text-slate-600">Screens affected</dt><dd class="text-slate-700">Register (06) — money and totals column removed, उक्ते dot added; Labour home — two money cards added; tap-detail — new.</dd></div>
+      <div class="flex gap-2"><dt class="w-36 flex-none font-bold text-slate-600">Founder's words</dt><dd class="mr text-slate-700">"नावाखाली कोणताही summary, कामाचा मजकूर किंवा पैशांची कळ नाही. नाव + दिवसाचे खूण एवढेच." And: the system never says "₹16,650 खर्च".</dd></div>
+    </dl>
+    <p class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[12.5px] font-bold text-emerald-900">DECIDED — this page is now the permanent visual reference for why the register is clean. Full record: DECISIONS-2026-09-02-founder-master-review.md (same folder).</p>
+  </div>
+
+  <p class="px-2 text-center text-[11.5px] leading-relaxed text-slate-500">
+    Everything above is a mockup for a decision. No production code implements contract work in the
+    register yet — which is precisely why the decision is cheap to make now.
+  </p>
+
+</div>
+</body>
+</html>

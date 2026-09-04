@@ -43,6 +43,8 @@ import {
 // Finding F3 — SchedulerPage's "Close Day" destination. See that module's
 // header for why this hop is a window event and not a prop path.
 import { requestOpenWaitingDrawer } from '../../features/oversight/oversightNavigationEvents';
+import { resolveLabourAnchor } from '../../features/labour/labourAnchor';
+import { getDateKey } from '../domain/services/DateKeyService';
 
 export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'profile') return null;
@@ -82,6 +84,12 @@ export const renderLabourRoute = (ctx: AppRouterContext): React.ReactNode => {
             <LabourFeaturePage
                 onExit={() => ctx.setCurrentRoute('profile')}
                 onGoToLog={() => {
+                    // Labour V2 R1 Task 3.1 — the labour mic is a VERIFICATION instrument.
+                    // No anchor → no mic. This is the door (the hub hero is already drawn
+                    // inactive with the approved reason); gating here as well means no future
+                    // caller of onGoToLog can walk past the rule. It gates ONLY the recorder:
+                    // the labour route, hub and हजेरी वही render regardless (Correction 11).
+                    if (resolveLabourAnchor(ctx.history ?? [], getDateKey()).state !== 'anchored') return;
                     // spec: 2026-07-13-labour-attendance-approval-design (Task 3.4) —
                     // tag the intent BEFORE navigating so mainView can show a
                     // "why am I here" hint on arrival.

@@ -7,6 +7,16 @@ type Filter = 'Open' | 'Acknowledged' | 'Resolved' | 'All';
 interface UseComplianceSignalsResult {
     signals: ComplianceSignalDto[];
     isLoading: boolean;
+    /**
+     * TASK 8 (spec: 2026-08-28-labour-v2-release-1, P4/P5, Ruling R8) — true
+     * when the LAST server read failed. Cached signals stay in `signals`
+     * (they are real); what this buys is the right to WITHHOLD "कोणत्याही
+     * चेतावण्या नाहीत" — a reassurance, not just a count.
+     *
+     * NOT "the list is empty": a 200 with no signals is a real answer and that
+     * sentence is TRUE, so this stays `false` there.
+     */
+    loadFailed: boolean;
     filter: Filter;
     setFilter: (f: Filter) => void;
     refresh: () => void;
@@ -15,19 +25,34 @@ interface UseComplianceSignalsResult {
 export function useComplianceSignals(farmId: string | null): UseComplianceSignalsResult {
     const [allSignals, setAllSignals] = useState<ComplianceSignalDto[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [filter, setFilter] = useState<Filter>('Open');
+    const [loadFailed, setLoadFailed] = useState(false);
+    /*
+     * TASK 8b — was 'Open'. A farm whose signals are all Acknowledged (or
+     * Resolved) then showed zero rows under that filter and fell through to
+     * "कोणत्याही चेतावण्या नाहीत" over a load that had fully succeeded — the
+     * same defect as `JobCardsPage`'s "Assigned" default, reached through
+     * this hook instead of the page. No new copy: opening unfiltered means
+     * that sentence is reachable only when the farm genuinely has zero
+     * signals. The "Open" chip itself is unchanged; only which one starts
+     * selected.
+     */
+    const [filter, setFilter] = useState<Filter>('All');
     const [tick, setTick] = useState(0);
 
     const refresh = useCallback(() => setTick(t => t + 1), []);
 
     useEffect(() => {
         if (!farmId) {
+            // Nothing was asked of the server, so there is no failure either.
             setAllSignals([]);
             setIsLoading(false);
+            setLoadFailed(false);
             return;
         }
 
         let cancelled = false;
+        // A fresh attempt starts from "we have not failed".
+        setLoadFailed(false);
 
         const loadCached = async () => {
             const db = getDatabase();
@@ -48,8 +73,13 @@ export function useComplianceSignals(farmId: string | null): UseComplianceSignal
                 const db = getDatabase();
                 await db.complianceSignals.bulkPut(fresh as unknown as Parameters<typeof db.complianceSignals.bulkPut>[0]);
                 setAllSignals(fresh);
+                setLoadFailed(false);
             } catch {
-                // Server unavailable — cached data shown
+                // Server unavailable — cached data stays shown (it is real),
+                // but the failure is no longer silent. Reachable at all only
+                // because `getSignals` now THROWS on a non-OK response
+                // instead of returning `[]` (Task 8).
+                if (!cancelled) setLoadFailed(true);
             }
         };
 
@@ -65,5 +95,5 @@ export function useComplianceSignals(farmId: string | null): UseComplianceSignal
         return true;
     });
 
-    return { signals, isLoading, filter, setFilter, refresh };
+    return { signals, isLoading, loadFailed, filter, setFilter, refresh };
 }
