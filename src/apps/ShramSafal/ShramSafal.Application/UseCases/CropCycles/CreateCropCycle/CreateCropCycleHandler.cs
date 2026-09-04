@@ -74,6 +74,15 @@ public sealed class CreateCropCycleHandler(
             PaidFeature.CreatePlot, ct);
         if (gate is not null) return gate;
 
+        // Stage A0 / A3 — the ledger records the actor's role ON THIS FARM; see
+        // UpdateFarmBoundaryHandler for the full reasoning. The JWT membership claim
+        // carries one role per ACCOUNT, so a Mukadam here was previously recorded as
+        // whatever their token said globally. Null is unreachable: IsUserMemberOfFarmAsync
+        // above shares this resolver's predicate exactly (ShramSafalRepository.cs:69-90
+        // vs :1112-1133), so "unknown" in a real row means a broken tenant scope.
+        var resolvedActorRole = await repository.GetUserRoleForFarmAsync(
+            command.FarmId, command.ActorUserId, ct);
+
         var requestedEndDate = command.EndDate ?? DateOnly.MaxValue;
         var overlappingCycleExists = (await repository.GetCropCyclesByPlotIdAsync(command.PlotId, ct))
             .Where(existing => !command.CropCycleId.HasValue || existing.Id != command.CropCycleId.Value)
@@ -110,7 +119,7 @@ public sealed class CreateCropCycleHandler(
                 entityId: cycle.Id,
                 action: "Created",
                 actorUserId: command.ActorUserId,
-                actorRole: command.ActorRole ?? "unknown",
+                actorRole: resolvedActorRole?.ToString().ToLowerInvariant() ?? "unknown",
                 payload: new
                 {
                     cycle.Id,

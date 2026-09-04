@@ -60,6 +60,31 @@ public sealed class IssueFarmInviteHandler(
 
         var utcNow = clock.UtcNow;
 
+        // Stage A0 / A3 — both sinks below were hardcoded to PrimaryOwner. Authorization
+        // runs OUTSIDE this handler (IssueFarmInviteAuthorizer -> EnsureIsOwner), which
+        // admits SecondaryOwner too (ShramSafalRepository.cs:94) — so the moment a
+        // co-owner shares the farm QR, both rows named a role that person does not hold.
+        var resolvedActorRole = await farmRepository.GetUserRoleForFarmAsync(
+            command.FarmId.Value, command.CallerUserId.Value, ct);
+
+        // The audit ledger takes the resolved role directly: ssf.audit_events.actor_role
+        // is varchar(80) (AuditEventConfiguration.cs:40-43), which fits every AppRole.
+        var auditActorRole = resolvedActorRole?.ToString().ToLowerInvariant() ?? "unknown";
+
+        // Analytics takes a BOUNDED mapping, never a raw role. Its actor_role column is
+        // varchar(16) (AnalyticsEventConfiguration.cs:53-56) and "fpctechnicalmanager" is
+        // 19 characters — a raw role there is a 22001 waiting to happen, the same failure
+        // class as the varchar(20) correction ledger. Issuing an invite is an owner
+        // action, so this mapping is total for every role that can legitimately reach
+        // here, stays truthful for a SecondaryOwner, and cannot overflow even if this
+        // handler is ever invoked outside the pipeline. Longest value: 14 chars.
+        var analyticsActorRole = resolvedActorRole switch
+        {
+            AppRole.PrimaryOwner => "primaryowner",
+            AppRole.SecondaryOwner => "secondaryowner",
+            _ => "unknown",
+        };
+
         // 1. Reuse existing Active invitation if present (idempotent).
         var existing = await invitationRepository.GetActiveInvitationByFarmAsync(command.FarmId, ct);
         if (existing is not null)
@@ -112,7 +137,7 @@ public sealed class IssueFarmInviteHandler(
                     entityId: invitation.Id.Value,
                     action: "InvitationIssued",
                     actorUserId: command.CallerUserId.Value,
-                    actorRole: AppRole.PrimaryOwner.ToString().ToLowerInvariant(),
+                    actorRole: auditActorRole,
                     payload: new { farmId = command.FarmId, invitationId = invitation.Id },
                     farmId: command.FarmId.Value,
                     clientCommandId: null,
@@ -133,7 +158,7 @@ public sealed class IssueFarmInviteHandler(
             ActorUserId: command.CallerUserId,
             FarmId: command.FarmId,
             OwnerAccountId: null,
-            ActorRole: AppRole.PrimaryOwner.ToString().ToLowerInvariant(),
+            ActorRole: analyticsActorRole,
             Trigger: "manual",
             DeviceOccurredAtUtc: null,
             SchemaVersion: "v1",

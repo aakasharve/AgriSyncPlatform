@@ -621,8 +621,7 @@ public sealed class FarmBoundaryRlsRealPostgresTests(Xunit.Abstractions.ITestOut
                 polygonGeoJson,
                 CentreLat: 19.0005,
                 CentreLng: 74.0005,
-                CalculatedAreaAcres: areaAcres,
-                ActorRole: "PrimaryOwner")));
+                CalculatedAreaAcres: areaAcres)));
 
     private static string OwnerAccountFor(Guid farmId) =>
         farmId == FarmA ? FarmAAccount.ToString() : FarmBAccount.ToString();

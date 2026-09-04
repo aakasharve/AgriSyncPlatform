@@ -94,8 +94,7 @@ public sealed class FarmGeographyHandlerTests
             PolygonGeoJson,
             18.2,
             73.2,
-            1.50m,
-            ActorRole: AppRole.PrimaryOwner.ToString()));
+            1.50m));
 
         Assert.True(result.IsSuccess);
         Assert.False(oldBoundary.IsActive);
