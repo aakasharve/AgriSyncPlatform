@@ -80,7 +80,7 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
     }, [invite]);
 
     useEffect(() => {
-        if (!invite || !shareUrl) return;
+        if (!shareUrl) return;
         let cancelled = false;
         QRCode.toDataURL(shareUrl, {
             errorCorrectionLevel: 'H',
@@ -176,7 +176,7 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
                             {invite?.farmName ?? farmName}
                         </h2>
                         <p className="mt-1 text-sm font-semibold text-stone-500">
-                            तुमच्या कामगारांना ही QR दाखवा
+                            कामाला येणाऱ्यांना ही QR दाखवा
                         </p>
                         <p className="text-xs text-stone-400">
                             Show this QR to your workers.
@@ -266,7 +266,7 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
                     </div>
 
                     <p className="mt-4 text-center text-[11px] leading-relaxed text-stone-400">
-                        तुमच्या कामगाराने ही QR स्कॅन केल्यावर त्यांना त्यांचा फोन नंबर आणि OTP द्यावा लागेल.
+                        समोरच्याने ही QR स्कॅन केल्यावर त्याला त्याचा फोन नंबर आणि OTP द्यावा लागेल.
                         <br />
                         Once a worker scans, they enter their phone and OTP. That's it.
                     </p>

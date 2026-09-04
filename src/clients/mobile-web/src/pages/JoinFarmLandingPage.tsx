@@ -34,8 +34,8 @@ interface JoinContext {
 }
 
 const ROLE_LABEL_MR: Record<JoinRole, string> = {
-    Worker: 'कामगार',
-    Mukadam: 'मुकादम',
+    Worker: 'कामाला येणारे',
+    Mukadam: 'जबाबदार',
     SecondaryOwner: 'सहमालक',
 };
 

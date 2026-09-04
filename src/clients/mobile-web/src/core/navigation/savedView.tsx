@@ -207,7 +207,7 @@ export const renderSavedView = (ctx: AppRouterContext): React.ReactNode => {
                                                     if (!savedLog) return null;
                                                     const buckets = [
                                                         { key: 'irrigation', count: (savedLog.irrigation || []).filter(e => (e.durationHours || 0) > 0 || (e.waterVolumeLitres || 0) > 0 || e.method || e.source).length, icon: <Droplets size={13} />, label: 'पाणी', color: 'bg-blue-100 text-blue-700' },
-                                                        { key: 'labour', count: (savedLog.labour || []).length, icon: <Users size={13} />, label: 'मजूर', color: 'bg-amber-100 text-amber-700' },
+                                                        { key: 'labour', count: (savedLog.labour || []).length, icon: <Users size={13} />, label: 'जण', color: 'bg-amber-100 text-amber-700' },
                                                         { key: 'inputs', count: (savedLog.inputs || []).length, icon: <Package size={13} />, label: 'औषध/खत', color: 'bg-purple-100 text-purple-700' },
                                                         { key: 'machinery', count: (savedLog.machinery || []).length, icon: <Tractor size={13} />, label: 'यंत्र', color: 'bg-stone-100 text-stone-700' },
                                                         { key: 'crop', count: (savedLog.cropActivities || []).length, icon: <Sprout size={13} />, label: 'पीक काम', color: 'bg-emerald-100 text-emerald-700' },

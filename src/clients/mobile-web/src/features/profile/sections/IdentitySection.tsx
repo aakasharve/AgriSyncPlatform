@@ -455,7 +455,7 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                 <QrCode size={20} />
                             </div>
                             <div className="flex-1 min-w-0">
-                                <div className="font-bold text-emerald-800">कामगारांना जोडा · Add your workers</div>
+                                <div className="font-bold text-emerald-800">कामाला येणाऱ्यांना जोडा · Add your workers</div>
                                 <div className="text-xs text-emerald-700/80">Show them the farm QR. They scan, enter phone, done.</div>
                             </div>
                         </div>

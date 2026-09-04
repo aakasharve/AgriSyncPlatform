@@ -22,7 +22,7 @@ interface OperatorSessionChipProps {
 const roleLabels: Record<string, { label: string; labelMr: string }> = {
     'PRIMARY_OWNER': { label: 'Owner', labelMr: 'मालक' },
     'SECONDARY_OWNER': { label: 'Co-Owner', labelMr: 'सह-मालक' },
-    'WORKER': { label: 'Worker', labelMr: 'कामगार' }
+    'WORKER': { label: 'Worker', labelMr: 'कामाला येणारे' }
 };
 
 export const OperatorSessionChip: React.FC<OperatorSessionChipProps> = ({

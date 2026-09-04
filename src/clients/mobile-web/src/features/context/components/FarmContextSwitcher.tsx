@@ -50,8 +50,8 @@ const roleLabel = (role: string) => {
     switch (role) {
         case 'PrimaryOwner': return 'मालक / Owner';
         case 'SecondaryOwner': return 'सहमालक / Co-owner';
-        case 'Mukadam': return 'मुकादम / Mukadam';
-        case 'Worker': return 'कामगार / Worker';
+        case 'Mukadam': return 'जबाबदार / Mukadam';
+        case 'Worker': return 'कामाला येणारे / Worker';
         default: return role;
     }
 };
