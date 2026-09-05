@@ -62,9 +62,22 @@ namespace AgriSync.Bootstrapper.Observability
         public const string MutationRejectedMetricName = "MutationRejected";
 
         /// <summary>
-        /// Failures of the rejection-observability emit itself. Published
-        /// alongside deliberately: a broken observer otherwise looks exactly like
-        /// a healthy system, which is the same lie this whole change removes.
+        /// Failures of the rejection-observability emit itself.
+        ///
+        /// <para>
+        /// <b>Scope limit, founder correction 2026-09-05 — this signal CANNOT prove
+        /// CloudWatch is working.</b> It travels over the same publication channel as
+        /// the metric it guards, so if IAM, the network or CloudWatch itself breaks,
+        /// this vanishes along with everything else and its silence proves nothing.
+        /// It is a partial-failure hint only: useful when the emit path throws while
+        /// publication still works.
+        /// </para>
+        ///
+        /// <para>
+        /// The authoritative distinction between "observed zero" and "not publishing"
+        /// is the one-minute zero heartbeat on <see cref="MutationRejectedMetricName"/>.
+        /// G5 must depend on the heartbeat, never on this counter.
+        /// </para>
         /// </summary>
         public const string ObservabilityEmitFailedMetricName = "ObservabilityEmitFailed";
 
