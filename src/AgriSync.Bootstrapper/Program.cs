@@ -786,6 +786,34 @@ try
         return 0;
     }
 
+    // The bounded migration executor (spec 2026-09-04-independent-db-verification;
+    // founder ruling 2026-09-05: "rehearsal and production must use the same
+    // migration mechanism").
+    //
+    // This calls the IDENTICAL InitializeApplicationDataAsync the serving path
+    // calls, so the rehearsal clone and production are migrated by the same code,
+    // the same phase order and the same targeted migrator. Only the connection
+    // string differs.
+    //
+    // Returning before app.Run() is the whole trick: AddHostedService instances
+    // start with Run(), so nothing registered — alert dispatch, MIS refresh,
+    // partition maintenance, retention sweeps — ever fires. Booting the full API
+    // against a throwaway clone to migrate it would have run all of them against a
+    // scratch database, with real outbound effects.
+    //
+    // The ALLOW_PRODUCTION_STARTUP_MIGRATIONS gate still applies: it is checked
+    // inside ApplyStartupMigrationsIfAllowedAsync, not here. This mode grants no
+    // authority it would not otherwise have.
+    if (args.Contains("--migrate-only", StringComparer.Ordinal))
+    {
+        Log.Information(
+            "--migrate-only: applying migrations via the standard startup path, then exiting "
+            + "without serving. No hosted services will start.");
+        await InitializeApplicationDataAsync(app);
+        Log.Information("--migrate-only: complete.");
+        return 0;
+    }
+
     await InitializeApplicationDataAsync(app);
 
     app.Run();
