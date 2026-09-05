@@ -429,6 +429,43 @@ try
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.AlertDispatcherJob>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.SubscriptionReconciliationJob>();
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.WorkerRetentionJob>();
+
+    // Spec 2026-09-04-independent-db-verification (Task 5.1/5.2), founder ruling
+    // 2026-09-05. Ships the sync-rejection counter to CloudWatch as
+    // ShramSafal/Api -> MutationRejected: "ShramSafal tried to save a farmer
+    // action and the system rejected it".
+    //
+    // WHY IT MATTERS: /sync/push answers HTTP 200 whether or not the mutations
+    // inside it were applied, so a release can pass /health and /version while
+    // farmers cannot save attendance, work logs or corrections. Until now nothing
+    // in src/ called PutMetricData at all, so the deploy gate's error-rate check
+    // queried a metric that had never existed, got an empty set, and scored it
+    // GREEN.
+    //
+    // NO SEPARATE FEATURE FLAG, on purpose. This project has already shipped a
+    // capability that sat switched off in production and was never noticed; a
+    // second switch to forget is exactly that failure mode. It follows the
+    // environment instead. AGRISYNC_PUBLISH_METRICS=true force-enables it
+    // elsewhere (staging rehearsal); dev and test stay quiet because they have no
+    // AWS credentials and a publish failure would only be log noise.
+    var publishMetrics =
+        builder.Environment.IsProduction()
+        || string.Equals(
+            Environment.GetEnvironmentVariable("AGRISYNC_PUBLISH_METRICS"),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+
+    if (publishMetrics)
+    {
+        builder.Services.AddSingleton(_ =>
+            new AgriSync.Bootstrapper.Observability.MutationRejectedMetricCollector(
+                builder.Environment.EnvironmentName));
+        builder.Services.AddSingleton<Amazon.CloudWatch.IAmazonCloudWatch>(
+            _ => new Amazon.CloudWatch.AmazonCloudWatchClient());
+        builder.Services.AddSingleton<AgriSync.Bootstrapper.Observability.IMetricSink,
+            AgriSync.Bootstrapper.Observability.CloudWatchMetricSink>();
+        builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.MutationRejectedMetricPublisher>();
+    }
     // CEI §4.5 — daily sweep at 02:00 UTC that transitions past-due TestInstance rows to Overdue
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Jobs.TestOverdueSweeper>();
     // CEI Phase 3 §4.6 — nightly compliance evaluation sweep at 03:00 UTC
@@ -730,6 +767,52 @@ try
 
     // Sub-plan 05 Task 2: maps /__e2e/* only if ALLOW_E2E_SEED=true.
     app.MapE2eEndpoints();
+
+    // Step 0c (spec 2026-09-04-independent-db-verification; founder ruling
+    // 2026-09-05). READ-ONLY migration census, then exit without serving.
+    //
+    // WHY IT MUST BE THIS BINARY AND NOT A FILE COUNT. Migration files on disk
+    // are NOT the same set EF can enumerate: a file with no [Migration]
+    // attribute is invisible to EF, and this project already carries three
+    // mutually inconsistent numbers (107 files at 7f5de637, 102 at the deployed
+    // SHA, 101 applied rows). Counting files would reproduce that confusion.
+    // GetPendingMigrationsAsync is EF's own enumeration and is authoritative.
+    //
+    // Applying nothing is the point: this runs BEFORE any migration authority
+    // exists, so the declared set can be proven before the gate is ever opened.
+    if (args.Contains("--list-migrations", StringComparer.Ordinal))
+    {
+        await ListMigrationsAndExitAsync(app);
+        return 0;
+    }
+
+    // The bounded migration executor (spec 2026-09-04-independent-db-verification;
+    // founder ruling 2026-09-05: "rehearsal and production must use the same
+    // migration mechanism").
+    //
+    // This calls the IDENTICAL InitializeApplicationDataAsync the serving path
+    // calls, so the rehearsal clone and production are migrated by the same code,
+    // the same phase order and the same targeted migrator. Only the connection
+    // string differs.
+    //
+    // Returning before app.Run() is the whole trick: AddHostedService instances
+    // start with Run(), so nothing registered — alert dispatch, MIS refresh,
+    // partition maintenance, retention sweeps — ever fires. Booting the full API
+    // against a throwaway clone to migrate it would have run all of them against a
+    // scratch database, with real outbound effects.
+    //
+    // The ALLOW_PRODUCTION_STARTUP_MIGRATIONS gate still applies: it is checked
+    // inside ApplyStartupMigrationsIfAllowedAsync, not here. This mode grants no
+    // authority it would not otherwise have.
+    if (args.Contains("--migrate-only", StringComparer.Ordinal))
+    {
+        Log.Information(
+            "--migrate-only: applying migrations via the standard startup path, then exiting "
+            + "without serving. No hosted services will start.");
+        await InitializeApplicationDataAsync(app);
+        Log.Information("--migrate-only: complete.");
+        return 0;
+    }
 
     await InitializeApplicationDataAsync(app);
 
@@ -1143,6 +1226,86 @@ static string ResolveAiRateLimitPartitionKey(HttpContext context)
     }
 
     return $"ip:{ResolveRemoteIpRateLimitPartitionKey(context)}";
+}
+
+/// <summary>
+/// Step 0c — the pre-apply migration census. Prints, per context, the applied
+/// and pending migration IDs as JSON on stdout and returns. Applies nothing.
+///
+/// <para>
+/// <b>Founder ruling 2026-09-05:</b> a production migration is no longer approved
+/// by a number like "5 migrations". It is approved by five specific identities.
+/// This is the step that produces those identities, before any migration
+/// authority exists — <c>ALLOW_PRODUCTION_STARTUP_MIGRATIONS</c> is never read
+/// here, and no gate is opened.
+/// </para>
+///
+/// <para>
+/// <b>Why the application binary rather than a script counting files.</b> EF only
+/// enumerates a migration class that carries the <c>[Migration]</c> attribute, so
+/// a file on disk is not necessarily a migration. This project already holds
+/// three mutually inconsistent numbers — 107 files at <c>7f5de637</c>, 102 at the
+/// deployed SHA, 101 applied rows — and an earlier deploy nearly failed on a
+/// count that was off by one AFTER production had already changed.
+/// <c>GetPendingMigrationsAsync</c> is EF's own answer and is the authoritative
+/// one.
+/// </para>
+///
+/// <para>
+/// Counts in the output are informational. The ID lists are authoritative.
+/// </para>
+/// </summary>
+static async Task ListMigrationsAndExitAsync(WebApplication app)
+{
+    using var scope = app.Services.CreateScope();
+    var services = scope.ServiceProvider;
+
+    // Same elevation InitializeApplicationDataAsync performs: the tenant
+    // interceptor is fail-closed and would otherwise refuse these reads.
+    services.GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantContext>()
+        .ElevateToAdminCrossTenant();
+
+    var contexts = new (string Name, string Schema, DbContext Context)[]
+    {
+        ("UserDbContext", "public",
+            services.GetRequiredService<User.Infrastructure.Persistence.UserDbContext>()),
+        ("AccountsDbContext", "accounts",
+            services.GetRequiredService<Accounts.Infrastructure.Persistence.AccountsDbContext>()),
+        ("ShramSafalDbContext", "ssf",
+            services.GetRequiredService<ShramSafal.Infrastructure.Persistence.ShramSafalDbContext>()),
+        ("AnalyticsDbContext", "analytics",
+            services.GetRequiredService<AnalyticsDbContext>())
+    };
+
+    var report = new Dictionary<string, object>();
+
+    foreach (var (name, schema, context) in contexts)
+    {
+        var applied = (await context.Database.GetAppliedMigrationsAsync()).OrderBy(m => m, StringComparer.Ordinal).ToArray();
+        var pending = (await context.Database.GetPendingMigrationsAsync()).OrderBy(m => m, StringComparer.Ordinal).ToArray();
+
+        report[name] = new Dictionary<string, object>
+        {
+            ["schema"] = schema,
+            ["applied"] = applied,
+            ["pending"] = pending,
+            ["appliedCount"] = applied.Length,
+            ["pendingCount"] = pending.Length
+        };
+    }
+
+    // Fenced so a caller can extract the payload even if Serilog interleaves
+    // startup lines on the same stream.
+    Console.WriteLine("---BEGIN-MIGRATION-CENSUS---");
+    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(
+        new Dictionary<string, object>
+        {
+            ["generatedAtUtc"] = DateTime.UtcNow.ToString("O"),
+            ["environment"] = app.Environment.EnvironmentName,
+            ["contexts"] = report
+        },
+        new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    Console.WriteLine("---END-MIGRATION-CENSUS---");
 }
 
 static async Task<bool> ApplyStartupMigrationsIfAllowedAsync(WebApplication app, DbContext context, string contextName, string? targetMigration = null)
