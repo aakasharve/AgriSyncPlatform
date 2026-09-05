@@ -768,6 +768,24 @@ try
     // Sub-plan 05 Task 2: maps /__e2e/* only if ALLOW_E2E_SEED=true.
     app.MapE2eEndpoints();
 
+    // Step 0c (spec 2026-09-04-independent-db-verification; founder ruling
+    // 2026-09-05). READ-ONLY migration census, then exit without serving.
+    //
+    // WHY IT MUST BE THIS BINARY AND NOT A FILE COUNT. Migration files on disk
+    // are NOT the same set EF can enumerate: a file with no [Migration]
+    // attribute is invisible to EF, and this project already carries three
+    // mutually inconsistent numbers (107 files at 7f5de637, 102 at the deployed
+    // SHA, 101 applied rows). Counting files would reproduce that confusion.
+    // GetPendingMigrationsAsync is EF's own enumeration and is authoritative.
+    //
+    // Applying nothing is the point: this runs BEFORE any migration authority
+    // exists, so the declared set can be proven before the gate is ever opened.
+    if (args.Contains("--list-migrations", StringComparer.Ordinal))
+    {
+        await ListMigrationsAndExitAsync(app);
+        return 0;
+    }
+
     await InitializeApplicationDataAsync(app);
 
     app.Run();
@@ -1180,6 +1198,86 @@ static string ResolveAiRateLimitPartitionKey(HttpContext context)
     }
 
     return $"ip:{ResolveRemoteIpRateLimitPartitionKey(context)}";
+}
+
+/// <summary>
+/// Step 0c — the pre-apply migration census. Prints, per context, the applied
+/// and pending migration IDs as JSON on stdout and returns. Applies nothing.
+///
+/// <para>
+/// <b>Founder ruling 2026-09-05:</b> a production migration is no longer approved
+/// by a number like "5 migrations". It is approved by five specific identities.
+/// This is the step that produces those identities, before any migration
+/// authority exists — <c>ALLOW_PRODUCTION_STARTUP_MIGRATIONS</c> is never read
+/// here, and no gate is opened.
+/// </para>
+///
+/// <para>
+/// <b>Why the application binary rather than a script counting files.</b> EF only
+/// enumerates a migration class that carries the <c>[Migration]</c> attribute, so
+/// a file on disk is not necessarily a migration. This project already holds
+/// three mutually inconsistent numbers — 107 files at <c>7f5de637</c>, 102 at the
+/// deployed SHA, 101 applied rows — and an earlier deploy nearly failed on a
+/// count that was off by one AFTER production had already changed.
+/// <c>GetPendingMigrationsAsync</c> is EF's own answer and is the authoritative
+/// one.
+/// </para>
+///
+/// <para>
+/// Counts in the output are informational. The ID lists are authoritative.
+/// </para>
+/// </summary>
+static async Task ListMigrationsAndExitAsync(WebApplication app)
+{
+    using var scope = app.Services.CreateScope();
+    var services = scope.ServiceProvider;
+
+    // Same elevation InitializeApplicationDataAsync performs: the tenant
+    // interceptor is fail-closed and would otherwise refuse these reads.
+    services.GetRequiredService<AgriSync.BuildingBlocks.Persistence.TenantContext>()
+        .ElevateToAdminCrossTenant();
+
+    var contexts = new (string Name, string Schema, DbContext Context)[]
+    {
+        ("UserDbContext", "public",
+            services.GetRequiredService<User.Infrastructure.Persistence.UserDbContext>()),
+        ("AccountsDbContext", "accounts",
+            services.GetRequiredService<Accounts.Infrastructure.Persistence.AccountsDbContext>()),
+        ("ShramSafalDbContext", "ssf",
+            services.GetRequiredService<ShramSafal.Infrastructure.Persistence.ShramSafalDbContext>()),
+        ("AnalyticsDbContext", "analytics",
+            services.GetRequiredService<AnalyticsDbContext>())
+    };
+
+    var report = new Dictionary<string, object>();
+
+    foreach (var (name, schema, context) in contexts)
+    {
+        var applied = (await context.Database.GetAppliedMigrationsAsync()).OrderBy(m => m, StringComparer.Ordinal).ToArray();
+        var pending = (await context.Database.GetPendingMigrationsAsync()).OrderBy(m => m, StringComparer.Ordinal).ToArray();
+
+        report[name] = new Dictionary<string, object>
+        {
+            ["schema"] = schema,
+            ["applied"] = applied,
+            ["pending"] = pending,
+            ["appliedCount"] = applied.Length,
+            ["pendingCount"] = pending.Length
+        };
+    }
+
+    // Fenced so a caller can extract the payload even if Serilog interleaves
+    // startup lines on the same stream.
+    Console.WriteLine("---BEGIN-MIGRATION-CENSUS---");
+    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(
+        new Dictionary<string, object>
+        {
+            ["generatedAtUtc"] = DateTime.UtcNow.ToString("O"),
+            ["environment"] = app.Environment.EnvironmentName,
+            ["contexts"] = report
+        },
+        new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    Console.WriteLine("---END-MIGRATION-CENSUS---");
 }
 
 static async Task<bool> ApplyStartupMigrationsIfAllowedAsync(WebApplication app, DbContext context, string contextName, string? targetMigration = null)
