@@ -702,8 +702,8 @@ function NavShell({
           onNavigate("/");
         }}
       >
-        <img className="brand-mark" src={markLogo} alt="" width={251} height={320} />
-        <img className="brand-wordmark" src={wordmarkLogo} alt="ShramSafal" width={1185} height={175} />
+        <img className="brand-mark" src={markLogo} alt="" width={376} height={480} />
+        <img className="brand-wordmark" src={wordmarkLogo} alt="ShramSafal" width={1600} height={220} />
       </a>
 
       <div className="header-silence">
