@@ -1,0 +1,17 @@
+# ShramSafal
+
+> For farmers who run farming like a business. Owning land is one thing. Building farming as an operation is another. ShramSafal brings direction, accounts, and responsibility to daily farm work.
+
+ShramSafal is built by Agriryot Value Enterprises Private Limited (CIN U62099PN2026PTC256337), Maharashtra, India. The site is available in English and Marathi on the same URLs.
+
+## Pages
+
+- [Home](https://shramsafal.in/): For farmers who run farming like a business.
+- [Vision and Philosophy](https://shramsafal.in/vision): ShramSafal is built so daily farm effort does not disappear. It turns work into clarity, trust, and better decisions.
+- [For Farmers and Farm Operators](https://shramsafal.in/farmers): Whether 10 guntha or 100 acres, farming needs clarity. See who ShramSafal is for and how daily work becomes visible.
+- [Join the First Responsible Group](https://shramsafal.in/join): If daily farm work needs direction, accounts, observation, and responsibility, join the first responsible ShramSafal group.
+- [Trust Is the Spine](https://shramsafal.in/privacy-trust): The one thing farming lacks most is trust. ShramSafal starts by helping farmers build trust from their real daily work.
+
+## Contact
+
+- Email: arvesystems@gmail.com

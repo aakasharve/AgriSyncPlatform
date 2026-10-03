@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!--
+      Title and description below are the APPROVED strings from
+      src/i18n.ts -> localizedSeo.en.home. App.tsx rewrites both at runtime
+      per route and per language, but social scrapers (WhatsApp, X,
+      LinkedIn) and AI answer engines never run JavaScript, so whatever
+      sits here statically is all they will ever see. It must therefore be
+      real copy, not a placeholder.
+    -->
+    <title>ShramSafal — For farmers who run farming like a business</title>
+    <meta
+      name="description"
+      content="Owning land is one thing. Building farming as an operation is another. ShramSafal brings direction, accounts, and responsibility to daily farm work."
+    />
+    <link rel="canonical" href="https://shramsafal.in/" />
+    <meta name="theme-color" content="#145225" />
+
+    <!-- Social preview. WhatsApp is the main way this link will travel, and
+         it reads og: tags only. Without these a shared link shows a bare URL. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ShramSafal" />
+    <meta property="og:url" content="https://shramsafal.in/" />
+    <meta property="og:title" content="ShramSafal — For farmers who run farming like a business" />
+    <meta
+      property="og:description"
+      content="Owning land is one thing. Building farming as an operation is another. ShramSafal brings direction, accounts, and responsibility to daily farm work."
+    />
+    <meta property="og:image" content="https://shramsafal.in/og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="en_IN" />
+    <meta property="og:locale:alternate" content="mr_IN" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="ShramSafal — For farmers who run farming like a business" />
+    <meta
+      name="twitter:description"
+      content="Owning land is one thing. Building farming as an operation is another. ShramSafal brings direction, accounts, and responsibility to daily farm work."
+    />
+    <meta name="twitter:image" content="https://shramsafal.in/og-image.jpg" />
+
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!--
+      Organization data. This is the machine-readable form of the company
+      identity shown on the trust page: it is how Google and AI systems
+      confirm a real registered company sits behind the site. Values match
+      src/App.tsx exactly - legal name, CIN, state and contact only.
+    -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Agriryot Value Enterprises Private Limited",
+        "alternateName": "ShramSafal",
+        "url": "https://shramsafal.in/",
+        "logo": "https://shramsafal.in/icon-512.png",
+        "identifier": {
+          "@type": "PropertyValue",
+          "propertyID": "CIN",
+          "value": "U62099PN2026PTC256337"
+        },
+        "email": "arvesystems@gmail.com",
+        "address": {
+          "@type": "PostalAddress",
+          "addressRegion": "Maharashtra",
+          "addressCountry": "IN"
+        },
+        "areaServed": { "@type": "State", "name": "Maharashtra" }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "ShramSafal",
+        "url": "https://shramsafal.in/",
+        "inLanguage": ["en", "mr"],
+        "publisher": { "@type": "Organization", "name": "Agriryot Value Enterprises Private Limited" }
+      }
+    </script>
+
+    <!-- English is the default, so the Latin cuts are what first paint needs.
+         Preloading them stops the headline jumping when the font swaps in. -->
+    <link rel="preload" href="/fonts/noto-sans-devanagari-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/noto-serif-devanagari-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-BBWVLKTLXQ"></script>
+    <script defer src="/analytics.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
