@@ -3106,11 +3106,11 @@ button {
 
 /* --- Hero Headline Highlight Styles --- */
 .hero-highlight-green {
+  /* Colour alone marks the phrase. A border-bottom here was drawn under each
+     wrapped line's box, and with the headline's tight leading it cut straight
+     through the next line of text (both languages). */
   font-weight: 800;
   color: #0f5132;
-  position: relative;
-  padding-bottom: 2px;
-  border-bottom: 1.5px solid rgba(47, 135, 53, 0.45);
 }
 
 .hero-highlight-gold {
