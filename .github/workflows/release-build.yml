@@ -97,6 +97,13 @@ jobs:
           (cd dist && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) > web-dist.sha256
           python3 "$GITHUB_WORKSPACE/ops/release/release_verify.py" bundle dist web-dist.sha256
 
+      # @capacitor/cli 8.x refuses to run below Node 22, while the web bundle has always
+      # been built on Node 20 (web-release's toolchain). The bundle is already built and
+      # hashed above; Node 22 is used ONLY to copy it into the Android project.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Cap sync android
         working-directory: src/clients/mobile-web
         run: npx cap sync android
@@ -173,7 +180,7 @@ jobs:
                "apk_sha256": h("out/app-release.apk"),
                "aab_sha256": h("out/app-release.aab"),
                "web_manifest_sha256": h("src/clients/mobile-web/web-dist.sha256"),
-               "node": os.popen("node --version").read().strip(),
+               "node_cap_sync_and_gradle": os.popen("node --version").read().strip(),
                "built_at_utc": datetime.datetime.utcnow().isoformat() + "Z"}
           json.dump(m, open("out/release-manifest.json","w"), indent=2)
           print(json.dumps(m, indent=2))
