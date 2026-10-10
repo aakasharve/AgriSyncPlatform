@@ -22,10 +22,21 @@ build put there.
 
 ## CI is the normal path
 
-Run **web-release** first (it builds and publishes the one web bundle and uploads it as the
-`web-dist` artifact), then run **android-release** from the same commit, giving it the
-successful web-release run id. The APK does not rebuild the web assets: it downloads that
-bundle and re-verifies every sha256 before and after `cap sync`. There is no tag trigger.
+Release is **build once, verify, then promote the same artifacts** - three workflows:
+
+1. **release-build** (manual, on the frozen protected-main SHA; also rehearsed on PRs that touch
+   the release path). Builds the web bundle, the signed APK and the Play bundle once, verifies
+   the *finished* APK (bundle bytes inside the package, application id, version, signature,
+   signer continuity against `ops/release/expected-release.env`) and uploads them as
+   artifacts. It holds **no AWS credentials**: it cannot publish or move any pointer.
+2. **web-release** and 3. **android-release** only *promote* those artifacts. Dispatch each on
+   the same commit with the release-build run id. They default to `dry_run=true` (verify only);
+   a real publish needs `dry_run=false` and `confirm=PUBLISH`. They re-check that the run is
+   `release-build`, succeeded and built this commit, and re-verify every hash. Nothing is rebuilt
+   and there is no tag trigger.
+
+Verifier logic and its negative-control tests: `ops/release/` (`python -m unittest`).
+
 It produces both:
 
 | Artifact | What it is for |

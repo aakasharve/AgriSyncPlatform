@@ -1,0 +1,210 @@
+# BUILD-ONLY. Creates the web bundle, the signed APK and the Play bundle ONCE, verifies
+# the FINISHED artifacts, and uploads them as workflow artifacts. It holds NO AWS
+# credentials: it cannot upload to S3, invalidate CloudFront or move a "latest" pointer.
+#
+# Publication is a separate, gated promotion of THESE exact artifacts:
+#   web-release.yml      promotes artifact `web-dist`    (no rebuild)
+#   android-release.yml  promotes artifact `release-apk` (no rebuild)
+# Each re-verifies the run (right workflow, success, same commit) and every hash before
+# it touches anything, and both default to dry_run=true.
+#
+# Triggers: manual (the real build, run on the frozen protected-main SHA) and
+# pull_request limited to the files that define the release path, so changes to the
+# release machinery are rehearsed BEFORE merge. PR runs keep their artifacts 1 day.
+name: release-build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/release-build.yml'
+      - '.github/workflows/web-release.yml'
+      - '.github/workflows/android-release.yml'
+      - 'ops/release/**'
+      - 'src/clients/mobile-web/android/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build once and verify
+    # Fork PRs get no secrets; they cannot sign. Same-repo PRs and manual runs only.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verifier negative-control tests
+        working-directory: ops/release
+        run: python3 -m unittest -v test_release_verify
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+
+      - name: Accept Android SDK licenses
+        run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      - name: Install sync-contract deps (tolerant)
+        working-directory: sync-contract
+        run: npm install --no-audit --no-fund
+
+      - name: Install mobile-web deps
+        working-directory: src/clients/mobile-web
+        run: npm ci
+
+      - name: Build web assets (the ONE bundle)
+        working-directory: src/clients/mobile-web
+        env:
+          VITE_AGRISYNC_API_URL: "https://api.shramsafal.in"
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          VITE_UNDERSTANDING_METER: "1"
+          VITE_STAGE_QUESTIONS: "1"
+          VITE_DISCIPLINE_SYSTEM: "1"
+          VITE_VOICE_CONTINUITY: "1"
+          VITE_DAILY_LOOP: "1"
+          VITE_TASK_CLOSE_CONFIRM: "1"
+          VITE_UNLOCK_COUNTER_PAUSED: "1"
+          VITE_SIMULATE_UNLOCK: "0"
+        run: npm run build
+
+      - name: Verify the bundle carries the prod API origin
+        working-directory: src/clients/mobile-web
+        run: |
+          set -euo pipefail
+          test -d dist
+          grep -rqF 'https://api.shramsafal.in' dist/ || { echo "::error::bundle lacks the prod API origin"; exit 1; }
+
+      - name: Hash the bundle
+        working-directory: src/clients/mobile-web
+        run: |
+          set -euo pipefail
+          (cd dist && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) > web-dist.sha256
+          python3 "$GITHUB_WORKSPACE/ops/release/release_verify.py" bundle dist web-dist.sha256
+
+      - name: Cap sync android
+        working-directory: src/clients/mobile-web
+        run: npx cap sync android
+
+      - name: Decode keystore from secret
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          KS=src/clients/mobile-web/android/app/shramsafal-release.keystore
+          echo "$KEYSTORE_BASE64" | base64 -d > "$KS"
+          SZ=$(wc -c < "$KS")
+          if [ "$SZ" -lt 1000 ]; then
+            echo "::error title=KEYSTORE_BASE64 empty or truncated::Decoded keystore is ${SZ} bytes."
+            exit 1
+          fi
+          if [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error title=Signing password secret missing::KEYSTORE_PASSWORD and/or KEY_PASSWORD is unset."
+            exit 1
+          fi
+          if ! KT_OUT=$(keytool -list -keystore "$KS" -storepass "$KEYSTORE_PASSWORD" -alias shramsafal 2>&1); then
+            echo "::error title=Keystore does not match KEYSTORE_PASSWORD::${KT_OUT}"
+            exit 1
+          fi
+          echo "Keystore opens with the supplied password and holds alias 'shramsafal'."
+
+      - name: Grant Gradle execute permission
+        working-directory: src/clients/mobile-web/android
+        run: chmod +x gradlew
+
+      - name: Build signed release APK
+        working-directory: src/clients/mobile-web/android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon
+
+      # Verify the FINISHED APK, not Gradle's input assets: bundle bytes inside the
+      # package, application id, version, v2/v3 signature, signer continuity.
+      - name: Verify the finished APK
+        run: |
+          set -euo pipefail
+          set -a; . ops/release/expected-release.env; set +a
+          APK=src/clients/mobile-web/android/app/build/outputs/apk/release/app-release.apk
+          ls -l "$APK"
+          [ "$VERSION_CODE" -gt "$PREVIOUS_VERSION_CODE" ] || { echo "::error::versionCode $VERSION_CODE is not above the published $PREVIOUS_VERSION_CODE"; exit 1; }
+          python3 ops/release/release_verify.py apk "$APK" src/clients/mobile-web/web-dist.sha256 \
+            --app-id "$APP_ID" --version-name "$VERSION_NAME" --version-code "$VERSION_CODE" --signer-sha256 "$SIGNER_SHA256"
+          # Independent second opinion from the Android SDK's own verifier.
+          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/apksigner.txt
+          grep -q "Verifies" /tmp/apksigner.txt
+          grep -qi "$SIGNER_SHA256" /tmp/apksigner.txt || { echo "::error::apksigner certificate digest is not the expected signer"; exit 1; }
+
+      - name: Build Play bundle
+        working-directory: src/clients/mobile-web/android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew bundleRelease --no-daemon
+
+      - name: Write release manifest
+        run: |
+          set -euo pipefail
+          APK=src/clients/mobile-web/android/app/build/outputs/apk/release/app-release.apk
+          mkdir -p out
+          cp "$APK" out/app-release.apk
+          cp src/clients/mobile-web/android/app/build/outputs/bundle/release/app-release.aab out/app-release.aab
+          python3 - <<'PY'
+          import hashlib, json, os, datetime
+          def h(p): return hashlib.sha256(open(p,'rb').read()).hexdigest()
+          m = {"git_sha": os.environ["RELEASE_SHA"],
+               "apk_sha256": h("out/app-release.apk"),
+               "aab_sha256": h("out/app-release.aab"),
+               "web_manifest_sha256": h("src/clients/mobile-web/web-dist.sha256"),
+               "node": os.popen("node --version").read().strip(),
+               "built_at_utc": datetime.datetime.utcnow().isoformat() + "Z"}
+          json.dump(m, open("out/release-manifest.json","w"), indent=2)
+          print(json.dumps(m, indent=2))
+          PY
+          python3 ops/release/release_verify.py release-manifest out/release-manifest.json out/app-release.apk src/clients/mobile-web/web-dist.sha256 "$RELEASE_SHA"
+          { echo "### release-build"; echo '```'; cat out/release-manifest.json; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload web bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: |
+            src/clients/mobile-web/dist
+            src/clients/mobile-web/web-dist.sha256
+          if-no-files-found: error
+          retention-days: ${{ github.event_name == 'pull_request' && 1 || 30 }}
+
+      - name: Upload APK + release manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: |
+            out/app-release.apk
+            out/release-manifest.json
+          if-no-files-found: error
+          retention-days: ${{ github.event_name == 'pull_request' && 1 || 30 }}
+
+      - name: Upload Play bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-aab
+          path: out/app-release.aab
+          if-no-files-found: error
+          retention-days: ${{ github.event_name == 'pull_request' && 1 || 30 }}
