@@ -27,10 +27,9 @@
 # has no working login and no sync, and presents as mixed-content failures
 # against the operator's own machine. Setting only the Maps key ships that.
 #
-# Values mirror `android-release.yml:47-61` EXACTLY, and the build command is
-# `npm run build` — the same script the APK job runs — so "the APK and the web
-# bundle were built from the same inputs" is a true statement rather than a
-# hopeful one.
+# This is the ONLY job that builds the web bundle. As of release 1.0.13 the APK
+# job no longer rebuilds it: it downloads this job's `web-dist` artifact and
+# re-verifies every sha256, so web and APK ship identical bytes.
 name: web-release
 
 on:
@@ -149,6 +148,35 @@ jobs:
           if grep -rqF 'localhost:5048' dist/; then
             echo "::warning::The bundle also contains a localhost:5048 fallback string. Expected — it is the literal in the client fallbacks — but check it is not the resolved base URL."
           fi
+
+      # ONE BUNDLE, TWO CLIENTS (release 1.0.13). The APK used to rebuild the web
+      # assets itself, on Node 22 where this job uses Node 20 - so "the web bundle
+      # and the APK were built from the same inputs" was never byte-true. This
+      # step fixes the identity of what is about to be published: a sha256 of
+      # every file in dist/, uploaded with dist/ as the `web-dist` artifact.
+      # android-release.yml consumes THIS artifact (by run id) and re-verifies
+      # every hash, including inside the Android assets after `cap sync`.
+      - name: Hash the bundle (identity of what is about to be published)
+        working-directory: src/clients/mobile-web
+        run: |
+          set -euo pipefail
+          (cd dist && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) > web-dist.sha256
+          {
+            echo "### web bundle identity"
+            echo "- git sha: \`${GITHUB_SHA}\`"
+            echo "- files: $(wc -l < web-dist.sha256)"
+            echo "- manifest sha256: \`$(sha256sum web-dist.sha256 | cut -d' ' -f1)\`"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the bundle for the APK job
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: |
+            src/clients/mobile-web/dist
+            src/clients/mobile-web/web-dist.sha256
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4

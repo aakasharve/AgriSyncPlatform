@@ -5,14 +5,26 @@ on:
   # here and no step ever read it, so choosing "patch" in the Run-workflow dialog
   # silently did nothing. The version is a COMMIT: edit versionCode / versionName
   # in src/clients/mobile-web/android/app/build.gradle and push that.
+  #
+  # RELEASE 1.0.13: no `push: tags: v*` trigger any more, and no web build here.
+  # The APK is built ONLY from the web bundle that web-release.yml already
+  # produced and published (artifact `web-dist`), so the two clients ship the
+  # same bytes. A tag push cannot name that run, so it can no longer start this
+  # workflow. Dispatch it from the SAME commit as the web run, passing its id.
   workflow_dispatch:
-  push:
-    tags:
-      - 'v*'
+    inputs:
+      web_run_id:
+        description: 'Run id of the SUCCESSFUL web-release run (same commit) whose web-dist bundle this APK embeds'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
   build-apk:
-    name: Build & publish signed APK
+    name: Build & publish signed APK (private)
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -42,47 +54,50 @@ jobs:
         working-directory: src/clients/mobile-web
         run: npm ci
 
-      - name: Build web assets
-        working-directory: src/clients/mobile-web
+      # The web assets are NOT rebuilt here. They are the exact bundle web-release
+      # published, bound to this commit and to a successful run.
+      - name: Verify the web run this APK will embed
         env:
-          # Backend API base URL — baked into the bundle so the packaged APK
-          # talks to prod (not https://localhost). Capacitor serves the app from
-          # https://localhost with NO server.url, so without this resolveApiBaseUrl()
-          # returns '' → all API calls hit the WebView origin and fail (no login,
-          # no sync). .env.production carries this for web builds but is gitignored
-          # / absent in CI, so CI must set it explicitly. Public URL, not a secret.
-          VITE_AGRISYNC_API_URL: "https://api.shramsafal.in"
-          # Google Maps JS key — baked into the bundle at build time so the
-          # farm-boundary map + GPS render inside the APK. Public client key
-          # (protected by HTTP-referrer restrictions, not secrecy); stored as a
-          # repo secret so CI builds carry it (.env.local is gitignored / absent
-          # in CI). See src/clients/mobile-web/.env.production.example.
-          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
-          # DFES companion (spec: dfes-companion-2026-07-11) — read via the
-          # isEnabled('VITE_...') helper in src/app/featureFlags.ts. Vite bakes
-          # import.meta.env at BUILD time, so a web-side flag flip never reaches
-          # an already-installed APK; CI must set the release value explicitly.
-          # Founder Acceptance Gate for the companion covers these five.
-          VITE_UNDERSTANDING_METER: "1"
-          VITE_STAGE_QUESTIONS: "1"
-          VITE_DISCIPLINE_SYSTEM: "1"
-          # Phase 4 voice-first continuity. Held back pending founder decision
-          # (see wave-0.4 handoff); founder ruling 2026-08-16 turns it ON for
-          # the pilot. Must match release.yml so browser and APK agree.
-          VITE_VOICE_CONTINUITY: "1"
-          VITE_DAILY_LOOP: "1"
-          VITE_TASK_CLOSE_CONFIRM: "1"
-          # Founder decision 2026-07-19 (see featureFlags.ts) pauses the rich-day
-          # unlock counter. This flag defaults OFF when unset — omitting it here
-          # would silently bring the counter back in the shipped APK.
-          VITE_UNLOCK_COUNTER_PAUSED: "1"
-          # Dev/test-only switches — must ship OFF in the release build.
-          VITE_SIMULATE_UNLOCK: "0"
-        run: npm run build
+          GH_TOKEN: ${{ github.token }}
+          WEB_RUN_ID: ${{ inputs.web_run_id }}
+        run: |
+          set -euo pipefail
+          INFO=$(gh run view "$WEB_RUN_ID" --repo "$GITHUB_REPOSITORY" --json conclusion,headSha,workflowName -q '[.workflowName,.conclusion,.headSha]|@tsv')
+          IFS=$'\t' read -r WF CONCL HEAD <<< "$INFO"
+          [ "$WF" = "web-release" ]   || { echo "::error::run $WEB_RUN_ID is '$WF', not web-release"; exit 1; }
+          [ "$CONCL" = "success" ]    || { echo "::error::web-release run $WEB_RUN_ID did not succeed ($CONCL)"; exit 1; }
+          [ "$HEAD" = "$GITHUB_SHA" ] || { echo "::error::web run built $HEAD but this APK is $GITHUB_SHA - they must be the same commit"; exit 1; }
+          echo "web-release run $WEB_RUN_ID succeeded on $HEAD"
+
+      - name: Download the published web bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: src/clients/mobile-web
+          run-id: ${{ inputs.web_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Verify the bundle is byte-identical to what web-release hashed
+        working-directory: src/clients/mobile-web
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum --check --strict --quiet ../web-dist.sha256)
+          test "$(cd dist && find . -type f | wc -l)" = "$(wc -l < web-dist.sha256)" \
+            || { echo "::error::dist/ holds files the manifest does not list"; exit 1; }
+          echo "dist/ matches the manifest ($(wc -l < web-dist.sha256) files)"
 
       - name: Cap sync android
         working-directory: src/clients/mobile-web
         run: npx cap sync android
+
+      # Bundle identity inside the APK input: every file the web job hashed must
+      # exist, unchanged, in the Android assets that Gradle packages.
+      - name: Verify the Android assets carry the same bundle
+        run: |
+          set -euo pipefail
+          cd src/clients/mobile-web/android/app/src/main/assets/public
+          sha256sum --check --strict --quiet "$GITHUB_WORKSPACE/src/clients/mobile-web/web-dist.sha256"
+          echo "android assets match the web manifest"
 
       # The signing key is NOT in the repo — it is this secret plus the founder's
       # offline backup. Everything below is a guard, because every failure mode
@@ -153,6 +168,21 @@ jobs:
           ls -lh "$APK"
           echo "APK_PATH=$APK" >> "$GITHUB_ENV"
 
+      # Version + signing identity of the artifact, for the release evidence.
+      - name: Record APK identity (version, signer, sha256)
+        run: |
+          set -euo pipefail
+          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" verify --print-certs "$APK_PATH" | grep -E "certificate SHA-256 digest|Signer #1" | tee /tmp/apk-certs.txt
+          "$BT/aapt2" dump badging "$APK_PATH" | grep -E "^package:" | tee /tmp/apk-badging.txt
+          {
+            echo "### APK identity"
+            echo "- git sha: \`${GITHUB_SHA}\`"
+            echo "- apk sha256: \`$(sha256sum "$APK_PATH" | cut -d' ' -f1)\`"
+            echo "- web manifest sha256: \`$(sha256sum src/clients/mobile-web/web-dist.sha256 | cut -d' ' -f1)\`"
+            echo '```'; cat /tmp/apk-badging.txt /tmp/apk-certs.txt; echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -160,10 +190,14 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-south-1
 
-      - name: Upload APK to S3 (versioned + latest + marketing site)
+      # PRIVATE DISTRIBUTION. The APK goes to the app bucket only, whose /apk/*
+      # path sits behind the CloudFront basic-auth function (shramsafal-apk-auth,
+      # dist EFLL3RCLOOO60). It is deliberately NOT copied to the marketing
+      # bucket or linked from shramsafal.in: on 2026-10-02 a public APK link was
+      # found on the marketing site and closed. Do not re-add it.
+      - name: Upload APK to S3 (private app bucket, versioned and latest)
         run: |
           SHA_SHORT=$(git rev-parse --short HEAD)
-          # app bucket — versioned + latest
           aws s3 cp "$APK_PATH" \
             "s3://shramsafal-app-prod/apk/shramsafal-${SHA_SHORT}.apk" \
             --content-type application/vnd.android.package-archive \
@@ -172,19 +206,7 @@ jobs:
             "s3://shramsafal-app-prod/apk/shramsafal-latest.apk" \
             --content-type application/vnd.android.package-archive \
             --cache-control "no-cache, no-store, must-revalidate"
-          # marketing site — /download/ path so shramsafal.in/download/shramsafal-latest.apk works
-          aws s3 cp "$APK_PATH" \
-            "s3://shramsafal-marketing-prod/download/shramsafal-latest.apk" \
-            --content-type application/vnd.android.package-archive \
-            --cache-control "no-cache, no-store, must-revalidate"
-          # Invalidate marketing site CloudFront for the download path
-          aws cloudfront create-invalidation \
-            --distribution-id E2M06A2B71ZW1O \
-            --paths "/download/shramsafal-latest.apk" \
-            --output text --query "Invalidation.Id"
-          echo "✅ APK published:"
-          echo "   Download: https://shramsafal.in/download/shramsafal-latest.apk"
-          echo "   Versioned: https://app.shramsafal.in/apk/shramsafal-${SHA_SHORT}.apk"
+          echo "APK published (private, basic-auth): https://app.shramsafal.in/apk/shramsafal-${SHA_SHORT}.apk"
 
       - name: Upload APK as workflow artifact
         uses: actions/upload-artifact@v4

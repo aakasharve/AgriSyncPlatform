@@ -22,11 +22,15 @@ build put there.
 
 ## CI is the normal path
 
-Run the **android-release** workflow from the Actions tab. It produces both:
+Run **web-release** first (it builds and publishes the one web bundle and uploads it as the
+`web-dist` artifact), then run **android-release** from the same commit, giving it the
+successful web-release run id. The APK does not rebuild the web assets: it downloads that
+bundle and re-verifies every sha256 before and after `cap sync`. There is no tag trigger.
+It produces both:
 
 | Artifact | What it is for |
 |---|---|
-| `shramsafal-release-apk` | what a pilot farmer sideloads, also published to `shramsafal.in/download` |
+| `shramsafal-release-apk` | what a pilot farmer sideloads; published **privately** to `app.shramsafal.in/apk/` (basic-auth), never to the marketing site |
 | `shramsafal-release-aab` | what Google Play requires; upload to Play Console by hand |
 
 The workflow fails early, with a named message, if any signing secret is empty,
