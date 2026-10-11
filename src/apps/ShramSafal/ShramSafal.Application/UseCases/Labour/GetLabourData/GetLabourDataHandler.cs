@@ -1116,7 +1116,11 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
     {
         if (view == LabourRegisterView.OwnerBook)
         {
-            return dto with { View = "owner" };
+            // Pending is the size of the list the caller receives - by
+            // construction the same number the handler already counted (one
+            // review card per pending log), restated here so the two can never
+            // drift. It is never windowed: the inbox is an obligation.
+            return dto with { View = "owner", Dashboard = dto.Dashboard with { Pending = dto.Review.Count } };
         }
 
         // narrowToCaller (own-row callers without a grant): only the caller's own
@@ -1126,11 +1130,43 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             .Where(p => !narrowToCaller || (ownPersonId is not null && p.Id == ownPersonId))
             .Select(p => p with { RecordedWages = null, Paid = null, Advance = null })
             .ToList();
-        var dashboard = dto.Dashboard with { Wages = null, Advances = null, Owed = null, Money = null };
+        // N1: every id list that points INTO People is narrowed with it, so no
+        // reference in the response can name a person who is not in it (the hub
+        // dereferences topLevelIds into people). Un-narrowed views keep their
+        // lists exactly as built.
+        var keptIds = people.Select(p => p.Id).ToHashSet();
+        var topLevelIds = narrowToCaller
+            ? dto.TopLevelIds.Where(keptIds.Contains).ToList()
+            : dto.TopLevelIds;
+        if (narrowToCaller)
+        {
+            people = people
+                .Select(p => p with
+                {
+                    MemberIds = p.MemberIds?.Where(keptIds.Contains).ToList(),
+                    AppointedById = p.AppointedById is not null && keptIds.Contains(p.AppointedById)
+                        ? p.AppointedById
+                        : null,
+                })
+                .ToList();
+        }
+
         var review = dto.Review
             .Where(r => !narrowToCaller || (ownReviewIds is not null && ownReviewIds.Contains(r.Id)))
             .Select(r => r with { Points = r.Points with { Amount = null } })
             .ToList();
+        // The badge must agree with the list under it, for every role: pending
+        // is the number of cards THIS caller receives. For owner, secondary
+        // owner, Mukadam and a granted member that is the farm's whole inbox
+        // (unchanged); for a no-grant Worker it is his own.
+        var dashboard = dto.Dashboard with
+        {
+            Wages = null,
+            Advances = null,
+            Owed = null,
+            Money = null,
+            Pending = review.Count,
+        };
         var ledger = view == LabourRegisterView.OwnRow
             ? dto.Ledger with { Rows = [], CrewRows = [] }
             : dto.Ledger;
@@ -1141,9 +1177,13 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         return dto with
         {
             View = view == LabourRegisterView.CrewAttendance ? "crew" : "own",
+            TopLevelIds = topLevelIds,
             People = people,
             Dashboard = dashboard,
             Review = review,
+            // Attendance rows name FIELD OPERATORS (other people's presence today);
+            // a narrowed caller is not permitted to see them.
+            Attendance = narrowToCaller ? dto.Attendance with { Rows = [] } : dto.Attendance,
             Ledger = ledger,
             Home = home,
         };

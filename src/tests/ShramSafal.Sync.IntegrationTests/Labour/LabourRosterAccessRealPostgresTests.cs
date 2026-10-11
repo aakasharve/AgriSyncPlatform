@@ -100,6 +100,11 @@ public sealed class LabourRosterAccessRealPostgresTests(Xunit.Abstractions.ITest
             await SeedMembershipAsync(raw, PlainWorker, "Worker", grant: false);
             await SeedMembershipAsync(raw, OtherWorker, "Worker", grant: false);
             await SeedMembershipAsync(raw, GrantedWorker, "Worker", grant: true);
+            // A populated farm: Draft logs by three different people, all older
+            // than any "today"/"week" window so a date filter cannot hide them.
+            for (var i = 0; i < 3; i++) await SeedDraftLogAsync(raw, PlainWorker, i + 1);
+            for (var i = 0; i < 2; i++) await SeedDraftLogAsync(raw, OtherWorker, i + 4);
+            await SeedDraftLogAsync(raw, Owner, 6);
 
             foreach (var name in RosterNames)
             {
@@ -264,6 +269,162 @@ public sealed class LabourRosterAccessRealPostgresTests(Xunit.Abstractions.ITest
         granted.People.Should().BeEquivalentTo(everyone, "a granted worker keeps what the grant already allows");
     }
 
+    // ── N1: no dangling person reference, for EVERY role ────────────────────
+
+    [Theory]
+    [InlineData("owner")]
+    [InlineData("secondary-owner")]
+    [InlineData("mukadam")]
+    [InlineData("granted-worker")]
+    [InlineData("plain-worker")]
+    [InlineData("other-plain-worker")]
+    public async Task Every_person_id_the_register_response_references_exists_in_people(string who)
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        var userId = who switch
+        {
+            "owner" => Owner,
+            "secondary-owner" => SecondOwner,
+            "mukadam" => Mukadam,
+            "granted-worker" => GrantedWorker,
+            "plain-worker" => PlainWorker,
+            _ => OtherWorker,
+        };
+
+        var dto = await ReadLabourDtoAsync(userId);
+        var known = dto.People.Select(p => p.Id).ToHashSet();
+        var referenced = dto.TopLevelIds
+            .Concat(dto.People.SelectMany(p => p.MemberIds ?? []))
+            .Concat(dto.People.Where(p => p.AppointedById is not null).Select(p => p.AppointedById!))
+            .ToList();
+
+        output.WriteLine($"[EVIDENCE] {who} view={dto.View} people={known.Count} topLevelIds={dto.TopLevelIds.Count} referenced={referenced.Count} pending={dto.Dashboard.Pending} review={dto.Review.Count}");
+        referenced.Should().OnlyContain(id => known.Contains(id), "the hub dereferences topLevelIds into people");
+        dto.TopLevelIds.Should().BeEquivalentTo(dto.People.Select(p => p.Id));
+    }
+
+    [Fact]
+    public async Task A_plain_workers_pending_badge_equals_the_cards_he_can_see_and_owners_keep_the_farm_inbox()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        var plain = await ReadLabourDtoAsync(PlainWorker);
+        plain.Dashboard.Pending.Should().Be(plain.Review.Count);
+
+        var owner = await ReadLabourDtoAsync(Owner);
+        owner.Dashboard.Pending.Should().Be(owner.Review.Count);
+        (await ReadLabourDtoAsync(Mukadam)).Dashboard.Pending.Should().Be(owner.Dashboard.Pending);
+        (await ReadLabourDtoAsync(GrantedWorker)).Dashboard.Pending.Should().Be(owner.Dashboard.Pending);
+    }
+
+    // ── Populated farm: the Worker's view through the grant lifecycle ────────
+
+    private async Task AssertNarrowedWorkerAsync(string step)
+    {
+        var dto = await ReadLabourDtoAsync(PlainWorker);
+        var self = PlainWorker.ToString();
+        output.WriteLine($"[EVIDENCE] {step}: people={dto.People.Count} top={dto.TopLevelIds.Count} review={dto.Review.Count} pending={dto.Dashboard.Pending}");
+
+        // INTENDED Worker narrowing - explicit, never loosened.
+        dto.View.Should().Be("own", step);
+        dto.People.Select(p => p.Id).Should().Equal([self], step);
+        dto.TopLevelIds.Should().Equal([self], step);
+        dto.Review.Should().HaveCount(3, $"{step}: only the Drafts he authored");
+        dto.Dashboard.Pending.Should().Be(3, $"{step}: the badge equals the cards he can see");
+        dto.Ledger.Rows.Should().BeEmpty(step);
+        dto.Ledger.CrewRows.Should().BeEmpty(step);
+        dto.Dashboard.Money.Should().BeNull(step);
+        dto.Dashboard.Wages.Should().BeNull(step);
+        dto.Dashboard.Owed.Should().BeNull(step);
+        dto.People.Single().Paid.Should().BeNull(step);
+        dto.Review.Should().OnlyContain(r => r.Points.Amount == null, step);
+        (await ProbeRosterAsync(PlainWorker)).ErrorKind.Should().Be("Forbidden", $"{step}: roster ReadNotAllowed");
+        AssertNoDangling(dto);
+    }
+
+    private async Task AssertGrantedWorkerAsync(string step)
+    {
+        var dto = await ReadLabourDtoAsync(PlainWorker);
+        var everyone = new[] { Mukadam, PlainWorker, OtherWorker, GrantedWorker }.Select(g => g.ToString()).ToArray();
+        output.WriteLine($"[EVIDENCE] {step}: people={dto.People.Count} top={dto.TopLevelIds.Count} review={dto.Review.Count} pending={dto.Dashboard.Pending}");
+
+        dto.View.Should().Be("own", $"{step}: a grant widens what he may DO, never his money view");
+        dto.People.Select(p => p.Id).Should().BeEquivalentTo(everyone, step);
+        dto.TopLevelIds.Should().BeEquivalentTo(everyone, step);
+        dto.Review.Should().HaveCount(6, $"{step}: the whole inbox");
+        dto.Dashboard.Pending.Should().Be(6, step);
+        dto.Dashboard.Money.Should().BeNull(step);
+        dto.People.Should().OnlyContain(p => p.Paid == null && p.RecordedWages == null, step);
+        (await ProbeRosterAsync(PlainWorker)).Succeeded.Should().BeTrue($"{step}: roster allowed");
+        AssertNoDangling(dto);
+    }
+
+    private static void AssertNoDangling(ShramSafal.Application.Contracts.Dtos.LabourDataDto dto)
+    {
+        var known = dto.People.Select(p => p.Id).ToHashSet();
+        dto.TopLevelIds.Concat(dto.People.SelectMany(p => p.MemberIds ?? []))
+            .Concat(dto.People.Where(p => p.AppointedById is not null).Select(p => p.AppointedById!))
+            .Should().OnlyContain(id => known.Contains(id));
+        dto.TopLevelIds.Should().BeEquivalentTo(dto.People.Select(p => p.Id));
+    }
+
+    [Fact]
+    public async Task Populated_farm_worker_view_through_no_grant_grant_revocation_and_expiry()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        await AssertNarrowedWorkerAsync("no grant");
+
+        await SetGrantAsync(PlainWorker, true);
+        await AssertGrantedWorkerAsync("active grant (no expiry)");
+
+        await SetGrantAsync(PlainWorker, false);
+        await AssertNarrowedWorkerAsync("revoked");
+
+        await SetGrantAsync(PlainWorker, true, TimeSpan.FromDays(1));
+        await AssertGrantedWorkerAsync("timed grant, live");
+
+        await SetGrantAsync(PlainWorker, true, TimeSpan.FromMinutes(-1));
+        await AssertNarrowedWorkerAsync("timed grant, EXPIRED");
+    }
+
+    [Fact]
+    public async Task Pending_equals_the_visible_review_list_for_every_role_and_ignores_the_date_window()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        var expected = new Dictionary<Guid, int>
+        {
+            [Owner] = 6,
+            [SecondOwner] = 6,
+            [Mukadam] = 6,
+            [GrantedWorker] = 6,
+            [PlainWorker] = 3,
+            [OtherWorker] = 2,
+        };
+
+        foreach (var (user, count) in expected)
+        {
+            foreach (var window in new[] { null, "alltime", "today", "week" })
+            {
+                var dto = await ReadLabourDtoAsync(user, window);
+                dto.Review.Should().HaveCount(count, $"{user} window={window}");
+                dto.Dashboard.Pending.Should().Be(count, $"{user} window={window}: pending is an inbox, never windowed");
+                dto.Dashboard.Pending.Should().Be(dto.Review.Count);
+            }
+
+            // Evidence for the before/after comparison: the whole payload of every
+            // role that is NOT narrowed must hash identically on the old and new handler.
+            if (user != PlainWorker && user != OtherWorker)
+            {
+                var json = System.Text.Json.JsonSerializer.Serialize(await ReadLabourDtoAsync(user));
+                var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(json)))[..16];
+                output.WriteLine($"[PAYLOAD-HASH] {user.ToString()[^2..]} {hash}");
+            }
+        }
+    }
+
     // ═════════════════════════════════════════════════════════════════════════
     // Harness
     // ═════════════════════════════════════════════════════════════════════════
@@ -304,9 +465,15 @@ public sealed class LabourRosterAccessRealPostgresTests(Xunit.Abstractions.ITest
     }
 
     private static GetFieldOperatorsHandler BuildRosterHandler(IServiceProvider sp)
-        => new(sp.GetRequiredService<IShramSafalRepository>(), sp.GetRequiredService<IClock>());
+        => new(sp.GetRequiredService<IShramSafalRepository>(), new FixedClock(Now));
 
     private async Task<PeopleProbe> ReadLabourPeopleIdsAsync(Guid userId)
+    {
+        var dto = await ReadLabourDtoAsync(userId);
+        return new PeopleProbe(dto.View, dto.People.Select(p => p.Id).ToList());
+    }
+
+    private async Task<ShramSafal.Application.Contracts.Dtos.LabourDataDto> ReadLabourDtoAsync(Guid userId, string? window = null)
     {
         await using var scope = _rootProvider!.CreateAsyncScope();
         var sp = scope.ServiceProvider;
@@ -320,11 +487,11 @@ public sealed class LabourRosterAccessRealPostgresTests(Xunit.Abstractions.ITest
 
         var result = await new GetLabourDataHandler(
                 sp.GetRequiredService<IShramSafalRepository>(), new FixedClock(Now))
-            .HandleAsync(new GetLabourDataQuery(new FarmId(Farm), new UserId(userId)));
+            .HandleAsync(new GetLabourDataQuery(new FarmId(Farm), new UserId(userId), window));
         await tx.CommitAsync();
 
         result.IsSuccess.Should().BeTrue();
-        return new PeopleProbe(result.Value!.View, result.Value.People.Select(p => p.Id).ToList());
+        return result.Value!;
     }
 
     private async Task AssertAppRoleIsNotVacuousAsync()
@@ -355,6 +522,39 @@ public sealed class LabourRosterAccessRealPostgresTests(Xunit.Abstractions.ITest
         cmd.Parameters.AddWithValue("id", Farm);
         cmd.Parameters.AddWithValue("owner", Owner);
         cmd.Parameters.AddWithValue("account", Account);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static async Task SeedDraftLogAsync(NpgsqlConnection db, Guid operatorUserId, int n)
+    {
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO ssf.daily_logs ("Id", farm_id, plot_id, crop_cycle_id, plot_ids, scope, operator_user_id, log_date, created_at_utc, source, model_version, prompt_version)
+            VALUES (@id, @farm, NULL, NULL, ARRAY[]::uuid[], 'Farm', @op, @date, NOW(), 'manual', 'unknown', 'unknown');
+            """;
+        cmd.Parameters.AddWithValue("id", Guid.Parse($"6a000000-0000-0000-0000-00000000f0{n:D2}"));
+        cmd.Parameters.AddWithValue("farm", Farm);
+        cmd.Parameters.AddWithValue("op", operatorUserId);
+        cmd.Parameters.AddWithValue("date", new DateOnly(2026, 8, 1));
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    // Expiry is stated against the SAME fixed clock the handlers read (`Now`), so
+    // "live" and "expired" mean what they say whatever day the suite runs.
+    private async Task SetGrantAsync(Guid userId, bool granted, TimeSpan? expiresIn = null)
+    {
+        await using var raw = new NpgsqlConnection(_superuserConn);
+        await raw.OpenAsync();
+        await using var cmd = raw.CreateCommand();
+        cmd.CommandText = """
+            UPDATE ssf.farm_memberships
+            SET can_manage_labour_records = @g, labour_grant_expires_at_utc = @exp
+            WHERE farm_id = @farm AND user_id = @user;
+            """;
+        cmd.Parameters.AddWithValue("g", granted);
+        cmd.Parameters.AddWithValue("exp", expiresIn is null ? DBNull.Value : Now.Add(expiresIn.Value));
+        cmd.Parameters.AddWithValue("farm", Farm);
+        cmd.Parameters.AddWithValue("user", userId);
         await cmd.ExecuteNonQueryAsync();
     }
 

@@ -150,6 +150,120 @@ public sealed class LabourRegisterViewTests
         Assert.Null(dto.People[0].Paid);
     }
 
+    /// <summary>
+    /// N1 (Labour V2 journeys, 2026-10-11): narrowing People without narrowing
+    /// the id lists that point INTO People left TopLevelIds naming people who
+    /// were no longer in the response, and the hub dereferenced them. The
+    /// invariant: every person id referenced anywhere in the response exists in
+    /// People, for every view and for narrowed and un-narrowed own-row callers.
+    /// </summary>
+    private static LabourDataDto CrewDto()
+    {
+        var full = FullDto();
+        var mukadam = full.People[0] with { Id = "p2", Name = "मुकादम", Role = "mukadam", MemberIds = ["p1", "p3"] };
+        var third = full.People[0] with { Id = "p3", Name = "बाळू", AppointedById = "p2" };
+        return full with
+        {
+            TopLevelIds = ["p1", "p2", "p3"],
+            People = [full.People[0], mukadam, third],
+        };
+    }
+
+    private static void AssertNoDanglingPersonReference(LabourDataDto dto)
+    {
+        var known = dto.People.Select(p => p.Id).ToHashSet();
+        foreach (var id in dto.TopLevelIds)
+        {
+            Assert.Contains(id, known);
+        }
+
+        foreach (var person in dto.People)
+        {
+            foreach (var id in person.MemberIds ?? [])
+            {
+                Assert.Contains(id, known);
+            }
+
+            if (person.AppointedById is not null)
+            {
+                Assert.Contains(person.AppointedById, known);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("OwnerBook", false)]
+    [InlineData("CrewAttendance", false)]
+    [InlineData("OwnRow", false)]
+    [InlineData("OwnRow", true)]
+    public void EveryPersonIdReferencedInTheResponseExistsInPeople(string viewName, bool narrow)
+    {
+        var view = Enum.Parse<LabourRegisterView>(viewName);
+        var dto = GetLabourDataHandler.ApplyRegisterView(
+            CrewDto(), view, narrow ? "p1" : null, narrow ? new HashSet<string>() : null, narrow);
+
+        AssertNoDanglingPersonReference(dto);
+    }
+
+    [Fact]
+    public void NarrowedCallerKeepsOnlyHisOwnTopLevelIdAndNoTeamLinks()
+    {
+        var dto = GetLabourDataHandler.ApplyRegisterView(
+            CrewDto(), LabourRegisterView.OwnRow, "p1", new HashSet<string>(), narrowToCaller: true);
+
+        Assert.Equal("p1", Assert.Single(dto.TopLevelIds));
+        Assert.Equal("p1", Assert.Single(dto.People).Id);
+    }
+
+    [Fact]
+    public void UnnarrowedViewsKeepTheirTopLevelIdsAndTeamLinksUntouched()
+    {
+        foreach (var view in new[] { LabourRegisterView.OwnerBook, LabourRegisterView.CrewAttendance })
+        {
+            var dto = GetLabourDataHandler.ApplyRegisterView(CrewDto(), view);
+            Assert.Equal(["p1", "p2", "p3"], dto.TopLevelIds);
+            Assert.Equal(["p1", "p3"], dto.People[1].MemberIds);
+            Assert.Equal("p2", dto.People[2].AppointedById);
+        }
+    }
+
+    [Fact]
+    public void NarrowedCallerGetsNoOtherPeoplesAttendanceRowsButOthersKeepTheirs()
+    {
+        var full = CrewDto();
+        full = full with { Attendance = full.Attendance with { Rows = [new LabourAttendanceRowDto("op-9", "present")] } };
+
+        var narrowed = GetLabourDataHandler.ApplyRegisterView(
+            full, LabourRegisterView.OwnRow, "p1", new HashSet<string>(), narrowToCaller: true);
+        Assert.Empty(narrowed.Attendance.Rows);
+
+        foreach (var view in new[] { LabourRegisterView.OwnerBook, LabourRegisterView.CrewAttendance, LabourRegisterView.OwnRow })
+        {
+            Assert.Single(GetLabourDataHandler.ApplyRegisterView(full, view).Attendance.Rows);
+        }
+    }
+
+    [Fact]
+    public void NarrowedCallersPendingCountIsTheNumberOfCardsHeCanSee()
+    {
+        var full = FullDto();
+        full = full with
+        {
+            Review = [full.Review[0], full.Review[0] with { Id = "r2" }, full.Review[0] with { Id = "r3" }],
+            Dashboard = full.Dashboard with { Pending = 3 },
+        };
+
+        var narrowed = GetLabourDataHandler.ApplyRegisterView(
+            full, LabourRegisterView.OwnRow, "p1", new HashSet<string> { "r2" }, narrowToCaller: true);
+        Assert.Equal(1, narrowed.Dashboard.Pending);
+        Assert.Equal(narrowed.Review.Count, narrowed.Dashboard.Pending);
+
+        // Owner, crew and a GRANTED own-row member keep the farm-wide inbox count.
+        Assert.Equal(3, GetLabourDataHandler.ApplyRegisterView(full, LabourRegisterView.OwnerBook).Dashboard.Pending);
+        Assert.Equal(3, GetLabourDataHandler.ApplyRegisterView(full, LabourRegisterView.CrewAttendance).Dashboard.Pending);
+        Assert.Equal(3, GetLabourDataHandler.ApplyRegisterView(full, LabourRegisterView.OwnRow).Dashboard.Pending);
+    }
+
     [Fact]
     public void OwnRowNarrowingFailsClosedWithoutACallerIdentity()
     {
