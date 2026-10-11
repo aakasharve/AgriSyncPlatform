@@ -365,7 +365,9 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
             // (a second claim answering "invalid" for the token the first one
             // consumed must never throw the farmer back to Step 1).
             if (completedJoins.has(context.token)) return;
-            if (isOtpError(err)) {
+            // isOtpError and isInviteApiError are the same shape check, so the claim's own
+            // `join.*` codes must be told apart by prefix first, or they land in the OTP branch.
+            if (isOtpError(err) && !String(err.error).startsWith('join.')) {
                 setError(err.message);
                 if (err.error === 'otp.expired' || err.error === 'otp.locked_out' || err.error === 'otp.no_pending_challenge') {
                     setStep('phone');

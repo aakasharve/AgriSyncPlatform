@@ -23,7 +23,7 @@ const mockVerifyOtp = vi.fn();
 vi.mock('../../features/auth/data/otpClient', () => ({
     startOtp: (...a: unknown[]) => mockStartOtp(...a),
     verifyOtp: (...a: unknown[]) => mockVerifyOtp(...a),
-    isOtpError: (v: unknown) => typeof v === 'object' && v !== null && 'error' in v && 'message' in v && !('status' in v),
+    isOtpError: (v: unknown) => typeof v === 'object' && v !== null && 'error' in v && 'status' in v,
 }));
 
 const mockClaim = vi.fn();
