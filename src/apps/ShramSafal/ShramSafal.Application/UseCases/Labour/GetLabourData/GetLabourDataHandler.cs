@@ -1116,7 +1116,11 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
     {
         if (view == LabourRegisterView.OwnerBook)
         {
-            return dto with { View = "owner" };
+            // Pending is the size of the list the caller receives - by
+            // construction the same number the handler already counted (one
+            // review card per pending log), restated here so the two can never
+            // drift. It is never windowed: the inbox is an obligation.
+            return dto with { View = "owner", Dashboard = dto.Dashboard with { Pending = dto.Review.Count } };
         }
 
         // narrowToCaller (own-row callers without a grant): only the caller's own
@@ -1151,15 +1155,17 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             .Where(r => !narrowToCaller || (ownReviewIds is not null && ownReviewIds.Contains(r.Id)))
             .Select(r => r with { Points = r.Points with { Amount = null } })
             .ToList();
-        // The badge must agree with the list under it: a narrowed caller's
-        // pending count is the number of cards he can see, not the farm's inbox.
+        // The badge must agree with the list under it, for every role: pending
+        // is the number of cards THIS caller receives. For owner, secondary
+        // owner, Mukadam and a granted member that is the farm's whole inbox
+        // (unchanged); for a no-grant Worker it is his own.
         var dashboard = dto.Dashboard with
         {
             Wages = null,
             Advances = null,
             Owed = null,
             Money = null,
-            Pending = narrowToCaller ? review.Count : dto.Dashboard.Pending,
+            Pending = review.Count,
         };
         var ledger = view == LabourRegisterView.OwnRow
             ? dto.Ledger with { Rows = [], CrewRows = [] }
@@ -1175,6 +1181,9 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             People = people,
             Dashboard = dashboard,
             Review = review,
+            // Attendance rows name FIELD OPERATORS (other people's presence today);
+            // a narrowed caller is not permitted to see them.
+            Attendance = narrowToCaller ? dto.Attendance with { Rows = [] } : dto.Attendance,
             Ledger = ledger,
             Home = home,
         };

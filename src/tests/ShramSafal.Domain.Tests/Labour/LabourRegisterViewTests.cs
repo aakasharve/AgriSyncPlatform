@@ -228,6 +228,22 @@ public sealed class LabourRegisterViewTests
     }
 
     [Fact]
+    public void NarrowedCallerGetsNoOtherPeoplesAttendanceRowsButOthersKeepTheirs()
+    {
+        var full = CrewDto();
+        full = full with { Attendance = full.Attendance with { Rows = [new LabourAttendanceRowDto("op-9", "present")] } };
+
+        var narrowed = GetLabourDataHandler.ApplyRegisterView(
+            full, LabourRegisterView.OwnRow, "p1", new HashSet<string>(), narrowToCaller: true);
+        Assert.Empty(narrowed.Attendance.Rows);
+
+        foreach (var view in new[] { LabourRegisterView.OwnerBook, LabourRegisterView.CrewAttendance, LabourRegisterView.OwnRow })
+        {
+            Assert.Single(GetLabourDataHandler.ApplyRegisterView(full, view).Attendance.Rows);
+        }
+    }
+
+    [Fact]
     public void NarrowedCallersPendingCountIsTheNumberOfCardsHeCanSee()
     {
         var full = FullDto();
