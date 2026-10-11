@@ -112,4 +112,50 @@ describe('cache keying, age and erasure', () => {
         clearAuthSession();
         expect(readCachedRoster('f1')).toBeNull();
     });
+
+    it('ALLOW-LIST: an unknown property at ANY level of the wire shape never reaches the stored copy', () => {
+        const d = ownerData() as unknown as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+        d.futureTopLevelMoney = 'LEAK-TOP';
+        d.dashboard.futureWageTotal = 'LEAK-DASH';
+        d.home.futureHomeMoney = 'LEAK-HOME';
+        d.attendance.futureAttendanceMoney = 'LEAK-ATT';
+        d.ledger.futureLedgerTotal = 'LEAK-LEDGER';
+        for (const p of Object.values(d.people) as Record<string, any>[]) { p.futureHourlyRate = 'LEAK-PERSON'; p.balance.futureOwedExtra = 'LEAK-BAL'; } // eslint-disable-line @typescript-eslint/no-explicit-any
+        for (const r of d.ledger.rows as Record<string, any>[]) { // eslint-disable-line @typescript-eslint/no-explicit-any
+            r.futureRowWage = 'LEAK-ROW';
+            for (const c of r.cells) if (c) c.futureCellPay = 'LEAK-CELL';
+        }
+        d.ledger.crewRows = [{ throughFieldOperatorId: 'x', throughName: 'y', counts: [1, null], futureCrewCost: 'LEAK-CREW' }];
+        d.dashboard.plots = [{ name: 'p', days: 1, pct: 2, futurePlotCost: 'LEAK-PLOT' }];
+        const stored = JSON.stringify(toOfflineReadout(d as unknown as LabourData));
+        expect(stored).not.toContain('LEAK');
+        expect(stored).not.toContain('future');
+    });
+
+    it('ALLOW-LIST: the stored shape has exactly the known property names', () => {
+        const d = ownerData();
+        d.ledger.crewRows = [{ throughFieldOperatorId: 'x', throughName: 'y', counts: [1, null] }];
+        const keys = new Set<string>();
+        const walk = (v: unknown): void => {
+            if (Array.isArray(v)) { v.forEach(walk); return; }
+            if (v && typeof v === 'object') {
+                for (const [k, x] of Object.entries(v)) {
+                    if (!/^[0-9a-f-]{8,}$/i.test(k) && !(k in d.people)) keys.add(k);
+                    walk(x);
+                }
+            }
+        };
+        walk(toOfflineReadout(d));
+        const personIds = new Set(Object.keys(d.people));
+        const names = [...keys].filter((k) => !personIds.has(k)).sort();
+        expect(names).toEqual([
+            'advance', 'advances', 'appointedById', 'balance', 'cells', 'counts', 'crewRows', 'dashboard', 'day', 'days',
+            'daysThisWeek', 'extraHours', 'fieldOperatorId', 'headcount', 'home', 'hours', 'initial', 'insight', 'ledger',
+            'logs', 'manDays', 'manDaysTrend', 'memberIds', 'money', 'name', 'night', 'onFarmToday', 'owed', 'paid',
+            'pct', 'pending', 'people', 'personId', 'plot', 'plots', 'recorded', 'review', 'role', 'rojandariStated',
+            'rojandariToday', 'rows', 'taskScope', 'temporary', 'throughFieldOperatorId', 'throughName', 'todayStatus',
+            'todaysLabourAssignmentId', 'tone', 'topLevelIds', 'ukte', 'ukteAgreed', 'ukteToday', 'verified', 'view',
+            'wages', 'weekLabel', 'work', 'attendance', 'id',
+        ].sort());
+    });
 });

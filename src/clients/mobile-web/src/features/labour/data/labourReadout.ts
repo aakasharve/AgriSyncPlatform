@@ -60,11 +60,32 @@ export function toOfflineReadout(data: LabourData): LabourData {
             plots: d.plots.map((x) => ({ name: x.name, days: x.days, pct: x.pct })),
             money: null,
         },
+        // ALLOW-LIST all the way down: every field is named. A property added to the
+        // wire type later (a wage, a rate, a total) is NOT copied until someone
+        // adds it here on purpose.
         ledger: {
             weekLabel: data.ledger.weekLabel,
             days: [...data.ledger.days],
-            rows: data.ledger.rows.map((r) => ({ ...r, cells: r.cells.map((c) => (c === null ? null : { ...c })) })),
-            crewRows: data.ledger.crewRows.map((c) => ({ ...c, counts: [...c.counts] })),
+            rows: data.ledger.rows.map((r) => ({
+                personId: r.personId,
+                fieldOperatorId: r.fieldOperatorId,
+                name: r.name,
+                initial: r.initial,
+                tone: r.tone,
+                cells: r.cells.map((c) => (c === null ? null : {
+                    day: c.day,
+                    night: c.night,
+                    hours: c.hours,
+                    extraHours: c.extraHours,
+                    ukte: c.ukte,
+                    work: c.work,
+                })),
+            })),
+            crewRows: data.ledger.crewRows.map((c) => ({
+                throughFieldOperatorId: c.throughFieldOperatorId,
+                throughName: c.throughName,
+                counts: [...c.counts],
+            })),
         },
         view: data.view,
         home: {

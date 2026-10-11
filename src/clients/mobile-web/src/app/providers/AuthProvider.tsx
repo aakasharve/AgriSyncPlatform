@@ -39,7 +39,7 @@ import { setRememberDevice, clearRememberDevice } from '../../infrastructure/sto
 // clearNativeRefreshSession is a web no-op but is called unconditionally so
 // the Android implementation (Task 5.2) automatically gets fail-closed
 // behaviour when the web build is ported.
-import { hasPendingLogout, clearPendingLogout } from '../../infrastructure/storage/PendingLogoutStore';
+import { hasPendingLogout } from '../../infrastructure/storage/PendingLogoutStore';
 import { clearNativeRefreshSession } from '../../infrastructure/storage/RefreshSessionStore';
 
 // spec: secure-remembered-device-sessions-2026-06-24
@@ -88,15 +88,18 @@ function hasJoinDeepLink(): boolean {
 }
 
 // A new sign-in replaces the previous credential (the cookie / Keystore slot),
-// so the previous user's owed revoke must be ATTEMPTED first. Failure does not
-// block the new user; the marker is dropped only after the attempt.
+// so the previous user's owed revoke must be ATTEMPTED first. A failure does not
+// block the new user from trying, but the pending-logout marker is KEPT: it is
+// cleared only when the revoke completed ('done'/'none', inside
+// completePendingLogout) or when a sign-in actually SUCCEEDS (setAuthSession).
+// Otherwise an offline login attempt that fails would drop the marker while the
+// old HttpOnly cookie is still valid, and the next online boot would silently
+// sign the previous user back in.
 async function settlePendingLogoutBeforeSignIn(): Promise<void> {
     try {
         await agriSyncClient.completePendingLogout();
     } catch {
-        // attempted; carry on
-    } finally {
-        clearPendingLogout();
+        // attempted; the marker stays unless the revoke completed
     }
 }
 

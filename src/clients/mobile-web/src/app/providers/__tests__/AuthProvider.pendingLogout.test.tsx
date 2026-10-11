@@ -198,12 +198,11 @@ describe('offline logout => pending logout', () => {
         expect(api.session?.userId).toBe('user-B');
     });
 
-    it("user B's login proceeds, and the marker is dropped, even if A's revoke could not be completed", async () => {
+    it("a login that SUCCEEDS while A's revoke keeps failing still signs B in (marker cleared by the successful sign-in)", async () => {
         await bootSignedIn();
         server.mode = 'server5xx';
         await act(async () => { await api.logout(); });
         server.calls = [];
-        // the wire recovers only for login
         const original = agriSyncClient.authHttp.defaults.adapter;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (agriSyncClient.authHttp.defaults as any).adapter = async (c: InternalAxiosRequestConfig) => {
@@ -217,8 +216,31 @@ describe('offline logout => pending logout', () => {
         };
         await act(async () => { await api.login('9999999999', 'pw'); });
         expect(count('/user/auth/logout')).toBe(1);
-        expect(hasPendingLogout()).toBe(false);
         expect(api.session?.userId).toBe('user-B');
+        expect(hasPendingLogout()).toBe(false); // cleared by the SUCCESSFUL sign-in, not by the attempt
+    });
+
+    it('a FAILED offline login attempt keeps the marker; the next ONLINE reload shows login, retries the revoke, and never signs A back in', async () => {
+        const view = await bootSignedIn();
+        server.mode = 'offline';
+        await act(async () => { await api.logout(); });
+        expect(hasPendingLogout()).toBe(true);
+
+        // tap Login while still offline: the attempt fails
+        await act(async () => { await api.login('9999999999', 'pw').catch(() => undefined); });
+        expect(hasPendingLogout()).toBe(true);
+        expect(status()).toBe('anonymous');
+
+        // back online, app reloaded
+        view.unmount();
+        server.calls = [];
+        server.mode = 'online';
+        render(<AuthProvider><Probe /></AuthProvider>);
+        await waitFor(() => expect(count('/user/auth/logout')).toBe(1));
+        expect(status()).toBe('anonymous');
+        expect(count('/user/auth/refresh')).toBe(0);
+        expect(server.credentialValid).toBe(false);
+        await waitFor(() => expect(hasPendingLogout()).toBe(false));
     });
 
     it('an ordinary ONLINE logout leaves nothing pending and revokes once', async () => {

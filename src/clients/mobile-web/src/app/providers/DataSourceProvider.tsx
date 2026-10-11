@@ -118,8 +118,10 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             setIsLoading(true);
             try {
                 console.log(`[DataSource] Initializing ${isDemoMode ? 'DEMO' : 'REAL'} mode`);
-                backgroundSyncWorker.stop();
-                attachmentUploadWorker.stop();
+                // Drain, don't just stop: the PREVIOUS user's in-flight cycle must
+                // finish before the sync badge is reset and the database address
+                // changes, or it could emit a stale rejection / touch B's rows.
+                await Promise.all([backgroundSyncWorker.stop(), attachmentUploadWorker.stop()]);
                 // The signed-in user changed (or signed out): the sync badge's
                 // in-memory rejected list belongs to the PREVIOUS user. Forget
                 // it; the new user's own parked rows are re-announced from THEIR
