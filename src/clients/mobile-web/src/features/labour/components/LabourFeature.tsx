@@ -539,7 +539,7 @@ export const LabourFeature: React.FC<{
                 roster belongs to, and the local log the engagement id was
                 minted on. Both already exist here; neither is required, and
                 without them the sheet renders exactly as it did before. */}
-            <ReviewSheet open={reviewOpen} data={data} onClose={() => setReviewOpen(false)} onToast={showToast} onApproved={refresh} farmId={farm?.farmId} history={history} />
+            <ReviewSheet open={reviewOpen} data={data} onClose={() => setReviewOpen(false)} onToast={showToast} onApproved={refresh} farmId={farm?.farmId} history={history} reviewListUnknown={error} />
 
             {cellDetail && (
                 <HajeriCellDetail
