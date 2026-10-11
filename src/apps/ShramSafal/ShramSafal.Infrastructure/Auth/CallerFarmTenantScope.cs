@@ -118,3 +118,50 @@ internal sealed class CallerFarmTenantScope(
         return Result.Success();
     }
 }
+
+/// <summary>
+/// spec: 2026-08-25-prod-cutover-waves - see <see cref="IJoinClaimTenantScope"/>. Lives in this
+/// file deliberately: it uses the same admin-elevate + transaction-local <c>set_config</c>
+/// technique as <see cref="CallerFarmTenantScope"/> above, and this file is the single
+/// reviewed home of that technique (<c>RlsIdentityScopeRules.GucWriteAllowlist</c>).
+/// <c>RlsIdentityScope.RunAsFarmAsync</c> cannot be used here because it demands the farm's
+/// owner-account id, which is unknowable before the farm row (RLS-protected by farm id) is read.
+/// The policies this claim must satisfy (<c>p_tenant_farms</c>, <c>p_tenant_farm_memberships</c>,
+/// <c>p_tenant_audit_events</c>) key on <c>agrisync.farm_id</c> alone.
+/// </summary>
+internal sealed class JoinClaimTenantScope(
+    TenantContext tenantContext,
+    ShramSafalDbContext db) : IJoinClaimTenantScope
+{
+    public void BeginTokenLookup()
+    {
+        // No FORCE-RLS and no raw SQL under a non-relational provider (EF InMemory); nothing
+        // to elevate away from either, because the interceptor does not exist there.
+        if (!db.Database.IsRelational())
+        {
+            return;
+        }
+
+        // Silences the interceptor ONLY. Sets no GUC => no row of any RLS table is visible.
+        // Throws if a single-tenant claim was already set (it cannot be on this route).
+        tenantContext.ElevateToAdminCrossTenant();
+    }
+
+    public async Task PublishTokenFarmScopeAsync(Guid tokenFarmId, Guid claimantUserId, CancellationToken ct = default)
+    {
+        if (tokenFarmId == Guid.Empty || claimantUserId == Guid.Empty)
+        {
+            throw new ArgumentException("A token-validated farm id and a claimant user id are both required.");
+        }
+
+        if (!db.Database.IsRelational())
+        {
+            return;
+        }
+
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.farm_id', {tokenFarmId.ToString()}, true)", ct);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.user_id', {claimantUserId.ToString()}, true)", ct);
+    }
+}

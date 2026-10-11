@@ -191,8 +191,8 @@ public sealed class InviteQrRoutesRealPostgresTests : IAsyncLifetime
         rotated.InvitationId.Should().NotBe(first.InvitationId);
 
         // The previous QR is dead in the ledger: its token is revoked, the new one is live.
-        // (Proven at the row level; the HTTP claim of a rotated-away token is the skipped
-        // fact below - /join/claim has its own, separate tenant-scope defect.)
+        // (Proven at the row level here; the HTTP claim of a rotated-away token is the
+        // worker-claim fact below.)
         (await TokenIsRevokedAsync(first.Token)).Should().BeTrue("a rotated-away QR must stop working");
         (await TokenIsRevokedAsync(rotated.Token)).Should().BeFalse();
         (await LiveTokenCountAsync(FarmA)).Should().Be(1);
@@ -202,13 +202,9 @@ public sealed class InviteQrRoutesRealPostgresTests : IAsyncLifetime
         again.Token.Should().Be(rotated.Token);
     }
 
-    // KNOWN, SEPARATE DEFECT (reported, not fixed here): POST /shramsafal/join/claim also fails
-    // the interceptor - ClaimJoinHandler's first command (GetTokenByHashAsync) runs with no
-    // tenant claim, and a not-yet-member claimant cannot use ICallerFarmTenantScope (it
-    // validates MEMBERSHIP of the farm). Fixing it is a tenancy-design decision (cross-farm
-    // token lookup, then a farm-scoped membership INSERT), not a one-line scope call.
-    // Un-skip when that route is fixed; the facts below are the intended contract.
-    [Fact(Skip = "/join/claim fails TenantConnectionInterceptor on real Postgres (separate defect: ClaimJoinHandler.cs:62)")]
+    // Worker half (POST /join/claim): fixed by IJoinClaimTenantScope; the full contract lives in
+    // JoinClaimRoutesRealPostgresTests. This keeps the issue -> rotate -> claim chain end to end.
+    [Fact]
     public async Task A_worker_who_claims_via_the_issued_or_rotated_invite_becomes_Worker_Active_on_that_farm_only()
     {
         await AssertAppRoleIsNotVacuousAsync();
