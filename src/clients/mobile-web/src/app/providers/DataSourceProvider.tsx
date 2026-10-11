@@ -12,6 +12,7 @@ import { seedHarvestSessions } from '../../services/harvestService'; // To be re
 import { procurementRepository } from '../../services/procurementRepository'; // To be refactored later
 import { legacyAuditPort } from '../../infrastructure/audit/LegacyAuditPort';
 import { useAuth } from './AuthProvider';
+import { getRootStore } from '../state/RootStore';
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 import { runLegacyLocalStorageMigration } from '../../infrastructure/storage/LegacyLocalStorageMigrator';
 import { DemoModeStore } from '../../infrastructure/storage/DemoModeStore';
@@ -118,6 +119,11 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 console.log(`[DataSource] Initializing ${isDemoMode ? 'DEMO' : 'REAL'} mode`);
                 backgroundSyncWorker.stop();
                 attachmentUploadWorker.stop();
+                // The signed-in user changed (or signed out): the sync badge's
+                // in-memory rejected list belongs to the PREVIOUS user. Forget
+                // it; the new user's own parked rows are re-announced from THEIR
+                // database when the worker starts. Nothing is deleted.
+                getRootStore().sync.send({ type: 'RESET' });
                 storageNamespace.setNamespace(isDemoMode ? 'demo' : 'user');
                 // A farmer's records live in a database of their own, so that a
                 // second farmer signing in on this handset is a change of
