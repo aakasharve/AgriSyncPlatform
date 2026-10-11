@@ -118,7 +118,8 @@ public sealed class LabourRegisterViewTests
     [Fact]
     public void OwnRowViewCarriesNoOtherRowsAndNoMoney()
     {
-        var dto = GetLabourDataHandler.ApplyRegisterView(FullDto(), LabourRegisterView.OwnRow);
+        var dto = GetLabourDataHandler.ApplyRegisterView(
+            FullDto(), LabourRegisterView.OwnRow, ownPersonId: "p1", ownReviewIds: new HashSet<string>(), narrowToCaller: true);
 
         Assert.Equal("own", dto.View);
         Assert.Empty(dto.Ledger.Rows);
@@ -128,6 +129,45 @@ public sealed class LabourRegisterViewTests
         Assert.Null(dto.Dashboard.Money);
         Assert.Null(dto.Home.RojandariStated);
         Assert.Null(dto.Home.UkteAgreed);
+    }
+
+    [Fact]
+    public void OwnRowNarrowedToCallerDropsOtherPeopleAndOtherLogs()
+    {
+        var full = FullDto();
+        var other = full.People[0] with { Id = "p2", Name = "बाळू" };
+        full = full with
+        {
+            People = [full.People[0], other],
+            Review = [full.Review[0], full.Review[0] with { Id = "r2", Who = "Owner" }],
+        };
+
+        var dto = GetLabourDataHandler.ApplyRegisterView(
+            full, LabourRegisterView.OwnRow, "p1", new HashSet<string> { "r1" }, narrowToCaller: true);
+
+        Assert.Equal("p1", Assert.Single(dto.People).Id);
+        Assert.Equal("r1", Assert.Single(dto.Review).Id);
+        Assert.Null(dto.People[0].Paid);
+    }
+
+    [Fact]
+    public void OwnRowNarrowingFailsClosedWithoutACallerIdentity()
+    {
+        var dto = GetLabourDataHandler.ApplyRegisterView(
+            FullDto(), LabourRegisterView.OwnRow, ownPersonId: null, ownReviewIds: null, narrowToCaller: true);
+
+        Assert.Empty(dto.People);
+        Assert.Empty(dto.Review);
+    }
+
+    [Fact]
+    public void OwnRowForAGrantedMemberKeepsPeopleAndReviewWhenNotNarrowed()
+    {
+        var dto = GetLabourDataHandler.ApplyRegisterView(FullDto(), LabourRegisterView.OwnRow);
+
+        Assert.Single(dto.People);
+        Assert.Single(dto.Review);
+        Assert.Null(dto.People[0].Paid);
     }
 
     // ─── F2 (task 4.2 review): the handler-level backstop ───────────────────

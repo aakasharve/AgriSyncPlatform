@@ -1,7 +1,10 @@
+using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
+using ShramSafal.Application.UseCases.Labour.GetLabourData;
 using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Labour.GetFieldOperators;
@@ -29,7 +32,7 @@ namespace ShramSafal.Application.UseCases.Labour.GetFieldOperators;
 /// trust the caller.
 /// </para>
 /// </summary>
-public sealed class GetFieldOperatorsHandler(IShramSafalRepository repository)
+public sealed class GetFieldOperatorsHandler(IShramSafalRepository repository, IClock clock)
     : IHandler<GetFieldOperatorsQuery, IReadOnlyList<FieldOperatorSummaryDto>>
 {
     public async Task<Result<IReadOnlyList<FieldOperatorSummaryDto>>> HandleAsync(
@@ -45,6 +48,18 @@ public sealed class GetFieldOperatorsHandler(IShramSafalRepository repository)
         if (callerRole is null)
         {
             return Result.Failure<IReadOnlyList<FieldOperatorSummaryDto>>(ShramSafalErrors.Forbidden);
+        }
+
+        // The roster is CREW data (names of every field operator on the farm),
+        // not an own-row fact. Only the tiers whose register view already shows
+        // crew — owners and Mukadam — or a member the owner explicitly GRANTED
+        // labour management may read it; a plain Worker (and any other
+        // own-row role) is refused with a READ Forbidden and no body.
+        if (GetLabourDataHandler.ResolveRegisterView(callerRole.Value) == LabourRegisterView.OwnRow
+            && !await LabourManagementGate.HasExplicitGrantAsync(
+                repository, query.FarmId.Value, query.CallerUserId.Value, clock.UtcNow, ct))
+        {
+            return Result.Failure<IReadOnlyList<FieldOperatorSummaryDto>>(ShramSafalErrors.ReadNotAllowed);
         }
 
         var operators = await repository.GetFieldOperatorsForFarmAsync(query.FarmId, ct);
