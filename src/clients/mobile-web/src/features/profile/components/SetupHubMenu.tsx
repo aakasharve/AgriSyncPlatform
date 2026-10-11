@@ -90,7 +90,7 @@ const ProgressHero: React.FC<{ p: SetupProgressData; onNext: () => void }> = ({ 
         <div className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-emerald-600">शेती तयारी · Farm setup</div>
         <div className="mt-1.5 flex items-end gap-2.5">
             <div className="text-[44px] font-black leading-[0.9] tracking-tight text-emerald-700 [font-variant-numeric:tabular-nums]">{p.percent}%</div>
-            <div className="pb-1.5 text-[12px] font-bold leading-tight text-slate-500">{p.done} पैकी {p.total} पूर्ण<br />{p.done} of {p.total} complete</div>
+            <div className="pb-1.5 text-[12px] font-bold leading-tight text-slate-500">{p.total} पैकी {p.done} पूर्ण<br />{p.done} of {p.total} complete</div>
         </div>
         <div className="relative mt-3.5 h-2.5 overflow-hidden rounded-full bg-emerald-100">
             <span className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-[width] duration-500" style={{ width: `${p.percent}%` }} />
