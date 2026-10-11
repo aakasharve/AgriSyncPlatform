@@ -24,7 +24,7 @@ import { formatCurrency } from '../../../shared/utils/currency';
 import { GroupLabel, PersonRow, HelpNote, EmptyState } from './LabourUiKit';
 import { toMr } from './LabourDataPoints';
 import type { LabourAnchor } from '../labourAnchor';
-import { NO_ANCHOR_TEST_IDS } from '../labourAnchor';
+import { NO_ANCHOR_TEST_IDS, serverStatesLabourToday } from '../labourAnchor';
 import { ATTENDANCE_COPY } from '../attendanceCopy';
 import { isAttendanceDoorEnabled } from '../attendanceDoor';
 import { findMarkedAboveStated, resolveStatedHeadcount } from '../attendanceDisagreement';
@@ -333,7 +333,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
                 {ATTENDANCE_COPY.noAnchorReason}
             </div>
         )}
-        {heroInactive && onNoWorkAttendance && isAttendanceDoorEnabled() && (
+        {heroInactive && onNoWorkAttendance && isAttendanceDoorEnabled() && !serverStatesLabourToday(data) && (
             <div className="grid grid-cols-1">
                 <QuickTile icon={<CloudRain size={20} />} chip="bg-sky-50 text-sky-600 ring-1 ring-sky-100" label="काम झालं नाही, पण मजूर आले" onClick={onNoWorkAttendance} />
             </div>

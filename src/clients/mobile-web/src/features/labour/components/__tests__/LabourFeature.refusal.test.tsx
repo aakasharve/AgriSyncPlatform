@@ -118,11 +118,19 @@ import { mutationQueue } from '../../../../infrastructure/sync/MutationQueue';
 import { CreateDailyLogCommand } from '../../../../application/usecases/sync/CreateDailyLogCommand';
 import { ATTENDANCE_COPY } from '../../attendanceCopy';
 
+// The server's read-out says NOTHING about today (journey fix D4: a day the server
+// states a headcount for is anchored, so the grey-hero / no-work-tile lane would
+// rightly not be offered). LABOUR_MOCK itself states 12 on the farm today.
+const LABOUR_NO_TODAY = {
+    ...LABOUR_MOCK,
+    home: { ...LABOUR_MOCK.home, onFarmToday: null, rojandariToday: null, ukteToday: null },
+};
+
 beforeEach(() => { setAttendanceDoorEnabled(true); });
 
 beforeEach(() => {
     mockFetchMeContext.mockResolvedValue(ME_CONTEXT);
-    mockFetchLabourData.mockResolvedValue(LABOUR_MOCK);
+    mockFetchLabourData.mockResolvedValue(LABOUR_NO_TODAY);
     mockFetchFieldOperators.mockResolvedValue([OP_A, OP_B, OP_C, OP_D]);
     mockTriggerNow.mockResolvedValue(undefined);
 });
