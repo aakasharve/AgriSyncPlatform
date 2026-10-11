@@ -84,13 +84,17 @@ export const renderLabourRoute = (ctx: AppRouterContext): React.ReactNode => {
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
             <LabourFeaturePage
                 onExit={() => ctx.setCurrentRoute('profile')}
-                onGoToLog={() => {
+                onGoToLog={(opts) => {
                     // Labour V2 R1 Task 3.1 — the labour mic is a VERIFICATION instrument.
                     // No anchor → no mic. This is the door (the hub hero is already drawn
                     // inactive with the approved reason); gating here as well means no future
                     // caller of onGoToLog can walk past the rule. It gates ONLY the recorder:
                     // the labour route, hub and हजेरी वही render regardless (Correction 11).
-                    if (resolveLabourAnchor(ctx.history ?? [], getDateKey()).state !== 'anchored') return;
+                    //
+                    // Journey fix D4: a day stated by the SERVER's read-out (a Mukadam on
+                    // another phone holds no local log) is an anchor too - the hub says so
+                    // via `anchoredByServer` when it drew the hero live for exactly that.
+                    if (!opts?.anchoredByServer && resolveLabourAnchor(ctx.history ?? [], getDateKey()).state !== 'anchored') return;
                     // spec: 2026-07-13-labour-attendance-approval-design (Task 3.4) —
                     // tag the intent BEFORE navigating so mainView can show a
                     // "why am I here" hint on arrival.

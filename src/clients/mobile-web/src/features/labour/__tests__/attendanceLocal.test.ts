@@ -61,7 +61,7 @@ describe('getLocalAttendanceMarks — only LIVE intent surfaces from the queue',
         // parks the row for HIS decision; blanking his statement from the
         // register while the question is open would be a silent vanish.
         const id = await enqueueOneMark();
-        await mutationQueue.markRejectedUserReview(id, 'ShramSafal.AttendanceContradiction');
+        await mutationQueue.markRejectedUserReview(id, 'contradiction', 'ShramSafal.AttendanceContradiction');
 
         const marks = await getLocalAttendanceMarks(FARM);
         expect(marks).toHaveLength(1);

@@ -751,7 +751,25 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
 
         var built = new LabourDataDto(
             topLevelIds, people, dashboard, ledger, review, attendance, View: "owner", Home: home);
-        return Result.Success(ApplyRegisterView(built, ResolveRegisterView(resolvedCallerRole)));
+        // A plain own-row caller (Worker etc. with NO explicit labour-management
+        // grant) is narrowed to his own row: other people's identities and the
+        // logs of others are crew data. A GRANTED member keeps the review inbox
+        // and people he needs to act on the grant (money stays withheld either
+        // way, as before).
+        var registerView = ResolveRegisterView(resolvedCallerRole);
+        var narrowToCaller = registerView == LabourRegisterView.OwnRow && !hasLabourManagementGrant;
+        var ownReviewIds = narrowToCaller
+            ? reviewLogs
+                .Where(l => l.OperatorUserId == query.CallerUserId)
+                .Select(l => l.Id.ToString())
+                .ToHashSet()
+            : null;
+        return Result.Success(ApplyRegisterView(
+            built,
+            registerView,
+            narrowToCaller ? query.CallerUserId.Value.ToString() : null,
+            ownReviewIds,
+            narrowToCaller));
     }
 
     /// <summary>Latest <see cref="FinanceCorrection"/> per <c>CostEntryId</c>, by <c>CorrectedAtUtc</c>.</summary>
@@ -1089,18 +1107,28 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
     /// rather than fabricated as ₹0. Attendance stays: "An attendance register
     /// is safe to show anyone on the farm. A wage book is not." (D-H8.)
     /// </summary>
-    internal static LabourDataDto ApplyRegisterView(LabourDataDto dto, LabourRegisterView view)
+    internal static LabourDataDto ApplyRegisterView(
+        LabourDataDto dto,
+        LabourRegisterView view,
+        string? ownPersonId = null,
+        IReadOnlySet<string>? ownReviewIds = null,
+        bool narrowToCaller = false)
     {
         if (view == LabourRegisterView.OwnerBook)
         {
             return dto with { View = "owner" };
         }
 
+        // narrowToCaller (own-row callers without a grant): only the caller's own
+        // People row survives, and the review inbox keeps only logs he made.
+        // Fails closed — a null id/set narrows to nothing, never to everything.
         var people = dto.People
+            .Where(p => !narrowToCaller || (ownPersonId is not null && p.Id == ownPersonId))
             .Select(p => p with { RecordedWages = null, Paid = null, Advance = null })
             .ToList();
         var dashboard = dto.Dashboard with { Wages = null, Advances = null, Owed = null, Money = null };
         var review = dto.Review
+            .Where(r => !narrowToCaller || (ownReviewIds is not null && ownReviewIds.Contains(r.Id)))
             .Select(r => r with { Points = r.Points with { Amount = null } })
             .ToList();
         var ledger = view == LabourRegisterView.OwnRow

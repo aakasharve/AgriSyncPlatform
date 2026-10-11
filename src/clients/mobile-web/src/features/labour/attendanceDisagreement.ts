@@ -147,3 +147,45 @@ export function selectConfirmSurface(input: DisagreementInput): AttendanceConfir
         ? { kind: 'confirm' }
         : { kind: 'confirm-with-disagreement', disagreement };
 }
+
+/**
+ * Journey fix D2 - the MANUAL door's side of the same fact.
+ *
+ * The work log (or the server's read-out of it) stated N people for today and
+ * the farmer has now marked MORE than N named people present. That is exactly
+ * the `count-vs-composition` axis above (names exceed the count), so it is
+ * answered by the SAME machinery rather than a second resolver: the marked
+ * people stand in as the "names", the stated headcount as the anchor.
+ *
+ * People are passed by their stable id, never their display name, so two
+ * people who share a name (B2) can neither hide nor fabricate a disagreement.
+ *
+ * Informational only: it returns the disagreement to SHOW. Both statements
+ * stay exactly as they are - nothing here yields a number to write back.
+ * `stated === null` is "nobody told us" and never manufactures anything.
+ */
+export function findMarkedAboveStated(
+    stated: number | null,
+    presentIds: readonly string[],
+): HeadcountDisagreement | null {
+    if (stated === null) return null;
+    const events = [{ id: 'marked-present', type: 'HIRED', workerNames: [...presentIds] }] as LabourEvent[];
+    return findHeadcountDisagreement({
+        anchor: { state: 'anchored', headcount: stated, logId: '' },
+        events,
+    });
+}
+
+/**
+ * The day's reported headcount for the manual door: this device's own anchor
+ * when it has one, else the server's read-out of the day (`onFarmToday`) - a
+ * Mukadam on another device has no local anchor but the day IS stated.
+ * Unknown stays null, never 0.
+ */
+export function resolveStatedHeadcount(
+    anchor: LabourAnchor | undefined,
+    serverOnFarmToday: number | null,
+): number | null {
+    if (anchor?.state === 'anchored') return anchor.headcount;
+    return serverOnFarmToday;
+}

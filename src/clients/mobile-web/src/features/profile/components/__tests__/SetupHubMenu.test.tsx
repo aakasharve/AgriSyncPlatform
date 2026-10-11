@@ -50,3 +50,17 @@ describe('SetupHubMenu — Labour row honesty (Task 7)', () => {
         expect(screen.queryByText(/उचल/)).toBeNull();
     });
 });
+
+// Journey fix D10 - Marathi `X पैकी Y` means "Y out of X": the TOTAL comes
+// before पैकी. The card said `{done} पैकी {total}`, i.e. "4 पैकी 5 पूर्ण" for
+// 4 done of 5, which reads as "5 of 4 complete".
+describe('SetupHubMenu - the setup progress count reads the right way round', () => {
+    afterEach(() => cleanup());
+
+    it('4 of 5 done: Marathi says 5 पैकी 4 पूर्ण, never 4 पैकी 5 पूर्ण; English agrees', () => {
+        render(<SetupHubMenu {...baseProps()} setupProgress={{ done: 4, total: 5, percent: 80, nextLabel: 'x' }} />);
+        expect(screen.getByText(/5 पैकी 4 पूर्ण/)).toBeInTheDocument();
+        expect(screen.getByText(/4 of 5 complete/)).toBeInTheDocument();
+        expect(screen.queryByText(/4 पैकी 5/)).toBeNull();
+    });
+});

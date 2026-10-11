@@ -138,12 +138,20 @@ const openCaptureScreen = async () => {
 
 import { setAttendanceDoorEnabled } from '../../attendanceDoor';
 
+// The server's read-out says NOTHING about today (journey fix D4: a day the server
+// states a headcount for is anchored, so the grey-hero / no-work-tile lane would
+// rightly not be offered). LABOUR_MOCK itself states 12 on the farm today.
+const LABOUR_NO_TODAY = {
+    ...LABOUR_MOCK,
+    home: { ...LABOUR_MOCK.home, onFarmToday: null, rojandariToday: null, ukteToday: null },
+};
+
 // Early-access switch ON: these suites pin the door's behaviour once opened (device-switch spec).
 beforeEach(() => { setAttendanceDoorEnabled(true); });
 
 beforeEach(() => {
     mockFetchMeContext.mockResolvedValue(ME_CONTEXT);
-    mockFetchLabourData.mockResolvedValue(LABOUR_MOCK);
+    mockFetchLabourData.mockResolvedValue(LABOUR_NO_TODAY);
     mockFetchFieldOperators.mockResolvedValue([OP_A, OP_B, OP_C, OP_D]);
     mockTriggerNow.mockResolvedValue(undefined);
 });

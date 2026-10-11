@@ -113,3 +113,40 @@ export function toMarkPayload(sel: PersonSelection, prefill: PersonPrefill = EMP
     if (extra !== null && extra !== prefill.extraHours) facts.extraHours = extra;
     return Object.keys(facts).length === 0 ? null : facts;
 }
+
+/**
+ * Who is marked PRESENT today, as the screen stands: the farmer's selection
+ * over what the register already holds. Present = came for the day (आला /
+ * अर्धा) or worked the night. An explicit `आला नाही` removes a person the
+ * register had down as present; an untouched person keeps the register's word
+ * (untouched is not absent).
+ */
+export function effectivePresentIds(
+    selections: Readonly<Record<string, PersonSelection>>,
+    prefills: Readonly<Record<string, PersonPrefill>>,
+): string[] {
+    const present: string[] = [];
+    for (const id of new Set([...Object.keys(selections), ...Object.keys(prefills)])) {
+        const sel = selections[id];
+        const pre = prefills[id] ?? EMPTY_PREFILL;
+        const day = sel?.day ?? pre.day;
+        const night = (sel?.night ?? false) || pre.night;
+        if (day === 'Full' || day === 'Half' || night) present.push(id);
+    }
+    return present;
+}
+
+/** The people today's register cells already mark present (same rule). */
+export function presentTodayFromLedger(
+    data: Pick<import('./labour.types').LabourData, 'ledger'>,
+    todayKey: string,
+): string[] {
+    const todayIndex = data.ledger.days.indexOf(todayKey);
+    if (todayIndex < 0) return [];
+    return data.ledger.rows
+        .filter((row) => {
+            const cell = row.cells[todayIndex];
+            return cell != null && (cell.day === 'full' || cell.day === 'half' || cell.night === 'worked');
+        })
+        .map((row) => row.fieldOperatorId);
+}

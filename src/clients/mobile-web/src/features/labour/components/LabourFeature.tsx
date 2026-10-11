@@ -17,7 +17,8 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLabourState } from '../useLabourState';
-import { resolveLabourAnchor } from '../labourAnchor';
+import { resolveEffectiveLabourAnchor } from '../labourAnchor';
+import { resolveStatedHeadcount } from '../attendanceDisagreement';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { MarkAttendanceCommand } from '../../../application/usecases/sync/MarkAttendanceCommand';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
@@ -33,6 +34,13 @@ import {
     type ContradictionQuestion,
     type ParkedAttendanceContradiction,
 } from '../data/attendanceParked';
+import {
+    listRefusedLabourState,
+    EMPTY_REFUSED_LABOUR_STATE,
+    type RefusedLabourState,
+} from '../data/attendanceRefused';
+import { readCachedRoster } from '../data/fieldOperatorRosterCache';
+import { ConflictResolutionService } from '../../sync/conflict/ConflictResolutionService';
 import { t as translate } from '../../../i18n/translations';
 import { SYNC_HONESTY_I18N_KEYS } from '../../sync/status/syncHonestyState';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
@@ -47,6 +55,7 @@ import WeeklyDashboard from './WeeklyDashboard';
 import HajeriLedger from './HajeriLedger';
 import HajeriCellDetail from './HajeriCellDetail';
 import AttendanceContradictionPrompt from './AttendanceContradictionPrompt';
+import RefusedLabourNotice from './RefusedLabourNotice';
 import ReviewSheet from './ReviewSheet';
 import { createEarlyAccessTapHandler, earlyAccessToastText } from '../earlyAccess';
 import FarmInviteQrSheet from '../../onboarding/qr/FarmInviteQrSheet';
@@ -96,7 +105,7 @@ const TITLES: Record<ScreenName, string> = {
 
 export const LabourFeature: React.FC<{
     onExit: () => void;
-    onGoToLog?: () => void;
+    onGoToLog?: (opts?: { anchoredByServer?: boolean }) => void;
     /**
      * Task 3.5 — optional log-history threading so the hub can show a
      * labour-only "just logged" summary after an auto-return from the log
@@ -182,8 +191,19 @@ export const LabourFeature: React.FC<{
         park: ParkedAttendanceContradiction; question: ContradictionQuestion;
     }>>([]);
     const farmId = farm?.farmId;
+    /**
+     * Journey fixes D1/D6 - what the SERVER REFUSED (a mark with no
+     * responsibility behind it, a no-work declaration that did not land),
+     * read from the same parked rows the ⚠ badge counts.
+     */
+    const [refused, setRefused] = useState<RefusedLabourState>(EMPTY_REFUSED_LABOUR_STATE);
     const loadParkedQuestions = useCallback(async () => {
-        if (!farmId) { setParkedQuestions([]); return; }
+        if (!farmId) { setParkedQuestions([]); setRefused(EMPTY_REFUSED_LABOUR_STATE); return; }
+        try {
+            setRefused(await listRefusedLabourState(farmId));
+        } catch {
+            setRefused(EMPTY_REFUSED_LABOUR_STATE); // no queue, nothing refused
+        }
         try {
             const parks = await listParkedAttendanceContradictions(farmId);
             setParkedQuestions(parks.flatMap((park) => {
@@ -198,6 +218,15 @@ export const LabourFeature: React.FC<{
     }, [farmId, history]);
     useEffect(() => { void loadParkedQuestions(); }, [loadParkedQuestions]);
 
+    const retryRefused = useCallback(() => {
+        void (async () => {
+            for (const id of refused.clientRequestIds) {
+                try { await ConflictResolutionService.retry(id); } catch { /* the notice stays if it fails */ }
+            }
+            await loadParkedQuestions();
+        })();
+    }, [refused, loadParkedQuestions]);
+
     const push = useCallback((s: ScreenState) => setStack((st) => [...st, s]), []);
     const back = useCallback(() => setStack((st) => (st.length > 1 ? st.slice(0, -1) : st)), []);
     const handleBack = () => { if (stack.length > 1) back(); else onExit(); };
@@ -208,7 +237,7 @@ export const LabourFeature: React.FC<{
     }, []);
     // No router available (e.g. bare `?preview=labour` mount) → surface the
     // existing toast instead of navigating or crashing.
-    const goToLog = onGoToLog ?? (() => showToast('🎙 बोलून नोंद करायची असेल तर कामाच्या पानावर जा.'));
+    const goToLogFallback = () => showToast('🎙 बोलून नोंद करायची असेल तर कामाच्या पानावर जा.');
 
     const title = cur.name === 'mukadam' && cur.id ? (data.people[cur.id]?.name ?? 'मुकादम')
         : cur.name === 'person' && cur.id ? (data.people[cur.id]?.name ?? 'कामगार')
@@ -222,9 +251,14 @@ export const LabourFeature: React.FC<{
     // stays undefined, which the hub's contract reads as "keep today's
     // behaviour: hero active" (its onGoToLog fallback is already a toast).
     const anchor = React.useMemo(
-        () => (history ? resolveLabourAnchor(history, getDateKey()) : undefined),
-        [history],
+        () => (history ? resolveEffectiveLabourAnchor(history, getDateKey(), data.home.onFarmToday) : undefined),
+        [history, data.home.onFarmToday],
     );
+    // The route re-checks the anchor from THIS device's history; tell it when
+    // the day is anchored by the server's read-out instead (journey fix D4).
+    const goToLog = onGoToLog
+        ? () => onGoToLog({ anchoredByServer: anchor?.state === 'anchored' && anchor.source === 'server' })
+        : goToLogFallback;
 
     /**
      * Refetch when the sync actor settles (SYNC_DONE). Nothing refetched after
@@ -310,6 +344,7 @@ export const LabourFeature: React.FC<{
             data={data}
             farmId={farm?.farmId}
             mode={cur.mode ?? 'normal'}
+            statedHeadcount={resolveStatedHeadcount(anchor, data.home.onFarmToday)}
             onSave={saveManualAttendance}
             onToast={showToast}
         />
@@ -349,6 +384,17 @@ export const LabourFeature: React.FC<{
                         }}
                     />
                 ))}
+                {!loading && (
+                    <RefusedLabourNotice
+                        state={refused}
+                        nameOf={(operatorId) => {
+                            const fromRegister = data.ledger.rows.find((r) => r.fieldOperatorId === operatorId)?.name;
+                            if (fromRegister) return fromRegister;
+                            return farmId ? readCachedRoster(farmId)?.find((o) => o.id === operatorId)?.displayName : undefined;
+                        }}
+                        onRetry={retryRefused}
+                    />
+                )}
                 {loading ? (
                     <LoadingState />
                 ) : error ? (
@@ -429,6 +475,7 @@ export const LabourFeature: React.FC<{
                                 history={history}
                                 ledgerDefaults={ledgerDefaults}
                                 lastLabourLogIds={lastLabourLogIds}
+                                rosterPeople={farmId ? readCachedRoster(farmId)?.filter((o) => o.isActive) ?? undefined : undefined}
                             />
                         )}
                         {cur.name === 'mukadam' && cur.id && (
