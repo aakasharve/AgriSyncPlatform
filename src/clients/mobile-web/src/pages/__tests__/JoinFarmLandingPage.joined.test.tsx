@@ -55,6 +55,7 @@ const walkToOtpStep = async () => {
 
 beforeEach(() => {
     __resetCompletedJoinsForTests();
+    window.sessionStorage.clear();
     openJoinLink();
     mockStartOtp.mockResolvedValue({});
     mockVerifyOtp.mockResolvedValue({ userId: 'u-1', accessToken: 'a', expiresAtUtc: '2099-01-01T00:00:00Z' });
@@ -125,5 +126,72 @@ describe('the landing page after a successful QR join', () => {
 
         await waitFor(() => expect(screen.getByText('तुमचा फोन नंबर')).toBeInTheDocument());
         expect(screen.queryByText('तुम्ही जोडले गेलात!')).toBeNull();
+    });
+});
+
+describe('D6 - refresh and re-mount mid-claim', () => {
+    it('a browser REFRESH of the success page (memory gone, token still in the URL) shows the joined state, not Step 1', async () => {
+        const first = render(<JoinFarmLandingPage onComplete={vi.fn()} />);
+        await walkToOtpStep();
+        fireEvent.click(screen.getByText('सामील व्हा'));
+        await waitFor(() => expect(screen.getByText('तुम्ही जोडले गेलात!')).toBeInTheDocument());
+        first.unmount();
+
+        // a real reload empties module memory; only the tab session survives
+        __resetCompletedJoinsForTests();
+        mockClaim.mockReset();
+        mockClaim.mockRejectedValue({ error: 'join.token_invalid', message: 'This QR is no longer valid.', status: 404 });
+        await act(async () => { render(<JoinFarmLandingPage onComplete={vi.fn()} />); });
+
+        expect(screen.getByText('तुम्ही जोडले गेलात!')).toBeInTheDocument();
+        expect(screen.getByText(/पवार यांची शेती/)).toBeInTheDocument();
+        expect(screen.queryByText('तुमचा फोन नंबर')).toBeNull();
+        expect(mockClaim).not.toHaveBeenCalled();
+    });
+
+    it('a page re-mounted WHILE the claim is in flight moves to the joined state when the claim lands', async () => {
+        let resolveClaim: (v: typeof CLAIM) => void = () => {};
+        mockClaim.mockReset();
+        mockClaim.mockImplementationOnce(() => new Promise((resolve) => { resolveClaim = resolve; }));
+
+        const first = render(<JoinFarmLandingPage onComplete={vi.fn()} />);
+        await walkToOtpStep();
+        fireEvent.click(screen.getByText('सामील व्हा'));
+        await waitFor(() => expect(mockClaim).toHaveBeenCalledTimes(1));
+
+        // the app re-mounts the page (new instance, Step 1) before the answer arrives
+        first.unmount();
+        await act(async () => { render(<JoinFarmLandingPage onComplete={vi.fn()} />); });
+        expect(screen.getByText('तुमचा फोन नंबर')).toBeInTheDocument();
+
+        await act(async () => { resolveClaim(CLAIM); });
+
+        await waitFor(() => expect(screen.getByText('तुम्ही जोडले गेलात!')).toBeInTheDocument());
+        expect(screen.queryByText('तुमचा फोन नंबर')).toBeNull();
+    });
+
+    it('a later failure from a second claim never overrides a success already recorded', async () => {
+        let resolveFirst: (v: typeof CLAIM) => void = () => {};
+        mockClaim.mockReset();
+        mockClaim
+            .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
+            .mockRejectedValue({ error: 'join.token_invalid', message: 'This QR is no longer valid.', status: 404 });
+
+        const first = render(<JoinFarmLandingPage onComplete={vi.fn()} />);
+        await walkToOtpStep();
+        fireEvent.click(screen.getByText('सामील व्हा'));
+        await waitFor(() => expect(mockClaim).toHaveBeenCalledTimes(1));
+        first.unmount();
+
+        // the second instance runs its own claim, which the server refuses ...
+        await act(async () => { render(<JoinFarmLandingPage onComplete={vi.fn()} />); });
+        await walkToOtpStep();
+        fireEvent.click(screen.getByText('सामील व्हा'));
+        await waitFor(() => expect(mockClaim).toHaveBeenCalledTimes(2));
+        // ... and the first one's success arrives afterwards
+        await act(async () => { resolveFirst(CLAIM); });
+
+        await waitFor(() => expect(screen.getByText('तुम्ही जोडले गेलात!')).toBeInTheDocument());
+        expect(screen.queryByText('तुमचा फोन नंबर')).toBeNull();
     });
 });

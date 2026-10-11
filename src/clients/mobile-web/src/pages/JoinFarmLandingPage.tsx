@@ -23,6 +23,7 @@ import { getOrCreateDeviceId } from '../infrastructure/storage/DeviceIdStore';
 import { startOtp, verifyOtp, isOtpError } from '../features/auth/data/otpClient';
 import { claimFarmJoin, isInviteApiError, type ClaimResponse } from '../features/onboarding/qr/inviteApi';
 import { useUiPref } from '../shared/hooks/useUiPref';
+import { readJoinResult, writeJoinResult, clearJoinResult } from '../infrastructure/storage/JoinResultStore';
 
 type Step = 'phone' | 'otp' | 'done' | 'invalid';
 
@@ -40,14 +41,30 @@ const ROLE_LABEL_MR: Record<JoinRole, string> = {
 };
 
 /**
- * Joins this page has already COMPLETED, by QR token. Module memory, not
- * storage: the page can be mounted again while the (single-use) token is still
- * in the URL, and a fresh mount must show the farmer he is already in rather
- * than start over at Step 1 with a token the server has consumed. Lost on a
- * real page reload - by then `handleFinish` has cleared the token anyway.
+ * Joins this page has already COMPLETED, by QR token. The page can be mounted
+ * again while the (single-use) token is still in the URL - a re-mount, or a
+ * browser refresh - and a fresh mount must show the farmer he is already in
+ * rather than start over at Step 1 with a token the server has consumed.
+ *
+ * Two layers: module memory (re-mounts in this page load, plus a live
+ * subscription so an instance that was mounted WHILE the claim was still in
+ * flight is told the moment it lands) and the tab-session adapter (a refresh).
+ * FIRST SUCCESS WINS: a result, once recorded, is never replaced or undone by
+ * a later failure.
  */
 const completedJoins = new Map<string, ClaimResponse>();
+const joinListeners = new Set<(token: string, claim: ClaimResponse) => void>();
 export const __resetCompletedJoinsForTests = (): void => { completedJoins.clear(); };
+
+const recallJoin = (token: string): ClaimResponse | null =>
+    completedJoins.get(token) ?? (readJoinResult(token) as ClaimResponse | null);
+
+const rememberJoin = (token: string, claim: ClaimResponse): void => {
+    if (completedJoins.has(token)) return;
+    completedJoins.set(token, claim);
+    writeJoinResult(token, claim);
+    joinListeners.forEach(listener => listener(token, claim));
+};
 
 const readJoinContextFromUrl = (): JoinContext | null => {
     if (typeof window === 'undefined') return null;
@@ -115,7 +132,7 @@ interface LastJoinedFarmRecord {
 
 const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, onExit }) => {
     const context = useMemo(() => readJoinContextFromUrl(), []);
-    const [joined, setJoined] = useState<ClaimResponse | null>(() => (context ? completedJoins.get(context.token) ?? null : null));
+    const [joined, setJoined] = useState<ClaimResponse | null>(() => (context ? recallJoin(context.token) : null));
     const [step, setStep] = useState<Step>(context ? (joined ? 'done' : 'phone') : 'invalid');
     // One press = one claim. State alone cannot stop two taps in the same tick,
     // and the second claim for a consumed token answers "invalid" - which used
@@ -136,6 +153,21 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
     // directly (no JSON.stringify boundary).
     const [, setPermissionsGranted] = useUiPref<boolean>('shramsafal_permissions_granted', false);
     const [, setLastJoinedFarm] = useUiPref<LastJoinedFarmRecord | null>('shramsafal_last_joined_farm_v1', null);
+
+    // A claim that lands while this instance is on screen - including one this
+    // very instance did not start because the page was re-mounted mid-claim -
+    // moves it to the joined state. First success wins; nothing moves it back.
+    useEffect(() => {
+        if (!context) return undefined;
+        const listener = (token: string, claim: ClaimResponse) => {
+            if (token !== context.token) return;
+            setJoined(claim);
+            setStep('done');
+            setError(null);
+        };
+        joinListeners.add(listener);
+        return () => { joinListeners.delete(listener); };
+    }, [context]);
 
     useEffect(() => {
         if (step === 'otp') {
@@ -236,10 +268,14 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
             });
             recordJoinAttempt(context.farmCode, context.token, 'verified');
 
-            completedJoins.set(context.token, claim);
+            rememberJoin(context.token, claim);
             setJoined(claim);
             setStep('done');
         } catch (err) {
+            // A join already recorded for this token outranks any later failure
+            // (a second claim answering "invalid" for the token the first one
+            // consumed must never throw the farmer back to Step 1).
+            if (completedJoins.has(context.token)) return;
             if (isOtpError(err)) {
                 setError(err.message);
                 if (err.error === 'otp.expired' || err.error === 'otp.locked_out' || err.error === 'otp.no_pending_challenge') {
@@ -265,6 +301,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
     };
 
     const handleFinish = () => {
+        clearJoinResult(context.token);
         clearJoinParamsFromUrl();
         onComplete?.();
         if (typeof window !== 'undefined' && !onComplete) {
