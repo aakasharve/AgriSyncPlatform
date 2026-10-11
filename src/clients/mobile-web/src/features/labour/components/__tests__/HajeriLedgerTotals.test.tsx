@@ -10,7 +10,7 @@
  * "नावाखाली कोणताही summary, कामाचा मजकूर किंवा पैशांची कळ नाही."
  */
 import React from 'react';
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import HajeriLedger from '../HajeriLedger';
@@ -33,6 +33,11 @@ const cell = (over: Partial<LedgerCell>): LedgerCell => ({
 });
 
 const withLedger = (ledger: LabourData['ledger']): LabourData => ({ ...LABOUR_MOCK, ledger });
+
+import { setAttendanceDoorEnabled } from '../../attendanceDoor';
+
+// Early-access switch ON: these suites pin the door's behaviour once opened (device-switch spec).
+beforeEach(() => { setAttendanceDoorEnabled(true); });
 
 describe('HajeriLedger — the clean register (master review D4)', () => {
     it('renders no ₹ and no trailing column anywhere in the grid', () => {

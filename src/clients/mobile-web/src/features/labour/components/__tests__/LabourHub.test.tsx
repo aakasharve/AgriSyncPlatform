@@ -10,7 +10,7 @@
 // optional (LabourPreview.tsx's bare `?preview=labour` mount supplies none
 // of them) — the "renders nothing, doesn't crash" cases guard that.
 import React from 'react';
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi, beforeEach } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import LabourHub from '../LabourHub';
@@ -113,6 +113,11 @@ const nonLabourLog = (): DailyLog => ({
     machinery: [],
     financialSummary: { totalLabourCost: 0, totalInputCost: 0, totalMachineryCost: 0, grandTotal: 0 },
 } as unknown as DailyLog);
+
+import { setAttendanceDoorEnabled } from '../../attendanceDoor';
+
+// Early-access switch ON: these suites pin the door's behaviour once opened (device-switch spec).
+beforeEach(() => { setAttendanceDoorEnabled(true); });
 
 describe('LabourHub — "just logged" labour summary (Task 3.5)', () => {
     afterEach(() => cleanup());

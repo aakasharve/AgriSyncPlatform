@@ -34,7 +34,7 @@
  * otherwise irrelevant to this file's loading/error assertions.
  */
 import React from 'react';
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi, beforeEach } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 
@@ -63,6 +63,11 @@ const LOADING_LABEL = 'माहिती आणत आहोत…';
 const EMPTY_PEOPLE_LABEL = 'अजून कोणाचंही नाव जोडलेलं नाही';
 const ERROR_LABEL = 'माहिती आणता आली नाही';
 const RETRY_LABEL = 'पुन्हा प्रयत्न करा';
+
+import { setAttendanceDoorEnabled } from '../../attendanceDoor';
+
+// Early-access switch ON: these suites pin the door's behaviour once opened (device-switch spec).
+beforeEach(() => { setAttendanceDoorEnabled(true); });
 
 describe('LabourFeature — loading gate (Decision 4b; extended Task 6d)', () => {
     afterEach(() => {
@@ -180,6 +185,47 @@ describe('LabourFeature - हजेरी घ्या is shown whatever the hoo
 
         expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
         expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
+    });
+});
+
+describe('LabourFeature - early-access switch (device-switch spec): default OFF, 7 taps on the title toggle', () => {
+    const mount = (isPreview: boolean) => {
+        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: false, error: false, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn(), isPreview });
+        return render(<LabourFeature onExit={() => {}} />);
+    };
+    const tapTitle = (n: number) => {
+        const title = screen.getByText('कामाचा हिशोब');
+        for (let i = 0; i < n; i++) fireEvent.click(title);
+    };
+
+    beforeEach(() => { window.localStorage.clear(); }); // runs after the file-level ON hook
+    afterEach(() => { cleanup(); mockUseLabourState.mockReset(); window.localStorage.clear(); });
+
+    it.each([true, false])('fresh device (preview: %s): no हजेरी घ्या tile, no no-work tile; हजेरी वही still there', (isPreview) => {
+        mount(isPreview);
+        expect(screen.queryByText('हजेरी घ्या')).not.toBeInTheDocument();
+        expect(screen.queryByText('काम झालं नाही, पण मजूर आले')).not.toBeInTheDocument();
+        expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
+    });
+
+    it('6 taps do nothing', () => {
+        mount(false);
+        tapTitle(6);
+        expect(screen.queryByText('हजेरी घ्या')).not.toBeInTheDocument();
+        expect(screen.queryByText(/Early access/)).not.toBeInTheDocument();
+    });
+
+    it('7 taps: toast, tile appears, and it persists after a remount (reload)', () => {
+        const first = mount(false);
+        tapTitle(7);
+        expect(screen.getByText('Early access: attendance door ON')).toBeInTheDocument();
+        expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
+        first.unmount();
+        mount(false);
+        expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
+        tapTitle(7);
+        expect(screen.getByText('Early access: attendance door OFF')).toBeInTheDocument();
+        expect(screen.queryByText('हजेरी घ्या')).not.toBeInTheDocument();
     });
 });
 

@@ -48,6 +48,7 @@ import HajeriLedger from './HajeriLedger';
 import HajeriCellDetail from './HajeriCellDetail';
 import AttendanceContradictionPrompt from './AttendanceContradictionPrompt';
 import ReviewSheet from './ReviewSheet';
+import { createEarlyAccessTapHandler, earlyAccessToastText } from '../earlyAccess';
 import FarmInviteQrSheet from '../../onboarding/qr/FarmInviteQrSheet';
 
 /**
@@ -128,6 +129,7 @@ export const LabourFeature: React.FC<{
     const [cellDetail, setCellDetail] = React.useState<{ row: LedgerRow; dayIndex: number } | null>(null);
     const [toast, setToast] = useState<string | null>(null);
     const toastTimer = useRef<number | undefined>(undefined);
+    const earlyTap = useRef(createEarlyAccessTapHandler()).current;
 
     /**
      * Screen honesty (Decision 4b, 2026-07-19; extended Task 6d, 2026-08-28)
@@ -315,7 +317,15 @@ export const LabourFeature: React.FC<{
 
     return (
         <div className="relative flex min-h-screen flex-col bg-[#f6f7f5]">
-            <BackHeader title={title} onBack={handleBack} />
+            <BackHeader
+                title={title}
+                onBack={handleBack}
+                onTitleTap={() => {
+                    // Founder-only early access: 7 quick taps toggle the per-device attendance door.
+                    const r = earlyTap();
+                    if (r !== null) showToast(earlyAccessToastText(r));
+                }}
+            />
             {error && <LoadErrorBanner onRetry={refresh} />}
             <div className="flex-1">
                 {/* Task 9 (B001) — the parked contradiction question(s). The

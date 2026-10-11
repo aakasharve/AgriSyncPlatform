@@ -136,6 +136,11 @@ const openCaptureScreen = async () => {
     await waitFor(() => expect(screen.getByTestId('attendance-screen')).toBeInTheDocument());
 };
 
+import { setAttendanceDoorEnabled } from '../../attendanceDoor';
+
+// Early-access switch ON: these suites pin the door's behaviour once opened (device-switch spec).
+beforeEach(() => { setAttendanceDoorEnabled(true); });
+
 beforeEach(() => {
     mockFetchMeContext.mockResolvedValue(ME_CONTEXT);
     mockFetchLabourData.mockResolvedValue(LABOUR_MOCK);
@@ -485,9 +490,9 @@ describe('attendance door — no gate left behind', () => {
         expect(feature).toMatch(/isAttendanceDoorEnabled\(\)/);
     });
 
-    it('the door function reads no preview, mock or build-time signal', () => {
+    it('the door function reads no preview, mock or build-time signal (only the per-device switch)', () => {
         const door = read('features/labour/attendanceDoor.ts');
-        expect(door).not.toMatch(/isPreview|import\.meta|process\.env|localStorage|LABOUR_MOCK/);
+        expect(door).not.toMatch(/isPreview|import\.meta|process\.env|LABOUR_MOCK/);
     });
 
     it('the voice hero is still anchor-gated (no work logged => grey, with the approved reason)', async () => {
