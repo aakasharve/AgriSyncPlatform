@@ -18,6 +18,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLabourState } from '../useLabourState';
 import { resolveLabourAnchor } from '../labourAnchor';
+import { resolveStatedHeadcount } from '../attendanceDisagreement';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { MarkAttendanceCommand } from '../../../application/usecases/sync/MarkAttendanceCommand';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
@@ -338,6 +339,7 @@ export const LabourFeature: React.FC<{
             data={data}
             farmId={farm?.farmId}
             mode={cur.mode ?? 'normal'}
+            statedHeadcount={resolveStatedHeadcount(anchor, data.home.onFarmToday)}
             onSave={saveManualAttendance}
             onToast={showToast}
         />

@@ -27,6 +27,10 @@ import type { LabourAnchor } from '../labourAnchor';
 import { NO_ANCHOR_TEST_IDS } from '../labourAnchor';
 import { ATTENDANCE_COPY } from '../attendanceCopy';
 import { isAttendanceDoorEnabled } from '../attendanceDoor';
+import { findMarkedAboveStated, resolveStatedHeadcount } from '../attendanceDisagreement';
+import { presentTodayFromLedger } from '../attendanceManual';
+import { getDateKey } from '../../../core/domain/services/DateKeyService';
+import HeadcountDisagreementCard from './HeadcountDisagreementCard';
 
 interface Props {
     data: LabourData;
@@ -385,6 +389,14 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
                 )}
             </div>
         )}
+
+        {/* D2 - the register holds more people marked present today than the
+            day's stated headcount. Both stay as they are; this only says so. */}
+        {(() => {
+            const presentIds = presentTodayFromLedger(data, getDateKey());
+            const disagreement = findMarkedAboveStated(resolveStatedHeadcount(anchor, data.home.onFarmToday), presentIds);
+            return disagreement ? <HeadcountDisagreementCard disagreement={disagreement} markedCount={presentIds.length} /> : null;
+        })()}
 
         <div className="grid grid-cols-2 gap-2.5">
             {isAttendanceDoorEnabled() && (

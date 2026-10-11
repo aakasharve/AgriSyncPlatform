@@ -23,6 +23,7 @@ import { resolveLabourHeadcount } from '../../../domain/logs/labourHeadcount';
 import { MarkAttendanceCommand } from '../../../application/usecases/sync/MarkAttendanceCommand';
 import { fetchFieldOperators, type FieldOperator } from '../data/fieldOperatorClient';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
+import HeadcountDisagreementCard from './HeadcountDisagreementCard';
 
 export interface AttendanceResultProps {
     /** Attendance-only draft (labour.length > 0) — toAttendanceOnlyDraft output. */
@@ -153,20 +154,7 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                 re-derived: spoken.count is null when only names were spoken (B001's
                 0-with-names), and printing a fabricated number here would be the
                 exact silent overwrite this card exists to prevent. */}
-            {disagreement && (
-                <div data-testid="headcount-disagreement"
-                    className="rounded-xl border border-amber-200 border-l-[3px] border-l-amber-600 bg-amber-50 p-3 text-[13px] leading-relaxed text-amber-800">
-                    <span className="font-extrabold">
-                        {COPY.youSaidChip}: {disagreement.spoken.count != null
-                            ? <>{disagreement.spoken.count} जण.</>
-                            : <>{disagreement.uniqueNames.join(', ')}.</>}
-                    </span>
-                    {disagreement.anchored != null && (
-                        <> आजच्या कामात {disagreement.anchored.headcount} जण होते, असं आधी समजलं होतं.</>
-                    )}
-                    {' '}दोन्ही गोष्टी तशाच राहतील.
-                </div>
-            )}
+            {disagreement && <HeadcountDisagreementCard disagreement={disagreement} />}
 
             {/* State D — the one question, answered by the two facts themselves. */}
             {contradictions.map((c) => {
