@@ -66,6 +66,7 @@ import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 import { t as translate } from '../../../../i18n/translations';
 import { SYNC_HONESTY_I18N_KEYS } from '../../../sync/status/syncHonestyState';
 import { writeCachedRoster } from '../../data/fieldOperatorRosterCache';
+import { SessionStore } from '../../../../infrastructure/storage/SessionStore';
 import type { DailyLog } from '../../../../types';
 
 // Real providers + a real IndexedDB queue: the first mount in a cold, heavily
@@ -402,6 +403,52 @@ describe('attendance door — offline', () => {
 
         await waitFor(() => expect(screen.getAllByText('माहिती आणता आली नाही').length).toBeGreaterThan(0));
         expect(document.querySelector('[data-testid^="att-row-"]')).toBeNull();
+    });
+});
+
+describe('attendance door — offline COLD START (/me also fails; farm id only on the device)', () => {
+    beforeEach(() => {
+        // The last session, while it had signal: /me confirmed this farm for this
+        // user, and the roster was read once.
+        SessionStore.setCurrentFarmId(REAL_FARM.farmId);
+        writeCachedRoster(REAL_FARM.farmId, [OP_A, OP_B]);
+        mockFetchMeContext.mockRejectedValue(new Error('offline'));
+        mockFetchLabourData.mockRejectedValue(new Error('offline'));
+        mockFetchFieldOperators.mockRejectedValue(new Error('offline'));
+    });
+
+    it('lists the cached names, queues a mark, and keeps add-person honestly refused', async () => {
+        renderRealFarm();
+        await waitFor(() => expect(screen.getByTestId('attendance-door-offline')).toBeInTheDocument());
+        fireEvent.click(screen.getByTestId('attendance-door-offline'));
+        await waitFor(() => expect(screen.getByTestId('attendance-screen')).toBeInTheDocument());
+
+        await waitFor(() => expect(screen.getByTestId(`att-row-${OP_A.id}`)).toBeInTheDocument());
+        expect(screen.getByTestId(`att-row-${OP_B.id}`)).toBeInTheDocument();
+
+        // add-person: refused, nothing created, nothing queued
+        fireEvent.click(screen.getByTestId('att-add-open'));
+        expect(screen.getByTestId('att-add-blocked')).toBeInTheDocument();
+        expect(screen.getByTestId('att-add-submit')).toBeDisabled();
+        expect(mockCreateFieldOperator).not.toHaveBeenCalled();
+
+        // the mark queues locally against the remembered farm
+        fireEvent.click(screen.getByTestId(`att-day-Full-${OP_A.id}`));
+        fireEvent.click(screen.getByTestId('att-save'));
+        await waitFor(async () => expect(await attendanceMarks()).toHaveLength(1));
+        const [mark] = await attendanceMarks();
+        expect(mark.farmId).toBe(REAL_FARM.farmId);
+        expect(mockCreateFieldOperator).not.toHaveBeenCalled();
+    });
+
+    it('with NO remembered farm for this user there is still no farm and no invented one', async () => {
+        SessionStore.clearCurrentFarmId();
+        renderRealFarm();
+        await waitFor(() => expect(screen.getByTestId('attendance-door-offline')).toBeInTheDocument());
+        fireEvent.click(screen.getByTestId('attendance-door-offline'));
+        await waitFor(() => expect(screen.getByTestId('attendance-screen')).toBeInTheDocument());
+        expect(document.querySelector('[data-testid^="att-row-"]')).toBeNull();
+        expect(screen.getByTestId('att-save')).toBeDisabled();
     });
 });
 

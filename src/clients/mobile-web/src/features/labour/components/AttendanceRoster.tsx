@@ -94,6 +94,15 @@ const AttendanceRoster: React.FC<Props> = ({ farmId, selections, prefills, onCha
         }
     }, [farmId]);
 
+    // A different farm must never keep showing the previous farm's names if its
+    // own fetch fails: re-seed from THIS farm's cached copy (or nothing) first.
+    const seededFarmRef = useRef(farmId);
+    useEffect(() => {
+        if (seededFarmRef.current === farmId) return;
+        seededFarmRef.current = farmId;
+        setRoster(farmId ? readCachedRoster(farmId) : null);
+    }, [farmId]);
+
     useEffect(() => { void load(); }, [load]);
 
     const rows = useMemo(() => buildPickerRows((roster ?? []).filter((o) => o.isActive)), [roster]);

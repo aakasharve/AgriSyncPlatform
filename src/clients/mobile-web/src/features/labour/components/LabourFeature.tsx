@@ -200,7 +200,13 @@ export const LabourFeature: React.FC<{
     const [parkedQuestions, setParkedQuestions] = useState<Array<{
         park: ParkedAttendanceContradiction; question: ContradictionQuestion;
     }>>([]);
-    const farmId = farm?.farmId;
+    // OFFLINE COLD START: `/me` failed, so `farm` is null - but the farm id this
+    // user last had CONFIRMED by the server is still on the device (a per-user
+    // pointer, FarmContext drops it on logout / user change). The roster cache
+    // and the mark queue only need the id, so they run on it. We use it ONLY
+    // while the last `/me` failed: once `/me` answers, `farm` is the authority
+    // (and if the answer excludes the remembered farm, it is no longer used).
+    const farmId = farm?.farmId ?? (farmCtx?.loadFailed ? farmCtx.currentFarmId ?? undefined : undefined);
     /**
      * Journey fixes D1/D6 - what the SERVER REFUSED (a mark with no
      * responsibility behind it, a no-work declaration that did not land),
@@ -312,12 +318,12 @@ export const LabourFeature: React.FC<{
      * value-keyed request id makes a retry safe (no duplicate marks).
      */
     const saveManualAttendance = async (marks: ManualAttendanceMark[], noWorkCause?: BucketIssueType): Promise<void> => {
-        if (!farm) throw new Error('no farm context'); // the button is disabled without a farm
+        if (!farmId) throw new Error('no farm context'); // the button is disabled without a farm
         const workDate = getDateKey();
         try {
             await Promise.all(marks.map(({ fieldOperatorId, ...facts }) => MarkAttendanceCommand.enqueue({
                 attendanceMarkId: crypto.randomUUID(),
-                farmId: farm.farmId,
+                farmId,
                 fieldOperatorId,
                 workDate,
                 ...facts,
@@ -352,7 +358,7 @@ export const LabourFeature: React.FC<{
     const attendanceScreen = (
         <Attendance
             data={data}
-            farmId={farm?.farmId}
+            farmId={farmId}
             mode={cur.mode ?? 'normal'}
             statedHeadcount={resolveStatedHeadcount(anchor, data.home.onFarmToday)}
             onSave={saveManualAttendance}
