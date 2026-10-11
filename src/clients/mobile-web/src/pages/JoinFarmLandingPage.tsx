@@ -22,10 +22,11 @@ import { setRememberDevice } from '../infrastructure/storage/RememberDeviceStore
 import { getOrCreateDeviceId } from '../infrastructure/storage/DeviceIdStore';
 import { startOtp, verifyOtp, isOtpError } from '../features/auth/data/otpClient';
 import { claimFarmJoin, getMyFarms, isInviteApiError, type ClaimResponse } from '../features/onboarding/qr/inviteApi';
+import { agriSyncClient } from '../infrastructure/api/AgriSyncClient';
 import { useOptionalAuth } from '../app/providers/AuthProvider';
 import { useUiPref } from '../shared/hooks/useUiPref';
 
-type Step = 'phone' | 'otp' | 'done' | 'invalid' | 'checking';
+type Step = 'phone' | 'otp' | 'done' | 'invalid' | 'checking' | 'revoked';
 
 interface JoinContext {
     token: string;
@@ -59,8 +60,17 @@ const ROLE_LABEL_MR: Record<JoinRole, string> = {
 const completedJoins = new Map<string, ClaimResponse>();
 const joinListeners = new Set<(token: string, claim: ClaimResponse) => void>();
 let lastConfirmedContext: JoinContext | null = null;
+/**
+ * The server REFUSED (or could not confirm) a join for a token. Kept in module
+ * memory so a page mounted again - signed in this time - still tells him why,
+ * instead of silently showing Step 1. Only ever set from a server answer.
+ */
+interface JoinFailure { code: string; message: string }
+const joinFailures = new Map<string, JoinFailure>();
+const REVOKED_CODES = ['join.token_invalid', 'join.farm_code_mismatch'];
 export const __resetCompletedJoinsForTests = (): void => {
     completedJoins.clear();
+    joinFailures.clear();
     lastConfirmedContext = null;
 };
 
@@ -159,9 +169,11 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
     const [step, setStep] = useState<Step>(() => {
         if (!context) return 'invalid';
         if (joined) return 'done';
-        // A signed-in (or still signing-in) visitor re-opening the link may already
-        // be a member: ask the server before showing Step 1.
-        return auth && (auth.isAuthenticated || auth.authStatus === 'checking') ? 'checking' : 'phone';
+        if (REVOKED_CODES.includes(joinFailures.get(context.token)?.code ?? '')) return 'revoked';
+        // Boot auth is SKIPPED for join links, so the visitor may well be a signed-in
+        // member the app has not recognised yet: resolve the session and ask the
+        // server before showing Step 1 (see the effect below).
+        return 'checking';
     });
     // One press = one claim. State alone cannot stop two taps in the same tick,
     // and the second claim for a consumed token answers "invalid" - which used
@@ -170,7 +182,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
     const [phone, setPhone] = useState('');
     const [otp, setOtp] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(() => (context ? joinFailures.get(context.token)?.message ?? null : null));
     // spec: secure-remembered-device-sessions-2026-06-24 — Task 4.2
     // Pre-checked by founder decision (2026-06-27).
     const [rememberDevice, setRememberDeviceState] = useState(true);
@@ -198,21 +210,33 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
         return () => { joinListeners.delete(listener); };
     }, [context]);
 
-    // Re-opened with a token while signed in (reload, re-mount): the server, not
-    // the browser, says whether he is already in. /farms/mine lists the farm by
-    // its code -> joined; otherwise Step 1, honestly.
+    // Opened (or re-opened) with a token: the server, not the browser, says who
+    // he is and whether he is already in. AuthProvider skips boot auth for join
+    // links, so this page resolves the session itself with the existing refresh,
+    // then reads /farms/mine: farm listed -> joined (no claim); anything else ->
+    // Step 1, honestly. A rejected refresh means no session: straight to Step 1.
     const authenticated = auth?.isAuthenticated ?? false;
     const authChecking = auth?.authStatus === 'checking';
     useEffect(() => {
         if (!context || completedJoins.has(context.token)) return undefined;
         if (authChecking) return undefined;
-        if (!authenticated) {
-            setStep(prev => (prev === 'checking' ? 'phone' : prev));
-            return undefined;
-        }
         if (claimingRef.current) return undefined;
         let cancelled = false;
+        const toStep1 = () => {
+            const failure = joinFailures.get(context.token);
+            setStep(prev => (prev === 'checking' ? (failure && REVOKED_CODES.includes(failure.code) ? 'revoked' : 'phone') : prev));
+        };
         void (async () => {
+            if (!authenticated) {
+                let outcome: { kind: string } = { kind: 'unreachable' };
+                try {
+                    outcome = await agriSyncClient.refreshSession();
+                } catch {
+                    /* unreachable: the server below decides, not this page */
+                }
+                if (cancelled || completedJoins.has(context.token)) return;
+                if (outcome.kind === 'rejected') { toStep1(); return; }
+            }
             const hit = await askServerIfMember({ farmCode: context.farmCode });
             if (cancelled || completedJoins.has(context.token)) return;
             if (hit) {
@@ -220,7 +244,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                     membershipId: '', farmId: hit.farmId, farmName: hit.name, role: hit.role, wasAlreadyMember: true,
                 });
             } else {
-                setStep(prev => (prev === 'checking' ? 'phone' : prev));
+                toStep1();
             }
         })();
         return () => { cancelled = true; };
@@ -232,7 +256,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
         }
     }, [step]);
 
-    if (!context) {
+    if (!context || step === 'revoked') {
         return (
             <div className="min-h-screen bg-stone-50 px-4 py-10">
                 <div className="mx-auto max-w-md rounded-3xl bg-white p-6 shadow-sm">
@@ -285,6 +309,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
             return;
         }
         claimingRef.current = true;
+        joinFailures.delete(context.token);
         setIsSubmitting(true);
 
         try {
@@ -350,9 +375,11 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                 // OTP succeeded but the QR is invalid / revoked — keep the
                 // user authenticated but surface the specific claim error.
                 setError(err.message);
-                if (err.error === 'join.token_invalid' || err.error === 'join.farm_code_mismatch') {
-                    // Reset to phone step so the user can rescan if needed.
-                    setStep('phone');
+                joinFailures.set(context.token, { code: err.error, message: err.message });
+                if (REVOKED_CODES.includes(err.error)) {
+                    // The QR itself is dead (rotated / revoked / wrong farm): a phone
+                    // number cannot fix that. Say so, and say who can.
+                    setStep('revoked');
                 }
             } else {
                 setError('Could not reach the server. Check your connection and try again.');
@@ -396,6 +423,12 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                 </header>
 
                 <StepIndicator step={step} />
+
+                {step === 'checking' && (
+                    <p data-testid="join-checking" className="text-center text-sm font-semibold text-stone-500">
+                        तपासत आहे… / Checking…
+                    </p>
+                )}
 
                 {step === 'phone' && (
                     <section className="rounded-3xl bg-white p-6 shadow-lg shadow-emerald-100/50">
