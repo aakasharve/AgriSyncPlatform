@@ -18,6 +18,8 @@ import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 import { runLegacyLocalStorageMigration } from '../../infrastructure/storage/LegacyLocalStorageMigrator';
 import { DemoModeStore } from '../../infrastructure/storage/DemoModeStore';
 import { activateDatabaseForUser } from '../../infrastructure/storage/activateUserDatabase';
+import { setActiveDatabaseName } from '../../infrastructure/storage/activeDatabaseName';
+import { UNIDENTIFIED_DATABASE_NAME } from '../../infrastructure/storage/userDatabaseName';
 import { recoverLegacyOwnershipClaim, settleOwnershipClaims } from '../../infrastructure/storage/databaseOwnership';
 import { purgeExpiredProcessingVoiceClips } from '../../infrastructure/voice/VoiceClipRetention';
 
@@ -114,6 +116,10 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     // Handle Mode Switching & Initialization
     useEffect(() => {
+        // A newer run supersedes this one (user/mode changed while it was still
+        // awaiting): a superseded run must not activate a database, start
+        // workers or clear the loading flag after the newer run has taken over.
+        let cancelled = false;
         const init = async () => {
             setIsLoading(true);
             try {
@@ -122,6 +128,7 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 // finish before the sync badge is reset and the database address
                 // changes, or it could emit a stale rejection / touch B's rows.
                 await Promise.all([backgroundSyncWorker.stop(), attachmentUploadWorker.stop()]);
+                if (cancelled) return;
                 // The signed-in user changed (or signed out): the sync badge's
                 // in-memory rejected list belongs to the PREVIOUS user. Forget
                 // it; the new user's own parked rows are re-announced from THEIR
@@ -148,10 +155,17 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 // another farmer's database while that check is still in flight.
                 if (!isDemoMode && session?.userId) {
                     await recoverLegacyOwnershipClaim();
+                    if (cancelled) return;
                     activateDatabaseForUser(session.userId);
                     // Offline Labour read-outs are per user: erase any other user's.
                     clearLabourReadoutsExcept(session.userId);
                     await settleOwnershipClaims();
+                } else if (!isDemoMode) {
+                    // Signed out / not yet identified: no farmer's database may stay
+                    // open (same invariant as endFarmerSessionLocally). Without this
+                    // the worker's rehydrate would re-announce the PREVIOUS user's
+                    // parked rows from the database still pointed at.
+                    setActiveDatabaseName(UNIDENTIFIED_DATABASE_NAME);
                 }
                 await dataSource.initialize();
                 await MigrationService.migrate();
@@ -166,19 +180,21 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                     await seedDemoDataIfNeeded();
                 } else {
                     await purgeExpiredProcessingVoiceClips();
+                    if (cancelled) return;
                     backgroundSyncWorker.start();
                     attachmentUploadWorker.start();
                 }
             } catch (error) {
                 console.error("[DataSource] Init failed", error);
             } finally {
-                setIsLoading(false);
+                if (!cancelled) setIsLoading(false);
             }
         };
 
         init();
 
         return () => {
+            cancelled = true;
             backgroundSyncWorker.stop();
             attachmentUploadWorker.stop();
         };
