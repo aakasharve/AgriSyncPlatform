@@ -64,7 +64,7 @@ const AppRouter: React.FC = () => {
     const { getTodayCounts, getContextColorIndicator } = useAppViewHelpers();
     // Session's active farm — threaded into ctx so the hook-free route render
     // functions (mainView) can reach it. See AppRouterContext.activeFarmId.
-    const { currentFarmId } = useFarmContext();
+    const { currentFarmId, currentFarm } = useFarmContext();
 
     const { currentRoute, setCurrentRoute, mainView, setMainView, logIntent, setLogIntent, lastLabourLogIds } = navigation;
     const { logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady } = context;
@@ -200,7 +200,7 @@ const AppRouter: React.FC = () => {
     if (!welcomeSeen) {
         return (
             <React.Suspense fallback={<RouteLoader />}>
-                <WelcomeScreen onContinue={() => setWelcomeSeen(true)} />
+                <WelcomeScreen onContinue={() => setWelcomeSeen(true)} farmRole={currentFarm?.role} />
             </React.Suspense>
         );
     }
