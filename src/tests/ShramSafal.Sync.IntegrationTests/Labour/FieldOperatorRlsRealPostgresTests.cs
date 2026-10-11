@@ -936,7 +936,7 @@ public sealed class FieldOperatorRlsRealPostgresTests(Xunit.Abstractions.ITestOu
     private Task<Result<IReadOnlyList<FieldOperatorSummaryDto>>> GetFieldOperatorsAsync(
         Guid farmScopeId, Guid callerUserId)
         => RunUnderScopeAsync(farmScopeId, callerUserId, sp =>
-            new GetFieldOperatorsHandler(sp.GetRequiredService<IShramSafalRepository>())
+            new GetFieldOperatorsHandler(sp.GetRequiredService<IShramSafalRepository>(), sp.GetRequiredService<IClock>())
                 .HandleAsync(new GetFieldOperatorsQuery(new FarmId(farmScopeId), new UserId(callerUserId))));
 
     // ── Loadability probes. These exist so a Forbidden cannot be mistaken for

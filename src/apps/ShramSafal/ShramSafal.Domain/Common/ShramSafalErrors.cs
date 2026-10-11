@@ -68,6 +68,11 @@ public static class ShramSafalErrors
 
     // --- Forbidden (role / ownership / not-allowed) ----------------------------------------
     public static readonly Error Forbidden = Error.Forbidden("ShramSafal.Forbidden", "User is not allowed to modify this farm.");
+    // READ refusal: the caller is a member but their role may not read this
+    // data (e.g. a plain Worker and the farm's crew roster). Distinct from
+    // Forbidden, whose text says "modify" and is a WRITE refusal.
+    public static readonly Error ReadNotAllowed =
+        Error.Forbidden("ShramSafal.ReadNotAllowed", "User is not allowed to view this information.");
     public static readonly Error VerificationTransitionNotAllowedForRole =
         Error.Forbidden("ShramSafal.VerificationTransitionNotAllowedForRole", "Transition not allowed for role.");
 
