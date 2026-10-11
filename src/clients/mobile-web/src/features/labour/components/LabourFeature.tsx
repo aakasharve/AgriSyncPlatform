@@ -33,6 +33,13 @@ import {
     type ContradictionQuestion,
     type ParkedAttendanceContradiction,
 } from '../data/attendanceParked';
+import {
+    listRefusedLabourState,
+    EMPTY_REFUSED_LABOUR_STATE,
+    type RefusedLabourState,
+} from '../data/attendanceRefused';
+import { readCachedRoster } from '../data/fieldOperatorRosterCache';
+import { ConflictResolutionService } from '../../sync/conflict/ConflictResolutionService';
 import { t as translate } from '../../../i18n/translations';
 import { SYNC_HONESTY_I18N_KEYS } from '../../sync/status/syncHonestyState';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
@@ -47,6 +54,7 @@ import WeeklyDashboard from './WeeklyDashboard';
 import HajeriLedger from './HajeriLedger';
 import HajeriCellDetail from './HajeriCellDetail';
 import AttendanceContradictionPrompt from './AttendanceContradictionPrompt';
+import RefusedLabourNotice from './RefusedLabourNotice';
 import ReviewSheet from './ReviewSheet';
 import { createEarlyAccessTapHandler, earlyAccessToastText } from '../earlyAccess';
 import FarmInviteQrSheet from '../../onboarding/qr/FarmInviteQrSheet';
@@ -182,8 +190,19 @@ export const LabourFeature: React.FC<{
         park: ParkedAttendanceContradiction; question: ContradictionQuestion;
     }>>([]);
     const farmId = farm?.farmId;
+    /**
+     * Journey fixes D1/D6 - what the SERVER REFUSED (a mark with no
+     * responsibility behind it, a no-work declaration that did not land),
+     * read from the same parked rows the ⚠ badge counts.
+     */
+    const [refused, setRefused] = useState<RefusedLabourState>(EMPTY_REFUSED_LABOUR_STATE);
     const loadParkedQuestions = useCallback(async () => {
-        if (!farmId) { setParkedQuestions([]); return; }
+        if (!farmId) { setParkedQuestions([]); setRefused(EMPTY_REFUSED_LABOUR_STATE); return; }
+        try {
+            setRefused(await listRefusedLabourState(farmId));
+        } catch {
+            setRefused(EMPTY_REFUSED_LABOUR_STATE); // no queue, nothing refused
+        }
         try {
             const parks = await listParkedAttendanceContradictions(farmId);
             setParkedQuestions(parks.flatMap((park) => {
@@ -197,6 +216,15 @@ export const LabourFeature: React.FC<{
         }
     }, [farmId, history]);
     useEffect(() => { void loadParkedQuestions(); }, [loadParkedQuestions]);
+
+    const retryRefused = useCallback(() => {
+        void (async () => {
+            for (const id of refused.clientRequestIds) {
+                try { await ConflictResolutionService.retry(id); } catch { /* the notice stays if it fails */ }
+            }
+            await loadParkedQuestions();
+        })();
+    }, [refused, loadParkedQuestions]);
 
     const push = useCallback((s: ScreenState) => setStack((st) => [...st, s]), []);
     const back = useCallback(() => setStack((st) => (st.length > 1 ? st.slice(0, -1) : st)), []);
@@ -349,6 +377,17 @@ export const LabourFeature: React.FC<{
                         }}
                     />
                 ))}
+                {!loading && (
+                    <RefusedLabourNotice
+                        state={refused}
+                        nameOf={(operatorId) => {
+                            const fromRegister = data.ledger.rows.find((r) => r.fieldOperatorId === operatorId)?.name;
+                            if (fromRegister) return fromRegister;
+                            return farmId ? readCachedRoster(farmId)?.find((o) => o.id === operatorId)?.displayName : undefined;
+                        }}
+                        onRetry={retryRefused}
+                    />
+                )}
                 {loading ? (
                     <LoadingState />
                 ) : error ? (

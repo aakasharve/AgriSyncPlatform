@@ -28,6 +28,23 @@ export const ATTENDANCE_COPY = {
     contradictionBody: (name: string, first: string, second: string) =>
         `${name} आज दोन कामांत दिसतोय — एकात ${first}, दुसऱ्यात ${second}. आजची हजेरी कोणती?`,
     contradictionReassurance: 'एकदाच स्पष्ट करा — दोन्ही कामांचं जे सांगितलं ते तसंच राहील.',
+    /*
+     * ── NEW, PENDING FOUNDER APPROVAL (journey fixes D1/D6/D2, 2026-10-11) ──
+     * Each is assembled from approved words: `शेतनोंदीत गेली` (sync.* tails),
+     * `कामगारांची जबाबदारी आहे` (D5, negated), `पुन्हा प्रयत्न करा` (labour
+     * retry vocabulary), `काम झालं नाही` (the approved no-work door).
+     */
+    /** A mark the server refused: N of them did not reach the farm record. */
+    refusedMarksTitle: (n: number) => `${n} हजेरी शेतनोंदीत गेली नाही`,
+    /** Shown ONLY when the server's own code says the caller may not take marks. */
+    refusedMissingResponsibility: 'कामगारांची जबाबदारी तुमच्याकडे नाही.',
+    refusedShowWhich: 'कोणत्या ते बघा',
+    refusedRetry: 'पुन्हा प्रयत्न करा',
+    /** The no-work declaration did not reach the farm record. */
+    noWorkNotRecorded: '"काम झालं नाही" हा दिवस शेतनोंदीत गेला नाही.',
+    /** D2 - T10: more people marked present than the work log stated. */
+    markedAboveStated: (stated: number) => `आजच्या कामात ${stated} जण होते, असं आधी समजलं होतं.`,
+    markedAboveStatedReassurance: 'दोन्ही गोष्टी तशाच राहतील.',
     /** Approved mark vocabulary — the only words the contradiction slots may hold. */
     markWord: { full: 'आला', half: 'अर्धा', night: 'रात्र' } as const,
 } as const;

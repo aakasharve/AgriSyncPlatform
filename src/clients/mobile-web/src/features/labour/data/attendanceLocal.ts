@@ -14,6 +14,7 @@ import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import type { MutationQueueStatus } from '../../../infrastructure/storage/DexieDatabase';
 import type { AttendanceMarkPayload } from '../../../application/usecases/sync/MarkAttendanceCommand';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
+import { isContradictionCode } from './attendanceRefused';
 
 export interface LocalAttendanceMark {
     fieldOperatorId: string;
@@ -33,12 +34,15 @@ export interface LocalAttendanceMark {
  * - PENDING / SENDING — captured, not yet acknowledged. The heart of P10.
  * - FAILED — retry-capped or backed-off, but still the farmer's statement;
  *   parking a fact must not erase it from his own register.
- * - REJECTED_USER_REVIEW — permanently refused THESE BYTES (for
- *   attendance.mark that is the AttendanceContradiction question) and sitting
- *   in the conflict UI awaiting HIS answer. Deliberately shown: the mark is
- *   still his stated, unresolved intent, and a register that blanked it the
- *   moment sync ran would make his statement silently vanish while the
- *   question is still open. It renders as 'queue' — the honest weaker state.
+ * - REJECTED_USER_REVIEW — ONLY when it is the AttendanceContradiction
+ *   question, which sits in the conflict UI awaiting HIS answer. Deliberately
+ *   shown: the mark is still his stated, unresolved intent, and a register
+ *   that blanked it the moment sync ran would make his statement silently
+ *   vanish while the question is still open. It renders as 'queue' - the
+ *   honest weaker state. Any OTHER parked code (e.g. ShramSafal.Forbidden:
+ *   no grant / grant expired) is a REFUSAL, not intent: it is filtered below
+ *   so the register stops drawing a refused mark as remembered
+ *   (attendanceRefused.ts tells the farmer instead).
  *
  * NOT live, by decision:
  * - APPLIED — acknowledged; the server row from /sync/pull owns the fact now.
@@ -74,6 +78,11 @@ export async function getLocalAttendanceMarks(farmId: string): Promise<LocalAtte
     for (const row of queued) {
         const p = row.payload as AttendanceMarkPayload;
         if (p.farmId !== farmId) continue;
+        // A mark the SERVER REFUSED is not intent the register may keep
+        // drawing as "remembered": only an unanswered contradiction question
+        // still speaks for the farmer. The refusal is told by the labour
+        // screens' own notice (attendanceRefused.ts).
+        if (row.status === 'REJECTED_USER_REVIEW' && !isContradictionCode(row.errorCode)) continue;
         out.push({
             fieldOperatorId: p.fieldOperatorId, workDate: p.workDate,
             dayMark: p.dayMark, nightMark: p.nightMark,
