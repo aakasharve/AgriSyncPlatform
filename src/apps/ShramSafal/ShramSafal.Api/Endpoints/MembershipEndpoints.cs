@@ -31,16 +31,30 @@ public static class MembershipEndpoints
         // so the legacy `catch (UnauthorizedAccessException)` defense-in-
         // depth seam is GONE. The pipeline's authorizer routes auth
         // failures as typed Result.Failure → ToErrorResult → 403.
-        group.MapPost("/farms/{farmId:guid}/invite-qr", async (
+        group.MapPost("/farms/{farmId:guid}/invite-qr", async Task<IResult> (
             Guid farmId,
             HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<IssueFarmInviteCommand, IssueFarmInviteResult> handler,
+            ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var userId))
             {
                 return Results.Unauthorized();
+            }
+
+            // Establish the membership-validated farm scope BEFORE the pipeline
+            // runs. The owner check (EnsureIsOwner) issues its first DbCommand
+            // before it publishes any tenant claim, so without this the
+            // TenantConnectionInterceptor fail-closes ("no tenant claim set and
+            // not in admin scope") and the owner got 500. A non-member is refused
+            // here (403); a non-owner member still reaches EnsureIsOwner and is
+            // refused there. Same fix as labour-permissions; mirrors LabourEndpoints.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — forensic provenance for
@@ -73,15 +87,23 @@ public static class MembershipEndpoints
         // enforcer returns Result, so no catch (UnauthorizedAccessException)
         // seam is needed — auth failures route as typed Result.Failure
         // → ToErrorResult → 403.
-        group.MapPost("/farms/{farmId:guid}/invite-qr/rotate", async (
+        group.MapPost("/farms/{farmId:guid}/invite-qr/rotate", async Task<IResult> (
             Guid farmId,
             ClaimsPrincipal user,
             IHandler<RotateFarmInviteCommand, RotateFarmInviteResult> handler,
+            ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var userId))
             {
                 return Results.Unauthorized();
+            }
+
+            // Same as issue above: scope first, then the owner-only pipeline.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
             }
 
             var result = await handler.HandleAsync(
