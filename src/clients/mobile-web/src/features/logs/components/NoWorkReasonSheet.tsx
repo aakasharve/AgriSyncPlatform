@@ -41,7 +41,7 @@ export interface NoWorkReasonSheetProps {
  * PEST / DISEASE / MATERIAL_SHORTAGE are deliberately absent: they are reasons work went
  * BADLY, not reasons no work was planned. He can still record them the ordinary way.
  */
-const NO_WORK_CAUSES: ReadonlyArray<{ cause: BucketIssueType; labelKey: 'weather' | 'electricity' | 'water' | 'machinery' | 'labour' | 'other' }> = [
+export const NO_WORK_CAUSES: ReadonlyArray<{ cause: BucketIssueType; labelKey: 'weather' | 'electricity' | 'water' | 'machinery' | 'labour' | 'other' }> = [
     { cause: 'WEATHER', labelKey: 'weather' },
     { cause: 'ELECTRICITY', labelKey: 'electricity' },
     { cause: 'WATER_SOURCE', labelKey: 'water' },

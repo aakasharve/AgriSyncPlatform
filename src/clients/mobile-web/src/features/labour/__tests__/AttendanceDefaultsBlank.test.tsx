@@ -156,7 +156,8 @@ describe('Attendance render — 5 workers, zero marks: no attendance facts are p
 
     const baseProps = () => ({
         data: draftData(),
-        onSave: vi.fn(),
+        farmId: undefined,
+        onSave: vi.fn(() => Promise.resolve()),
         onToast: vi.fn(),
     });
 
@@ -181,8 +182,8 @@ describe('Attendance render — 5 workers, zero marks: no attendance facts are p
         });
     });
 
-    it('still shows the honest "add names" call-to-action rather than a silent blank', () => {
+    it('still shows the honest "add name" call-to-action rather than a silent blank', () => {
         render(<Attendance {...baseProps()} />);
-        expect(screen.getByText(/नावं जोडा/)).toBeInTheDocument();
+        expect(screen.getByText(/नाव जोडा/)).toBeInTheDocument();
     });
 });

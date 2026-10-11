@@ -161,35 +161,24 @@ describe('LabourFeature — error state asserts nothing (Task 6d)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Task 18 (spec: 2026-08-28-labour-v2-release-1) — `useLabourState`'s
-// `isPreview` must reach `LabourHub` unchanged, so the founder-review
-// exception for हजेरी घ्या (LabourHub's SHOW_ATTENDANCE_TILE) actually works
-// end-to-end through THIS component's own wiring, not just inside LabourHub's
-// isolated tests. (The हजेरी वही tile left this exception with Correction 5:
-// its switch was deleted, so it renders for real farms and preview alike.)
+// The attendance door is not tied to the preview flag any more (Task 18's
+// `isPreview` threading was deleted with SHOW_ATTENDANCE_TILE): whatever the
+// hook reports, the tile is there. Real-mount coverage of the screen behind it
+// lives in LabourFeature.attendanceDoor.test.tsx.
 // ---------------------------------------------------------------------------
 
-describe('LabourFeature — threads isPreview to LabourHub (Task 18)', () => {
+describe('LabourFeature - हजेरी घ्या is shown whatever the hook says about preview', () => {
     afterEach(() => {
         cleanup();
         mockUseLabourState.mockReset();
     });
 
-    it('reveals हजेरी घ्या / हजेरी वही when the hook reports isPreview: true', () => {
-        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: false, error: false, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn(), isPreview: true });
+    it.each([true, false])('shows हजेरी घ्या and हजेरी वही when the hook reports isPreview: %s', (isPreview) => {
+        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: false, error: false, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn(), isPreview });
 
         render(<LabourFeature onExit={() => {}} />);
 
         expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
-        expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
-    });
-
-    it('keeps हजेरी घ्या hidden when the hook reports isPreview: false — the हजेरी वही stays (Correction 5)', () => {
-        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: false, error: false, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn(), isPreview: false });
-
-        render(<LabourFeature onExit={() => {}} />);
-
-        expect(screen.queryByText('हजेरी घ्या')).toBeNull();
         expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
     });
 });
