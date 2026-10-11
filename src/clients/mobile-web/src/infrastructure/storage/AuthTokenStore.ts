@@ -27,6 +27,7 @@
 import { endFarmerSessionLocally } from './endFarmerSession';
 import { clearPendingLogout } from './PendingLogoutStore';
 import { clearAllLabourReadouts } from './LabourReadoutCache';
+import { clearAllCachedRosters } from './LabourLocalStore';
 
 export interface AuthSession {
     userId: string;
@@ -242,6 +243,7 @@ export function clearAuthSession(): void {
     // The last-known Labour read-out is per-user offline convenience data; it
     // does not outlive the session that fetched it.
     clearAllLabourReadouts();
+    clearAllCachedRosters();
 
     notifyAuthSessionChanged();
 }

@@ -6,6 +6,7 @@ import { toOfflineReadout, saveLabourReadout, loadLabourReadout } from '../data/
 import {
     LABOUR_READOUT_MAX_AGE_MS, clearAllLabourReadouts, clearLabourReadoutsExcept,
 } from '../../../infrastructure/storage/LabourReadoutCache';
+import { writeCachedRoster, readCachedRoster } from '../data/fieldOperatorRosterCache';
 import { setAuthSession, clearAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
 
 // Distinctive money sentinels: none of these numbers may survive anywhere.
@@ -104,5 +105,11 @@ describe('cache keying, age and erasure', () => {
         saveLabourReadout('u1', 'f1', 'alltime', ownerData());
         clearAuthSession();
         expect(loadLabourReadout('u1', 'f1', 'alltime')).toBeNull();
+    });
+    it('the cached field-operator roster (keyed by farm, not user) is erased at session end too', () => {
+        writeCachedRoster('f1', [{ id: 'op1', displayName: 'रमेश', isActive: true } as never]);
+        expect(readCachedRoster('f1')).not.toBeNull();
+        clearAuthSession();
+        expect(readCachedRoster('f1')).toBeNull();
     });
 });

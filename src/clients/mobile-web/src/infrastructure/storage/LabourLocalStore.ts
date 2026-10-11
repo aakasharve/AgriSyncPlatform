@@ -59,3 +59,24 @@ export function writeCachedJson(key: string, value: string): void {
         /* storage unavailable */
     }
 }
+
+/**
+ * Erases the cached field-operator rosters of EVERY farm (key fragment
+ * `shramsafal_field_operator_roster_`). Called when a session ends: those
+ * rosters are keyed by farm, not by user, so they must not outlive the user who
+ * fetched them on a shared handset. Best-effort.
+ */
+export function clearAllCachedRosters(): void {
+    try {
+        if (typeof window === 'undefined') return;
+        const s = window.localStorage;
+        const doomed: string[] = [];
+        for (let i = 0; i < s.length; i++) {
+            const k = s.key(i);
+            if (k !== null && k.includes('shramsafal_field_operator_roster_')) doomed.push(k);
+        }
+        doomed.forEach((k) => s.removeItem(k));
+    } catch {
+        /* storage unavailable */
+    }
+}
