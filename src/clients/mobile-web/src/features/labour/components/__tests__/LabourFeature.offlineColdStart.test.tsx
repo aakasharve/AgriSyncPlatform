@@ -90,7 +90,7 @@ function coldStart(userId = 'u1') {
     window.localStorage.setItem(MARKER_KEY, JSON.stringify({
         userId, expiresAtUtc: new Date(Date.now() - 5 * 3600_000).toISOString(),
     }));
-    SessionStore.setCurrentFarmId(FARM);
+    SessionStore.setCurrentFarmIdForUser(userId, FARM);
 }
 
 const mount = () => render(

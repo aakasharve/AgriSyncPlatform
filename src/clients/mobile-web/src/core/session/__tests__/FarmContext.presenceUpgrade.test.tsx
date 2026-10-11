@@ -19,7 +19,10 @@ vi.mock('../../../features/onboarding/qr/inviteApi', () => ({
 let authValue: { isAuthenticated: boolean; session: { userId: string; accessToken: string } | null };
 vi.mock('../../../app/providers/AuthProvider', () => ({ useAuth: () => authValue }));
 vi.mock('../../../infrastructure/storage/SessionStore', () => ({
-    SessionStore: { getCurrentFarmId: () => null, setCurrentFarmId: vi.fn(), clearCurrentFarmId: vi.fn() },
+    SessionStore: {
+        getCurrentFarmId: () => null, setCurrentFarmId: vi.fn(), clearCurrentFarmId: vi.fn(),
+        getCurrentFarmIdForUser: () => null, setCurrentFarmIdForUser: vi.fn(),
+    },
 }));
 
 import { FarmContextProvider, useFarmContext } from '../FarmContext';

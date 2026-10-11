@@ -16,6 +16,7 @@ import React, {
     useContext,
     useEffect,
     useMemo,
+    useRef,
     useState,
 } from 'react';
 import {
@@ -84,10 +85,11 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
     // A token-less offline PRESENCE session is upgraded to a real one without
     // isAuthenticated changing; refetch then, or the offline failure sticks.
     const hasRealToken = Boolean(session?.accessToken);
+    const userId = session?.userId ?? null;
     const [meContext, setMeContext] = useState<MeContext | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [currentFarmId, setCurrentFarmId] = useState<string | null>(
-        () => SessionStore.getCurrentFarmId(),
+        () => (userId ? SessionStore.getCurrentFarmIdForUser(userId) : SessionStore.getCurrentFarmId()),
     );
     // Task 6e — see the `loadFailed` note on FarmContextValue.
     const [loadFailed, setLoadFailed] = useState(false);
@@ -102,7 +104,12 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
             const ids = ctx.farms.map(f => f.farmId);
             setCurrentFarmId(prev => {
                 const valid = prev && ids.includes(prev) ? prev : (ids[0] ?? null);
-                if (valid) SessionStore.setCurrentFarmId(valid);
+                if (valid) {
+                    // Keyed to the signed-in farmer, not the ambient namespace
+                    // (which switches a tick after the session does).
+                    if (userId) SessionStore.setCurrentFarmIdForUser(userId, valid);
+                    else SessionStore.setCurrentFarmId(valid);
+                }
                 return valid;
             });
         } catch {
@@ -115,7 +122,26 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
         } finally {
             setIsLoading(false);
         }
-    }, [isAuthenticated]);
+    }, [isAuthenticated, userId]);
+
+    // The remembered farm id belongs to ONE signed-in farmer. On logout, or when
+    // a different farmer signs in, drop the previous one's id from memory and
+    // re-read the pointer for the NEW farmer only (never invented: no pointer
+    // for this farmer means no farm id until /me answers).
+    const lastUserRef = useRef<string | null>(userId);
+    useEffect(() => {
+        if (!isAuthenticated) {
+            lastUserRef.current = null;
+            setCurrentFarmId(null);
+            setMeContext(null);
+            return;
+        }
+        if (lastUserRef.current !== userId) {
+            lastUserRef.current = userId;
+            setMeContext(null);
+            setCurrentFarmId(userId ? SessionStore.getCurrentFarmIdForUser(userId) : null);
+        }
+    }, [isAuthenticated, userId]);
 
     useEffect(() => {
         if (isAuthenticated) {
