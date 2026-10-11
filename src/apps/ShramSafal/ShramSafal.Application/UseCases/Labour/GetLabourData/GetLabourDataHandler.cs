@@ -1126,11 +1126,41 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             .Where(p => !narrowToCaller || (ownPersonId is not null && p.Id == ownPersonId))
             .Select(p => p with { RecordedWages = null, Paid = null, Advance = null })
             .ToList();
-        var dashboard = dto.Dashboard with { Wages = null, Advances = null, Owed = null, Money = null };
+        // N1: every id list that points INTO People is narrowed with it, so no
+        // reference in the response can name a person who is not in it (the hub
+        // dereferences topLevelIds into people). Un-narrowed views keep their
+        // lists exactly as built.
+        var keptIds = people.Select(p => p.Id).ToHashSet();
+        var topLevelIds = narrowToCaller
+            ? dto.TopLevelIds.Where(keptIds.Contains).ToList()
+            : dto.TopLevelIds;
+        if (narrowToCaller)
+        {
+            people = people
+                .Select(p => p with
+                {
+                    MemberIds = p.MemberIds?.Where(keptIds.Contains).ToList(),
+                    AppointedById = p.AppointedById is not null && keptIds.Contains(p.AppointedById)
+                        ? p.AppointedById
+                        : null,
+                })
+                .ToList();
+        }
+
         var review = dto.Review
             .Where(r => !narrowToCaller || (ownReviewIds is not null && ownReviewIds.Contains(r.Id)))
             .Select(r => r with { Points = r.Points with { Amount = null } })
             .ToList();
+        // The badge must agree with the list under it: a narrowed caller's
+        // pending count is the number of cards he can see, not the farm's inbox.
+        var dashboard = dto.Dashboard with
+        {
+            Wages = null,
+            Advances = null,
+            Owed = null,
+            Money = null,
+            Pending = narrowToCaller ? review.Count : dto.Dashboard.Pending,
+        };
         var ledger = view == LabourRegisterView.OwnRow
             ? dto.Ledger with { Rows = [], CrewRows = [] }
             : dto.Ledger;
@@ -1141,6 +1171,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         return dto with
         {
             View = view == LabourRegisterView.CrewAttendance ? "crew" : "own",
+            TopLevelIds = topLevelIds,
             People = people,
             Dashboard = dashboard,
             Review = review,

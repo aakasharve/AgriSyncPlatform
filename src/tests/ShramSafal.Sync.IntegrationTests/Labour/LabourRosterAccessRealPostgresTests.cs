@@ -264,6 +264,55 @@ public sealed class LabourRosterAccessRealPostgresTests(Xunit.Abstractions.ITest
         granted.People.Should().BeEquivalentTo(everyone, "a granted worker keeps what the grant already allows");
     }
 
+    // ── N1: no dangling person reference, for EVERY role ────────────────────
+
+    [Theory]
+    [InlineData("owner")]
+    [InlineData("secondary-owner")]
+    [InlineData("mukadam")]
+    [InlineData("granted-worker")]
+    [InlineData("plain-worker")]
+    [InlineData("other-plain-worker")]
+    public async Task Every_person_id_the_register_response_references_exists_in_people(string who)
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        var userId = who switch
+        {
+            "owner" => Owner,
+            "secondary-owner" => SecondOwner,
+            "mukadam" => Mukadam,
+            "granted-worker" => GrantedWorker,
+            "plain-worker" => PlainWorker,
+            _ => OtherWorker,
+        };
+
+        var dto = await ReadLabourDtoAsync(userId);
+        var known = dto.People.Select(p => p.Id).ToHashSet();
+        var referenced = dto.TopLevelIds
+            .Concat(dto.People.SelectMany(p => p.MemberIds ?? []))
+            .Concat(dto.People.Where(p => p.AppointedById is not null).Select(p => p.AppointedById!))
+            .ToList();
+
+        output.WriteLine($"[EVIDENCE] {who} view={dto.View} people={known.Count} topLevelIds={dto.TopLevelIds.Count} referenced={referenced.Count} pending={dto.Dashboard.Pending} review={dto.Review.Count}");
+        referenced.Should().OnlyContain(id => known.Contains(id), "the hub dereferences topLevelIds into people");
+        dto.TopLevelIds.Should().BeEquivalentTo(dto.People.Select(p => p.Id));
+    }
+
+    [Fact]
+    public async Task A_plain_workers_pending_badge_equals_the_cards_he_can_see_and_owners_keep_the_farm_inbox()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        var plain = await ReadLabourDtoAsync(PlainWorker);
+        plain.Dashboard.Pending.Should().Be(plain.Review.Count);
+
+        var owner = await ReadLabourDtoAsync(Owner);
+        owner.Dashboard.Pending.Should().Be(owner.Review.Count);
+        (await ReadLabourDtoAsync(Mukadam)).Dashboard.Pending.Should().Be(owner.Dashboard.Pending);
+        (await ReadLabourDtoAsync(GrantedWorker)).Dashboard.Pending.Should().Be(owner.Dashboard.Pending);
+    }
+
     // ═════════════════════════════════════════════════════════════════════════
     // Harness
     // ═════════════════════════════════════════════════════════════════════════
@@ -308,6 +357,12 @@ public sealed class LabourRosterAccessRealPostgresTests(Xunit.Abstractions.ITest
 
     private async Task<PeopleProbe> ReadLabourPeopleIdsAsync(Guid userId)
     {
+        var dto = await ReadLabourDtoAsync(userId);
+        return new PeopleProbe(dto.View, dto.People.Select(p => p.Id).ToList());
+    }
+
+    private async Task<ShramSafal.Application.Contracts.Dtos.LabourDataDto> ReadLabourDtoAsync(Guid userId)
+    {
         await using var scope = _rootProvider!.CreateAsyncScope();
         var sp = scope.ServiceProvider;
         var ctx = sp.GetRequiredService<ShramSafalDbContext>();
@@ -324,7 +379,7 @@ public sealed class LabourRosterAccessRealPostgresTests(Xunit.Abstractions.ITest
         await tx.CommitAsync();
 
         result.IsSuccess.Should().BeTrue();
-        return new PeopleProbe(result.Value!.View, result.Value.People.Select(p => p.Id).ToList());
+        return result.Value!;
     }
 
     private async Task AssertAppRoleIsNotVacuousAsync()
