@@ -305,6 +305,20 @@ public interface IShramSafalRepository
 
     Task SaveChangesAsync(CancellationToken ct = default);
 
+    /// <summary>
+    /// Commits the staged new <see cref="FarmMembership"/> (and its audit row). Returns
+    /// <c>true</c> when committed. Returns <c>false</c> ONLY when this exact save lost a race to
+    /// a concurrent insert of the same (farm, user) non-terminal membership
+    /// (<c>ix_farm_memberships_farm_user_nonterminal</c>, SQLSTATE 23505): the staged entities
+    /// are discarded and the caller re-reads the winner's row. Any other failure still throws.
+    /// Provider specifics never leave Infrastructure. Default body = plain save.
+    /// </summary>
+    async Task<bool> TrySaveNewMembershipAsync(CancellationToken ct = default)
+    {
+        await SaveChangesAsync(ct);
+        return true;
+    }
+
     // --- CEI Phase 1 §4.4 ----------------------------------------------------------------
     /// <summary>
     /// Returns the count of <see cref="ShramSafal.Domain.Logs.DailyLog"/> records for the

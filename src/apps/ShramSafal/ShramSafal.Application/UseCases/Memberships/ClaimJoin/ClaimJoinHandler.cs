@@ -166,7 +166,28 @@ public sealed class ClaimJoinHandler(
                 deviceId: command.AuditDeviceId,
                 ipHash: command.AuditIpHash,
                 sourceAiJobId: null), ct);
-        await farmRepository.SaveChangesAsync(ct);
+        if (!await farmRepository.TrySaveNewMembershipAsync(ct))
+        {
+            // A concurrent claim by the SAME user (QR double-tap) won the insert. Same outcome as
+            // the already-member path above: re-read the winner's row (farm scope is still the
+            // token's farm) and return it idempotently. No second audit row, no analytics event.
+            var winner = await farmRepository.GetFarmMembershipAsync(farm.Id.Value, command.CallerUserId.Value, ct);
+            if (winner is null || winner.IsTerminal)
+            {
+                // The index only fires for a non-terminal row; if it is gone again, surface it
+                // rather than invent a success.
+                return Result.Failure<ClaimJoinResult>(Error.Conflict(
+                    "join.concurrent_claim_unresolved",
+                    "Could not complete joining. Please scan the QR again."));
+            }
+
+            return Result.Success(new ClaimJoinResult(
+                MembershipId: winner.Id,
+                FarmId: farm.Id,
+                FarmName: farm.Name,
+                Role: winner.Role.ToString(),
+                WasAlreadyMember: true));
+        }
 
         await analytics.EmitAsync(new AnalyticsEvent(
             EventId: Guid.NewGuid(),

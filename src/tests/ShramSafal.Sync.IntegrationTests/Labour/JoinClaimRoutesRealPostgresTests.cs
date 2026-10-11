@@ -304,23 +304,23 @@ public sealed class JoinClaimRoutesRealPostgresTests : IAsyncLifetime
         await AssertAppRoleIsNotVacuousAsync();
         var invite = await IssueOkAsync(OwnerA, FarmA);
 
-        // The losers hit the partial unique index ix_farm_memberships_farm_user_nonterminal
-        // (23505) and their transaction rolls back whole - so what is asserted is the
-        // database outcome, which the index guarantees, not the loser's status code.
+        // A worker double-tapping a QR scan fires concurrent claims with the same token. The
+        // losers hit the partial unique index ix_farm_memberships_farm_user_nonterminal
+        // (23505); the handler must turn that into the idempotent already-member success.
         var outcomes = await Task.WhenAll(Enumerable.Range(0, 4).Select(async _ =>
         {
-            try
-            {
-                using var r = await ClaimAsync(Racer, invite.Token, invite.FarmCode);
-                return r.StatusCode == HttpStatusCode.OK;
-            }
-            catch (DbUpdateException)
-            {
-                return false;
-            }
+            using var r = await ClaimAsync(Racer, invite.Token, invite.FarmCode);
+            return (r.StatusCode, Body: await r.Content.ReadAsStringAsync());
         }));
 
-        outcomes.Count(ok => ok).Should().BeGreaterThanOrEqualTo(1, "at least one racer must win");
+        outcomes.Should().OnlyContain(o => o.StatusCode == HttpStatusCode.OK,
+            "every racer must get 200, never a 500: " + string.Join(" | ", outcomes.Select(o => (int)o.StatusCode + " " + o.Body)));
+        var flags = outcomes.Select(o =>
+        {
+            using var doc = JsonDocument.Parse(o.Body);
+            return doc.RootElement.GetProperty("wasAlreadyMember").GetBoolean();
+        }).ToList();
+        flags.Count(f => !f).Should().Be(1, "exactly one racer actually created the membership");
         (await MembershipsAsync(FarmA, Racer)).Should().Equal(("Worker", 3, 3));
         (await AuditCountAsync(FarmA, Racer, "MemberJoined")).Should().Be(1);
     }
