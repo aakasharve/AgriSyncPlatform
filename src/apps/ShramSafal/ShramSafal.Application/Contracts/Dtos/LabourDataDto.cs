@@ -19,7 +19,17 @@ public sealed record LabourDataDto(
     // Resolved server-side from the caller's membership role; the client
     // renders what arrives and adds nothing back.
     string View,
-    LabourHomeDto Home);
+    LabourHomeDto Home,
+    // Journey fix 3 (P3) - a SERVER-SENT capability signal, so the client does not
+    // offer controls the server will refuse. true = this caller may rewrite
+    // labour truth here (owner, secondary owner, Mukadam - who is shown the door
+    // and refused clearly if un-granted, decision Q4 - or a member with an
+    // effective explicit grant); false = an own-row caller WITHOUT an effective
+    // grant (plain Worker, or an expired/revoked grant). It restates the same
+    // decision the handler already takes for the register narrowing
+    // (hasLabourManagementGrant); it is not a new authority rule. Nullable and
+    // additive: absent/null = unknown, and a client then keeps today's behaviour.
+    bool? CanManageLabour = null);
 
 public sealed record LabourPersonDto(
     string Id,
