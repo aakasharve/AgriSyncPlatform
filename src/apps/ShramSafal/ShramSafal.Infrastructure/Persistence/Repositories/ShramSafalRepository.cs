@@ -1299,6 +1299,48 @@ internal sealed class ShramSafalRepository(
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task<bool> TrySaveNewMembershipAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolationOn(ex, "ix_farm_memberships_farm_user_nonterminal"))
+        {
+            // Lost the double-tap race. Discard everything this unit staged (membership + audit)
+            // so a later SaveChanges cannot replay the doomed INSERTs.
+            foreach (var entry in db.ChangeTracker.Entries()
+                         .Where(e => e.State == EntityState.Added).ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            return false;
+        }
+    }
+
+    private static bool IsUniqueViolationOn(DbUpdateException ex, string constraintName)
+    {
+        for (Exception? inner = ex; inner is not null; inner = inner.InnerException)
+        {
+            if (inner.GetType().Name != "PostgresException")
+            {
+                continue;
+            }
+
+            var sqlState = inner.GetType().GetProperty("SqlState")?.GetValue(inner) as string;
+            var constraint = inner.GetType().GetProperty("ConstraintName")?.GetValue(inner) as string;
+            if (string.Equals(sqlState, "23505", StringComparison.Ordinal)
+                && string.Equals(constraint, constraintName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // --- CEI Phase 1 §4.4 -----------------------------------------------------------------
 
     public async Task<int> GetDisputedLogCountForPlotAsync(Guid plotId, CancellationToken ct = default)
