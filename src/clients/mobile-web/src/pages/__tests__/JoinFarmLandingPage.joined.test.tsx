@@ -35,6 +35,12 @@ vi.mock('../../features/onboarding/qr/inviteApi', () => ({
     isInviteApiError: (v: unknown) => typeof v === 'object' && v !== null && 'error' in v && 'status' in v,
 }));
 
+// The page resolves a hard-opened link's session itself (boot auth is skipped for join links).
+const mockRefreshSession = vi.fn();
+vi.mock('../../infrastructure/api/AgriSyncClient', () => ({
+    agriSyncClient: { refreshSession: (...a: unknown[]) => mockRefreshSession(...a) },
+}));
+
 vi.mock('../../infrastructure/storage/AuthTokenStore', () => ({
     setAuthSession: vi.fn(),
     getAuthSession: () => null,
@@ -59,7 +65,8 @@ const urlHasToken = () => new URLSearchParams(window.location.search).has('join'
 const openJoinLink = () => window.history.replaceState({}, '', '/?join=tok-123&farm=FRM002');
 
 const walkToOtpStep = async () => {
-    fireEvent.change(screen.getByPlaceholderText('9876543210'), { target: { value: '9800000011' } });
+    // Step 1 appears once the page has asked who the visitor is (no session -> Step 1).
+    fireEvent.change(await screen.findByPlaceholderText('9876543210'), { target: { value: '9800000011' } });
     fireEvent.click(screen.getByText('OTP मिळवा'));
     await waitFor(() => expect(screen.getByText('OTP टाका')).toBeInTheDocument());
     fireEvent.change(screen.getByPlaceholderText('••••••'), { target: { value: '123456' } });
@@ -68,6 +75,7 @@ const walkToOtpStep = async () => {
 beforeEach(() => {
     __resetCompletedJoinsForTests();
     authValue = null;
+    mockRefreshSession.mockResolvedValue({ kind: 'rejected' });
     mockGetMyFarms.mockResolvedValue(MINE);
     openJoinLink();
     mockStartOtp.mockResolvedValue({});
@@ -132,13 +140,15 @@ describe('the landing page after a successful QR join', () => {
         expect(screen.queryByText('तुमचा फोन नंबर')).toBeNull();
     });
 
-    it('a QR that really is invalid still sends him back to try again (the honest failure is kept)', async () => {
+    it('a QR that really is invalid is told so, with who to ask for a new one (the honest failure is kept)', async () => {
         mockClaim.mockRejectedValue({ error: 'join.token_invalid', message: 'This QR is no longer valid.', status: 404 });
         render(<JoinFarmLandingPage onComplete={vi.fn()} />);
         await walkToOtpStep();
         fireEvent.click(screen.getByText('सामील व्हा'));
 
-        await waitFor(() => expect(screen.getByText('तुमचा फोन नंबर')).toBeInTheDocument());
+        // Round 3 (FIX 2): a dead QR is no longer a silent snap-back to the phone step -
+        // it says so and tells him to ask the farmer for a new one (see the .reopen test).
+        await waitFor(() => expect(screen.getByText(/तुमच्या मालकाला नवीन QR मागा/)).toBeInTheDocument());
         expect(screen.queryByText('तुम्ही जोडले गेलात!')).toBeNull();
     });
 });

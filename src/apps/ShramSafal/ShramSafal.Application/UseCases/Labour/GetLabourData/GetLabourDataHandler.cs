@@ -1120,7 +1120,12 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             // construction the same number the handler already counted (one
             // review card per pending log), restated here so the two can never
             // drift. It is never windowed: the inbox is an obligation.
-            return dto with { View = "owner", Dashboard = dto.Dashboard with { Pending = dto.Review.Count } };
+            return dto with
+            {
+                View = "owner",
+                Dashboard = dto.Dashboard with { Pending = dto.Review.Count },
+                CanManageLabour = true,
+            };
         }
 
         // narrowToCaller (own-row callers without a grant): only the caller's own
@@ -1176,6 +1181,10 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
 
         return dto with
         {
+            // Journey fix 3 (P3): the same decision that narrows the register above,
+            // told to the client so it does not offer what the server will refuse.
+            // Mukadam stays true (decision Q4: shown the door, refused clearly).
+            CanManageLabour = !narrowToCaller,
             View = view == LabourRegisterView.CrewAttendance ? "crew" : "own",
             TopLevelIds = topLevelIds,
             People = people,

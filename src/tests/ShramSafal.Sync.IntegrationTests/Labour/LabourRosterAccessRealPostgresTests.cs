@@ -425,6 +425,48 @@ public sealed class LabourRosterAccessRealPostgresTests(Xunit.Abstractions.ITest
         }
     }
 
+    [Fact]
+    public async Task CanManageLabour_is_false_only_for_an_own_row_caller_without_an_effective_grant()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        // Roles that carry (or are shown) the door: true, whatever the grant column says.
+        foreach (var (who, user) in new[] { ("owner", Owner), ("secondary owner", SecondOwner), ("mukadam (un-granted, Q4)", Mukadam), ("granted worker", GrantedWorker) })
+        {
+            (await ReadLabourDtoAsync(user)).CanManageLabour.Should().BeTrue(who);
+        }
+
+        // The own-row Worker follows the grant, exactly as the register narrowing does.
+        (await ReadLabourDtoAsync(PlainWorker)).CanManageLabour.Should().BeFalse("no grant");
+        (await ReadLabourDtoAsync(OtherWorker)).CanManageLabour.Should().BeFalse("no grant");
+
+        await SetGrantAsync(PlainWorker, true);
+        (await ReadLabourDtoAsync(PlainWorker)).CanManageLabour.Should().BeTrue("active grant");
+
+        await SetGrantAsync(PlainWorker, false);
+        (await ReadLabourDtoAsync(PlainWorker)).CanManageLabour.Should().BeFalse("revoked");
+
+        await SetGrantAsync(PlainWorker, true, TimeSpan.FromDays(1));
+        (await ReadLabourDtoAsync(PlainWorker)).CanManageLabour.Should().BeTrue("timed grant, live");
+
+        await SetGrantAsync(PlainWorker, true, TimeSpan.FromMinutes(-1));
+        (await ReadLabourDtoAsync(PlainWorker)).CanManageLabour.Should().BeFalse("timed grant, EXPIRED");
+    }
+
+    [Fact]
+    public async Task The_new_field_is_the_only_difference_in_the_owner_secondary_mukadam_and_granted_payloads()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        foreach (var user in new[] { Owner, SecondOwner, Mukadam, GrantedWorker })
+        {
+            var node = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(await ReadLabourDtoAsync(user)))!.AsObject();
+            node.Remove("CanManageLabour").Should().BeTrue();
+            var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(node.ToJsonString())))[..16];
+            output.WriteLine($"[PAYLOAD-HASH-EX-CANMANAGE] {user.ToString()[^2..]} {hash}");
+        }
+    }
+
     // ═════════════════════════════════════════════════════════════════════════
     // Harness
     // ═════════════════════════════════════════════════════════════════════════
