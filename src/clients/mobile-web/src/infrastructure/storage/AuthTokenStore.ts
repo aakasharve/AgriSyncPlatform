@@ -136,7 +136,10 @@ export function getAuthSession(): AuthSession | null {
 // credential (server: 30 days, sliding). We therefore honour the marker for at
 // most that long past its stamp; beyond it the server would refuse the refresh
 // anyway, so showing the app would only mislead. Never longer than the server.
-const PRESENCE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+// Tied to the server's refresh-credential life: AddDays(30) in
+// User.Application RefreshTokenHandler.cs:70 and LoginHandler.cs:76 (also
+// RegisterUserHandler, VerifyOtpHandler). Change both together.
+export const PRESENCE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 // A genuine marker is never more than one access-token life in the future. A
 // far-future value can only be a tampered/corrupt marker — fail closed.
 const PRESENCE_MAX_FUTURE_MS = 24 * 60 * 60 * 1000;

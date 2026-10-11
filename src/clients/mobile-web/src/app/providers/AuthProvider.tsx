@@ -10,7 +10,7 @@
 //   local state (Task 6.1). Callers use `void logout()` or `await logout()`.
 // - mapSession does NOT copy refreshToken from the dto.
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { agriSyncClient, type AuthResponseDto } from '../../infrastructure/api/AgriSyncClient';
 import type { RefreshOutcome } from '../../infrastructure/api/transport';
 import {
@@ -102,8 +102,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Guard: we do NOT override the initial 'checking' state here — the boot effect
     // always completes and sets the terminal status itself. This handler only fires
     // on EXPLICIT setAuthSession / clearAuthSession calls (not during boot).
+    // Latest presence-mode identity, readable from the stable callback below.
+    const presenceUserRef = useRef<string | null>(null);
     const syncFromStorage = useCallback(() => {
-        const current = getAuthSession();
+        // A tab that is open on a token-less PRESENCE session must not be
+        // dropped to login by a storage/auth-changed event while its marker
+        // survives, is valid, and is still the SAME user. Anything else (marker
+        // gone/invalid, another user's marker, tab not in presence mode) fails
+        // closed exactly as before.
+        const presenceUser = presenceUserRef.current;
+        let current = getAuthSession();
+        if (current === null && presenceUser !== null) {
+            const presence = getPresenceSession();
+            if (presence !== null && presence.userId === presenceUser) {
+                current = presence;
+            }
+        }
         setSession(current);
         setAuthStatus(current !== null ? 'authenticated' : 'anonymous');
     }, []);
@@ -195,6 +209,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // (revoked/blocked users end here); 'unreachable' changes nothing. Only
     // armed while in presence mode, so a normal session never refreshes extra.
     const offlinePresence = authStatus === 'authenticated' && !session?.accessToken;
+    const presenceUserId = offlinePresence ? (session?.userId ?? null) : null;
+    useEffect(() => {
+        presenceUserRef.current = presenceUserId;
+    }, [presenceUserId]);
     useEffect(() => {
         if (!offlinePresence) {
             return;

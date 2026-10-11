@@ -80,7 +80,10 @@ interface FarmContextValue {
 const FarmCtx = createContext<FarmContextValue | null>(null);
 
 export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, session } = useAuth();
+    // A token-less offline PRESENCE session is upgraded to a real one without
+    // isAuthenticated changing; refetch then, or the offline failure sticks.
+    const hasRealToken = Boolean(session?.accessToken);
     const [meContext, setMeContext] = useState<MeContext | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [currentFarmId, setCurrentFarmId] = useState<string | null>(
@@ -121,7 +124,7 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
             setMeContext(null);
             invalidateMeContext();
         }
-    }, [isAuthenticated, refresh]);
+    }, [isAuthenticated, hasRealToken, refresh]);
 
     const switchFarm = useCallback((farmId: string) => {
         setCurrentFarmId(farmId);

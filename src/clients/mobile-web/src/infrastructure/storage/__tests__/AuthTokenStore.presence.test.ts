@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
     getAuthSession,
     getPresenceSession,
+    PRESENCE_MAX_AGE_MS,
     setAuthSession,
     clearAuthSession,
 } from '../AuthTokenStore';
@@ -82,5 +83,11 @@ describe('getPresenceSession', () => {
         setAuthSession({ userId: 'user-A', accessToken: 'a', expiresAtUtc: iso(15 * 60 * 1000) });
         setAuthSession({ userId: 'user-B', accessToken: 'b', expiresAtUtc: iso(15 * 60 * 1000) });
         expect(getPresenceSession()?.userId).toBe('user-B');
+    });
+
+    it('the age cap equals the server refresh-credential life (30 days)', () => {
+        // Server: RefreshTokenHandler.cs:70 / LoginHandler.cs:76 (AddDays(30)).
+        // If the server lifetime changes, this bound must change with it.
+        expect(PRESENCE_MAX_AGE_MS).toBe(30 * 24 * 60 * 60 * 1000);
     });
 });

@@ -230,4 +230,52 @@ describe('AuthProvider - offline cold start (real AuthTokenStore)', () => {
         await act(async () => { window.dispatchEvent(new Event('online')); });
         expect(spy()).toHaveBeenCalledTimes(1);
     });
+
+    describe('storage / auth-changed events in a presence tab', () => {
+        async function presenceTab(userId = 'u-field') {
+            coldStartWithMarker(userId);
+            spy().mockResolvedValue({ kind: 'unreachable' });
+            render(<AuthProvider><Probe /></AuthProvider>);
+            await waitFor(() => expect(screen.getByTestId('offline').textContent).toBe('yes'));
+        }
+
+        it('keeps the presence session when a storage event fires and the same-user marker survives', async () => {
+            await presenceTab();
+            await act(async () => { window.dispatchEvent(new StorageEvent('storage', { key: KEY })); });
+            expect(status()).toBe('authenticated');
+            expect(screen.getByTestId('offline').textContent).toBe('yes');
+            await act(async () => { window.dispatchEvent(new Event('agrisync:auth-session-changed')); });
+            expect(status()).toBe('authenticated');
+        });
+
+        it('fails closed when the marker is gone', async () => {
+            await presenceTab();
+            window.localStorage.removeItem(KEY);
+            await act(async () => { window.dispatchEvent(new StorageEvent('storage', { key: KEY })); });
+            expect(status()).toBe('anonymous');
+        });
+
+        it("fails closed when another user's marker appears", async () => {
+            await presenceTab('user-A');
+            window.localStorage.setItem(KEY, JSON.stringify({ userId: 'user-B', expiresAtUtc: iso(60_000) }));
+            await act(async () => { window.dispatchEvent(new StorageEvent('storage', { key: KEY })); });
+            expect(status()).toBe('anonymous');
+        });
+
+        it('fails closed when the marker is no longer valid under the age rule', async () => {
+            await presenceTab();
+            window.localStorage.setItem(KEY, JSON.stringify({ userId: 'u-field', expiresAtUtc: iso(-31 * DAY) }));
+            await act(async () => { window.dispatchEvent(new StorageEvent('storage', { key: KEY })); });
+            expect(status()).toBe('anonymous');
+        });
+
+        it('an anonymous tab is NOT promoted to presence by a storage event', async () => {
+            spy().mockResolvedValue({ kind: 'unreachable' });
+            render(<AuthProvider><Probe /></AuthProvider>);
+            await waitFor(() => expect(status()).toBe('anonymous'));
+            window.localStorage.setItem(KEY, JSON.stringify({ userId: 'u-field', expiresAtUtc: iso(60_000) }));
+            await act(async () => { window.dispatchEvent(new StorageEvent('storage', { key: KEY })); });
+            expect(status()).toBe('anonymous');
+        });
+    });
 });

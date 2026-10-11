@@ -99,6 +99,9 @@ export function useFarmContextState(): FarmContextState {
     const [showFirstFarmWizard, setShowFirstFarmWizard] = React.useState(false);
     const [showMinimalOnboarding, setShowMinimalOnboarding] = React.useState(false);
     const [refreshCounter, setRefreshCounter] = React.useState(0);
+    // Refetch when an offline presence session is upgraded to a real token
+    // (isAuthenticated/userId do not change at that moment).
+    const hasRealToken = Boolean(session?.accessToken);
 
     React.useEffect(() => {
         if (!isAuthenticated) {
@@ -134,7 +137,7 @@ export function useFarmContextState(): FarmContextState {
         })();
         return () => { cancelled = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [refreshCounter, isAuthenticated, session?.userId]);
+    }, [refreshCounter, isAuthenticated, session?.userId, hasRealToken]);
 
     const handleSwitchFarm = React.useCallback((farmId: string) => {
         setCurrentFarmId(farmId);
