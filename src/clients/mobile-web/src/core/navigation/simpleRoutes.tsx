@@ -45,6 +45,7 @@ import {
 import { requestOpenWaitingDrawer } from '../../features/oversight/oversightNavigationEvents';
 import { resolveLabourAnchor } from '../../features/labour/labourAnchor';
 import { getDateKey } from '../domain/services/DateKeyService';
+import { buildNoWorkDayPayload } from './noWorkDay';
 
 export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'profile') return null;
@@ -106,6 +107,31 @@ export const renderLabourRoute = (ctx: AppRouterContext): React.ReactNode => {
                 history={ctx.history}
                 ledgerDefaults={ctx.ledgerDefaults}
                 lastLabourLogIds={ctx.lastLabourLogIds}
+                // काम झालं नाही, पण मजूर आले — the rained-out-day door. The marks
+                // are ordinary attendance.mark mutations; THIS records the day as
+                // a declared no-work day through the same payload and the same
+                // handler the main screen's `आज काम नाही` sheet uses.
+                //
+                // `handleManualSubmit` refuses silently (`'not_saved'`) while no
+                // log scope is selected, and the Labour route is reachable
+                // without one. So when the lane opens with NO scope we select
+                // the entire farm (a rest day is a farm-wide fact); a scope the
+                // farmer already chose is left alone, exactly as the main
+                // screen's sheet would use it. The save is only reported as
+                // done when the handler says it was.
+                onBeginNoWorkLane={() => {
+                    if (!ctx.hasActiveLogContext) {
+                        ctx.setLogScope({ selectedCropIds: ['FARM_GLOBAL'], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' });
+                    }
+                }}
+                onDeclareNoWorkDay={async (cause) => {
+                    const outcome = await ctx.handleManualSubmit(buildNoWorkDayPayload(ctx.todayDateKey, cause));
+                    // The manual-save path parks the main log screen on its
+                    // "Saved to Ledger" panel; we are not on that screen, and
+                    // leaving it armed would greet the farmer with it later.
+                    ctx.setStatus('idle');
+                    return outcome === 'saved' || outcome === 'saved_with_warning';
+                }}
             />
         </div>
     );

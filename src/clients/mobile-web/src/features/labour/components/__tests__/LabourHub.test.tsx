@@ -10,7 +10,7 @@
 // optional (LabourPreview.tsx's bare `?preview=labour` mount supplies none
 // of them) — the "renders nothing, doesn't crash" cases guard that.
 import React from 'react';
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi, beforeEach } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import LabourHub from '../LabourHub';
@@ -113,6 +113,11 @@ const nonLabourLog = (): DailyLog => ({
     machinery: [],
     financialSummary: { totalLabourCost: 0, totalInputCost: 0, totalMachineryCost: 0, grandTotal: 0 },
 } as unknown as DailyLog);
+
+import { setAttendanceDoorEnabled } from '../../attendanceDoor';
+
+// Early-access switch ON: these suites pin the door's behaviour once opened (device-switch spec).
+beforeEach(() => { setAttendanceDoorEnabled(true); });
 
 describe('LabourHub — "just logged" labour summary (Task 3.5)', () => {
     afterEach(() => cleanup());
@@ -274,9 +279,9 @@ describe('LabourHub — screen honesty (Decision 4b)', () => {
         expect(screen.queryByText('अजून कोणाचंही नाव जोडलेलं नाही')).toBeNull();
     });
 
-    it('hides हजेरी घ्या (capture unfinished) — but the हजेरी वही is never gated (Correction 5)', () => {
+    it('shows हजेरी घ्या (the capture screen is finished) and the हजेरी वही (never gated, Correction 5)', () => {
         render(<LabourHub {...baseProps()} data={LABOUR_MOCK} />);
-        expect(screen.queryByText('हजेरी घ्या')).toBeNull();
+        expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
         expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
         // The tiles that DO work stay reachable.
         expect(screen.getByText('आढावा')).toBeInTheDocument();
@@ -285,9 +290,8 @@ describe('LabourHub — screen honesty (Decision 4b)', () => {
 
 // ---------------------------------------------------------------------------
 // Task 7 (labour-v2-release-1) — the two REACHABLE false attendance claims on
-// this hub. Neither is behind a SHOW_* flag (unlike हजेरी घ्या above, which
-// IS hidden and covered by the test above; the हजेरी वही tile is ungated
-// since Correction 5 and needs no flag at all).
+// this hub. Neither is behind a SHOW_* flag (the हजेरी घ्या door is decided
+// by attendanceDoor.ts alone; the हजेरी वही tile is ungated since Correction 5).
 // The hub hero is the ONE way in to speaking; the duplicate mic that used to
 // sit on the Attendance screen (LabourMic) was deleted 2026-08-31.
 // ---------------------------------------------------------------------------
@@ -413,40 +417,45 @@ describe('LabourHub — no auto-approve capability claim (Task 22)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Task 18 (spec: 2026-08-28-labour-v2-release-1) — dev-preview review
-// exception. SHOW_ATTENDANCE_TILE stays hard `false` for every real farm
-// (Decision 4b, above) — the founder still cannot review the capture screen
-// with the flag itself flipped, because that would ship the same dead end to
-// a real farmer. `isPreview` (threaded from `useLabourState`'s
-// `farmCtx === null`, itself only true inside the `import.meta.env.DEV`-gated
-// `?preview=labour` mount — see App.tsx) is the ONE declared exception.
-// The हजेरी वही tile is no longer part of this exception: Correction 5
-// deleted its switch AND its || isPreview escape, so it renders on every
-// farm, real or preview — asserted below and in HajeriLedgerTotals.test.tsx.
+// The attendance door (replaces the Task 18 preview-exception block). The old
+// hard-`false` SHOW_ATTENDANCE_TILE and its `isPreview` escape are DELETED;
+// the tile is shown by `isAttendanceDoorEnabled()` for every caller, with no
+// prop. The full flow is pinned by LabourFeature.attendanceDoor.test.tsx.
 // ---------------------------------------------------------------------------
 
-describe('LabourHub — preview-only review exception (Task 18)', () => {
+describe('LabourHub - the attendance door (हजेरी घ्या)', () => {
     afterEach(() => cleanup());
 
-    it('reveals हजेरी घ्या and हजेरी वही when isPreview is true (founder review only)', () => {
-        render(<LabourHub {...baseProps()} data={LABOUR_MOCK} isPreview />);
+    it('always shows हजेरी घ्या and हजेरी वही, with no preview prop involved', () => {
+        render(<LabourHub {...baseProps()} data={LABOUR_MOCK} />);
         expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
         expect(screen.getByText('आज कोण आलं')).toBeInTheDocument();
         expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
         expect(screen.getByText('सर्व दिवस')).toBeInTheDocument();
     });
 
-    it('keeps हजेरी घ्या hidden when isPreview is explicitly false — but the हजेरी वही renders regardless', () => {
-        render(<LabourHub {...baseProps()} data={LABOUR_MOCK} isPreview={false} />);
-        expect(screen.queryByText('हजेरी घ्या')).toBeNull();
-        expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
-        expect(screen.getByText('आढावा')).toBeInTheDocument();
+    it('the tile opens the screen through onAttendance', () => {
+        const onAttendance = vi.fn();
+        render(<LabourHub {...baseProps()} onAttendance={onAttendance} />);
+        fireEvent.click(screen.getByText('हजेरी घ्या'));
+        expect(onAttendance).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps हजेरी घ्या hidden when isPreview is omitted entirely (every existing real-app caller)', () => {
-        render(<LabourHub {...baseProps()} data={LABOUR_MOCK} />);
-        expect(screen.queryByText('हजेरी घ्या')).toBeNull();
-        expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
+    it('the no-work door (काम झालं नाही, पण मजूर आले) shows only while the hero is grey AND a handler exists', () => {
+        const onNoWorkAttendance = vi.fn();
+        const noWork = 'काम झालं नाही, पण मजूर आले';
+
+        render(<LabourHub {...baseProps()} anchor={{ state: 'no-anchor' }} onNoWorkAttendance={onNoWorkAttendance} />);
+        fireEvent.click(screen.getByText(noWork));
+        expect(onNoWorkAttendance).toHaveBeenCalledTimes(1);
+        cleanup();
+
+        render(<LabourHub {...baseProps()} anchor={{ state: 'no-anchor' }} />);          // no handler
+        expect(screen.queryByText(noWork)).toBeNull();
+        cleanup();
+
+        render(<LabourHub {...baseProps()} anchor={{ state: 'anchored', headcount: 4, logId: 'l1' }} onNoWorkAttendance={onNoWorkAttendance} />);
+        expect(screen.queryByText(noWork)).toBeNull();                                    // hero active
     });
 });
 

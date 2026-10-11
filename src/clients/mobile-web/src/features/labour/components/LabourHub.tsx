@@ -7,13 +7,15 @@
  * line, drill-in optional). Simple for a semi-literate farmer, in the app's
  * design.
  *
- * Decision 4b (2026-07-19, screen honesty): हजेरी घ्या's capture tile stays
- * hidden behind `SHOW_ATTENDANCE_TILE` below until the capture work finishes.
- * The हजेरी वही tile is NOT gated — Correction 5 (founder, 2026-09-01)
- * deleted its switch once Phase 4 finished the register it opens.
+ * हजेरी घ्या's capture tile is shown by `isAttendanceDoorEnabled()` (the ONE
+ * place that decides — `../attendanceDoor.ts`). The old hard-`false`
+ * `SHOW_ATTENDANCE_TILE` constant and its `isPreview` escape were DELETED once
+ * the screen behind the tile was finished (a switch that can be flipped back
+ * is still a gate). The हजेरी वही tile was never gated — Correction 5
+ * (founder, 2026-09-01).
  */
 import React from 'react';
-import { Mic, ClipboardCheck, Inbox, LayoutDashboard, BookText, Users } from 'lucide-react';
+import { Mic, ClipboardCheck, Inbox, LayoutDashboard, BookText, Users, CloudRain } from 'lucide-react';
 import type { LabourData } from '../labourMock';
 import { inr } from '../labourMock';
 import type { DailyLog, LedgerDefaults } from '../../../types';
@@ -24,27 +26,20 @@ import { toMr } from './LabourDataPoints';
 import type { LabourAnchor } from '../labourAnchor';
 import { NO_ANCHOR_TEST_IDS } from '../labourAnchor';
 import { ATTENDANCE_COPY } from '../attendanceCopy';
-
-/**
- * Task 3.5c (Labour V2 R1) killed the lie this gate was hiding: हजेरी घ्या's
- * save now enqueues REAL attendance.mark mutations through MutationQueue and
- * toasts the honest offline vocabulary — nothing claims "saved" before
- * acknowledgement (P10). The tile itself STAYS hidden: un-hiding is Phase 4's
- * call, when the register that reads these marks back exists.
- */
-// STAYS false for every real farm (Task 18, spec: 2026-08-28-labour-v2-
-// release-1). This is NOT the founder-review switch — see `isPreview` in the
-// render below, which is the one declared exception: it reveals this tile
-// only inside the `import.meta.env.DEV`-gated `?preview=labour` mount
-// (App.tsx), never for a real farmer. Preview mounts have no farm context, so
-// the screen's save renders disabled there (Attendance.tsx `saveDisabled`).
-const SHOW_ATTENDANCE_TILE = false;
+import { isAttendanceDoorEnabled } from '../attendanceDoor';
 
 interface Props {
     data: LabourData;
     onOpenMukadam: (id: string) => void;
     onOpenPerson: (id: string) => void;
     onAttendance: () => void;
+    /**
+     * Opens the same attendance screen in no-work mode (`काम झालं नाही, पण
+     * मजूर आले`). Rendered ONLY while the voice hero is grey (no work logged
+     * today), because with a logged day the hero and the हजेरी घ्या tile
+     * already cover "who came".
+     */
+    onNoWorkAttendance?: () => void;
     onDashboard: () => void;
     onLedger: () => void;
     onReview: () => void;
@@ -78,16 +73,6 @@ interface Props {
     history?: DailyLog[];
     ledgerDefaults?: LedgerDefaults;
     lastLabourLogIds?: string[];
-    /**
-     * Task 18 (spec: 2026-08-28-labour-v2-release-1) — true only inside the
-     * `?preview=labour` dev preview (threaded from `useLabourState`'s
-     * `isPreview`, itself `farmCtx === null`). Reveals `SHOW_ATTENDANCE_TILE`
-     * below for founder review WITHOUT flipping the constant for a real
-     * farm. Defaults to `false` so every existing
-     * real-app caller (and this component's own pre-Task-18 tests) is
-     * unaffected.
-     */
-    isPreview?: boolean;
 }
 
 /**
@@ -285,7 +270,7 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
     );
 };
 
-const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onDashboard, onLedger, onReview, onGoToLog, onInviteWorker, anchor, history, ledgerDefaults, lastLabourLogIds, isPreview = false }) => {
+const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onNoWorkAttendance, onDashboard, onLedger, onReview, onGoToLog, onInviteWorker, anchor, history, ledgerDefaults, lastLabourLogIds }) => {
     const justLoggedLogs = (history && ledgerDefaults && lastLabourLogIds && lastLabourLogIds.length > 0)
         ? lastLabourLogIds
             .map((id) => history.find((log) => log.id === id))
@@ -344,6 +329,11 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
                 {ATTENDANCE_COPY.noAnchorReason}
             </div>
         )}
+        {heroInactive && onNoWorkAttendance && isAttendanceDoorEnabled() && (
+            <div className="grid grid-cols-1">
+                <QuickTile icon={<CloudRain size={20} />} chip="bg-sky-50 text-sky-600 ring-1 ring-sky-100" label="काम झालं नाही, पण मजूर आले" onClick={onNoWorkAttendance} />
+            </div>
+        )}
 
         {/* D6 (master review 2026-09-02) — one Labour, TWO money truths, never
             one figure. Owner view only: D-H8 keeps money off every non-owner
@@ -397,9 +387,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
         )}
 
         <div className="grid grid-cols-2 gap-2.5">
-            {/* Task 18 — `isPreview` is the one declared exception to the
-                hard-`false` SHOW_ATTENDANCE_TILE above; see its own comment. */}
-            {(SHOW_ATTENDANCE_TILE || isPreview) && (
+            {isAttendanceDoorEnabled() && (
                 <QuickTile icon={<ClipboardCheck size={20} />} chip="bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100" label="हजेरी घ्या" sub="आज कोण आलं" onClick={onAttendance} />
             )}
             {/* Correction 5 (founder, 2026-09-01): the हजेरी वही is NEVER gated —

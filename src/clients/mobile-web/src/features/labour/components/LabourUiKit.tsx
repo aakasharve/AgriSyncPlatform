@@ -208,7 +208,7 @@ export const StatTile: React.FC<{ icon: React.ReactNode; tone: 'em' | 'am' | 'bl
 };
 
 /** Back-header matching the SetupHub sub-screen pattern (bg #f6f7f5, back pill + centred title). */
-export const BackHeader: React.FC<{ title: string; onBack: () => void }> = ({ title, onBack }) => (
+export const BackHeader: React.FC<{ title: string; onBack: () => void; onTitleTap?: () => void }> = ({ title, onBack, onTitleTap }) => (
     <div className="sticky top-0 z-20 flex items-center gap-3 bg-[#f6f7f5] px-4 pb-3 pt-2 shadow-[0_8px_14px_-12px_rgba(20,40,30,0.35)]">
         {/*
           * This is the ONLY way out of every sub-screen. It was 35px tall with
@@ -223,7 +223,7 @@ export const BackHeader: React.FC<{ title: string; onBack: () => void }> = ({ ti
           * nothing to Devanagari except loosen the letters and hurt legibility.
           * Dropped, and raised from 13px to 18px so the farmer can read where he is.
           */}
-        <div className="flex-1 truncate pr-16 text-center text-[18px] font-bold text-stone-500">{title}</div>
+        <div className="flex-1 truncate pr-16 text-center text-[18px] font-bold text-stone-500" onClick={onTitleTap}>{title}</div>
     </div>
 );
 
