@@ -6,7 +6,7 @@
  * a farm, so the manual हजेरी screen still lists names when the network is
  * down (locked offline ruling).
  *
- * localStorage on purpose, NOT a Dexie table: a Dexie version bump is one-way
+ * Device-local storage (via infrastructure/storage/LabourLocalStore) on purpose, NOT a Dexie table: a Dexie version bump is one-way
  * on devices, and a roster list is a convenience copy, not a record. Keyed per
  * farmer AND farm via `storageNamespace`, so a shared handset never shows one
  * farm's names on another. Every read/write is try/catch'd; a failing store
@@ -16,6 +16,7 @@
  * names as "current".
  */
 import { storageNamespace } from '../../../infrastructure/storage/StorageNamespace';
+import { readCachedJson, writeCachedJson } from '../../../infrastructure/storage/LabourLocalStore';
 import type { FieldOperator } from './fieldOperatorClient';
 
 const keyFor = (farmId: string): string => storageNamespace.getKey(`shramsafal_field_operator_roster_${farmId}`);
@@ -27,7 +28,7 @@ const isOperator = (v: unknown): v is FieldOperator => {
 
 export function readCachedRoster(farmId: string): FieldOperator[] | null {
     try {
-        const raw = window.localStorage.getItem(keyFor(farmId));
+        const raw = readCachedJson(keyFor(farmId));
         if (!raw) return null;
         const parsed: unknown = JSON.parse(raw);
         if (!Array.isArray(parsed) || !parsed.every(isOperator)) return null;
@@ -39,8 +40,8 @@ export function readCachedRoster(farmId: string): FieldOperator[] | null {
 
 export function writeCachedRoster(farmId: string, roster: FieldOperator[]): void {
     try {
-        window.localStorage.setItem(keyFor(farmId), JSON.stringify(roster));
+        writeCachedJson(keyFor(farmId), JSON.stringify(roster));
     } catch {
-        /* storage unavailable: the screen just has no offline copy */
+        /* stringify failed: the screen just has no offline copy */
     }
 }

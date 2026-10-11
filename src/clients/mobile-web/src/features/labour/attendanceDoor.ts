@@ -17,25 +17,15 @@
  * has no farm, so the screen it opens cannot save or add a name (the roster
  * and the queue need a farm) and therefore cannot show an acknowledgement.
  */
+import { readDeviceFlag, writeDeviceFlag } from '../../infrastructure/storage/LabourLocalStore';
+
 export const ATTENDANCE_DOOR_STORAGE_KEY = 'agrisync.early.attendanceDoor';
 
 export function isAttendanceDoorEnabled(): boolean {
-    try {
-        if (typeof window === 'undefined') return false;
-        return window.localStorage.getItem(ATTENDANCE_DOOR_STORAGE_KEY) === '1';
-    } catch {
-        return false;
-    }
+    return readDeviceFlag(ATTENDANCE_DOOR_STORAGE_KEY);
 }
 
 /** Returns whether the value was persisted (false when storage is blocked). */
 export function setAttendanceDoorEnabled(on: boolean): boolean {
-    try {
-        if (typeof window === 'undefined') return false;
-        if (on) window.localStorage.setItem(ATTENDANCE_DOOR_STORAGE_KEY, '1');
-        else window.localStorage.removeItem(ATTENDANCE_DOOR_STORAGE_KEY);
-        return true;
-    } catch {
-        return false;
-    }
+    return writeDeviceFlag(ATTENDANCE_DOOR_STORAGE_KEY, on);
 }
