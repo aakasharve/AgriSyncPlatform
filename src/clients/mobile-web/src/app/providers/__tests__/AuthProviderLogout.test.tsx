@@ -36,7 +36,8 @@ vi.mock('../../../infrastructure/api/AgriSyncClient', () => {
     return {
         agriSyncClient: {
             get refreshSession() { return mockRefreshSession; },
-            get logoutCurrentDevice() { return mockLogoutCurrentDevice; },
+            get completePendingLogout() { return mockLogoutCurrentDevice; },
+        beginLogout: vi.fn(() => Promise.resolve()),
             login: vi.fn(),
             register: vi.fn(),
         },
@@ -138,7 +139,7 @@ describe('AuthProvider — Task 6.1 logout wiring', () => {
         cleanup();
     });
 
-    it('calls logoutCurrentDevice on the backend before clearing local state', async () => {
+    it('signs out locally FIRST, then asks the backend to revoke (offline logout must not wait)', async () => {
         // Track call order via a sequence array
         const callOrder: string[] = [];
 
@@ -155,9 +156,9 @@ describe('AuthProvider — Task 6.1 logout wiring', () => {
             screen.getByTestId('logout-btn').click();
         });
 
-        // backend must be called first
-        expect(callOrder[0]).toBe('backend');
-        expect(callOrder[1]).toBe('clearAuthSession');
+        // local sign-out first; the network revoke is last
+        expect(callOrder[0]).toBe('clearAuthSession');
+        expect(callOrder[1]).toBe('backend');
     });
 
     it('clears AuthTokenStore (clearAuthSession) on logout', async () => {

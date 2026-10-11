@@ -39,6 +39,7 @@ import { setRememberDevice, clearRememberDevice } from '../../infrastructure/sto
 // clearNativeRefreshSession is a web no-op but is called unconditionally so
 // the Android implementation (Task 5.2) automatically gets fail-closed
 // behaviour when the web build is ported.
+import { hasPendingLogout, clearPendingLogout } from '../../infrastructure/storage/PendingLogoutStore';
 import { clearNativeRefreshSession } from '../../infrastructure/storage/RefreshSessionStore';
 
 // spec: secure-remembered-device-sessions-2026-06-24
@@ -83,6 +84,19 @@ function hasJoinDeepLink(): boolean {
         return Boolean((params.get('join') && params.get('farm')) || params.get('q'));
     } catch {
         return false;
+    }
+}
+
+// A new sign-in replaces the previous credential (the cookie / Keystore slot),
+// so the previous user's owed revoke must be ATTEMPTED first. Failure does not
+// block the new user; the marker is dropped only after the attempt.
+async function settlePendingLogoutBeforeSignIn(): Promise<void> {
+    try {
+        await agriSyncClient.completePendingLogout();
+    } catch {
+        // attempted; carry on
+    } finally {
+        clearPendingLogout();
     }
 }
 
@@ -193,6 +207,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
         }
 
+        // Signed out locally but the server revoke is still owed (offline
+        // logout): NEVER silently re-authenticate. Show login, finish the
+        // revoke now (no-op offline; retried on 'online').
+        if (hasPendingLogout()) {
+            setAuthStatus('anonymous');
+            void agriSyncClient.completePendingLogout().catch(() => undefined);
+            return;
+        }
+
         // Even if we have a valid-looking access token in storage, we still
         // attempt a refresh to validate the server-side session. This prevents
         // a stale access token from being treated as truth — but a failure to
@@ -235,6 +258,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
     }, [offlinePresence, applyRefreshOutcome]);
 
+    // Finish an owed server-side revoke on every reachable moment. Never
+    // re-signs anyone in: it only tells the server to revoke, then clears the
+    // pending marker. A no-op when nothing is pending.
+    useEffect(() => {
+        const settle = () => {
+            void agriSyncClient.completePendingLogout().catch(() => undefined);
+        };
+        window.addEventListener('online', settle);
+        return () => window.removeEventListener('online', settle);
+    }, []);
+
     useEffect(() => {
         const onStorage = (event: StorageEvent) => {
             if (!event.key || event.key.includes('agrisync_auth_session_v1')) {
@@ -259,6 +293,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsLoading(true);
         setAuthError(null);
         try {
+            await settlePendingLogoutBeforeSignIn();
             const response = await agriSyncClient.login({
                 phone,
                 password,
@@ -287,6 +322,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsLoading(true);
         setAuthError(null);
         try {
+            await settlePendingLogoutBeforeSignIn();
             const response = await agriSyncClient.register({
                 phone,
                 password,
@@ -312,29 +348,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, []);
 
     // spec: secure-remembered-device-sessions-2026-06-24 / Task 6.1
-    // logout is ASYNC: call backend revoke FIRST, then ALWAYS clear local
-    // state even when the backend call fails (fail-closed guarantee).
-    // Order:
-    //   1. POST /user/auth/logout (backend revoke) — wrapped in try/catch;
-    //      error is logged but does NOT abort cleanup.
-    //   2. clearAuthSession() — wipes the access token from localStorage.
-    //   3. clearCachedDek() — drops in-memory tenant DEK.
-    //      (data-principle-spine-2026-05-05/05.3)
-    //   4. clearCachedConsentToken() — drops in-memory consent token.
-    //      (data-principle-spine-2026-05-05/06.5)
-    //   5. clearRememberDevice() — removes the remember-device flag so a
-    //      fresh login is required before the next refresh cycle honours it.
-    //   6. clearNativeRefreshSession() — web no-op; Android Keystore wipe.
-    //   7. Set session null + authStatus 'anonymous'.
+    // logout is ASYNC and signs the farmer out LOCALLY AT ONCE; the server
+    // revoke is attempted last and, if the phone is offline, stays owed
+    // (PendingLogoutStore marker) and is retried on boot / 'online'.
+    // Order: beginLogout (marker; Android token -> pending-revoke slot) ->
+    // clearAuthSession -> clear DEK / consent token / remember-device / native
+    // slot -> state anonymous -> completePendingLogout (network, last).
     const logout = useCallback(async () => {
+        // 1. Record the owed server revoke (non-secret marker; on Android the
+        //    token moves to a separate pending-revoke slot). Local, no network.
         try {
-            await agriSyncClient.logoutCurrentDevice();
+            await agriSyncClient.beginLogout();
         } catch (err) {
-            // Backend revoke failed (network error, 401, etc.).
-            // Record the error but proceed with local cleanup unconditionally.
-            console.error('[AuthProvider] Backend logout failed — clearing local state regardless', err);
+            console.error('[AuthProvider] Could not record pending logout - signing out locally anyway', err);
         }
-        // Always clear — even when the backend call threw.
+        // 2. Sign out locally AT ONCE - never waits for the network.
         clearAuthSession();
         // spec: data-principle-spine-2026-05-05/05.3
         clearCachedDek();
@@ -346,6 +374,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSession(null);
         setAuthStatus('anonymous');
         setAuthError(null);
+        // 3. Now ask the server to revoke. Failure leaves the marker; it is
+        //    retried on every boot / 'online' and boot will not re-sign-in.
+        try {
+            await agriSyncClient.completePendingLogout();
+        } catch (err) {
+            console.error('[AuthProvider] Backend logout failed - will retry when online', err);
+        }
     }, []);
 
     const value = useMemo<AuthContextValue>(() => ({

@@ -25,6 +25,7 @@
 // See `endFarmerSession.ts` for what it does and why it hangs off this
 // function rather than off the logout button.
 import { endFarmerSessionLocally } from './endFarmerSession';
+import { clearPendingLogout } from './PendingLogoutStore';
 
 export interface AuthSession {
     userId: string;
@@ -207,6 +208,10 @@ export function getSessionUserId(): string | null {
 export function setAuthSession(session: AuthSession): void {
     // The access token lives in memory only — never in localStorage.
     inMemoryAccessToken = session.accessToken;
+
+    // A session was just established by a fresh login/refresh: any earlier
+    // pending-logout no longer blocks boot (callers settle the revoke first).
+    clearPendingLogout();
 
     if (canUseStorage()) {
         // Persist ONLY the non-sensitive presence marker (no token).

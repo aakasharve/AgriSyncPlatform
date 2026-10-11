@@ -22,7 +22,8 @@ vi.mock('../../../infrastructure/api/AgriSyncClient', () => {
             get refreshSession() { return spy; },
             login: vi.fn(),
             register: vi.fn(),
-            logoutCurrentDevice: vi.fn(() => Promise.resolve()),
+            beginLogout: vi.fn(() => Promise.resolve()),
+            completePendingLogout: vi.fn(() => Promise.resolve("none")),
             _spy: spy,
         },
     };

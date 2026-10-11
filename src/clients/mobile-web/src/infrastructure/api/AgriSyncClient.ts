@@ -26,6 +26,7 @@ import {
 } from '../storage/AuthTokenStore';
 import { getOrCreateDeviceId } from '../storage/DeviceIdStore';
 import { getRememberDevice } from '../storage/RememberDeviceStore';
+import { hasPendingLogout } from '../storage/PendingLogoutStore';
 import {
     clearNativeRefreshSession,
     getNativeRefreshSession,
@@ -577,6 +578,13 @@ export class AgriSyncClient implements HttpTransport {
             return this.refreshPromise;
         }
 
+        // Signed out locally, server revoke still pending: never silently
+        // re-authenticate (the HttpOnly cookie / Keystore token may still be
+        // valid server-side). Not 'rejected'-with-clearing: nothing to clear.
+        if (hasPendingLogout()) {
+            return { kind: 'rejected' };
+        }
+
         const deviceId = getOrCreateDeviceId();
         const rememberDevice = getRememberDevice();
 
@@ -668,8 +676,12 @@ export class AgriSyncClient implements HttpTransport {
     // sent automatically via withCredentials on authHttp; X-Device-Id is
     // attached by the authHttp interceptor. If the backend is unreachable the
     // caller (AuthProvider.logout) still completes local cleanup.
-    async logoutCurrentDevice(): Promise<void> {
-        await Auth.logout(this);
+    async beginLogout(): Promise<void> {
+        await Auth.beginLogout();
+    }
+
+    async completePendingLogout(): Promise<Auth.PendingLogoutResult> {
+        return Auth.completePendingLogout(this);
     }
 }
 
