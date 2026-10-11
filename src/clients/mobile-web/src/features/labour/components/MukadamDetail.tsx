@@ -79,7 +79,7 @@ const MukadamDetail: React.FC<Props> = ({ data, personId, onOpenPerson, onOpenMu
               * is actually known; no new word is introduced.
               */}
             <GroupLabel>याच्यासोबत आलेली माणसं{m.memberIds != null ? ` (${members.length})` : ''}</GroupLabel>
-            {members.map((id) => {
+            {members.filter((id) => data.people[id] != null).map((id) => {
                 const person = data.people[id];
                 const isMukadam = person.role !== 'worker';
                 return (

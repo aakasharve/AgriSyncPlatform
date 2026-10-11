@@ -295,6 +295,10 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
     // perhaps never marked) plus every named row of the register (marked). Once
     // each, by id. A register row with no name is skipped - a name is never
     // invented - and nobody here carries a balance (blank is not zero).
+    // N1 - a top-level id whose person is not in the response is skipped, never
+    // dereferenced: a narrowed or older server must not be able to crash the hub.
+    const shownIds = data.topLevelIds.filter((id) => data.people[id] != null);
+
     const namedPeople = (() => {
         const seen = new Set<string>();
         const out: Array<{ id: string; name: string }> = [];
@@ -491,7 +495,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
         />
 
         <GroupLabel>माणसं</GroupLabel>
-        {data.topLevelIds.length === 0 && namedPeople.length === 0 ? (
+        {shownIds.length === 0 && namedPeople.length === 0 ? (
             <EmptyState
                 icon={<Users size={22} />}
                 title="अजून कोणाचंही नाव जोडलेलं नाही"
@@ -514,7 +518,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
             />
         ) : (
             <>
-                {data.topLevelIds.map((id) => {
+                {shownIds.map((id) => {
                     const person = data.people[id];
                     const isMukadam = person.role !== 'worker';
                     return (
@@ -539,7 +543,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
                 )}
                 {/* Nobody has joined by QR yet, so the empty state's one real next step
                     (show the QR) must not disappear just because names were added. */}
-                {data.topLevelIds.length === 0 && onInviteWorker && (
+                {shownIds.length === 0 && onInviteWorker && (
                     <button
                         type="button"
                         data-testid="hub-invite-qr"
