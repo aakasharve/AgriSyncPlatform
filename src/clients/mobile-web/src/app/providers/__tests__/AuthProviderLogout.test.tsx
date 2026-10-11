@@ -49,6 +49,7 @@ const mockSetAuthSession = vi.fn();
 
 vi.mock('../../../infrastructure/storage/AuthTokenStore', () => ({
     getAuthSession: () => mockGetAuthSession(),
+    getPresenceSession: () => null,
     setAuthSession: (...args: unknown[]) => mockSetAuthSession(...args),
     clearAuthSession: () => mockClearAuthSession(),
     AUTH_SESSION_CHANGED_EVENT: 'agrisync:auth-session-changed',

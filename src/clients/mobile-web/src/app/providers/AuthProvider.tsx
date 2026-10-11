@@ -17,6 +17,7 @@ import {
     AUTH_SESSION_CHANGED_EVENT,
     clearAuthSession,
     getAuthSession,
+    getPresenceSession,
     setAuthSession,
     type AuthSession
 } from '../../infrastructure/storage/AuthTokenStore';
@@ -48,6 +49,12 @@ interface AuthContextValue {
     authStatus: AuthStatus;
     isAuthenticated: boolean;
     isLoading: boolean;
+    /**
+     * True when the app is open on the strength of the stored presence marker
+     * alone (offline cold start): `session.accessToken` is '' and NOTHING has
+     * been verified. Server-bound work must treat this as "no token yet".
+     */
+    isOfflinePresence: boolean;
     authError: string | null;
     login: (phone: string, password: string, rememberDevice?: boolean) => Promise<void>;
     register: (phone: string, password: string, displayName: string) => Promise<void>;
@@ -117,9 +124,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     //               An unverified access token grants nothing on its own — the
     //               first real request that meets a live server and gets a 401
     //               routes back through refreshSession() and clears properly.
-    //               With no warm session there is nothing to show, so we land
-    //               on 'anonymous' — but we still clear NOTHING, so the durable
-    //               Keystore token is there for the next launch with signal.
+    //               With no warm session we fall back to the token-less PRESENCE
+    //               session (cold start, marker survives). With neither there is
+    //               nothing to show, so 'anonymous' — still clearing NOTHING, so
+    //               the durable Keystore token is there for the next launch.
     const applyRefreshOutcome = useCallback((outcome: RefreshOutcome) => {
         if (outcome.kind === 'refreshed') {
             setSession(outcome.session);
@@ -135,7 +143,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
         }
 
-        const warm = getAuthSession();
+        // A warm session (live in-memory token) wins. On a COLD start there is
+        // none, but the non-secret presence marker survives: fall back to a
+        // TOKEN-LESS presence session so a farmer relaunching with no signal
+        // lands in the offline app, not on the login screen (locked offline
+        // ruling: attendance capture works offline). It carries no token, so
+        // nothing server-bound can use it; the first reachable refresh mints a
+        // real session or, if the server judges the credential dead, clears it.
+        const warm = getAuthSession() ?? getPresenceSession();
         setSession(warm);
         setAuthStatus(warm !== null ? 'authenticated' : 'anonymous');
     }, []);
@@ -173,6 +188,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .then(applyRefreshOutcome)
             .catch(() => applyRefreshOutcome({ kind: 'unreachable' }));
     }, [applyRefreshOutcome]);
+
+    // Connectivity is back (or the app is foregrounded) while we are open on
+    // presence alone: re-run the refresh so a REAL token replaces the empty one
+    // before authenticated work resumes. A judged rejection clears the session
+    // (revoked/blocked users end here); 'unreachable' changes nothing. Only
+    // armed while in presence mode, so a normal session never refreshes extra.
+    const offlinePresence = authStatus === 'authenticated' && !session?.accessToken;
+    useEffect(() => {
+        if (!offlinePresence) {
+            return;
+        }
+
+        const retry = () => {
+            if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+                return;
+            }
+            void agriSyncClient.refreshSession()
+                .then(applyRefreshOutcome)
+                .catch(() => applyRefreshOutcome({ kind: 'unreachable' }));
+        };
+
+        window.addEventListener('online', retry);
+        document.addEventListener('visibilitychange', retry);
+        return () => {
+            window.removeEventListener('online', retry);
+            document.removeEventListener('visibilitychange', retry);
+        };
+    }, [offlinePresence, applyRefreshOutcome]);
 
     useEffect(() => {
         const onStorage = (event: StorageEvent) => {
@@ -292,13 +335,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         authStatus,
         isAuthenticated: authStatus === 'authenticated',
         isLoading,
+        isOfflinePresence: offlinePresence,
         authError,
         login,
         register,
         logout,
         refresh,
         clearAuthError,
-    }), [session, authStatus, isLoading, authError, login, register, logout, refresh, clearAuthError]);
+    }), [session, authStatus, isLoading, offlinePresence, authError, login, register, logout, refresh, clearAuthError]);
 
     return (
         <AuthContext.Provider value={value}>

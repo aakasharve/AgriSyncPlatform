@@ -130,6 +130,52 @@ export function getAuthSession(): AuthSession | null {
     };
 }
 
+// The marker's `expiresAtUtc` is the ACCESS token's expiry (15 min), refreshed on
+// every refresh — so on a cold start it is almost always already in the past and
+// that is NOT evidence the session ended. The real bound is the refresh
+// credential (server: 30 days, sliding). We therefore honour the marker for at
+// most that long past its stamp; beyond it the server would refuse the refresh
+// anyway, so showing the app would only mislead. Never longer than the server.
+const PRESENCE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+// A genuine marker is never more than one access-token life in the future. A
+// far-future value can only be a tampered/corrupt marker — fail closed.
+const PRESENCE_MAX_FUTURE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * TOKEN-LESS "this device had a signed-in user" view, built ONLY from the
+ * non-secret presence marker. `accessToken` is ALWAYS '' — nothing is invented,
+ * nothing is persisted, and the transport (which sends a Bearer only for a
+ * non-empty token) therefore never authenticates with it.
+ *
+ * Use is restricted to AuthProvider's 'unreachable' boot branch so a relaunch
+ * with no signal opens the offline app instead of the login screen. Server
+ * authority is untouched: every request is still validated by the JWT, and the
+ * first reachable refresh either mints a real session or (judged 4xx) clears
+ * this one.
+ */
+export function getPresenceSession(): AuthSession | null {
+    const marker = readPresenceMarker();
+    if (!marker) {
+        return null;
+    }
+
+    const expiresAtMs = Date.parse(marker.expiresAtUtc);
+    if (Number.isNaN(expiresAtMs)) {
+        return null;
+    }
+
+    const now = Date.now();
+    if (now - expiresAtMs > PRESENCE_MAX_AGE_MS || expiresAtMs - now > PRESENCE_MAX_FUTURE_MS) {
+        return null;
+    }
+
+    return {
+        userId: marker.userId,
+        accessToken: '',
+        expiresAtUtc: marker.expiresAtUtc,
+    };
+}
+
 /**
  * Returns true when a session-presence marker exists in localStorage,
  * regardless of whether the in-memory access token is currently populated.
