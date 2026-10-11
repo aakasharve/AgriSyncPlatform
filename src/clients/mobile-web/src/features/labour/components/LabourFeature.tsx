@@ -475,6 +475,7 @@ export const LabourFeature: React.FC<{
                                 history={history}
                                 ledgerDefaults={ledgerDefaults}
                                 lastLabourLogIds={lastLabourLogIds}
+                                rosterPeople={farmId ? readCachedRoster(farmId)?.filter((o) => o.isActive) ?? undefined : undefined}
                             />
                         )}
                         {cur.name === 'mukadam' && cur.id && (

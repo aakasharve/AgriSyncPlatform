@@ -21,7 +21,7 @@ import { inr } from '../labourMock';
 import type { DailyLog, LedgerDefaults } from '../../../types';
 import { generateDayWorkSummary } from '../../analysis/dayWorkSummary';
 import { formatCurrency } from '../../../shared/utils/currency';
-import { GroupLabel, PersonRow, HelpNote, EmptyState } from './LabourUiKit';
+import { GroupLabel, PersonRow, HelpNote, EmptyState, Avatar } from './LabourUiKit';
 import { toMr } from './LabourDataPoints';
 import type { LabourAnchor } from '../labourAnchor';
 import { NO_ANCHOR_TEST_IDS, serverStatesLabourToday } from '../labourAnchor';
@@ -77,6 +77,12 @@ interface Props {
     history?: DailyLog[];
     ledgerDefaults?: LedgerDefaults;
     lastLabourLogIds?: string[];
+    /**
+     * People the farm has NAMED (FieldOperators) that this device already knows
+     * from its cached roster - so a person who was added but not yet marked
+     * still appears. Names only: nothing here carries money.
+     */
+    rosterPeople?: ReadonlyArray<{ id: string; displayName: string }>;
 }
 
 /**
@@ -274,7 +280,7 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
     );
 };
 
-const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onNoWorkAttendance, onDashboard, onLedger, onReview, onGoToLog, onInviteWorker, anchor, history, ledgerDefaults, lastLabourLogIds }) => {
+const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onNoWorkAttendance, onDashboard, onLedger, onReview, onGoToLog, onInviteWorker, anchor, history, ledgerDefaults, lastLabourLogIds, rosterPeople }) => {
     const justLoggedLogs = (history && ledgerDefaults && lastLabourLogIds && lastLabourLogIds.length > 0)
         ? lastLabourLogIds
             .map((id) => history.find((log) => log.id === id))
@@ -284,6 +290,23 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
     // Task 3.1 — no anchor → the recorder's doorway goes inactive. ONLY the
     // recorder: every other surface on this hub renders exactly as before.
     const heroInactive = anchor?.state === 'no-anchor';
+
+    // Journey fix D7 - the people the farm has NAMED: the cached roster (added,
+    // perhaps never marked) plus every named row of the register (marked). Once
+    // each, by id. A register row with no name is skipped - a name is never
+    // invented - and nobody here carries a balance (blank is not zero).
+    const namedPeople = (() => {
+        const seen = new Set<string>();
+        const out: Array<{ id: string; name: string }> = [];
+        const add = (id: string, name: string) => {
+            if (name.trim() === '' || seen.has(id)) return;
+            seen.add(id);
+            out.push({ id, name });
+        };
+        (rosterPeople ?? []).forEach((o) => add(o.id, o.displayName));
+        data.ledger.rows.forEach((r) => add(r.fieldOperatorId, r.name));
+        return out;
+    })();
 
     return (
     <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2">
@@ -468,7 +491,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
         />
 
         <GroupLabel>माणसं</GroupLabel>
-        {data.topLevelIds.length === 0 ? (
+        {data.topLevelIds.length === 0 && namedPeople.length === 0 ? (
             <EmptyState
                 icon={<Users size={22} />}
                 title="अजून कोणाचंही नाव जोडलेलं नाही"
@@ -490,18 +513,43 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
                 ) : undefined}
             />
         ) : (
-            data.topLevelIds.map((id) => {
-                const person = data.people[id];
-                const isMukadam = person.role !== 'worker';
-                return (
-                    <PersonRow
-                        key={id}
-                        person={person}
-                        teamCount={person.memberIds?.length}
-                        onOpen={() => (isMukadam ? onOpenMukadam(id) : onOpenPerson(id))}
-                    />
-                );
-            })
+            <>
+                {data.topLevelIds.map((id) => {
+                    const person = data.people[id];
+                    const isMukadam = person.role !== 'worker';
+                    return (
+                        <PersonRow
+                            key={id}
+                            person={person}
+                            teamCount={person.memberIds?.length}
+                            onOpen={() => (isMukadam ? onOpenMukadam(id) : onOpenPerson(id))}
+                        />
+                    );
+                })}
+                {namedPeople.length > 0 && (
+                    <ul data-testid="hub-named-people" className="flex flex-col gap-2.5">
+                        {namedPeople.map((p) => (
+                            <li key={p.id} data-testid="hub-named-person"
+                                className="flex min-h-[64px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+                                <Avatar tone="em" initial={[...p.name][0]} />
+                                <span className="min-w-0 flex-1 truncate text-[20px] font-bold text-stone-800">{p.name}</span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+                {/* Nobody has joined by QR yet, so the empty state's one real next step
+                    (show the QR) must not disappear just because names were added. */}
+                {data.topLevelIds.length === 0 && onInviteWorker && (
+                    <button
+                        type="button"
+                        data-testid="hub-invite-qr"
+                        onClick={onInviteWorker}
+                        className="flex min-h-[60px] w-full items-center justify-center gap-2.5 rounded-[16px] bg-emerald-600 px-5 py-4 text-[19px] font-extrabold text-white transition-transform active:scale-[0.98]"
+                    >
+                        <Users size={22} /> QR दाखवा
+                    </button>
+                )}
+            </>
         )}
     </div>
     );
