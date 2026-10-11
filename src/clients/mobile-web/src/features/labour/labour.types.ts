@@ -280,6 +280,13 @@ export interface LabourData {
     ledger: { weekLabel: string; days: string[]; rows: LedgerRow[]; crewRows: LedgerCrewRow[] };
     /** D-H8 — the projection the server sent (owner | crew | own). Display alignment only; the SERVER strips. */
     view: LabourView;
+    /**
+     * Journey fix 3 (P3) - the SERVER's answer to "may this caller rewrite labour
+     * truth here". Hide voice attendance, manual attendance and approve controls
+     * ONLY when this is explicitly `false` (an un-granted own-row Worker).
+     * `undefined` = unknown (older server / fixtures): keep today's behaviour.
+     */
+    canManageLabour?: boolean;
     /** D6 — the two money truths and the आज कामावर counts; see LabourHome. */
     home: LabourHome;
     review: ReviewItem[];

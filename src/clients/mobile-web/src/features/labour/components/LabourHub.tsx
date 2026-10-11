@@ -290,6 +290,9 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
     // Task 3.1 — no anchor → the recorder's doorway goes inactive. ONLY the
     // recorder: every other surface on this hub renders exactly as before.
     const heroInactive = anchor?.state === 'no-anchor';
+    // Journey fix 3 (P3): the server says this caller may not rewrite labour truth
+    // (un-granted own-row Worker). Only an explicit `false` hides anything.
+    const mayRecord = data.canManageLabour !== false;
 
     // Journey fix D7 - the people the farm has NAMED: the cached roster (added,
     // perhaps never marked) plus every named row of the register (marked). Once
@@ -341,6 +344,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
           * takes हजेरी and has nowhere to see it — closed by Correction 5:
           * the हजेरी वही tile below renders unconditionally.
           */}
+        {mayRecord && (<>
         <button type="button" disabled={heroInactive} onClick={heroInactive ? undefined : onGoToLog}
             className={`relative flex w-full items-center gap-4 overflow-hidden rounded-[24px] p-5 text-left transition-transform ${heroInactive
                 ? 'bg-slate-100 shadow-none'
@@ -365,6 +369,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
                 <QuickTile icon={<CloudRain size={20} />} chip="bg-sky-50 text-sky-600 ring-1 ring-sky-100" label="काम झालं नाही, पण मजूर आले" onClick={onNoWorkAttendance} />
             </div>
         )}
+        </>)}
 
         {/* D6 (master review 2026-09-02) — one Labour, TWO money truths, never
             one figure. Owner view only: D-H8 keeps money off every non-owner
@@ -426,7 +431,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
         })()}
 
         <div className="grid grid-cols-2 gap-2.5">
-            {isAttendanceDoorEnabled() && (
+            {mayRecord && isAttendanceDoorEnabled() && (
                 <QuickTile icon={<ClipboardCheck size={20} />} chip="bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100" label="हजेरी घ्या" sub="आज कोण आलं" onClick={onAttendance} />
             )}
             {/* Correction 5 (founder, 2026-09-01): the हजेरी वही is NEVER gated —
