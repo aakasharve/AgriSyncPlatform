@@ -13,6 +13,7 @@ import { procurementRepository } from '../../services/procurementRepository'; //
 import { legacyAuditPort } from '../../infrastructure/audit/LegacyAuditPort';
 import { useAuth } from './AuthProvider';
 import { getRootStore } from '../state/RootStore';
+import { clearLabourReadoutsExcept } from '../../infrastructure/storage/LabourReadoutCache';
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 import { runLegacyLocalStorageMigration } from '../../infrastructure/storage/LegacyLocalStorageMigrator';
 import { DemoModeStore } from '../../infrastructure/storage/DemoModeStore';
@@ -146,6 +147,8 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 if (!isDemoMode && session?.userId) {
                     await recoverLegacyOwnershipClaim();
                     activateDatabaseForUser(session.userId);
+                    // Offline Labour read-outs are per user: erase any other user's.
+                    clearLabourReadoutsExcept(session.userId);
                     await settleOwnershipClaims();
                 }
                 await dataSource.initialize();

@@ -26,6 +26,7 @@
 // function rather than off the logout button.
 import { endFarmerSessionLocally } from './endFarmerSession';
 import { clearPendingLogout } from './PendingLogoutStore';
+import { clearAllLabourReadouts } from './LabourReadoutCache';
 
 export interface AuthSession {
     userId: string;
@@ -237,6 +238,10 @@ export function clearAuthSession(): void {
     // change event, so no listener can re-render against the farmer whose
     // session has just ended. Deletes no farmer record.
     endFarmerSessionLocally();
+
+    // The last-known Labour read-out is per-user offline convenience data; it
+    // does not outlive the session that fetched it.
+    clearAllLabourReadouts();
 
     notifyAuthSessionChanged();
 }

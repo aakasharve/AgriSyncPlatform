@@ -49,6 +49,8 @@ afterEach(() => {
     cleanup();
     mockUseOptionalFarmContext.mockReset();
     mockFetchLabourData.mockReset();
+    // The hook now keeps an offline read-out in localStorage; do not let one test feed the next.
+    window.localStorage.clear();
     mockUseOptionalAuth.mockReset();
     mockUseOptionalAuth.mockReturnValue(null);
 });

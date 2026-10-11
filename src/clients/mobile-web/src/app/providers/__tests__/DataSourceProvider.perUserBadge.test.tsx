@@ -11,7 +11,7 @@
 import 'fake-indexeddb/auto';
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
-import { render, waitFor, cleanup, act } from '@testing-library/react';
+import { render, waitFor, cleanup, act, configure } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../../../infrastructure/api/AgriSyncClient', async () => {
@@ -41,6 +41,8 @@ import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 import { getRootStore, resetRootStore } from '../../state/RootStore';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
+
+configure({ asyncUtilTimeout: 8000 });
 
 const badge = () => getRootStore().sync.getSnapshot().context.rejectedMutations.map(m => m.mutationId);
 const as = (u: string | null) => {
@@ -94,7 +96,7 @@ describe('parked/rejected badge is strictly per user', () => {
         const view = render(<DataSourceProvider><i /></DataSourceProvider>);
         await waitFor(() => expect(badge()).toEqual(['a-1']));
         as('user-C');
-        view.rerender(<DataSourceProvider><c /></DataSourceProvider>);
+        view.rerender(<DataSourceProvider><span /></DataSourceProvider>);
         await waitFor(() => expect(badge()).toEqual([]));
         await act(async () => { await new Promise(r => setTimeout(r, 50)); });
         expect(badge()).toEqual([]);

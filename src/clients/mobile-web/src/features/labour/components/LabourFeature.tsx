@@ -47,6 +47,7 @@ import { useOptionalFarmContext } from '../../../core/session/FarmContext';
 import type { DailyLog, LedgerDefaults } from '../../../types';
 import type { LedgerRow } from '../labour.types';
 import { BackHeader, LoadErrorBanner, LoadingState } from './LabourUiKit';
+import { ATTENDANCE_COPY } from '../attendanceCopy';
 import LabourHub from './LabourHub';
 import MukadamDetail from './MukadamDetail';
 import PersonDetail from './PersonDetail';
@@ -66,6 +67,15 @@ import FarmInviteQrSheet from '../../onboarding/qr/FarmInviteQrSheet';
  * idiom): लक्षात ठेवलं ✓ — never transcribed, so a founder copy edit reaches
  * this toast automatically.
  */
+/** Age of the offline read-out in farmer words (placeholder copy in attendanceCopy.ts). */
+function staleAgeLabel(savedAtUtc: string): string {
+    const ms = Date.now() - Date.parse(savedAtUtc);
+    const hours = Math.floor(ms / 3_600_000);
+    if (!Number.isFinite(hours) || hours < 1) return ATTENDANCE_COPY.staleAgeJustNow;
+    if (hours < 24) return ATTENDANCE_COPY.staleAgeHours(hours);
+    return ATTENDANCE_COPY.staleAgeDays(Math.floor(hours / 24));
+}
+
 const ON_PHONE_MR = translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr');
 
 type ScreenName = 'hub' | 'mukadam' | 'person' | 'attendance' | 'dashboard' | 'ledger';
@@ -126,7 +136,7 @@ export const LabourFeature: React.FC<{
     onBeginNoWorkLane?: () => void;
     onDeclareNoWorkDay?: (cause?: BucketIssueType) => Promise<boolean>;
 }> = ({ onExit, onGoToLog, history, ledgerDefaults, lastLabourLogIds, onBeginNoWorkLane, onDeclareNoWorkDay }) => {
-    const { data, loading, error, refresh, timeWindow, setTimeWindow } = useLabourState();
+    const { data, loading, error, refresh, timeWindow, setTimeWindow, staleSinceIso } = useLabourState();
     // Safe (non-throwing) outside a provider (`?preview=labour` mounts with
     // none) — `farm` stays `null` there, and the QR-invite CTA below hides
     // itself accordingly.
@@ -362,6 +372,11 @@ export const LabourFeature: React.FC<{
                 }}
             />
             {error && <LoadErrorBanner onRetry={refresh} />}
+            {error && Boolean(staleSinceIso) && (
+                <div data-testid="labour-stale-readout" className="mx-4 mt-2 rounded-[14px] border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[15px] font-bold leading-snug text-amber-800">
+                    {ATTENDANCE_COPY.staleReadoutNote(staleAgeLabel(staleSinceIso as string))}
+                </div>
+            )}
             <div className="flex-1">
                 {/* Task 9 (B001) — the parked contradiction question(s). The
                     end of EditSurfaceRegistry's 'labour' route: rendered above
@@ -397,7 +412,7 @@ export const LabourFeature: React.FC<{
                 )}
                 {loading ? (
                     <LoadingState />
-                ) : error ? (
+                ) : error && !staleSinceIso ? (
                     /*
                      * Task 9 (B001) — the outage is no longer a dead-end when
                      * THIS DEVICE holds attendance facts: useLabourState
