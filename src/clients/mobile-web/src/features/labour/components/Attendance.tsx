@@ -44,11 +44,14 @@ import {
     EMPTY_PREFILL,
     prefillFromCell,
     toMarkPayload,
+    effectivePresentIds,
     type ManualMarkFacts,
     type PersonPrefill,
     type PersonSelection,
 } from '../attendanceManual';
+import { findMarkedAboveStated } from '../attendanceDisagreement';
 import AttendanceRoster from './AttendanceRoster';
+import HeadcountDisagreementCard from './HeadcountDisagreementCard';
 
 /** One person's stated facts — only people the farmer actually stated something about. */
 export type ManualAttendanceMark = { fieldOperatorId: string } & ManualMarkFacts;
@@ -62,6 +65,12 @@ interface Props {
     farmId: string | undefined;
     mode?: AttendanceMode;
     /**
+     * The day's REPORTED headcount (work log anchor, else the server's read-out
+     * of the day); null = nobody stated one. Read-only: used to show when more
+     * people are marked present than that, never to change either number.
+     */
+    statedHeadcount?: number | null;
+    /**
      * Persist the marks. Resolves when they are safely queued; rejects when
      * they were not (the screen then re-enables and the farmer can retry).
      * `noWorkCause` is only ever set in no-work mode, and only when a chip
@@ -74,7 +83,7 @@ interface Props {
 /** D9.6 — the no-work question is WHO + WHY, no count. */
 const NO_WORK_QUESTION = 'आज कोण आले होते आणि काम का झालं नाही?';
 
-const Attendance: React.FC<Props> = ({ data, farmId, mode = 'normal', onSave, onToast }) => {
+const Attendance: React.FC<Props> = ({ data, farmId, mode = 'normal', statedHeadcount = null, onSave, onToast }) => {
     const [selections, setSelections] = useState<Record<string, PersonSelection>>({});
     const [cause, setCause] = useState<BucketIssueType | undefined>(undefined);
     const [saving, setSaving] = useState(false);
@@ -99,6 +108,14 @@ const Attendance: React.FC<Props> = ({ data, farmId, mode = 'normal', onSave, on
         const facts = toMarkPayload(sel, prefills[id] ?? EMPTY_PREFILL);
         return facts ? [{ fieldOperatorId: id, ...facts }] : [];
     }), [selections, prefills]);
+
+    // D2 - more named people marked present than the day's stated headcount:
+    // shown through the existing disagreement card, never resolved here.
+    const presentIds = useMemo(() => effectivePresentIds(selections, prefills), [selections, prefills]);
+    const aboveStated = useMemo(
+        () => findMarkedAboveStated(statedHeadcount, presentIds),
+        [statedHeadcount, presentIds],
+    );
 
     const canSave = Boolean(farmId) && marks.length > 0 && !saving;
 
@@ -142,6 +159,8 @@ const Attendance: React.FC<Props> = ({ data, farmId, mode = 'normal', onSave, on
                 onToast={onToast}
                 disabled={saving}
             />
+
+            {aboveStated && <HeadcountDisagreementCard disagreement={aboveStated} markedCount={presentIds.length} />}
 
             <p data-testid="att-honesty" className="px-1 pt-1 text-[16px] leading-snug text-stone-600">{ATTENDANCE_COPY.preSaveHonesty}</p>
             <button type="button" data-testid="att-save" disabled={!canSave}

@@ -75,4 +75,17 @@ describe('renderLabourRoute — onGoToLog carries the labour intent', () => {
         expect(ctx.setLogIntent).not.toHaveBeenCalled();
         expect(ctx.setCurrentRoute).not.toHaveBeenCalled();
     });
+
+    it('journey fix D4: with no local anchor the doorway opens ONLY when the hub says the server anchored the day', () => {
+        const ctx = ctxWith('labour');
+        (ctx as unknown as { history: unknown[] }).history = [];   // another phone: no local log
+        const node = renderLabourRoute(ctx) as React.ReactElement<{ children: React.ReactElement<{ onGoToLog: (o?: { anchoredByServer?: boolean }) => void }> }>;
+
+        node.props.children.props.onGoToLog({ anchoredByServer: false });
+        expect(ctx.setCurrentRoute).not.toHaveBeenCalled();
+
+        node.props.children.props.onGoToLog({ anchoredByServer: true });
+        expect(ctx.setLogIntent).toHaveBeenCalledWith('labour');
+        expect(ctx.setCurrentRoute).toHaveBeenCalledWith('main');
+    });
 });

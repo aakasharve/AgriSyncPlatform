@@ -21,7 +21,7 @@ import { setAuthSession } from '../infrastructure/storage/AuthTokenStore';
 import { setRememberDevice } from '../infrastructure/storage/RememberDeviceStore';
 import { getOrCreateDeviceId } from '../infrastructure/storage/DeviceIdStore';
 import { startOtp, verifyOtp, isOtpError } from '../features/auth/data/otpClient';
-import { claimFarmJoin, isInviteApiError } from '../features/onboarding/qr/inviteApi';
+import { claimFarmJoin, isInviteApiError, type ClaimResponse } from '../features/onboarding/qr/inviteApi';
 import { useUiPref } from '../shared/hooks/useUiPref';
 
 type Step = 'phone' | 'otp' | 'done' | 'invalid';
@@ -38,6 +38,16 @@ const ROLE_LABEL_MR: Record<JoinRole, string> = {
     Mukadam: 'जबाबदार',
     SecondaryOwner: 'सहमालक',
 };
+
+/**
+ * Joins this page has already COMPLETED, by QR token. Module memory, not
+ * storage: the page can be mounted again while the (single-use) token is still
+ * in the URL, and a fresh mount must show the farmer he is already in rather
+ * than start over at Step 1 with a token the server has consumed. Lost on a
+ * real page reload - by then `handleFinish` has cleared the token anyway.
+ */
+const completedJoins = new Map<string, ClaimResponse>();
+export const __resetCompletedJoinsForTests = (): void => { completedJoins.clear(); };
 
 const readJoinContextFromUrl = (): JoinContext | null => {
     if (typeof window === 'undefined') return null;
@@ -105,7 +115,12 @@ interface LastJoinedFarmRecord {
 
 const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, onExit }) => {
     const context = useMemo(() => readJoinContextFromUrl(), []);
-    const [step, setStep] = useState<Step>(context ? 'phone' : 'invalid');
+    const [joined, setJoined] = useState<ClaimResponse | null>(() => (context ? completedJoins.get(context.token) ?? null : null));
+    const [step, setStep] = useState<Step>(context ? (joined ? 'done' : 'phone') : 'invalid');
+    // One press = one claim. State alone cannot stop two taps in the same tick,
+    // and the second claim for a consumed token answers "invalid" - which used
+    // to throw a worker who HAD joined back to Step 1.
+    const claimingRef = useRef(false);
     const [phone, setPhone] = useState('');
     const [otp, setOtp] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -174,11 +189,13 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
     };
 
     const handleOtpSubmit = async () => {
+        if (claimingRef.current || joined) return;
         setError(null);
         if (otp.length !== 6) {
             setError('OTP should be 6 digits.');
             return;
         }
+        claimingRef.current = true;
         setIsSubmitting(true);
 
         try {
@@ -219,6 +236,8 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
             });
             recordJoinAttempt(context.farmCode, context.token, 'verified');
 
+            completedJoins.set(context.token, claim);
+            setJoined(claim);
             setStep('done');
         } catch (err) {
             if (isOtpError(err)) {
@@ -240,6 +259,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
             }
             recordJoinAttempt(context.farmCode, context.token, 'failed');
         } finally {
+            claimingRef.current = false;
             setIsSubmitting(false);
         }
     };
@@ -262,13 +282,17 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                     <h1 className="mt-3 font-display text-3xl font-black text-stone-900">
                         ShramSafal
                     </h1>
-                    <p className="text-sm font-semibold text-stone-500">
-                        तुम्ही <span className="font-bold text-emerald-700">{context.farmName}</span> मध्ये सामील होत आहात.
-                    </p>
-                    <p className="text-xs text-stone-500">
-                        You are joining <span className="font-bold text-emerald-700">{context.farmName}</span> as{' '}
-                        <span className="font-bold text-stone-800">{context.proposedRole}</span> ({ROLE_LABEL_MR[context.proposedRole]}).
-                    </p>
+                    {step !== 'done' && (
+                        <>
+                            <p className="text-sm font-semibold text-stone-500">
+                                तुम्ही <span className="font-bold text-emerald-700">{context.farmName}</span> मध्ये सामील होत आहात.
+                            </p>
+                            <p className="text-xs text-stone-500">
+                                You are joining <span className="font-bold text-emerald-700">{context.farmName}</span> as{' '}
+                                <span className="font-bold text-stone-800">{context.proposedRole}</span> ({ROLE_LABEL_MR[context.proposedRole]}).
+                            </p>
+                        </>
+                    )}
                 </header>
 
                 <StepIndicator step={step} />
@@ -430,8 +454,14 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                         <p className="text-sm font-semibold text-emerald-700">
                             You're in.
                         </p>
-                        <p className="mt-2 text-sm text-stone-500">
-                            {context.farmName} · {context.proposedRole}
+                        {/* The farm the SERVER says he joined (claim.farmName), and the role
+                            it gave him - never the "Your farm" placeholder the QR link
+                            carries, and never the role the link merely PROPOSED. */}
+                        <p data-testid="join-done-farm" className="mt-2 text-lg font-bold text-stone-800">
+                            {joined?.farmName || context.farmName}
+                        </p>
+                        <p data-testid="join-done-role" className="text-sm font-semibold text-stone-600">
+                            {ROLE_LABEL_MR[(joined?.role as JoinRole | undefined) ?? context.proposedRole] ?? joined?.role}
                         </p>
                         <button
                             type="button"
@@ -441,9 +471,6 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                             शेती उघडा / Open my farm
                             <ArrowRight size={16} />
                         </button>
-                        <p className="mt-3 text-[11px] text-stone-400">
-                            When the backend is live, your past attendance and payments will appear here automatically.
-                        </p>
                     </section>
                 )}
             </div>
