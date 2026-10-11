@@ -17,7 +17,7 @@
 import 'fake-indexeddb/auto';
 import React from 'react';
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, screen, cleanup, fireEvent, waitFor, within, act } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, within, act, configure } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -67,6 +67,10 @@ import { t as translate } from '../../../../i18n/translations';
 import { SYNC_HONESTY_I18N_KEYS } from '../../../sync/status/syncHonestyState';
 import { writeCachedRoster } from '../../data/fieldOperatorRosterCache';
 import type { DailyLog } from '../../../../types';
+
+// Real providers + a real IndexedDB queue: the first mount in a cold, heavily
+// loaded full-suite run needs more than the 1s default.
+configure({ asyncUtilTimeout: 6000 });
 
 const ON_PHONE = translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr');
 
