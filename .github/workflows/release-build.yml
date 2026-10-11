@@ -159,6 +159,20 @@ jobs:
           grep -q "Verifies" /tmp/apksigner.txt
           grep -qi "$SIGNER_SHA256" /tmp/apksigner.txt || { echo "::error::apksigner certificate digest is not the expected signer"; exit 1; }
 
+      # The verifier's APK negative controls (wrong version/app id/signer, corrupted,
+      # unsigned, mismatched bundle) skip when no APK is supplied. Run them here against
+      # the REAL freshly built APK so they are never skipped on the path that matters.
+      - name: APK negative controls against the real APK
+        working-directory: ops/release
+        run: |
+          set -euo pipefail
+          set -a; . ./expected-release.env; set +a
+          export RELEASE_TEST_APK="$GITHUB_WORKSPACE/src/clients/mobile-web/android/app/build/outputs/apk/release/app-release.apk"
+          export RELEASE_EXPECT_APP_ID="$APP_ID" RELEASE_EXPECT_VERSION_NAME="$VERSION_NAME" \
+                 RELEASE_EXPECT_VERSION_CODE="$VERSION_CODE" RELEASE_EXPECT_SIGNER="$SIGNER_SHA256"
+          python3 -m unittest -v test_release_verify 2>&1 | tee /tmp/negative-controls.txt
+          if grep -q "skipped" /tmp/negative-controls.txt; then echo "::error::APK negative controls were skipped"; exit 1; fi
+
       - name: Build Play bundle
         working-directory: src/clients/mobile-web/android
         env:

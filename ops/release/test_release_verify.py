@@ -3,6 +3,8 @@
 The APK tests need a real APK to read a compiled manifest and signing block from.
 They run when RELEASE_TEST_APK points at one (the previously published APK works:
 it is 1.0.12/20, signer 3b3f860b...); otherwise they are skipped, never faked.
+release-build runs them against the freshly built APK (RELEASE_EXPECT_* from expected-release.env),
+so they are not skipped on the path that matters.
 """
 import hashlib
 import json
@@ -150,8 +152,13 @@ class ApkTests(unittest.TestCase):
                  if n.startswith("assets/public/") and not n.endswith("/")
                  and n[len("assets/public/"):] not in rv.ALLOWED_EXTRA_PUBLIC}
         self.manifest = make_dist(os.path.join(self.tmp, "dist"), files)
-        self.kw = dict(app_id="com.agrisync.shramsafal", version_name="1.0.12",
-                       version_code="20", signer_sha256=SIGNER)
+        # Expected identity of the APK under test. Defaults describe the previously
+        # published 1.0.12/20 APK; the release-build workflow sets RELEASE_EXPECT_* to
+        # expected-release.env so these negative controls run against the REAL new APK.
+        self.kw = dict(app_id=os.environ.get("RELEASE_EXPECT_APP_ID", "com.agrisync.shramsafal"),
+                       version_name=os.environ.get("RELEASE_EXPECT_VERSION_NAME", "1.0.12"),
+                       version_code=os.environ.get("RELEASE_EXPECT_VERSION_CODE", "20"),
+                       signer_sha256=os.environ.get("RELEASE_EXPECT_SIGNER", SIGNER))
 
     def check(self, apk=None, **over):
         kw = dict(self.kw); kw.update(over)
@@ -162,9 +169,9 @@ class ApkTests(unittest.TestCase):
 
     def test_wrong_version_rejected(self):
         with self.assertRaisesRegex(rv.Fail, "versionName"):
-            self.check(version_name="1.0.13")
+            self.check(version_name="9.9.9")
         with self.assertRaisesRegex(rv.Fail, "versionCode"):
-            self.check(version_code="21")
+            self.check(version_code="99")
 
     def test_wrong_application_id_rejected(self):
         with self.assertRaisesRegex(rv.Fail, "application id"):
