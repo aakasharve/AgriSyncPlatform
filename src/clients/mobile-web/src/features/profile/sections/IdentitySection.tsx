@@ -21,7 +21,6 @@ import { FarmerProfile, VerificationStatus } from '../../../types';
 import EntitlementBanner, { type SubscriptionSnapshotView } from '../../admin/billing/EntitlementBanner';
 import MembershipsList from '../../people/components/MembershipsList';
 import type { MyFarmDto, FarmDetailsDto } from '../../onboarding/qr/inviteApi';
-import ReliabilityScoreCard from '../../work/components/ReliabilityScoreCard';
 import { TeamMemberCard } from '../components/TeamMemberCard';
 import { useLabourPermissions } from '../hooks/useLabourPermissions';
 import { useLanguage } from '../../../i18n/LanguageContext';
@@ -76,8 +75,6 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
     setShowMemberWizard,
     nonExitableFarmIds,
     handleExitMembership,
-    isWorkerOnAnyFarm,
-    workerProfile,
 }) => {
     const { t } = useLanguage();
     // LABOUR_PHASE2 Phase 5. `myFarm.farmId` is the SERVER's farm id. The hook
@@ -403,20 +400,10 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                 />
             )}
 
-            {/* CEI Phase 4 §4.8 — own reliability score (Worker/Mukadam only) */}
-            {isWorkerOnAnyFarm && workerProfile && (
-                <div>
-                    <p
-                        className="text-[10px] font-bold uppercase tracking-wide text-stone-400 mb-2 px-1"
-                        style={{ fontFamily: "'DM Sans', sans-serif" }}
-                    >
-                        Your reliability
-                    </p>
-                    <ReliabilityScoreCard
-                        score={workerProfile.reliability}
-                    />
-                </div>
-            )}
+            {/* The own-reliability card was REMOVED, not hidden behind a flag:
+                the server computes it from zero metrics, so every worker read
+                100 (ReliabilityScore.cs). Trust score is deferred by founder
+                decision; this returns only with a real metrics read-model. */}
 
             {/* 2. FARM TEAM HIERARCHY (LAYERS 2 & 3) */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
