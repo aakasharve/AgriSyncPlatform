@@ -224,6 +224,69 @@ describe('AuthProvider - offline cold start (real AuthTokenStore)', () => {
         expect(window.localStorage.getItem(KEY)).not.toBeNull();
     });
 
+    describe('sync-tick recovery (no online/visibilitychange event)', () => {
+        afterEach(() => { vi.useRealTimers(); });
+
+        it('re-runs refresh on a 15 s tick while in presence mode and establishes a REAL session', async () => {
+            coldStartWithMarker();
+            spy().mockResolvedValueOnce({ kind: 'unreachable' });
+            render(<AuthProvider><Probe /></AuthProvider>);
+            await waitFor(() => expect(screen.getByTestId('offline').textContent).toBe('yes'));
+            expect(spy()).toHaveBeenCalledTimes(1);
+
+            vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+            // re-arm under fake timers: toggle presence off/on is not possible, so
+            // unmount + remount under fake timers instead.
+            cleanup();
+            coldStartWithMarker();
+            spy().mockReset();
+            spy().mockResolvedValueOnce({ kind: 'unreachable' });
+            render(<AuthProvider><Probe /></AuthProvider>);
+            await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+            expect(screen.getByTestId('offline').textContent).toBe('yes');
+            const before = spy().mock.calls.length;
+
+            spy().mockImplementationOnce(async () => refreshedOutcome());
+            await act(async () => { vi.advanceTimersByTime(15_000); });
+            await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+            expect(spy().mock.calls.length).toBe(before + 1);
+            expect(screen.getByTestId('token').textContent).toBe('tok-real');
+            expect(screen.getByTestId('offline').textContent).toBe('no');
+        });
+
+        it('a tick that is still unreachable clears nothing, and stops ticking once a normal session exists', async () => {
+            vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+            coldStartWithMarker();
+            spy().mockResolvedValue({ kind: 'unreachable' });
+            render(<AuthProvider><Probe /></AuthProvider>);
+            await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+            const base = spy().mock.calls.length;
+
+            await act(async () => { vi.advanceTimersByTime(15_000); });
+            expect(spy().mock.calls.length).toBe(base + 1);
+            expect(status()).toBe('authenticated');
+            expect(window.localStorage.getItem(KEY)).not.toBeNull();
+
+            spy().mockImplementationOnce(async () => refreshedOutcome());
+            await act(async () => { vi.advanceTimersByTime(15_000); });
+            await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+            const afterReal = spy().mock.calls.length;
+            await act(async () => { vi.advanceTimersByTime(60_000); });
+            expect(spy().mock.calls.length).toBe(afterReal);
+        });
+
+        it('does not tick when there is no offline presence', async () => {
+            vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+            spy().mockResolvedValue({ kind: 'unreachable' });
+            render(<AuthProvider><Probe /></AuthProvider>);
+            await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+            const base = spy().mock.calls.length;
+            await act(async () => { vi.advanceTimersByTime(60_000); });
+            expect(spy().mock.calls.length).toBe(base);
+        });
+    });
+
     it("'online' does NOT trigger a refresh when there is no offline presence", async () => {
         spy().mockResolvedValueOnce({ kind: 'unreachable' });
         render(<AuthProvider><Probe /></AuthProvider>);

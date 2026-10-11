@@ -64,6 +64,9 @@ interface AuthContextValue {
     clearAuthError: () => void;
 }
 
+/** Presence-mode recovery cadence - matches BackgroundSyncWorker's 15 s tick. */
+const PRESENCE_RETRY_INTERVAL_MS = 15_000;
+
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 // spec: secure-remembered-device-sessions-2026-06-24
@@ -255,9 +258,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         window.addEventListener('online', retry);
         document.addEventListener('visibilitychange', retry);
+        // The OS does not always raise 'online' (the API can simply come back
+        // while the radio never dropped), and the sync workers skip while the
+        // token is empty - so nothing else would ever recover the session.
+        // Same cadence as the sync tick. It goes through the very same
+        // single-flight refreshSession + applyRefreshOutcome as the events
+        // above: 'unreachable' changes nothing, 'rejected' signs out, and the
+        // interval exists only while in presence mode (the effect is torn down
+        // the moment a real token arrives or the user logs out).
+        const tick = window.setInterval(retry, PRESENCE_RETRY_INTERVAL_MS);
         return () => {
             window.removeEventListener('online', retry);
             document.removeEventListener('visibilitychange', retry);
+            window.clearInterval(tick);
         };
     }, [offlinePresence, applyRefreshOutcome]);
 
