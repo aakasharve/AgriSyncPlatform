@@ -23,4 +23,13 @@ describe('Team page role label', () => {
         expect(screen.queryByText('कामाला येणारे')).toBeNull();
         expect(screen.queryByText('भागीदार')).toBeNull();
     });
+
+    it('shows NO role label when the client does not know the role', () => {
+        const { container } = renderRole('UNKNOWN');
+        expect(screen.getByText('नाव')).toBeTruthy();
+        for (const word of ['कामगार', 'मालक', 'सहमालक', 'मुकादम', 'सदस्य']) {
+            expect(screen.queryByText(word)).toBeNull();
+        }
+        expect(container.querySelector('span.uppercase')).toBeNull();
+    });
 });
