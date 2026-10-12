@@ -42,6 +42,7 @@ vi.mock('../../../infrastructure/api/AgriSyncClient', () => {
 
 vi.mock('../../../infrastructure/storage/AuthTokenStore', () => ({
     getAuthSession: vi.fn(() => null),
+    getPresenceSession: vi.fn(() => null),
     setAuthSession: vi.fn(),
     clearAuthSession: vi.fn(),
     AUTH_SESSION_CHANGED_EVENT: 'agrisync:auth-session-changed',

@@ -52,6 +52,8 @@ import { DEFAULT_LABOUR_WINDOW, isLabourWindow, type LabourWindow } from './labo
 import { useOptionalFarmContext } from '../../core/session/FarmContext';
 import { useOptionalAuth } from '../../app/providers/AuthProvider';
 import { SessionStore } from '../../infrastructure/storage/SessionStore';
+import { loadLabourReadout, saveLabourReadout } from './data/labourReadout';
+import { isFarmAccessRefused, purgeLabourCachesForFarm } from '../../infrastructure/storage/labourFarmAccess';
 
 /**
  * Task 9 (B001, spec: 2026-08-28-labour-v2-release-1) — the local attendance
@@ -150,6 +152,14 @@ export interface UseLabourStateResult {
      * Correction 5 deleted the ledger door outright.)
      */
     isPreview: boolean;
+    /**
+     * Offline cold start (spec: 2026-08-25-prod-cutover-waves): when the fetch
+     * failed and a LAST-KNOWN read-out for THIS user+farm+window (<= 7 days
+     * old, money stripped) exists, `data` is that read-out overlaid with the
+     * locally queued marks and this is the ISO time it was fetched. `null`
+     * whenever `data` is live, queued-only, or empty. Never claims freshness.
+     */
+    staleSinceIso: string | null;
 }
 
 export const useLabourState = (): UseLabourStateResult => {
@@ -177,15 +187,22 @@ export const useLabourState = (): UseLabourStateResult => {
     // gate opens rather than deadlocking on a provider that will never appear.
     const auth = useOptionalAuth();
     /** True once auth has settled AND an access token is actually in memory. */
+    // Offline PRESENCE (cold start on the surviving marker, no token yet) counts
+    // as settled: the fetch is attempted, fails honestly offline, and falls into
+    // the offline path below instead of spinning forever. When the real token
+    // arrives `hasRealToken` flips and the effect re-runs.
+    const offlinePresence = auth?.isOfflinePresence === true;
+    const hasRealToken = Boolean(auth?.session?.accessToken);
+    const userId = auth?.session?.userId ?? null;
     const authReady = auth === null
         ? true
-        : auth.authStatus === 'authenticated' && Boolean(auth.session?.accessToken);
+        : auth.authStatus === 'authenticated' && (hasRealToken || offlinePresence);
     /** True while the boot refresh is still deciding — an honest "loading", not an error. */
     const authPending = auth !== null
         && (auth.authStatus === 'checking'
             // Authenticated but the token hasn't landed in memory yet: still
             // in flight, not a failure. Do not fetch, do not show an error.
-            || (auth.authStatus === 'authenticated' && !auth.session?.accessToken));
+            || (auth.authStatus === 'authenticated' && !auth.session?.accessToken && !offlinePresence));
 
     // Lazy initializer: preview is the ONLY case that starts with the mock.
     // A real app (provider present) always starts honest, even before its
@@ -194,6 +211,7 @@ export const useLabourState = (): UseLabourStateResult => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(false);
     const [retryToken, setRetryToken] = useState(0);
+    const [staleSinceIso, setStaleSinceIso] = useState<string | null>(null);
     /**
      * TASK 11 — the window every fetch below is scoped to.
      *
@@ -219,6 +237,7 @@ export const useLabourState = (): UseLabourStateResult => {
     }, []);
 
     useEffect(() => {
+        setStaleSinceIso(null);
         if (isPreview) {
             // No provider at all (preview) — mock fallback.
             // This is the ONLY branch that may show LABOUR_MOCK.
@@ -293,11 +312,26 @@ export const useLabourState = (): UseLabourStateResult => {
                 // instead of vanishing until the queue flushes. No queue
                 // marks → `overlayLocalAttendance` returns `real` itself.
                 const plane = await readLocalAttendancePlane(farmId);
+                if (userId) saveLabourReadout(userId, farmId, timeWindow, real);
                 if (!cancelled) {
                     setData(overlayLocalAttendance(real, plane.marks, plane.hints));
                     setError(false);
                 }
-            } catch {
+            } catch (err) {
+                if (isFarmAccessRefused(err)) {
+                    // The server READ the request and said this user is not a
+                    // member of the farm (403): access ended. The cached
+                    // read-out + roster for it are erased and NOT shown, and the
+                    // queued-only view is skipped too (it can carry names). The
+                    // unsent queue itself is untouched. Only a 403 does this:
+                    // an unreachable server is "unknown", not "revoked".
+                    purgeLabourCachesForFarm(userId, farmId);
+                    if (!cancelled) {
+                        setData(EMPTY_LABOUR_DATA);
+                        setError(true);
+                    }
+                    return;
+                }
                 // MONEY-SAFETY: a real farm's fetch error NEVER falls back to
                 // LABOUR_MOCK. Keep the honest empty state and surface
                 // `error` so the UI can show a retry affordance instead of
@@ -315,8 +349,17 @@ export const useLabourState = (): UseLabourStateResult => {
                 // while `error` stays true and the banner stays up. An empty
                 // plane keeps the dead-end exactly as before. Never the mock.
                 const plane = await readLocalAttendancePlane(farmId);
+                // LAST-KNOWN read-out for exactly this user+farm+window (money
+                // already stripped, <= 7 days). Queued intent is laid over it
+                // exactly as over a live answer; no cache => the queued-only view.
+                const cached = userId ? loadLabourReadout(userId, farmId, timeWindow) : null;
                 if (!cancelled) {
-                    setData(buildOfflineRegister(plane.marks, plane.hints) ?? EMPTY_LABOUR_DATA);
+                    if (cached) {
+                        setData(overlayLocalAttendance(cached.data, plane.marks, plane.hints));
+                        setStaleSinceIso(cached.savedAtUtc);
+                    } else {
+                        setData(buildOfflineRegister(plane.marks, plane.hints) ?? EMPTY_LABOUR_DATA);
+                    }
                     setError(true);
                 }
             } finally {
@@ -334,7 +377,7 @@ export const useLabourState = (): UseLabourStateResult => {
         // heading for the length of the request — a period label over figures
         // that answer a different period, which is the exact defect this task
         // exists to remove, reintroduced one layer lower.
-    }, [isPreview, farmId, farmCtxLoading, farmCtxLoadFailed, authReady, authPending, retryToken, timeWindow]);
+    }, [isPreview, farmId, farmCtxLoading, farmCtxLoadFailed, authReady, authPending, hasRealToken, userId, retryToken, timeWindow]);
 
     const refresh = useCallback(() => {
         // Task 6e — when there is no farm id, the failure is UPSTREAM (the
@@ -348,5 +391,5 @@ export const useLabourState = (): UseLabourStateResult => {
         setRetryToken((t) => t + 1);
     }, [farmId, farmCtxRefresh]);
 
-    return { data, loading, error, refresh, timeWindow, setTimeWindow, isPreview };
+    return { data, loading, error, refresh, timeWindow, setTimeWindow, isPreview, staleSinceIso };
 };

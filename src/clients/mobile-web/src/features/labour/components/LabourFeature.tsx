@@ -47,6 +47,7 @@ import { useOptionalFarmContext } from '../../../core/session/FarmContext';
 import type { DailyLog, LedgerDefaults } from '../../../types';
 import type { LedgerRow } from '../labour.types';
 import { BackHeader, LoadErrorBanner, LoadingState } from './LabourUiKit';
+import { ATTENDANCE_COPY } from '../attendanceCopy';
 import LabourHub from './LabourHub';
 import MukadamDetail from './MukadamDetail';
 import PersonDetail from './PersonDetail';
@@ -66,6 +67,15 @@ import FarmInviteQrSheet from '../../onboarding/qr/FarmInviteQrSheet';
  * idiom): लक्षात ठेवलं ✓ — never transcribed, so a founder copy edit reaches
  * this toast automatically.
  */
+/** Age of the offline read-out in farmer words (placeholder copy in attendanceCopy.ts). */
+function staleAgeLabel(savedAtUtc: string): string {
+    const ms = Date.now() - Date.parse(savedAtUtc);
+    const hours = Math.floor(ms / 3_600_000);
+    if (!Number.isFinite(hours) || hours < 1) return ATTENDANCE_COPY.staleAgeJustNow;
+    if (hours < 24) return ATTENDANCE_COPY.staleAgeHours(hours);
+    return ATTENDANCE_COPY.staleAgeDays(Math.floor(hours / 24));
+}
+
 const ON_PHONE_MR = translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr');
 
 type ScreenName = 'hub' | 'mukadam' | 'person' | 'attendance' | 'dashboard' | 'ledger';
@@ -126,7 +136,7 @@ export const LabourFeature: React.FC<{
     onBeginNoWorkLane?: () => void;
     onDeclareNoWorkDay?: (cause?: BucketIssueType) => Promise<boolean>;
 }> = ({ onExit, onGoToLog, history, ledgerDefaults, lastLabourLogIds, onBeginNoWorkLane, onDeclareNoWorkDay }) => {
-    const { data, loading, error, refresh, timeWindow, setTimeWindow } = useLabourState();
+    const { data, loading, error, refresh, timeWindow, setTimeWindow, staleSinceIso } = useLabourState();
     // Safe (non-throwing) outside a provider (`?preview=labour` mounts with
     // none) — `farm` stays `null` there, and the QR-invite CTA below hides
     // itself accordingly.
@@ -190,7 +200,13 @@ export const LabourFeature: React.FC<{
     const [parkedQuestions, setParkedQuestions] = useState<Array<{
         park: ParkedAttendanceContradiction; question: ContradictionQuestion;
     }>>([]);
-    const farmId = farm?.farmId;
+    // OFFLINE COLD START: `/me` failed, so `farm` is null - but the farm id this
+    // user last had CONFIRMED by the server is still on the device (a per-user
+    // pointer, FarmContext drops it on logout / user change). The roster cache
+    // and the mark queue only need the id, so they run on it. We use it ONLY
+    // while the last `/me` failed: once `/me` answers, `farm` is the authority
+    // (and if the answer excludes the remembered farm, it is no longer used).
+    const farmId = farm?.farmId ?? (farmCtx?.loadFailed ? farmCtx.currentFarmId ?? undefined : undefined);
     /**
      * Journey fixes D1/D6 - what the SERVER REFUSED (a mark with no
      * responsibility behind it, a no-work declaration that did not land),
@@ -302,12 +318,12 @@ export const LabourFeature: React.FC<{
      * value-keyed request id makes a retry safe (no duplicate marks).
      */
     const saveManualAttendance = async (marks: ManualAttendanceMark[], noWorkCause?: BucketIssueType): Promise<void> => {
-        if (!farm) throw new Error('no farm context'); // the button is disabled without a farm
+        if (!farmId) throw new Error('no farm context'); // the button is disabled without a farm
         const workDate = getDateKey();
         try {
             await Promise.all(marks.map(({ fieldOperatorId, ...facts }) => MarkAttendanceCommand.enqueue({
                 attendanceMarkId: crypto.randomUUID(),
-                farmId: farm.farmId,
+                farmId,
                 fieldOperatorId,
                 workDate,
                 ...facts,
@@ -342,7 +358,7 @@ export const LabourFeature: React.FC<{
     const attendanceScreen = (
         <Attendance
             data={data}
-            farmId={farm?.farmId}
+            farmId={farmId}
             mode={cur.mode ?? 'normal'}
             statedHeadcount={resolveStatedHeadcount(anchor, data.home.onFarmToday)}
             onSave={saveManualAttendance}
@@ -362,6 +378,11 @@ export const LabourFeature: React.FC<{
                 }}
             />
             {error && <LoadErrorBanner onRetry={refresh} />}
+            {error && Boolean(staleSinceIso) && (
+                <div data-testid="labour-stale-readout" className="mx-4 mt-2 rounded-[14px] border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[15px] font-bold leading-snug text-amber-800">
+                    {ATTENDANCE_COPY.staleReadoutNote(staleAgeLabel(staleSinceIso as string))}
+                </div>
+            )}
             <div className="flex-1">
                 {/* Task 9 (B001) — the parked contradiction question(s). The
                     end of EditSurfaceRegistry's 'labour' route: rendered above
@@ -397,7 +418,7 @@ export const LabourFeature: React.FC<{
                 )}
                 {loading ? (
                     <LoadingState />
-                ) : error ? (
+                ) : error && !staleSinceIso ? (
                     /*
                      * Task 9 (B001) — the outage is no longer a dead-end when
                      * THIS DEVICE holds attendance facts: useLabourState
@@ -524,7 +545,7 @@ export const LabourFeature: React.FC<{
                 roster belongs to, and the local log the engagement id was
                 minted on. Both already exist here; neither is required, and
                 without them the sheet renders exactly as it did before. */}
-            <ReviewSheet open={reviewOpen} data={data} onClose={() => setReviewOpen(false)} onToast={showToast} onApproved={refresh} farmId={farm?.farmId} history={history} />
+            <ReviewSheet open={reviewOpen} data={data} onClose={() => setReviewOpen(false)} onToast={showToast} onApproved={refresh} farmId={farm?.farmId} history={history} reviewListUnknown={error} />
 
             {cellDetail && (
                 <HajeriCellDetail

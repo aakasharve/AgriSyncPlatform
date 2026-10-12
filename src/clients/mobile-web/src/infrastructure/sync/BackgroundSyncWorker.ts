@@ -76,19 +76,26 @@ export class BackgroundSyncWorker {
         window.addEventListener('online', this.handleOnline);
     }
 
-    stop() {
-        if (!this.isRunning) {
-            return;
+    /**
+     * Stops scheduling AND returns a promise that settles only when any cycle
+     * already running has finished. Callers that are about to change the active
+     * user/database MUST await it: a previous user's in-flight cycle must never
+     * emit a rejection into, or write to, the next user's state.
+     * (`currentCycle` never rejects: safeRunCycle catches.)
+     */
+    stop(): Promise<void> {
+        if (this.isRunning) {
+            this.isRunning = false;
+
+            if (this.timerId !== null) {
+                window.clearInterval(this.timerId);
+                this.timerId = null;
+            }
+
+            window.removeEventListener('online', this.handleOnline);
         }
 
-        this.isRunning = false;
-
-        if (this.timerId !== null) {
-            window.clearInterval(this.timerId);
-            this.timerId = null;
-        }
-
-        window.removeEventListener('online', this.handleOnline);
+        return this.currentCycle;
     }
 
     async triggerNow(): Promise<void> {

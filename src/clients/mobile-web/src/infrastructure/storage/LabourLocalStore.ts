@@ -50,11 +50,63 @@ export function readCachedJson(key: string): string | null {
     }
 }
 
+/** Best-effort delete of one cached key. */
+export function removeCachedJson(key: string): void {
+    try {
+        if (typeof window === 'undefined') return;
+        window.localStorage.removeItem(key);
+    } catch {
+        /* storage unavailable */
+    }
+}
+
 /** Best-effort write; a failing store simply means there is no offline copy. */
 export function writeCachedJson(key: string, value: string): void {
     try {
         if (typeof window === 'undefined') return;
         window.localStorage.setItem(key, value);
+    } catch {
+        /* storage unavailable */
+    }
+}
+
+/**
+ * Erases the cached field-operator roster of ONE farm (every user's scoped copy
+ * on this handset: the key ends with the farm id). Used when access to that farm
+ * ends. Best-effort.
+ */
+export function clearCachedRosterForFarm(farmId: string): void {
+    try {
+        if (typeof window === 'undefined' || !farmId) return;
+        const s = window.localStorage;
+        const tail = `shramsafal_field_operator_roster_${farmId}`;
+        const doomed: string[] = [];
+        for (let i = 0; i < s.length; i++) {
+            const k = s.key(i);
+            if (k !== null && k.endsWith(tail)) doomed.push(k);
+        }
+        doomed.forEach((k) => s.removeItem(k));
+    } catch {
+        /* storage unavailable */
+    }
+}
+
+/**
+ * Erases the cached field-operator rosters of EVERY farm (key fragment
+ * `shramsafal_field_operator_roster_`). Called when a session ends: those
+ * rosters are keyed by farm, not by user, so they must not outlive the user who
+ * fetched them on a shared handset. Best-effort.
+ */
+export function clearAllCachedRosters(): void {
+    try {
+        if (typeof window === 'undefined') return;
+        const s = window.localStorage;
+        const doomed: string[] = [];
+        for (let i = 0; i < s.length; i++) {
+            const k = s.key(i);
+            if (k !== null && k.includes('shramsafal_field_operator_roster_')) doomed.push(k);
+        }
+        doomed.forEach((k) => s.removeItem(k));
     } catch {
         /* storage unavailable */
     }

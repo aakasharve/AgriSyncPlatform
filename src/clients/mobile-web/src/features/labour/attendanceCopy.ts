@@ -44,6 +44,16 @@ export const ATTENDANCE_COPY = {
     refusedRetry: 'पुन्हा प्रयत्न करा',
     /** The no-work declaration did not reach the farm record. */
     noWorkNotRecorded: '"काम झालं नाही" हा दिवस शेतनोंदीत जमा झाला नाही.',
+    /*
+     * ── TEMPORARY PLACEHOLDER - NEEDS FOUNDER WORDING (offline read-out, 2026-10-11) ──
+     * No approved phrase for "this is the last copy we have / may be old" exists
+     * in attendanceCopy, SYNC_HONESTY or the farmer vocabulary. Built only from
+     * words already on this screen. The ONE place to change it.
+     */
+    staleReadoutNote: (ageLabel: string) => `ही माहिती जुनी असू शकते — ${ageLabel}`,
+    staleAgeJustNow: 'थोड्या वेळापूर्वी मिळाली',
+    staleAgeHours: (n: number) => `${n} तासांपूर्वी मिळाली`,
+    staleAgeDays: (n: number) => `${n} दिवसांपूर्वी मिळाली`,
     /** Approved mark vocabulary — the only words the contradiction slots may hold. */
     markWord: { full: 'आला', half: 'अर्धा', night: 'रात्र' } as const,
 } as const;

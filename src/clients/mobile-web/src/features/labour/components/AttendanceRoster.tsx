@@ -34,6 +34,8 @@ import {
     type FieldOperator,
 } from '../data/fieldOperatorClient';
 import { readCachedRoster, writeCachedRoster } from '../data/fieldOperatorRosterCache';
+import { isFarmAccessRefused, purgeLabourCachesForFarm } from '../../../infrastructure/storage/labourFarmAccess';
+import { getSessionUserId } from '../../../infrastructure/storage/AuthTokenStore';
 import {
     EMPTY_PREFILL,
     sanitizeHoursInput,
@@ -85,13 +87,31 @@ const AttendanceRoster: React.FC<Props> = ({ farmId, selections, prefills, onCha
             const fresh = await fetchFieldOperators(farmId);
             setRoster(fresh);
             writeCachedRoster(farmId, fresh);
-        } catch {
+        } catch (err) {
+            if (isFarmAccessRefused(err)) {
+                // 403 = no longer a member of this farm: the cached names are
+                // erased and not shown (founder 2026-10-12). Unreachable is
+                // different: keep the cached copy below.
+                purgeLabourCachesForFarm(getSessionUserId(), farmId);
+                setRoster(null);
+                setLoadFailed(true);
+                return;
+            }
             // Honest failure: keep whatever cached copy we already hold, never
             // substitute an invented roster.
             setLoadFailed(true);
         } finally {
             setLoading(false);
         }
+    }, [farmId]);
+
+    // A different farm must never keep showing the previous farm's names if its
+    // own fetch fails: re-seed from THIS farm's cached copy (or nothing) first.
+    const seededFarmRef = useRef(farmId);
+    useEffect(() => {
+        if (seededFarmRef.current === farmId) return;
+        seededFarmRef.current = farmId;
+        setRoster(farmId ? readCachedRoster(farmId) : null);
     }, [farmId]);
 
     useEffect(() => { void load(); }, [load]);
