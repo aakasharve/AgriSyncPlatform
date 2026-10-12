@@ -104,6 +104,33 @@ export function buildSkippedSyncToast(
 }
 
 /**
+ * The toast for a save whose records ALL reached the sync queue.
+ *
+ * Founder decision 2026-10-12 (Marathi corrections): "Logged." / "Saved to N
+ * plots" were English and claimed a finished save at the moment the record was
+ * only queued on the phone. The server has not accepted anything yet, so the
+ * only claim made is the approved `sync.onPhone` one ("लक्षात ठेवलं ✓"), in the
+ * farmer's own language. The day-completeness figure is local arithmetic over
+ * the history and is named as such, not as a server result.
+ */
+export function buildQueuedLogToast(
+    language: Language,
+    beforePercent: number,
+    afterPercent: number,
+    plotCount?: number,
+): SaveToastMessage {
+    const claim = onPhoneClaim(language);
+    const mr = language === 'mr';
+    const plots = plotCount === undefined
+        ? ''
+        : mr ? ` ${plotCount} प्लॉटसाठी एकच नोंद.` : ` One entry for ${plotCount} plots.`;
+    const closure = mr
+        ? `दिवसाची नोंद ${beforePercent}% वरून ${afterPercent}%`
+        : `Day record ${beforePercent}% to ${afterPercent}%`;
+    return { message: `${claim} —${plots} ${closure}`, type: 'success' };
+}
+
+/**
  * The toast for a successful EDIT.
  *
  * Two true things and no more:

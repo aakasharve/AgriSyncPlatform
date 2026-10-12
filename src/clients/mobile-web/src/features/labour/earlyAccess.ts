@@ -7,7 +7,7 @@
  *   1. 7 quick taps (within 3 s) on the app version label.
  *   2. Web only: `?early=attendance` / `?early=attendance-off`, consumed once
  *      and stripped from the URL.
- * The toast text is founder-only developer text (English, flagged for review).
+ * The toast text is founder-only, in plain Marathi (founder decision 2026-10-12).
  * spec: 2026-08-25-prod-cutover-waves
  */
 import { isAttendanceDoorEnabled, setAttendanceDoorEnabled } from './attendanceDoor';
@@ -16,7 +16,7 @@ export const EARLY_TAP_COUNT = 7;
 export const EARLY_TAP_WINDOW_MS = 3000;
 
 export function earlyAccessToastText(on: boolean): string {
-    return `Early access: attendance door ${on ? 'ON' : 'OFF'}`;
+    return `हजेरीचं नवं दार: ${on ? 'चालू' : 'बंद'}`;
 }
 
 /** Makes a tap handler; the 7th tap in the window toggles and returns the new state, else null. */

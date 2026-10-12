@@ -405,7 +405,7 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
         // Declared no-work day (founder ruling 2, 2026-08-14). The Marathi is
         // the founder's own register and ships verbatim; these two English
         // lines are a working translation of it and are NOT founder-reviewed.
-        noWorkDayAcknowledged: 'No work today — you said so, and I recorded it.',
+        noWorkDayAcknowledged: 'No work today — noted on this phone.',
 
         consistencyKept: 'You have told me without fail for {days} days running.',
 
@@ -586,7 +586,7 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
         // A day he honestly said had no work. FOUNDER-SUPPLIED register, used
         // verbatim — do not paraphrase. No number appears beside these lines:
         // his honesty is acknowledged and his consistency named instead.
-        noWorkDayAcknowledged: 'आज काम नाही — तुम्ही सांगितलं, मी नोंदवलं.',
+        noWorkDayAcknowledged: 'आज काम नाही — लक्षात ठेवलं.',
 
         consistencyKept: 'सलग {days} दिवस तुम्ही न चुकता सांगताय.',
 

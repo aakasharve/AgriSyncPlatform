@@ -99,7 +99,7 @@ describe('the landing page after a successful QR join', () => {
         await waitFor(() => expect(screen.getByText('तुम्ही जोडले गेलात!')).toBeInTheDocument());
         const body = document.body.textContent ?? '';
         expect(body).toContain('पवार यांची शेती');
-        expect(body).toContain('कामाला येणारे');
+        expect(body).toContain('कामगार');
         expect(body).not.toContain('Your farm');
         expect(body).not.toMatch(/Step 1/i);
         // no "you ARE joining" present-tense line over a finished join, no promise of unbuilt features

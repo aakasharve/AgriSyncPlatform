@@ -22,6 +22,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Sprout, Plus, QrCode, CheckCircle2, X } from 'lucide-react';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
+import { getRoleLabel } from '../../../shared/roles/roleLabels';
 
 interface FarmContextSwitcherProps {
     farms: MyFarmDto[];
@@ -48,10 +49,13 @@ const roleStyle = (role: string) => {
 
 const roleLabel = (role: string) => {
     switch (role) {
-        case 'PrimaryOwner': return 'मालक / Owner';
-        case 'SecondaryOwner': return 'सहमालक / Co-owner';
-        case 'Mukadam': return 'जबाबदार / Mukadam';
-        case 'Worker': return 'कामाला येणारे / Worker';
+        case 'PrimaryOwner':
+        case 'SecondaryOwner':
+        case 'Mukadam':
+        case 'Worker': {
+            const l = getRoleLabel(role);
+            return `${l.mr} / ${l.en}`;
+        }
         default: return role;
     }
 };

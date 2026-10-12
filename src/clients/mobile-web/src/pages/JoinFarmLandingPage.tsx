@@ -25,6 +25,7 @@ import { claimFarmJoin, getMyFarms, isInviteApiError, type ClaimResponse } from 
 import { agriSyncClient } from '../infrastructure/api/AgriSyncClient';
 import { useOptionalAuth } from '../app/providers/AuthProvider';
 import { useUiPref } from '../shared/hooks/useUiPref';
+import { getRoleLabel } from '../shared/roles/roleLabels';
 
 type Step = 'phone' | 'otp' | 'done' | 'invalid' | 'checking' | 'revoked';
 
@@ -36,9 +37,14 @@ interface JoinContext {
 }
 
 const ROLE_LABEL_MR: Record<JoinRole, string> = {
-    Worker: 'कामाला येणारे',
-    Mukadam: 'जबाबदार',
-    SecondaryOwner: 'सहमालक',
+    Worker: getRoleLabel('Worker').mr,
+    Mukadam: getRoleLabel('Mukadam').mr,
+    SecondaryOwner: getRoleLabel('SecondaryOwner').mr,
+};
+const ROLE_LABEL_EN: Record<JoinRole, string> = {
+    Worker: getRoleLabel('Worker').en,
+    Mukadam: getRoleLabel('Mukadam').en,
+    SecondaryOwner: getRoleLabel('SecondaryOwner').en,
 };
 
 /**
@@ -414,11 +420,11 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                     {step !== 'done' && (
                         <>
                             <p className="text-sm font-semibold text-stone-500">
-                                तुम्ही <span className="font-bold text-emerald-700">{context.farmName}</span> मध्ये सामील होत आहात.
+                                तुम्ही <span className="font-bold text-emerald-700">{context.farmName}</span> मध्ये <span className="font-bold text-stone-800">{ROLE_LABEL_MR[context.proposedRole]}</span> म्हणून सामील होत आहात.
                             </p>
                             <p className="text-xs text-stone-500">
                                 You are joining <span className="font-bold text-emerald-700">{context.farmName}</span> as{' '}
-                                <span className="font-bold text-stone-800">{context.proposedRole}</span> ({ROLE_LABEL_MR[context.proposedRole]}).
+                                <span className="font-bold text-stone-800">{ROLE_LABEL_EN[context.proposedRole]}</span>.
                             </p>
                         </>
                     )}
