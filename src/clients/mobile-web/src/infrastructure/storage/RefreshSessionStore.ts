@@ -110,18 +110,18 @@ export async function clearNativeRefreshSession(): Promise<void> {
 //
 // When a farmer logs out we must tell the server to revoke the refresh token,
 // but the phone may be offline. Deleting the token first (as before) leaves it
-// valid on the server for up to 30 days. So the token is MOVED into this
+// valid on the server for up to its 30-day life. So the token is MOVED into this
 // separate Keystore slot: same protection as the live slot, but
 //   - it is never read by refresh/boot (only by the revoke call),
 //   - it is deleted the moment the revoke succeeds (or the server judges it),
-//   - it is deleted after PENDING_REVOKE_MAX_AGE_MS regardless (the token's own
-//     server life), so it cannot linger past the point it could matter.
+//   - it is deleted after PENDING_REVOKE_MAX_AGE_MS regardless (the 14-day offline
+//     reopening window, same as AuthTokenStore.PRESENCE_MAX_AGE_MS; <= server life), so it cannot linger past the point it could matter.
 // Web has no equivalent: the HttpOnly cookie IS the credential and the revoke
 // call carries it automatically.
 // ---------------------------------------------------------------------------
 
 const PENDING_REVOKE_KEY = 'agrisync_native_pending_revoke_v1';
-export const PENDING_REVOKE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+export const PENDING_REVOKE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
 export async function stashPendingRevoke(refreshToken: string): Promise<void> {
     if (!isNativeSecureRefreshEnabled()) {

@@ -5,6 +5,8 @@
 // view used ONLY by AuthProvider's 'unreachable' boot branch. It must never
 // carry, invent or persist a token.
 import { describe, it, expect, beforeEach } from 'vitest';
+import { PENDING_REVOKE_MAX_AGE_MS } from '../RefreshSessionStore';
+import { PENDING_LOGOUT_MAX_AGE_MS } from '../PendingLogoutStore';
 import {
     getAuthSession,
     getPresenceSession,
@@ -57,13 +59,13 @@ describe('getPresenceSession', () => {
         expect(getPresenceSession()).toBeNull();
     });
 
-    it('is null once the marker is older than the 30-day refresh-credential life', () => {
-        window.localStorage.setItem(KEY, JSON.stringify({ userId: 'u-1', expiresAtUtc: iso(-31 * DAY) }));
+    it('is null once the marker is older than the 14-day offline reopening window', () => {
+        window.localStorage.setItem(KEY, JSON.stringify({ userId: 'u-1', expiresAtUtc: iso(-15 * DAY) }));
         expect(getPresenceSession()).toBeNull();
     });
 
-    it('is still present at 29 days', () => {
-        window.localStorage.setItem(KEY, JSON.stringify({ userId: 'u-1', expiresAtUtc: iso(-29 * DAY) }));
+    it('is still present at 13 days', () => {
+        window.localStorage.setItem(KEY, JSON.stringify({ userId: 'u-1', expiresAtUtc: iso(-13 * DAY) }));
         expect(getPresenceSession()?.userId).toBe('u-1');
     });
 
@@ -85,9 +87,15 @@ describe('getPresenceSession', () => {
         expect(getPresenceSession()?.userId).toBe('user-B');
     });
 
-    it('the age cap equals the server refresh-credential life (30 days)', () => {
+    it('the offline reopening window is 14 days (founder 2026-10-12) and never exceeds the server refresh life (30 days)', () => {
         // Server: RefreshTokenHandler.cs:70 / LoginHandler.cs:76 (AddDays(30)).
-        // If the server lifetime changes, this bound must change with it.
-        expect(PRESENCE_MAX_AGE_MS).toBe(30 * 24 * 60 * 60 * 1000);
+        // The app must never claim presence beyond what it can honestly revoke.
+        expect(PRESENCE_MAX_AGE_MS).toBe(14 * 24 * 60 * 60 * 1000);
+        expect(PRESENCE_MAX_AGE_MS).toBeLessThanOrEqual(30 * 24 * 60 * 60 * 1000);
+    });
+
+    it('the pending-revoke slot and pending-logout marker use the same 14-day window as presence', () => {
+        expect(PENDING_REVOKE_MAX_AGE_MS).toBe(PRESENCE_MAX_AGE_MS);
+        expect(PENDING_LOGOUT_MAX_AGE_MS).toBe(PRESENCE_MAX_AGE_MS);
     });
 });

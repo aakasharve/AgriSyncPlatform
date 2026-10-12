@@ -141,15 +141,15 @@ describe('AuthProvider - offline cold start (real AuthTokenStore)', () => {
         expect(screen.getByTestId('offline').textContent).toBe('no');
     });
 
-    it('marker older than the 30-day refresh-credential life + unreachable => anonymous', async () => {
-        coldStartWithMarker('u-field', -31 * DAY);
+    it('marker older than the 14-day offline reopening window + unreachable => anonymous', async () => {
+        coldStartWithMarker('u-field', -15 * DAY);
         spy().mockResolvedValueOnce({ kind: 'unreachable' });
         render(<AuthProvider><Probe /></AuthProvider>);
         await waitFor(() => expect(status()).toBe('anonymous'));
     });
 
     it('an access-token expiry weeks in the past is still honoured (that is the normal cold start)', async () => {
-        coldStartWithMarker('u-field', -20 * DAY);
+        coldStartWithMarker('u-field', -10 * DAY);
         spy().mockResolvedValueOnce({ kind: 'unreachable' });
         render(<AuthProvider><Probe /></AuthProvider>);
         await waitFor(() => expect(status()).toBe('authenticated'));
@@ -328,7 +328,7 @@ describe('AuthProvider - offline cold start (real AuthTokenStore)', () => {
 
         it('fails closed when the marker is no longer valid under the age rule', async () => {
             await presenceTab();
-            window.localStorage.setItem(KEY, JSON.stringify({ userId: 'u-field', expiresAtUtc: iso(-31 * DAY) }));
+            window.localStorage.setItem(KEY, JSON.stringify({ userId: 'u-field', expiresAtUtc: iso(-15 * DAY) }));
             await act(async () => { window.dispatchEvent(new StorageEvent('storage', { key: KEY })); });
             expect(status()).toBe('anonymous');
         });

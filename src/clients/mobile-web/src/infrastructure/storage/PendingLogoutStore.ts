@@ -5,7 +5,7 @@
 //
 // Why it exists: logging out offline used to clear the local token while the
 // server-side revoke failed silently. The refresh credential then stayed valid
-// for up to 30 days and, on web, the HttpOnly cookie could silently sign the
+// for up to its 30-day server life and, on web, the HttpOnly cookie could silently sign the
 // user back in at the next online boot. While this marker is set the boot MUST
 // NOT refresh or present an offline session: it shows login and finishes the
 // revoke on the first reachable moment.
@@ -16,8 +16,8 @@
 
 const KEY = 'agrisync_pending_logout_v1';
 
-/** Matches the server's 30-day refresh-credential life (AddDays(30) in User.Application handlers). */
-export const PENDING_LOGOUT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+/** Same 14-day offline reopening window as AuthTokenStore.PRESENCE_MAX_AGE_MS (founder 2026-10-12; server refresh life is 30 days, so this is never longer than the server). */
+export const PENDING_LOGOUT_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
 function storage(): Storage | null {
     return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'

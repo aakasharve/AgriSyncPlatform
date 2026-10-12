@@ -64,7 +64,7 @@ describe('Android pending-revoke slot', () => {
         expect(slots.has(PENDING)).toBe(false);
     });
 
-    it('a token older than the 30-day cap is deleted and never sent', async () => {
+    it('a token older than the 14-day cap is deleted and never sent', async () => {
         slots.set(PENDING, JSON.stringify({
             refreshToken: 'RT-OLD',
             stashedAtUtc: new Date(Date.now() - PENDING_REVOKE_MAX_AGE_MS - 1000).toISOString(),
