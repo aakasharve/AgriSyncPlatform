@@ -173,10 +173,11 @@ describe('AuthProvider - offline cold start (real AuthTokenStore)', () => {
     it('a second user overwrites the marker; a cold start presents only that user', async () => {
         setAuthSession({ userId: 'user-A', accessToken: 'a', expiresAtUtc: iso(60_000) });
         setAuthSession({ userId: 'user-B', accessToken: 'b', expiresAtUtc: iso(60_000) });
-        // simulate reload: drop only the in-memory token, keep the marker
-        const raw = window.localStorage.getItem(KEY)!;
-        clearAuthSession();
-        window.localStorage.setItem(KEY, raw);
+        // the marker names only the LAST user to sign in (overwritten, not appended)
+        expect(JSON.parse(window.localStorage.getItem(KEY)!).userId).toBe('user-B');
+        // simulate reload: drop the in-memory token and re-create that marker from literals
+        // (never copy stored session data back into storage)
+        coldStartWithMarker('user-B', 60_000);
         spy().mockResolvedValueOnce({ kind: 'unreachable' });
         render(<AuthProvider><Probe /></AuthProvider>);
         await waitFor(() => expect(status()).toBe('authenticated'));
