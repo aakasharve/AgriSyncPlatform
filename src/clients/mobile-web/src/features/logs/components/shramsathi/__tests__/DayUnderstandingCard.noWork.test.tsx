@@ -108,7 +108,7 @@ describe('DayUnderstandingCard — a declared no-work day (founder ruling 2, 202
 
         expect(queryByTestId('day-understanding-value')).toBeNull();
         expect(getByTestId('day-understanding-nowork').textContent)
-            .toBe('आज काम नाही — तुम्ही सांगितलं, मी नोंदवलं.');
+            .toBe('आज काम नाही — लक्षात ठेवलं.');
         expect(getByTestId('day-understanding-consistency').textContent)
             .toBe('सलग ६ दिवस तुम्ही न चुकता सांगताय.');
     });

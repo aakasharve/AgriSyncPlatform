@@ -241,11 +241,12 @@ describe('changing a permission', () => {
 });
 
 describe('the copy this hook hands the UI', () => {
-    it('is English, because no Marathi has been approved for it', () => {
-        // Recorded deliberately, and on the founder-copy list. No agent in this
-        // phase has invented farmer-facing Marathi and none may start here.
+    it('is plain Marathi with no English words (founder decision 2026-10-12: translate the English strings)', () => {
+        // Replaces the old "is English until Marathi is approved" pin. The
+        // founder approved Marathi messages WITH CORRECTIONS on 2026-10-12.
         for (const message of Object.values(LABOUR_PERMISSION_MESSAGES)) {
-            expect(/[ऀ-ॿ]/.test(message)).toBe(false);
+            expect(/[ऀ-ॿ]/.test(message)).toBe(true);
+            expect(/[A-Za-z]/.test(message)).toBe(false);
         }
     });
 });

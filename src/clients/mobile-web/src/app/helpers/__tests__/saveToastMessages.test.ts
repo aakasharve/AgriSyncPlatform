@@ -18,6 +18,7 @@ import { describe, it, expect } from 'vitest';
 
 import {
     buildEditSavedMessage,
+    buildQueuedLogToast,
     buildSkippedSyncToast,
     onPhoneClaim,
 } from '../saveToastMessages';
@@ -322,5 +323,24 @@ describe('buildEditSavedMessage — the phone claim is evidence, not a courtesy 
     it('keeps the whole sentence in one script', () => {
         expect(/[A-Za-z]{2,}/.test(buildEditSavedMessage(1, 'mr', true, false))).toBe(false);
         expect(/[ऀ-ॿ]/.test(buildEditSavedMessage(1, 'en', true, false))).toBe(false);
+    });
+});
+
+describe('buildQueuedLogToast - a queued save claims only what is true', () => {
+    for (const language of LANGUAGES) {
+        it(`${language}: leads with the approved phone claim and never says Logged / saved / recorded`, () => {
+            const toast = buildQueuedLogToast(language, 40, 60);
+            expect(toast.type).toBe('success');
+            expect(toast.message.startsWith(onPhoneClaim(language))).toBe(true);
+            expect(toast.message).not.toMatch(/Logged|Saved|saved|सेव्ह|जतन|नोंदवलं/);
+            expect(toast.message).toContain('40%');
+            expect(toast.message).toContain('60%');
+        });
+    }
+
+    it('mr is Marathi only, with no English sentence', () => {
+        expect(buildQueuedLogToast('mr', 40, 60).message).toBe('लक्षात ठेवलं ✓ — दिवसाची नोंद 40% वरून 60%');
+        expect(buildQueuedLogToast('mr', 40, 60, 2).message)
+            .toBe('लक्षात ठेवलं ✓ — 2 प्लॉटसाठी एकच नोंद. दिवसाची नोंद 40% वरून 60%');
     });
 });

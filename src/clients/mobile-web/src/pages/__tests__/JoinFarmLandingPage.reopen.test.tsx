@@ -90,7 +90,7 @@ describe('FIX 1 - a signed-in member re-opening the join link (boot auth skipped
         expect(mockClaim).not.toHaveBeenCalled();
         expect(screen.getByTestId('join-done-farm')).toHaveTextContent('पवार यांची शेती');
         // server role Mukadam, not the role the link merely proposed (Worker)
-        expect(screen.getByTestId('join-done-role')).toHaveTextContent('जबाबदार');
+        expect(screen.getByTestId('join-done-role')).toHaveTextContent('मुकादम');
         expect(screen.getByText(/शेती उघडा/)).toBeInTheDocument();
         expect(screen.queryByText(STEP1)).toBeNull();
         expect(urlHasToken()).toBe(false);

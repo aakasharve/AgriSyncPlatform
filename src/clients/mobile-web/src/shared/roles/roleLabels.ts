@@ -89,13 +89,13 @@ export const ROLE_LABELS: Record<FarmRole, RoleLabel> = {
     Mukadam: make(
         'Mukadam',
         'Mukadam',
-        'जबाबदार',
+        'मुकादम',
         'bg-orange-50 text-orange-700 border-orange-200',
     ),
     Worker: make(
         'Worker',
         'Worker',
-        'कामाला येणारे',
+        'कामगार',
         'bg-stone-100 text-stone-700 border-stone-200',
     ),
 
@@ -153,6 +153,31 @@ export const getRoleLabel = (code: string | null | undefined): RoleLabel => {
         badge: 'bg-stone-100 text-stone-700 border-stone-200',
         display: 'सदस्य · Member',
     };
+};
+
+/**
+ * Resolve the role strings the app actually carries to a label.
+ *
+ * Two spellings of the same four membership roles circulate: the server's
+ * PascalCase (`SecondaryOwner`, from /my-farms and the QR claim) and the
+ * local operator profile's SCREAMING_SNAKE (`SECONDARY_OWNER`, from
+ * `FarmOperator.role`). Before this helper the Team page tested only
+ * `=== 'SECONDARY_OWNER'` and labelled EVERYONE else - the owner and any
+ * Mukadam included - as a worker (founder decision 2026-10-12: role labels
+ * must be accurate). Unknown values fall back to the neutral "सदस्य" via
+ * `getRoleLabel`, never to "worker".
+ */
+export const getOperatorRoleLabel = (role: string | null | undefined): RoleLabel => {
+    const canonical = (role ?? '')
+        .toLowerCase()
+        .replace(/[^a-z]/g, '');
+    const code: FarmRole | null =
+        canonical === 'primaryowner' ? 'PrimaryOwner'
+            : canonical === 'secondaryowner' ? 'SecondaryOwner'
+                : canonical === 'mukadam' ? 'Mukadam'
+                    : canonical === 'worker' ? 'Worker'
+                        : null;
+    return getRoleLabel(code ?? role);
 };
 
 /**

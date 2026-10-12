@@ -197,7 +197,7 @@ const AttendanceRoster: React.FC<Props> = ({ farmId, selections, prefills, onCha
                         {states && sel.day !== 'Absent' && (
                             <div className="flex gap-2">
                                 <label className="flex flex-1 flex-col gap-1 text-[16px] font-bold text-stone-500">
-                                    तास
+                                    कामाचे तास
                                     <input type="text" inputMode="decimal" disabled={disabled}
                                         data-testid={`att-hours-${id}`}
                                         value={sel.hours}

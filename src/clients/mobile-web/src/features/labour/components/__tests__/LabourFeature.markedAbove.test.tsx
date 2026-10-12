@@ -149,7 +149,7 @@ describe('manual door: more people marked present than the day stated (D2)', () 
 
         markPresent(OP_D);
         const card = screen.getByTestId('headcount-disagreement');
-        expect(card).toHaveTextContent('तुम्ही सांगितलं: 4 जण.');
+        expect(card).toHaveTextContent('निवडलेले: 4 जण.');
         expect(card).toHaveTextContent('आजच्या कामात 3 जण होते, असं आधी समजलं होतं.');
         expect(card).toHaveTextContent('दोन्ही गोष्टी तशाच राहतील.');
         // no machine id reaches the farmer
@@ -181,7 +181,7 @@ describe('manual door: more people marked present than the day stated (D2)', () 
         fireEvent.click(screen.getByText('मागे')); // register -> hub
         await waitFor(() => expect(screen.getByText(/आज कामावर 3 जण/)).toBeInTheDocument());
         const card = await screen.findByTestId('headcount-disagreement');
-        expect(card).toHaveTextContent('तुम्ही सांगितलं: 4 जण.');
+        expect(card).toHaveTextContent('निवडलेले: 4 जण.');
         expect(card).toHaveTextContent('आजच्या कामात 3 जण होते');
         expect(document.body.textContent ?? '').not.toMatch(/आज कामावर 4 जण/);
     });

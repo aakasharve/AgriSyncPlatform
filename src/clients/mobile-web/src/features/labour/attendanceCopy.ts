@@ -11,7 +11,9 @@ export const ATTENDANCE_COPY = {
     noAnchorReason: 'आजच्या कामात किती जण होते ते अजून समजलं नाही. आधी आजचं काम सांगा.',
     understoodHeading: 'श्रम सफलला समजलं',
     /** D9.5 provenance chips. */
-    youSaidChip: 'तुम्ही सांगितलं',
+    youSaidChip: 'सांगितलेलं',
+    /** The manual door: people the user marked on the list - marked, not spoken. */
+    markedChip: 'निवडलेले',
     explicitChip: 'स्पष्ट माहिती',
     /** Rung 2 — count known, nobody named (mockup 05, locked as drawn). */
     rungWho: (n: number) => `या ${n} जणांमध्ये कोण होते?`,
@@ -35,13 +37,13 @@ export const ATTENDANCE_COPY = {
      * retry vocabulary), `काम झालं नाही` (the approved no-work door).
      */
     /** A mark the server refused: N of them did not reach the farm record. */
-    refusedMarksTitle: (n: number) => `${n} हजेरी शेतनोंदीत गेली नाही`,
+    refusedMarksTitle: (n: number) => `${n} हजेरी शेतनोंदीत जमा झाली नाही`,
     /** Shown ONLY when the server's own code says the caller may not take marks. */
     refusedMissingResponsibility: 'कामगारांची जबाबदारी तुमच्याकडे नाही.',
     refusedShowWhich: 'कोणत्या ते बघा',
     refusedRetry: 'पुन्हा प्रयत्न करा',
     /** The no-work declaration did not reach the farm record. */
-    noWorkNotRecorded: '"काम झालं नाही" हा दिवस शेतनोंदीत गेला नाही.',
+    noWorkNotRecorded: '"काम झालं नाही" हा दिवस शेतनोंदीत जमा झाला नाही.',
     /** Approved mark vocabulary — the only words the contradiction slots may hold. */
     markWord: { full: 'आला', half: 'अर्धा', night: 'रात्र' } as const,
 } as const;

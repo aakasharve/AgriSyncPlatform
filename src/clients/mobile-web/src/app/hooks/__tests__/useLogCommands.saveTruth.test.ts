@@ -335,7 +335,7 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
         });
 
         expect(lastToast()?.type).toBe('success');
-        expect(lastToast()?.message).toMatch(/^Logged\. Day closure: \d+% -> \d+%$/);
+        expect(lastToast()?.message).toMatch(/^लक्षात ठेवलं ✓ — दिवसाची नोंद \d+% वरून \d+%$/);
     });
 
     it('an English farmer is told this in English, not in Marathi', async () => {
@@ -361,7 +361,7 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
 
         expect(enqueueLogsForSync).not.toHaveBeenCalled();
         expect(lastToast()?.type).toBe('success');
-        expect(lastToast()?.message).toMatch(/^Logged\. Day closure: /);
+        expect(lastToast()?.message).toMatch(/^लक्षात ठेवलं ✓ — दिवसाची नोंद /);
     });
 
     // ------------------------------------------------- B1: the durable surface
@@ -552,7 +552,7 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
         });
 
         expect(lastToast()?.type).toBe('success');
-        expect(lastToast()?.message).toMatch(/^Logged once\. Saved to 2 plots\. Day closure: /);
+        expect(lastToast()?.message).toMatch(/^लक्षात ठेवलं ✓ — 2 प्लॉटसाठी एकच नोंद\. दिवसाची नोंद /);
     });
 
     // ------------------------------------------------------------ sites 1 & 2

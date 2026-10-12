@@ -15,6 +15,7 @@ import React, { useState } from 'react';
 import { ChevronDown, Trash2, ClipboardList, CheckCircle2 } from 'lucide-react';
 import { OperatorCapability } from '../../../types';
 import { DURATION_CHIPS, expiryUtcForChip, responsibilityEndLine } from './responsibilityDuration';
+import { getOperatorRoleLabel } from '../../../shared/roles/roleLabels';
 
 interface Member {
     id: string;
@@ -100,6 +101,8 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onDelete
     const [choosingDuration, setChoosingDuration] = useState(false);
     const [pickedDate, setPickedDate] = useState('');
     const isPartner = member.role === 'SECONDARY_OWNER';
+    // Accurate for every role: owner, co-owner, Mukadam, worker (never 'worker' by default).
+    const roleMr = getOperatorRoleLabel(member.role).mr;
 
     return (
         <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
@@ -118,7 +121,7 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onDelete
                         summary can never clip off the right edge. */}
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                         <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${isPartner ? 'border-blue-100 bg-blue-50 text-blue-700' : 'border-orange-100 bg-orange-50 text-orange-700'}`}>
-                            {isPartner ? 'भागीदार' : 'कामाला येणारे'}
+                            {roleMr}
                         </span>
                     </div>
                 </div>

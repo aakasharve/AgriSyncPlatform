@@ -212,19 +212,19 @@ describe('LabourFeature - early-access switch (device-switch spec): default OFF,
         mount(false);
         tapTitle(6);
         expect(screen.queryByText('हजेरी घ्या')).not.toBeInTheDocument();
-        expect(screen.queryByText(/Early access/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/हजेरीचं नवं दार/)).not.toBeInTheDocument();
     });
 
     it('7 taps: toast, tile appears, and it persists after a remount (reload)', () => {
         const first = mount(false);
         tapTitle(7);
-        expect(screen.getByText('Early access: attendance door ON')).toBeInTheDocument();
+        expect(screen.getByText('हजेरीचं नवं दार: चालू')).toBeInTheDocument();
         expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
         first.unmount();
         mount(false);
         expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
         tapTitle(7);
-        expect(screen.getByText('Early access: attendance door OFF')).toBeInTheDocument();
+        expect(screen.getByText('हजेरीचं नवं दार: बंद')).toBeInTheDocument();
         expect(screen.queryByText('हजेरी घ्या')).not.toBeInTheDocument();
     });
 });

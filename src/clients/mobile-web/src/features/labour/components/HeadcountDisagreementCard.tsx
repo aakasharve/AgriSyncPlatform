@@ -27,7 +27,7 @@ const HeadcountDisagreementCard: React.FC<{
             (B001's 0-with-names), and printing a fabricated number here
             would be the exact silent overwrite this card exists to prevent. */}
         <span className="font-extrabold">
-            {COPY.youSaidChip}: {disagreement.spoken.count != null
+            {disagreement.spoken.count == null && markedCount != null ? COPY.markedChip : COPY.youSaidChip}: {disagreement.spoken.count != null
                 ? <>{disagreement.spoken.count} जण.</>
                 : markedCount != null
                     ? <>{markedCount} जण.</>

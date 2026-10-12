@@ -119,7 +119,7 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                         {/* 3.4b review finding 9 (P7): the chip must attribute the
                             count to its ACTUAL source. knownCount is
                             spokenCount ?? anchorHeadcount — when it came from the
-                            anchor (the log), तुम्ही सांगितलं would credit the
+                            anchor (the log), सांगितलेलं would credit the
                             farmer with a statement he never made this session;
                             the anchor's figure carries the स्पष्ट माहिती chip
                             instead (both chips are the approved D9.5 harvest). */}

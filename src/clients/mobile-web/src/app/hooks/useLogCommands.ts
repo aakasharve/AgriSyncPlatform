@@ -50,7 +50,7 @@ import { countCompletedIrrigationEvents } from '../../features/logs/services/irr
 // that fact, so this is the only place that can tell it.
 import { noteUnqueueableLogs } from '../../features/sync/status/unqueueableLogs';
 import { useLanguage } from '../../i18n/LanguageContext';
-import { buildEditSavedMessage, buildSkippedSyncToast } from '../helpers/saveToastMessages';
+import { buildEditSavedMessage, buildQueuedLogToast, buildSkippedSyncToast } from '../helpers/saveToastMessages';
 
 // spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — fix round 3.
 // `ManualSubmitOutcome` moved to `useLogCommands.types.ts` (its own doc
@@ -353,10 +353,7 @@ export const useLogCommands = ({
             );
 
             // AUTO-SAVE SUCCESS: Show the success screen instead of just a toast
-            setToast(buildSkippedSyncToast(syncOutcome, language) ?? {
-                message: `Logged. Day closure: ${beforePercent}% -> ${afterPercent}%`,
-                type: 'success'
-            });
+            setToast(buildSkippedSyncToast(syncOutcome, language) ?? buildQueuedLogToast(language, beforePercent, afterPercent));
             setStatus('success');
             setMode('manual'); // Ensure we are in a view that shows the success state overlay
 
@@ -421,10 +418,7 @@ export const useLogCommands = ({
                 history,
                 [...newLogs, ...history]
             );
-            setToast(buildSkippedSyncToast(syncOutcome, language) ?? {
-                message: `Logged. Day closure: ${beforePercent}% -> ${afterPercent}%`,
-                type: 'success'
-            });
+            setToast(buildSkippedSyncToast(syncOutcome, language) ?? buildQueuedLogToast(language, beforePercent, afterPercent));
 
             setMode('manual');
             setMainView('log');
@@ -621,10 +615,7 @@ export const useLogCommands = ({
 
                 const nextHistory = [...newLogs, ...history];
                 const { beforePercent, afterPercent } = computeClosureDelta(history, nextHistory);
-                setToast(buildSkippedSyncToast(syncOutcome, language) ?? {
-                    message: `Logged. Day closure: ${beforePercent}% -> ${afterPercent}%`,
-                    type: 'success'
-                });
+                setToast(buildSkippedSyncToast(syncOutcome, language) ?? buildQueuedLogToast(language, beforePercent, afterPercent));
                 savedLogIds = newLogs.map(l => l.id);
                 showSavedToLedgerPanel = true;
             }
@@ -736,10 +727,7 @@ export const useLogCommands = ({
             // three-plot save as "Saved to 1 plots": the same sentence, newly
             // false, and this time an UNDER-count.
             const queuedPlotCount = countAssertedPlots(logs, syncOutcome);
-            setToast(buildSkippedSyncToast(syncOutcome, language) ?? {
-                message: `Logged once. Saved to ${queuedPlotCount} plots. Day closure: ${beforePercent}% -> ${afterPercent}%`,
-                type: 'success'
-            });
+            setToast(buildSkippedSyncToast(syncOutcome, language) ?? buildQueuedLogToast(language, beforePercent, afterPercent, queuedPlotCount));
 
             setStatus('success');
         } catch (error) {
