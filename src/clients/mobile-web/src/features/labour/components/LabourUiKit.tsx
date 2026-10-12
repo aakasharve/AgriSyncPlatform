@@ -134,7 +134,7 @@ export const MoneyLine: React.FC<{ balance: LabourBalance }> = ({ balance }) => 
 
 export const MukadamBadge: React.FC<{ sub?: boolean }> = ({ sub }) => (
     <span className={`rounded-lg border px-2.5 py-1 text-[15px] font-bold ${sub ? 'border-blue-100 bg-blue-50 text-blue-700' : 'border-violet-100 bg-violet-50 text-violet-700'}`}>
-        {sub ? 'उप-जबाबदार' : 'जबाबदार'}
+        {sub ? 'उप-मुकादम' : 'मुकादम'}
     </span>
 );
 

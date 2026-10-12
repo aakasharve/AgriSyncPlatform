@@ -102,7 +102,7 @@ export const OperatorSessionChip: React.FC<OperatorSessionChipProps> = ({
                             ) : (
                                 allOperators.map((operator) => {
                                     const isActive = currentOperator?.id === operator.id;
-                                    const opRoleInfo = roleLabels[operator.role] || { label: operator.role, labelMr: '' };
+                                    const opRoleInfo = roleLabels[operator.role] || { label: '', labelMr: '' };
 
                                     return (
                                         <button

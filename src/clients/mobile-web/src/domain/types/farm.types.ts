@@ -292,7 +292,8 @@ export interface Person {
 export interface FarmOperator {
     id: string;
     name: string;
-    role: 'PRIMARY_OWNER' | 'SECONDARY_OWNER' | 'MUKADAM' | 'WORKER';
+    /** UNKNOWN = the client was not told this member's role (server hides other members' roles); never shown as a role. */
+    role: 'PRIMARY_OWNER' | 'SECONDARY_OWNER' | 'MUKADAM' | 'WORKER' | 'UNKNOWN';
     phone?: string;
     isActive?: boolean;
 

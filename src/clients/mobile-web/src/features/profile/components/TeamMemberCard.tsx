@@ -102,7 +102,8 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onDelete
     const [pickedDate, setPickedDate] = useState('');
     const isPartner = member.role === 'SECONDARY_OWNER';
     // Accurate for every role: owner, co-owner, Mukadam, worker (never 'worker' by default).
-    const roleMr = getOperatorRoleLabel(member.role).mr;
+    // Show a role only when the client actually knows it; otherwise no label at all.
+    const roleMr = member.role === 'UNKNOWN' ? null : getOperatorRoleLabel(member.role).mr;
 
     return (
         <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
@@ -119,11 +120,13 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onDelete
                     <h4 className="truncate text-[15px] font-bold leading-tight text-slate-800">{member.name}</h4>
                     {/* Tags wrap to a second line on narrow phones so the access
                         summary can never clip off the right edge. */}
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                        <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${isPartner ? 'border-blue-100 bg-blue-50 text-blue-700' : 'border-orange-100 bg-orange-50 text-orange-700'}`}>
-                            {roleMr}
-                        </span>
-                    </div>
+                    {roleMr && (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${isPartner ? 'border-blue-100 bg-blue-50 text-blue-700' : 'border-orange-100 bg-orange-50 text-orange-700'}`}>
+                                {roleMr}
+                            </span>
+                        </div>
+                    )}
                 </div>
                 {/* Chevron + label stacked in a compact right column so they
                     don't compete with the name for horizontal space. */}
