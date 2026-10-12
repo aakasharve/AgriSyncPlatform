@@ -14,9 +14,16 @@
  *
  * The cache carries NO claim of freshness: callers must not present cached
  * names as "current".
+ *
+ * MAX AGE 7 DAYS (founder 2026-10-12, same cap as the Labour read-out): the
+ * copy is stamped with `savedAtUtc`; an older one - or a legacy copy with no
+ * stamp, whose age is unknown - is deleted on read and by the boot sweep
+ * (infrastructure/storage/labourFarmAccess.purgeExpiredLabourCaches). It is also
+ * erased on every session end and when access to the farm ends.
  */
 import { storageNamespace } from '../../../infrastructure/storage/StorageNamespace';
-import { readCachedJson, writeCachedJson } from '../../../infrastructure/storage/LabourLocalStore';
+import { readCachedJson, writeCachedJson, removeCachedJson } from '../../../infrastructure/storage/LabourLocalStore';
+import { LABOUR_READOUT_MAX_AGE_MS } from '../../../infrastructure/storage/LabourReadoutCache';
 import type { FieldOperator } from './fieldOperatorClient';
 
 const keyFor = (farmId: string): string => storageNamespace.getKey(`shramsafal_field_operator_roster_${farmId}`);
@@ -28,11 +35,19 @@ const isOperator = (v: unknown): v is FieldOperator => {
 
 export function readCachedRoster(farmId: string): FieldOperator[] | null {
     try {
-        const raw = readCachedJson(keyFor(farmId));
+        const key = keyFor(farmId);
+        const raw = readCachedJson(key);
         if (!raw) return null;
-        const parsed: unknown = JSON.parse(raw);
-        if (!Array.isArray(parsed) || !parsed.every(isOperator)) return null;
-        return parsed;
+        const parsed = JSON.parse(raw) as { savedAtUtc?: unknown; roster?: unknown } | null;
+        const at = typeof parsed?.savedAtUtc === 'string' ? Date.parse(parsed.savedAtUtc) : NaN;
+        const now = Date.now();
+        if (Number.isNaN(at) || now - at > LABOUR_READOUT_MAX_AGE_MS || at - now > 24 * 60 * 60 * 1000) {
+            removeCachedJson(key); // too old, future-dated, or legacy/unstamped: age unknown
+            return null;
+        }
+        const roster = parsed?.roster;
+        if (!Array.isArray(roster) || !roster.every(isOperator)) return null;
+        return roster;
     } catch {
         return null;
     }
@@ -40,7 +55,7 @@ export function readCachedRoster(farmId: string): FieldOperator[] | null {
 
 export function writeCachedRoster(farmId: string, roster: FieldOperator[]): void {
     try {
-        writeCachedJson(keyFor(farmId), JSON.stringify(roster));
+        writeCachedJson(keyFor(farmId), JSON.stringify({ savedAtUtc: new Date().toISOString(), roster }));
     } catch {
         /* stringify failed: the screen just has no offline copy */
     }

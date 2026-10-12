@@ -28,6 +28,7 @@ import { endFarmerSessionLocally } from './endFarmerSession';
 import { clearPendingLogout } from './PendingLogoutStore';
 import { clearAllLabourReadouts } from './LabourReadoutCache';
 import { clearAllCachedRosters } from './LabourLocalStore';
+import { SessionStore } from './SessionStore';
 
 export interface AuthSession {
     userId: string;
@@ -136,13 +137,14 @@ export function getAuthSession(): AuthSession | null {
 // The marker's `expiresAtUtc` is the ACCESS token's expiry (15 min), refreshed on
 // every refresh — so on a cold start it is almost always already in the past and
 // that is NOT evidence the session ended. The real bound is the refresh
-// credential (server: 30 days, sliding). We therefore honour the marker for at
-// most that long past its stamp; beyond it the server would refuse the refresh
-// anyway, so showing the app would only mislead. Never longer than the server.
-// Tied to the server's refresh-credential life: AddDays(30) in
-// User.Application RefreshTokenHandler.cs:70 and LoginHandler.cs:76 (also
-// RegisterUserHandler, VerifyOtpHandler). Change both together.
-export const PRESENCE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+// credential (server: 30 days, sliding). We honour the marker for at most the
+// FOUNDER-DECIDED 14-day offline reopening window (2026-10-12) past its stamp.
+// INVARIANT: the app must never claim presence beyond what it can honestly
+// revoke - so this is <= the server refresh life (AddDays(30) in User.Application
+// RefreshTokenHandler.cs:70 / LoginHandler.cs:76) and equals the pending-revoke
+// slot (RefreshSessionStore) and pending-logout marker (PendingLogoutStore)
+// caps. Change all three together; a test pins them equal.
+export const PRESENCE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 // A genuine marker is never more than one access-token life in the future. A
 // far-future value can only be a tampered/corrupt marker — fail closed.
 const PRESENCE_MAX_FUTURE_MS = 24 * 60 * 60 * 1000;
@@ -230,6 +232,11 @@ export function setAuthSession(session: AuthSession): void {
 export function clearAuthSession(): void {
     inMemoryAccessToken = null;
 
+    // Whose session is ending, read BEFORE the marker goes. The ambient farmer
+    // (activeUserId) is switched a tick after the session, so the farm pointer
+    // must be erased for THIS user explicitly, not only for the ambient one.
+    const endingUserId = readPresenceMarker()?.userId ?? null;
+
     if (canUseStorage()) {
         window.localStorage.removeItem(AUTH_SESSION_KEY);
     }
@@ -239,6 +246,9 @@ export function clearAuthSession(): void {
     // change event, so no listener can re-render against the farmer whose
     // session has just ended. Deletes no farmer record.
     endFarmerSessionLocally();
+    if (endingUserId) {
+        SessionStore.clearCurrentFarmIdForUser(endingUserId);
+    }
 
     // The last-known Labour read-out is per-user offline convenience data; it
     // does not outlive the session that fetched it.

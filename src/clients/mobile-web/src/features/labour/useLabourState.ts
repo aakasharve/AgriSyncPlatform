@@ -53,6 +53,7 @@ import { useOptionalFarmContext } from '../../core/session/FarmContext';
 import { useOptionalAuth } from '../../app/providers/AuthProvider';
 import { SessionStore } from '../../infrastructure/storage/SessionStore';
 import { loadLabourReadout, saveLabourReadout } from './data/labourReadout';
+import { isFarmAccessRefused, purgeLabourCachesForFarm } from '../../infrastructure/storage/labourFarmAccess';
 
 /**
  * Task 9 (B001, spec: 2026-08-28-labour-v2-release-1) — the local attendance
@@ -316,7 +317,21 @@ export const useLabourState = (): UseLabourStateResult => {
                     setData(overlayLocalAttendance(real, plane.marks, plane.hints));
                     setError(false);
                 }
-            } catch {
+            } catch (err) {
+                if (isFarmAccessRefused(err)) {
+                    // The server READ the request and said this user is not a
+                    // member of the farm (403): access ended. The cached
+                    // read-out + roster for it are erased and NOT shown, and the
+                    // queued-only view is skipped too (it can carry names). The
+                    // unsent queue itself is untouched. Only a 403 does this:
+                    // an unreachable server is "unknown", not "revoked".
+                    purgeLabourCachesForFarm(userId, farmId);
+                    if (!cancelled) {
+                        setData(EMPTY_LABOUR_DATA);
+                        setError(true);
+                    }
+                    return;
+                }
                 // MONEY-SAFETY: a real farm's fetch error NEVER falls back to
                 // LABOUR_MOCK. Keep the honest empty state and surface
                 // `error` so the UI can show a retry affordance instead of

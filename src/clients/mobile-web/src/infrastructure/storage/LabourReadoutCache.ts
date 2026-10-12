@@ -89,6 +89,16 @@ export function clearAllLabourReadouts(): void {
     removeWhere(() => false);
 }
 
+/**
+ * Access to ONE farm ended (membership removed / server says not a member):
+ * erase this user's read-out for that farm in EVERY window. Other farms and
+ * other users are untouched.
+ */
+export function clearLabourReadoutsForFarm(userId: string, farmId: string): void {
+    const doomedPrefix = `${PREFIX}${encodeURIComponent(userId)}:${encodeURIComponent(farmId)}:`;
+    removeWhere((k) => !k.startsWith(doomedPrefix));
+}
+
 /** A different user is now active: erase everyone else's read-out. */
 export function clearLabourReadoutsExcept(userId: string): void {
     const mine = `${PREFIX}${encodeURIComponent(userId)}:`;

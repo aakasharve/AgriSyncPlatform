@@ -14,6 +14,7 @@ import { legacyAuditPort } from '../../infrastructure/audit/LegacyAuditPort';
 import { useAuth } from './AuthProvider';
 import { getRootStore } from '../state/RootStore';
 import { clearLabourReadoutsExcept } from '../../infrastructure/storage/LabourReadoutCache';
+import { purgeExpiredLabourCaches } from '../../infrastructure/storage/labourFarmAccess';
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 import { runLegacyLocalStorageMigration } from '../../infrastructure/storage/LegacyLocalStorageMigrator';
 import { DemoModeStore } from '../../infrastructure/storage/DemoModeStore';
@@ -159,6 +160,8 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                     activateDatabaseForUser(session.userId);
                     // Offline Labour read-outs are per user: erase any other user's.
                     clearLabourReadoutsExcept(session.userId);
+                    // 7-day cap on cached Labour names: purge expired copies at boot.
+                    purgeExpiredLabourCaches();
                     await settleOwnershipClaims();
                 } else if (!isDemoMode) {
                     // Signed out / not yet identified: no farmer's database may stay

@@ -27,6 +27,7 @@ import {
 } from './MeContextService';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { SessionStore } from '../../infrastructure/storage/SessionStore';
+import { purgeLabourCachesForFarm } from '../../infrastructure/storage/labourFarmAccess';
 
 interface FarmContextValue {
     meContext: MeContext | null;
@@ -104,6 +105,15 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
             const ids = ctx.farms.map(f => f.farmId);
             setCurrentFarmId(prev => {
                 const valid = prev && ids.includes(prev) ? prev : (ids[0] ?? null);
+                if (prev && !ids.includes(prev)) {
+                    // The server ANSWERED and this farm is not in it: access
+                    // ended. Purge the cached read-out + roster for it (founder
+                    // 2026-10-12). Only a successful /me gets here - a failed
+                    // one is "unknown" and lands in the catch below.
+                    purgeLabourCachesForFarm(userId, prev);
+                    if (userId) SessionStore.clearCurrentFarmIdForUser(userId);
+                    else SessionStore.clearCurrentFarmId();
+                }
                 if (valid) {
                     // Keyed to the signed-in farmer, not the ambient namespace
                     // (which switches a tick after the session does).

@@ -70,6 +70,11 @@ export const SessionStore = {
             ? storageNamespace.getKey(KEY_CURRENT_FARM_ID)
             : scopedKeyFor(KEY_CURRENT_FARM_ID, userId);
     },
+    /** Erase the pointer for an EXPLICIT farmer (logout, whatever the ambient farmer is). */
+    clearCurrentFarmIdForUser(userId: string): void {
+        try { window.localStorage.removeItem(this.keyForUser(userId)); }
+        catch { /* ignore */ }
+    },
     clearCurrentFarmId(): void {
         try { window.localStorage.removeItem(storageNamespace.getKey(KEY_CURRENT_FARM_ID)); }
         catch { /* ignore */ }
