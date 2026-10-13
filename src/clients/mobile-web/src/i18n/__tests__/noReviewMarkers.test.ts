@@ -13,7 +13,7 @@
 // that were measured against the code and found untrue (see the per-test notes), so a
 // later edit cannot quietly reintroduce an overstated promise.
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -38,6 +38,43 @@ function collectStrings(node: unknown, path: string, out: Array<[string, string]
     } else if (node && typeof node === 'object') {
         for (const [k, v] of Object.entries(node)) collectStrings(v, path ? `${path}.${k}` : k, out);
     }
+}
+
+/**
+ * Every file under `dir` (recursive) that satisfies `keep`, read WITHOUT a prior
+ * existence or type check: a "check, then read" pair is a race (CodeQL
+ * js/file-system-race), so each read happens inside try/catch and a file that vanished
+ * in between (ENOENT) is skipped. Directory entries come from the directory listing's own
+ * type information, not from a separate stat call.
+ */
+function filesContaining(dir: string, keep: (name: string) => boolean, skipDirs: string[], needle: (body: string) => boolean): string[] {
+    const hits: string[] = [];
+    const walk = (current: string): void => {
+        let entries;
+        try {
+            entries = readdirSync(current, { withFileTypes: true });
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+            throw error;
+        }
+        for (const entry of entries) {
+            const full = join(current, entry.name);
+            if (entry.isDirectory()) {
+                if (!skipDirs.includes(entry.name)) walk(full);
+            } else if (keep(entry.name)) {
+                let body: string;
+                try {
+                    body = readFileSync(full, 'utf8');
+                } catch (error) {
+                    if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+                    throw error;
+                }
+                if (needle(body)) hits.push(full);
+            }
+        }
+    };
+    walk(dir);
+    return hits;
 }
 
 const BUNDLES: Record<string, unknown> = {
@@ -76,36 +113,21 @@ describe('no user-visible string carries an internal review marker', () => {
 
     it('no served document under public/ carries the marker', () => {
         const root = resolve(__dirname, '../../../public');
-        const hits: string[] = [];
-        const walk = (dir: string): void => {
-            for (const entry of readdirSync(dir)) {
-                const full = join(dir, entry);
-                if (statSync(full).isDirectory()) walk(full);
-                else if (/\.(md|txt|json|html|svg)$/i.test(entry) && readFileSync(full, 'utf8').includes(MARKER)) {
-                    hits.push(full);
-                }
-            }
-        };
-        walk(join(root, 'consent'));
-        walk(join(root, 'legal'));
+        const hits = [
+            ...filesContaining(join(root, 'consent'), (n) => /\.(md|txt|json|html|svg)$/i.test(n), [], (b) => b.includes(MARKER)),
+            ...filesContaining(join(root, 'legal'), (n) => /\.(md|txt|json|html|svg)$/i.test(n), [], (b) => b.includes(MARKER)),
+        ];
         expect(hits).toEqual([]);
     });
 
     it('no shipped source file builds the runtime prefix any more', () => {
         const srcRoot = resolve(__dirname, '../..');
-        const hits: string[] = [];
-        const walk = (dir: string): void => {
-            for (const entry of readdirSync(dir)) {
-                if (entry === '__tests__' || entry === 'node_modules') continue;
-                const full = join(dir, entry);
-                if (statSync(full).isDirectory()) walk(full);
-                else if (/\.(ts|tsx)$/.test(entry) && !/\.test\./.test(entry)) {
-                    const body = readFileSync(full, 'utf8');
-                    if (body.includes(`[${MARKER}]`) || body.includes('tagLegalString')) hits.push(full);
-                }
-            }
-        };
-        walk(srcRoot);
+        const hits = filesContaining(
+            srcRoot,
+            (n) => /\.(ts|tsx)$/.test(n) && !/\.test\./.test(n),
+            ['__tests__', 'node_modules'],
+            (b) => b.includes(`[${MARKER}]`) || b.includes('tagLegalString'),
+        );
         expect(hits).toEqual([]);
     });
 });
@@ -149,5 +171,24 @@ describe('statements that were measured against the code and found untrue stay o
         for (const [path, value] of allLegal) {
             expect(value, path).not.toMatch(/DPDP/);
         }
+    });
+});
+
+describe('the hashed gate notice and the Voice Diary labels do not overstate', () => {
+    const noticeAll = (['mr', 'en'] as const).map((l) => canonicalNoticeText(l)).join(' ');
+    const labels: Array<[string, string]> = [];
+    collectStrings({ c: CONSENT_BUNDLES, v: VOICE_DIARY_BUNDLES }, '', labels);
+
+    it('no label implies a 30-day default that nothing enforces', () => {
+        for (const [path, value] of labels) {
+            expect(value, path).not.toMatch(/beyond 30|30 days|३० दिवस|३० दिनों|३० दिन/);
+        }
+    });
+
+    it('the gate notice makes no absolute it cannot back', () => {
+        expect(noticeAll).not.toMatch(/under your control|ताब्यात/);
+        expect(noticeAll).not.toMatch(/only for that assigned purpose|ठरलेल्या कामापुरतीच/);
+        expect(noticeAll).not.toMatch(/download your information/i);
+        expect(CONSENT_NOTICE.en.willNotDo.items[2]).toMatch(/^We ourselves will not/);
     });
 });
