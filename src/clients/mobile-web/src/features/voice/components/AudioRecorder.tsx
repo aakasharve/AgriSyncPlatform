@@ -8,6 +8,7 @@ import { Mic, Square, AlertCircle, ArrowUp, X } from 'lucide-react';
 import { AudioData } from '../../../types';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { hapticFeedback } from '../../../shared/utils/haptics';
+import { acquireMicStream } from '../../../infrastructure/voice/acquireMicStream';
 
 interface AudioRecorderProps {
   onAudioCaptured: (audioData: AudioData) => void;
@@ -45,7 +46,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await acquireMicStream({ audio: true });
       streamRef.current = stream;
 
       const mediaRecorder = new MediaRecorder(stream);
