@@ -86,6 +86,16 @@ export interface VoiceDiaryBundle {
          * everything he records is already kept.
          */
         pendingCloudSave: string;
+        /**
+         * spec: 2026-08-25-prod-cutover-waves (voice archive path).
+         * An upload is in flight. Still NOT saved - only the server's
+         * acknowledgement makes it saved.
+         */
+        uploading: string;
+        /** The last upload was not acknowledged; it will be retried. Not saved. */
+        uploadFailed: string;
+        /** The recording cannot be played right now (offline, or not yet openable). */
+        playbackUnavailable: string;
         local: string;
         cloud: string;
         processed: string;
@@ -154,6 +164,9 @@ const mr: VoiceDiaryBundle = {
     },
     clipBadge: {
         pendingCloudSave: 'अजून क्लाउडमध्ये सेव्ह झाले नाही',
+        uploading: 'क्लाउडमध्ये सेव्ह होत आहे…',
+        uploadFailed: 'क्लाउडमध्ये सेव्ह झाले नाही, पुन्हा प्रयत्न होईल',
+        playbackUnavailable: 'आत्ता ऐकता येत नाही',
         local: 'क्लाउड · cloud',
         cloud: 'क्लाउड · cloud',
         processed: 'प्रक्रिया झाली',
@@ -225,6 +238,9 @@ const hi: VoiceDiaryBundle = {
     },
     clipBadge: {
         pendingCloudSave: 'अभी क्लाउड में सेव नहीं हुआ',
+        uploading: 'क्लाउड में सेव हो रहा है…',
+        uploadFailed: 'क्लाउड में सेव नहीं हुआ, फिर कोशिश होगी',
+        playbackUnavailable: 'अभी सुना नहीं जा सकता',
         local: 'लोकल · local',
         cloud: 'क्लाउड · cloud',
         processed: 'प्रोसेस हुआ',
@@ -293,6 +309,9 @@ const en: VoiceDiaryBundle = {
     },
     clipBadge: {
         pendingCloudSave: 'Not saved to cloud yet',
+        uploading: 'Saving to cloud…',
+        uploadFailed: 'Not saved to cloud, will retry',
+        playbackUnavailable: 'Cannot play this right now',
         local: 'local',
         cloud: 'cloud',
         processed: 'processed',

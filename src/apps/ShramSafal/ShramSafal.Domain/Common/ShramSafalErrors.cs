@@ -38,6 +38,11 @@ public static class ShramSafalErrors
     public static readonly Error CropCycleOverlap = Error.Conflict("ShramSafal.CropCycleOverlap", "Crop cycle dates overlap an existing cycle on this plot.");
     public static readonly Error DuplicateLogRequest = Error.Conflict("ShramSafal.DuplicateLogRequest", "A log already exists for this idempotency key.");
     public static readonly Error AttachmentAlreadyFinalized = Error.Conflict("ShramSafal.AttachmentAlreadyFinalized", "Attachment is already finalized and immutable.");
+    // spec: 2026-08-25-prod-cutover-waves (voice archive path). The client mints the retained
+    // clip id, so the id space is shared by every account. An id already held by ANOTHER
+    // account must never be answered with the success a repeat upload by its owner gets:
+    // that would acknowledge a recording the server did not store for the caller.
+    public static readonly Error RetainedClipIdTaken = Error.Conflict("ShramSafal.RetainedClipIdTaken", "This recording id belongs to another account.");
     public static readonly Error ScheduleAlreadyAdopted = Error.Conflict("ShramSafal.ScheduleAlreadyAdopted", "An active schedule subscription already exists for this plot-crop-cycle.");
     public static readonly Error ScheduleTemplateUnpublished = Error.Conflict("ShramSafal.ScheduleTemplateUnpublished", "Schedule template has not been published.");
     public static readonly Error ScheduleNotActive = Error.Conflict("ShramSafal.ScheduleNotActive", "Schedule subscription is not active and cannot transition.");

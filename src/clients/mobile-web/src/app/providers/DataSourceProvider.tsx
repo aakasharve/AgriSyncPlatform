@@ -6,6 +6,7 @@ import { storageNamespace } from '../../infrastructure/storage/StorageNamespace'
 import { MigrationService } from '../../infrastructure/storage/MigrationService';
 import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
 import { attachmentUploadWorker } from '../../infrastructure/sync/AttachmentUploadWorker';
+import { voiceArchiveUploader } from '../../infrastructure/sync/VoiceArchiveUploader';
 import { generateRollingDemoData, generateDemoHarvestSessions, generateDemoProcurementExpenses, DEMO_SEED_VERSION } from '../../features/demo/DemoDataService';
 import { LocalStorageLogsRepository } from '../../infrastructure/storage/LocalStorageLogsRepository';
 import { seedHarvestSessions } from '../../services/harvestService'; // To be refactored later
@@ -130,7 +131,7 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 // Drain, don't just stop: the PREVIOUS user's in-flight cycle must
                 // finish before the sync badge is reset and the database address
                 // changes, or it could emit a stale rejection / touch B's rows.
-                await Promise.all([backgroundSyncWorker.stop(), attachmentUploadWorker.stop()]);
+                await Promise.all([backgroundSyncWorker.stop(), attachmentUploadWorker.stop(), voiceArchiveUploader.stop()]);
                 if (cancelled) return;
                 // The signed-in user changed (or signed out): the sync badge's
                 // in-memory rejected list belongs to the PREVIOUS user. Forget
@@ -194,6 +195,7 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                     if (cancelled) return;
                     backgroundSyncWorker.start();
                     attachmentUploadWorker.start();
+                    voiceArchiveUploader.start();
                 }
             } catch (error) {
                 console.error("[DataSource] Init failed", error);
@@ -208,6 +210,7 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             cancelled = true;
             backgroundSyncWorker.stop();
             attachmentUploadWorker.stop();
+            voiceArchiveUploader.stop();
         };
         // `seedDemoDataIfNeeded` is deliberately absent: it is re-created on
         // every render, so listing it would re-run this effect in a loop — a
