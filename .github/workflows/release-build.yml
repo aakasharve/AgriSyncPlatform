@@ -52,6 +52,15 @@ jobs:
         with:
           node-version: '20'
 
+      # APK library tooling: publisher refusals (overwrite, latest rollback, test->latest),
+      # end-to-end verifier against a local fake server, and the catalog generator.
+      - name: APK catalog tooling tests
+        working-directory: ops/release
+        run: |
+          set -euo pipefail
+          python3 -m unittest -v test_publish_apk test_verify_publication test_workflows
+          node --test apk_catalog.test.mjs
+
       - uses: actions/setup-java@v4
         with:
           java-version: '21'
