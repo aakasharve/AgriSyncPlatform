@@ -38,6 +38,19 @@ public class VerifyOtpDeviceSessionTests
         new("device-A", RememberDevice: true, DeviceName: "Web Browser", Platform: "web");
 
     [Fact]
+    public async Task Verify_otp_reports_the_refresh_credentials_own_expiry_not_the_access_expiry()
+    {
+        var now = DateTime.UtcNow;
+        var (handler, repo, _) = BuildHandler(now, Phone);
+
+        var result = await handler.HandleAsync(new VerifyOtpCommand(Phone, OtpCode, null, DeviceA));
+
+        result.IsSuccess.Should().BeTrue();
+        repo.AddedToken!.ExpiresAtUtc.Should().Be(now.Add(User.Application.UseCases.Auth.Session.RefreshTokenPolicy.Lifetime));
+        result.Value.RefreshExpiresAtUtc.Should().Be(repo.AddedToken.ExpiresAtUtc);
+    }
+
+    [Fact]
     public async Task Verify_otp_calls_per_device_revoke_for_current_device_and_never_revoke_all()
     {
         // Verifies handler behaviour: VerifyOtpHandler calls RevokeActiveForUserDeviceAsync(deviceId)

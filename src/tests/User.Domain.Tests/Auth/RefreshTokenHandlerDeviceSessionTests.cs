@@ -166,6 +166,35 @@ public class RefreshTokenHandlerDeviceSessionTests
         existingToken.LastUsedAtUtc.Should().Be(utcNow, "MarkUsed must update LastUsedAtUtc to the refresh time");
     }
 
+    [Fact]
+    public async Task Rotation_reports_the_refresh_credentials_own_expiry_not_the_15_minute_access_expiry()
+    {
+        // spec: 2026-08-25-prod-cutover-waves. The web cookie must live as long as the DB
+        // refresh row. AuthResponse.ExpiresAtUtc is the ACCESS token's expiry (~15 min);
+        // the cookie used to borrow it and so died long before the credential did.
+        var now = DateTime.UtcNow;
+        const string rawToken = "valid-raw-refresh-expiry";
+        var userId = new UserId(Guid.NewGuid());
+        var user = MakeActiveUser(userId, now);
+        var repo = new CapturingRepo(MakeActiveToken(userId, rawToken, "device-X", now));
+
+        var result = await BuildHandler(user, repo, now)
+            .HandleAsync(new RefreshTokenCommand(rawToken, DefaultSession));
+
+        result.IsSuccess.Should().BeTrue();
+        repo.AddedToken!.ExpiresAtUtc.Should().Be(now.Add(User.Application.UseCases.Auth.Session.RefreshTokenPolicy.Lifetime));
+        result.Value.RefreshExpiresAtUtc.Should().Be(repo.AddedToken.ExpiresAtUtc,
+            "the value the cookie is stamped with must be the stored row's expiry, to the tick");
+        result.Value.RefreshExpiresAtUtc.Should().BeAfter(result.Value.ExpiresAtUtc.AddDays(1));
+    }
+
+    [Fact]
+    public void Refresh_credential_server_life_is_30_days()
+    {
+        // The mobile client pins the same number (refreshCredentialLife.ts). Change both together.
+        User.Application.UseCases.Auth.Session.RefreshTokenPolicy.Lifetime.Should().Be(TimeSpan.FromDays(30));
+    }
+
     // ---- helpers ----
 
     private static DomainUser MakeActiveUser(UserId userId, DateTime now)

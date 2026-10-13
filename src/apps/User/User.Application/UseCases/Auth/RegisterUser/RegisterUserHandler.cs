@@ -65,11 +65,11 @@ public sealed class RegisterUserHandler(
             deviceName: session?.DeviceName,
             platform: session?.Platform ?? "unknown",
             utcNow,
-            utcNow.AddDays(30));
+            utcNow.Add(RefreshTokenPolicy.Lifetime));
 
         await refreshTokenRepository.AddAsync(refreshToken, ct);
         await userRepository.SaveChangesAsync(ct);
 
-        return Result.Success(new AuthResponse(user.Id, tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAtUtc));
+        return Result.Success(new AuthResponse(user.Id, tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAtUtc, refreshToken.ExpiresAtUtc));
     }
 }

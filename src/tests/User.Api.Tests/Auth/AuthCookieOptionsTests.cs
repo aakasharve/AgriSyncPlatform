@@ -111,6 +111,44 @@ public sealed class AuthCookieOptionsTests
             "without rememberDevice the cookie is a session cookie cleared when the browser closes");
     }
 
+    // ── Build() — lifetime follows the REFRESH credential, not the access token ──
+    // spec: 2026-08-25-prod-cutover-waves. The endpoints used to pass the access
+    // token's ~15-minute ExpiresAtUtc, so a remembered web user lost the cookie
+    // (and the session) after a short offline spell although the DB row lived 30 days.
+
+    [Fact]
+    public void Build_Expires_is_the_refresh_expiry_even_when_far_past_the_access_expiry()
+    {
+        var now = new DateTime(2026, 10, 12, 8, 0, 0, DateTimeKind.Utc);
+        var refreshExpiry = now.Add(User.Application.UseCases.Auth.Session.RefreshTokenPolicy.Lifetime);
+        var opts = AuthCookieOptions.Build(MakeEnv(isDevelopment: false), refreshExpiry, rememberDevice: true);
+        opts.Expires!.Value.UtcDateTime.Should().Be(now.AddDays(30));
+        opts.Expires!.Value.UtcDateTime.Should().BeAfter(now.AddMinutes(15).AddDays(29));
+    }
+
+    [Fact]
+    public void Endpoints_stamp_the_cookie_with_RefreshExpiresAtUtc_never_the_access_ExpiresAtUtc()
+    {
+        var path = FindUp("src/apps/User/User.Api/Endpoints/AuthEndpoints.cs");
+        var source = File.ReadAllText(path);
+        source.Should().NotContain("AuthCookieOptions.Build(env, result.Value.ExpiresAtUtc",
+            "ExpiresAtUtc is the ~15 min access-token expiry");
+        System.Text.RegularExpressions.Regex.Matches(source, @"AuthCookieOptions\.Build\(env, result\.Value!?\.RefreshExpiresAtUtc")
+            .Count.Should().Be(4, "register, login, verify-otp and refresh all set the cookie");
+    }
+
+    private static string FindUp(string relative)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(dir.FullName, relative.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(candidate)) return candidate;
+            dir = dir.Parent;
+        }
+        throw new FileNotFoundException(relative);
+    }
+
     // ── BuildForDelete() ──────────────────────────────────────────────────────
 
     [Theory]
