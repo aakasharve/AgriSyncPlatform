@@ -88,6 +88,8 @@ describe('getLocalAttendanceNameHints — the attach-time snapshot, never an inv
     const seedLog = async (id: string, farmId: string, date: string, name: string) => {
         await getDatabase().logs.add({
             id, schemaVersion: 1, date, isDeleted: 0,
+            // 7-day Labour cache: a downloaded log's names carry the time they were downloaded.
+            labourNamesDownloadedAtUtc: new Date().toISOString(),
             log: {
                 id, date, meta: { farmId },
                 labour: [{

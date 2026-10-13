@@ -15,6 +15,8 @@ import type { MutationQueueStatus } from '../../../infrastructure/storage/DexieD
 import type { AttendanceMarkPayload } from '../../../application/usecases/sync/MarkAttendanceCommand';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 import { isContradictionCode } from './attendanceRefused';
+import { systemClock } from '../../../core/domain/services/Clock';
+import { isDownloadFresh, logsForDisplay } from '../../../infrastructure/storage/downloadedLabourCache';
 
 export interface LocalAttendanceMark {
     fieldOperatorId: string;
@@ -61,7 +63,12 @@ const LIVE_INTENT_STATUSES: ReadonlySet<MutationQueueStatus> = new Set<MutationQ
 
 export async function getLocalAttendanceMarks(farmId: string): Promise<LocalAttendanceMark[]> {
     const db = getDatabase();
-    const server = await db.attendanceMarks.where('farmId').equals(farmId).toArray();
+    // 7-day Labour cache (founder 2026-10-12): a server-acknowledged row downloaded
+    // more than 7 days ago (or with no stamp) is not shown, even before the boot sweep
+    // has deleted it. The queue half below is UNSENT work and is never age-filtered.
+    const now = systemClock.nowEpoch();
+    const server = (await db.attendanceMarks.where('farmId').equals(farmId).toArray())
+        .filter(r => isDownloadFresh(r.updatedAt, now));
     const queued = await db.mutationQueue
         .where('mutationType').equals(SyncMutationName.AttendanceMark)
         .filter(row => LIVE_INTENT_STATUSES.has(row.status))
@@ -113,10 +120,11 @@ export async function getLocalAttendanceNameHints(
     const wanted = new Set(marks.map(m => m.fieldOperatorId));
     const dates = [...new Set(marks.map(m => m.workDate))];
     const db = getDatabase();
-    const records = await db.logs.where('date').anyOf(dates).toArray();
-    for (const record of records) {
-        if (record.isDeleted === 1) continue;
-        const log = record.log;
+    const records = (await db.logs.where('date').anyOf(dates).toArray()).filter(r => r.isDeleted !== 1);
+    // 7-day Labour cache: names in a downloaded log older than 7 days are not a hint
+    // (an unsent log of this user's own still is). See downloadedLabourCache.ts.
+    const logs = await logsForDisplay(db, records);
+    for (const log of logs) {
         if (log?.meta?.farmId !== farmId) continue;
         for (const event of log.labour ?? []) {
             for (const attribution of event.attributedOperators ?? []) {

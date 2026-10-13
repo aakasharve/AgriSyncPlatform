@@ -119,7 +119,7 @@ export const UNIDENTIFIED_DATABASE_NAME = 'AgriLogDB_unidentified';
  * Distinct from `LEGACY_DATABASE_NAME` by construction, so no user id can
  * produce a name that collides with the adopted database.
  */
-const PER_USER_DATABASE_PREFIX = 'AgriLogDB_u_';
+export const PER_USER_DATABASE_PREFIX = 'AgriLogDB_u_';
 
 /**
  * Records which farmer `AgriLogDB` was adopted by. Written exactly once, on

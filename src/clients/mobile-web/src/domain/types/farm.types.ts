@@ -306,6 +306,14 @@ export interface FarmOperator {
     assignedBy?: string; // ID of PRIMARY_OWNER or SECONDARY_OWNER who added this person
     joinedAt?: string;   // ISO Date
     verificationStatus?: 'Unverified' | 'Verified_Phone' | 'Verified_FarmerID_Pending';
+
+    /**
+     * 7-day Labour cache (founder 2026-10-12): when this person was last DOWNLOADED from
+     * the server's /sync/pull. A downloaded person older than 7 days is not shown.
+     */
+    downloadedAtUtc?: string;
+    /** Added on this device (never downloaded): unsent local work, exempt from the 7-day cache cap. */
+    localOnly?: true;
 }
 
 // =============================================================================
