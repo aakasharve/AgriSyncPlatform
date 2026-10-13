@@ -103,6 +103,11 @@ export interface LabourPermission {
      * the server never reports an expired window as a live one.
      */
     labourGrantExpiresAtUtc: string | null;
+    /**
+     * The member's name from the user directory (owner-tier roster read only).
+     * Absent/null = the server had no name: show none, never invent one.
+     */
+    displayName?: string | null;
 }
 
 /** The server's error code when a role already carries the capability. */

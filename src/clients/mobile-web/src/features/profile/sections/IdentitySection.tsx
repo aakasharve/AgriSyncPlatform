@@ -23,6 +23,7 @@ import MembershipsList from '../../people/components/MembershipsList';
 import type { MyFarmDto, FarmDetailsDto } from '../../onboarding/qr/inviteApi';
 import { TeamMemberCard } from '../components/TeamMemberCard';
 import { useLabourPermissions } from '../hooks/useLabourPermissions';
+import { isOwnerTierRole, mergeTeamWithServerRoster } from '../helpers/teamRoster';
 import { useLanguage } from '../../../i18n/LanguageContext';
 
 // Identity verification status for farmer ID
@@ -81,7 +82,20 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
     // makes no request until it resolves, and on a failed read it stays `null`
     // rather than falling back to the local profile — see its docblock for why
     // that matters (`profile.operators[].id` is not a server userId).
-    const labourPermissions = useLabourPermissions(myFarm?.farmId ?? null);
+    //
+    // Owner-tier ONLY (server-sent `myFarm.role`): the roster route is owner/co-owner-only,
+    // so asking as anyone else is a refused call, and answering it is what lets the owner's
+    // Team list show every member's real role and name (see helpers/teamRoster.ts).
+    const callerIsOwnerTier = isOwnerTierRole(myFarm?.role);
+    // The server told us the caller is NOT owner/co-owner: owner-only actions (share QR,
+    // add/remove member) are refused or meaningless for him, so they are not offered.
+    // Unknown (no farm loaded yet) keeps today's behaviour rather than guessing.
+    const callerIsKnownNonOwner = !!myFarm && !callerIsOwnerTier;
+    const labourPermissions = useLabourPermissions(callerIsOwnerTier ? (myFarm?.farmId ?? null) : null);
+    const teamOperators = React.useMemo(
+        () => mergeTeamWithServerRoster(profile.operators ?? [], labourPermissions.rows),
+        [profile.operators, labourPermissions.rows],
+    );
     return (
         <div className="bg-transparent animate-in fade-in space-y-6">
 
@@ -415,6 +429,7 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                         </h3>
                         <p className="text-xs text-slate-400 mt-1">{t('profile.manageAccess')}</p>
                     </div>
+                    {!callerIsKnownNonOwner && (
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <button
                             onClick={handleOpenInviteQr}
@@ -429,10 +444,11 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                             <Plus size={16} /> {t('profile.addMember')}
                         </button>
                     </div>
+                    )}
                 </div>
 
                 {/* Prominent invite banner — visible when the team is empty so a first-time farmer knows the QR exists. */}
-                {(!profile.operators || profile.operators.length === 0) && (
+                {!callerIsKnownNonOwner && teamOperators.length === 0 && (
                     <button
                         onClick={handleOpenInviteQr}
                         className="mb-4 w-full text-left rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white px-4 py-4 shadow-sm hover:border-emerald-300 transition-colors"
@@ -460,8 +476,8 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
 
                 <div className="space-y-3">
                     {/* Existing People or Dummies if none */}
-                    {(profile.operators && profile.operators.length > 0) ? (
-                        profile.operators.map(person => {
+                    {teamOperators.length > 0 ? (
+                        teamOperators.map(person => {
                             return (
                                 <TeamMemberCard
                                     key={person.id}
@@ -495,7 +511,7 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                         const updatedOperators = profile.operators!.map(p => p.id === person.id ? { ...p, capabilities: newCaps } as any : p);
                                         onUpdateProfile({ ...profile, operators: updatedOperators });
                                     }}
-                                    onDelete={() => onDeletePerson && onDeletePerson(person.id)}
+                                    onDelete={callerIsKnownNonOwner ? undefined : () => onDeletePerson && onDeletePerson(person.id)}
                                 />
                             );
                         })
