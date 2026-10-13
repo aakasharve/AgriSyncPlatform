@@ -101,9 +101,17 @@ public sealed class PersistVoiceClipRetainedHandler(
             consentAuditId: null,
             nowUtc: clock.UtcNow);
 
-        var persistedId = await retainedBlobStore
-            .PersistAsync(metadata, cipher, ct)
-            .ConfigureAwait(false);
+        Guid persistedId;
+        try
+        {
+            persistedId = await retainedBlobStore
+                .PersistAsync(metadata, cipher, ct)
+                .ConfigureAwait(false);
+        }
+        catch (RetainedClipIdConflictException)
+        {
+            return Result.Failure<PersistVoiceClipRetainedResult>(ShramSafalErrors.RetainedClipIdTaken);
+        }
 
         // ADR-DS-009 audit-payload kid stamp (Phase 07 spine-hardening).
         // Re-read consent state to source CurrentTokenKid; the
