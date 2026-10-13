@@ -42,9 +42,16 @@ export interface ConsentGateState {
 }
 
 export function useConsentGate(): ConsentGateState {
+    // Both prefs live in the PRE-LOGIN (unidentified) database, but a signed-in cold start
+    // reads them while the farmer's own database is already active, where they do not exist.
+    // The gate is hidden for an authenticated session, so that wrong "required" stayed
+    // invisible until LOGOUT, when the gate appeared (offline it could not even be accepted).
+    // Re-reading on every database switch makes the answer follow the database the
+    // decision actually lives in. spec: 2026-08-25-prod-cutover-waves (F1)
     const [acceptedNotice, setAcceptedNotice, acceptedLoaded] =
-        useUiPref<string>(ACCEPTED_NOTICE_PREF, '');
-    const [sessionId, setSessionId, sessionLoaded] = useUiPref<string>(PREREG_SESSION_PREF, '');
+        useUiPref<string>(ACCEPTED_NOTICE_PREF, '', { rereadOnDatabaseChange: true });
+    const [sessionId, setSessionId, sessionLoaded] =
+        useUiPref<string>(PREREG_SESSION_PREF, '', { rereadOnDatabaseChange: true });
 
     const loaded = acceptedLoaded && sessionLoaded;
 

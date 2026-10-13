@@ -40,6 +40,34 @@ describe('consent gate across login -> logout', () => {
         expect(after.result.current.status).toBe('passed');
     });
 
+    it('F1 (reproduced 2026-10-12): accepted pre-login, app restored signed in on the farmer DB, then logout -> NEVER re-gated, never even flashed', async () => {
+        // Accept pre-login (unidentified DB), as the real gate does.
+        const first = renderHook(() => useConsentGate());
+        await waitFor(() => expect(first.result.current.status).toBe('required'));
+        act(() => first.result.current.markPassed());
+        await waitFor(() => expect(first.result.current.status).toBe('passed'));
+        await new Promise((r) => setTimeout(r, 50));
+        first.unmount();
+
+        // Cold start of an already signed-in app: the farmer's DB is active BEFORE the
+        // gate hook reads (presence session). Her DB has no gate row -> 'required', hidden
+        // only because App.tsx never gates an authenticated session.
+        activateDatabaseForUser('user-A');
+        const seen: string[] = [];
+        const mounted = renderHook(() => {
+            const g = useConsentGate();
+            seen.push(g.status);
+            return g;
+        });
+        await waitFor(() => expect(mounted.result.current.status).not.toBe('undecided'));
+        seen.length = 0;
+
+        endFarmerSessionLocally(); // logout: routing returns to the unidentified DB
+
+        await waitFor(() => expect(mounted.result.current.status).toBe('passed'));
+        expect(seen).not.toContain('required'); // no flash of the consent screen
+    });
+
     it('a device that NEVER passed the gate here (e.g. signed in by another route) is still gated after logout', async () => {
         activateDatabaseForUser('user-A');
         endFarmerSessionLocally();
