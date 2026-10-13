@@ -20,6 +20,7 @@ import { getDatabase } from './DexieDatabase';
 import type { ProfileRepository } from '../../application/ports/AppDataSource';
 import type { FarmerProfile } from '../../types';
 import { normalizeMojibakeDeep } from '../../shared/utils/textEncoding';
+import { profileForDisplay } from './downloadedLabourCache';
 
 export class DexieProfileRepository implements ProfileRepository {
     async get(): Promise<FarmerProfile> {
@@ -27,7 +28,9 @@ export class DexieProfileRepository implements ProfileRepository {
         if (!row) {
             return {} as FarmerProfile;
         }
-        return normalizeMojibakeDeep(row.data as FarmerProfile).value as FarmerProfile;
+        // 7-day Labour cache (founder 2026-10-12): team members downloaded more than 7 days
+        // ago (or of unknown age) are not handed to a screen. See downloadedLabourCache.ts.
+        return profileForDisplay(normalizeMojibakeDeep(row.data as FarmerProfile).value as FarmerProfile);
     }
 
     async save(profile: FarmerProfile): Promise<void> {

@@ -29,6 +29,9 @@ import { clearPendingLogout } from './PendingLogoutStore';
 import { clearAllLabourReadouts } from './LabourReadoutCache';
 import { clearAllCachedRosters } from './LabourLocalStore';
 import { SessionStore } from './SessionStore';
+import { getActiveDatabaseName } from './activeDatabaseName';
+import { UNIDENTIFIED_DATABASE_NAME } from './userDatabaseName';
+import { purgeDownloadedLabourForDatabase } from './downloadedLabourCache';
 
 export interface AuthSession {
     userId: string;
@@ -236,6 +239,10 @@ export function clearAuthSession(): void {
     // (activeUserId) is switched a tick after the session, so the farm pointer
     // must be erased for THIS user explicitly, not only for the ambient one.
     const endingUserId = readPresenceMarker()?.userId ?? null;
+    // The database the ending user was working in, captured BEFORE routing moves away
+    // from it (endFarmerSessionLocally below). Its DOWNLOADED Labour cache is purged;
+    // its unsent queue is not touched and stays private to that database.
+    const endingDatabaseName = getActiveDatabaseName();
 
     if (canUseStorage()) {
         window.localStorage.removeItem(AUTH_SESSION_KEY);
@@ -254,6 +261,8 @@ export function clearAuthSession(): void {
     // does not outlive the session that fetched it.
     clearAllLabourReadouts();
     clearAllCachedRosters();
+    // The unidentified boundary holds no ending user's data (it is swept at boot instead).
+    if (endingDatabaseName !== UNIDENTIFIED_DATABASE_NAME) purgeDownloadedLabourForDatabase(endingDatabaseName);
 
     notifyAuthSessionChanged();
 }

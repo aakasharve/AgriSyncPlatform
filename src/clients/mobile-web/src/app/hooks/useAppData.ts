@@ -335,7 +335,9 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
                 phone: person.phone,
                 capabilities: [OperatorCapability.LOG_DATA],
                 isVerifier: false,
-                isActive: true
+                isActive: true,
+                // Added on this device, never downloaded: exempt from the 7-day cache cap.
+                localOnly: true,
             }]
         }));
     };

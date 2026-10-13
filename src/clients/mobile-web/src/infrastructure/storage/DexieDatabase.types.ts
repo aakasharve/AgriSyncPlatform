@@ -642,6 +642,14 @@ export interface DexieLogRecord {
     isDeleted: 0 | 1;
     /** Server-reported modification timestamp; used to skip stale-pull overwrites */
     serverModifiedAtUtc?: string;
+    /**
+     * 7-day Labour cache (founder 2026-10-12): when the worker names carried by this
+     * log's labour events (`attributedOperators`, `workerNames`) were last DOWNLOADED
+     * from the server. Written only by the pull reconciler. Absent = unknown age
+     * (legacy copy, or a log only ever written on this device).
+     * See infrastructure/storage/downloadedLabourCache.ts.
+     */
+    labourNamesDownloadedAtUtc?: string;
 }
 
 // =============================================================================
