@@ -1,27 +1,24 @@
-# spec: data-principle-spine-2026-05-05/06.4
+# spec: 2026-08-25-prod-cutover-waves
 #
-# Review-marker counter. It greps the tracked source for the literal token
-# LEGAL_REVIEW_PENDING and reports how many times it appears. THAT IS ALL IT
-# MEASURES. A count of zero means "no file contains the token"; it does NOT mean
-# any copy has been reviewed, approved or cleared by counsel. Copy review status
-# and sign-off are recorded in the private review records, not here, and a green
-# run of this workflow is never evidence of legal review.
+# Copy-review registry gate. ops/release/copy-review-registry.json lists the user-facing
+# legal / consent / privacy copy files that need counsel review, with a per-file reviewStatus
+# and a registry-level audience (founder_testing | real_farmers). ops/release/copy_review_check.mjs
+# compares file hashes against that registry. THAT IS ALL IT MEASURES. A green run is never
+# evidence that any copy is legally valid, compliant, or reviewed by counsel; sign-off records
+# live in the private review records and the registry only holds an identifier pointing at them.
+# How to sign off a file or change the audience: ops/release/COPY_REVIEW.md.
 #
-# Two jobs:
+# Two jobs (ids unchanged from the previous marker-counting version):
 #
-#   warn_on_tag  — counts occurrences on every push to every branch and on PRs
-#                  to integration branches. Emits a ::notice:: annotation with
-#                  the count. Never fails the build.
+#   warn-on-tag  — every push / PR. Report mode: prints how many files await counsel review.
+#                  Fails only on registry-integrity problems: a listed file is missing, a
+#                  covered copy file is not in the registry, a signed_off file's hash no longer
+#                  matches reviewedSha256, or the registry itself is malformed.
 #
-#   block_on_tag — runs only when github.ref == 'refs/heads/prod-deploy'.
-#                  Date-aware: before ENFORCEMENT_DATE (below) it emits a
-#                  ::warning:: with the count and a countdown and does not fail;
-#                  on and after that date it fails the build when the count is
-#                  above zero. The date is configured policy owned by the
-#                  founder; this file asserts nothing about what it represents.
-#
-# Protocol: see the private review records.
-# ADR (pending): ADR-DS-008 — authored by architect.
+#   block-on-tag — only when github.ref == 'refs/heads/prod-deploy'. Enforce mode: everything
+#                  above, plus when audience is real_farmers it fails unless every listed file
+#                  is signed_off with a matching hash and a non-empty signOffRef. There is no
+#                  date logic; the audience is changed only by an explicit reviewed commit.
 
 name: legal-review-gate
 
@@ -31,45 +28,35 @@ on:
   pull_request:
     branches: [main, prod-deploy]
 
+permissions:
+  contents: read
+
 jobs:
   warn-on-tag:
-    name: Count review-marker tokens (informational, any branch)
+    name: Copy-review registry (report mode, any branch)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Count LEGAL_REVIEW_PENDING occurrences
-        run: |
-          COUNT=$(grep -rIn --include='*.md' --include='*.ts' --include='*.tsx' --include='*.cs' "LEGAL_REVIEW_PENDING" src/ _COFOUNDER/ .github/ 2>/dev/null | wc -l || echo 0)
-          echo "::notice::Review-marker token count: $COUNT (informational on this branch). A count of 0 does not mean counsel review is complete."
-          exit 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Registry check tests (gate fires and passes)
+        working-directory: ops/release
+        run: node --test copy_review_check.test.mjs
+      - name: Report copy-review registry
+        run: node ops/release/copy_review_check.mjs --mode report
 
   block-on-tag:
-    name: Review-marker count on prod-deploy (warns before 2027-05-13, fails on or after)
+    name: Copy-review registry (enforce mode, prod-deploy)
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/prod-deploy'
     steps:
       - uses: actions/checkout@v4
-      - name: Warn before the enforcement date, reject from it
-        env:
-          # Configured policy value (founder decision 2026-08-24). Do not infer
-          # from this file what the date represents.
-          ENFORCEMENT_DATE: '2027-05-13'
-        run: |
-          COUNT=$(grep -rIn --include='*.md' --include='*.ts' --include='*.tsx' --include='*.cs' \
-                    "LEGAL_REVIEW_PENDING" src/ _COFOUNDER/ 2>/dev/null | wc -l || echo 0)
-
-          if [ "$COUNT" -eq 0 ]; then
-            echo "::notice::Review-marker token count is 0. This does NOT mean counsel has reviewed or cleared any copy; review status is recorded in the private review records."
-            exit 0
-          fi
-
-          TODAY=$(date -u +%F)
-          DAYS_LEFT=$(( ( $(date -u -d "$ENFORCEMENT_DATE" +%s) - $(date -u -d "$TODAY" +%s) ) / 86400 ))
-
-          if [ "$TODAY" \< "$ENFORCEMENT_DATE" ]; then
-            echo "::warning::$COUNT review-marker token(s) found. Not failing this run: the configured enforcement date is $ENFORCEMENT_DATE ($DAYS_LEFT days away). This count is not a measure of counsel review."
-            exit 0
-          fi
-
-          echo "::error::$COUNT review-marker token(s) found and the configured enforcement date ($ENFORCEMENT_DATE) has passed. Rejecting prod-deploy."
-          exit 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Registry check tests (gate fires and passes)
+        working-directory: ops/release
+        run: node --test copy_review_check.test.mjs
+      - name: Enforce copy-review registry
+        run: node ops/release/copy_review_check.mjs --mode enforce
