@@ -67,7 +67,6 @@ import { clearAuthSession } from '../../../../infrastructure/storage/AuthTokenSt
 import { SessionStore } from '../../../../infrastructure/storage/SessionStore';
 import { saveLabourReadout, loadLabourReadout } from '../../data/labourReadout';
 import { writeCachedRoster, readCachedRoster } from '../../data/fieldOperatorRosterCache';
-import { setAttendanceDoorEnabled } from '../../attendanceDoor';
 import { getDatabase } from '../../../../infrastructure/storage/DexieDatabase';
 import { mutationQueue } from '../../../../infrastructure/sync/MutationQueue';
 import { SyncMutationName } from '../../../../infrastructure/sync/SyncMutationCatalog';
@@ -82,6 +81,7 @@ const spy = () => (agriSyncClient as unknown as { _spy: ReturnType<typeof vi.fn>
 
 function ownerData(): LabourData {
     const d: LabourData = JSON.parse(JSON.stringify(LABOUR_MOCK));
+    d.canManageLabour = true;
     d.dashboard.wages = MONEY[0]; d.dashboard.advances = MONEY[1]; d.dashboard.owed = MONEY[2];
     d.dashboard.money = { recorded: MONEY[3], paid: 1, advance: 1, owed: MONEY[2] };
     for (const p of Object.values(d.people)) p.balance = { recorded: MONEY[3], paid: MONEY[1], advance: 0 };
@@ -188,7 +188,6 @@ describe('access revoked - Labour 403', () => {
 describe('access revoked - roster 403', () => {
     it('403 on the roster fetch purges the cached roster and shows no names', async () => {
         coldStart();
-        setAttendanceDoorEnabled(true);
         saveLabourReadout('u1', FARM, 'alltime', ownerData());
         writeCachedRoster(FARM, [op]);
         mockFetchOps.mockRejectedValue(refused());

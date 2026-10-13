@@ -10,7 +10,7 @@
  * "नावाखाली कोणताही summary, कामाचा मजकूर किंवा पैशांची कळ नाही."
  */
 import React from 'react';
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import HajeriLedger from '../HajeriLedger';
@@ -34,10 +34,8 @@ const cell = (over: Partial<LedgerCell>): LedgerCell => ({
 
 const withLedger = (ledger: LabourData['ledger']): LabourData => ({ ...LABOUR_MOCK, ledger });
 
-import { setAttendanceDoorEnabled } from '../../attendanceDoor';
 
 // Early-access switch ON: these suites pin the door's behaviour once opened (device-switch spec).
-beforeEach(() => { setAttendanceDoorEnabled(true); });
 
 describe('HajeriLedger — the clean register (master review D4)', () => {
     it('renders no ₹ and no trailing column anywhere in the grid', () => {
@@ -313,7 +311,7 @@ describe('LabourHub — D6: two money truths, never one figure', () => {
         />);
 
     it('shows both cards separately and never a combined figure', () => {
-        const { container } = hub({ ...LABOUR_MOCK, home: { rojandariStated: 4650, ukteAgreed: 12000, onFarmToday: 12, rojandariToday: 4, ukteToday: 8 } });
+        const { container } = hub({ ...LABOUR_MOCK, canManageLabour: true, home: { rojandariStated: 4650, ukteAgreed: 12000, onFarmToday: 12, rojandariToday: 4, ukteToday: 8 } });
         // FOUNDER VOCABULARY RULE (2026-09-03) — the day-rate half of the
         // pair is now stated as a SETTLEMENT BASIS, never as a kind of person.
         // `उक्ते काम` beside it is unchanged; it already described the work

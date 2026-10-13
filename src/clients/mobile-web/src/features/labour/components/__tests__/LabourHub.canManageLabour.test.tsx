@@ -11,7 +11,7 @@
 //
 // Real LabourHub + real ReviewSheet, fed through the real DTO mapper.
 import React from 'react';
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 
@@ -26,7 +26,6 @@ vi.mock('../../../../infrastructure/sync/BackgroundSyncWorker', () => ({
     backgroundSyncWorker: { triggerNow: vi.fn() },
 }));
 
-import { setAttendanceDoorEnabled } from '../../attendanceDoor';
 import LabourHub from '../LabourHub';
 import ReviewSheet from '../ReviewSheet';
 import { fetchLabourData, type LabourDataDto } from '../../data/labourClient';
@@ -75,7 +74,6 @@ const hubProps = (data: Awaited<ReturnType<typeof load>>, anchorState: 'anchored
     anchor: (anchorState === 'anchored' ? { state: 'anchored', headcount: 4, logId: 'l1' } : { state: 'no-anchor' }) as never,
 });
 
-beforeEach(() => { setAttendanceDoorEnabled(true); });
 afterEach(() => { cleanup(); mockGet.mockReset(); });
 
 describe('the mapper carries the server capability signal', () => {
@@ -99,17 +97,47 @@ describe('LabourHub - an un-granted Worker is not offered what the server refuse
         expect(screen.getByText('तपासा')).toBeInTheDocument();
     });
 
+    // Founder ruling 2026-10-12: the manual attendance tile is part of NORMAL
+    // Labour navigation (no seven-tap gesture, no device switch). It is shown
+    // ONLY when the server explicitly says canManageLabour === true. The server
+    // decides (owner/co-owner by role; everyone else, Mukadam included, by an
+    // ACTIVE owner grant); the client never inspects roles.
     it.each([
         ['owner', 'owner', true],
-        ['secondary owner', 'owner', true],
-        ['Mukadam, un-granted (decision Q4: sees the door)', 'crew', true],
-        ['granted member', 'own', true],
-        ['old server / old fixture (field absent = unknown)', 'own', undefined],
-    ] as const)('%s keeps every control', async (_who, view, flag) => {
+        ['co-owner (owner-tier)', 'owner', true],
+        ['member with an ACTIVE owner grant (Worker)', 'own', true],
+        ['Mukadam with an ACTIVE owner grant', 'crew', true],
+    ] as const)('%s sees the voice door AND the manual attendance tile', async (_who, view, flag) => {
         const data = await load(wire(view, flag));
         render(<LabourHub {...hubProps(data)} />);
         expect(screen.getByText(HERO)).toBeInTheDocument();
         expect(screen.getByText(MANUAL_TILE)).toBeInTheDocument();
+    });
+
+    it.each([
+        ['Worker, un-granted / grant expired / grant revoked (server says false)', 'own', false],
+        ['Mukadam, un-granted / grant expired / grant revoked (server says false)', 'crew', false],
+    ] as const)('%s: no manual attendance tile, no voice door', async (_who, view, flag) => {
+        const data = await load(wire(view, flag));
+        render(<LabourHub {...hubProps(data, 'no-anchor')} />);
+        expect(screen.queryByText(MANUAL_TILE)).toBeNull();
+        expect(screen.queryByText(NO_WORK_TILE)).toBeNull();
+        expect(screen.queryByText(HERO)).toBeNull();
+    });
+
+    it('old server shape (flag absent): the manual attendance tile and no-work door stay HIDDEN', async () => {
+        const data = await load(wire('own', undefined));
+        render(<LabourHub {...hubProps(data, 'no-anchor')} />);
+        expect(screen.queryByText(MANUAL_TILE)).toBeNull();
+        expect(screen.queryByText(NO_WORK_TILE)).toBeNull();
+    });
+
+    it('there is no hidden gesture: the screen title does nothing on tap', async () => {
+        const data = await load(wire('own', false));
+        render(<LabourHub {...hubProps(data)} />);
+        const title = screen.queryByText('कामाचा हिशोब');
+        if (title) for (let i = 0; i < 9; i++) title.click();
+        expect(screen.queryByText(MANUAL_TILE)).toBeNull();
     });
 
     it('control: with no work logged today the owner is still offered the no-work door', async () => {

@@ -31,7 +31,7 @@ vi.mock('../../../../core/session/MeContextService', () => ({
 
 vi.mock('../../../../app/providers/AuthProvider', () => ({
     useAuth: () => ({ isAuthenticated: true }),
-    useOptionalAuth: () => ({ authStatus: 'authenticated', session: { accessToken: 'test-token' } }),
+    useOptionalAuth: () => ({ authStatus: 'authenticated', session: { accessToken: 'test-token', userId: 'u1' } }),
 }));
 
 const mockFetchLabourData = vi.fn();
@@ -65,6 +65,7 @@ import { getRootStore, resetRootStore } from '../../../../app/state/RootStore';
 import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 import { t as translate } from '../../../../i18n/translations';
 import { SYNC_HONESTY_I18N_KEYS } from '../../../sync/status/syncHonestyState';
+import { saveLabourReadout } from '../../data/labourReadout';
 import { writeCachedRoster } from '../../data/fieldOperatorRosterCache';
 import { SessionStore } from '../../../../infrastructure/storage/SessionStore';
 import type { DailyLog } from '../../../../types';
@@ -137,18 +138,17 @@ const openCaptureScreen = async () => {
     await waitFor(() => expect(screen.getByTestId('attendance-screen')).toBeInTheDocument());
 };
 
-import { setAttendanceDoorEnabled } from '../../attendanceDoor';
 
 // The server's read-out says NOTHING about today (journey fix D4: a day the server
 // states a headcount for is anchored, so the grey-hero / no-work-tile lane would
 // rightly not be offered). LABOUR_MOCK itself states 12 on the farm today.
 const LABOUR_NO_TODAY = {
     ...LABOUR_MOCK,
+    canManageLabour: true,
     home: { ...LABOUR_MOCK.home, onFarmToday: null, rojandariToday: null, ukteToday: null },
 };
 
 // Early-access switch ON: these suites pin the door's behaviour once opened (device-switch spec).
-beforeEach(() => { setAttendanceDoorEnabled(true); });
 
 beforeEach(() => {
     mockFetchMeContext.mockResolvedValue(ME_CONTEXT);
@@ -172,8 +172,8 @@ afterEach(async () => {
 
 describe('attendance door — opens, and says only true things', () => {
     it.each([
-        ['populated farm', LABOUR_MOCK],
-        ['zero-operator farm', EMPTY_LABOUR_DATA],
+        ['populated farm', { ...LABOUR_MOCK, canManageLabour: true }],
+        ['zero-operator farm', { ...EMPTY_LABOUR_DATA, canManageLabour: true }],
     ])('%s: the tile is there and opens आजची हजेरी', async (_name, fixture) => {
         mockFetchLabourData.mockResolvedValue(fixture);
         renderRealFarm();
@@ -200,6 +200,7 @@ describe('attendance door — opens, and says only true things', () => {
     it('CRASH CASE: wire attendance rows keyed by an operator id missing from people render without throwing', async () => {
         const crashing: LabourData = {
             ...LABOUR_MOCK,
+            canManageLabour: true,
             attendance: {
                 ...LABOUR_MOCK.attendance,
                 // the REAL wire shape: FieldOperator ids, absent from `people`
@@ -372,12 +373,14 @@ describe('attendance door — offline', () => {
     it('with the labour fetch failing, the door is still there and runs on the cached roster', async () => {
         mockFetchLabourData.mockRejectedValue(new Error('offline'));
         mockFetchFieldOperators.mockRejectedValue(new Error('offline'));
-        // The device read this roster once while it had signal.
-        renderRealFarm();
-        await waitFor(() => expect(screen.getByTestId('attendance-door-offline')).toBeInTheDocument());
+        // The device read this roster once while it had signal, and kept the
+        // server's last canManageLabour=true answer in the (money-free) read-out.
         writeCachedRoster(REAL_FARM.farmId, [OP_A, OP_B]);
+        saveLabourReadout('u1', REAL_FARM.farmId, 'alltime', { ...EMPTY_LABOUR_DATA, canManageLabour: true });
+        renderRealFarm();
+        await waitFor(() => expect(screen.getByText(CAPTURE_TILE)).toBeInTheDocument());
 
-        fireEvent.click(screen.getByTestId('attendance-door-offline'));
+        fireEvent.click(screen.getByText(CAPTURE_TILE));
         await waitFor(() => expect(screen.getByTestId('attendance-screen')).toBeInTheDocument());
 
         // cached names are listed, no fabricated roster, creation is blocked
@@ -397,9 +400,10 @@ describe('attendance door — offline', () => {
     it('offline with NO cached roster: the honest failure banner, no invented names', async () => {
         mockFetchLabourData.mockRejectedValue(new Error('offline'));
         mockFetchFieldOperators.mockRejectedValue(new Error('offline'));
+        saveLabourReadout('u1', REAL_FARM.farmId, 'alltime', { ...EMPTY_LABOUR_DATA, canManageLabour: true });
         renderRealFarm();
-        await waitFor(() => expect(screen.getByTestId('attendance-door-offline')).toBeInTheDocument());
-        fireEvent.click(screen.getByTestId('attendance-door-offline'));
+        await waitFor(() => expect(screen.getByText(CAPTURE_TILE)).toBeInTheDocument());
+        fireEvent.click(screen.getByText(CAPTURE_TILE));
 
         await waitFor(() => expect(screen.getAllByText('माहिती आणता आली नाही').length).toBeGreaterThan(0));
         expect(document.querySelector('[data-testid^="att-row-"]')).toBeNull();
@@ -412,6 +416,7 @@ describe('attendance door — offline COLD START (/me also fails; farm id only o
         // user, and the roster was read once.
         SessionStore.setCurrentFarmId(REAL_FARM.farmId);
         writeCachedRoster(REAL_FARM.farmId, [OP_A, OP_B]);
+        saveLabourReadout('u1', REAL_FARM.farmId, 'alltime', { ...EMPTY_LABOUR_DATA, canManageLabour: true });
         mockFetchMeContext.mockRejectedValue(new Error('offline'));
         mockFetchLabourData.mockRejectedValue(new Error('offline'));
         mockFetchFieldOperators.mockRejectedValue(new Error('offline'));
@@ -419,8 +424,8 @@ describe('attendance door — offline COLD START (/me also fails; farm id only o
 
     it('lists the cached names, queues a mark, and keeps add-person honestly refused', async () => {
         renderRealFarm();
-        await waitFor(() => expect(screen.getByTestId('attendance-door-offline')).toBeInTheDocument());
-        fireEvent.click(screen.getByTestId('attendance-door-offline'));
+        await waitFor(() => expect(screen.getByText(CAPTURE_TILE)).toBeInTheDocument());
+        fireEvent.click(screen.getByText(CAPTURE_TILE));
         await waitFor(() => expect(screen.getByTestId('attendance-screen')).toBeInTheDocument());
 
         await waitFor(() => expect(screen.getByTestId(`att-row-${OP_A.id}`)).toBeInTheDocument());
@@ -441,14 +446,21 @@ describe('attendance door — offline COLD START (/me also fails; farm id only o
         expect(mockCreateFieldOperator).not.toHaveBeenCalled();
     });
 
-    it('with NO remembered farm for this user there is still no farm and no invented one', async () => {
+    it('with NO remembered farm for this user there is no farm, no cached answer and NO door', async () => {
         SessionStore.clearCurrentFarmId();
         renderRealFarm();
-        await waitFor(() => expect(screen.getByTestId('attendance-door-offline')).toBeInTheDocument());
-        fireEvent.click(screen.getByTestId('attendance-door-offline'));
-        await waitFor(() => expect(screen.getByTestId('attendance-screen')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getAllByText('माहिती आणता आली नाही').length).toBeGreaterThan(0));
+        expect(screen.queryByText(CAPTURE_TILE)).toBeNull();
         expect(document.querySelector('[data-testid^="att-row-"]')).toBeNull();
-        expect(screen.getByTestId('att-save')).toBeDisabled();
+    });
+
+    it('no cached read-out at all (server answer unknown): the door stays hidden rather than guessing', async () => {
+        window.localStorage.clear();
+        SessionStore.setCurrentFarmId(REAL_FARM.farmId);
+        renderRealFarm();
+        await waitFor(() => expect(screen.getAllByText('माहिती आणता आली नाही').length).toBeGreaterThan(0));
+        expect(screen.queryByText(CAPTURE_TILE)).toBeNull();
+        expect(screen.queryByTestId('attendance-door-offline')).toBeNull();
     });
 });
 
@@ -539,15 +551,15 @@ describe('attendance door — no gate left behind', () => {
         expect(hub).not.toMatch(/SHOW_ATTENDANCE/);
         expect(hub).not.toMatch(/\|\|\s*isPreview/);
         expect(hub).not.toMatch(/isPreview/);
-        expect(hub).toMatch(/isAttendanceDoorEnabled\(\)/);
+        expect(hub).toMatch(/canTakeManualAttendance\(data\.canManageLabour\)/);
         const feature = read('features/labour/components/LabourFeature.tsx');
         expect(feature).not.toMatch(/isPreview/);
-        expect(feature).toMatch(/isAttendanceDoorEnabled\(\)/);
+        expect(feature).not.toMatch(/earlyAccess|EarlyAccess|onTitleTap/);
     });
 
-    it('the door function reads no preview, mock or build-time signal (only the per-device switch)', () => {
+    it('the door function reads no preview, mock, storage or build-time signal (only the server flag)', () => {
         const door = read('features/labour/attendanceDoor.ts');
-        expect(door).not.toMatch(/isPreview|import\.meta|process\.env|LABOUR_MOCK/);
+        expect(door).not.toMatch(/isPreview|import\.meta|process\.env|LABOUR_MOCK|localStorage|DeviceFlag/);
     });
 
     it('the voice hero is still anchor-gated (no work logged => grey, with the approved reason)', async () => {
@@ -559,14 +571,10 @@ describe('attendance door — no gate left behind', () => {
 
     it('with NO farm context at all (the ?preview=labour mount) nothing can be saved or acknowledged', async () => {
         render(<LabourFeature onExit={() => {}} />);
-        await waitFor(() => expect(screen.getByText(CAPTURE_TILE)).toBeInTheDocument());
-        fireEvent.click(screen.getByText(CAPTURE_TILE));
-        await waitFor(() => expect(screen.getByTestId('attendance-screen')).toBeInTheDocument());
-
+        await waitFor(() => expect(screen.getByText('हजेरी वही')).toBeInTheDocument()); // the hub rendered (positive control)
+        // The preview mock carries no server answer, so the door is not offered at all.
+        expect(screen.queryByText(CAPTURE_TILE)).toBeNull();
         expect(mockFetchFieldOperators).not.toHaveBeenCalled();
-        expect(screen.getByTestId('att-save')).toBeDisabled();
-        expect(screen.getByTestId('att-add-open')).toBeDisabled();
-        expect(screen.queryByText(ON_PHONE)).toBeNull();
         expect(await attendanceMarks()).toHaveLength(0);
     });
 });

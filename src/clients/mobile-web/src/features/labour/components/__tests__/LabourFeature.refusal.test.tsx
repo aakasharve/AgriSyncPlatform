@@ -113,7 +113,6 @@ const openCaptureScreen = async () => {
     await waitFor(() => expect(screen.getByTestId('attendance-screen')).toBeInTheDocument());
 };
 
-import { setAttendanceDoorEnabled } from '../../attendanceDoor';
 import { mutationQueue } from '../../../../infrastructure/sync/MutationQueue';
 import { CreateDailyLogCommand } from '../../../../application/usecases/sync/CreateDailyLogCommand';
 import { ATTENDANCE_COPY } from '../../attendanceCopy';
@@ -123,10 +122,10 @@ import { ATTENDANCE_COPY } from '../../attendanceCopy';
 // rightly not be offered). LABOUR_MOCK itself states 12 on the farm today.
 const LABOUR_NO_TODAY = {
     ...LABOUR_MOCK,
+    canManageLabour: true,
     home: { ...LABOUR_MOCK.home, onFarmToday: null, rojandariToday: null, ukteToday: null },
 };
 
-beforeEach(() => { setAttendanceDoorEnabled(true); });
 
 beforeEach(() => {
     mockFetchMeContext.mockResolvedValue(ME_CONTEXT);

@@ -98,7 +98,6 @@ const renderRealFarm = (props: FeatureProps = {}) => render(
 );
 
 
-import { setAttendanceDoorEnabled } from '../../attendanceDoor';
 import { LABOUR_MOCK } from '../../labourMock';
 import type { LabourData } from '../../labour.types';
 import { NO_ANCHOR_TEST_IDS } from '../../labourAnchor';
@@ -106,6 +105,7 @@ import { LogVerificationStatus, type DailyLog } from '../../../../domain/types/l
 
 const BASE: LabourData = {
     ...LABOUR_MOCK,
+    canManageLabour: true,
     ledger: { ...LABOUR_MOCK.ledger, days: [], rows: [], crewRows: [] },
 };
 const withToday = (home: Partial<LabourData['home']>, todaysLabourAssignmentId = ''): LabourData => ({
@@ -120,7 +120,6 @@ const noWorkTile = () => screen.queryByText(NO_WORK_TILE);
 
 const NO_ANCHOR_REASON = NO_ANCHOR_TEST_IDS.reason;
 
-beforeEach(() => { setAttendanceDoorEnabled(true); });
 beforeEach(() => {
     mockFetchMeContext.mockResolvedValue(ME_CONTEXT);
     mockFetchLabourData.mockResolvedValue(withToday({}));

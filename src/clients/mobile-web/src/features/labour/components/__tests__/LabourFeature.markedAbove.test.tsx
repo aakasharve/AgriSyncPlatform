@@ -104,12 +104,12 @@ const openCaptureScreen = async () => {
     await waitFor(() => expect(screen.getByTestId('attendance-screen')).toBeInTheDocument());
 };
 
-import { setAttendanceDoorEnabled } from '../../attendanceDoor';
 import { LABOUR_MOCK } from '../../labourMock';
 import type { LabourData } from '../../labour.types';
 
 const STATED_THREE: LabourData = {
     ...LABOUR_MOCK,
+    canManageLabour: true,
     home: { ...LABOUR_MOCK.home, onFarmToday: 3, rojandariToday: 3, ukteToday: null },
     ledger: { ...LABOUR_MOCK.ledger, days: [], rows: [], crewRows: [] },
 };
@@ -118,7 +118,6 @@ const attendanceMarks = async () => (await getDatabase().mutationQueue
     .where('mutationType').equals(SyncMutationName.AttendanceMark).toArray())
     .map((r) => r.payload as Record<string, unknown>);
 
-beforeEach(() => { setAttendanceDoorEnabled(true); });
 beforeEach(() => {
     mockFetchMeContext.mockResolvedValue(ME_CONTEXT);
     mockFetchLabourData.mockResolvedValue(STATED_THREE);

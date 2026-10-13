@@ -88,6 +88,9 @@ export function toOfflineReadout(data: LabourData): LabourData {
             })),
         },
         view: data.view,
+        // The server's own last answer to "may this caller take attendance" - a bare boolean,
+        // never derived here. Absent stays absent (door hidden).
+        ...(typeof data.canManageLabour === 'boolean' ? { canManageLabour: data.canManageLabour } : {}),
         home: {
             rojandariStated: null,
             ukteAgreed: null,
