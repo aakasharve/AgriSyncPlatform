@@ -15,6 +15,12 @@ name: android-release
 #      web bundle that web-release promoted (one bundle, two clients);
 #   4. the FINISHED APK is re-verified here: bundle bytes inside the package,
 #      application id, version, signature and signer continuity.
+# THE APK LIBRARY (ops/release/publish_apk.py, runbook in
+# src/clients/mobile-web/android/README-RELEASE.md): every published APK is kept under a unique
+# permanent key and is never overwritten (different bytes under an existing key = refusal); the
+# catalog page apk/index.html is regenerated and CloudFront is invalidated in the same run; the
+# stable shramsafal-latest.apk moves ONLY for publication_kind=release + promote_latest=true and
+# never to a versionCode that is not strictly higher. Test/rehearsal publication never moves it.
 # There is no tag trigger: a tag cannot name the build run. Dispatch with
 # `--ref <frozen protected-main sha>`. The Play bundle stays a workflow artifact
 # (an .aab is not installable and must never reach a download URL).
@@ -32,6 +38,19 @@ on:
         default: true
       confirm:
         description: 'To publish (dry_run=false) type PUBLISH'
+        type: string
+        required: false
+      publication_kind:
+        description: 'test = delivered for trial (never becomes latest); release = founder-approved release'
+        type: choice
+        options: [test, release]
+        default: test
+      promote_latest:
+        description: 'Move shramsafal-latest.apk to this build. Only with publication_kind=release.'
+        type: boolean
+        default: false
+      approval_ref:
+        description: 'Required for publication_kind=release: reference to the founder approval (message/date)'
         type: string
         required: false
 
@@ -53,8 +72,19 @@ jobs:
         env:
           DRY_RUN: ${{ inputs.dry_run }}
           CONFIRM: ${{ inputs.confirm }}
+          KIND: ${{ inputs.publication_kind }}
+          PROMOTE: ${{ inputs.promote_latest }}
+          APPROVAL: ${{ inputs.approval_ref }}
         run: |
           set -euo pipefail
+          if [ "$PROMOTE" = "true" ] && [ "$KIND" != "release" ]; then
+            echo "::error::promote_latest=true needs publication_kind=release. A test build never becomes latest."
+            exit 1
+          fi
+          if [ "$KIND" = "release" ] && [ -z "$APPROVAL" ]; then
+            echo "::error::publication_kind=release needs approval_ref (the founder approval being relied on)."
+            exit 1
+          fi
           if [ "$DRY_RUN" != "true" ] && [ "$CONFIRM" != "PUBLISH" ]; then
             echo "::error::Refusing to publish. dry_run=false needs confirm=PUBLISH."
             exit 1
@@ -62,6 +92,19 @@ jobs:
           echo "mode: dry_run=$DRY_RUN"
 
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the catalog derives each build's change list from the commit range
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Publication tooling tests (gates fire and pass)
+        working-directory: ops/release
+        run: |
+          set -euo pipefail
+          python3 -m unittest -v test_publish_apk test_verify_publication test_workflows
+          node --test apk_catalog.test.mjs
 
       - name: Verify the build run
         env:
@@ -102,6 +145,20 @@ jobs:
           grep -qi "$SIGNER_SHA256" /tmp/apksigner.txt
           { echo "### APK to promote"; echo "- sha256: \`$(sha256sum promote/apk/app-release.apk | cut -d' ' -f1)\`"; echo "- commit: \`$GITHUB_SHA\`"; } | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: Show the publication plan (no AWS call is possible in this step)
+        if: ${{ inputs.dry_run }}
+        env:
+          KIND: ${{ inputs.publication_kind }}
+          PROMOTE: ${{ inputs.promote_latest }}
+          APPROVAL: ${{ inputs.approval_ref }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+        run: |
+          set -euo pipefail
+          ARGS=(--apk promote/apk/app-release.apk --web-manifest promote/web/web-dist.sha256
+                --commit "$GITHUB_SHA" --run-id "$BUILD_RUN_ID" --kind "$KIND" --approval-ref "$APPROVAL")
+          if [ "$PROMOTE" = "true" ]; then ARGS+=(--promote-latest); fi
+          python3 ops/release/publish_apk.py "${ARGS[@]}"   # dry-run: the execute flag is deliberately absent
+
       - name: Dry run stops here
         if: ${{ inputs.dry_run }}
         run: echo "dry_run=true - verified only. No AWS credentials were configured, nothing was uploaded, no pointer moved."
@@ -114,13 +171,44 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-south-1
 
-      - name: Upload APK to the private app bucket (versioned, then latest)
+      - name: Publish into the APK library, refresh the catalog, invalidate CloudFront
         if: ${{ !inputs.dry_run }}
+        env:
+          KIND: ${{ inputs.publication_kind }}
+          PROMOTE: ${{ inputs.promote_latest }}
+          APPROVAL: ${{ inputs.approval_ref }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          APK_BUCKET: shramsafal-app-prod
+          APK_CF_DISTRIBUTION: ${{ vars.APK_CF_DISTRIBUTION || 'EFLL3RCLOOO60' }}
         run: |
           set -euo pipefail
-          SHA_SHORT=${GITHUB_SHA::7}
-          aws s3 cp promote/apk/app-release.apk "s3://shramsafal-app-prod/apk/shramsafal-${SHA_SHORT}.apk" \
-            --content-type application/vnd.android.package-archive --cache-control "max-age=31536000"
-          aws s3 cp promote/apk/app-release.apk "s3://shramsafal-app-prod/apk/shramsafal-latest.apk" \
-            --content-type application/vnd.android.package-archive --cache-control "no-cache, no-store, must-revalidate"
-          echo "APK published (private, basic-auth): https://app.shramsafal.in/apk/shramsafal-${SHA_SHORT}.apk"
+          ARGS=(--apk promote/apk/app-release.apk --web-manifest promote/web/web-dist.sha256
+                --commit "$GITHUB_SHA" --run-id "$BUILD_RUN_ID" --kind "$KIND" --approval-ref "$APPROVAL"
+                --report-json publication-report.json --execute)
+          if [ "$PROMOTE" = "true" ]; then ARGS+=(--promote-latest); fi
+          python3 ops/release/publish_apk.py "${ARGS[@]}"
+          {
+            echo "### APK library"
+            python3 -c "import json;r=json.load(open('publication-report.json'));print('- kind: ' + r['kind']);print('- permanent link: https://app.shramsafal.in/' + r['key']);print('- latest moved: ' + str(r['latestMoved']));print('- catalog: https://app.shramsafal.in/apk/')"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Fail-closed: a publication nobody checked from the outside is not reported as done.
+      - name: End-to-end verification of the published build (authenticated)
+        if: ${{ !inputs.dry_run }}
+        env:
+          APK_CATALOG_USER: ${{ secrets.APK_CATALOG_USER }}
+          APK_CATALOG_PASSWORD: ${{ secrets.APK_CATALOG_PASSWORD }}
+          KIND: ${{ inputs.publication_kind }}
+          PROMOTE: ${{ inputs.promote_latest }}
+        run: |
+          set -euo pipefail
+          if [ -z "$APK_CATALOG_USER" ] || [ -z "$APK_CATALOG_PASSWORD" ]; then
+            echo "::error::APK was published but APK_CATALOG_USER/APK_CATALOG_PASSWORD secrets are missing, so the end-to-end check could not run. Treat the publication as UNVERIFIED; run ops/release/verify_publication.py by hand."
+            exit 1
+          fi
+          set -a; . ops/release/expected-release.env; set +a
+          KEY=$(python3 -c "import json;print(json.load(open('publication-report.json'))['key'])")
+          if [ "$PROMOTE" = "true" ]; then LATEST=this; elif [ "$KIND" = "test" ]; then LATEST=not-this; else LATEST=skip; fi
+          python3 ops/release/verify_publication.py --key "$KEY" --apk promote/apk/app-release.apk \
+            --web-manifest promote/web/web-dist.sha256 --version-name "$VERSION_NAME" --version-code "$VERSION_CODE" \
+            --kind "$KIND" --latest "$LATEST"
