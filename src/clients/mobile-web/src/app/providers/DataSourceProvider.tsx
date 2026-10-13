@@ -22,6 +22,8 @@ import { activateDatabaseForUser } from '../../infrastructure/storage/activateUs
 import { setActiveDatabaseName } from '../../infrastructure/storage/activeDatabaseName';
 import { UNIDENTIFIED_DATABASE_NAME } from '../../infrastructure/storage/userDatabaseName';
 import { recoverLegacyOwnershipClaim, settleOwnershipClaims } from '../../infrastructure/storage/databaseOwnership';
+import { getActiveDatabaseName } from '../../infrastructure/storage/activeDatabaseName';
+import { sweepExpiredDownloadedLabour, sweepOtherLocalDatabases } from '../../infrastructure/storage/downloadedLabourCache';
 import { purgeExpiredProcessingVoiceClips } from '../../infrastructure/voice/VoiceClipRetention';
 
 // --- CONTEXT ---
@@ -163,12 +165,18 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                     // 7-day cap on cached Labour names: purge expired copies at boot.
                     purgeExpiredLabourCaches();
                     await settleOwnershipClaims();
+                    // Same 7-day cap in the IndexedDB stores (marks, names in logs, team list,
+                    // last-pull snapshot) and in every OTHER farmer's database on this handset.
+                    // Awaited so no screen reads before the sweep; best-effort, never blocks boot.
+                    await sweepExpiredDownloadedLabour().catch((e) => console.warn('[DataSource] labour cache sweep failed', e));
+                    await sweepOtherLocalDatabases(getActiveDatabaseName()).catch(() => undefined);
                 } else if (!isDemoMode) {
                     // Signed out / not yet identified: no farmer's database may stay
                     // open (same invariant as endFarmerSessionLocally). Without this
                     // the worker's rehydrate would re-announce the PREVIOUS user's
                     // parked rows from the database still pointed at.
                     setActiveDatabaseName(UNIDENTIFIED_DATABASE_NAME);
+                    await sweepOtherLocalDatabases(UNIDENTIFIED_DATABASE_NAME).catch(() => undefined);
                 }
                 await dataSource.initialize();
                 await MigrationService.migrate();
