@@ -1,0 +1,107 @@
+{
+  "_comment": "Copy-review registry. Lists user-facing legal/consent/privacy copy that needs counsel review. reviewStatus stays unreviewed until a sign-off record exists in the PRIVATE review records; signOffRef is only an identifier pointing at that record. audience changes only by an explicit reviewed commit. See ops/release/COPY_REVIEW.md. A passing check is not evidence of legal validity.",
+  "audience": "founder_testing",
+  "coverage": [
+    {
+      "dir": "src/clients/mobile-web/public/legal",
+      "pattern": "\\.md$"
+    },
+    {
+      "dir": "src/clients/mobile-web/public/consent",
+      "pattern": "\\.md$"
+    },
+    {
+      "dir": "src/clients/mobile-web/src/features/consent/gate",
+      "pattern": "^consentNotice\\.ts$"
+    },
+    {
+      "dir": "src/clients/mobile-web/src/i18n",
+      "pattern": "^(consent|dataRights|voiceDiary|piiReview|legal|privacy)\\w*Translations\\.ts$"
+    },
+    {
+      "dir": "src/apps/ShramSafal/ShramSafal.Infrastructure/Privacy",
+      "pattern": "^(ExportWorker|ErasureWorker)\\.cs$"
+    },
+    {
+      "dir": "src/apps/ShramSafal/ShramSafal.Infrastructure/Privacy/Resources",
+      "pattern": "\\.txt$"
+    }
+  ],
+  "files": [
+    {
+      "path": "src/apps/ShramSafal/ShramSafal.Infrastructure/Privacy/ErasureWorker.cs",
+      "reviewStatus": "unreviewed",
+      "sha256": "1f8852d85bcbeea1abb3919580760ef21bb447a292bf991c485c42d292155723"
+    },
+    {
+      "path": "src/apps/ShramSafal/ShramSafal.Infrastructure/Privacy/ExportWorker.cs",
+      "reviewStatus": "unreviewed",
+      "sha256": "e1751966704f9b316ea00029b65836d1bd46573a3b34d083faa9056baa88c834"
+    },
+    {
+      "path": "src/apps/ShramSafal/ShramSafal.Infrastructure/Privacy/Resources/marathi_worker_names.txt",
+      "reviewStatus": "unreviewed",
+      "sha256": "2509a2bcb831de15b3ca3af7a5331726a218e6a83f0a1b1a30234412ac8a5509"
+    },
+    {
+      "path": "src/clients/mobile-web/public/consent/agreement_en.md",
+      "reviewStatus": "unreviewed",
+      "sha256": "bbed2f42a22fbbaaf6962a735d92e87db2bf18a0036c2051e0573c95ddb15bad"
+    },
+    {
+      "path": "src/clients/mobile-web/public/consent/agreement_hi.md",
+      "reviewStatus": "unreviewed",
+      "sha256": "43e7429c03384935ecbab4b1c300ac51b9b84344b39e5d1858de30575bc749b4"
+    },
+    {
+      "path": "src/clients/mobile-web/public/consent/agreement_mr.md",
+      "reviewStatus": "unreviewed",
+      "sha256": "26aebcb8339757a5b42d50758ef2e880fe5e22ac89e659414100a765f559aee5"
+    },
+    {
+      "path": "src/clients/mobile-web/public/legal/privacy_en.md",
+      "reviewStatus": "unreviewed",
+      "sha256": "6f813b889659b6b52e1530fdac1065dffcd4e380707cc26979c00f4dc2762345"
+    },
+    {
+      "path": "src/clients/mobile-web/public/legal/privacy_mr.md",
+      "reviewStatus": "unreviewed",
+      "sha256": "90b851485943b660a67cbb0373170b9939521ad7d2eb74ba17691e344c61fe60"
+    },
+    {
+      "path": "src/clients/mobile-web/public/legal/terms_en.md",
+      "reviewStatus": "unreviewed",
+      "sha256": "b64dbe57d9733c260c95f4b2c35be6476c43d858c12662dedfcce73fade6568d"
+    },
+    {
+      "path": "src/clients/mobile-web/public/legal/terms_mr.md",
+      "reviewStatus": "unreviewed",
+      "sha256": "929448de09dc0da18cff89f4aa328a39b7f57a680379766f4cf5254b5731f8fc"
+    },
+    {
+      "path": "src/clients/mobile-web/src/features/consent/gate/consentNotice.ts",
+      "reviewStatus": "unreviewed",
+      "sha256": "72eeb99230a2892314a5f5ddcebd495785a83094c63f8c20329723795abeacfc"
+    },
+    {
+      "path": "src/clients/mobile-web/src/i18n/consentTranslations.ts",
+      "reviewStatus": "unreviewed",
+      "sha256": "831ccdbab38de77747fb2bfd2bcee6ee60f974409431c68c779f73d7337c321a"
+    },
+    {
+      "path": "src/clients/mobile-web/src/i18n/dataRightsTranslations.ts",
+      "reviewStatus": "unreviewed",
+      "sha256": "c1ba8fbadd0851722776809cae6c373edefac23a6d5a18bb88d59ba560fe80c8"
+    },
+    {
+      "path": "src/clients/mobile-web/src/i18n/piiReviewTranslations.ts",
+      "reviewStatus": "unreviewed",
+      "sha256": "5a2d8ecebe93f85242bf409ff63682633608c644e56aac55259de539436d880d"
+    },
+    {
+      "path": "src/clients/mobile-web/src/i18n/voiceDiaryTranslations.ts",
+      "reviewStatus": "unreviewed",
+      "sha256": "607727901bc9781097517307eab750bd8493b933a39fee8306c2c8ebce52e3ee"
+    }
+  ]
+}
