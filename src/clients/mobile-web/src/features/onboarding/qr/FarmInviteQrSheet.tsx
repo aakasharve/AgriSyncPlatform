@@ -23,6 +23,7 @@ import {
     type InviteResponse,
 } from './inviteApi';
 import { getShareOrigin } from '../../../shared/config/publicWebOrigin';
+import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 
 interface FarmInviteQrSheetProps {
     isOpen: boolean;
@@ -149,6 +150,7 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
         }
     };
 
+    useBackDismiss(isOpen, onClose);
     if (!isOpen) return null;
 
     return (

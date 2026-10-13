@@ -25,6 +25,7 @@
 import React from 'react';
 import type { BucketIssueType } from '../../../domain/types/log.types';
 import { useLanguage } from '../../../i18n/LanguageContext';
+import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 
 export interface NoWorkReasonSheetProps {
     isOpen: boolean;
@@ -53,6 +54,7 @@ export const NO_WORK_CAUSES: ReadonlyArray<{ cause: BucketIssueType; labelKey: '
 export const NoWorkReasonSheet: React.FC<NoWorkReasonSheetProps> = ({ isOpen, onDeclare, onClose }) => {
     const { t } = useLanguage();
 
+    useBackDismiss(isOpen, onClose);
     if (!isOpen) return null;
 
     return (

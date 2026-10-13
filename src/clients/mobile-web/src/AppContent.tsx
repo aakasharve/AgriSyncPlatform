@@ -24,6 +24,8 @@ import { AppFeatureProviders } from './app/context/AppFeatureContexts';
 import { useTemplateCatalogSync } from './app/hooks/useTemplateCatalogSync';
 import { useFarmContextState, OPEN_CREATE_FARM_WIZARD_EVENT } from './app/hooks/useFarmContextState';
 import { useCapacitorKeyboard } from './app/hooks/useCapacitorKeyboard';
+import { useAndroidBackButton } from './app/hooks/useAndroidBackButton';
+import { useBackDismiss } from './core/navigation/useBackDismiss';
 import { useSavedSurfaceScrollReset } from './app/hooks/useSavedSurfaceScrollReset';
 import {
     getTodayCounts as deriveTodayCounts,
@@ -80,6 +82,18 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
     // reduced-motion rule live in the hook.
     const pageScrollRef = React.useRef<HTMLElement>(null);
     useSavedSurfaceScrollReset(pageScrollRef, voice.status);
+
+    // spec: 2026-08-25-prod-cutover-waves — Android hardware Back (native only).
+    // Overlays close first, then the app's own route history, and only at Home
+    // does it exit (or background the app while a capture is in flight).
+    useAndroidBackButton({
+        goBack: navigation.goBack,
+        isBusy: () => isRecordingPathBusy(voice.status),
+    });
+    // The create-farm wizard is only dismissible when a farm already exists
+    // (see its onDismiss below); a first-farm wizard stays a hard gate.
+    useBackDismiss(showFirstFarmWizard && !!myFarms && myFarms.length > 0, () => setShowFirstFarmWizard(false));
+    useBackDismiss(!!weather.pendingWeatherEvent, () => weather.setPendingWeatherEvent(null));
 
     useEffect(() => {
         setCrops(data.crops);

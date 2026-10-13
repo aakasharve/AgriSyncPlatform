@@ -6,6 +6,7 @@ import { X, RefreshCw, Wifi, WifiOff, Cpu, Upload, AlertCircle, CheckCircle, Clo
 import { useSyncQueueStatus, useUnqueueableLogCount } from '../hooks/useSyncQueueStatus';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
+import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 
 interface Props {
      isOpen: boolean;
@@ -152,6 +153,7 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
           return `${Math.floor(diff / 3600000)}h ago`;
      };
 
+     useBackDismiss(isOpen, onClose);
      if (!isOpen) return null;
 
      const totalPending = status.pendingCount + status.pendingUploads + status.pendingAiJobs;

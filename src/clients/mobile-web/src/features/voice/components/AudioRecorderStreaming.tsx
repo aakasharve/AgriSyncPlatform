@@ -122,7 +122,12 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       // distinguishes it from a genuine getUserMedia denial. Remove once confirmed.
       const name = (err as { name?: string })?.name || 'Error';
       console.error('Error accessing microphone (streaming):', err);
-      setInternalError(`${t('voice.micError')} [${name}]`);
+      // A refusal is the farmer's/OS's decision, not a fault: say the typing route is open
+      // (same wording as AudioRecorder). Tapping the mic again asks the OS again.
+      setInternalError(
+        name === 'NotAllowedError'
+          ? t('voice.micDeniedTypeInstead')
+          : `${t('voice.micError')} [${name}]`);
       setIsRecording(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stopRecording is a stable callback

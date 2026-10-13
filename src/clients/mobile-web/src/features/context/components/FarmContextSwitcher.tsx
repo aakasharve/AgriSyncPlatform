@@ -23,6 +23,7 @@ import { createPortal } from 'react-dom';
 import { ChevronDown, Sprout, Plus, QrCode, CheckCircle2, X } from 'lucide-react';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 import { getRoleLabel } from '../../../shared/roles/roleLabels';
+import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 
 interface FarmContextSwitcherProps {
     farms: MyFarmDto[];
@@ -69,6 +70,7 @@ const FarmContextSwitcher: React.FC<FarmContextSwitcherProps> = ({
     compact = false,
 }) => {
     const [isOpen, setIsOpen] = useState(false);
+    useBackDismiss(isOpen, () => setIsOpen(false));
 
     // State 1: no farms yet.
     if (farms.length === 0) {
