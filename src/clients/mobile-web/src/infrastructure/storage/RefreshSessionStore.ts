@@ -20,6 +20,7 @@
 
 import { Capacitor } from '@capacitor/core';
 import { SecureStorage } from '@aparajita/capacitor-secure-storage';
+import { SERVER_REFRESH_LIFETIME_MS } from './refreshCredentialLife';
 
 export interface NativeRefreshSession {
     refreshToken: string;
@@ -114,14 +115,16 @@ export async function clearNativeRefreshSession(): Promise<void> {
 // separate Keystore slot: same protection as the live slot, but
 //   - it is never read by refresh/boot (only by the revoke call),
 //   - it is deleted the moment the revoke succeeds (or the server judges it),
-//   - it is deleted after PENDING_REVOKE_MAX_AGE_MS regardless (the 14-day offline
-//     reopening window, same as AuthTokenStore.PRESENCE_MAX_AGE_MS; <= server life), so it cannot linger past the point it could matter.
+//   - it is deleted after PENDING_REVOKE_MAX_AGE_MS regardless: the server credential's
+//     whole life (30 days from the logout is an upper bound on its remaining life), so it
+//     cannot linger past the point it could matter. NOT the 14-day offline reopening
+//     window: founder 2026-10-12, protection lasts until revoked or expired.
 // Web has no equivalent: the HttpOnly cookie IS the credential and the revoke
 // call carries it automatically.
 // ---------------------------------------------------------------------------
 
 const PENDING_REVOKE_KEY = 'agrisync_native_pending_revoke_v1';
-export const PENDING_REVOKE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+export const PENDING_REVOKE_MAX_AGE_MS = SERVER_REFRESH_LIFETIME_MS;
 
 export async function stashPendingRevoke(refreshToken: string): Promise<void> {
     if (!isNativeSecureRefreshEnabled()) {

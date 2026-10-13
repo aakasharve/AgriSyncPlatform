@@ -85,7 +85,7 @@ export async function getMeContext(t: HttpTransport): Promise<import('../../../c
  * 1. beginLogout() - local and fast, no network. Records the NON-SECRET
  *    pending-logout marker, and on Android MOVES the Keystore refresh token into
  *    the separate pending-revoke slot (never used for refresh; deleted when the
- *    revoke is judged or after the 14-day offline window). The caller then clears the live
+ *    revoke is judged or once the server credential has expired, 30 days). The caller then clears the live
  *    session. From this moment boot will not re-authenticate.
  * 2. completePendingLogout() - POST /user/auth/logout (AllowAnonymous; web
  *    carries the HttpOnly cookie, Android sends the slot's token). Reached

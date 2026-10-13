@@ -14,10 +14,18 @@
 // credential needed for the revoke lives in RefreshSessionStore's separate
 // pending-revoke Keystore slot, never here.
 
+import { SERVER_REFRESH_LIFETIME_MS } from './refreshCredentialLife';
+
 const KEY = 'agrisync_pending_logout_v1';
 
-/** Same 14-day offline reopening window as AuthTokenStore.PRESENCE_MAX_AGE_MS (founder 2026-10-12; server refresh life is 30 days, so this is never longer than the server). */
-export const PENDING_LOGOUT_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+/**
+ * How long an unfinished logout is remembered: the server refresh credential's whole life
+ * (30 days), NOT the 14-day offline reopening window. Founder 2026-10-12: after day 14 the
+ * app no longer presents the user as signed in, but a credential that could still be live
+ * on the server must still be revoked on reconnect and must never silently sign the user
+ * back in. The marker may drop only once the credential has expired by itself.
+ */
+export const PENDING_LOGOUT_MAX_AGE_MS = SERVER_REFRESH_LIFETIME_MS;
 
 function storage(): Storage | null {
     return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'

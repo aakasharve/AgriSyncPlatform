@@ -64,6 +64,24 @@ public class LoginHandlerDeviceSessionTests
     }
 
     [Fact]
+    public async Task Login_reports_the_refresh_credentials_own_expiry_not_the_access_expiry()
+    {
+        var now = DateTime.UtcNow;
+        var user = MakeVerifiedUser(now);
+        var repo = new CapturingRefreshTokenRepository();
+        var handler = new LoginHandler(
+            new SingleUserRepository(user), repo, new AlwaysTrueHasher(),
+            new FakeJwt(), new GuidIdGenerator(), new FakeClock(now));
+
+        var result = await handler.HandleAsync(new LoginCommand("8888888888", "password", DeviceA));
+
+        result.IsSuccess.Should().BeTrue();
+        var stored = repo.AddedToken!;
+        stored.ExpiresAtUtc.Should().Be(now.Add(User.Application.UseCases.Auth.Session.RefreshTokenPolicy.Lifetime));
+        result.Value.RefreshExpiresAtUtc.Should().Be(stored.ExpiresAtUtc);
+    }
+
+    [Fact]
     public async Task Login_stores_token_hash_not_raw_token_in_added_row()
     {
         var now = DateTime.UtcNow;

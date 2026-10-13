@@ -67,7 +67,7 @@ public sealed class RefreshTokenHandler(
             existingToken.DeviceName,
             existingToken.Platform,
             utcNow,
-            utcNow.AddDays(30));
+            utcNow.Add(RefreshTokenPolicy.Lifetime));
 
         // Stamp last_used_at_utc before rotating so the column reflects the final use.
         existingToken.MarkUsed(utcNow);
@@ -78,6 +78,6 @@ public sealed class RefreshTokenHandler(
         await refreshTokenRepository.AddAsync(newRefreshToken, ct);
         await refreshTokenRepository.SaveChangesAsync(ct);
 
-        return Result.Success(new AuthResponse(user.Id, tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAtUtc));
+        return Result.Success(new AuthResponse(user.Id, tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAtUtc, newRefreshToken.ExpiresAtUtc));
     }
 }

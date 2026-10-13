@@ -13,4 +13,5 @@ public sealed record VerifyOtpResult(
     string AccessToken,
     string RefreshToken,
     DateTime ExpiresAtUtc,
-    bool CreatedNewUser);
+    bool CreatedNewUser,
+    DateTime RefreshExpiresAtUtc);

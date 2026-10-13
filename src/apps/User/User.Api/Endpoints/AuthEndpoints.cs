@@ -66,7 +66,7 @@ public static class AuthEndpoints
             context.Response.Cookies.Append(
                 AuthCookieOptions.RefreshCookieName,
                 result.Value.RefreshToken,
-                AuthCookieOptions.Build(env, result.Value.ExpiresAtUtc, request.RememberDevice));
+                AuthCookieOptions.Build(env, result.Value.RefreshExpiresAtUtc, request.RememberDevice));
 
             // LB-1: native (Android) clients receive the refresh token in the body so the
             // Capacitor app can persist it in the Android Keystore. Web clients get the
@@ -101,7 +101,7 @@ public static class AuthEndpoints
                 context.Response.Cookies.Append(
                     AuthCookieOptions.RefreshCookieName,
                     result.Value.RefreshToken,
-                    AuthCookieOptions.Build(env, result.Value.ExpiresAtUtc, request.RememberDevice));
+                    AuthCookieOptions.Build(env, result.Value.RefreshExpiresAtUtc, request.RememberDevice));
 
                 // LB-1: native (Android) clients receive the refresh token in the body so the
                 // Capacitor app can persist it in the Android Keystore. Web clients get the
@@ -192,7 +192,7 @@ public static class AuthEndpoints
             context.Response.Cookies.Append(
                 AuthCookieOptions.RefreshCookieName,
                 result.Value!.RefreshToken,
-                AuthCookieOptions.Build(env, result.Value.ExpiresAtUtc, request.RememberDevice));
+                AuthCookieOptions.Build(env, result.Value.RefreshExpiresAtUtc, request.RememberDevice));
 
             // LB-1: native (Android) clients receive the refresh token in the body so the
             // Capacitor app can persist it in the Android Keystore. Web clients get the
@@ -255,7 +255,7 @@ public static class AuthEndpoints
             context.Response.Cookies.Append(
                 AuthCookieOptions.RefreshCookieName,
                 result.Value.RefreshToken,
-                AuthCookieOptions.Build(env, result.Value.ExpiresAtUtc, request.RememberDevice));
+                AuthCookieOptions.Build(env, result.Value.RefreshExpiresAtUtc, request.RememberDevice));
 
             // LB-1: native (Android) clients receive the refresh token in the body so the
             // Capacitor app can persist it in the Android Keystore. Web clients get the
