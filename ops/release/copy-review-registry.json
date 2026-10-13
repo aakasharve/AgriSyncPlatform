@@ -46,27 +46,27 @@
     {
       "path": "src/clients/mobile-web/public/consent/agreement_en.md",
       "reviewStatus": "unreviewed",
-      "sha256": "bbed2f42a22fbbaaf6962a735d92e87db2bf18a0036c2051e0573c95ddb15bad"
+      "sha256": "baa05fd5eebae162bf802997953d2a56bad73b69c878dd944aeb9f243adda847"
     },
     {
       "path": "src/clients/mobile-web/public/consent/agreement_hi.md",
       "reviewStatus": "unreviewed",
-      "sha256": "43e7429c03384935ecbab4b1c300ac51b9b84344b39e5d1858de30575bc749b4"
+      "sha256": "f9435455e53baf3457442f9ed15e9db753a77b0824b5860f866ae0ae166fd78f"
     },
     {
       "path": "src/clients/mobile-web/public/consent/agreement_mr.md",
       "reviewStatus": "unreviewed",
-      "sha256": "26aebcb8339757a5b42d50758ef2e880fe5e22ac89e659414100a765f559aee5"
+      "sha256": "d8a8aa4e46c7cfa2198ae101047e3450bbc60b5a9d00ea81f32a7bc866b859dd"
     },
     {
       "path": "src/clients/mobile-web/public/legal/privacy_en.md",
       "reviewStatus": "unreviewed",
-      "sha256": "6f813b889659b6b52e1530fdac1065dffcd4e380707cc26979c00f4dc2762345"
+      "sha256": "5b6d7df396b934e6f0cc5a2924cb2310ef9c24e857e05f21258f18e08e7a1f60"
     },
     {
       "path": "src/clients/mobile-web/public/legal/privacy_mr.md",
       "reviewStatus": "unreviewed",
-      "sha256": "90b851485943b660a67cbb0373170b9939521ad7d2eb74ba17691e344c61fe60"
+      "sha256": "a6b6ba9f829e36434cccc9b3d1d0d730c0e0cd07178261f0407bbaaf18ef1a47"
     },
     {
       "path": "src/clients/mobile-web/public/legal/terms_en.md",
@@ -81,12 +81,12 @@
     {
       "path": "src/clients/mobile-web/src/features/consent/gate/consentNotice.ts",
       "reviewStatus": "unreviewed",
-      "sha256": "72eeb99230a2892314a5f5ddcebd495785a83094c63f8c20329723795abeacfc"
+      "sha256": "9757487ea42435a12818175671e1ff6d6b2d078792e6c15d15dd4793f7f35ff0"
     },
     {
       "path": "src/clients/mobile-web/src/i18n/consentTranslations.ts",
       "reviewStatus": "unreviewed",
-      "sha256": "831ccdbab38de77747fb2bfd2bcee6ee60f974409431c68c779f73d7337c321a"
+      "sha256": "da7d06d169f80811a085e3518dbef7656278fb5555094408dac2593839ac9906"
     },
     {
       "path": "src/clients/mobile-web/src/i18n/dataRightsTranslations.ts",
@@ -101,7 +101,7 @@
     {
       "path": "src/clients/mobile-web/src/i18n/voiceDiaryTranslations.ts",
       "reviewStatus": "unreviewed",
-      "sha256": "607727901bc9781097517307eab750bd8493b933a39fee8306c2c8ebce52e3ee"
+      "sha256": "34cdb1204f926feca9a5043002b2ba0a929bff14a5492ecfea882de28bcc7730"
     }
   ]
 }
