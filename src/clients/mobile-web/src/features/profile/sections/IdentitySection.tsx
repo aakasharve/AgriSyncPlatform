@@ -13,7 +13,7 @@
 
 import React from 'react';
 import {
-    MapPin, Plus, Clock,
+    MapPin, Clock,
     ChevronRight, CheckCircle2, ShieldCheck, Check, Users, Phone, AlertTriangle, FileText, Upload, Eye, LogOut,
     Cloud, QrCode, Medal
 } from 'lucide-react';
@@ -23,7 +23,8 @@ import MembershipsList from '../../people/components/MembershipsList';
 import type { MyFarmDto, FarmDetailsDto } from '../../onboarding/qr/inviteApi';
 import { TeamMemberCard } from '../components/TeamMemberCard';
 import { useLabourPermissions } from '../hooks/useLabourPermissions';
-import { isOwnerTierRole, mergeTeamWithServerRoster } from '../helpers/teamRoster';
+import { FarmWorkersCard } from '../components/FarmWorkersCard';
+import { isOwnerTierRole, isPhoneLocalOnlyMember, mergeTeamWithServerRoster } from '../helpers/teamRoster';
 import { useLanguage } from '../../../i18n/LanguageContext';
 
 // Identity verification status for farmer ID
@@ -40,7 +41,6 @@ const getIdentityStatus = (profile: FarmerProfile): IdentityStatus => {
 interface IdentitySectionProps {
     profile: FarmerProfile;
     onUpdateProfile: (p: FarmerProfile) => void;
-    onDeletePerson?: (id: string) => void;
     logout: () => void;
     myFarm: { farmId: string; name: string; role: string; subscription: SubscriptionSnapshotView | null } | null;
     myMemberships: MyFarmDto[];
@@ -51,7 +51,6 @@ interface IdentitySectionProps {
     handleConnectWeather: () => void;
     setShowFarmBoundary: (v: boolean) => void;
     handleOpenInviteQr: () => void;
-    setShowMemberWizard: (v: boolean) => void;
     nonExitableFarmIds: Set<string>;
     handleExitMembership: (farmId: string, farmName: string) => Promise<void>;
     isWorkerOnAnyFarm: boolean;
@@ -62,7 +61,6 @@ interface IdentitySectionProps {
 const IdentitySection: React.FC<IdentitySectionProps> = ({
     profile,
     onUpdateProfile,
-    onDeletePerson,
     logout,
     myFarm,
     myMemberships,
@@ -73,7 +71,6 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
     handleConnectWeather,
     setShowFarmBoundary,
     handleOpenInviteQr,
-    setShowMemberWizard,
     nonExitableFarmIds,
     handleExitMembership,
 }) => {
@@ -92,8 +89,13 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
     // Unknown (no farm loaded yet) keeps today's behaviour rather than guessing.
     const callerIsKnownNonOwner = !!myFarm && !callerIsOwnerTier;
     const labourPermissions = useLabourPermissions(callerIsOwnerTier ? (myFarm?.farmId ?? null) : null);
+    // Linked app users only. A "member" that exists nowhere but this phone (the old local-only Add
+    // member) is not a team member and is not presented as one; named workers have their own card.
     const teamOperators = React.useMemo(
-        () => mergeTeamWithServerRoster(profile.operators ?? [], labourPermissions.rows),
+        () => mergeTeamWithServerRoster(
+            (profile.operators ?? []).filter(op => !isPhoneLocalOnlyMember(op)),
+            labourPermissions.rows,
+        ),
         [profile.operators, labourPermissions.rows],
     );
     return (
@@ -430,18 +432,12 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                         <p className="text-xs text-slate-400 mt-1">{t('profile.manageAccess')}</p>
                     </div>
                     {!callerIsKnownNonOwner && (
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-2">
                         <button
                             onClick={handleOpenInviteQr}
                             className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-200 active:scale-95 transition-all"
                         >
                             <QrCode size={16} /> Share farm QR
-                        </button>
-                        <button
-                            onClick={() => setShowMemberWizard(true)}
-                            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 shadow-sm active:scale-95 transition-all"
-                        >
-                            <Plus size={16} /> {t('profile.addMember')}
                         </button>
                     </div>
                     )}
@@ -511,7 +507,8 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                         const updatedOperators = profile.operators!.map(p => p.id === person.id ? { ...p, capabilities: newCaps } as any : p);
                                         onUpdateProfile({ ...profile, operators: updatedOperators });
                                     }}
-                                    onDelete={callerIsKnownNonOwner ? undefined : () => onDeletePerson && onDeletePerson(person.id)}
+                                    /* No Remove here: a linked app user leaves through the
+                                       membership exit, not through a button on his card. */
                                 />
                             );
                         })
@@ -526,6 +523,11 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                     )}
                 </div>
             </div>
+
+            {/* Named workers (no login): the only part of the Team page where an owner can add or
+                remove a person, and both go to the server. Owner / co-owner only, as told by the
+                server-sent role; before the farm is known there is nothing to send it to. */}
+            {callerIsOwnerTier && myFarm && <FarmWorkersCard farmId={myFarm.farmId} />}
 
         </div>
     );

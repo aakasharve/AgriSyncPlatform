@@ -881,6 +881,20 @@ public interface IShramSafalRepository
         => Task.CompletedTask;
 
     /// <summary>
+    /// Idempotent-create insert for a CLIENT-CHOSEN <see cref="FieldOperator"/> id: commits
+    /// now and reports <c>true</c> = inserted, <c>false</c> = that id already exists (a retry,
+    /// or an id that belongs to a person this tenant cannot see). A duplicate never throws and
+    /// never poisons the caller's transaction. The default body is the plain add + save used by
+    /// in-memory repositories (no unique index to race).
+    /// </summary>
+    async Task<bool> TryAddFieldOperatorAsync(FieldOperator o, CancellationToken ct = default)
+    {
+        await AddFieldOperatorAsync(o, ct);
+        await SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <summary>
     /// Single <see cref="FieldOperator"/> lookup by id. <b>NOT farm-scoped by
     /// itself</b> — <c>p_user_select_field_operators</c> is a PERMISSIVE RLS
     /// policy OR-ed with the tenant policy (A11), so under a multi-farm login

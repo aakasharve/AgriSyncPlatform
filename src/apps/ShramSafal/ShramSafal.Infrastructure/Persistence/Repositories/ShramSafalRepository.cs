@@ -1559,6 +1559,53 @@ internal sealed class ShramSafalRepository(
         await db.FieldOperators.AddAsync(o, ct);
     }
 
+    public async Task<bool> TryAddFieldOperatorAsync(FieldOperator o, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(o);
+
+        await db.FieldOperators.AddAsync(o, ct);
+
+        // A duplicate id must not abort the surrounding (tenant) transaction: the follow-up
+        // lookup and the response still need it. Absorb the conflict with a SAVEPOINT — it
+        // needs no row visibility, unlike ON CONFLICT (see InsertIgnoringDuplicateAsync).
+        var transaction = db.Database.CurrentTransaction;
+        string? savepoint = null;
+        if (transaction is not null)
+        {
+            savepoint = "sp_field_operator_" + Guid.NewGuid().ToString("N");
+            await transaction.CreateSavepointAsync(savepoint, ct);
+        }
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            db.Entry(o).State = EntityState.Detached;
+            if (transaction is not null && savepoint is not null)
+            {
+                await RollBackQuietlyAsync(transaction, savepoint);
+            }
+
+            return false;
+        }
+
+        if (transaction is not null && savepoint is not null)
+        {
+            try
+            {
+                await transaction.ReleaseSavepointAsync(savepoint, ct);
+            }
+            catch (PostgresException)
+            {
+                // Housekeeping only; the savepoint is discarded at COMMIT.
+            }
+        }
+
+        return true;
+    }
+
     public async Task<FieldOperator?> GetFieldOperatorByIdAsync(Guid id, CancellationToken ct = default)
     {
         return await db.FieldOperators.FindAsync([id], ct);
