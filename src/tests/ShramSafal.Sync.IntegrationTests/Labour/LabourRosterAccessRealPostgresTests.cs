@@ -430,11 +430,15 @@ public sealed class LabourRosterAccessRealPostgresTests(Xunit.Abstractions.ITest
     {
         await AssertAppRoleIsNotVacuousAsync();
 
-        // Roles that carry (or are shown) the door: true, whatever the grant column says.
-        foreach (var (who, user) in new[] { ("owner", Owner), ("secondary owner", SecondOwner), ("mukadam (un-granted, Q4)", Mukadam), ("granted worker", GrantedWorker) })
+        // Roles that carry the capability BY ROLE: true, whatever the grant column says.
+        // (A Mukadam is NOT among them - see the write-authority matrix below.)
+        foreach (var (who, user) in new[] { ("owner", Owner), ("secondary owner", SecondOwner), ("granted worker", GrantedWorker) })
         {
             (await ReadLabourDtoAsync(user)).CanManageLabour.Should().BeTrue(who);
         }
+
+        // Un-granted Mukadam: reads the crew register, is refused every write -> false.
+        (await ReadLabourDtoAsync(Mukadam)).CanManageLabour.Should().BeFalse("un-granted Mukadam has no write authority");
 
         // The own-row Worker follows the grant, exactly as the register narrowing does.
         (await ReadLabourDtoAsync(PlainWorker)).CanManageLabour.Should().BeFalse("no grant");
@@ -451,6 +455,72 @@ public sealed class LabourRosterAccessRealPostgresTests(Xunit.Abstractions.ITest
 
         await SetGrantAsync(PlainWorker, true, TimeSpan.FromMinutes(-1));
         (await ReadLabourDtoAsync(PlainWorker)).CanManageLabour.Should().BeFalse("timed grant, EXPIRED");
+    }
+
+    private sealed record WriteProbe(bool? Flag, bool WriteAccepted, string? WriteError);
+
+    /// <summary>The flag the server SENDS, and the outcome of a REAL governed write
+    /// (CreateFieldOperatorHandler -> LabourManagementGate.IsAllowedAsync, the authority
+    /// every attendance/attribution/approval write shares), for the same caller.</summary>
+    private async Task<WriteProbe> ProbeFlagAndWriteAsync(Guid userId, bool callerIsMember = true)
+    {
+        bool? flag = callerIsMember ? (await ReadLabourDtoAsync(userId)).CanManageLabour : null;
+
+        await using var scope = _rootProvider!.CreateAsyncScope();
+        var sp = scope.ServiceProvider;
+        var ctx = sp.GetRequiredService<ShramSafalDbContext>();
+        await using var tx = await ctx.Database.BeginTransactionAsync();
+        var gate = await sp.GetRequiredService<ICallerFarmTenantScope>().EstablishForCallerAsync(Farm, userId);
+        if (!gate.IsSuccess)
+        {
+            await tx.RollbackAsync();
+            return new WriteProbe(flag, false, gate.Error.Code);
+        }
+
+        var result = await new ShramSafal.Application.UseCases.Labour.CreateFieldOperator.CreateFieldOperatorHandler(
+                sp.GetRequiredService<IShramSafalRepository>(), new GuidIdGenerator(), new FixedClock(Now))
+            .HandleAsync(new ShramSafal.Application.UseCases.Labour.CreateFieldOperator.CreateFieldOperatorCommand(
+                new FarmId(Farm), $"Probe-{Guid.NewGuid():N}", null, new UserId(userId)));
+        await tx.RollbackAsync(); // the probe must leave no operator behind
+        return new WriteProbe(flag, result.IsSuccess, result.IsSuccess ? null : result.Error.Code);
+    }
+
+    [Fact]
+    public async Task CanManageLabour_is_WRITE_authority_and_equals_what_a_real_write_is_accepted_for()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        async Task Expect(string label, Guid user, bool expected, bool member = true)
+        {
+            var p = await ProbeFlagAndWriteAsync(user, member);
+            output.WriteLine($"[FLAG-VS-WRITE] {label}: flag={p.Flag?.ToString() ?? "n/a"} writeAccepted={p.WriteAccepted} err={p.WriteError}");
+            if (member) p.Flag.Should().Be(expected, $"{label}: flag");
+            p.WriteAccepted.Should().Be(expected, $"{label}: a real governed write must agree with the flag");
+        }
+
+        await Expect("owner", Owner, true);
+        await Expect("co-owner", SecondOwner, true);
+        await Expect("un-granted mukadam", Mukadam, false);
+        await Expect("un-granted worker", PlainWorker, false);
+        await Expect("granted worker", GrantedWorker, true);
+        await Expect("farm-B owner / non-member", Outsider, false, member: false);
+
+        await SetGrantAsync(Mukadam, true);
+        await Expect("granted mukadam", Mukadam, true);
+
+        await SetGrantAsync(Mukadam, true, TimeSpan.FromDays(1));
+        await Expect("mukadam, live timed grant", Mukadam, true);
+
+        await SetGrantAsync(Mukadam, true, TimeSpan.FromMinutes(-1));
+        await Expect("mukadam, EXPIRED grant", Mukadam, false);
+
+        await SetGrantAsync(Mukadam, false);
+        await Expect("mukadam, revoked grant", Mukadam, false);
+
+        // The READ side is untouched by the flag: an un-granted Mukadam still gets the crew register.
+        var mukadam = await ReadLabourDtoAsync(Mukadam);
+        mukadam.View.Should().Be("crew");
+        mukadam.People.Should().NotBeEmpty();
     }
 
     [Fact]

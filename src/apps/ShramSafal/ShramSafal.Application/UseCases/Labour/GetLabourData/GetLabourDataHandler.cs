@@ -769,7 +769,12 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             registerView,
             narrowToCaller ? query.CallerUserId.Value.ToString() : null,
             ownReviewIds,
-            narrowToCaller));
+            narrowToCaller,
+            // WRITE authority, not read visibility: the SAME rule LabourManagementGate
+            // .IsAllowedAsync applies on every governed write (owner-tier by role,
+            // everyone else - a Mukadam included - only on a live explicit grant).
+            canManageLabour: LabourManagementPermission.IsAllowed(
+                resolvedCallerRole, hasLabourManagementGrant)));
     }
 
     /// <summary>Latest <see cref="FinanceCorrection"/> per <c>CostEntryId</c>, by <c>CorrectedAtUtc</c>.</summary>
@@ -1112,7 +1117,8 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         LabourRegisterView view,
         string? ownPersonId = null,
         IReadOnlySet<string>? ownReviewIds = null,
-        bool narrowToCaller = false)
+        bool narrowToCaller = false,
+        bool? canManageLabour = null)
     {
         if (view == LabourRegisterView.OwnerBook)
         {
@@ -1183,8 +1189,11 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         {
             // Journey fix 3 (P3): the same decision that narrows the register above,
             // told to the client so it does not offer what the server will refuse.
-            // Mukadam stays true (decision Q4: shown the door, refused clearly).
-            CanManageLabour = !narrowToCaller,
+            // `canManageLabour` (when the handler supplies it) is the WRITE authority:
+            // an un-granted Mukadam reads the crew register but is refused every write,
+            // so he gets false. The `!narrowToCaller` fallback is only for direct
+            // callers of this pure function that have no role/grant to hand.
+            CanManageLabour = canManageLabour ?? !narrowToCaller,
             View = view == LabourRegisterView.CrewAttendance ? "crew" : "own",
             TopLevelIds = topLevelIds,
             People = people,
