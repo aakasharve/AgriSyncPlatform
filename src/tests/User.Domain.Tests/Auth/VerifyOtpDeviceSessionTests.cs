@@ -47,7 +47,7 @@ public class VerifyOtpDeviceSessionTests
 
         result.IsSuccess.Should().BeTrue();
         repo.AddedToken!.ExpiresAtUtc.Should().Be(now.Add(User.Application.UseCases.Auth.Session.RefreshTokenPolicy.Lifetime));
-        result.Value.RefreshExpiresAtUtc.Should().Be(repo.AddedToken.ExpiresAtUtc);
+        result.Value!.RefreshExpiresAtUtc.Should().Be(repo.AddedToken.ExpiresAtUtc);
     }
 
     [Fact]

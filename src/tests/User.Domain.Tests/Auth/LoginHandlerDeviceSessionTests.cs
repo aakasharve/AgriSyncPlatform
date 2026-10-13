@@ -78,7 +78,7 @@ public class LoginHandlerDeviceSessionTests
         result.IsSuccess.Should().BeTrue();
         var stored = repo.AddedToken!;
         stored.ExpiresAtUtc.Should().Be(now.Add(User.Application.UseCases.Auth.Session.RefreshTokenPolicy.Lifetime));
-        result.Value.RefreshExpiresAtUtc.Should().Be(stored.ExpiresAtUtc);
+        result.Value!.RefreshExpiresAtUtc.Should().Be(stored.ExpiresAtUtc);
     }
 
     [Fact]
