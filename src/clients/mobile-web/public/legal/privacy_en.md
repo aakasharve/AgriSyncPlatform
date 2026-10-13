@@ -18,7 +18,7 @@
 
 # Privacy Notice — Shram Safal
 
-**Version `privacy-2026-10-13.1` · revised 13 October 2026**
+**Version `privacy-2026-10-13.2` · revised 13 October 2026**
 
 > **This is a founder-authored draft. It has not been reviewed by a lawyer.**
 > It is published so that nobody is asked to accept a document that does not exist. It
@@ -89,9 +89,10 @@ lawyer, and it is open. We are not going to pretend it is settled.
 
 - **We will not sell your personal data.**
 - **We will not use it for advertising** without separate permission.
-- **We will not use your voice to train AI models.** Not with permission, not without —
-  this one has no exception, and it says the same thing in Marathi and in English. (See
-  §7 for what the software can and cannot do here.)
+- **We ourselves will not use your voice to train AI models.** Not with permission, not
+  without — this one has no exception, and it says the same thing in Marathi and in
+  English. We have not verified what our speech and AI providers do under their own terms.
+  (See §7 for what the software can and cannot do here.)
 - **We will not make lending, insurance or market decisions from your data** — that would
   need separate, specific consent that we have not asked for.
 
@@ -177,10 +178,10 @@ worse than none:
 
 ## 8. Your rights
 
-From **Settings → Data & Privacy** you can:
+In **Settings → Data & Privacy**, or by writing to arvesystems@gmail.com, you can:
 
 - Review or withdraw the permissions you gave.
-- Access, correct or download your information.
+- Ask to see, correct or get a copy of your information.
 - Request deletion of your account and your data.
 - Raise a grievance with us, or nominate someone to exercise these rights for you.
 

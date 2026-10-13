@@ -152,9 +152,21 @@ import {
  * `notice-2026-08-17.5` was shown those two statements, so he is NOT recorded as having
  * accepted this version: the gate shows again once, and his earlier ledger rows stay
  * exactly as written.
+ *
+ * `notice-2026-10-13.2` - the FINAL pass of the same unreleased candidate: the gate's
+ * own words now stop short of what the code cannot back. `.1` was never released, but a
+ * build carrying it exists, so `.2` is used instead of re-using `.1` for different text:
+ * one version string must name exactly one text. Removed: "stays under your control";
+ * "trusted" and "only for that assigned purpose" about processors (no signed DPAs, their
+ * terms unverified); the unqualified "we will not train AI" (now "we ourselves");
+ * "access, correct or download" and "nominate" as if each were an in-app action (the
+ * rights are now requests, also reachable by email). The Privacy Notice carries the same
+ * two corrections, so `PRIVACY_POLICY_VERSION` is `privacy-2026-10-13.2` (also never
+ * released at `.1`). `TERMS_VERSION` and `RETENTION_POLICY_VERSION` are unchanged: neither
+ * document changed in this pass.
  */
-export const NOTICE_VERSION = 'notice-2026-10-13.1';
-export const PRIVACY_POLICY_VERSION = 'privacy-2026-10-13.1';
+export const NOTICE_VERSION = 'notice-2026-10-13.2';
+export const PRIVACY_POLICY_VERSION = 'privacy-2026-10-13.2';
 export const TERMS_VERSION = 'terms-2026-08-17.1';
 
 /**
@@ -274,7 +286,7 @@ export interface NoticeCopy {
 // ── मराठी ───────────────────────────────────────────────────────────────────────────
 const mr: NoticeCopy = {
     title: 'सुरू करण्याआधी',
-    intro: 'तुमच्या शेताची माहिती तुमच्याच ताब्यात राहते. श्रम सफल चालण्यासाठी फक्त खालची माहिती वापरली जाते.',
+    intro: 'श्रम सफल चालण्यासाठी खालची माहिती वापरली जाते.',
     brandLine: 'श्रम सफल — Agriryot Value Enterprises Private Limited यांची सेवा. ती AgriSync वर चालते.',
     purposeCardsHeading: 'कोणती माहिती, कशासाठी',
     cards: [
@@ -324,17 +336,17 @@ const mr: NoticeCopy = {
         items: [
             'तुमची वैयक्तिक माहिती विकणार नाही.',
             'परवानगीशिवाय जाहिरातींसाठी वापरणार नाही.',
-            'तुमचा आवाज AI मॉडेल शिकवण्यासाठी वापरणार नाही.',
+            'आम्ही स्वतः तुमचा आवाज AI मॉडेल शिकवण्यासाठी वापरणार नाही.',
             'तुमच्या माहितीवरून कर्ज, विमा किंवा बाजाराचे निर्णय घेणार नाही — त्यासाठी वेगळी स्पष्ट परवानगी मागू.',
         ],
     },
-    processors: 'OTP, सुरक्षित क्लाउड, आवाज समजणे, हवामान, फाइल, सूचना आणि तांत्रिक मदत — एवढ्याच कामांसाठी काही विश्वासू सेवा पुरवठादार मर्यादित माहिती हाताळू शकतात, ठरलेल्या कामापुरतीच.',
+    processors: 'OTP, सुरक्षित क्लाउड, आवाज समजणे, हवामान, फाइल, सूचना आणि तांत्रिक मदत — या कामांसाठी काही सेवा पुरवठादार मर्यादित माहिती हाताळू शकतात. आम्ही त्यांना त्या कामासाठी लागणारी माहितीच पाठवतो. त्यांच्याकडे असलेल्या माहितीला त्यांच्या स्वतःच्या अटी लागू होतात.',
     rights: {
         heading: 'तुमचे हक्क',
-        where: 'Settings → Data & Privacy मध्ये:',
+        where: 'Settings → Data & Privacy मध्ये, किंवा arvesystems@gmail.com वर लिहून:',
         items: [
             'दिलेली परवानगी पाहा किंवा मागे घ्या.',
-            'माहिती पाहा, दुरुस्त करा किंवा डाउनलोड करा.',
+            'तुमची माहिती पाहण्याची, दुरुस्त करण्याची किंवा तिची प्रत मिळण्याची विनंती करा.',
             'खातं आणि माहिती हटवायची विनंती करा.',
             'तक्रार करा, किंवा तुमच्या वतीने हक्क वापरायला कुणाला नेमा.',
         ],
@@ -359,7 +371,7 @@ const mr: NoticeCopy = {
 // ── English ─────────────────────────────────────────────────────────────────────────
 const en: NoticeCopy = {
     title: 'Before you begin',
-    intro: 'Your farm data stays under your control. Shram Safal uses only the information below.',
+    intro: 'Shram Safal uses the information below to work for you.',
     brandLine: 'Shram Safal is an app by Agriryot Value Enterprises Private Limited, built on the AgriSync platform.',
     purposeCardsHeading: 'What we use, and why',
     cards: [
@@ -412,17 +424,17 @@ const en: NoticeCopy = {
             // ABSOLUTE, and identical to the Marathi line. The qualifier "without separate
             // permission" was here until notice-2026-08-17.5 and may not come back without
             // the Marathi moving in the same commit — see the NOTICE_VERSION note.
-            'We will not use your voice to train AI models.',
+            'We ourselves will not use your voice to train AI models.',
             'We will not make lending, insurance or market decisions from your data — that needs separate, specific consent.',
         ],
     },
-    processors: 'Trusted service providers may handle limited information only for OTP, secure cloud hosting, speech processing, weather, file storage, notifications and technical support — and only for that assigned purpose.',
+    processors: 'Service providers may handle limited information for OTP, secure cloud hosting, speech processing, weather, file storage, notifications and technical support. We send them only what that task needs. Their own terms apply to what they hold.',
     rights: {
         heading: 'Your rights',
-        where: 'From Settings → Data & Privacy:',
+        where: 'In Settings → Data & Privacy, or by writing to arvesystems@gmail.com:',
         items: [
             'Review or withdraw your consent.',
-            'Access, correct or download your information.',
+            'Ask to see, correct or get a copy of your information.',
             'Request deletion of your account and data.',
             'Raise a grievance, or nominate someone to act for you.',
         ],

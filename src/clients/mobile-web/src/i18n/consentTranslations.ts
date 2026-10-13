@@ -63,7 +63,7 @@ const mr: ConsentBundle = {
     },
     toggles: {
         fullHistoryJournal: {
-            title: '३० दिवसांपेक्षा जास्त आवाज नोंद ठेवा',
+            title: 'आवाज नोंदी क्लाउडमध्ये ठेवा',
             body: 'होकार दिल्यास तुमचे आवाज तुम्ही मिटवेपर्यंत तुमच्या क्लाउडमध्ये सेव्ह राहतील. नकार दिल्यास ते आवाजी डायरीच्या क्लाउडमध्ये ठेवले जात नाहीत.',
         },
         crossFarmAggregation: {
@@ -96,7 +96,7 @@ const hi: ConsentBundle = {
     },
     toggles: {
         fullHistoryJournal: {
-            title: '३० दिनों के बाद भी आवाज़ रिकॉर्डिंग रखें',
+            title: 'आवाज़ रिकॉर्डिंग क्लाउड में रखें',
             body: 'हाँ कहने पर आपकी आवाज़ें आप मिटाएँ तब तक आपके क्लाउड में सेव रहेंगी। ना कहने पर वे आवाज़ डायरी के क्लाउड में नहीं रखी जातीं।',
         },
         crossFarmAggregation: {
@@ -129,7 +129,7 @@ const en: ConsentBundle = {
     },
     toggles: {
         fullHistoryJournal: {
-            title: 'Keep voice recordings beyond 30 days',
+            title: 'Keep voice recordings in your cloud',
             body: 'If yes, your clips are kept in your cloud until you erase them. If no, they are not kept in the Voice Diary cloud.',
         },
         crossFarmAggregation: {

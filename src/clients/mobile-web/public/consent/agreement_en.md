@@ -3,7 +3,7 @@
 We ask for three separate permissions to keep your data safe. Each permission is independent —
 you can say yes to one and no to another. You can revoke at any time.
 
-## 1. Keep recordings of my voice beyond 30 days
+## 1. Keep recordings of my voice in my cloud
 - Default: OFF
 - If you say yes: Your voice clips are saved with the full history, until you erase them or close your account. You can review them any time.
 - If you say no: They are not saved to your Voice Diary cloud.
