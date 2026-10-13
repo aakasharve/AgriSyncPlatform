@@ -22,6 +22,7 @@ import type {
 } from '../../../../infrastructure/api/AgriSyncClient';
 import type { AgriLogDatabase } from '../../../../infrastructure/storage/DexieDatabase';
 import { normalizeMojibakeText } from '../../../../shared/utils/textEncoding';
+import { systemClock } from '../../../../core/domain/services/Clock';
 import { mapLabourEngagements } from '../helpers/mapLabourEngagements';
 import { mapVerificationStatus } from '../helpers/mapVerificationStatus';
 import {
@@ -111,6 +112,7 @@ export async function reconcileLogs(
     payload: SyncPullResponse,
     plotLookup: Map<string, PlotLookupEntry>,
     pendingLogIds: Set<string>,
+    receivedAtUtc: string = systemClock.nowISO(),
 ): Promise<number> {
     const logs = payload.dailyLogs.map(log => toDailyLog(log, plotLookup));
 
@@ -151,6 +153,12 @@ export async function reconcileLogs(
             serverModified &&
             Date.parse(serverModified) <= Date.parse(existing.serverModifiedAtUtc)
         ) {
+            // Nothing newer to adopt. If the server just re-sent the SAME version, it
+            // re-confirmed this log's names: refresh their download stamp. (An OLDER
+            // response confirms nothing about what we hold.)
+            if (Date.parse(serverModified) === Date.parse(existing.serverModifiedAtUtc)) {
+                await db.logs.put({ ...existing, labourNamesDownloadedAtUtc: receivedAtUtc });
+            }
             continue;
         }
 
@@ -181,6 +189,8 @@ export async function reconcileLogs(
             createdByOperatorId: merged.meta?.createdByOperatorId,
             isDeleted: merged.deletion ? 1 : 0,
             serverModifiedAtUtc: serverModified,
+            // 7-day Labour cache: when the names in this log's labour events were downloaded.
+            labourNamesDownloadedAtUtc: receivedAtUtc,
         });
     }
 
