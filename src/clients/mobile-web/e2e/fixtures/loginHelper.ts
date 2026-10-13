@@ -11,7 +11,7 @@ import { expect } from '@playwright/test';
  *
  * Then fill phone + password + optionally toggle the "Remember this device"
  * checkbox (pre-checked by default; pass rememberDevice: false to uncheck it),
- * then click submit. Asserts home-greeting visible (proves auth + initial sync
+ * then click submit. Asserts the home shell visible (proves auth + initial sync
  * pull completed).
  *
  * spec: secure-remembered-device-sessions-2026-06-24 — Task 7.1
@@ -25,6 +25,19 @@ import { expect } from '@playwright/test';
  * label role using /Remember this device/i so the query is locale-independent
  * and resilient to Marathi text changes.
  */
+/**
+ * The testid that proves the signed-in app shell (the Home log view) is on screen.
+ *
+ * `the home shell` (the "Owner: <name>" chip) was removed from Home by the
+ * home-reorder change (spec §4.2; `log-view-home-reorder.test.tsx` pins that it
+ * must NOT come back). The owner now shows in the header, so the greeting chip
+ * is the wrong thing to wait for. `main-view-transition` wraps every main view
+ * and is rendered only for an authenticated user past the consent / login gates,
+ * so "visible" still means "auth + shell rendered", exactly what the old
+ * assertion proved.
+ */
+export const HOME_READY_TESTID = 'main-view-transition';
+
 export interface LoginOptions {
     /** When explicitly false, unchecks the "Remember this device" checkbox. Default: true (leave pre-checked). */
     rememberDevice?: boolean;
@@ -56,6 +69,8 @@ export async function passConsentGateIfPresent(page: Page): Promise<boolean> {
     // the login form is on screen immediately. Race the two rather than sleeping.
     const useLegacyButton = page.getByRole('button', { name: /Use password/i });
 
+    const GATE_SETTLE_POLLS = 8; // 8 x 250 ms = 2 s of a stable login form
+    let loginSeenPolls = 0;
     const deadline = Date.now() + 20_000;
     while (Date.now() < deadline) {
         if (await acceptCta.isVisible().catch(() => false)) {
@@ -71,7 +86,19 @@ export async function passConsentGateIfPresent(page: Page): Promise<boolean> {
         }
 
         if (await useLegacyButton.isVisible().catch(() => false)) {
-            return false; // already past the gate
+            // The login form being visible is NOT proof the gate was passed: while
+            // the consent preference is still being read (`status: 'undecided'`,
+            // App.tsx) the app renders LoginPage, then swaps to the gate once the
+            // read settles. Treating the first sighting as "already past the gate"
+            // clicked a button that was then detached (the 60 s "element was
+            // detached" timeouts). Only believe it after it has stayed up for a
+            // settle window in which the gate never appeared.
+            loginSeenPolls += 1;
+            if (loginSeenPolls >= GATE_SETTLE_POLLS) {
+                return false; // genuinely past the gate
+            }
+        } else {
+            loginSeenPolls = 0;
         }
 
         await page.waitForTimeout(250);
@@ -135,14 +162,14 @@ export async function loginViaPassword(
         await page.getByTestId('onboarding-skip').click();
     }
 
-    // Auth + initial sync pull takes a moment; home-greeting only appears once
+    // Auth + initial sync pull takes a moment; the home shell only appears once
     // both complete. Generous timeout for CI.
-    await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId(HOME_READY_TESTID)).toBeVisible({ timeout: 30_000 });
 }
 
 async function waitForLoginLanding(page: Page): Promise<'home' | 'permissions' | 'welcome'> {
     const deadline = Date.now() + 30_000;
-    const homeGreeting = page.getByTestId('home-greeting');
+    const homeGreeting = page.getByTestId(HOME_READY_TESTID);
     const welcomeContinue = page.getByTestId('welcome-continue');
     const skipBtn = page.getByTestId('onboarding-skip');
     const alert = page.getByRole('alert').first();
