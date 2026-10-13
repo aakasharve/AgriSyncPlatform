@@ -21,6 +21,8 @@ import {
     type VoiceClipCacheRecord,
 } from '../../../infrastructure/storage/DexieDatabase';
 import { purgeExpiredProcessingVoiceClips } from '../../../infrastructure/voice/VoiceClipRetention';
+import { deriveCloudArchiveState } from '../../../infrastructure/voice/voiceArchiveState';
+import { voiceArchiveUploader } from '../../../infrastructure/sync/VoiceArchiveUploader';
 import {
     getVoiceDiaryByRange,
     type VoiceDiaryListItem,
@@ -45,7 +47,9 @@ interface VoiceDiaryPageProps {
     forceLocale?: VoiceDiaryLocale;
 }
 
-const DEFAULT_RANGE_DAYS = 60;
+// D9: recordings are kept forever, so the archive window is wide. (It was 60
+// days, which hid every older acknowledged clip on a fresh install.)
+const DEFAULT_RANGE_DAYS = 3650;
 
 const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
     onBack,
@@ -66,12 +70,12 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
         setLoading(true);
         try {
             await purgeExpiredProcessingVoiceClips();
-            const nowUtc = new Date().toISOString();
-            const records = await getDatabase()
-                .voiceClips
-                .where('expiresAtUtc')
-                .above(nowUtc)
-                .toArray();
+            // spec: 2026-08-25-prod-cutover-waves (D9). Every local recording,
+            // not just the ones whose retired 30-day `expiresAtUtc` is still in
+            // the future: the old filter hid a clip from the diary on day 31
+            // although the bytes were never deleted - the farmer could not tell
+            // that apart from deletion. The user's own database is the scope.
+            const records = await getDatabase().voiceClips.toArray();
             records.sort((a, b) => Date.parse(b.recordedAtUtc) - Date.parse(a.recordedAtUtc));
             setLocalClips(records);
 
@@ -114,6 +118,24 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
         void loadClips();
     }, [consentLoaded, loadClips]);
 
+    // While any clip is still waiting for the server's acknowledgement, nudge the
+    // uploader and re-read the local rows so the badge follows the truth (queued
+    // -> uploading -> saved, or failed). Stops by itself once everything is acked.
+    const hasUnacknowledged = consentGranted
+        && localClips.some(clip => !clip.s3RetainedKey);
+    useEffect(() => {
+        if (!hasUnacknowledged) return undefined;
+        const timer = window.setInterval(() => {
+            void voiceArchiveUploader.triggerNow().finally(() => {
+                void getDatabase().voiceClips.toArray().then(rows => {
+                    rows.sort((a, b) => Date.parse(b.recordedAtUtc) - Date.parse(a.recordedAtUtc));
+                    setLocalClips(rows);
+                });
+            });
+        }, 10_000);
+        return () => window.clearInterval(timer);
+    }, [hasUnacknowledged]);
+
     // ---------------------------------------------------------------------
     // Unified projection — merge local + cloud, de-dup by clip id, sort.
     // ---------------------------------------------------------------------
@@ -138,6 +160,7 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
                 // voice — for everyone else the 30-day local journal is
                 // the whole promise and there is nothing pending.
                 pendingCloudSave: consentGranted && !record.s3RetainedKey,
+                cloudState: deriveCloudArchiveState(record, consentGranted),
             });
         }
         for (const cloud of cloudClips) {
@@ -154,6 +177,7 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
                 // acknowledgement. Nothing pending, whatever the local
                 // row happens to say.
                 pendingCloudSave: false,
+                cloudState: 'acknowledged',
             });
         }
         return Array.from(map.values()).sort(

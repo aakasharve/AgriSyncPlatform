@@ -419,6 +419,22 @@ export interface VoiceClipCacheRecord {
     retainedArchiveAttempts?: number;
     /** When the last archive attempt ran, successful or not. */
     retainedArchiveLastAttemptAtUtc?: string;
+    /**
+     * Where this clip is in the cloud-save state machine, ONLY while an upload
+     * is in flight or has failed. `uploading` is written before the POST and
+     * `failed` after a POST that was not acknowledged. Absence means "not
+     * started" (queued if the farmer keeps his voice, else local-only).
+     * Acknowledged is NEVER stored here: it is `s3RetainedKey`, the id the
+     * SERVER echoed back. See `voiceArchiveState.ts`.
+     * NON-INDEXED - no Dexie version bump.
+     */
+    archiveState?: 'uploading' | 'failed';
+    /** Consecutive unacknowledged uploads; drives retry backoff. Reset on ack. */
+    archiveFailCount?: number;
+    /** Earliest time the next upload may run after a failure. */
+    archiveNextAttemptAtUtc?: string;
+    /** When the server acknowledged the upload (same moment `s3RetainedKey` was set). */
+    archiveAckedAtUtc?: string;
     status: VoiceClipStatus;
     retentionPolicy: VoiceClipRetentionPolicy;
     expiresAtUtc: string;

@@ -69,7 +69,7 @@ const FARM_ID = 'f2222222-2222-4222-8222-222222222222';
  *
  * Built the way `BackendAiClient.persistProcessingVoiceClip` builds it:
  * `localBlob`, no sealed triple. Verified in that source, and it is why
- * `awaiting_seal_support` is now a silent skip.
+ * an unbindable (farm not cached) clip is a silent skip, `binding_unavailable`.
  */
 function liveRow(overrides: Record<string, unknown> = {}) {
     return {
@@ -207,17 +207,17 @@ describe('archiveToRetainedTierIfConsented — the failure has to land (D9)', ()
         await getDatabase().voiceClips.put(sealedRow() as never);
         persistMock
             .mockRejectedValueOnce(new Error('Network Error'))
-            .mockResolvedValueOnce({ clipId: 'server-clip-1' });
+            .mockResolvedValueOnce({ clipId: CLIP_ID });
 
         const outcome = await archiveToRetainedTierIfConsented(CLIP_ID);
 
         expect(outcome).toEqual({
-            status: 'archived', clipId: CLIP_ID, retainedKey: 'server-clip-1', attempts: 2,
+            status: 'archived', clipId: CLIP_ID, retainedKey: CLIP_ID, attempts: 2,
         });
         // Recovered means recovered: no alarm, and no stale failure left behind.
         expect(emitClientErrorMock).not.toHaveBeenCalled();
         const row = await clipRow();
-        expect(row?.s3RetainedKey).toBe('server-clip-1');
+        expect(row?.s3RetainedKey).toBe(CLIP_ID);
         expect(row?.retainedArchiveError).toBeUndefined();
     });
 
@@ -236,10 +236,12 @@ describe('archiveToRetainedTierIfConsented — the failure has to land (D9)', ()
         // did not. Saying `persist_failed` here tells an admin a recording is
         // missing while it sits in S3.
         await getDatabase().voiceClips.put(sealedRow() as never);
-        persistMock.mockResolvedValue({ clipId: 'server-clip-1' });
+        persistMock.mockResolvedValue({ clipId: CLIP_ID });
         const db = getDatabase();
         const realUpdate = db.voiceClips.update.bind(db.voiceClips);
-        const spy = vi.spyOn(db.voiceClips, 'update').mockRejectedValueOnce(new Error('QuotaExceeded'));
+        const spy = vi.spyOn(db.voiceClips, 'update')
+            .mockImplementationOnce(realUpdate) // the `uploading` mark
+            .mockRejectedValueOnce(new Error('QuotaExceeded')); // the ack stamp
 
         const outcome = await archiveToRetainedTierIfConsented(CLIP_ID);
         spy.mockImplementation(realUpdate);
@@ -271,7 +273,7 @@ describe('archiveToRetainedTierIfConsented — the ordinary path stays silent', 
         emitClientErrorMock.mockReset();
     });
 
-    it('C1_SILENT_the_shape_every_live_clip_actually_has_emits_nothing', async () => {
+    it('C1_SILENT_a_live_clip_whose_farm_is_not_cached_yet_waits_and_emits_nothing', async () => {
         // THE TEST THAT WAS MISSING, and the one the brief's requirement 4 is
         // about. Nothing on the live write path seals clips, so THIS is the
         // ordinary path: one report per clip here would be one alarm per note
@@ -282,7 +284,7 @@ describe('archiveToRetainedTierIfConsented — the ordinary path stays silent', 
 
         const outcome = await archiveToRetainedTierIfConsented(CLIP_ID);
 
-        expect(outcome).toEqual({ status: 'skipped', clipId: CLIP_ID, reason: 'awaiting_seal_support' });
+        expect(outcome).toEqual({ status: 'skipped', clipId: CLIP_ID, reason: 'binding_unavailable' });
         expect(emitClientErrorMock).not.toHaveBeenCalled();
         expect(persistMock).not.toHaveBeenCalled();
     });
@@ -307,7 +309,7 @@ describe('archiveToRetainedTierIfConsented — the ordinary path stays silent', 
         await archiveToRetainedTierIfConsented(CLIP_ID);
 
         const row = await clipRow();
-        expect(row?.retainedArchiveError).toContain('awaiting_seal_support');
+        expect(row?.retainedArchiveError).toContain('binding_unavailable');
         expect(row?.retainedArchiveLastAttemptAtUtc).toBeTruthy();
     });
 
@@ -317,17 +319,17 @@ describe('archiveToRetainedTierIfConsented — the ordinary path stays silent', 
         // useless.
         getConsentMock.mockResolvedValue({ fullHistoryJournal: true });
         await getDatabase().voiceClips.put(sealedRow() as never);
-        persistMock.mockResolvedValue({ clipId: 'server-clip-1' });
+        persistMock.mockResolvedValue({ clipId: CLIP_ID });
 
         const outcome = await archiveToRetainedTierIfConsented(CLIP_ID);
 
         expect(outcome).toEqual({
-            status: 'archived', clipId: CLIP_ID, retainedKey: 'server-clip-1', attempts: 1,
+            status: 'archived', clipId: CLIP_ID, retainedKey: CLIP_ID, attempts: 1,
         });
         expect(emitClientErrorMock).not.toHaveBeenCalled();
         expect(persistMock).toHaveBeenCalledTimes(1);
         const row = await clipRow();
-        expect(row?.s3RetainedKey).toBe('server-clip-1');
+        expect(row?.s3RetainedKey).toBe(CLIP_ID);
         expect(row?.retainedArchiveError).toBeUndefined();
     });
 

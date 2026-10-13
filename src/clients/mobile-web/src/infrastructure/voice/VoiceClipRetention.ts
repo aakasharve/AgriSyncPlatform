@@ -24,6 +24,7 @@ import { sealVoiceClip, openVoiceClip, type VoiceClipBinding } from '../security
 import { getCurrentTenantDek, resolveDek } from '../security/tenantDekClient';
 import { agriSyncClient } from '../api/AgriSyncClient';
 import { persistRetainedVoiceClip } from '../voiceDiary/voiceDiaryApiClient';
+import { archiveRetryDelayMs } from './voiceArchiveState';
 import { emitClientError } from '../../core/telemetry/eventEmitters';
 import { EventSchemas } from '../../core/telemetry/eventSchema';
 
@@ -247,27 +248,18 @@ export type VoiceClipArchiveSkipReason =
      */
     | 'consent_unknown'
     /**
-     * THE ROW HAS NO SEALED CIPHERTEXT, WHICH TODAY MEANS EVERY ROW.
-     *
-     * Verified, not assumed: the only live writer,
-     * `BackendAiClient.persistProcessingVoiceClip`, writes `localBlob` and
-     * never `ciphertext`/`iv`/`wrappedDekId`; and `persistVoiceClip` — the only
-     * function in this file that seals — has ZERO callers in `src/clients`.
-     * The header of this very file says so at `:63-67`: *"every clip is PLAIN,
-     * OPENABLE AUDIO. `sealVoiceClip` exists in this codebase with zero callers
-     * on the live write path."*
-     *
-     * So this is not a per-clip incident, it is one fact about the build:
-     * nothing can be archived until sealing is wired. D9 already names
-     * encryption as the next item in this area and the gap is documented above.
-     * Alarming once per clip about a known, owned, tracked backlog item is how
-     * a signal becomes noise.
-     *
-     * SILENT, BUT NOT INVISIBLE: every occurrence is written to
-     * `retainedArchiveError`, so the count is queryable on-device and a sweep
-     * can find exactly this set the day sealing lands.
+     * The row holds no audio at all (neither the recorded blob nor a sealed
+     * copy). There is nothing to upload. Recorded on the row, not reported.
      */
-    | 'awaiting_seal_support';
+    | 'no_audio_bytes'
+    /**
+     * The clip's farm is not in the local cache, so the owner account the seal
+     * is bound to is unknown (`resolveVoiceClipBinding` returns null). Sealing
+     * unbound is refused by contract, so the clip waits - it stays queued and
+     * is retried when the farm cache is present. Recorded, not reported: this
+     * is ordinary on a fresh install before the first farm pull.
+     */
+    | 'binding_unavailable';
 
 export type VoiceClipArchiveFailureReason =
     /** The POST to the retained tier failed. THE DEFECT THIS TYPE EXISTS FOR. */
@@ -276,6 +268,12 @@ export type VoiceClipArchiveFailureReason =
     | 'clip_row_missing'
     /** Ciphertext present but shorter than the AES-GCM tag — genuinely corrupt. */
     | 'ciphertext_malformed'
+    /**
+     * The clip could not be sealed: the tenant DEK could not be fetched (the
+     * usual cause is the network) or WebCrypto refused. The audio never left
+     * the phone. Retried by the uploader.
+     */
+    | 'seal_failed'
     /**
      * The upload SUCCEEDED and the local cross-reference write did not
      * (review I2). The clip IS in the archive — the promise is kept — so this
@@ -403,7 +401,8 @@ function reportArchiveFailure(
 async function recordArchiveAttempt(
     clipId: string,
     fields: Partial<Pick<VoiceClipCacheRecord,
-        'retainedArchiveError' | 'retainedArchiveAttempts' | 'retainedArchiveLastAttemptAtUtc'>>,
+        'retainedArchiveError' | 'retainedArchiveAttempts' | 'retainedArchiveLastAttemptAtUtc'
+        | 'archiveState' | 'archiveFailCount' | 'archiveNextAttemptAtUtc'>>,
 ): Promise<void> {
     try {
         await getDatabase().voiceClips.update(clipId, {
@@ -451,7 +450,7 @@ async function recordArchiveAttempt(
  *
  * spec: voice-diary-e2e-2026-05-17 (D.14); founder ruling D9 (2026-08-14)
  */
-export async function archiveToRetainedTierIfConsented(
+async function archiveOnce(
     clipId: string,
     /**
      * The farm from the caller's own context, used ONLY when the clip row
@@ -490,27 +489,54 @@ export async function archiveToRetainedTierIfConsented(
         // Already archived — the promise is kept. Silent, and no round-trip.
         return { status: 'skipped', clipId, reason: 'already_archived' };
     }
-    if (!row.ciphertext || !row.iv || !row.wrappedDekId) {
-        // REVIEW C1 — THIS IS EVERY CLIP, NOT A LEGACY REMNANT, so it is
-        // recorded and NOT reported. See `awaiting_seal_support` for the
-        // evidence and for why one alarm per clip would bury `persist_failed`.
-        //
-        // Recorded on every occurrence so the count stays queryable and a sweep
-        // can find exactly this set the day sealing is wired.
+    // WHAT GETS SENT, AND WHY IT IS SEALED HERE.
+    //
+    // The live writer stores the recording as a plain `localBlob` (capture must
+    // work offline, and sealing needs the tenant DEK, which is a network call).
+    // So the seal happens NOW, at upload time, in memory, with the existing
+    // contract: `getCurrentTenantDek` + `sealVoiceClip` bound to
+    // (clipId, ownerAccountId). The sealed bytes are sent and then dropped -
+    // the local row is NOT rewritten, so no existing recording is altered (D9).
+    // A row that already carries a sealed triple is sent as it is.
+    let sealed: { ciphertext: Uint8Array; iv: Uint8Array; wrappedDekId: string };
+    if (row.ciphertext && row.iv && row.wrappedDekId) {
+        sealed = { ciphertext: row.ciphertext, iv: row.iv, wrappedDekId: row.wrappedDekId };
+    } else if (row.localBlob) {
+        const binding = await resolveVoiceClipBinding(row.id, row.farmId);
+        if (!binding) {
+            await recordArchiveAttempt(clipId, {
+                retainedArchiveError:
+                    'binding_unavailable: the clip farm is not in the local cache, so the seal '
+                    + 'cannot be bound to its owner account yet. Retried when the farm cache is present.',
+                retainedArchiveLastAttemptAtUtc: new Date().toISOString(),
+            });
+            return { status: 'skipped', clipId, reason: 'binding_unavailable' };
+        }
+        try {
+            const bytes = await blobToBytes(row.localBlob);
+            const { dek, dekId } = await getCurrentTenantDek();
+            sealed = await sealVoiceClip(bytes, dek, dekId, binding);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            const firstOfStreak = (row.archiveFailCount ?? 0) === 0;
+            await markUploadFailed(row, `seal_failed: ${message}`);
+            if (firstOfStreak) {
+                reportArchiveFailure(clipId, 'seal_failed', message, 0, row.farmId);
+            }
+            return { status: 'failed', clipId, reason: 'seal_failed', message, attempts: 0 };
+        }
+    } else {
         await recordArchiveAttempt(clipId, {
-            retainedArchiveError:
-                'awaiting_seal_support: row has no sealed ciphertext, so there is nothing to '
-                + 'archive. Nothing on the live write path seals clips yet (see the D9 note at '
-                + 'the head of this module); this is systemic, not specific to this clip.',
+            retainedArchiveError: 'no_audio_bytes: the row holds neither a recording nor a sealed copy.',
             retainedArchiveLastAttemptAtUtc: new Date().toISOString(),
         });
-        return { status: 'skipped', clipId, reason: 'awaiting_seal_support' };
+        return { status: 'skipped', clipId, reason: 'no_audio_bytes' };
     }
 
     // Split WebCrypto AES-GCM combined output: ct_body + 16-byte auth_tag
     // (the backend stores them in separate columns per its envelope schema).
-    if (row.ciphertext.byteLength <= AES_GCM_TAG_BYTES) {
-        const message = `ciphertext is ${row.ciphertext.byteLength}B, at or under the ${AES_GCM_TAG_BYTES}B auth tag`;
+    if (sealed.ciphertext.byteLength <= AES_GCM_TAG_BYTES) {
+        const message = `ciphertext is ${sealed.ciphertext.byteLength}B, at or under the ${AES_GCM_TAG_BYTES}B auth tag`;
         reportArchiveFailure(clipId, 'ciphertext_malformed', message, 0, row.farmId);
         await recordArchiveAttempt(clipId, {
             retainedArchiveError: `ciphertext_malformed: ${message}`,
@@ -518,13 +544,21 @@ export async function archiveToRetainedTierIfConsented(
         });
         return { status: 'failed', clipId, reason: 'ciphertext_malformed', message, attempts: 0 };
     }
-    const cipherBody = row.ciphertext.subarray(0, row.ciphertext.byteLength - AES_GCM_TAG_BYTES);
-    const authTag = row.ciphertext.subarray(row.ciphertext.byteLength - AES_GCM_TAG_BYTES);
+    const cipherBody = sealed.ciphertext.subarray(0, sealed.ciphertext.byteLength - AES_GCM_TAG_BYTES);
+    const authTag = sealed.ciphertext.subarray(sealed.ciphertext.byteLength - AES_GCM_TAG_BYTES);
 
     const durationSeconds = Math.max(
         1,
         Math.round((row.durationMs ?? 1000) / 1000),
     );
+
+    // From here until the server answers, the clip is `uploading` - and still
+    // NOT saved. The mark is what lets the UI say so, and what lets a crashed
+    // session's leftover be recognised (STALE_UPLOADING_MS).
+    await recordArchiveAttempt(clipId, {
+        archiveState: 'uploading',
+        retainedArchiveLastAttemptAtUtc: new Date().toISOString(),
+    });
 
     let lastError = 'unknown';
     for (let attempt = 1; attempt <= MAX_PERSIST_ATTEMPTS; attempt++) {
@@ -533,8 +567,8 @@ export async function archiveToRetainedTierIfConsented(
                 clipId: row.id,
                 recordedAtUtc: row.recordedAtUtc,
                 cipherBase64: uint8ToBase64(cipherBody),
-                dekId: row.wrappedDekId,
-                ivBase64: uint8ToBase64(row.iv),
+                dekId: sealed.wrappedDekId,
+                ivBase64: uint8ToBase64(sealed.iv),
                 authTagBase64: uint8ToBase64(authTag),
                 durationSeconds,
                 // Language is not persisted on the local Dexie row today; the
@@ -543,26 +577,36 @@ export async function archiveToRetainedTierIfConsented(
                 language: 'mr-IN',
             });
 
-            // REVIEW I2 — THE STAMP HAS ITS OWN TRY, and the boundary matters.
+            // THE ACKNOWLEDGEMENT, AND THE ONLY THING THAT MAY BE CALLED ONE.
+            // A reply that does not echo THIS clip's id is not an ack of this
+            // clip, whatever its status code was.
+            if (String(result.clipId).toLowerCase() !== row.id.toLowerCase()) {
+                throw new Error(`server acknowledged clip ${result.clipId}, not ${row.id}`);
+            }
+
+            // REVIEW I2 - THE STAMP HAS ITS OWN TRY, and the boundary matters.
             //
             // This write used to sit inside the same `try` as the POST, so a
             // local Dexie failure AFTER a successful upload was reported as
-            // `persist_failed` — telling an admin a recording never reached the
-            // archive while it was sitting in S3. A false alarm, on a change
-            // whose entire purpose is a record that does not over-claim.
-            //
-            // The upload succeeded, so the promise IS kept: the outcome is
-            // `archived` either way. Only the local cross-reference is missing,
-            // which costs one harmless idempotent re-POST later.
+            // `persist_failed` - telling an admin a recording never reached the
+            // archive while it was sitting in S3. The upload succeeded, so the
+            // promise IS kept: the outcome is `archived` either way. Only the
+            // local cross-reference is missing, which costs one harmless
+            // idempotent re-POST later (the server is idempotent on clip id).
             try {
-                // CLEAR any failure an earlier attempt recorded, so the row
-                // cannot keep claiming a failure that has since been repaired.
+                const ackedAt = new Date().toISOString();
                 await db.voiceClips.update(clipId, {
                     s3RetainedKey: result.clipId,
+                    archiveAckedAtUtc: ackedAt,
+                    archiveState: undefined,
+                    archiveFailCount: undefined,
+                    archiveNextAttemptAtUtc: undefined,
+                    // CLEAR any failure an earlier attempt recorded, so the row
+                    // cannot keep claiming a failure that has since been repaired.
                     retainedArchiveError: undefined,
                     retainedArchiveAttempts: attempt,
-                    retainedArchiveLastAttemptAtUtc: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
+                    retainedArchiveLastAttemptAtUtc: ackedAt,
+                    updatedAt: ackedAt,
                 });
             } catch (stampError) {
                 reportArchiveFailure(
@@ -580,12 +624,13 @@ export async function archiveToRetainedTierIfConsented(
         }
     }
 
-    reportArchiveFailure(clipId, 'persist_failed', lastError, MAX_PERSIST_ATTEMPTS, row.farmId);
-    await recordArchiveAttempt(clipId, {
-        retainedArchiveError: `persist_failed: ${lastError}`,
-        retainedArchiveAttempts: MAX_PERSIST_ATTEMPTS,
-        retainedArchiveLastAttemptAtUtc: new Date().toISOString(),
-    });
+    // Reported once per streak, not once per retry: the uploader retries on a
+    // backoff and one `client.error` per attempt would bury every other signal.
+    const firstOfStreak = (row.archiveFailCount ?? 0) === 0;
+    if (firstOfStreak) {
+        reportArchiveFailure(clipId, 'persist_failed', lastError, MAX_PERSIST_ATTEMPTS, row.farmId);
+    }
+    await markUploadFailed(row, `persist_failed: ${lastError}`, MAX_PERSIST_ATTEMPTS);
     return {
         status: 'failed',
         clipId,
@@ -595,6 +640,57 @@ export async function archiveToRetainedTierIfConsented(
     };
 }
 
+/** One archive attempt per clip at a time (parse hook and background uploader can race). */
+const archivesInFlight = new Map<string, Promise<VoiceClipArchiveOutcome>>();
+
+/**
+ * Archive one clip to the retained tier if the farmer keeps his voice in the
+ * cloud. See `archiveOnce` above for the full contract; this wrapper only
+ * guarantees that two callers asking for the same clip share ONE attempt, so a
+ * clip is never sealed and POSTed twice concurrently.
+ */
+export function archiveToRetainedTierIfConsented(
+    clipId: string,
+    contextFarmId?: string,
+): Promise<VoiceClipArchiveOutcome> {
+    const running = archivesInFlight.get(clipId);
+    if (running) return running;
+    const attempt = archiveOnce(clipId, contextFarmId).finally(() => {
+        archivesInFlight.delete(clipId);
+    });
+    archivesInFlight.set(clipId, attempt);
+    return attempt;
+}
+
+/** Record an unacknowledged upload: state `failed`, backoff, and a human-readable reason. */
+async function markUploadFailed(
+    row: VoiceClipCacheRecord,
+    error: string,
+    attempts?: number,
+): Promise<void> {
+    const failCount = (row.archiveFailCount ?? 0) + 1;
+    await recordArchiveAttempt(row.id, {
+        archiveState: 'failed',
+        archiveFailCount: failCount,
+        archiveNextAttemptAtUtc: new Date(Date.now() + archiveRetryDelayMs(failCount)).toISOString(),
+        retainedArchiveError: error,
+        ...(attempts !== undefined ? { retainedArchiveAttempts: attempts } : {}),
+        retainedArchiveLastAttemptAtUtc: new Date().toISOString(),
+    });
+}
+
+/** Blob -> bytes. `Blob.arrayBuffer` where it exists, FileReader where it does not (older WebViews, jsdom). */
+async function blobToBytes(blob: Blob): Promise<Uint8Array> {
+    if (typeof blob.arrayBuffer === 'function') {
+        return new Uint8Array(await blob.arrayBuffer());
+    }
+    return new Promise<Uint8Array>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+        reader.onerror = () => reject(reader.error ?? new Error('blob_read_failed'));
+        reader.readAsArrayBuffer(blob);
+    });
+}
 
 /**
  * How many recordings are still waiting to reach the farmer's cloud.
