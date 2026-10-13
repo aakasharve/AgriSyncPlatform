@@ -125,17 +125,18 @@ describe('ReviewSheet - approve / approve-all follow the same signal', () => {
         render(<ReviewSheet open data={data} onClose={noop} onToast={noop} />);
     };
 
-    it('canManageLabour=false: no मंजूर, no सगळं मंजूर; the cards and शंका remain', async () => {
+    it('canManageLabour=false: no मंजूर, no सगळं मंजूर, no शंका (the server refuses all three); the cards remain', async () => {
         await sheet(false);
         expect(screen.getByTestId('review-card-l1')).toBeInTheDocument();
         expect(screen.queryByTestId('review-approve-l1')).toBeNull();
         expect(screen.queryByTestId('review-approve-all')).toBeNull();
-        expect(screen.getByTestId('review-query-l1')).toBeInTheDocument();
+        expect(screen.queryByTestId('review-query-l1')).toBeNull();
     });
 
     it.each([[true], [undefined]])('canManageLabour=%s keeps approve and approve-all', async (flag) => {
         await sheet(flag);
         expect(screen.getByTestId('review-approve-l1')).toBeInTheDocument();
         expect(screen.getByTestId('review-approve-all')).toBeInTheDocument();
+        expect(screen.getByTestId('review-query-l1')).toBeInTheDocument();
     });
 });

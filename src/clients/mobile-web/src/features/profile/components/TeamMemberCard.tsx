@@ -91,7 +91,8 @@ interface TeamMemberCardProps {
      * a `.tsx`-frozen round; delete the prop and its caller together.
      */
     onToggleCap?: (cap: OperatorCapability) => void;
-    onDelete: () => void;
+    /** Absent = the server says this caller may not manage the team: no Remove. */
+    onDelete?: () => void;
     labourAccess?: LabourAccessView;
 }
 
@@ -279,6 +280,7 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onDelete
                         </div>
                     )}
 
+                    {onDelete && (
                     <button
                         type="button"
                         onClick={onDelete}
@@ -286,6 +288,7 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ member, onDelete
                     >
                         <Trash2 size={16} /> टीममधून काढा · Remove
                     </button>
+                    )}
                 </div>
             )}
         </div>

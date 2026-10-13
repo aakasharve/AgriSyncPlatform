@@ -98,6 +98,13 @@ public sealed class LabourPermissionRoutesRealPostgresTests : IAsyncLifetime
         await using (var raw = new NpgsqlConnection(_superuserConn))
         {
             await raw.OpenAsync();
+            // The roster read now resolves member names from the global public.users
+            // directory (same read GetLabourData and /sync/pull already make as
+            // agrisync_app in production). BootstrapDbRoles grants ssf only: fixture gap.
+            await ExecAsync(raw, $"""
+                GRANT USAGE ON SCHEMA public TO {AppRoleUser};
+                GRANT SELECT ON ALL TABLES IN SCHEMA public TO {AppRoleUser};
+                """);
             await ExecAsync(raw, """
                 INSERT INTO ssf.farms ("Id", name, owner_user_id, owner_account_id, created_at_utc, modified_at_utc, weather_radius_km, geo_validation_status)
                 VALUES (@farm, 'Labour Permission Routes Farm', @owner, @account, NOW(), NOW(), 3.0, 'Unchecked');

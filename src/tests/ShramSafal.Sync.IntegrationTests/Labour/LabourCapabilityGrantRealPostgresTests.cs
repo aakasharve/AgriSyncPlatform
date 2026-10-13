@@ -115,6 +115,16 @@ public sealed class LabourCapabilityGrantRealPostgresTests(Xunit.Abstractions.IT
         await using (var raw = new NpgsqlConnection(_superuserConn))
         {
             await raw.OpenAsync();
+            // The roster read now resolves member names from the global public.users
+            // directory (as GetLabourData and /sync/pull already do as agrisync_app in
+            // production). BootstrapDbRoles grants ssf only: fixture gap, not a product one.
+            await using (var grant = raw.CreateCommand())
+            {
+                grant.CommandText =
+                    $"GRANT USAGE ON SCHEMA public TO {AppRoleUser}; GRANT SELECT ON ALL TABLES IN SCHEMA public TO {AppRoleUser};";
+                await grant.ExecuteNonQueryAsync();
+            }
+
             await SeedFarmAsync(raw, FarmA, OwnerA, AccountA, "Capability Farm A");
             await SeedMembershipAsync(raw, FarmA, OwnerA, AccountA, "PrimaryOwner");
             await SeedMembershipAsync(raw, FarmA, WorkerBoth, AccountA, "Worker");

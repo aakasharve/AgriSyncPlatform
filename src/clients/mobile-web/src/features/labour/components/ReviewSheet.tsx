@@ -410,6 +410,10 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
     const actionable = items.filter((i) => !confirming[i.id]);
     // Journey fix 3 (P3): an un-granted own-row Worker is not offered approval the
     // server refuses. Only an explicit `false` hides it (absent = unknown = today).
+    // The शंका (dispute) is the same `verify_log_v2` write: the server refuses it to a caller
+    // without labour authority exactly as it refuses मंजूर (VerifyLogAuthorizer runs for every
+    // decision; pinned by OwnerCanApproveAMukadamsLogRealPostgresTests proof 3c), so it is
+    // offered on the same server-sent flag. Cards stay readable.
     const mayApprove = data.canManageLabour !== false;
 
     /**
@@ -701,7 +705,7 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                                       */}
                                     <div className="mt-3 flex gap-3">
                                         {mayApprove && <button type="button" data-testid={`review-approve-${it.id}`} disabled={!!kind} onClick={() => approve(it.id)} className="flex min-h-[60px] flex-1 items-center justify-center gap-2.5 rounded-xl bg-emerald-600 py-3.5 text-[19px] font-extrabold text-white active:scale-[0.98] disabled:opacity-60"><Check size={24} strokeWidth={2.6} /> मंजूर</button>}
-                                        <button type="button" data-testid={`review-query-${it.id}`} disabled={!!kind} onClick={() => query(it.id)} className="flex min-h-[60px] w-[112px] flex-shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-stone-200 bg-white py-3.5 text-[19px] font-bold text-stone-600 active:scale-[0.98] disabled:opacity-60"><MessageSquare size={20} /> शंका</button>
+                                        {mayApprove && <button type="button" data-testid={`review-query-${it.id}`} disabled={!!kind} onClick={() => query(it.id)} className="flex min-h-[60px] w-[112px] flex-shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-stone-200 bg-white py-3.5 text-[19px] font-bold text-stone-600 active:scale-[0.98] disabled:opacity-60"><MessageSquare size={20} /> शंका</button>}
                                     </div>
                                     {/*
                                       * Labour V1 Task 13 — the attribution
