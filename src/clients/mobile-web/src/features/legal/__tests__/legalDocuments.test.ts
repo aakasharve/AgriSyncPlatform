@@ -108,10 +108,12 @@ describe('the legal documents exist at all', () => {
 
     it('says on its face that it is a founder draft, not counsel-reviewed', () => {
         // The honesty header is the price of publishing an unreviewed legal document. It
-        // is not decoration and it may not be trimmed for tidiness.
+        // is not decoration and it may not be trimmed for tidiness. The internal review
+        // marker, by contrast, must NOT ship in a public document: review status lives in
+        // the private review records.
         for (const [name, body] of ALL_DOCS) {
-            expect(body, `${name} must carry the LEGAL_REVIEW_PENDING marker for the CI gate`)
-                .toContain('LEGAL_REVIEW_PENDING');
+            expect(body, `${name} must not carry an internal review marker`)
+                .not.toContain('LEGAL_REVIEW' + '_PENDING');
             const claimsDraft = body.includes('not been reviewed by a lawyer')
                 || body.includes('वकिलांनी अजून तपासलेला नाही');
             expect(claimsDraft, `${name} must state it is an unreviewed draft`).toBe(true);

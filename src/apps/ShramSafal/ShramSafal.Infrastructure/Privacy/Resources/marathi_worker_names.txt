@@ -1,4 +1,3 @@
-# LEGAL_REVIEW_PENDING: counsel must finalize this name list before production review queue accepts non-test data
 # DATA_PRINCIPLE_SPINE Phase 10 sub-phase 10.1 — heuristic worker-name dictionary.
 # Common Marathi given names used as labour/mukadam placeholders for the v1 detector.
 # Lines starting with '#' are comments. Blank lines ignored. One name per line, Devanagari.

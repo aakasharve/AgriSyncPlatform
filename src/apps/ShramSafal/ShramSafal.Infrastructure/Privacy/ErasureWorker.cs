@@ -151,8 +151,7 @@
 //     login, no user_id column, no consent capture today — so this disposition is a
 //     cascade FROM the registered farmer's own erasure, not a first-class DPDP right
 //     exercised BY the worker; see the phase-5 privacy report for what this covers and
-//     does not, and the still-open LEGAL_REVIEW_PENDING note on third-party worker
-//     notice/consent.
+//     does not, and the still-open question of notice/consent for third-party workers.
 //   - ssf.worker_assignments — ADDED 2026-07-19 alongside ssf.workers above. WTL v0 link
 //     entity (ADR 2026-05-04 wtl-v0-entity-shape) tying a Worker to the DailyLog its
 //     name was extracted from. NO PII column of its own: worker_id/daily_log_id/

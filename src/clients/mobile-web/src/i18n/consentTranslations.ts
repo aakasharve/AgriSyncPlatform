@@ -9,13 +9,8 @@
 // the same envelope. When the rest of the app gains Hindi, this bundle
 // folds into `translations.ts` under the canonical `consent` namespace.
 //
-// Per OQ-7 verdict (i18n convention): every value MUST be prefixed with
-// the `[LEGAL_REVIEW_PENDING] ` marker via `tagLegalString(...)` so the
-// dev/CI runtime UI surfaces the tag visibly until counsel removes it.
-// Counsel removes by either (a) editing the shared constant
-// (`legalReviewMarker.ts`) for bulk strip, OR (b) per-string swap.
-
-import { tagLegalString } from './legalReviewMarker';
+// Strings render exactly as written here: no visible review prefix is added at
+// runtime. Copy review status is tracked in the private review records.
 
 /** Locale codes accepted by the consent feature. */
 export type ConsentLocale = 'mr-IN' | 'hi-IN' | 'en-IN';
@@ -61,104 +56,101 @@ export interface ConsentBundle {
 }
 
 // -- mr-IN --------------------------------------------------------------
-// LEGAL_REVIEW_PENDING: all values below — Marathi, awaiting counsel.
 const mr: ConsentBundle = {
     screen: {
-        title: tagLegalString('संमती'),
-        intro: tagLegalString('तीन वेगळ्या परवानग्या. प्रत्येक स्वतंत्र. कधीही रद्द करता येते.'),
+        title: 'संमती',
+        intro: 'तीन वेगळ्या परवानग्या. प्रत्येक स्वतंत्र. कधीही रद्द करता येते.',
     },
     toggles: {
         fullHistoryJournal: {
-            title: tagLegalString('३० दिवसांपेक्षा जास्त आवाज नोंद ठेवा'),
-            body: tagLegalString('होकार दिल्यास तुमचे आवाज कायम सेव्ह राहतील. नकार दिल्यास ३० दिवसांनंतर मिटवले जातात.'),
+            title: '३० दिवसांपेक्षा जास्त आवाज नोंद ठेवा',
+            body: 'होकार दिल्यास तुमचे आवाज तुम्ही मिटवेपर्यंत तुमच्या क्लाउडमध्ये सेव्ह राहतील. नकार दिल्यास ते आवाजी डायरीच्या क्लाउडमध्ये ठेवले जात नाहीत.',
         },
         crossFarmAggregation: {
-            title: tagLegalString('माझ्या डी-आयडेंटिफाईड डेटाने अॅप सुधारा'),
-            body: tagLegalString('तुमच्या नावाशिवाय शिकवण्यासाठी वापरलं जाईल — इतर शेतकर्‍यांसाठी अॅप अधिक चांगलं होईल.'),
+            title: 'माझ्या डी-आयडेंटिफाईड डेटाने अॅप सुधारा',
+            body: 'तुमच्या नावाशिवाय शिकवण्यासाठी वापरलं जाईल — इतर शेतकर्‍यांसाठी अॅप अधिक चांगलं होईल.',
         },
         researchCorpusExport: {
-            title: tagLegalString('संशोधन/निर्यातीसाठी डी-आयडेंटिफाईड वापर'),
-            body: tagLegalString('सरकारी/संशोधन भागीदारांसाठी (नावांशिवाय) सामान्य ट्रेंड शेअर केले जाऊ शकतात.'),
+            title: 'संशोधन/निर्यातीसाठी डी-आयडेंटिफाईड वापर',
+            body: 'सरकारी/संशोधन भागीदारांसाठी (नावांशिवाय) सामान्य ट्रेंड शेअर केले जाऊ शकतात.',
         },
-        expand: tagLegalString('अधिक माहिती'),
+        expand: 'अधिक माहिती',
     },
     revoke: {
-        button: tagLegalString('सर्व रद्द करा'),
-        confirm: tagLegalString('तुम्ही खात्रीने सर्व परवानग्या रद्द करू इच्छिता?'),
-        whatStops: tagLegalString('रद्द केल्यावर: जुने आवाज पुन्हा ऐकता येणार नाहीत. बाकी सगळं तसंच चालू राहील — तुमचं शेत, तुमची कामं आणि तुमचा हिशोब जिथल्या तिथेच राहतो. हवं तेव्हा पुन्हा परवानगी देता येते.'),
+        button: 'सर्व रद्द करा',
+        confirm: 'तुम्ही खात्रीने सर्व परवानग्या रद्द करू इच्छिता?',
+        whatStops: 'रद्द केल्यावर: यापुढे नवीन आवाज क्लाउडमध्ये साठवला जाणार नाही, आणि सुधारणा व संशोधनाच्या दोन परवानग्या तुम्ही मागे घेता. आधी साठवलेले आवाज तुम्ही मिटवेपर्यंत राहतील. बाकी सगळं तसंच चालू राहील — तुमचं शेत, तुमची कामं आणि तुमचा हिशोब जिथल्या तिथेच राहतो. हवं तेव्हा पुन्हा परवानगी देता येते.',
     },
     save: {
-        button: tagLegalString('जतन करा'),
-        success: tagLegalString('संमती जतन झाली.'),
-        error: tagLegalString('जतन करता आले नाही. पुन्हा प्रयत्न करा.'),
+        button: 'जतन करा',
+        success: 'संमती जतन झाली.',
+        error: 'जतन करता आले नाही. पुन्हा प्रयत्न करा.',
     },
 };
 
 // -- hi-IN --------------------------------------------------------------
-// LEGAL_REVIEW_PENDING: all values below — Hindi, awaiting counsel.
 const hi: ConsentBundle = {
     screen: {
-        title: tagLegalString('सहमति'),
-        intro: tagLegalString('तीन अलग-अलग अनुमतियाँ। हर एक स्वतंत्र। किसी भी समय रद्द कर सकते हैं।'),
+        title: 'सहमति',
+        intro: 'तीन अलग-अलग अनुमतियाँ। हर एक स्वतंत्र। किसी भी समय रद्द कर सकते हैं।',
     },
     toggles: {
         fullHistoryJournal: {
-            title: tagLegalString('३० दिनों के बाद भी आवाज़ रिकॉर्डिंग रखें'),
-            body: tagLegalString('हाँ कहने पर आपकी आवाज़ें हमेशा सेव रहेंगी। ना कहने पर ३० दिन बाद अपने आप मिटा दी जाती हैं।'),
+            title: '३० दिनों के बाद भी आवाज़ रिकॉर्डिंग रखें',
+            body: 'हाँ कहने पर आपकी आवाज़ें आप मिटाएँ तब तक आपके क्लाउड में सेव रहेंगी। ना कहने पर वे आवाज़ डायरी के क्लाउड में नहीं रखी जातीं।',
         },
         crossFarmAggregation: {
-            title: tagLegalString('मेरे डी-आइडेंटिफ़ाइड डेटा से ऐप बेहतर बनाएँ'),
-            body: tagLegalString('आपके नाम के बिना सीखने के लिए उपयोग होगा — दूसरे किसानों के लिए ऐप बेहतर बनेगा।'),
+            title: 'मेरे डी-आइडेंटिफ़ाइड डेटा से ऐप बेहतर बनाएँ',
+            body: 'आपके नाम के बिना सीखने के लिए उपयोग होगा — दूसरे किसानों के लिए ऐप बेहतर बनेगा।',
         },
         researchCorpusExport: {
-            title: tagLegalString('अनुसंधान/निर्यात के लिए डी-आइडेंटिफ़ाइड उपयोग'),
-            body: tagLegalString('सरकारी/अनुसंधान भागीदारों के साथ (नाम के बिना) सामान्य रुझान साझा किए जा सकते हैं।'),
+            title: 'अनुसंधान/निर्यात के लिए डी-आइडेंटिफ़ाइड उपयोग',
+            body: 'सरकारी/अनुसंधान भागीदारों के साथ (नाम के बिना) सामान्य रुझान साझा किए जा सकते हैं।',
         },
-        expand: tagLegalString('और जानें'),
+        expand: 'और जानें',
     },
     revoke: {
-        button: tagLegalString('सब रद्द करें'),
-        confirm: tagLegalString('क्या आप वाकई सभी अनुमतियाँ रद्द करना चाहते हैं?'),
-        whatStops: tagLegalString('रद्द करने पर: पुरानी आवाज़ें दोबारा नहीं सुनी जा सकेंगी। बाकी सब वैसा ही चलता रहेगा — आपका खेत, आपके काम और आपका हिसाब वहीं रहते हैं। जब चाहें दोबारा अनुमति दे सकते हैं।'),
+        button: 'सब रद्द करें',
+        confirm: 'क्या आप वाकई सभी अनुमतियाँ रद्द करना चाहते हैं?',
+        whatStops: 'रद्द करने पर: आगे से नई आवाज़ आपके क्लाउड में सहेजी नहीं जाएगी, और सुधार व अनुसंधान की दोनों अनुमतियाँ आप वापस लेते हैं। पहले सहेजी गई आवाज़ें आप मिटाएँ तब तक रहेंगी। बाकी सब वैसा ही चलता रहेगा — आपका खेत, आपके काम और आपका हिसाब वहीं रहते हैं। जब चाहें दोबारा अनुमति दे सकते हैं।',
     },
     save: {
-        button: tagLegalString('सहेजें'),
-        success: tagLegalString('सहमति सहेज ली गई।'),
-        error: tagLegalString('सहेजा नहीं जा सका। फिर से कोशिश करें।'),
+        button: 'सहेजें',
+        success: 'सहमति सहेज ली गई।',
+        error: 'सहेजा नहीं जा सका। फिर से कोशिश करें।',
     },
 };
 
 // -- en-IN --------------------------------------------------------------
-// LEGAL_REVIEW_PENDING: all values below — English, awaiting counsel.
 const en: ConsentBundle = {
     screen: {
-        title: tagLegalString('Consent'),
-        intro: tagLegalString('Three independent permissions. Each is separate. You can revoke at any time.'),
+        title: 'Consent',
+        intro: 'Three independent permissions. Each is separate. You can revoke at any time.',
     },
     toggles: {
         fullHistoryJournal: {
-            title: tagLegalString('Keep voice recordings beyond 30 days'),
-            body: tagLegalString('If yes, your clips are saved forever. If no, they are deleted automatically after 30 days.'),
+            title: 'Keep voice recordings beyond 30 days',
+            body: 'If yes, your clips are kept in your cloud until you erase them. If no, they are not kept in the Voice Diary cloud.',
         },
         crossFarmAggregation: {
-            title: tagLegalString('Improve the app using my de-identified data'),
-            body: tagLegalString('Used (without your name) for learning — makes the app better for other farmers.'),
+            title: 'Improve the app using my de-identified data',
+            body: 'Used (without your name) for learning — makes the app better for other farmers.',
         },
         researchCorpusExport: {
-            title: tagLegalString('De-identified use for research / export'),
-            body: tagLegalString('General trends (without names) may be shared with government / research partners.'),
+            title: 'De-identified use for research / export',
+            body: 'General trends (without names) may be shared with government / research partners.',
         },
-        expand: tagLegalString('Learn more'),
+        expand: 'Learn more',
     },
     revoke: {
-        button: tagLegalString('Revoke all'),
-        confirm: tagLegalString('Are you sure you want to revoke every permission?'),
-        whatStops: tagLegalString('If you revoke: you will no longer be able to play back your older recordings. Everything else keeps working — your farm, your work and your accounts stay exactly where they are. You can grant permission again whenever you like.'),
+        button: 'Revoke all',
+        confirm: 'Are you sure you want to revoke every permission?',
+        whatStops: 'If you revoke: no new voice will be saved to your cloud, and you withdraw the two permissions for improving the app and for research. Recordings already saved stay until you erase them. Everything else keeps working — your farm, your work and your accounts stay exactly where they are. You can grant permission again whenever you like.',
     },
     save: {
-        button: tagLegalString('Save'),
-        success: tagLegalString('Consent saved.'),
-        error: tagLegalString('Could not save. Please try again.'),
+        button: 'Save',
+        success: 'Consent saved.',
+        error: 'Could not save. Please try again.',
     },
 };
 

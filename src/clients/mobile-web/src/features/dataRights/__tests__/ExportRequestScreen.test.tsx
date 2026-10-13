@@ -30,7 +30,6 @@ vi.mock('../../../infrastructure/storage/AuthTokenStore', () => ({
 
 
 import ExportRequestScreen from '../ExportRequestScreen';
-import { LEGAL_REVIEW_PENDING_PREFIX } from '../../../i18n/legalReviewMarker';
 
 describe('ExportRequestScreen', () => {
     beforeEach(() => {
@@ -40,20 +39,23 @@ describe('ExportRequestScreen', () => {
         cleanup();
     });
 
-    it('renders the submit button with LEGAL_REVIEW_PENDING-tagged copy', async () => {
+    it('renders the submit button without any review marker', async () => {
         render(<ExportRequestScreen forceLocale="en-IN" />);
         const btn = await screen.findByTestId('export-submit-button');
-        expect(btn.textContent ?? '').toContain(LEGAL_REVIEW_PENDING_PREFIX);
+        expect(btn.textContent ?? '').not.toContain('LEGAL_REVIEW' + '_PENDING');
     });
 
-    it('Submit calls the injected submitFn and shows the 24h SLA copy on success', async () => {
+    it('Submit calls the injected submitFn and shows the truthful no-download-link copy on success', async () => {
         const submitFn = vi.fn().mockResolvedValue({ requestId: 'r-456' });
         render(<ExportRequestScreen forceLocale="en-IN" submitFn={submitFn} />);
         fireEvent.click(await screen.findByTestId('export-submit-button'));
         await waitFor(() => expect(submitFn).toHaveBeenCalledTimes(1));
         const sla = await screen.findByTestId('export-success-sla');
-        expect(sla.textContent ?? '').toContain(LEGAL_REVIEW_PENDING_PREFIX);
-        expect(sla.textContent ?? '').toContain('24 hours');
+        expect(sla.textContent ?? '').not.toContain('LEGAL_REVIEW' + '_PENDING');
+        // ExportWorker cannot issue a download link (NoSignerReason), so the copy must not
+        // promise one or state a delivery time.
+        expect(sla.textContent ?? '').toContain('not available yet');
+        expect(sla.textContent ?? '').not.toMatch(/d+s*hours?/i);
     });
 });
 

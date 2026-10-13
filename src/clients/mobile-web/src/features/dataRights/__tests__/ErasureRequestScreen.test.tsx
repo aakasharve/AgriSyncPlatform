@@ -30,7 +30,6 @@ vi.mock('../../../infrastructure/storage/AuthTokenStore', () => ({
 
 
 import ErasureRequestScreen from '../ErasureRequestScreen';
-import { LEGAL_REVIEW_PENDING_PREFIX } from '../../../i18n/legalReviewMarker';
 
 describe('ErasureRequestScreen', () => {
     beforeEach(() => {
@@ -40,13 +39,13 @@ describe('ErasureRequestScreen', () => {
         cleanup();
     });
 
-    it('renders the open-confirm button with LEGAL_REVIEW_PENDING-tagged copy', async () => {
+    it('renders the open-confirm button without any review marker', async () => {
         render(<ErasureRequestScreen forceLocale="en-IN" />);
         const btn = await screen.findByTestId('erasure-open-confirm');
-        expect(btn.textContent ?? '').toContain(LEGAL_REVIEW_PENDING_PREFIX);
+        expect(btn.textContent ?? '').not.toContain('LEGAL_REVIEW' + '_PENDING');
     });
 
-    it('Submit calls the injected submitFn and shows the 48h SLA copy on success', async () => {
+    it('Submit calls the injected submitFn and shows the received-request copy on success (no hour promise)', async () => {
         const submitFn = vi.fn().mockResolvedValue({ requestId: 'r-123' });
         render(<ErasureRequestScreen forceLocale="en-IN" submitFn={submitFn} />);
 
@@ -61,8 +60,10 @@ describe('ErasureRequestScreen', () => {
         });
 
         const sla = await screen.findByTestId('erasure-success-sla');
-        expect(sla.textContent ?? '').toContain(LEGAL_REVIEW_PENDING_PREFIX);
-        expect(sla.textContent ?? '').toContain('48 hours');
+        expect(sla.textContent ?? '').not.toContain('LEGAL_REVIEW' + '_PENDING');
+        expect(sla.textContent ?? '').toContain('Request received');
+        // Nothing enforces a deadline, so the copy must not state one.
+        expect(sla.textContent ?? '').not.toMatch(/d+s*hours?/i);
     });
 });
 

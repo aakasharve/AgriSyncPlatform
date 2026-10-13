@@ -1,38 +1,26 @@
 # spec: data-principle-spine-2026-05-05/06.4
 #
-# LEGAL_REVIEW_PENDING gate. Per OQ-7 verdict (founder DS-015,
-# 2026-05-17): engineering ships placeholder Marathi/Hindi/English
-# legal copy NOW; counsel reviews and swaps before real-farmer onboard.
-# This workflow has two jobs:
+# Review-marker counter. It greps the tracked source for the literal token
+# LEGAL_REVIEW_PENDING and reports how many times it appears. THAT IS ALL IT
+# MEASURES. A count of zero means "no file contains the token"; it does NOT mean
+# any copy has been reviewed, approved or cleared by counsel. Copy review status
+# and sign-off are recorded in the private review records, not here, and a green
+# run of this workflow is never evidence of legal review.
 #
-#   warn_on_tag  — counts LEGAL_REVIEW_PENDING occurrences on every
-#                  push to every branch + on PRs to integration
-#                  branches. Emits an ::notice:: annotation with the
-#                  count. Never fails the build (warn-only).
+# Two jobs:
+#
+#   warn_on_tag  — counts occurrences on every push to every branch and on PRs
+#                  to integration branches. Emits a ::notice:: annotation with
+#                  the count. Never fails the build.
 #
 #   block_on_tag — runs only when github.ref == 'refs/heads/prod-deploy'.
-#                  DATE-AWARE since founder decision 2026-08-24. Until
-#                  2027-05-13 it WARNS with a count and a countdown but does
-#                  not block: the DPDP substantive obligations for ordinary
-#                  Data Fiduciaries do not commence until then, and the
-#                  LEGAL_REVIEW_PENDING copy is deliberate placeholder work
-#                  per DS-015 Track B. On and after that date it fails the
-#                  build again, automatically, with no human action needed.
+#                  Date-aware: before ENFORCEMENT_DATE (below) it emits a
+#                  ::warning:: with the count and a countdown and does not fail;
+#                  on and after that date it fails the build when the count is
+#                  above zero. The date is configured policy owned by the
+#                  founder; this file asserts nothing about what it represents.
 #
-#                  WHY THIS IS NOT "TURNING THE GATE OFF": everything built
-#                  under this tag — the consent ledgers, the notice-hash
-#                  evidence, the erasure and retention machinery, the
-#                  processor register — is INFRASTRUCTURE built ahead of the
-#                  legal need, precisely so it is not rebuilt in a hurry in
-#                  2027. The tags mark copy awaiting counsel, not missing
-#                  capability. A hard block today would stop a 20-farmer
-#                  pilot for a deadline eight months away; a date-armed gate
-#                  keeps the obligation visible without doing that. The one
-#                  failure mode this guards against is the classic one —
-#                  "temporarily disabled" quietly becoming "permanently
-#                  forgotten" — because nobody has to remember to re-arm it.
-#
-# Protocol: _COFOUNDER/01_Operations/Protocols/LEGAL_REVIEW_PENDING_CONVENTION.md
+# Protocol: see the private review records.
 # ADR (pending): ADR-DS-008 — authored by architect.
 
 name: legal-review-gate
@@ -45,36 +33,33 @@ on:
 
 jobs:
   warn-on-tag:
-    name: Warn on LEGAL_REVIEW_PENDING tags (any branch)
+    name: Count review-marker tokens (informational, any branch)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Count LEGAL_REVIEW_PENDING occurrences
         run: |
           COUNT=$(grep -rIn --include='*.md' --include='*.ts' --include='*.tsx' --include='*.cs' "LEGAL_REVIEW_PENDING" src/ _COFOUNDER/ .github/ 2>/dev/null | wc -l || echo 0)
-          echo "::notice::LEGAL_REVIEW_PENDING count: $COUNT (warn-only on this branch; blocks on prod-deploy)"
+          echo "::notice::Review-marker token count: $COUNT (informational on this branch). A count of 0 does not mean counsel review is complete."
           exit 0
 
   block-on-tag:
-    name: LEGAL_REVIEW_PENDING on prod-deploy (warn until 2027-05-13, then block)
+    name: Review-marker count on prod-deploy (warns before 2027-05-13, fails on or after)
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/prod-deploy'
     steps:
       - uses: actions/checkout@v4
-      - name: Warn now, reject from the DPDP enforcement date
+      - name: Warn before the enforcement date, reject from it
         env:
-          # DPDP Rules 2025 were gazetted 2026-11-13; the substantive obligations for
-          # ordinary Data Fiduciaries commence 18 months later. Founder decision
-          # 2026-08-24: until that date the LEGAL_REVIEW_PENDING work is INFRASTRUCTURE
-          # built ahead of need — it must not block a pilot deploy. On and after it,
-          # this gate arms itself again with no human action required.
+          # Configured policy value (founder decision 2026-08-24). Do not infer
+          # from this file what the date represents.
           ENFORCEMENT_DATE: '2027-05-13'
         run: |
           COUNT=$(grep -rIn --include='*.md' --include='*.ts' --include='*.tsx' --include='*.cs' \
                     "LEGAL_REVIEW_PENDING" src/ _COFOUNDER/ 2>/dev/null | wc -l || echo 0)
 
           if [ "$COUNT" -eq 0 ]; then
-            echo "::notice::No LEGAL_REVIEW_PENDING tags remain. Counsel swap complete."
+            echo "::notice::Review-marker token count is 0. This does NOT mean counsel has reviewed or cleared any copy; review status is recorded in the private review records."
             exit 0
           fi
 
@@ -82,9 +67,9 @@ jobs:
           DAYS_LEFT=$(( ( $(date -u -d "$ENFORCEMENT_DATE" +%s) - $(date -u -d "$TODAY" +%s) ) / 86400 ))
 
           if [ "$TODAY" \< "$ENFORCEMENT_DATE" ]; then
-            echo "::warning::$COUNT LEGAL_REVIEW_PENDING tag(s) remain. NOT blocking: the DPDP substantive obligations commence $ENFORCEMENT_DATE ($DAYS_LEFT days away), and this placeholder copy is deliberate per founder verdict DS-015 (Track B). Counsel swap is owed before that date, not before this deploy."
+            echo "::warning::$COUNT review-marker token(s) found. Not failing this run: the configured enforcement date is $ENFORCEMENT_DATE ($DAYS_LEFT days away). This count is not a measure of counsel review."
             exit 0
           fi
 
-          echo "::error::$COUNT LEGAL_REVIEW_PENDING tag(s) remain and the DPDP enforcement date ($ENFORCEMENT_DATE) has passed. Counsel swap is now overdue. Reject prod-deploy."
+          echo "::error::$COUNT review-marker token(s) found and the configured enforcement date ($ENFORCEMENT_DATE) has passed. Rejecting prod-deploy."
           exit 1

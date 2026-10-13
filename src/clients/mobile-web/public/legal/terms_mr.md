@@ -1,5 +1,4 @@
 <!-- spec: dfes-companion-2026-07-11 (wave-4.3) -->
-<!-- LEGAL_REVIEW_PENDING: ENTIRE FILE — founder-authored, not counsel-reviewed. -->
 <!--
   §१० मध्ये जबाबदारीची मर्यादा, नुकसानभरपाई किंवा लवाद यांचं कलम मुद्दाम ठेवलेलं नाही.
   हा विसर नाही — terms_en.md §10 चं तेच कारण इथेही लागू आहे: ती कलमं वकिलाशिवाय

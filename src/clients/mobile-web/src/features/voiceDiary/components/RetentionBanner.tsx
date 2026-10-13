@@ -3,12 +3,11 @@
 // Consent-aware retention banner. Two states driven by the
 // FullHistoryJournal toggle:
 //
-//   granted  — calm emerald: "voice notes kept forever in your cloud"
-//   denied   — warn amber + inline CTA: "30 days only — turn on in
-//              Settings". CTA navigates to the consent toggle anchor.
+//   granted  — calm emerald: "voice notes are saved to your cloud"
+//   denied   — warn amber + inline CTA: "not saved to your cloud — turn on
+//              in Settings". CTA navigates to the consent toggle anchor.
 //
-// All copy flows through `tVoiceDiary(locale, key)` and carries the
-// LEGAL_REVIEW_PENDING runtime prefix per the i18n bundle convention.
+// All copy flows through `tVoiceDiary(locale, key)`.
 
 import React from 'react';
 import { Check, AlertTriangle } from 'lucide-react';

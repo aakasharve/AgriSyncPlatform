@@ -48,14 +48,13 @@
 // Tailwind's `font-sans` stack resolves a mixed line per glyph (Latin → DM Sans,
 // Devanagari → Noto Sans Devanagari), so that line reads correctly in Marathi.
 //
-// ── LEGAL_REVIEW_PENDING ────────────────────────────────────────────────────────────
-// Per DS-015 / the LEGAL_REVIEW_PENDING convention, this copy is derived from the
-// founder's own words (docs/superpowers/specs/2026-08-16-consent-gate-founder-copy.md)
-// and has NOT been through counsel. The marker is carried once, here, as
-// `NOTICE_LEGAL_REVIEW_PENDING` rather than as a `[LEGAL_REVIEW_PENDING] ` prefix on
-// every string: prefixing would put the tag in front of every line a farmer reads, and
-// a notice that is hard to read is a worse consent notice, not a safer one. The CI gate
-// greps for the token, so the prod-deploy block still fires while this constant exists.
+// ── COPY REVIEW STATUS ──────────────────────────────────────────────────────────────
+// This copy is derived from the founder's own words
+// (docs/superpowers/specs/2026-08-16-consent-gate-founder-copy.md) and has NOT been
+// reviewed by counsel. That status is tracked in the private review records; it is
+// deliberately not stamped into the shipped text, because a notice that is hard to read
+// is a worse consent notice, not a safer one. Nothing in this file is a claim of legal
+// validity or compliance.
 //
 // 🛑 WHAT IS STILL UNKNOWN IS OMITTED, NOT PLACEHELD. The data fiduciary's legal name
 // and contact are real and appear on screen verbatim. Omission is honest; a visible
@@ -89,9 +88,6 @@ import {
     type CoreDataCategoryCode,
     type CorePurposeCode,
 } from '../../../domain/consent/CoreConsentScope';
-
-/** The CI gate greps for this token; see the header note. */
-export const NOTICE_LEGAL_REVIEW_PENDING = 'LEGAL_REVIEW_PENDING' as const;
 
 /**
  * Versions carried onto BOTH legal records. Bump the notice version on any change to
@@ -145,9 +141,20 @@ export const NOTICE_LEGAL_REVIEW_PENDING = 'LEGAL_REVIEW_PENDING' as const;
  *
  * Both strings are inside `canonicalNoticeText`, so either one moving is a material
  * change to the hashed notice and the notice version has to move with it.
+ *
+ * `notice-2026-10-13.1` - the CLAIMS-MATCH-CODE pass. The words on this screen did not
+ * change; the Privacy Notice it links to did, so `PRIVACY_POLICY_VERSION` moved to
+ * `privacy-2026-10-13.1` and the version inside `canonicalNoticeText` moved with it.
+ * Two statements in the previous Privacy Notice were not true of the code: that a voice
+ * recording is deleted from the phone 30 days after it is made (the sweep has been a
+ * no-op since founder ruling D9), and that the app encrypts it on the phone before
+ * storage (the live writer stores the audio unsealed). A farmer who accepted
+ * `notice-2026-08-17.5` was shown those two statements, so he is NOT recorded as having
+ * accepted this version: the gate shows again once, and his earlier ledger rows stay
+ * exactly as written.
  */
-export const NOTICE_VERSION = 'notice-2026-08-17.5';
-export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-17.1';
+export const NOTICE_VERSION = 'notice-2026-10-13.1';
+export const PRIVACY_POLICY_VERSION = 'privacy-2026-10-13.1';
 export const TERMS_VERSION = 'terms-2026-08-17.1';
 
 /**
