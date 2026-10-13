@@ -161,3 +161,12 @@ Android refuses an update signed with a different key. Rotating the key means
 every existing user must uninstall and reinstall, losing whatever is stored on
 their device. If the key ever needs rotating again, it has to happen **before**
 the next distribution, not after.
+
+## Public web origin for shared links
+
+The farm-invite QR and share link must open for someone else, but inside the APK
+`window.location.origin` is `https://localhost`. On native the app therefore builds
+join links from a public origin: default `https://app.shramsafal.in`, overridable at
+build time with `VITE_PUBLIC_WEB_ORIGIN` (https URL, non-localhost; invalid values fall
+back to the default). Web keeps `window.location.origin`. Same bundle for both; no
+platform build fork. Code: `src/shared/config/publicWebOrigin.ts`.

@@ -22,6 +22,7 @@ import {
     isInviteApiError,
     type InviteResponse,
 } from './inviteApi';
+import { getShareOrigin } from '../../../shared/config/publicWebOrigin';
 
 interface FarmInviteQrSheetProps {
     isOpen: boolean;
@@ -67,7 +68,8 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
 
     const shareUrl = useMemo(() => {
         if (!invite) return '';
-        // When running on the mobile-web origin (localhost in dev, app.shramsafal.in
+        // Web: current origin. Native (APK, origin https://localhost): the public
+        // web origin, so the link works for whoever scans it. When running on the mobile-web origin (localhost in dev, app.shramsafal.in
         // in prod), build an internal deep-link so scanning lands on the
         // JoinFarmLandingPage without a round-trip through the marketing site.
         // The server also returned `invite.qrPayload` with the public marketing
@@ -76,7 +78,7 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
         const params = new URLSearchParams();
         params.set('join', invite.token);
         params.set('farm', invite.farmCode);
-        return new URL(`/?${params.toString()}`, window.location.origin).toString();
+        return new URL(`/?${params.toString()}`, getShareOrigin()).toString();
     }, [invite]);
 
     useEffect(() => {
