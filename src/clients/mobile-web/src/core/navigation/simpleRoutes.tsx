@@ -56,8 +56,6 @@ export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
                 crops={ctx.crops}
                 onUpdateProfile={ctx.setFarmerProfile}
                 onUpdateCrops={ctx.handleUpdateCrops}
-                onAddPerson={ctx.handleAddPerson}
-                onDeletePerson={ctx.handleDeletePerson}
                 onOpenScheduleLibrary={(cropId?: string) => {
                     if (typeof window !== 'undefined' && cropId) {
                         window.sessionStorage.setItem('schedule_library_crop_id', cropId);

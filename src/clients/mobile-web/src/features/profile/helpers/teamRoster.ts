@@ -36,6 +36,16 @@ export function isOwnerTierRole(role: string | null | undefined): boolean {
     return role === 'PrimaryOwner' || role === 'SecondaryOwner';
 }
 
+/**
+ * A "team member" that exists only on this phone: added through the old Add member form, which
+ * called no server (`localOnly`, or the legacy `op_` ids it minted before that flag). Not a linked
+ * app user and not a named worker - the Team page no longer presents it as either. Hidden, not
+ * deleted: the stored profile is untouched.
+ */
+export function isPhoneLocalOnlyMember(op: FarmOperator): boolean {
+    return op.localOnly === true || (!op.downloadedAtUtc && typeof op.id === 'string' && op.id.startsWith('op_'));
+}
+
 export function mergeTeamWithServerRoster(
     operators: FarmOperator[],
     roster: LabourPermission[] | null | undefined,

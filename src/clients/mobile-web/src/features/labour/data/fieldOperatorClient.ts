@@ -7,6 +7,7 @@
  *   - `GET  .../labour/field-operators`            (Task 12 read-model: `FieldOperatorSummaryDto`)
  *   - `POST .../labour/field-operators`            (Task 11 create)
  *   - `POST .../labour/field-operators/{id}/attach` (Task 11 attach — idempotent by intent)
+ *   - `POST .../labour/field-operators/{id}/deactivate` (Team page "Remove": retire, never delete)
  *
  * The PATCH rename route exists server-side but has no V1 farmer surface, so
  * it deliberately has no client function here — an unused wrapper would read
@@ -105,6 +106,10 @@ export const fieldOperatorsPath = (farmId: string): string =>
 export const attachFieldOperatorPath = (farmId: string, fieldOperatorId: string): string =>
     `${fieldOperatorsPath(farmId)}/${fieldOperatorId}/attach`;
 
+/** Team page "Remove" — retires a named worker (is_active=false). History is untouched. */
+export const deactivateFieldOperatorPath = (farmId: string, fieldOperatorId: string): string =>
+    `${fieldOperatorsPath(farmId)}/${fieldOperatorId}/deactivate`;
+
 const mapFieldOperator = (dto: FieldOperatorSummaryDto): FieldOperator => ({
     id: dto.id,
     displayName: dto.displayName,
@@ -142,11 +147,17 @@ export async function fetchFieldOperators(farmId: string): Promise<FieldOperator
  *
  * `fullName` is optional and sent only when non-empty — an empty string is
  * not a full name, and the column is nullable.
+ *
+ * `clientId` (optional) is a client-chosen id for the new person. When sent, the
+ * server uses it AS the operator id, so a retry after a lost response (or a double
+ * tap) returns the same person instead of a twin. It keys on the id, never on the
+ * name — two different people may still share a name.
  */
 export async function createFieldOperator(
     farmId: string,
     displayName: string,
     fullName?: string,
+    clientId?: string,
 ): Promise<FieldOperator> {
     const trimmedFullName = fullName?.trim();
     const response = await agriSyncClient.http.post<FieldOperatorCreatedDto>(
@@ -154,6 +165,7 @@ export async function createFieldOperator(
         {
             displayName: displayName.trim(),
             ...(trimmedFullName ? { fullName: trimmedFullName } : {}),
+            ...(clientId ? { id: clientId } : {}),
         },
     );
     const dto = response.data;
@@ -188,4 +200,29 @@ export async function attachFieldOperator(
         { labourAssignmentId },
     );
     return response.data;
+}
+
+/**
+ * Retires a named worker from the farm's live list ("Remove" on the Team page).
+ *
+ * NOT a delete and NOT an account action: the server only flips `isActive` to false. His
+ * attendance marks, attribution and name in history stay exactly as recorded; he is simply not
+ * offered for NEW marks. Idempotent (retiring twice is a success). Online-only: there is no
+ * queued mutation for field operators, so a failure throws and the caller must say so — never
+ * present it as saved.
+ */
+export async function deactivateFieldOperator(
+    farmId: string,
+    fieldOperatorId: string,
+): Promise<FieldOperator> {
+    const response = await agriSyncClient.http.post<FieldOperatorCreatedDto>(
+        deactivateFieldOperatorPath(farmId, fieldOperatorId),
+    );
+    const dto = response.data;
+    return {
+        id: dto.id,
+        displayName: dto.displayName,
+        fullName: dto.fullName ?? undefined,
+        isActive: dto.isActive,
+    };
 }

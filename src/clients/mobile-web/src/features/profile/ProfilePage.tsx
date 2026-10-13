@@ -11,13 +11,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Sprout, Zap, Tractor, FlaskConical, ArrowLeft, Globe, Shield, Download, Trash2, CreditCard, Mic } from 'lucide-react';
-import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useFarmContext } from '../../core/session/FarmContext';
 import { requestCreateFarmWizard, promptAndJoinFarmViaQr } from '../../app/hooks/useFarmContextState';
 import { useWorkerProfile } from '../work/hooks/useWorkerProfile';
-import { AddMemberWizard } from '../people/components/AddMemberWizard';
 import FarmInviteQrSheet from '../onboarding/qr/FarmInviteQrSheet';
 
 import IdentitySection from './sections/IdentitySection';
@@ -33,7 +31,7 @@ import { useFarmAdminState } from './hooks/useFarmAdminState';
 import SubscriptionCard from '../admin/billing/SubscriptionCard';
 import { buildSettingsExtraIds } from './settingsItems';
 
-import type { CropProfile, FarmerProfile, FarmOperator, Person } from '../../types';
+import type { CropProfile, FarmerProfile } from '../../types';
 
 /**
  * The eight tabs rendered by ProfilePage. Exported so tests (and any
@@ -60,8 +58,6 @@ interface ProfilePageProps {
     onUpdateCrops: (c: CropProfile[]) => void;
     waterResources?: unknown;
     electricity?: unknown;
-    onAddPerson?: (person: Person) => void;
-    onDeletePerson?: (id: string) => void;
     onOpenScheduleLibrary?: (cropId?: string) => void;
     onOpenFinanceManager?: () => void;
     onOpenLabour?: () => void;
@@ -86,7 +82,6 @@ interface ProfilePageProps {
 
 const ProfilePage: React.FC<ProfilePageProps> = ({
     profile, crops, onUpdateProfile, onUpdateCrops,
-    onAddPerson, onDeletePerson,
     onOpenScheduleLibrary, onOpenFinanceManager, onOpenLabour, onOpenReferrals,
     onOpenConsent, onOpenExport, onOpenErasure, onOpenAiDrafts,
     onExit,
@@ -122,14 +117,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
             adminSetShowFarmBoundary(true);
         }
     }, [adminMyFarm, adminSetShowFarmBoundary]);
-
-    const [showMemberWizard, setShowMemberWizard] = useState(false);
-    const handleAddMember = (member: Partial<FarmOperator>) => {
-        if (onAddPerson) {
-            onAddPerson({ ...(member as unknown as Person), id: `p_${idGenerator.generate()}` });
-        }
-        setShowMemberWizard(false);
-    };
 
     // CEI Phase 4 §4.8 — show own reliability score if user is a Worker or
     // Mukadam on any farm.
@@ -188,13 +175,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
 
     return (
         <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-4 pb-[calc(8rem+env(safe-area-inset-bottom))]">
-            {showMemberWizard && (
-                <AddMemberWizard
-                    onSave={handleAddMember}
-                    onCancel={() => setShowMemberWizard(false)}
-                />
-            )}
-
             {farmAdmin.myFarm && (
                 <FarmInviteQrSheet
                     isOpen={farmAdmin.showInviteQr}
@@ -255,7 +235,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             <IdentitySection
                                 profile={profile}
                                 onUpdateProfile={onUpdateProfile}
-                                onDeletePerson={onDeletePerson}
                                 logout={logout}
                                 myFarm={farmAdmin.myFarm}
                                 myMemberships={farmAdmin.myMemberships}
@@ -266,7 +245,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                                 handleConnectWeather={farmAdmin.handleConnectWeather}
                                 setShowFarmBoundary={farmAdmin.setShowFarmBoundary}
                                 handleOpenInviteQr={farmAdmin.handleOpenInviteQr}
-                                setShowMemberWizard={setShowMemberWizard}
                                 nonExitableFarmIds={nonExitableFarmIds}
                                 handleExitMembership={farmAdmin.handleExitMembership}
                                 isWorkerOnAnyFarm={isWorkerOnAnyFarm}
