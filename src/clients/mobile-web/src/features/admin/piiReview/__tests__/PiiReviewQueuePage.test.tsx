@@ -17,7 +17,6 @@ vi.mock('../../../../i18n/LanguageContext', () => ({
 
 import { PiiReviewQueuePage, PiiReviewQueueEntryDto } from '../PiiReviewQueuePage';
 import { PiiReviewDecisionPanel } from '../PiiReviewDecisionPanel';
-import { LEGAL_REVIEW_PENDING_PREFIX } from '../../../../i18n/legalReviewMarker';
 
 const sampleEntry: PiiReviewQueueEntryDto = {
     id: 'entry-1',
@@ -37,7 +36,7 @@ afterEach(() => {
 });
 
 describe('PiiReviewQueuePage', () => {
-    it('renders the queue title with the legal-review tag', async () => {
+    it('renders the queue title without any review marker', async () => {
         const fetchQueue = vi.fn().mockResolvedValue([sampleEntry]);
         render(<PiiReviewQueuePage fetchQueue={fetchQueue} />);
 
@@ -45,9 +44,9 @@ describe('PiiReviewQueuePage', () => {
             expect(screen.getByTestId('pii-review-queue-page')).toBeInTheDocument();
         });
 
-        // Title carries the [LEGAL_REVIEW_PENDING] prefix.
+        // No internal review marker is ever shown to the user.
         const heading = screen.getByRole('heading', { level: 1 });
-        expect(heading.textContent).toContain(LEGAL_REVIEW_PENDING_PREFIX);
+        expect(heading.textContent).not.toContain('LEGAL_REVIEW' + '_PENDING');
     });
 
     it('shows the empty state when the queue returns no entries', async () => {

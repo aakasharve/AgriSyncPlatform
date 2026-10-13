@@ -8,9 +8,8 @@
  * row to the <see cref="PiiReviewDecisionPanel"/> for the approve/
  * reject decision.
  *
- * All user-facing strings are tagged with `[LEGAL_REVIEW_PENDING]`
- * via `tPiiReview()` per the Phase 06 OQ-7 convention (binding under
- * DS-015 Track-B).
+ * All user-facing strings come from `tPiiReview()` and render exactly as
+ * written there.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';

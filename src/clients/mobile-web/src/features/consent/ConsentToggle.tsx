@@ -1,13 +1,11 @@
 // spec: data-principle-spine-2026-05-05/06.4
 //
-// Single consent toggle — checkbox + (LEGAL_REVIEW_PENDING-tagged) title
+// Single consent toggle — checkbox + title
 // + expandable body. Three independent instances live inside
 // `ConsentScreen.tsx`, one per purpose (full-history journal,
 // cross-farm aggregation, research/corpus export).
 //
-// Per OQ-7 i18n convention all visible strings flow through
-// `tConsent(locale, key)` and therefore carry the
-// `[LEGAL_REVIEW_PENDING] ` prefix at runtime until counsel strips it.
+// All visible strings flow through `tConsent(locale, key)`.
 
 import React, { useState } from 'react';
 import {

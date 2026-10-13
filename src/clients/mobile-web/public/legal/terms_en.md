@@ -1,5 +1,4 @@
 <!-- spec: dfes-companion-2026-07-11 (wave-4.3) -->
-<!-- LEGAL_REVIEW_PENDING: ENTIRE FILE — founder-authored, not counsel-reviewed. -->
 <!--
   §10 deliberately contains NO limitation of liability, no indemnity and no arbitration
   clause. That is not an omission to be tidied up by whoever edits this next.

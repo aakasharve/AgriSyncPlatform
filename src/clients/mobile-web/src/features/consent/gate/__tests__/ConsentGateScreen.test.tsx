@@ -542,7 +542,7 @@ describe('the notice document', () => {
         // absolute on AI training, AND the Terms/Privacy versions moved to documents that
         // exist; anyone who accepted `.4` was shown a weaker English promise and two
         // version strings that named nothing.
-        expect(NOTICE_VERSION).toBe('notice-2026-08-17.5');
+        expect(NOTICE_VERSION).toBe('notice-2026-10-13.1');
     });
 
     // The other half of `.5` — that TERMS_VERSION and PRIVACY_POLICY_VERSION name

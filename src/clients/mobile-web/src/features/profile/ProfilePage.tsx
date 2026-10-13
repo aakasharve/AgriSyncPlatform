@@ -321,7 +321,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     // Both strings already exist in the app (nav 'सेटिंग्ज'; Voice Diary bundle 'आवाजी डायरी').
                     'voice-diary': { label: 'सेटिंग्ज · Settings', icon: <BookOpen size={20} />, subtitle: 'आवाजी डायरी · Voice Diary' },
                     consent: { label: 'गोपनीयता · Consent', icon: <Shield size={20} />, subtitle: 'तुमच्या परवानग्या · Your permissions' },
-                    export: { label: 'डेटा डाउनलोड · Export my data', icon: <Download size={20} />, subtitle: 'सर्व डेटाची प्रत · A copy of your data' },
+                    export: { label: 'डेटा डाउनलोड · Export my data', icon: <Download size={20} />, subtitle: 'तुमच्या नोंदींची प्रत · A copy of your records' },
                     erase: { label: 'डेटा पुसा · Erase my data', icon: <Trash2 size={20} />, subtitle: 'कायमचा पुसा · Permanent' },
                     billing: { label: 'बिलिंग · Billing', icon: <CreditCard size={20} />, subtitle: 'तुमचा प्लॅन · Your plan' },
                     // English-only placeholder copy (Global Constraint: never compose new
