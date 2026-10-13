@@ -44,11 +44,31 @@ public sealed class CreateFieldOperatorHandler(
             return Result.Failure<FieldOperatorDto>(ShramSafalErrors.Forbidden);
         }
 
+        // Idempotent create. A client that supplies an id and retries (lost response,
+        // double tap) must get the SAME person back, not a twin. The lookup is NOT
+        // farm-scoped by itself (PERMISSIVE select policy), so an id that already
+        // names a person on a DIFFERENT farm is refused, never returned or re-used.
+        if (command.ClientOperatorId is { } requestedId)
+        {
+            if (requestedId == Guid.Empty)
+            {
+                return Result.Failure<FieldOperatorDto>(ShramSafalErrors.InvalidCommand);
+            }
+
+            var existing = await repository.GetFieldOperatorByIdAsync(requestedId, ct);
+            if (existing is not null)
+            {
+                return existing.OriginatingFarmId == command.FarmId
+                    ? Result.Success(existing.ToDto())
+                    : Result.Failure<FieldOperatorDto>(ShramSafalErrors.Forbidden);
+            }
+        }
+
         FieldOperator operatorEntity;
         try
         {
             operatorEntity = FieldOperator.Create(
-                idGenerator.New(),
+                command.ClientOperatorId ?? idGenerator.New(),
                 command.DisplayName,
                 command.FullName,
                 // 11.3 — OriginatingFarmId is command.FarmId (the farm
@@ -62,6 +82,21 @@ public sealed class CreateFieldOperatorHandler(
         catch (ArgumentException)
         {
             return Result.Failure<FieldOperatorDto>(ShramSafalErrors.InvalidCommand);
+        }
+
+        if (command.ClientOperatorId is { } clientId)
+        {
+            if (await repository.TryAddFieldOperatorAsync(operatorEntity, ct))
+            {
+                return Result.Success(operatorEntity.ToDto());
+            }
+
+            // Lost a race with the same id (a double tap): the winner's row is the answer if
+            // it is ours; an id that is not visible to this farm is never handed back.
+            var winner = await repository.GetFieldOperatorByIdAsync(clientId, ct);
+            return winner is not null && winner.OriginatingFarmId == command.FarmId
+                ? Result.Success(winner.ToDto())
+                : Result.Failure<FieldOperatorDto>(ShramSafalErrors.Forbidden);
         }
 
         await repository.AddFieldOperatorAsync(operatorEntity, ct);

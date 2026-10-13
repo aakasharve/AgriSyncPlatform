@@ -814,6 +814,11 @@ public static class DependencyInjection
                 ShramSafal.Application.UseCases.Labour.RenameFieldOperator.RenameFieldOperatorCommand,
                 ShramSafal.Application.Contracts.Dtos.FieldOperatorDto>,
             ShramSafal.Application.UseCases.Labour.RenameFieldOperator.RenameFieldOperatorHandler>();
+        services.AddScoped<
+            AgriSync.BuildingBlocks.Application.IHandler<
+                ShramSafal.Application.UseCases.Labour.DeactivateFieldOperator.DeactivateFieldOperatorCommand,
+                ShramSafal.Application.Contracts.Dtos.FieldOperatorDto>,
+            ShramSafal.Application.UseCases.Labour.DeactivateFieldOperator.DeactivateFieldOperatorHandler>();
 
         // Task 12 (spec: 2026-07-13-labour-attendance-approval-design) — the
         // field-operator LIST read. Same registration shape as the three
