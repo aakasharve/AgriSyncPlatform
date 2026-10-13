@@ -17,7 +17,7 @@ namespace ShramSafal.Application.UseCases.Memberships.SetLabourPermission;
 /// </summary>
 internal static class LabourPermissionProjection
 {
-    public static LabourPermissionDto From(FarmMembership membership, DateTime nowUtc)
+    public static LabourPermissionDto From(FarmMembership membership, DateTime nowUtc, string? displayName = null)
     {
         var carriedByRole = LabourManagementPermission.IsCarriedByRole(membership.Role);
 
@@ -42,6 +42,7 @@ internal static class LabourPermissionProjection
             HasExplicitGrant: hasEffectiveGrant,
             Source: source,
             IsGrantEditable: !carriedByRole,
-            LabourGrantExpiresAtUtc: hasEffectiveGrant ? membership.LabourGrantExpiresAtUtc : null);
+            LabourGrantExpiresAtUtc: hasEffectiveGrant ? membership.LabourGrantExpiresAtUtc : null,
+            DisplayName: displayName);
     }
 }

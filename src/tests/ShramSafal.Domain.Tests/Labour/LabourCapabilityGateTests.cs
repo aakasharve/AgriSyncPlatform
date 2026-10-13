@@ -634,6 +634,11 @@ public sealed class LabourCapabilityGateTests
         public void AddAssignment(LabourAssignment a) => _assignments[a.Id] = a;
         public void AddFieldOperator(FieldOperator o) => _fieldOperators[o.Id] = o;
 
+        public override Task<IReadOnlyList<ShramSafal.Application.Contracts.Dtos.SyncOperatorDto>> GetOperatorsByIdsAsync(
+            IEnumerable<Guid> userIds, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ShramSafal.Application.Contracts.Dtos.SyncOperatorDto>>(
+                userIds.Select(id => new ShramSafal.Application.Contracts.Dtos.SyncOperatorDto(id, "Name " + id.ToString("N")[..6], "WORKER")).ToList());
+
         public override Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
             => Task.FromResult(_roles.TryGetValue((farmId, userId), out var role) ? (AppRole?)role : null);
 

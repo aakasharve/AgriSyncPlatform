@@ -49,6 +49,14 @@
 /// The instant the responsibility ends, <c>null</c> for कायम — and <c>null</c>
 /// once lapsed: an expired grant reports as NotGranted with no ghost date.
 /// </param>
+/// <param name="DisplayName">
+/// The member's name from the user directory, so the owner's Team page can list
+/// and label a member the sync pull never sent (its operator role comes from a
+/// table whose RLS hides every other member). Present ONLY on the owner-tier
+/// roster read - this route is owner/co-owner-only - and <c>null</c> on the
+/// grant-write response and whenever the directory has no name; the client must
+/// then show NO name rather than invent one. Additive: older clients ignore it.
+/// </param>
 public sealed record LabourPermissionDto(
     Guid UserId,
     string Role,
@@ -57,4 +65,5 @@ public sealed record LabourPermissionDto(
     bool HasExplicitGrant,
     string Source,
     bool IsGrantEditable,
-    DateTime? LabourGrantExpiresAtUtc);
+    DateTime? LabourGrantExpiresAtUtc,
+    string? DisplayName = null);
