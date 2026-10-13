@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 
 export type OverrideAction = 'shift_date' | 'rename' | 'restage' | 'remove';
 
@@ -30,6 +31,7 @@ const PlannedActivityOverrideSheet: React.FC<PlannedActivityOverrideSheetProps> 
     const [newStage, setNewStage] = useState('');
     const [reason, setReason] = useState('');
 
+    useBackDismiss(isOpen, onClose);
     if (!isOpen) return null;
 
     const handleSave = () => {

@@ -4,6 +4,7 @@ import { QuickLogChip } from '../../../shared/components/ui/QuickLogChip';
 import { SchedulePickerModal } from '../../scheduler/components/SchedulePickerModal';
 import { AlertCircle } from 'lucide-react';
 import { emitClosureStarted } from '../../../core/telemetry/eventEmitters';
+import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 
 // --- ICONS (Inline) ---
 const Icons = {
@@ -81,6 +82,7 @@ export const QuickLogSheet: React.FC<QuickLogSheetProps> = ({
         handleClose();
     };
 
+    useBackDismiss(isOpen, onClose);
     if (!isOpen) return null;
 
     if (showPickerGate && plotId && cropKey && cycleId && farmId) {

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 
 interface CloneTemplateSheetProps {
     isOpen: boolean;
@@ -18,6 +19,7 @@ const CloneTemplateSheet: React.FC<CloneTemplateSheetProps> = ({
     const [newName, setNewName] = useState(`${sourceName} (my copy)`);
     const [reason, setReason] = useState('');
 
+    useBackDismiss(isOpen, onClose);
     if (!isOpen) return null;
 
     const handleClone = () => {

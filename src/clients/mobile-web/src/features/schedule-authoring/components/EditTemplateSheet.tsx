@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 
 interface EditTemplateSheetProps {
     isOpen: boolean;
@@ -23,6 +24,7 @@ const EditTemplateSheet: React.FC<EditTemplateSheetProps> = ({
     const [stage, setStage] = useState(currentStage);
     const [cropType, setCropType] = useState(currentCropType);
 
+    useBackDismiss(isOpen, onClose);
     if (!isOpen) return null;
 
     const nextVersion = (currentVersion ?? 1) + 1;
