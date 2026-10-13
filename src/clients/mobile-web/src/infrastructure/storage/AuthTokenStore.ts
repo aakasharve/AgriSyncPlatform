@@ -139,11 +139,11 @@ export function getAuthSession(): AuthSession | null {
 // that is NOT evidence the session ended. The real bound is the refresh
 // credential (server: 30 days, sliding). We honour the marker for at most the
 // FOUNDER-DECIDED 14-day offline reopening window (2026-10-12) past its stamp.
-// INVARIANT: the app must never claim presence beyond what it can honestly
-// revoke - so this is <= the server refresh life (AddDays(30) in User.Application
-// RefreshTokenHandler.cs:70 / LoginHandler.cs:76) and equals the pending-revoke
-// slot (RefreshSessionStore) and pending-logout marker (PendingLogoutStore)
-// caps. Change all three together; a test pins them equal.
+// The app never presents a session older than this, and never claims more than the
+// server holds (<= server refresh life, RefreshTokenPolicy.Lifetime = 30 days).
+// The unfinished-LOGOUT memory (PendingLogoutStore, RefreshSessionStore pending-revoke
+// slot) is deliberately LONGER: it lasts the whole server credential life
+// (refreshCredentialLife.ts), so a revoke owed after day 14 is still completed.
 export const PRESENCE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 // A genuine marker is never more than one access-token life in the future. A
 // far-future value can only be a tampered/corrupt marker — fail closed.

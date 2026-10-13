@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PENDING_REVOKE_MAX_AGE_MS } from '../RefreshSessionStore';
 import { PENDING_LOGOUT_MAX_AGE_MS } from '../PendingLogoutStore';
+import { SERVER_REFRESH_LIFETIME_MS } from '../refreshCredentialLife';
 import {
     getAuthSession,
     getPresenceSession,
@@ -94,8 +95,13 @@ describe('getPresenceSession', () => {
         expect(PRESENCE_MAX_AGE_MS).toBeLessThanOrEqual(30 * 24 * 60 * 60 * 1000);
     });
 
-    it('the pending-revoke slot and pending-logout marker use the same 14-day window as presence', () => {
-        expect(PENDING_REVOKE_MAX_AGE_MS).toBe(PRESENCE_MAX_AGE_MS);
-        expect(PENDING_LOGOUT_MAX_AGE_MS).toBe(PRESENCE_MAX_AGE_MS);
+    it('unfinished-logout protection outlives the 14-day reopening window: it lasts the server refresh life (30 days)', () => {
+        // Founder 2026-10-12 round 2: a logout whose server revoke is still owed must be
+        // remembered until the credential is revoked OR has expired.
+        expect(SERVER_REFRESH_LIFETIME_MS).toBe(30 * DAY);
+        expect(PENDING_REVOKE_MAX_AGE_MS).toBe(SERVER_REFRESH_LIFETIME_MS);
+        expect(PENDING_LOGOUT_MAX_AGE_MS).toBe(SERVER_REFRESH_LIFETIME_MS);
+        expect(PENDING_REVOKE_MAX_AGE_MS).toBeGreaterThan(PRESENCE_MAX_AGE_MS);
+        expect(PENDING_LOGOUT_MAX_AGE_MS).toBeGreaterThan(PRESENCE_MAX_AGE_MS);
     });
 });
