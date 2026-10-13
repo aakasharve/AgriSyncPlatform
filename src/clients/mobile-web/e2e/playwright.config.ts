@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const CHROMIUM_FAKE_MIC_ARGS = ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'];
+
 export default defineConfig({
   testDir: './specs',
   timeout: 60_000,
@@ -16,9 +18,11 @@ export default defineConfig({
     storageState: undefined,
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    // Chromium-only switches: synthetic microphone for the voice-diary journey
+    // (06_voice_diary_consent_gate). Never pass these to webkit - it exits at launch.
+    { name: 'chromium', use: { ...devices['Desktop Chrome'], permissions: ['microphone'], launchOptions: { args: CHROMIUM_FAKE_MIC_ARGS } } },
     { name: 'webkit', use: { ...devices['Desktop Safari'] } },
-    { name: 'mobile-android', use: { ...devices['Pixel 5'] } },
+    { name: 'mobile-android', use: { ...devices['Pixel 5'], permissions: ['microphone'], launchOptions: { args: CHROMIUM_FAKE_MIC_ARGS } } },
   ],
   // Always start vite preview. The original `process.env.CI ? undefined`
   // gate assumed the workflow would start the preview server itself, but

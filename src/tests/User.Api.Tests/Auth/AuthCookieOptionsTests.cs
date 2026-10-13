@@ -62,6 +62,26 @@ public sealed class AuthCookieOptionsTests
         opts.Secure.Should().BeTrue("the refresh cookie must require HTTPS in production");
     }
 
+    [Fact]
+    public void Build_in_CI_environment_is_http_local_compatible_for_webkit()
+    {
+        var opts = AuthCookieOptions.Build(new FakeHostEnvironment("CI"), SampleExpiry, rememberDevice: true);
+        opts.Secure.Should().BeFalse("WebKit drops Secure cookies on http://localhost; the e2e API runs as CI");
+        opts.SameSite.Should().Be(SameSiteMode.Lax);
+        opts.HttpOnly.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("Production")]
+    [InlineData("Staging")]
+    public void Build_stays_Secure_SameSiteNone_outside_Development_and_CI(string envName)
+    {
+        var opts = AuthCookieOptions.Build(new FakeHostEnvironment(envName), SampleExpiry, rememberDevice: true);
+        opts.Secure.Should().BeTrue();
+        opts.SameSite.Should().Be(SameSiteMode.None);
+        AuthCookieOptions.BuildForDelete(new FakeHostEnvironment(envName)).Secure.Should().BeTrue();
+    }
+
     // ── Build() — SameSite ────────────────────────────────────────────────────
 
     [Fact]

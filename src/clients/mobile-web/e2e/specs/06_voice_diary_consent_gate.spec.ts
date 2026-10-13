@@ -22,7 +22,7 @@
  *      server, not from component state).
  *   6. Record a clip. On chromium this drives the REAL recorder (MediaRecorder
  *      fed by Chromium's fake audio device: --use-fake-device-for-media-stream
- *      --use-fake-ui-for-media-stream). Other engines have no fake device, so
+ *      --use-fake-ui-for-media-stream). WebKit has no fake audio device, so
  *      the same row shape is seeded instead. Either way the clip must land in
  *      the PER-USER database (AgriLogDB_u_<userId>), never the legacy
  *      AgriLogDB.
@@ -69,14 +69,11 @@ const BACKEND_URL = process.env.E2E_API_URL ?? 'http://localhost:5000';
 const SEEDED_CLIP_ID = '11111111-2222-3333-4444-555555555555';
 const NEGATIVE_PERSIST_CLIP_ID = '22222222-3333-4444-5555-666666666666';
 
-// Chromium's synthetic microphone: a tone stream, no prompt. Ignored by
-// engines that do not know the flags (they take the seeded-clip branch).
-test.use({
-    permissions: ['microphone'],
-    launchOptions: {
-        args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
-    },
-});
+// Chromium's synthetic microphone (--use-fake-device-for-media-stream, microphone
+// permission) is configured per project in playwright.config.ts, for the
+// Chromium-based projects ONLY. WebKit rejects those switches at launch
+// ("Unknown option --use-fake-device-for-media-stream"), so the webkit project
+// must not receive them; it takes the seeded-clip branch below instead.
 
 interface AuthSessionShape {
     userId: string;
