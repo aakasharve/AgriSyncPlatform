@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Sprout, Zap, Tractor, FlaskConical, ArrowLeft, Globe, Shield, Download, Trash2, CreditCard, Mic } from 'lucide-react';
+import { User, Sprout, Zap, Tractor, FlaskConical, ArrowLeft, Globe, Shield, Download, Trash2, CreditCard, Mic, BookOpen } from 'lucide-react';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useAuth } from '../../app/providers/AuthProvider';
@@ -73,6 +73,8 @@ interface ProfilePageProps {
     /** spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — offline
      * voice-note drafts waiting for the farmer's review. */
     onOpenAiDrafts?: () => void;
+    /** Settings page: Voice Journal / Voice Diary + retention consent. */
+    onOpenSettings?: () => void;
     /** Leave the Profile screen (back to the main app / daily log). */
     onExit?: () => void;
     /**
@@ -88,7 +90,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     profile, crops, onUpdateProfile, onUpdateCrops,
     onAddPerson, onDeletePerson,
     onOpenScheduleLibrary, onOpenFinanceManager, onOpenLabour, onOpenReferrals,
-    onOpenConsent, onOpenExport, onOpenErasure, onOpenAiDrafts,
+    onOpenConsent, onOpenExport, onOpenErasure, onOpenAiDrafts, onOpenSettings,
     onExit,
     initialTab,
 }) => {
@@ -338,6 +340,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 const isOwner = billingFarm?.role === 'PrimaryOwner';
                 const settingsMeta: Record<string, { label: string; icon: React.ReactNode; subtitle?: string }> = {
                     language: { label: 'भाषा · Language', icon: <Globe size={20} />, subtitle: langLabel },
+                    // Both strings already exist in the app (nav 'सेटिंग्ज'; Voice Diary bundle 'आवाजी डायरी').
+                    'voice-diary': { label: 'सेटिंग्ज · Settings', icon: <BookOpen size={20} />, subtitle: 'आवाजी डायरी · Voice Diary' },
                     consent: { label: 'गोपनीयता · Consent', icon: <Shield size={20} />, subtitle: 'तुमच्या परवानग्या · Your permissions' },
                     export: { label: 'डेटा डाउनलोड · Export my data', icon: <Download size={20} />, subtitle: 'सर्व डेटाची प्रत · A copy of your data' },
                     erase: { label: 'डेटा पुसा · Erase my data', icon: <Trash2 size={20} />, subtitle: 'कायमचा पुसा · Permanent' },
@@ -354,6 +358,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     if (id === 'export') { onOpenExport?.(); return; }
                     if (id === 'erase') { onOpenErasure?.(); return; }
                     if (id === 'ai-drafts') { onOpenAiDrafts?.(); return; }
+                    if (id === 'voice-diary') { onOpenSettings?.(); return; }
                     setActiveExtra(id); // 'language' | 'billing' — folded sub-screens
                 };
 

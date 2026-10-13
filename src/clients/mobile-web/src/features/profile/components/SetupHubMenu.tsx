@@ -156,8 +156,9 @@ interface RowCardProps {
     subtitle?: string;
     tone?: 'emerald' | 'muted' | 'danger';
     onClick?: () => void;
+    testId?: string;
 }
-const RowCard: React.FC<RowCardProps> = ({ icon, label, subtitle, tone = 'muted', onClick }) => {
+const RowCard: React.FC<RowCardProps> = ({ icon, label, subtitle, tone = 'muted', onClick, testId }) => {
     const tileTone =
         tone === 'emerald' ? 'bg-emerald-50 text-emerald-600 ring-emerald-100'
             : tone === 'danger' ? 'bg-red-50 text-red-500 ring-red-100'
@@ -166,6 +167,7 @@ const RowCard: React.FC<RowCardProps> = ({ icon, label, subtitle, tone = 'muted'
         <button
             type="button"
             onClick={onClick}
+            data-testid={testId}
             className="group flex w-full items-center gap-3.5 rounded-[20px] border border-slate-100 bg-white p-3.5 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-all active:scale-[0.98] hover:border-emerald-200/70 hover:shadow-[0_6px_16px_-8px_rgba(20,40,30,0.18)]"
         >
             <span className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl ring-1 ${tileTone}`}>{icon}</span>
@@ -303,7 +305,7 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                     <GroupLabel>सेटिंग्ज · Settings</GroupLabel>
                     <div className="space-y-2.5">
                         {settingsItems.map(it => (
-                            <RowCard key={it.id} icon={it.icon} label={it.label} subtitle={it.subtitle} onClick={() => onSelectExtra?.(it.id)} />
+                            <RowCard key={it.id} icon={it.icon} label={it.label} subtitle={it.subtitle} testId={`hub-settings-${it.id}`} onClick={() => onSelectExtra?.(it.id)} />
                         ))}
                     </div>
                 </>

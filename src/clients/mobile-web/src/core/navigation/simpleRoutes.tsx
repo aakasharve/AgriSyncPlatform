@@ -72,6 +72,7 @@ export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
                 onOpenErasure={() => ctx.setCurrentRoute('dataRights/erasure')}
                 onOpenQrDemo={() => ctx.setCurrentRoute('qr-demo')}
                 onOpenAiDrafts={() => ctx.setCurrentRoute('ai-drafts')}
+                onOpenSettings={() => ctx.setCurrentRoute('settings')}
                 onExit={() => ctx.setCurrentRoute('main')}
             />
         </div>
