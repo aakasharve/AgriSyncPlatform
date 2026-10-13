@@ -114,6 +114,8 @@ async function freshDb() {
         // ignore
     }
     await resetDatabase();
+    // Cloud-save consent took effect before every fixture clip (2026-08-15).
+    await getDatabase().appMeta.put({ key: 'voice_archive_consent_since', value: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' });
 }
 
 async function clipRow() {

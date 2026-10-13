@@ -72,6 +72,7 @@ async function signIn(user: string, owner: string) {
 
 async function seedFarm() {
     await getDatabase().farms.put({ id: FARM, ownerAccountId: 'owner-a', payload: {}, updatedAt: minutesAgo(1) });
+    await getDatabase().appMeta.put({ key: 'voice_archive_consent_since', value: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' });
 }
 
 async function seedClip(clipId: string, minutes: number, extra: Record<string, unknown> = {}) {

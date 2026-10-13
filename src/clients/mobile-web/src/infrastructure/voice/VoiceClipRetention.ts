@@ -25,6 +25,7 @@ import { getCurrentTenantDek, resolveDek } from '../security/tenantDekClient';
 import { agriSyncClient } from '../api/AgriSyncClient';
 import { persistRetainedVoiceClip } from '../voiceDiary/voiceDiaryApiClient';
 import { archiveRetryDelayMs } from './voiceArchiveState';
+import { observeArchiveConsent, recordedUnderConsent } from './voiceArchiveConsent';
 import { emitClientError } from '../../core/telemetry/eventEmitters';
 import { EventSchemas } from '../../core/telemetry/eventSchema';
 
@@ -253,6 +254,12 @@ export type VoiceClipArchiveSkipReason =
      */
     | 'no_audio_bytes'
     /**
+     * Recorded before cloud-save consent took effect on this phone (or while it
+     * was declined / revoked). Never uploaded automatically; stays local-only.
+     * See `voiceArchiveConsent.ts`. Silent: nothing was promised for this clip.
+     */
+    | 'recorded_before_consent'
+    /**
      * The clip's farm is not in the local cache, so the owner account the seal
      * is bound to is unknown (`resolveVoiceClipBinding` returns null). Sealing
      * unbound is refused by contract, so the clip waits - it stays queued and
@@ -473,13 +480,21 @@ async function archiveOnce(
         return { status: 'skipped', clipId, reason: 'consent_unknown' };
     }
     if (!consentGranted) {
+        await observeArchiveConsent(false).catch(() => null);
         return { status: 'skipped', clipId, reason: 'consent_not_granted' };
     }
 
-    // Past this line consent IS granted, so every remaining exit that is not
-    // `archived` leaves a promise unkept and is reported.
     const db = getDatabase();
     const row = await db.voiceClips.get(clipId);
+    // Consent covers recordings made WHILE it was granted. Fail closed: no
+    // marker, or a clip older than it, is never uploaded automatically.
+    const consentSince = await observeArchiveConsent(true);
+    if (row && !row.s3RetainedKey && !recordedUnderConsent(row.recordedAtUtc, consentSince)) {
+        return { status: 'skipped', clipId, reason: 'recorded_before_consent' };
+    }
+
+    // Past this line consent IS granted for this clip, so every remaining exit
+    // that is not `archived` leaves a promise unkept and is reported.
     if (!row) {
         const message = 'consent is granted but the clip row is not in Dexie';
         reportArchiveFailure(clipId, 'clip_row_missing', message, 0, contextFarmId);

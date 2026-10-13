@@ -109,6 +109,8 @@ describe('voice archive state machine', () => {
         await useUser('user-a', 'owner-a');
         server.consent.set('user-a', true);
         await seedFarm(FARM_A, 'owner-a');
+        // Consent took effect before every clip below unless a test says otherwise.
+        await getDatabase().appMeta.put({ key: 'voice_archive_consent_since', value: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' });
     });
     afterEach(() => setOnline(true));
 
@@ -256,6 +258,7 @@ describe('voice archive state machine', () => {
 
         await useUser('user-b', 'owner-b');
         server.consent.set('user-b', true);
+        await getDatabase().appMeta.put({ key: 'voice_archive_consent_since', value: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' });
         await seedFarm('f2222222-2222-4222-8222-222222222222', 'owner-b');
         await seedClip(CLIP_2, 'f2222222-2222-4222-8222-222222222222');
         // B's database does not even contain A's clip.
@@ -336,5 +339,65 @@ describe('voice archive state machine', () => {
             expect(r.sizeBytes).toBe(PLAINTEXT.byteLength);
         }
         expect(await getDatabase().voiceClips.count()).toBe(2);
+    });
+
+    describe('consent boundary: only clips recorded WHILE consent was granted are ever uploaded', () => {
+        const GRANT = '2026-10-10T12:00:00.000Z';
+        const BEFORE = '2026-10-10T09:00:00.000Z';
+        const AFTER = '2026-10-10T15:00:00.000Z';
+
+        beforeEach(async () => {
+            await getDatabase().appMeta.clear();
+        });
+
+        it('a clip recorded BEFORE the grant stays local_only after the grant and after retries; a clip recorded after uploads once', async () => {
+            await seedClip(CLIP_1, FARM_A, { recordedAtUtc: BEFORE });
+            await seedClip(CLIP_2, FARM_A, { recordedAtUtc: AFTER });
+            const { observeArchiveConsent } = await import('../../voice/voiceArchiveConsent');
+            await observeArchiveConsent(true, GRANT); // the moment the toggle reported the grant
+
+            for (let i = 0; i < 3; i++) {
+                await drainRetainedArchiveQueue(); // repeated passes / retries
+            }
+
+            expect(server.stored.get('user-a')?.has(CLIP_2)).toBe(true);
+            expect(server.stored.get('user-a')?.has(CLIP_1)).toBeFalsy();
+            expect(server.persistCalls.filter(c => c.clipId === CLIP_2)).toHaveLength(1);
+            const old = (await row(CLIP_1))!;
+            expect(old.localBlob).toBeTruthy();
+            expect(old.archiveState).toBeUndefined();
+            const { getArchiveConsentSince, recordedUnderConsent } = await import('../../voice/voiceArchiveConsent');
+            const since = await getArchiveConsentSince();
+            expect(deriveCloudArchiveState(old, true, Date.now(), recordedUnderConsent(old.recordedAtUtc, since))).toBe('local_only');
+            expect(deriveCloudArchiveState((await row(CLIP_2))!, true)).toBe('acknowledged');
+        });
+
+        it('the parse-hook path honours the same boundary', async () => {
+            await seedClip(CLIP_1, FARM_A, { recordedAtUtc: BEFORE });
+            const { observeArchiveConsent } = await import('../../voice/voiceArchiveConsent');
+            await observeArchiveConsent(true, GRANT);
+            const { archiveToRetainedTierIfConsented } = await import('../../voice/VoiceClipRetention');
+            const outcome = await archiveToRetainedTierIfConsented(CLIP_1, FARM_A);
+            expect(outcome).toEqual({ status: 'skipped', clipId: CLIP_1, reason: 'recorded_before_consent' });
+            expect(server.persistCalls).toHaveLength(0);
+        });
+
+        it('no marker at all (grant time unknown) fails closed: nothing older than the consent record is uploaded', async () => {
+            // The first pass observes consent NOW; a clip recorded earlier is not eligible.
+            await seedClip(CLIP_1, FARM_A, { recordedAtUtc: BEFORE });
+            await drainRetainedArchiveQueue();
+            expect(server.persistCalls).toHaveLength(0);
+        });
+
+        it('revoke clears the marker; a later re-grant starts a NEW boundary, so clips from the declined gap stay local', async () => {
+            const { observeArchiveConsent, getArchiveConsentSince } = await import('../../voice/voiceArchiveConsent');
+            await observeArchiveConsent(true, GRANT);
+            await observeArchiveConsent(false);
+            expect(await getArchiveConsentSince()).toBeNull();
+            await seedClip(CLIP_1, FARM_A, { recordedAtUtc: AFTER }); // recorded while revoked
+            await observeArchiveConsent(true, '2026-10-11T00:00:00.000Z'); // re-grant next day
+            await drainRetainedArchiveQueue();
+            expect(server.persistCalls).toHaveLength(0);
+        });
     });
 });

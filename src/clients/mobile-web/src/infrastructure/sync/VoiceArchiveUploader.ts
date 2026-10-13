@@ -31,6 +31,7 @@ import { getDatabase, type VoiceClipCacheRecord } from '../storage/DexieDatabase
 import { agriSyncClient } from '../api/AgriSyncClient';
 import { archiveToRetainedTierIfConsented } from '../voice/VoiceClipRetention';
 import { deriveCloudArchiveState } from '../voice/voiceArchiveState';
+import { observeArchiveConsent, recordedUnderConsent } from '../voice/voiceArchiveConsent';
 
 const WORKER_INTERVAL_MS = 30_000;
 /** Clips carried per cycle. Small on purpose: sealing + a base64 POST is heavy on a low-RAM phone. */
@@ -73,6 +74,8 @@ export async function drainRetainedArchiveQueue(): Promise<DrainResult> {
     } catch {
         return { ...EMPTY, skipped: 'consent_unknown' };
     }
+    // Remember WHEN consent was first seen on; clear it the moment it is off.
+    const consentSince = await observeArchiveConsent(granted);
     if (!granted) {
         return { ...EMPTY, skipped: 'consent_not_granted' };
     }
@@ -82,6 +85,8 @@ export async function drainRetainedArchiveQueue(): Promise<DrainResult> {
     const nowMs = Date.now();
     const unacknowledged = (await db.voiceClips.toArray())
         .filter(clip => !clip.s3RetainedKey && hasBytes(clip))
+        // Only clips recorded while consent was in force; older ones stay local-only.
+        .filter(clip => recordedUnderConsent(clip.recordedAtUtc, consentSince))
         .filter(clip => deriveCloudArchiveState(clip, true, nowMs) !== 'uploading')
         .sort((a, b) => Date.parse(a.recordedAtUtc) - Date.parse(b.recordedAtUtc));
 

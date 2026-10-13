@@ -65,6 +65,7 @@ async function recordAndUpload() {
     await getDatabase().farms.put({
         id: FARM, ownerAccountId: 'owner-a', payload: {}, updatedAt: '2026-10-01T00:00:00.000Z',
     });
+    await getDatabase().appMeta.put({ key: 'voice_archive_consent_since', value: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' });
     await getDatabase().voiceClips.put({
         id: CLIP,
         farmId: FARM,

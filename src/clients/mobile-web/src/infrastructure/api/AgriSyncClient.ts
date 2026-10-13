@@ -457,8 +457,17 @@ export class AgriSyncClient implements HttpTransport {
         return Consent.getConsent(this);
     }
 
-    updateConsent(request: UpdateConsentRequest): Promise<ConsentStateDto> {
-        return Consent.updateConsent(this, request);
+    async updateConsent(request: UpdateConsentRequest): Promise<ConsentStateDto> {
+        const result = await Consent.updateConsent(this, request);
+        // Voice archive: the grant moment is what bounds which recordings may be
+        // uploaded. Best-effort and lazy (no import cycle); never blocks consent.
+        try {
+            const { observeArchiveConsent } = await import('../voice/voiceArchiveConsent');
+            await observeArchiveConsent(result.fullHistoryJournal === true);
+        } catch {
+            // marker stays as it was; the uploader re-observes on its next pass
+        }
+        return result;
     }
 
     issueConsentToken(): Promise<IssueConsentTokenResponse> {

@@ -47,11 +47,13 @@ export function deriveCloudArchiveState(
     clip: StateInput,
     consentGranted: boolean,
     nowMs: number = Date.now(),
+    /** False for a clip recorded before consent took effect: it is never queued. */
+    eligible: boolean = true,
 ): CloudArchiveState {
     // The server's own echo beats every other signal, including later
     // revocation of consent: stopping FUTURE saving never un-saves a clip.
     if (clip.s3RetainedKey) return 'acknowledged';
-    if (!consentGranted) return 'local_only';
+    if (!consentGranted || !eligible) return 'local_only';
     if (clip.archiveState === 'uploading') {
         const startedMs = Date.parse(clip.retainedArchiveLastAttemptAtUtc ?? '');
         const live = Number.isFinite(startedMs) && nowMs - startedMs < STALE_UPLOADING_MS;

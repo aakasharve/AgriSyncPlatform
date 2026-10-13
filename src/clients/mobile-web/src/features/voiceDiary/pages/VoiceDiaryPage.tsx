@@ -22,6 +22,7 @@ import {
 } from '../../../infrastructure/storage/DexieDatabase';
 import { purgeExpiredProcessingVoiceClips } from '../../../infrastructure/voice/VoiceClipRetention';
 import { deriveCloudArchiveState } from '../../../infrastructure/voice/voiceArchiveState';
+import { getArchiveConsentSince, recordedUnderConsent } from '../../../infrastructure/voice/voiceArchiveConsent';
 import { voiceArchiveUploader } from '../../../infrastructure/sync/VoiceArchiveUploader';
 import {
     getVoiceDiaryByRange,
@@ -63,6 +64,7 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
     const [cloudClips, setCloudClips] = useState<VoiceDiaryListItem[]>([]);
     const [selectedDateKey, setSelectedDateKey] = useState<string>(() => getDateKey());
     const [loading, setLoading] = useState(true);
+    const [consentSince, setConsentSince] = useState<string | null>(null);
 
     const { granted: consentGranted, loaded: consentLoaded } = useFullHistoryJournalConsent();
 
@@ -77,6 +79,8 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
             // that apart from deletion. The user's own database is the scope.
             const records = await getDatabase().voiceClips.toArray();
             records.sort((a, b) => Date.parse(b.recordedAtUtc) - Date.parse(a.recordedAtUtc));
+            // Marker first, so no frame labels a clip with a stale boundary.
+            setConsentSince(await getArchiveConsentSince().catch(() => null));
             setLocalClips(records);
 
             // spec: dfes-companion-2026-07-11 (farm-memory) — ADR-DS-017 (c).
@@ -122,7 +126,7 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
     // uploader and re-read the local rows so the badge follows the truth (queued
     // -> uploading -> saved, or failed). Stops by itself once everything is acked.
     const hasUnacknowledged = consentGranted
-        && localClips.some(clip => !clip.s3RetainedKey);
+        && localClips.some(clip => !clip.s3RetainedKey && recordedUnderConsent(clip.recordedAtUtc, consentSince));
     useEffect(() => {
         if (!hasUnacknowledged) return undefined;
         const timer = window.setInterval(() => {
@@ -159,8 +163,13 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
                 // the server. That only matters to a farmer who keeps his
                 // voice — for everyone else the 30-day local journal is
                 // the whole promise and there is nothing pending.
-                pendingCloudSave: consentGranted && !record.s3RetainedKey,
-                cloudState: deriveCloudArchiveState(record, consentGranted),
+                // Only clips recorded while consent was in force are ever queued;
+                // older ones stay honestly local (fail closed without a marker).
+                pendingCloudSave: consentGranted && !record.s3RetainedKey
+                    && recordedUnderConsent(record.recordedAtUtc, consentSince),
+                cloudState: deriveCloudArchiveState(
+                    record, consentGranted, Date.now(), recordedUnderConsent(record.recordedAtUtc, consentSince),
+                ),
             });
         }
         for (const cloud of cloudClips) {
@@ -183,7 +192,7 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
         return Array.from(map.values()).sort(
             (a, b) => Date.parse(b.recordedAtUtc) - Date.parse(a.recordedAtUtc),
         );
-    }, [localClips, cloudClips, consentGranted]);
+    }, [localClips, cloudClips, consentGranted, consentSince]);
 
     const countsByDate = useMemo(() => {
         return unifiedClips.reduce<Record<string, number>>((acc, clip) => {
