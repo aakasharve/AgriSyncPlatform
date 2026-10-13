@@ -63,7 +63,6 @@ import { setAuthSession, clearAuthSession } from '../../../../infrastructure/sto
 import { SessionStore } from '../../../../infrastructure/storage/SessionStore';
 import { saveLabourReadout } from '../../data/labourReadout';
 import { LABOUR_READOUT_MAX_AGE_MS } from '../../../../infrastructure/storage/LabourReadoutCache';
-import { setAttendanceDoorEnabled } from '../../attendanceDoor';
 import { getDatabase } from '../../../../infrastructure/storage/DexieDatabase';
 import { mutationQueue } from '../../../../infrastructure/sync/MutationQueue';
 import { SyncMutationName } from '../../../../infrastructure/sync/SyncMutationCatalog';
@@ -78,6 +77,7 @@ const spy = () => (agriSyncClient as unknown as { _spy: ReturnType<typeof vi.fn>
 
 function ownerData(): LabourData {
     const d: LabourData = JSON.parse(JSON.stringify(LABOUR_MOCK));
+    d.canManageLabour = true;
     d.dashboard.wages = MONEY[0]; d.dashboard.advances = MONEY[1]; d.dashboard.owed = MONEY[2];
     d.dashboard.money = { recorded: MONEY[3], paid: 1, advance: 1, owed: MONEY[2] };
     for (const p of Object.values(d.people)) p.balance = { recorded: MONEY[3], paid: MONEY[1], advance: 0 };
@@ -121,7 +121,6 @@ afterEach(() => cleanup());
 describe('offline cold start - Labour loads', () => {
     it('marker + no network: hub loads from the last-known read-out, labelled, no money, door reachable', async () => {
         coldStart();
-        setAttendanceDoorEnabled(true);
         saveLabourReadout('u1', FARM, 'alltime', ownerData());
         await queueMark();
 
@@ -147,9 +146,19 @@ describe('offline cold start - Labour loads', () => {
         await waitFor(() => expect(container.querySelector('[data-testid="ledger-cell-pending"]')).not.toBeNull());
     });
 
-    it('without the manual-door switch the door is not drawn (same as online)', async () => {
+    it("the read-out carries the server's last canManageLabour answer: true draws the door offline", async () => {
         coldStart();
         saveLabourReadout('u1', FARM, 'alltime', ownerData());
+        mount();
+        await waitFor(() => expect(screen.getByTestId('labour-stale-readout')).toBeInTheDocument());
+        expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
+    });
+
+    it('a read-out whose server answer was false, or absent (older copy): the door is not drawn', async () => {
+        coldStart();
+        const d = ownerData();
+        d.canManageLabour = false;
+        saveLabourReadout('u1', FARM, 'alltime', d);
         mount();
         await waitFor(() => expect(screen.getByTestId('labour-stale-readout')).toBeInTheDocument());
         expect(screen.queryByText('हजेरी घ्या')).not.toBeInTheDocument();

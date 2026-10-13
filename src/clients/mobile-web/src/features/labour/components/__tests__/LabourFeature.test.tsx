@@ -34,7 +34,7 @@
  * otherwise irrelevant to this file's loading/error assertions.
  */
 import React from 'react';
-import { describe, it, expect, afterEach, vi, beforeEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 
@@ -64,10 +64,6 @@ const EMPTY_PEOPLE_LABEL = 'अजून कोणाचंही नाव ज�
 const ERROR_LABEL = 'माहिती आणता आली नाही';
 const RETRY_LABEL = 'पुन्हा प्रयत्न करा';
 
-import { setAttendanceDoorEnabled } from '../../attendanceDoor';
-
-// Early-access switch ON: these suites pin the door's behaviour once opened (device-switch spec).
-beforeEach(() => { setAttendanceDoorEnabled(true); });
 
 describe('LabourFeature — loading gate (Decision 4b; extended Task 6d)', () => {
     afterEach(() => {
@@ -172,25 +168,12 @@ describe('LabourFeature — error state asserts nothing (Task 6d)', () => {
 // lives in LabourFeature.attendanceDoor.test.tsx.
 // ---------------------------------------------------------------------------
 
-describe('LabourFeature - हजेरी घ्या is shown whatever the hook says about preview', () => {
-    afterEach(() => {
-        cleanup();
-        mockUseLabourState.mockReset();
-    });
-
-    it.each([true, false])('shows हजेरी घ्या and हजेरी वही when the hook reports isPreview: %s', (isPreview) => {
-        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: false, error: false, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn(), isPreview });
-
-        render(<LabourFeature onExit={() => {}} />);
-
-        expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
-        expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
-    });
-});
-
-describe('LabourFeature - early-access switch (device-switch spec): default OFF, 7 taps on the title toggle', () => {
-    const mount = (isPreview: boolean) => {
-        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: false, error: false, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn(), isPreview });
+describe('LabourFeature - हजेरी घ्या is normal Labour navigation, driven only by the server flag', () => {
+    const mount = (canManageLabour: boolean | undefined, isPreview = false) => {
+        mockUseLabourState.mockReturnValue({
+            data: { ...EMPTY_LABOUR_DATA, ...(canManageLabour === undefined ? {} : { canManageLabour }) },
+            loading: false, error: false, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn(), isPreview,
+        });
         return render(<LabourFeature onExit={() => {}} />);
     };
     const tapTitle = (n: number) => {
@@ -198,33 +181,35 @@ describe('LabourFeature - early-access switch (device-switch spec): default OFF,
         for (let i = 0; i < n; i++) fireEvent.click(title);
     };
 
-    beforeEach(() => { window.localStorage.clear(); }); // runs after the file-level ON hook
-    afterEach(() => { cleanup(); mockUseLabourState.mockReset(); window.localStorage.clear(); });
+    afterEach(() => {
+        cleanup();
+        mockUseLabourState.mockReset();
+        window.localStorage.clear();
+    });
 
-    it.each([true, false])('fresh device (preview: %s): no हजेरी घ्या tile, no no-work tile; हजेरी वही still there', (isPreview) => {
-        mount(isPreview);
+    it.each([true, false])('server says canManageLabour=true (isPreview: %s): हजेरी घ्या and हजेरी वही both show', (isPreview) => {
+        mount(true, isPreview);
+        expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
+        expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
+    });
+
+    it.each([[false], [undefined]])('canManageLabour=%s: no हजेरी घ्या, no no-work tile; हजेरी वही still there', (flag) => {
+        mount(flag);
         expect(screen.queryByText('हजेरी घ्या')).not.toBeInTheDocument();
         expect(screen.queryByText('काम झालं नाही, पण मजूर आले')).not.toBeInTheDocument();
         expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
     });
 
-    it('6 taps do nothing', () => {
+    it('the old hidden gesture is gone: 7 (or 20) taps on the title neither toast nor open the door', () => {
         mount(false);
-        tapTitle(6);
+        tapTitle(20);
         expect(screen.queryByText('हजेरी घ्या')).not.toBeInTheDocument();
         expect(screen.queryByText(/हजेरीचं नवं दार/)).not.toBeInTheDocument();
     });
 
-    it('7 taps: toast, tile appears, and it persists after a remount (reload)', () => {
-        const first = mount(false);
-        tapTitle(7);
-        expect(screen.getByText('हजेरीचं नवं दार: चालू')).toBeInTheDocument();
-        expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
-        first.unmount();
+    it('a stored legacy device flag changes nothing', () => {
+        window.localStorage.setItem('agrisync.early.attendanceDoor', '1');
         mount(false);
-        expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
-        tapTitle(7);
-        expect(screen.getByText('हजेरीचं नवं दार: बंद')).toBeInTheDocument();
         expect(screen.queryByText('हजेरी घ्या')).not.toBeInTheDocument();
     });
 });

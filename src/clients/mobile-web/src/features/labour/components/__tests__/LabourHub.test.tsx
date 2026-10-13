@@ -10,7 +10,7 @@
 // optional (LabourPreview.tsx's bare `?preview=labour` mount supplies none
 // of them) — the "renders nothing, doesn't crash" cases guard that.
 import React from 'react';
-import { describe, it, expect, afterEach, vi, beforeEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import LabourHub from '../LabourHub';
@@ -114,10 +114,7 @@ const nonLabourLog = (): DailyLog => ({
     financialSummary: { totalLabourCost: 0, totalInputCost: 0, totalMachineryCost: 0, grandTotal: 0 },
 } as unknown as DailyLog);
 
-import { setAttendanceDoorEnabled } from '../../attendanceDoor';
 
-// Early-access switch ON: these suites pin the door's behaviour once opened (device-switch spec).
-beforeEach(() => { setAttendanceDoorEnabled(true); });
 
 describe('LabourHub — "just logged" labour summary (Task 3.5)', () => {
     afterEach(() => cleanup());
@@ -280,7 +277,7 @@ describe('LabourHub — screen honesty (Decision 4b)', () => {
     });
 
     it('shows हजेरी घ्या (the capture screen is finished) and the हजेरी वही (never gated, Correction 5)', () => {
-        render(<LabourHub {...baseProps()} data={LABOUR_MOCK} />);
+        render(<LabourHub {...baseProps()} data={{ ...LABOUR_MOCK, canManageLabour: true }} />);
         expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
         expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
         // The tiles that DO work stay reachable.
@@ -419,15 +416,15 @@ describe('LabourHub — no auto-approve capability claim (Task 22)', () => {
 // ---------------------------------------------------------------------------
 // The attendance door (replaces the Task 18 preview-exception block). The old
 // hard-`false` SHOW_ATTENDANCE_TILE and its `isPreview` escape are DELETED;
-// the tile is shown by `isAttendanceDoorEnabled()` for every caller, with no
+// the tile is shown by `canTakeManualAttendance(data.canManageLabour)` for every caller, with no
 // prop. The full flow is pinned by LabourFeature.attendanceDoor.test.tsx.
 // ---------------------------------------------------------------------------
 
 describe('LabourHub - the attendance door (हजेरी घ्या)', () => {
     afterEach(() => cleanup());
 
-    it('always shows हजेरी घ्या and हजेरी वही, with no preview prop involved', () => {
-        render(<LabourHub {...baseProps()} data={LABOUR_MOCK} />);
+    it('shows हजेरी घ्या and हजेरी वही when the server allows it, with no preview prop involved', () => {
+        render(<LabourHub {...baseProps()} data={{ ...LABOUR_MOCK, canManageLabour: true }} />);
         expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
         expect(screen.getByText('आज कोण आलं')).toBeInTheDocument();
         expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
@@ -436,7 +433,7 @@ describe('LabourHub - the attendance door (हजेरी घ्या)', () =>
 
     it('the tile opens the screen through onAttendance', () => {
         const onAttendance = vi.fn();
-        render(<LabourHub {...baseProps()} onAttendance={onAttendance} />);
+        render(<LabourHub {...baseProps()} data={{ ...LABOUR_MOCK, canManageLabour: true }} onAttendance={onAttendance} />);
         fireEvent.click(screen.getByText('हजेरी घ्या'));
         expect(onAttendance).toHaveBeenCalledTimes(1);
     });
@@ -445,16 +442,16 @@ describe('LabourHub - the attendance door (हजेरी घ्या)', () =>
         const onNoWorkAttendance = vi.fn();
         const noWork = 'काम झालं नाही, पण मजूर आले';
 
-        render(<LabourHub {...baseProps()} anchor={{ state: 'no-anchor' }} onNoWorkAttendance={onNoWorkAttendance} />);
+        render(<LabourHub {...baseProps()} data={{ ...EMPTY_LABOUR_DATA, canManageLabour: true }} anchor={{ state: 'no-anchor' }} onNoWorkAttendance={onNoWorkAttendance} />);
         fireEvent.click(screen.getByText(noWork));
         expect(onNoWorkAttendance).toHaveBeenCalledTimes(1);
         cleanup();
 
-        render(<LabourHub {...baseProps()} anchor={{ state: 'no-anchor' }} />);          // no handler
+        render(<LabourHub {...baseProps()} data={{ ...EMPTY_LABOUR_DATA, canManageLabour: true }} anchor={{ state: 'no-anchor' }} />);          // no handler
         expect(screen.queryByText(noWork)).toBeNull();
         cleanup();
 
-        render(<LabourHub {...baseProps()} anchor={{ state: 'anchored', headcount: 4, logId: 'l1' }} onNoWorkAttendance={onNoWorkAttendance} />);
+        render(<LabourHub {...baseProps()} data={{ ...EMPTY_LABOUR_DATA, canManageLabour: true }} anchor={{ state: 'anchored', headcount: 4, logId: 'l1' }} onNoWorkAttendance={onNoWorkAttendance} />);
         expect(screen.queryByText(noWork)).toBeNull();                                    // hero active
     });
 });

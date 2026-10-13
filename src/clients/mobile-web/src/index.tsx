@@ -23,9 +23,6 @@ import { eventBus } from './core/telemetry/AnalyticsEventBus';
 import { emitClientError } from './core/telemetry/eventEmitters';
 import { initSentry } from './lib/sentry';
 import { BUILD_TAG } from './buildInfo';
-import { consumeEarlyAccessUrlParam } from './features/labour/earlyAccess';
-
-consumeEarlyAccessUrlParam();
 
 // Build-identity marker (login-cache-ghost / stale-install diagnostics): prints
 // the exact running build so we can confirm a device is on the latest bundle

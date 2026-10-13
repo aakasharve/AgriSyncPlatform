@@ -45,7 +45,7 @@ test.describe('Attachment upload state machine', () => {
         await resetAndSeed('purvesh-demo');
 
         // --- Login ---
-        // loginViaPassword also waits for home-greeting, which ensures the initial
+        // loginViaPassword also waits for home shell, which ensures the initial
         // sync pull has run (shramsafal_last_pull_payload is written; farmId available).
         await loginViaPassword(page, '8888888888', 'Testuser@123');
 

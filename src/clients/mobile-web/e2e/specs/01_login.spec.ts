@@ -17,7 +17,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { resetAndSeed } from '../fixtures/seed.api';
-import { loginViaPassword, passConsentGateIfPresent } from '../fixtures/loginHelper';
+import { loginViaPassword, passConsentGateIfPresent, HOME_READY_TESTID } from '../fixtures/loginHelper';
 
 test.describe('Login', () => {
     test('login with seeded user lands on home', async ({ page }) => {
@@ -60,8 +60,8 @@ test.describe('Login', () => {
         await expect(alert).toBeVisible({ timeout: 10_000 });
         await expect(alert).toContainText(/invalid|incorrect|wrong|चुकीचे|unauthorized|login failed|check phone/i);
 
-        // Still on login — home-greeting should NOT be present
-        await expect(page.getByTestId('home-greeting')).not.toBeVisible();
+        // Still on login — home shell should NOT be present
+        await expect(page.getByTestId(HOME_READY_TESTID)).not.toBeVisible();
     });
 });
 
@@ -88,12 +88,11 @@ test.describe('Login', () => {
 // We scope the profile button to the <header> banner role to avoid ambiguity
 // with any other User2 icon rendered elsewhere in the app shell.
 async function logoutViaProfile(page: Page): Promise<void> {
-    // The AppHeader profile button is a <button> with a User2 icon inside the
-    // sticky <header> (role="banner"). It has no data-testid — anchor on the
-    // banner-scoped button that contains the lucide-user-2 SVG class.
-    const profileBtn = page.getByRole('banner').getByRole('button').filter({
-        has: page.locator('svg.lucide-user-2'),
-    }).first();
+    // The AppHeader profile button is the header's `header-setup-hub` button (it opens
+    // the profile route). The old anchor, the `lucide-user-2` SVG class, no longer
+    // exists: lucide renamed User2 -> UserRound and the class is now `lucide-user-round`.
+    // The data-testid does not depend on the icon library's class naming.
+    const profileBtn = page.getByRole('banner').getByTestId('header-setup-hub');
     await expect(profileBtn).toBeVisible({ timeout: 15_000 });
     await profileBtn.click();
 
@@ -107,6 +106,12 @@ async function logoutViaProfile(page: Page): Promise<void> {
     // session store, and the app re-renders the LoginPage. Wait for the
     // OTP login form header ("OTP पाठवा / Send OTP") or the "Use password"
     // toggle button as the canonical sign that the login screen is showing.
+    //
+    // The consent gate stands in front of LoginPage for every logged-out boot, and
+    // after a logout it is shown again (the acceptance is read from the active
+    // per-user database, which logout moves away from). Pass it exactly as a farmer
+    // does, then assert the login screen - otherwise this waits behind the gate.
+    await passConsentGateIfPresent(page);
     const useLegacyButton = page.getByRole('button', { name: /पासवर्डने/i });
     await expect(useLegacyButton).toBeVisible({ timeout: 20_000 });
 }
@@ -129,7 +134,7 @@ test.describe('remembered device sessions', () => {
         await loginViaPassword(page, '8888888888', 'Testuser@123');
 
         // Confirm we are on the authenticated home shell.
-        await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId(HOME_READY_TESTID)).toBeVisible({ timeout: 30_000 });
 
         // Full page reload — simulates the user closing the browser tab and
         // returning. The HttpOnly refresh-token cookie is sent automatically;
@@ -138,7 +143,7 @@ test.describe('remembered device sessions', () => {
 
         // After reload the app shell should restore immediately. Give it a
         // generous timeout for CI (initial sync pull + WASM hydration).
-        await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId(HOME_READY_TESTID)).toBeVisible({ timeout: 30_000 });
 
         // The login page must NOT be visible after the reload.
         await expect(page.getByRole('button', { name: /पासवर्डने/i })).not.toBeVisible();
@@ -158,7 +163,7 @@ test.describe('remembered device sessions', () => {
         await resetAndSeed('purvesh-demo');
 
         await loginViaPassword(page, '8888888888', 'Testuser@123');
-        await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId(HOME_READY_TESTID)).toBeVisible({ timeout: 30_000 });
 
         // Read all localStorage entries and assert none contain a refreshToken.
         const sessionRaw = await page.evaluate(() =>
@@ -175,10 +180,14 @@ test.describe('remembered device sessions', () => {
         // fields are persisted — refreshToken is never written.").
         expect('refreshToken' in session).toBe(false);
 
-        // Sanity: the three required fields must be present.
+        // Sanity: the presence marker carries the two non-sensitive fields. The
+        // short-lived ACCESS token is no longer persisted either (AuthTokenStore:
+        // CodeQL clear-text-storage hardening - it lives in memory only), so the
+        // old "three fields" expectation is replaced by the stronger current
+        // contract: userId + expiresAtUtc present, NO token of any kind stored.
         expect(typeof session['userId']).toBe('string');
-        expect(typeof session['accessToken']).toBe('string');
         expect(typeof session['expiresAtUtc']).toBe('string');
+        expect('accessToken' in session).toBe(false);
     });
 
     /**
@@ -194,7 +203,7 @@ test.describe('remembered device sessions', () => {
         await resetAndSeed('purvesh-demo');
 
         await loginViaPassword(page, '8888888888', 'Testuser@123');
-        await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId(HOME_READY_TESTID)).toBeVisible({ timeout: 30_000 });
 
         // Trigger logout through the profile page.
         await logoutViaProfile(page);
@@ -203,6 +212,7 @@ test.describe('remembered device sessions', () => {
         // LoginPage is rendered. (Already asserted inside logoutViaProfile —
         // we re-assert after reload to prove the revoked state persists.)
         await page.reload({ waitUntil: 'domcontentloaded' });
+        await passConsentGateIfPresent(page);
 
         // The OTP login surface (or its "Use password" toggle) must be visible.
         // We do NOT require the exact OTP form — either the OTP panel or the
@@ -211,7 +221,7 @@ test.describe('remembered device sessions', () => {
         await expect(useLegacyButton).toBeVisible({ timeout: 20_000 });
 
         // The authenticated home shell must be gone.
-        await expect(page.getByTestId('home-greeting')).not.toBeVisible();
+        await expect(page.getByTestId(HOME_READY_TESTID)).not.toBeVisible();
     });
 
     /**
@@ -223,9 +233,9 @@ test.describe('remembered device sessions', () => {
      * could indicate that the session check is asynchronous in a way that
      * exposes the gate.
      *
-     * Approach: after login + reload, wait for home-greeting (authenticated).
+     * Approach: after login + reload, wait for home shell (authenticated).
      * Then assert the login toggle button is NOT present. We do NOT use a
-     * fixed sleep — we rely on the home-greeting assertion as the "app is
+     * fixed sleep — we rely on the home shell assertion as the "app is
      * stable" signal before checking that login UI is absent.
      *
      * Grep key: "remember"
@@ -234,18 +244,18 @@ test.describe('remembered device sessions', () => {
         await resetAndSeed('purvesh-demo');
 
         await loginViaPassword(page, '8888888888', 'Testuser@123');
-        await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId(HOME_READY_TESTID)).toBeVisible({ timeout: 30_000 });
 
         // Reload into a remembered session.
         await page.reload({ waitUntil: 'domcontentloaded' });
 
         // Wait for the authenticated home shell to be stable.
-        await expect(page.getByTestId('home-greeting')).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId(HOME_READY_TESTID)).toBeVisible({ timeout: 30_000 });
 
         // At this point the app has fully settled on the authenticated shell.
         // The login toggle button must NOT be in the DOM at all — any flash
         // would have caused the above assertion to race and potentially see
-        // the login page briefly, but since we wait for home-greeting first,
+        // the login page briefly, but since we wait for home shell first,
         // the absence of the login button here is the flash-free guarantee.
         const loginToggle = page.getByRole('button', { name: /पासवर्डने/i });
         await expect(loginToggle).not.toBeVisible();

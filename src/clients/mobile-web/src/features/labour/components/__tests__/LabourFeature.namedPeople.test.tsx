@@ -97,7 +97,6 @@ const renderRealFarm = (props: FeatureProps = {}) => render(
 );
 
 
-import { setAttendanceDoorEnabled } from '../../attendanceDoor';
 import { LABOUR_MOCK, EMPTY_LABOUR_DATA } from '../../labourMock';
 import type { LabourData } from '../../labour.types';
 import { writeCachedRoster } from '../../data/fieldOperatorRosterCache';
@@ -110,11 +109,11 @@ const row = (id: string, name: string) => ({
 });
 const NAMED_ONLY: LabourData = {
     ...EMPTY_LABOUR_DATA,
+    canManageLabour: true,
     topLevelIds: [],
     ledger: { weekLabel: '', days: ['2026-09-02'], rows: [row(OP_A.id, OP_A.displayName), row(OP_B.id, OP_B.displayName)], crewRows: [] },
 };
 
-beforeEach(() => { setAttendanceDoorEnabled(true); });
 beforeEach(() => {
     mockFetchMeContext.mockResolvedValue(ME_CONTEXT);
     mockFetchLabourData.mockResolvedValue(NAMED_ONLY);

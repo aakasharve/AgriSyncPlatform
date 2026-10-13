@@ -25,8 +25,6 @@ import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyn
 import { getRootStore } from '../../../app/state/RootStore';
 import { hasDeclaredNoWorkDay } from '../../../core/navigation/noWorkDay';
 import type { BucketIssueType } from '../../../domain/types/log.types';
-import { isAttendanceDoorEnabled } from '../attendanceDoor';
-import { ClipboardCheck } from 'lucide-react';
 import {
     listParkedAttendanceContradictions,
     buildContradictionQuestion,
@@ -58,7 +56,6 @@ import HajeriCellDetail from './HajeriCellDetail';
 import AttendanceContradictionPrompt from './AttendanceContradictionPrompt';
 import RefusedLabourNotice from './RefusedLabourNotice';
 import ReviewSheet from './ReviewSheet';
-import { createEarlyAccessTapHandler, earlyAccessToastText } from '../earlyAccess';
 import FarmInviteQrSheet from '../../onboarding/qr/FarmInviteQrSheet';
 
 /**
@@ -148,7 +145,6 @@ export const LabourFeature: React.FC<{
     const [cellDetail, setCellDetail] = React.useState<{ row: LedgerRow; dayIndex: number } | null>(null);
     const [toast, setToast] = useState<string | null>(null);
     const toastTimer = useRef<number | undefined>(undefined);
-    const earlyTap = useRef(createEarlyAccessTapHandler()).current;
 
     /**
      * Screen honesty (Decision 4b, 2026-07-19; extended Task 6d, 2026-08-28)
@@ -371,11 +367,6 @@ export const LabourFeature: React.FC<{
             <BackHeader
                 title={title}
                 onBack={handleBack}
-                onTitleTap={() => {
-                    // Founder-only early access: 7 quick taps toggle the per-device attendance door.
-                    const r = earlyTap();
-                    if (r !== null) showToast(earlyAccessToastText(r));
-                }}
             />
             {error && <LoadErrorBanner onRetry={refresh} />}
             {error && Boolean(staleSinceIso) && (
@@ -431,23 +422,12 @@ export const LabourFeature: React.FC<{
                     cur.name === 'attendance' ? attendanceScreen : (
                         <>
                             {/*
-                              * The manual door is a CAPTURE door, not a claim: it
-                              * needs no server answer (the roster is cached on the
-                              * device, marks queue locally), so an outage must not
-                              * lock the farmer out of taking हजेरी. The hub stays
-                              * withheld; only this door and the local register show.
+                              * No attendance door here: with no cached read-out
+                              * the server's canManageLabour answer is unknown, and
+                              * unknown means hidden. An authorised farmer with a
+                              * cached read-out gets the normal hub (with the tile,
+                              * from the cached server answer) instead of this branch.
                               */}
-                            {isAttendanceDoorEnabled() && (
-                                <button type="button" data-testid="attendance-door-offline"
-                                    onClick={() => push({ name: 'attendance' })}
-                                    className="mx-4 mt-2 flex min-h-[92px] w-[calc(100%-2rem)] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-transform active:scale-[0.98]">
-                                    <span className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[16px] bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100"><ClipboardCheck size={20} /></span>
-                                    <span className="min-w-0">
-                                        <span className="block text-[19px] font-bold leading-tight text-stone-800">हजेरी घ्या</span>
-                                        <span className="mt-0.5 block truncate text-[16px] text-stone-500">आज कोण आलं</span>
-                                    </span>
-                                </button>
-                            )}
                             {data.ledger.rows.length > 0 ? (
                                 <HajeriLedger
                                     data={data}

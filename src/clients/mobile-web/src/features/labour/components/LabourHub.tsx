@@ -7,7 +7,7 @@
  * line, drill-in optional). Simple for a semi-literate farmer, in the app's
  * design.
  *
- * हजेरी घ्या's capture tile is shown by `isAttendanceDoorEnabled()` (the ONE
+ * हजेरी घ्या's capture tile is shown by `canTakeManualAttendance()` (the ONE
  * place that decides — `../attendanceDoor.ts`). The old hard-`false`
  * `SHOW_ATTENDANCE_TILE` constant and its `isPreview` escape were DELETED once
  * the screen behind the tile was finished (a switch that can be flipped back
@@ -26,7 +26,7 @@ import { toMr } from './LabourDataPoints';
 import type { LabourAnchor } from '../labourAnchor';
 import { NO_ANCHOR_TEST_IDS, serverStatesLabourToday } from '../labourAnchor';
 import { ATTENDANCE_COPY } from '../attendanceCopy';
-import { isAttendanceDoorEnabled } from '../attendanceDoor';
+import { canTakeManualAttendance } from '../attendanceDoor';
 import { findMarkedAboveStated, resolveStatedHeadcount } from '../attendanceDisagreement';
 import { presentTodayFromLedger } from '../attendanceManual';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
@@ -364,7 +364,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
                 {ATTENDANCE_COPY.noAnchorReason}
             </div>
         )}
-        {heroInactive && onNoWorkAttendance && isAttendanceDoorEnabled() && !serverStatesLabourToday(data) && (
+        {heroInactive && onNoWorkAttendance && canTakeManualAttendance(data.canManageLabour) && !serverStatesLabourToday(data) && (
             <div className="grid grid-cols-1">
                 <QuickTile icon={<CloudRain size={20} />} chip="bg-sky-50 text-sky-600 ring-1 ring-sky-100" label="काम झालं नाही, पण मजूर आले" onClick={onNoWorkAttendance} />
             </div>
@@ -431,7 +431,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
         })()}
 
         <div className="grid grid-cols-2 gap-2.5">
-            {mayRecord && isAttendanceDoorEnabled() && (
+            {canTakeManualAttendance(data.canManageLabour) && (
                 <QuickTile icon={<ClipboardCheck size={20} />} chip="bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100" label="हजेरी घ्या" sub="आज कोण आलं" onClick={onAttendance} />
             )}
             {/* Correction 5 (founder, 2026-09-01): the हजेरी वही is NEVER gated —
