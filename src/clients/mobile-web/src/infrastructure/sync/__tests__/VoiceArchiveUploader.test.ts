@@ -341,6 +341,46 @@ describe('voice archive state machine', () => {
         expect(await getDatabase().voiceClips.count()).toBe(2);
     });
 
+    describe('failure kind: only a connectivity failure may promise a retry on the internet', () => {
+        it('a dropped connection is recorded as network_failed (connectivity message)', async () => {
+            await seedClip(CLIP_1, FARM_A);
+            server.failPersist = 10;
+            await drainRetainedArchiveQueue();
+            const failed = (await row(CLIP_1))!;
+            expect(failed.archiveState).toBe('failed');
+            expect(failed.retainedArchiveError).toMatch(/^network_failed:/);
+            const { archiveFailureKind } = await import('../../voice/voiceArchiveState');
+            expect(archiveFailureKind(failed)).toBe('network');
+        });
+
+        it('a server answer (403 / 409 / 500) is NOT connectivity: no internet-retry promise', async () => {
+            const { archiveFailureKind } = await import('../../voice/voiceArchiveState');
+            for (const status of [403, 409, 500]) {
+                await getDatabase().voiceClips.clear();
+                await seedClip(CLIP_1, FARM_A);
+                server.failPersistWith = Object.assign(new Error(`Request failed with status code ${status}`), {
+                    isAxiosError: true,
+                    response: { status },
+                });
+                await drainRetainedArchiveQueue();
+                const failed = (await row(CLIP_1))!;
+                expect(failed.archiveState).toBe('failed');
+                expect(failed.retainedArchiveError).toMatch(/^persist_failed:/);
+                expect(archiveFailureKind(failed)).toBe('other');
+            }
+        });
+
+        it('isTransportFailure: no response = transport; any response = not', async () => {
+            const { isTransportFailure } = await import('../../voice/voiceArchiveState');
+            expect(isTransportFailure(Object.assign(new Error('x'), { isAxiosError: true }))).toBe(true);
+            expect(isTransportFailure(Object.assign(new Error('x'), { code: 'ECONNABORTED' }))).toBe(true);
+            expect(isTransportFailure(new Error('Network Error'))).toBe(true);
+            expect(isTransportFailure(Object.assign(new Error('x'), { isAxiosError: true, response: { status: 502 } }))).toBe(false);
+            expect(isTransportFailure(new Error('ShramSafal.ConsentRequired'))).toBe(false);
+            expect(isTransportFailure(null)).toBe(false);
+        });
+    });
+
     describe('consent boundary: only clips recorded WHILE consent was granted are ever uploaded', () => {
         const GRANT = '2026-10-10T12:00:00.000Z';
         const BEFORE = '2026-10-10T09:00:00.000Z';
@@ -387,6 +427,55 @@ describe('voice archive state machine', () => {
             await seedClip(CLIP_1, FARM_A, { recordedAtUtc: BEFORE });
             await drainRetainedArchiveQueue();
             expect(server.persistCalls).toHaveLength(0);
+        });
+
+        it('CROSS-DEVICE: revoked and re-granted from another device while this phone never saw false - the gap clip stays local', async () => {
+            // This phone observed the first grant (GRANT) and then went offline / was not running.
+            const { observeArchiveConsent } = await import('../../voice/voiceArchiveConsent');
+            await observeArchiveConsent(true, GRANT);
+            await seedClip(CLIP_1, FARM_A, { recordedAtUtc: '2026-10-10T20:00:00.000Z' }); // recorded in the revoked gap
+            await seedClip(CLIP_2, FARM_A, { recordedAtUtc: '2026-10-11T09:00:00.000Z' }); // recorded after the re-grant
+            // Elsewhere: revoked at 18:00, re-granted at 2026-10-11T08:00. This phone's marker is still GRANT.
+            server.grantSince.set('user-a', '2026-10-11T08:00:00.000Z');
+
+            await drainRetainedArchiveQueue();
+
+            expect(server.persistCalls.map(c => c.clipId)).toEqual([CLIP_2]);
+            expect(server.stored.get('user-a')?.has(CLIP_1)).toBeFalsy();
+            const gap = (await row(CLIP_1))!;
+            expect(gap.localBlob).toBeTruthy();
+            expect(gap.s3RetainedKey).toBeUndefined();
+            const { getArchiveConsentSince, recordedUnderConsent } = await import('../../voice/voiceArchiveConsent');
+            expect(await getArchiveConsentSince()).toBe('2026-10-11T08:00:00.000Z');
+            expect(deriveCloudArchiveState(gap, true, Date.now(), recordedUnderConsent(gap.recordedAtUtc, await getArchiveConsentSince()))).toBe('local_only');
+        });
+
+        it('the later of (this phone, server) wins in both directions', async () => {
+            const { observeArchiveConsent } = await import('../../voice/voiceArchiveConsent');
+            await observeArchiveConsent(true, GRANT); // local 12:00
+            await seedClip(CLIP_1, FARM_A, { recordedAtUtc: '2026-10-10T13:00:00.000Z' });
+            server.grantSince.set('user-a', '2026-10-10T10:00:00.000Z'); // server EARLIER than local
+            await drainRetainedArchiveQueue();
+            expect(server.persistCalls.map(c => c.clipId)).toEqual([CLIP_1]);
+            const { getArchiveConsentSince } = await import('../../voice/voiceArchiveConsent');
+            expect(await getArchiveConsentSince()).toBe(GRANT);
+        });
+
+        it.each([null, 'not-a-date'])('FAIL CLOSED: consent true but server grant start is %s => nothing uploads, clip stays local', async bad => {
+            const { observeArchiveConsent } = await import('../../voice/voiceArchiveConsent');
+            await observeArchiveConsent(true, GRANT);
+            await seedClip(CLIP_1, FARM_A, { recordedAtUtc: AFTER });
+            server.grantSince.set('user-a', bad as string | null);
+
+            await drainRetainedArchiveQueue();
+            const { archiveToRetainedTierIfConsented } = await import('../../voice/VoiceClipRetention');
+            const hook = await archiveToRetainedTierIfConsented(CLIP_1, FARM_A);
+
+            expect(server.persistCalls).toHaveLength(0);
+            expect(hook).toEqual({ status: 'skipped', clipId: CLIP_1, reason: 'recorded_before_consent' });
+            expect((await row(CLIP_1))!.localBlob).toBeTruthy();
+            const { getArchiveConsentSince } = await import('../../voice/voiceArchiveConsent');
+            expect(await getArchiveConsentSince()).toBeNull();
         });
 
         it('revoke clears the marker; a later re-grant starts a NEW boundary, so clips from the declined gap stay local', async () => {

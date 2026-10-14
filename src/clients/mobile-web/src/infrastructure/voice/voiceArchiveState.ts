@@ -68,3 +68,37 @@ export function archiveRetryDelayMs(failCount: number): number {
     const n = Math.max(1, Math.min(failCount, 6));
     return Math.min(15_000 * 2 ** (n - 1), 10 * 60 * 1000);
 }
+
+/**
+ * True only when the failure was a TRANSPORT failure: the request never got an
+ * answer (no connection, timeout, dropped). That is the one failure the farmer
+ * can fix by getting the internet back, and the one for which "will try again
+ * when the internet is working" is true. Any HTTP answer - even a 5xx - is not
+ * connectivity.
+ */
+export function isTransportFailure(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false;
+    const e = error as { response?: unknown; code?: unknown; isAxiosError?: unknown; message?: unknown };
+    if (e.response) return false;
+    if (e.isAxiosError === true) return true;
+    if (typeof e.code === 'string'
+        && /^(ERR_NETWORK|ECONNABORTED|ETIMEDOUT|ECONNRESET|ENOTFOUND|ERR_INTERNET_DISCONNECTED)$/.test(e.code)) {
+        return true;
+    }
+    return typeof e.message === 'string'
+        && /network error|failed to fetch|networkerror|timeout of \d+ms exceeded|load failed/i.test(e.message);
+}
+
+/** Prefix the uploader writes into `retainedArchiveError` for a connectivity failure. */
+export const NETWORK_FAILURE_PREFIX = 'network_failed';
+
+/**
+ * Why the last upload failed, as the farmer-facing message needs it:
+ * `network` => the connectivity message (a retry IS coming);
+ * `other`   => the plain "could not save" message with no retry promise.
+ */
+export function archiveFailureKind(clip: Pick<VoiceClipCacheRecord, 'retainedArchiveError'>): 'network' | 'other' {
+    return typeof clip.retainedArchiveError === 'string' && clip.retainedArchiveError.startsWith(NETWORK_FAILURE_PREFIX)
+        ? 'network'
+        : 'other';
+}

@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';
 import { ConsentState } from '../../../domain/consent/ConsentState';
+import { observeArchiveConsentView } from '../../../infrastructure/voice/voiceArchiveConsent';
 
 export interface UseFullHistoryJournalConsentResult {
     granted: boolean;
@@ -29,6 +30,9 @@ export function useFullHistoryJournalConsent(): UseFullHistoryJournalConsentResu
     const reload = useCallback(async () => {
         try {
             const dto = await agriSyncClient.getConsent();
+            // Keep the upload boundary (max of this phone and the server's grant start)
+            // current, so the diary labels use the same bound as the uploader.
+            await observeArchiveConsentView(dto).catch(() => null);
             setState({
                 fullHistoryJournal: dto.fullHistoryJournal,
                 crossFarmAggregation: dto.crossFarmAggregation,

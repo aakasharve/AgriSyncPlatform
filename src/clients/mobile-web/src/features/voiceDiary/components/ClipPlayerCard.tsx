@@ -58,6 +58,11 @@ export interface UnifiedClip {
      * SERVER echoed this clip's id. Absent = unknown, rendered as not saved.
      */
     cloudState?: CloudArchiveState;
+    /**
+     * Why the last upload failed: `network` earns the connectivity message
+     * (which promises a retry); anything else gets the plain "could not save".
+     */
+    cloudFailure?: 'network' | 'other';
 }
 
 interface Props {
@@ -111,7 +116,7 @@ const getStatusPresentation = (
             };
         case 'failed':
             return {
-                label: tVoiceDiary(locale, 'clipBadge.failed'),
+                label: tVoiceDiary(locale, 'clipBadge.failed'), // speech understanding failed (NOT playback)
                 icon: AlertCircle,
                 className: 'bg-rose-50 text-rose-700 border-rose-100',
             };
@@ -231,7 +236,7 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
     const unsavedKey = clip.cloudState === 'uploading'
         ? 'clipBadge.uploading'
         : clip.cloudState === 'failed'
-            ? 'clipBadge.uploadFailed'
+            ? (clip.cloudFailure === 'network' ? 'clipBadge.uploadFailed' : 'clipBadge.uploadRefused')
             : clip.cloudState === 'queued' || clip.pendingCloudSave
                 ? 'clipBadge.pendingCloudSave'
                 : null;
@@ -270,37 +275,37 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
                 <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                     <span
                         data-testid={`voice-diary-clip-source-${clip.id}`}
-                        className={`inline-flex items-center gap-1 ${sourceBadgeCls} text-[10px] font-['DM_Sans'] font-bold uppercase tracking-wider rounded-full px-2 py-0.5`}
+                        className={`inline-flex max-w-full items-start gap-1 ${sourceBadgeCls} text-xs font-['DM_Sans'] font-bold leading-snug whitespace-normal break-words text-left rounded-2xl px-2 py-1`}
                     >
-                        <SourceIcon size={10} />
-                        {tVoiceDiary(locale, sourceBadgeKey)}
+                        <SourceIcon size={12} className="mt-0.5 shrink-0" />
+                        <span className="min-w-0 break-words">{tVoiceDiary(locale, sourceBadgeKey)}</span>
                     </span>
                     {unsavedKey && !inCloud && (
                         <span
                             data-testid={`voice-diary-clip-pending-cloud-${clip.id}`}
                             data-cloud-state={clip.cloudState ?? 'queued'}
-                            className="inline-flex items-center gap-1 border bg-amber-50 text-amber-800 border-amber-200 text-[10px] font-['DM_Sans'] font-bold uppercase tracking-wider rounded-full px-2 py-0.5"
+                            className="inline-flex max-w-full items-start gap-1 border bg-amber-50 text-amber-800 border-amber-200 text-xs font-['DM_Sans'] font-bold leading-snug whitespace-normal break-words text-left rounded-2xl px-2 py-1"
                         >
-                            <CloudOff size={10} />
-                            {tVoiceDiary(locale, unsavedKey)}
+                            <CloudOff size={12} className="mt-0.5 shrink-0" />
+                            <span className="min-w-0 break-words">{tVoiceDiary(locale, unsavedKey)}</span>
                         </span>
                     )}
                     {status && (
                         <span
-                            className={`inline-flex items-center gap-1 border ${status.className} text-[10px] font-['DM_Sans'] font-bold uppercase tracking-wider rounded-full px-2 py-0.5`}
+                            className={`inline-flex max-w-full items-start gap-1 border ${status.className} text-xs font-['DM_Sans'] font-bold leading-snug whitespace-normal break-words text-left rounded-2xl px-2 py-1`}
                         >
-                            <StatusIcon size={10} className={status.spin ? 'animate-spin' : ''} />
-                            {status.label}
+                            <StatusIcon size={12} className={`mt-0.5 shrink-0 ${status.spin ? 'animate-spin' : ''}`} />
+                            <span className="min-w-0 break-words">{status.label}</span>
                         </span>
                     )}
                 </div>
                 {fetchError && (
-                    <p data-testid={`voice-diary-clip-play-error-${clip.id}`} data-error={fetchError} className="mt-1 text-[11px] font-['DM_Sans'] text-rose-600">
+                    <p data-testid={`voice-diary-clip-play-error-${clip.id}`} data-error={fetchError} className="mt-1 text-xs font-['DM_Sans'] text-rose-600 whitespace-normal break-words">
                         {tVoiceDiary(locale, 'clipBadge.playbackUnavailable')}
                     </p>
                 )}
                 {clip.lastError && !fetchError && (
-                    <p className="mt-1 text-[11px] font-['DM_Sans'] text-rose-600">
+                    <p className="mt-1 text-xs font-['DM_Sans'] text-rose-600 whitespace-normal break-words">
                         {clip.lastError}
                     </p>
                 )}

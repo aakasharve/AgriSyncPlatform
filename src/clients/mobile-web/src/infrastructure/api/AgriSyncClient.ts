@@ -462,8 +462,11 @@ export class AgriSyncClient implements HttpTransport {
         // Voice archive: the grant moment is what bounds which recordings may be
         // uploaded. Best-effort and lazy (no import cycle); never blocks consent.
         try {
-            const { observeArchiveConsent } = await import('../voice/voiceArchiveConsent');
-            await observeArchiveConsent(result.fullHistoryJournal === true);
+            const { observeArchiveConsentView } = await import('../voice/voiceArchiveConsent');
+            // The PUT reply carries no grant-start. Read it back from the server
+            // (best effort) so labels use the same bound as the uploader.
+            const fresh = result.fullHistoryJournal === true ? await this.getConsent() : result;
+            await observeArchiveConsentView(fresh);
         } catch {
             // marker stays as it was; the uploader re-observes on its next pass
         }

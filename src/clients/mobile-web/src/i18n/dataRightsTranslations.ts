@@ -1,6 +1,6 @@
 // spec: data-principle-spine-2026-05-05/08.6
 //
-// Data rights namespace i18n bundle. Three locales (mr-IN, hi-IN,
+// Data rights namespace i18n bundle. Two locales (mr-IN,
 // en-IN) per DPDP §5. Strings render exactly as written: no visible review
 // prefix is added at runtime. Copy review status is tracked in the private
 // review records.
@@ -10,11 +10,13 @@
 // cannot currently issue a download link (ExportWorker.NoSignerReason), so
 // neither screen states a number of hours.
 
-export type DataRightsLocale = 'mr-IN' | 'hi-IN' | 'en-IN';
+export type DataRightsLocale = 'mr-IN' | 'en-IN';
 
 export function toDataRightsLocale(lang: string | null | undefined): DataRightsLocale {
     if (lang === 'mr' || lang === 'mr-IN') return 'mr-IN';
-    if (lang === 'hi' || lang === 'hi-IN') return 'hi-IN';
+    // Hindi is not offered. A stored or server-sent 'hi' falls back to Marathi,
+    // the app default (same rule as LanguageContext / LanguageSyncFromServer).
+    if (lang === 'hi' || lang === 'hi-IN') return 'mr-IN';
     return 'en-IN';
 }
 
@@ -77,36 +79,6 @@ const mr: DataRightsBundle = {
     },
 };
 
-// -- hi-IN --------------------------------------------------------------
-const hi: DataRightsBundle = {
-    erasure: {
-        title: 'मेरा डेटा मिटाएं',
-        intro: 'अपना खाता और व्यक्तिगत जानकारी मिटाने का अनुरोध। यह क्रिया पलटी नहीं जा सकती।',
-        confirmHeading: 'क्या आप निश्चित हैं?',
-        confirmBody: 'आपका खाता और व्यक्तिगत जानकारी हटाई या गुमनाम की जाएगी। खेती के रिकॉर्ड बने रहेंगे लेकिन आपका नाम उनसे नहीं जुड़ा होगा। सर्वर पर रखी कुछ आवाज़ें अभी अपने आप नहीं मिटाई जा सकतीं।',
-        submit: 'हाँ, मिटाएं',
-        cancel: 'नहीं, रद्द करें',
-        sla: 'आपका अनुरोध प्राप्त हो गया है। हम इसे पूरा कर रहे हैं।',
-        error: 'अनुरोध भेजा नहीं जा सका। फिर से कोशिश करें।',
-    },
-    export: {
-        title: 'मेरा डेटा निर्यात करें',
-        intro: 'आपकी सहमति और खाते के रिकॉर्ड की प्रति तैयार की जाएगी। आवाज़ और टेक्स्ट के रिकॉर्ड अभी इसमें शामिल नहीं हैं।',
-        submit: 'निर्यात तैयार करें',
-        sla: 'अनुरोध प्राप्त हो गया है। डाउनलोड लिंक अभी उपलब्ध नहीं है। arvesystems@gmail.com पर संपर्क करें, हम आपको प्रति सौंप देंगे।',
-        downloadLabel: 'डाउनलोड करें',
-        error: 'अनुरोध भेजा नहीं जा सका। फिर से कोशिश करें।',
-    },
-    recent: {
-        title: 'हाल के अनुरोध',
-        empty: 'अभी तक कोई अनुरोध नहीं।',
-        statusRequested: 'प्राप्त',
-        statusInProgress: 'प्रगति पर',
-        statusCompleted: 'पूर्ण',
-        statusFailed: 'विफल',
-    },
-};
-
 // -- en-IN --------------------------------------------------------------
 const en: DataRightsBundle = {
     erasure: {
@@ -139,7 +111,6 @@ const en: DataRightsBundle = {
 
 export const DATA_RIGHTS_BUNDLES: Record<DataRightsLocale, DataRightsBundle> = {
     'mr-IN': mr,
-    'hi-IN': hi,
     'en-IN': en,
 };
 

@@ -68,6 +68,20 @@ public sealed class PersistVoiceClipRetainedHandler(
             return Result.Failure<PersistVoiceClipRetainedResult>(ShramSafalErrors.ConsentRequired);
         }
 
+        // Defence in depth (consent boundary): consent covers recordings made
+        // WHILE it was granted. If the ledger shows when the CURRENT continuous
+        // grant began and the client says this clip was recorded before that,
+        // refuse. recordedAt is client-declared, so this is not the primary
+        // control (the phone filters first); when the ledger cannot show the
+        // start (null) the consent gate above stands alone.
+        var grantStart = await repository
+            .GetFullHistoryCurrentGrantStartUtcAsync(command.UserId, ct)
+            .ConfigureAwait(false);
+        if (grantStart is { } start && recordedAtUtc < DateTime.SpecifyKind(start, DateTimeKind.Utc))
+        {
+            return Result.Failure<PersistVoiceClipRetainedResult>(ShramSafalErrors.RecordedBeforeConsent);
+        }
+
         byte[] cipher;
         try
         {

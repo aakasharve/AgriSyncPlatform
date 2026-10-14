@@ -25,7 +25,8 @@ import { getCurrentTenantDek, resolveDek } from '../security/tenantDekClient';
 import { agriSyncClient } from '../api/AgriSyncClient';
 import { persistRetainedVoiceClip } from '../voiceDiary/voiceDiaryApiClient';
 import { archiveRetryDelayMs } from './voiceArchiveState';
-import { observeArchiveConsent, recordedUnderConsent } from './voiceArchiveConsent';
+import { observeArchiveConsent, observeArchiveConsentView, recordedUnderConsent } from './voiceArchiveConsent';
+import { isTransportFailure, NETWORK_FAILURE_PREFIX } from './voiceArchiveState';
 import { emitClientError } from '../../core/telemetry/eventEmitters';
 import { EventSchemas } from '../../core/telemetry/eventSchema';
 
@@ -468,9 +469,12 @@ async function archiveOnce(
     contextFarmId?: string,
 ): Promise<VoiceClipArchiveOutcome> {
     let consentGranted: boolean;
+    let consentSince: string | null = null;
     try {
         const dto = await agriSyncClient.getConsent();
         consentGranted = dto.fullHistoryJournal === true;
+        // max(local marker, server's start of the CURRENT grant); null = fail closed.
+        consentSince = await observeArchiveConsentView(dto);
     } catch {
         // We do not know whether a promise exists. Record, do not report.
         await recordArchiveAttempt(clipId, {
@@ -488,7 +492,6 @@ async function archiveOnce(
     const row = await db.voiceClips.get(clipId);
     // Consent covers recordings made WHILE it was granted. Fail closed: no
     // marker, or a clip older than it, is never uploaded automatically.
-    const consentSince = await observeArchiveConsent(true);
     if (row && !row.s3RetainedKey && !recordedUnderConsent(row.recordedAtUtc, consentSince)) {
         return { status: 'skipped', clipId, reason: 'recorded_before_consent' };
     }
@@ -534,7 +537,7 @@ async function archiveOnce(
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             const firstOfStreak = (row.archiveFailCount ?? 0) === 0;
-            await markUploadFailed(row, `seal_failed: ${message}`);
+            await markUploadFailed(row, `${isTransportFailure(error) ? NETWORK_FAILURE_PREFIX : 'seal_failed'}: ${message}`);
             if (firstOfStreak) {
                 reportArchiveFailure(clipId, 'seal_failed', message, 0, row.farmId);
             }
@@ -576,6 +579,7 @@ async function archiveOnce(
     });
 
     let lastError = 'unknown';
+    let lastWasTransport = false;
     for (let attempt = 1; attempt <= MAX_PERSIST_ATTEMPTS; attempt++) {
         try {
             const result = await persistRetainedVoiceClip({
@@ -636,6 +640,7 @@ async function archiveOnce(
             return { status: 'archived', clipId, retainedKey: result.clipId, attempts: attempt };
         } catch (error) {
             lastError = error instanceof Error ? error.message : String(error);
+            lastWasTransport = isTransportFailure(error);
         }
     }
 
@@ -645,7 +650,7 @@ async function archiveOnce(
     if (firstOfStreak) {
         reportArchiveFailure(clipId, 'persist_failed', lastError, MAX_PERSIST_ATTEMPTS, row.farmId);
     }
-    await markUploadFailed(row, `persist_failed: ${lastError}`, MAX_PERSIST_ATTEMPTS);
+    await markUploadFailed(row, `${lastWasTransport ? NETWORK_FAILURE_PREFIX : 'persist_failed'}: ${lastError}`, MAX_PERSIST_ATTEMPTS);
     return {
         status: 'failed',
         clipId,

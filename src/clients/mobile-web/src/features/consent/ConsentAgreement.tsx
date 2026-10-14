@@ -1,7 +1,7 @@
 // spec: data-principle-spine-2026-05-05/06.4
 //
 // Fetches and renders the locale-appropriate consent agreement markdown
-// (`/consent/agreement_{mr|hi|en}.md`).
+// (`/consent/agreement_{mr|en}.md`).
 //
 // **No new dependency.** We render markdown with a tiny manual parser
 // (headings + lists + bold + paragraphs + `---` rules) because the
@@ -15,10 +15,8 @@ interface Props {
     locale: ConsentLocale;
 }
 
-function localeToFileSuffix(locale: ConsentLocale): 'mr' | 'hi' | 'en' {
-    if (locale === 'mr-IN') return 'mr';
-    if (locale === 'hi-IN') return 'hi';
-    return 'en';
+function localeToFileSuffix(locale: ConsentLocale): 'mr' | 'en' {
+    return locale === 'mr-IN' ? 'mr' : 'en';
 }
 
 /** Strip HTML comments — source-only notes must never reach the UI. */

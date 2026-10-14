@@ -21,7 +21,7 @@ import {
     type VoiceClipCacheRecord,
 } from '../../../infrastructure/storage/DexieDatabase';
 import { purgeExpiredProcessingVoiceClips } from '../../../infrastructure/voice/VoiceClipRetention';
-import { deriveCloudArchiveState } from '../../../infrastructure/voice/voiceArchiveState';
+import { archiveFailureKind, deriveCloudArchiveState } from '../../../infrastructure/voice/voiceArchiveState';
 import { getArchiveConsentSince, recordedUnderConsent } from '../../../infrastructure/voice/voiceArchiveConsent';
 import { voiceArchiveUploader } from '../../../infrastructure/sync/VoiceArchiveUploader';
 import {
@@ -170,6 +170,7 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
                 cloudState: deriveCloudArchiveState(
                     record, consentGranted, Date.now(), recordedUnderConsent(record.recordedAtUtc, consentSince),
                 ),
+                cloudFailure: archiveFailureKind(record),
             });
         }
         for (const cloud of cloudClips) {

@@ -93,7 +93,7 @@ async function seedClip(clipId: string, minutes: number, extra: Record<string, u
     } as never);
 }
 
-const mount = (locale: 'en-IN' | 'mr-IN' | 'hi-IN' = 'en-IN') =>
+const mount = (locale: 'en-IN' | 'mr-IN' = 'en-IN') =>
     render(<VoiceDiaryPage onBack={() => undefined} onOpenSettings={() => undefined} forceLocale={locale} />);
 
 const sourceBadge = (clipId: string) => screen.getByTestId(`voice-diary-clip-source-${clipId}`).textContent;
@@ -113,7 +113,7 @@ describe('Voice Diary - honest per-clip cloud status', () => {
     it('queued, uploading and failed clips are NEVER labelled as in the cloud; only the acknowledged one is', async () => {
         await seedClip(id(1), 5); // queued: nothing sent yet
         await seedClip(id(2), 4, { archiveState: 'uploading', retainedArchiveLastAttemptAtUtc: minutesAgo(0) });
-        await seedClip(id(3), 3, { archiveState: 'failed', archiveFailCount: 1 });
+        await seedClip(id(3), 3, { archiveState: 'failed', archiveFailCount: 1, retainedArchiveError: 'network_failed: Network Error' });
         await seedClip(id(4), 2, { s3RetainedKey: id(4), archiveAckedAtUtc: minutesAgo(1) });
 
         mount();
@@ -156,20 +156,43 @@ describe('Voice Diary - honest per-clip cloud status', () => {
         expect(unsavedBadge(id(1))).toBeNull();
     });
 
-    it.each(['mr-IN', 'hi-IN', 'en-IN'] as const)('the new status labels exist, are non-empty and distinct in %s', locale => {
-        const labels = (['pendingCloudSave', 'uploading', 'uploadFailed', 'playbackUnavailable'] as const)
+    it.each(['mr-IN', 'en-IN'] as const)('the status labels exist, are non-empty and distinct in %s', locale => {
+        const labels = (['pendingCloudSave', 'uploading', 'uploadFailed', 'uploadRefused', 'understandFailed', 'playbackUnavailable'] as const)
             .map(key => tVoiceDiary(locale, `clipBadge.${key}`));
         for (const label of labels) expect(label.trim().length).toBeGreaterThan(0);
         expect(new Set(labels).size).toBe(labels.length);
     });
 
     it('renders the Marathi labels on the card', async () => {
-        await seedClip(id(3), 3, { archiveState: 'failed', archiveFailCount: 1 });
+        await seedClip(id(3), 3, { archiveState: 'failed', archiveFailCount: 1, retainedArchiveError: 'network_failed: Network Error' });
         mount('mr-IN');
         await waitFor(() => expect(unsavedBadge(id(3))).not.toBeNull());
         expect(unsavedBadge(id(3))).toHaveTextContent(tVoiceDiary('mr-IN', 'clipBadge.uploadFailed'));
     });
 
+
+    it('EXACT Marathi messages (founder wording) and which failure shows which', async () => {
+        expect(tVoiceDiary('mr-IN', 'clipBadge.uploading')).toBe('श्रमसाथी जतन करत आहे.');
+        expect(tVoiceDiary('mr-IN', 'clipBadge.uploadFailed')).toBe('श्रमसाथी जतन करू शकला नाही. इंटरनेट व्यवस्थित झाल्यावर पुन्हा प्रयत्न करेल.');
+        expect(tVoiceDiary('mr-IN', 'clipBadge.playbackUnavailable')).toBe('ऐकता आले नाही.');
+        expect(tVoiceDiary('mr-IN', 'clipBadge.failed')).toBe('समजून घेऊ शकत नाही.');
+        // playback and understanding are separate messages
+        expect(tVoiceDiary('mr-IN', 'clipBadge.playbackUnavailable')).not.toBe(tVoiceDiary('mr-IN', 'clipBadge.failed'));
+
+        await seedClip(id(3), 3, { archiveState: 'failed', archiveFailCount: 1, retainedArchiveError: 'network_failed: Network Error' });
+        await seedClip(id(5), 2, { archiveState: 'failed', archiveFailCount: 1, retainedArchiveError: 'persist_failed: Request failed with status code 403' });
+        mount('mr-IN');
+        await waitFor(() => expect(unsavedBadge(id(3))).not.toBeNull());
+        // connectivity failure: the retry promise; any other failure: NO retry promise
+        expect(unsavedBadge(id(3))).toHaveTextContent('इंटरनेट व्यवस्थित झाल्यावर पुन्हा प्रयत्न करेल');
+        expect(unsavedBadge(id(5))).toHaveTextContent(tVoiceDiary('mr-IN', 'clipBadge.uploadRefused'));
+        expect(unsavedBadge(id(5))!.textContent).not.toContain('पुन्हा प्रयत्न');
+        // nothing says 'cloud' / 'क्लाउड' to the farmer on a recording
+        for (const k of ['pendingCloudSave', 'uploading', 'uploadFailed', 'uploadRefused', 'local', 'cloud'] as const) {
+            expect(tVoiceDiary('mr-IN', `clipBadge.${k}`)).not.toMatch(/क्लाउड|cloud/i);
+            expect(tVoiceDiary('en-IN', `clipBadge.${k}`)).not.toMatch(/cloud/i);
+        }
+    });
     it('plays the recording from the LOCAL copy when it is there (no server read)', async () => {
         await seedClip(id(1), 5);
         const create = vi.fn(() => 'blob:local');

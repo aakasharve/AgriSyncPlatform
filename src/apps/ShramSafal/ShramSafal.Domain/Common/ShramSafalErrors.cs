@@ -85,6 +85,12 @@ public static class ShramSafalErrors
     // ParseVoiceInputHandler + PersistVoiceClipRetainedHandler when the
     // FullHistoryJournal consent toggle is OFF. Frontend renders a
     // consent-required CTA pointing at Settings.
+    // Defence in depth on the voice archive: the clip says it was recorded before
+    // the current continuous grant of cloud-save consent began.
+    public static readonly Error RecordedBeforeConsent = Error.Forbidden(
+        "ShramSafal.RecordedBeforeConsent",
+        "This recording was made before cloud-save consent was granted.");
+
     public static readonly Error ConsentRequired = Error.Forbidden(
         "ShramSafal.ConsentRequired",
         "Full History Journal consent is required to retain voice notes beyond 30 days.");

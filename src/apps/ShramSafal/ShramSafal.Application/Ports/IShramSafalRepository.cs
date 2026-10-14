@@ -611,6 +611,15 @@ public interface IShramSafalRepository
     Task AddConsentAuditEntryAsync(ConsentAuditEntry entry, CancellationToken ct = default)
         => Task.CompletedTask;
 
+    /// <summary>
+    /// Start of the CURRENT continuous grant of the voice full-history purpose,
+    /// computed read-side from the append-only consent ledger (see
+    /// <c>FullHistoryGrantWindow</c>). <c>null</c> when it is not granted or the
+    /// ledger cannot show when it started. Never mutates the ledger.
+    /// </summary>
+    Task<DateTime?> GetFullHistoryCurrentGrantStartUtcAsync(Guid userId, CancellationToken ct = default)
+        => Task.FromResult<DateTime?>(null);
+
     // --- DATA_PRINCIPLE_SPINE sub-phase 10.2 / 10.4 (PII review queue) ---
     /// <summary>
     /// Append a brand-new <see cref="ShramSafal.Domain.Privacy.Pii.PiiReviewQueueEntry"/>

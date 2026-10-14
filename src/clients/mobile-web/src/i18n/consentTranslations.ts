@@ -1,28 +1,25 @@
 // spec: data-principle-spine-2026-05-05/06.4
 //
-// Consent-namespace i18n bundle. Three locales (mr-IN, hi-IN, en-IN)
-// per DPDP §5 (notice in a regional language the principal understands)
-// and per Phase 06.4 — Marathi/Hindi/English consent screen.
-//
-// The base app's `translations.ts` is en/mr only; Hindi is added here
-// as a feature-scoped bundle to avoid forcing a full-app Hindi swap in
-// the same envelope. When the rest of the app gains Hindi, this bundle
-// folds into `translations.ts` under the canonical `consent` namespace.
+// Consent-namespace i18n bundle. Two locales (mr-IN, en-IN) per DPDP §5
+// (notice in a regional language the principal understands). Hindi was never
+// requested and is not offered; a stored or server-sent 'hi' falls back to
+// Marathi (see `toConsentLocale`).
 //
 // Strings render exactly as written here: no visible review prefix is added at
 // runtime. Copy review status is tracked in the private review records.
 
 /** Locale codes accepted by the consent feature. */
-export type ConsentLocale = 'mr-IN' | 'hi-IN' | 'en-IN';
+export type ConsentLocale = 'mr-IN' | 'en-IN';
 
 /**
  * Map the base app's `Language` ('en' | 'mr') onto consent locales.
- * Hindi falls through to 'hi-IN' when callers route it manually
- * (e.g. via the future language picker). Unknown values map to en-IN.
+ * Hindi is not offered: 'hi' falls back to Marathi. Unknown values map to en-IN.
  */
 export function toConsentLocale(lang: string | null | undefined): ConsentLocale {
     if (lang === 'mr' || lang === 'mr-IN') return 'mr-IN';
-    if (lang === 'hi' || lang === 'hi-IN') return 'hi-IN';
+    // Hindi is not offered. A stored or server-sent 'hi' falls back to Marathi,
+    // the app default (same rule as LanguageContext / LanguageSyncFromServer).
+    if (lang === 'hi' || lang === 'hi-IN') return 'mr-IN';
     return 'en-IN';
 }
 
@@ -63,8 +60,8 @@ const mr: ConsentBundle = {
     },
     toggles: {
         fullHistoryJournal: {
-            title: 'आवाज नोंदी क्लाउडमध्ये ठेवा',
-            body: 'होकार दिल्यास तुमचे आवाज तुम्ही मिटवेपर्यंत तुमच्या क्लाउडमध्ये सेव्ह राहतील. नकार दिल्यास ते आवाजी डायरीच्या क्लाउडमध्ये ठेवले जात नाहीत.',
+            title: 'आवाज नोंदी जतन करून ठेवा',
+            body: 'होकार दिल्यास तुमचे आवाज तुम्ही मिटवेपर्यंत तुमच्या खात्यात जतन राहतील. नकार दिल्यास ते आवाजी डायरीत जतन केले जात नाहीत.',
         },
         crossFarmAggregation: {
             title: 'माझ्या डी-आयडेंटिफाईड डेटाने अॅप सुधारा',
@@ -79,45 +76,12 @@ const mr: ConsentBundle = {
     revoke: {
         button: 'सर्व रद्द करा',
         confirm: 'तुम्ही खात्रीने सर्व परवानग्या रद्द करू इच्छिता?',
-        whatStops: 'रद्द केल्यावर: यापुढे नवीन आवाज क्लाउडमध्ये साठवला जाणार नाही, आणि सुधारणा व संशोधनाच्या दोन परवानग्या तुम्ही मागे घेता. आधी साठवलेले आवाज तुम्ही मिटवेपर्यंत राहतील. बाकी सगळं तसंच चालू राहील — तुमचं शेत, तुमची कामं आणि तुमचा हिशोब जिथल्या तिथेच राहतो. हवं तेव्हा पुन्हा परवानगी देता येते.',
+        whatStops: 'रद्द केल्यावर: यापुढे नवीन आवाज जतन केला जाणार नाही, आणि सुधारणा व संशोधनाच्या दोन परवानग्या तुम्ही मागे घेता. आधी साठवलेले आवाज तुम्ही मिटवेपर्यंत राहतील. बाकी सगळं तसंच चालू राहील — तुमचं शेत, तुमची कामं आणि तुमचा हिशोब जिथल्या तिथेच राहतो. हवं तेव्हा पुन्हा परवानगी देता येते.',
     },
     save: {
         button: 'जतन करा',
         success: 'संमती जतन झाली.',
         error: 'जतन करता आले नाही. पुन्हा प्रयत्न करा.',
-    },
-};
-
-// -- hi-IN --------------------------------------------------------------
-const hi: ConsentBundle = {
-    screen: {
-        title: 'सहमति',
-        intro: 'तीन अलग-अलग अनुमतियाँ। हर एक स्वतंत्र। किसी भी समय रद्द कर सकते हैं।',
-    },
-    toggles: {
-        fullHistoryJournal: {
-            title: 'आवाज़ रिकॉर्डिंग क्लाउड में रखें',
-            body: 'हाँ कहने पर आपकी आवाज़ें आप मिटाएँ तब तक आपके क्लाउड में सेव रहेंगी। ना कहने पर वे आवाज़ डायरी के क्लाउड में नहीं रखी जातीं।',
-        },
-        crossFarmAggregation: {
-            title: 'मेरे डी-आइडेंटिफ़ाइड डेटा से ऐप बेहतर बनाएँ',
-            body: 'आपके नाम के बिना सीखने के लिए उपयोग होगा — दूसरे किसानों के लिए ऐप बेहतर बनेगा।',
-        },
-        researchCorpusExport: {
-            title: 'अनुसंधान/निर्यात के लिए डी-आइडेंटिफ़ाइड उपयोग',
-            body: 'सरकारी/अनुसंधान भागीदारों के साथ (नाम के बिना) सामान्य रुझान साझा किए जा सकते हैं।',
-        },
-        expand: 'और जानें',
-    },
-    revoke: {
-        button: 'सब रद्द करें',
-        confirm: 'क्या आप वाकई सभी अनुमतियाँ रद्द करना चाहते हैं?',
-        whatStops: 'रद्द करने पर: आगे से नई आवाज़ आपके क्लाउड में सहेजी नहीं जाएगी, और सुधार व अनुसंधान की दोनों अनुमतियाँ आप वापस लेते हैं। पहले सहेजी गई आवाज़ें आप मिटाएँ तब तक रहेंगी। बाकी सब वैसा ही चलता रहेगा — आपका खेत, आपके काम और आपका हिसाब वहीं रहते हैं। जब चाहें दोबारा अनुमति दे सकते हैं।',
-    },
-    save: {
-        button: 'सहेजें',
-        success: 'सहमति सहेज ली गई।',
-        error: 'सहेजा नहीं जा सका। फिर से कोशिश करें।',
     },
 };
 
@@ -129,8 +93,8 @@ const en: ConsentBundle = {
     },
     toggles: {
         fullHistoryJournal: {
-            title: 'Keep voice recordings in your cloud',
-            body: 'If yes, your clips are kept in your cloud until you erase them. If no, they are not kept in the Voice Diary cloud.',
+            title: 'Keep voice recordings saved',
+            body: 'If yes, your clips are kept in your account until you erase them. If no, they are not saved in the Voice Diary.',
         },
         crossFarmAggregation: {
             title: 'Improve the app using my de-identified data',
@@ -145,7 +109,7 @@ const en: ConsentBundle = {
     revoke: {
         button: 'Revoke all',
         confirm: 'Are you sure you want to revoke every permission?',
-        whatStops: 'If you revoke: no new voice will be saved to your cloud, and you withdraw the two permissions for improving the app and for research. Recordings already saved stay until you erase them. Everything else keeps working — your farm, your work and your accounts stay exactly where they are. You can grant permission again whenever you like.',
+        whatStops: 'If you revoke: no new voice will be saved, and you withdraw the two permissions for improving the app and for research. Recordings already saved stay until you erase them. Everything else keeps working — your farm, your work and your accounts stay exactly where they are. You can grant permission again whenever you like.',
     },
     save: {
         button: 'Save',
@@ -156,7 +120,6 @@ const en: ConsentBundle = {
 
 export const CONSENT_BUNDLES: Record<ConsentLocale, ConsentBundle> = {
     'mr-IN': mr,
-    'hi-IN': hi,
     'en-IN': en,
 };
 

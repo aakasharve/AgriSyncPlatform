@@ -12,13 +12,20 @@
  * as clear-text storage of a credential (CodeQL js/clear-text-storage-of-
  * sensitive-data).
  *
- * This module is the single choke point on the way to storage. It does not
- * pass the caller's string through: it REBUILDS the id one character at a time
- * from a fixed table of printable ASCII, and refuses anything it cannot
- * rebuild. The output therefore provably contains only table characters, can
- * never be, or contain, a JWT-shaped credential by accident of plumbing (a
- * token is far longer than any id; see MAX_FARMER_ID_LENGTH), and has no data
- * dependency on the object it came from other than the characters themselves.
+ * WHAT THIS MODULE IS, HONESTLY. For a printable-ASCII id of at most
+ * MAX_FARMER_ID_LENGTH (128) characters it is the IDENTITY FUNCTION: it returns
+ * a string with the same characters, but one it built itself character by
+ * character, so what reaches storage is a plain string and not a value that is
+ * still attached to the session object. Anything empty, longer than 128
+ * characters, or containing a character outside printable ASCII yields `null`
+ * ("no identity", fail closed).
+ *
+ * WHAT IT DOES NOT DO. It does NOT by itself prove the string is not a
+ * credential: a short printable-ASCII token would pass through unchanged. That
+ * guarantee comes from the CALLERS, which pass only the user id and never the
+ * access token. It is pinned separately by `noCredentialInStorage.test.ts`,
+ * which scans localStorage, sessionStorage and every IndexedDB store for the
+ * token strings after a login/refresh.
  *
  * Behaviour for every id the app has ever produced (server GUIDs, test
  * fixtures such as `user/bbbb 2222`) is the identity function.

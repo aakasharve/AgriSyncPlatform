@@ -168,7 +168,7 @@ public sealed class VoiceArchiveAckRealPostgresTests(ITestOutputHelper output) :
     }
 
     private async Task<AgriSync.BuildingBlocks.Results.Result<PersistVoiceClipRetainedResult>> PersistAsync(
-        Guid user, Guid clip, byte[] cipher)
+        Guid user, Guid clip, byte[] cipher, DateTime? recordedAtUtc = null)
     {
         await using var scope = Scope();
         var store = NewStore(scope);
@@ -179,7 +179,7 @@ public sealed class VoiceArchiveAckRealPostgresTests(ITestOutputHelper output) :
             scope.ServiceProvider.GetRequiredService<IClock>());
         return await handler.HandleAsync(new PersistVoiceClipRetainedCommand(
             ClipId: clip, UserId: user,
-            RecordedAtUtc: new DateTime(2026, 10, 10, 9, 0, 0, DateTimeKind.Utc),
+            RecordedAtUtc: recordedAtUtc ?? DateTime.UtcNow.AddMinutes(1),
             CipherBase64: Convert.ToBase64String(cipher),
             DekId: "dek-owner-a-v1",
             IvBase64: Convert.ToBase64String(new byte[12]),
@@ -199,7 +199,7 @@ public sealed class VoiceArchiveAckRealPostgresTests(ITestOutputHelper output) :
         await using var scope = Scope();
         var handler = new GetVoiceDiaryByRangeHandler(NewStore(scope));
         var result = await handler.HandleAsync(new GetVoiceDiaryByRangeQuery(
-            user, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 31)));
+            user, DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-2)), DateOnly.FromDateTime(DateTime.UtcNow.AddDays(2))));
         result.IsSuccess.Should().BeTrue();
         return result.Value!.Clips.Count;
     }
@@ -229,6 +229,29 @@ public sealed class VoiceArchiveAckRealPostgresTests(ITestOutputHelper output) :
     }
 
     // ── the proofs ───────────────────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task A_clip_recorded_in_a_revoked_gap_is_refused_after_the_regrant_and_nothing_is_stored()
+    {
+        SkipIfPostgresUnavailable();
+        await GrantAsync(UserA, true);
+        await Task.Delay(30);
+        await GrantAsync(UserA, false);
+        await Task.Delay(30);
+        var recordedInGap = DateTime.UtcNow; // consent is OFF at this instant
+        await Task.Delay(30);
+        await GrantAsync(UserA, true);       // possibly from another device; the server only sees the ledger
+
+        var refused = await PersistAsync(UserA, ClipA1, SealedBytes, recordedInGap);
+
+        refused.IsSuccess.Should().BeFalse("consent covers recordings made while it was granted");
+        refused.Error.Code.Should().Be(ShramSafalErrors.RecordedBeforeConsent.Code);
+        (await ScalarAsync("SELECT count(*) FROM ssf.voice_clips_retained")).Should().Be(0);
+        _s3.PutCount.Should().Be(0);
+
+        // A clip recorded after the regrant is accepted as before.
+        (await PersistAsync(UserA, ClipA2, SealedBytes, DateTime.UtcNow.AddSeconds(1))).IsSuccess.Should().BeTrue();
+    }
 
     [SkippableFact]
     public async Task The_application_role_is_not_a_superuser()

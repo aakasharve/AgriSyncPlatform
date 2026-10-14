@@ -26,8 +26,8 @@ export const LanguageSyncFromServer: React.FC = () => {
         if (syncedRef.current) return;
         const pref = meContext?.me?.preferredLanguage;
         if (!pref) return;
-        // Backend: 'mr' | 'hi' | 'en'. Frontend today supports 'mr' | 'en'.
-        // Hindi speakers get Marathi (Devanagari script, target audience).
+        // Backend may hold 'mr' | 'hi' | 'en' in historical rows. The app offers
+        // 'mr' | 'en' only: an old 'hi' (or anything else) becomes Marathi.
         const mapped: Language = pref === 'en' ? 'en' : 'mr';
         setLanguage(mapped);
         syncedRef.current = true;
