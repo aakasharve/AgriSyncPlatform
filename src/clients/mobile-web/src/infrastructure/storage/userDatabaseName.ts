@@ -82,6 +82,7 @@
  */
 
 import { readActiveUserId } from './activeUserId';
+import { toStorableFarmerId } from './farmerId';
 
 /**
  * The database every install has today, and the only one that exists before
@@ -165,10 +166,11 @@ export function recordVerifiedLegacyDatabaseOwner(owner: string): boolean {
     if (!canRecordOwnership()) {
         return false;
     }
-    if (localStorage.getItem(LEGACY_DB_OWNER_KEY) === owner) {
+    const storable = toStorableFarmerId(owner);
+    if (storable === null || localStorage.getItem(LEGACY_DB_OWNER_KEY) === storable) {
         return false;
     }
-    localStorage.setItem(LEGACY_DB_OWNER_KEY, owner);
+    localStorage.setItem(LEGACY_DB_OWNER_KEY, storable);
     return true;
 }
 
@@ -203,7 +205,12 @@ export function resolveDatabaseNameForUser(userId: string): string {
         // regarded as the active user owns everything in `AgriLogDB`; if it has
         // never had one, the rows belong to nobody on record and the farmer
         // signing in now adopts them rather than losing them.
-        owner = readActiveUserId() ?? userId;
+        // The id is rebuilt by `toStorableFarmerId` before it is persisted; an
+        // id storage cannot represent is never adopted as an owner.
+        owner = readActiveUserId() ?? toStorableFarmerId(userId);
+        if (owner === null) {
+            return perUserDatabaseName(userId);
+        }
         localStorage.setItem(LEGACY_DB_OWNER_KEY, owner);
     }
 
