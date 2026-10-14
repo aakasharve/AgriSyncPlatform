@@ -27,6 +27,7 @@ vi.mock('../../voiceDiary/voiceDiaryApiClient', async () => {
 });
 vi.mock('../../../core/telemetry/eventEmitters', () => ({ emitClientError: vi.fn() }));
 
+import { seedPulledFarm } from './seedPulledFarm';
 import { fakeArchiveServer as server } from './fakeArchiveServer';
 import { getDatabase, resetDatabase } from '../../storage/DexieDatabase';
 import { setActiveDatabaseName } from '../../storage/activeDatabaseName';
@@ -62,9 +63,7 @@ async function signIn(user: string, owner: string) {
 async function recordAndUpload() {
     await signIn('user-a', 'owner-a');
     server.consent.set('user-a', true);
-    await getDatabase().farms.put({
-        id: FARM, ownerAccountId: 'owner-a', payload: {}, updatedAt: '2026-10-01T00:00:00.000Z',
-    });
+    await seedPulledFarm(FARM, 'owner-a', '2026-10-01T00:00:00.000Z');
     await getDatabase().appMeta.put({ key: 'voice_archive_consent_since', value: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' });
     await getDatabase().voiceClips.put({
         id: CLIP,
@@ -119,9 +118,7 @@ describe('fresh install: the acknowledged clip comes back from the server archiv
         await recordAndUpload();
         await wipeIndexedDb();
         await signIn('user-a', 'owner-a');
-        await getDatabase().farms.put({
-            id: FARM, ownerAccountId: 'owner-a', payload: {}, updatedAt: '2026-10-12T00:00:00.000Z',
-        });
+        await seedPulledFarm(FARM, 'owner-a', '2026-10-12T00:00:00.000Z');
         const opened = await openRetainedClip(CLIP);
         expect(opened.ok && Array.from(opened.bytes)).toEqual(Array.from(PLAINTEXT));
     });

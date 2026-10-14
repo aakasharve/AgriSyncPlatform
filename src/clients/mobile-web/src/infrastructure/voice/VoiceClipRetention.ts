@@ -95,11 +95,41 @@ export async function resolveVoiceClipBinding(
     farmId: string,
 ): Promise<VoiceClipBinding | null> {
     const farm = await getDatabase().farms.get(farmId);
-    const ownerAccountId = farm?.ownerAccountId;
+    const ownerAccountId = readFarmOwnerAccountId(farm);
     if (!ownerAccountId) {
         return null;
     }
-    return { clipId, ownerAccountId: String(ownerAccountId) };
+    return { clipId, ownerAccountId };
+}
+
+function nonEmptyString(value: unknown): string | null {
+    return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+/**
+ * The owner account of a cached farm row, read from where the row REALLY
+ * keeps it. The sync pull (`farmsPlotsCyclesReconciler`) writes
+ * `{ id, payload, updatedAt }` - the server FarmDto, including
+ * `ownerAccountId`, lives INSIDE `payload`. Only rows written by
+ * `DexieFarmGeographyRepository.saveFarm` (and legacy rows) also carry a
+ * top-level copy, so the payload is read first and the top level is a
+ * defensive fallback. Anything that is not a non-empty string is "unknown":
+ * returns `null`, never an invented value.
+ */
+export function readFarmOwnerAccountId(
+    farm: { ownerAccountId?: unknown; payload?: unknown } | undefined | null,
+): string | null {
+    if (!farm) {
+        return null;
+    }
+    const payload = farm.payload;
+    if (payload && typeof payload === 'object') {
+        const fromPayload = nonEmptyString((payload as { ownerAccountId?: unknown }).ownerAccountId);
+        if (fromPayload) {
+            return fromPayload;
+        }
+    }
+    return nonEmptyString(farm.ownerAccountId);
 }
 
 /**

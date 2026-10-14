@@ -40,3 +40,18 @@ describe('ReviewSheet - empty list', () => {
         expect(screen.getByTestId('review-list-unknown')).toBeInTheDocument();
     });
 });
+
+describe('ReviewSheet - list refetching after a save', () => {
+    it('never renders the all-done text or the header claim while the list is loading', () => {
+        render(<ReviewSheet open data={EMPTY_LABOUR_DATA} reviewListLoading onClose={() => undefined} onToast={() => undefined} />);
+        expect(screen.queryByText(DONE_TITLE)).not.toBeInTheDocument();
+        expect(screen.queryByText(DONE_HEADER)).not.toBeInTheDocument();
+        expect(screen.queryByTestId('review-list-unknown')).not.toBeInTheDocument();
+    });
+
+    it('once the refetch settles with a truly empty list the done text returns', () => {
+        const { rerender } = render(<ReviewSheet open data={EMPTY_LABOUR_DATA} reviewListLoading onClose={() => undefined} onToast={() => undefined} />);
+        rerender(<ReviewSheet open data={EMPTY_LABOUR_DATA} reviewListLoading={false} onClose={() => undefined} onToast={() => undefined} />);
+        expect(screen.getByText(DONE_TITLE)).toBeInTheDocument();
+    });
+});

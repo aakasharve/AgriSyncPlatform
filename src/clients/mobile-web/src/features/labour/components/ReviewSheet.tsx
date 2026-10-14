@@ -55,6 +55,13 @@ interface Props {
      */
     reviewListUnknown?: boolean;
     /**
+     * The list is being (re)fetched - e.g. right after an attendance save, when
+     * the hook blanks `data` before the new read-out arrives. An empty list in
+     * that window is NOT an answer, so neither "all checked" nor "could not
+     * fetch" may show; the body stays blank until the fetch settles.
+     */
+    reviewListLoading?: boolean;
+    /**
      * Labour V1 Task 13 — the farm whose engagements are being attributed.
      * Optional: `LabourPreview.tsx`'s bare `?preview=labour` mount has no
      * farm context at all, and without a farm there is no Field Operator
@@ -346,7 +353,7 @@ const ReviewFacts: React.FC<{ item: ReviewItem }> = ({ item }) => {
     );
 };
 
-const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved, farmId, history, reviewListUnknown }) => {
+const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved, farmId, history, reviewListUnknown, reviewListLoading }) => {
     const [gone, setGone] = useState<Record<string, boolean>>({});
     const [confirming, setConfirming] = useState<Record<string, ConfirmKind>>({});
     const [undoQueue, setUndoQueue] = useState<UndoEntry[]>([]);
@@ -641,7 +648,7 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                             only a team's — "टीमच्या नोंदी" (your team's entries) claimed
                             something not always true. Neutral phrasing that doesn't assert
                             whose entries they are. */}
-                        <p className="text-[16px] text-stone-500">{items.length ? `${items.length} नोंदी — मंजूर करा` : reviewListUnknown ? 'यादी आत्ता दिसत नाही' : 'सगळं झालं ✓'}</p>
+                        <p className="text-[16px] text-stone-500">{items.length ? `${items.length} नोंदी — मंजूर करा` : reviewListLoading ? '' : reviewListUnknown ? 'यादी आत्ता दिसत नाही' : 'सगळं झालं ✓'}</p>
                     </div>
                     <button type="button" onClick={onClose} aria-label="बंद करा" className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-stone-100 text-stone-500"><X size={26} /></button>
                 </div>
@@ -724,13 +731,13 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                             </div>
                         );
                     })}
-                    {items.length === 0 && reviewListUnknown && (
+                    {items.length === 0 && !reviewListLoading && reviewListUnknown && (
                         <div data-testid="review-list-unknown" className="py-8 text-center">
                             <p className="text-[20px] font-bold text-stone-800">तपासायची यादी आत्ता आणता आली नाही</p>
                             <p className="mt-1.5 text-[17px] text-stone-500">नेट आल्यावर पुन्हा उघडा.</p>
                         </div>
                     )}
-                    {items.length === 0 && !reviewListUnknown && (
+                    {items.length === 0 && !reviewListLoading && !reviewListUnknown && (
                         <div className="py-8 text-center">
                             <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600"><Check size={30} /></div>
                             <p className="text-[20px] font-bold text-stone-800">सगळ्या नोंदी तपासून झाल्या</p>
