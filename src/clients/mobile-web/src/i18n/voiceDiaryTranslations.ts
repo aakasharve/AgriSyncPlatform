@@ -1,20 +1,21 @@
 // spec: voice-diary-e2e-2026-05-17 (D.4)
 //
-// Voice Diary i18n bundle — mr-IN / hi-IN / en-IN. Strings render exactly
+// Voice Diary i18n bundle — mr-IN / en-IN. Strings render exactly
 // as written here: no visible review prefix is added at runtime. Copy
 // review status is tracked in the private review records, not in this file.
 
 /** Locale codes accepted by the Voice Diary feature. */
-export type VoiceDiaryLocale = 'mr-IN' | 'hi-IN' | 'en-IN';
+export type VoiceDiaryLocale = 'mr-IN' | 'en-IN';
 
 /**
  * Map the base app's `Language` ('en' | 'mr') onto Voice Diary locales.
- * Hindi falls through to 'hi-IN' when callers route it manually. Unknown
- * values map to en-IN. Mirrors `toConsentLocale` in consentTranslations.ts.
+ * Hindi is not offered: 'hi' falls back to Marathi. Unknown values map to en-IN. Mirrors `toConsentLocale` in consentTranslations.ts.
  */
 export function toVoiceDiaryLocale(lang: string | null | undefined): VoiceDiaryLocale {
     if (lang === 'mr' || lang === 'mr-IN') return 'mr-IN';
-    if (lang === 'hi' || lang === 'hi-IN') return 'hi-IN';
+    // Hindi is not offered. A stored or server-sent 'hi' falls back to Marathi,
+    // the app default (same rule as LanguageContext / LanguageSyncFromServer).
+    if (lang === 'hi' || lang === 'hi-IN') return 'mr-IN';
     return 'en-IN';
 }
 
@@ -92,9 +93,21 @@ export interface VoiceDiaryBundle {
          * acknowledgement makes it saved.
          */
         uploading: string;
-        /** The last upload was not acknowledged; it will be retried. Not saved. */
+        /**
+         * The last upload failed BECAUSE OF CONNECTIVITY (no answer from the
+         * server). The only failure that promises a retry, because the
+         * uploader really does retry on a backoff once the internet is back.
+         */
         uploadFailed: string;
-        /** The recording cannot be played right now (offline, or not yet openable). */
+        /**
+         * The last upload failed for a reason that is not connectivity (the
+         * server refused or could not take it). Says it is not saved and
+         * makes NO promise about a retry.
+         */
+        uploadRefused: string;
+        /** Speech understanding failed for this clip (separate from playback). */
+        understandFailed: string;
+        /** The recording could not be played (separate from understanding). */
         playbackUnavailable: string;
         local: string;
         cloud: string;
@@ -120,31 +133,31 @@ const mr: VoiceDiaryBundle = {
         back: 'मागे',
     },
     retentionBanner: {
-        grantedTitle: 'आवाजी नोंदी तुमच्या क्लाउडमध्ये जतन केल्या जातात',
-        grantedBody: 'Voice notes are saved to your cloud',
-        deniedTitle: 'क्लाउडमध्ये साठवले जात नाही — सेटिंग्जमध्ये चालू करा',
-        deniedBody: 'Not saved to your cloud — turn on Full History Journal',
+        grantedTitle: 'आवाजी नोंदी जतन केल्या जातात',
+        grantedBody: 'तुमच्या नोंदी तुमच्या खात्यात जतन होतात.',
+        deniedTitle: 'नोंदी फक्त या फोनमध्ये आहेत — सेटिंग्जमध्ये चालू करा',
+        deniedBody: 'Recordings stay only on this phone — turn on Full History Journal',
         deniedCta: 'चालू करा',
     },
     emptyState: {
         headline: 'अजून आवाजी नोंदी नाहीत',
         headlineEn: 'No voice notes yet',
-        body: 'आवाजी नोंदी तुमच्या क्लाउडमध्ये ठेवायच्या असतील तर Full History Journal चालू करा.',
-        bodyEn: 'Turn on Full History Journal in Settings to keep your recordings in your cloud.',
+        body: 'आवाजी नोंदी जतन करून ठेवायच्या असतील तर Full History Journal चालू करा.',
+        bodyEn: 'Turn on Full History Journal in Settings to keep your recordings saved.',
         cta: 'सेटिंग्ज उघडा · Open Settings',
     },
     consentToggle: {
-        title: 'आवाजी नोंदी तुमच्या क्लाउडमध्ये ठेवा',
-        titleEn: 'Keep voice journal in your cloud',
-        helper: 'तुमच्या खाजगी क्लाउड जागेत जतन केले जाते. कधीही बंद करता येते — जुन्या नोंदी तुम्ही मिटवेपर्यंत राहतील.',
-        helperEn: 'Saved in your private cloud space. You can turn off any time — old clips stay until you erase them.',
+        title: 'आवाजी नोंदी जतन करून ठेवा',
+        titleEn: 'Keep voice recordings saved',
+        helper: 'तुमच्या खात्यात जतन केले जाते. कधीही बंद करता येते — जुन्या नोंदी तुम्ही मिटवेपर्यंत राहतील.',
+        helperEn: 'Saved to your account. You can turn off any time — old clips stay until you erase them.',
         expand: '+ अधिक',
     },
     firstGrant: {
-        headline: 'आवाजी इतिहास क्लाउडमध्ये ठेवा',
-        headlineEn: 'Keep your voice history in your cloud',
-        body: 'तुमच्या आवाजी नोंदी तुमच्या खाजगी क्लाउड जागेत साठवल्या जातील. फक्त तुमच्या खात्यातूनच त्या ऐकता येतील.',
-        bodyEn: 'Your voice notes will be saved in your private AgriSync cloud space. Only your account can play them back in the app.',
+        headline: 'आवाजी इतिहास जतन करून ठेवा',
+        headlineEn: 'Keep your voice history saved',
+        body: 'तुमच्या आवाजी नोंदी तुमच्या खात्यात जतन केल्या जातील. फक्त तुमच्या खात्यातूनच त्या ऐकता येतील.',
+        bodyEn: 'Your voice recordings will be saved to your account. Only your account can play them back in the app.',
         bullet1: 'पूर्ण इतिहास उपलब्ध',
         bullet2: 'कधीही बंद करता येते',
         bullet3: 'तुम्ही नोंदी मिटवायला सांगू शकता',
@@ -155,104 +168,32 @@ const mr: VoiceDiaryBundle = {
     stopFutureConfirm: {
         headline: 'यापुढे नवीन आवाज साठवणे बंद करायचे?',
         headlineEn: 'Stop saving future voice?',
-        body: 'यापुढच्या नवीन आवाजी नोंदी क्लाउडमध्ये साठवल्या जाणार नाहीत.',
-        bodyEn: 'New recordings will no longer be saved to your cloud.',
+        body: 'यापुढच्या नवीन आवाजी नोंदी जतन केल्या जाणार नाहीत.',
+        bodyEn: 'New recordings will no longer be saved.',
         keptNote: 'तुमच्या आधीच्या सर्व नोंदी जशाच्या तशा राहतील. त्या मिटवायच्या असतील तर ती वेगळी कृती आहे.',
         keptNoteEn: 'Everything you have already saved stays. Deleting it is a separate action.',
         primaryCta: 'होय, यापुढे साठवू नका',
         secondaryCta: 'नको / Cancel',
     },
     clipBadge: {
-        pendingCloudSave: 'अजून क्लाउडमध्ये सेव्ह झाले नाही',
-        uploading: 'क्लाउडमध्ये सेव्ह होत आहे…',
-        uploadFailed: 'क्लाउडमध्ये सेव्ह झाले नाही, पुन्हा प्रयत्न होईल',
-        playbackUnavailable: 'आत्ता ऐकता येत नाही',
-        local: 'क्लाउड · cloud',
-        cloud: 'क्लाउड · cloud',
+        pendingCloudSave: 'अजून जतन झाले नाही — फक्त या फोनमध्ये आहे',
+        uploading: 'श्रमसाथी जतन करत आहे.',
+        uploadFailed: 'श्रमसाथी जतन करू शकला नाही. इंटरनेट व्यवस्थित झाल्यावर पुन्हा प्रयत्न करेल.',
+        uploadRefused: 'श्रमसाथी जतन करू शकला नाही.',
+        understandFailed: 'समजून घेऊ शकत नाही.',
+        playbackUnavailable: 'ऐकता आले नाही.',
+        local: 'फक्त या फोनमध्ये',
+        cloud: 'जतन झाले',
         processed: 'प्रक्रिया झाली',
         parsing: 'प्रक्रिया चालू',
         queued: 'रांगेत',
-        failed: 'पुन्हा प्रयत्न',
+        failed: 'समजून घेऊ शकत नाही.',
         recorded: 'नोंदले',
     },
     dayHeading: {
         countSingular: 'क्लिप',
         countPlural: 'क्लिप',
         empty: 'या दिवशी कोणत्याही नोंदी नाहीत',
-    },
-};
-
-// Override: badge.local should read "local" not "cloud".
-mr.clipBadge.local = 'लोकल · local';
-
-// -- hi-IN --------------------------------------------------------------
-const hi: VoiceDiaryBundle = {
-    page: {
-        title: 'आवाज़ डायरी',
-        subtitle: 'Voice Diary · सभी क्लिप',
-        refresh: 'रिफ्रेश',
-        back: 'वापस',
-    },
-    retentionBanner: {
-        grantedTitle: 'आवाज़ रिकॉर्डिंग्स आपके क्लाउड में सहेजी जाती हैं',
-        grantedBody: 'Voice notes are saved to your cloud',
-        deniedTitle: 'क्लाउड में सहेजा नहीं जा रहा — Settings में चालू करें',
-        deniedBody: 'Not saved to your cloud — turn on Full History Journal',
-        deniedCta: 'चालू करें',
-    },
-    emptyState: {
-        headline: 'अभी तक कोई आवाज़ नोट नहीं',
-        headlineEn: 'No voice notes yet',
-        body: 'रिकॉर्डिंग अपने क्लाउड में रखने के लिए Full History Journal चालू करें.',
-        bodyEn: 'Turn on Full History Journal in Settings to keep your recordings in your cloud.',
-        cta: 'Settings खोलें · Open Settings',
-    },
-    consentToggle: {
-        title: 'आवाज़ रिकॉर्डिंग्स अपने क्लाउड में रखें',
-        titleEn: 'Keep voice journal in your cloud',
-        helper: 'आपके निजी क्लाउड स्थान में सहेजा जाता है. किसी भी समय बंद कर सकते हैं — पुरानी क्लिप्स आप मिटाने तक रहेंगी.',
-        helperEn: 'Saved in your private cloud space. You can turn off any time — old clips stay until you erase them.',
-        expand: '+ और',
-    },
-    firstGrant: {
-        headline: 'आवाज़ इतिहास क्लाउड में रखें',
-        headlineEn: 'Keep your voice history in your cloud',
-        body: 'आपकी आवाज़ नोट्स आपके निजी क्लाउड स्थान में सहेजी जाएंगी. इन्हें केवल आपके खाते से ही सुना जा सकेगा.',
-        bodyEn: 'Your voice notes will be saved in your private AgriSync cloud space. Only your account can play them back in the app.',
-        bullet1: 'पूरा इतिहास उपलब्ध',
-        bullet2: 'किसी भी समय बंद कर सकते हैं',
-        bullet3: 'आप रिकॉर्डिंग मिटाने को कह सकते हैं',
-        primaryCta: 'मैं सहमत हूँ · I agree',
-        secondaryCta: 'बाद में / Not now',
-        attestation: 'आपकी सहमति दर्ज की जाती है।',
-    },
-    stopFutureConfirm: {
-        headline: 'आगे से नई आवाज़ सहेजना बंद करें?',
-        headlineEn: 'Stop saving future voice?',
-        body: 'आगे की नई आवाज़ रिकॉर्डिंग्स आपके क्लाउड में सहेजी नहीं जाएंगी.',
-        bodyEn: 'New recordings will no longer be saved to your cloud.',
-        keptNote: 'आपकी पहले से सहेजी गई सभी रिकॉर्डिंग्स वैसी ही रहेंगी. उन्हें मिटाना एक अलग काम है.',
-        keptNoteEn: 'Everything you have already saved stays. Deleting it is a separate action.',
-        primaryCta: 'हाँ, आगे से न सहेजें',
-        secondaryCta: 'रहने दें / Cancel',
-    },
-    clipBadge: {
-        pendingCloudSave: 'अभी क्लाउड में सेव नहीं हुआ',
-        uploading: 'क्लाउड में सेव हो रहा है…',
-        uploadFailed: 'क्लाउड में सेव नहीं हुआ, फिर कोशिश होगी',
-        playbackUnavailable: 'अभी सुना नहीं जा सकता',
-        local: 'लोकल · local',
-        cloud: 'क्लाउड · cloud',
-        processed: 'प्रोसेस हुआ',
-        parsing: 'प्रोसेस हो रहा',
-        queued: 'कतार में',
-        failed: 'फिर से कोशिश',
-        recorded: 'रिकॉर्डेड',
-    },
-    dayHeading: {
-        countSingular: 'क्लिप',
-        countPlural: 'क्लिप',
-        empty: 'इस दिन कोई क्लिप नहीं',
     },
 };
 
@@ -265,31 +206,31 @@ const en: VoiceDiaryBundle = {
         back: 'Back',
     },
     retentionBanner: {
-        grantedTitle: 'Voice notes are saved to your cloud',
-        grantedBody: 'Saved in your private cloud space. Only your account can play them back in the app.',
-        deniedTitle: 'Not saved to your cloud — turn on in Settings',
-        deniedBody: 'Your recordings are not saved to your cloud. Turn on Full History Journal to keep them there.',
+        grantedTitle: 'Voice recordings are saved',
+        grantedBody: 'Saved to your account. Only your account can play them back in the app.',
+        deniedTitle: 'Recordings stay only on this phone — turn on in Settings',
+        deniedBody: 'Your recordings stay only on this phone. Turn on Full History Journal to keep them saved.',
         deniedCta: 'Turn on',
     },
     emptyState: {
         headline: 'No voice notes yet',
         headlineEn: 'No voice notes yet',
-        body: 'Turn on Full History Journal in Settings to keep your recordings in your cloud.',
-        bodyEn: 'Turn on Full History Journal in Settings to keep your recordings in your cloud.',
+        body: 'Turn on Full History Journal in Settings to keep your recordings saved.',
+        bodyEn: 'Turn on Full History Journal in Settings to keep your recordings saved.',
         cta: 'Open Settings',
     },
     consentToggle: {
-        title: 'Keep voice journal in your cloud',
-        titleEn: 'Keep voice journal in your cloud',
-        helper: 'Saved in your private cloud space. You can turn off any time — old clips stay until you erase them.',
-        helperEn: 'Saved in your private cloud space. You can turn off any time — old clips stay until you erase them.',
+        title: 'Keep voice recordings saved',
+        titleEn: 'Keep voice recordings saved',
+        helper: 'Saved to your account. You can turn off any time — old clips stay until you erase them.',
+        helperEn: 'Saved to your account. You can turn off any time — old clips stay until you erase them.',
         expand: '+ more',
     },
     firstGrant: {
-        headline: 'Keep your voice history in your cloud',
-        headlineEn: 'Keep your voice history in your cloud',
-        body: 'Your voice notes will be saved in your private AgriSync cloud space. Only your account can play them back in the app.',
-        bodyEn: 'Your voice notes will be saved in your private AgriSync cloud space. Only your account can play them back in the app.',
+        headline: 'Keep your voice history saved',
+        headlineEn: 'Keep your voice history saved',
+        body: 'Your voice recordings will be saved to your account. Only your account can play them back in the app.',
+        bodyEn: 'Your voice recordings will be saved to your account. Only your account can play them back in the app.',
         bullet1: 'Full history available',
         bullet2: 'Turn off any time',
         bullet3: 'You can ask us to erase them',
@@ -300,24 +241,26 @@ const en: VoiceDiaryBundle = {
     stopFutureConfirm: {
         headline: 'Stop saving future voice?',
         headlineEn: 'Stop saving future voice?',
-        body: 'New recordings will no longer be saved to your cloud.',
-        bodyEn: 'New recordings will no longer be saved to your cloud.',
+        body: 'New recordings will no longer be saved.',
+        bodyEn: 'New recordings will no longer be saved.',
         keptNote: 'Everything you have already saved stays where it is. Deleting your saved history is a separate action.',
         keptNoteEn: 'Everything you have already saved stays where it is. Deleting your saved history is a separate action.',
         primaryCta: 'Yes, stop saving',
         secondaryCta: 'Cancel',
     },
     clipBadge: {
-        pendingCloudSave: 'Not saved to cloud yet',
-        uploading: 'Saving to cloud…',
-        uploadFailed: 'Not saved to cloud, will retry',
-        playbackUnavailable: 'Cannot play this right now',
-        local: 'local',
-        cloud: 'cloud',
+        pendingCloudSave: 'Not saved yet — only on this phone',
+        uploading: 'ShramSathi is saving.',
+        uploadFailed: 'ShramSathi could not save. It will try again when the internet is working.',
+        uploadRefused: 'ShramSathi could not save.',
+        understandFailed: 'Could not understand.',
+        playbackUnavailable: 'Could not play.',
+        local: 'only on this phone',
+        cloud: 'saved',
         processed: 'processed',
         parsing: 'parsing',
         queued: 'queued',
-        failed: 'retry',
+        failed: 'Could not understand.',
         recorded: 'recorded',
     },
     dayHeading: {
@@ -329,7 +272,6 @@ const en: VoiceDiaryBundle = {
 
 export const VOICE_DIARY_BUNDLES: Record<VoiceDiaryLocale, VoiceDiaryBundle> = {
     'mr-IN': mr,
-    'hi-IN': hi,
     'en-IN': en,
 };
 

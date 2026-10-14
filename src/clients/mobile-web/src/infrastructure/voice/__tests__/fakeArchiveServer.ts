@@ -43,6 +43,8 @@ class FakeArchiveServer {
     dekFetches = 0;
     /** Make the next N persist calls fail like a dropped connection. */
     failPersist = 0;
+    /** When set, persist throws THIS (e.g. an HTTP-response error) instead of a dropped connection. */
+    failPersistWith: unknown = null;
     /** Make persist answer 200 but with a different clip id (a broken ack). */
     ackWrongId = false;
     /** Held open to observe the in-flight state; resolved by the test. */
@@ -58,6 +60,7 @@ class FakeArchiveServer {
         this.persistCalls = [];
         this.dekFetches = 0;
         this.failPersist = 0;
+        this.failPersistWith = null;
         this.ackWrongId = false;
         this.holdPersist = null;
     }
@@ -111,6 +114,7 @@ class FakeArchiveServer {
         persistRetainedVoiceClip: async (req: PersistVoiceClipRetainedRequest) => {
             this.persistCalls.push(req);
             if (this.holdPersist) await this.holdPersist;
+            if (this.failPersistWith) throw this.failPersistWith;
             if (this.failPersist > 0) {
                 this.failPersist -= 1;
                 throw new Error('Network Error');

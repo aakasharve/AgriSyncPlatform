@@ -341,6 +341,46 @@ describe('voice archive state machine', () => {
         expect(await getDatabase().voiceClips.count()).toBe(2);
     });
 
+    describe('failure kind: only a connectivity failure may promise a retry on the internet', () => {
+        it('a dropped connection is recorded as network_failed (connectivity message)', async () => {
+            await seedClip(CLIP_1, FARM_A);
+            server.failPersist = 10;
+            await drainRetainedArchiveQueue();
+            const failed = (await row(CLIP_1))!;
+            expect(failed.archiveState).toBe('failed');
+            expect(failed.retainedArchiveError).toMatch(/^network_failed:/);
+            const { archiveFailureKind } = await import('../../voice/voiceArchiveState');
+            expect(archiveFailureKind(failed)).toBe('network');
+        });
+
+        it('a server answer (403 / 409 / 500) is NOT connectivity: no internet-retry promise', async () => {
+            const { archiveFailureKind } = await import('../../voice/voiceArchiveState');
+            for (const status of [403, 409, 500]) {
+                await getDatabase().voiceClips.clear();
+                await seedClip(CLIP_1, FARM_A);
+                server.failPersistWith = Object.assign(new Error(`Request failed with status code ${status}`), {
+                    isAxiosError: true,
+                    response: { status },
+                });
+                await drainRetainedArchiveQueue();
+                const failed = (await row(CLIP_1))!;
+                expect(failed.archiveState).toBe('failed');
+                expect(failed.retainedArchiveError).toMatch(/^persist_failed:/);
+                expect(archiveFailureKind(failed)).toBe('other');
+            }
+        });
+
+        it('isTransportFailure: no response = transport; any response = not', async () => {
+            const { isTransportFailure } = await import('../../voice/voiceArchiveState');
+            expect(isTransportFailure(Object.assign(new Error('x'), { isAxiosError: true }))).toBe(true);
+            expect(isTransportFailure(Object.assign(new Error('x'), { code: 'ECONNABORTED' }))).toBe(true);
+            expect(isTransportFailure(new Error('Network Error'))).toBe(true);
+            expect(isTransportFailure(Object.assign(new Error('x'), { isAxiosError: true, response: { status: 502 } }))).toBe(false);
+            expect(isTransportFailure(new Error('ShramSafal.ConsentRequired'))).toBe(false);
+            expect(isTransportFailure(null)).toBe(false);
+        });
+    });
+
     describe('consent boundary: only clips recorded WHILE consent was granted are ever uploaded', () => {
         const GRANT = '2026-10-10T12:00:00.000Z';
         const BEFORE = '2026-10-10T09:00:00.000Z';

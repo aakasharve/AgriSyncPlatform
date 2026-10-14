@@ -1,14 +1,14 @@
 // spec: data-principle-spine-2026-05-05/10.4
 //
 // PII review queue admin surface — i18n bundle. Three locales
-// (mr-IN, hi-IN, en-IN). Strings render exactly as written: no visible review
+// (mr-IN, en-IN). Strings render exactly as written: no visible review
 // prefix is added at runtime. Copy review status is tracked in the private
 // review records.
 //
 // Shape mirrors consentTranslations.ts.
 
 /** Locale codes accepted by the PII review feature. */
-export type PiiReviewLocale = 'mr-IN' | 'hi-IN' | 'en-IN';
+export type PiiReviewLocale = 'mr-IN' | 'en-IN';
 
 /**
  * Map the base app's `Language` ('en' | 'mr') onto PII review locales.
@@ -17,7 +17,9 @@ export type PiiReviewLocale = 'mr-IN' | 'hi-IN' | 'en-IN';
  */
 export function toPiiReviewLocale(lang: string | null | undefined): PiiReviewLocale {
     if (lang === 'mr' || lang === 'mr-IN') return 'mr-IN';
-    if (lang === 'hi' || lang === 'hi-IN') return 'hi-IN';
+    // Hindi is not offered. A stored or server-sent 'hi' falls back to Marathi,
+    // the app default (same rule as LanguageContext / LanguageSyncFromServer).
+    if (lang === 'hi' || lang === 'hi-IN') return 'mr-IN';
     return 'en-IN';
 }
 
@@ -88,40 +90,6 @@ const mr: PiiReviewBundle = {
     },
 };
 
-// -- hi-IN --------------------------------------------------------------
-const hi: PiiReviewBundle = {
-    queue: {
-        title: 'गोपनीयता समीक्षा क़तार',
-        empty: 'कोई समीक्षा-लंबित प्रविष्टि नहीं।',
-        loading: 'क़तार लोड हो रही है…',
-        loadError: 'क़तार लोड नहीं हो सकी। फिर से कोशिश करें।',
-        statusPending: 'समीक्षा शेष',
-        statusAutoRedacted: 'स्वतः-रिडैक्ट',
-        statusReviewApproved: 'स्वीकृत',
-        statusReviewRejected: 'अस्वीकृत',
-        statusDiscarded: 'त्यागी गई',
-        listColumns: {
-            transcriptId: 'प्रतिलेख आईडी',
-            score: 'स्कोर',
-            occurredAtUtc: 'समय (UTC)',
-            action: 'कार्रवाई',
-        },
-    },
-    decision: {
-        title: 'रिडैक्शन समीक्षा',
-        originalLabel: 'मूल पाठ',
-        redactedLabel: 'रिडैक्टेड पाठ',
-        notePlaceholder: 'समीक्षक की टिप्पणी (वैकल्पिक)',
-        approveButton: 'स्वीकृत करें',
-        rejectButton: 'अस्वीकृत करें',
-        approveSuccess: 'स्वीकृति सहेज ली गई।',
-        rejectSuccess: 'अस्वीकृति सहेज ली गई।',
-        approveError: 'स्वीकृत नहीं किया जा सका। पुनः प्रयास करें।',
-        rejectError: 'अस्वीकृत नहीं किया जा सका। पुनः प्रयास करें।',
-        backToQueue: 'क़तार पर वापस',
-    },
-};
-
 // -- en-IN --------------------------------------------------------------
 const en: PiiReviewBundle = {
     queue: {
@@ -158,7 +126,6 @@ const en: PiiReviewBundle = {
 
 export const PII_REVIEW_BUNDLES: Record<PiiReviewLocale, PiiReviewBundle> = {
     'mr-IN': mr,
-    'hi-IN': hi,
     'en-IN': en,
 };
 

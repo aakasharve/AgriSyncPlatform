@@ -760,20 +760,14 @@ export interface ConsentStateDto {
     version: number;
     acceptedAtUtc: string | null;
     revokedAtUtc: string | null;
-    /**
-     * ADDITIVE, GET only. Start of the CURRENT continuous grant of the voice
-     * full-history purpose, computed by the server from its consent ledger.
-     * Absent from older servers; null when not granted or unknown. Wire name is
-     * exactly `fullHistoryJournalGrantedSinceUtc` (acceptedAtUtc / revokedAtUtc
-     * above do not match the server's grantedAtUtc / withdrawnAtUtc).
-     */
+    /** ADDITIVE, GET only: server-derived start of the CURRENT voice grant (null/absent = unknown). */
     fullHistoryJournalGrantedSinceUtc?: string | null;
 }
 
 /**
  * PUT `/shramsafal/consent/me` body. Any of the three flag fields may
  * be omitted (partial update); the audit row records the new full
- * state regardless. `languageShown` is the locale code (mr-IN, hi-IN,
+ * state regardless. `languageShown` is the locale code (mr-IN,
  * en-IN) the user actually saw when consenting — required for the
  * audit row per plan §6.1.3.
  */

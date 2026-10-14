@@ -98,9 +98,9 @@ describe('no user-visible string carries an internal review marker', () => {
         });
     }
 
-    it('covers all three locales of the legal bundles (mr-IN, hi-IN, en-IN)', () => {
+    it('covers exactly the two offered locales of the legal bundles (mr-IN, en-IN); Hindi is not offered', () => {
         for (const bundle of [CONSENT_BUNDLES, DATA_RIGHTS_BUNDLES, PII_REVIEW_BUNDLES, VOICE_DIARY_BUNDLES]) {
-            expect(Object.keys(bundle).sort()).toEqual(['en-IN', 'hi-IN', 'mr-IN']);
+            expect(Object.keys(bundle).sort()).toEqual(['en-IN', 'mr-IN']);
         }
     });
 

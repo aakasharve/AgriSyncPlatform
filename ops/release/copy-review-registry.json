@@ -46,17 +46,12 @@
     {
       "path": "src/clients/mobile-web/public/consent/agreement_en.md",
       "reviewStatus": "unreviewed",
-      "sha256": "baa05fd5eebae162bf802997953d2a56bad73b69c878dd944aeb9f243adda847"
-    },
-    {
-      "path": "src/clients/mobile-web/public/consent/agreement_hi.md",
-      "reviewStatus": "unreviewed",
-      "sha256": "f9435455e53baf3457442f9ed15e9db753a77b0824b5860f866ae0ae166fd78f"
+      "sha256": "858e4df556d351646d3ad75bfd5d40405332be0d8ce1dcc939d066ce892484f3"
     },
     {
       "path": "src/clients/mobile-web/public/consent/agreement_mr.md",
       "reviewStatus": "unreviewed",
-      "sha256": "d8a8aa4e46c7cfa2198ae101047e3450bbc60b5a9d00ea81f32a7bc866b859dd"
+      "sha256": "3a283eba03b51c076ba4fc65a3b48d340ce1ec52ef09996a0d05598f958368ec"
     },
     {
       "path": "src/clients/mobile-web/public/legal/privacy_en.md",
@@ -86,22 +81,22 @@
     {
       "path": "src/clients/mobile-web/src/i18n/consentTranslations.ts",
       "reviewStatus": "unreviewed",
-      "sha256": "da7d06d169f80811a085e3518dbef7656278fb5555094408dac2593839ac9906"
+      "sha256": "89ed2f6707b0b01039430ca133228cc4b667841ed6c559e37165225cdbfc42bd"
     },
     {
       "path": "src/clients/mobile-web/src/i18n/dataRightsTranslations.ts",
       "reviewStatus": "unreviewed",
-      "sha256": "c1ba8fbadd0851722776809cae6c373edefac23a6d5a18bb88d59ba560fe80c8"
+      "sha256": "fe29ed42b06385aed774f350cfef6636e108de905e36c36187aa273014b4f655"
     },
     {
       "path": "src/clients/mobile-web/src/i18n/piiReviewTranslations.ts",
       "reviewStatus": "unreviewed",
-      "sha256": "5a2d8ecebe93f85242bf409ff63682633608c644e56aac55259de539436d880d"
+      "sha256": "95bcbe22c265adb9f18e28c0494c524d2061bb9c6a8e94d8814d9642b83ce41d"
     },
     {
       "path": "src/clients/mobile-web/src/i18n/voiceDiaryTranslations.ts",
       "reviewStatus": "unreviewed",
-      "sha256": "1df6c27c8d313e9ceb4c6e564050a7f0647b292810be05886a34c7094569fcc1"
+      "sha256": "efd3ac9c474fad9a649b30cf54834ea0159dc4cf010ba2d8f6ae69095f20131e"
     }
   ]
 }
