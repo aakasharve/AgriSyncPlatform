@@ -25,6 +25,7 @@ import { getDatabase } from '../storage/DexieDatabase';
 import { agriSyncClient } from '../api/AgriSyncClient';
 import { openVoiceClip } from '../security/voiceEnvelope';
 import { resolveDek } from '../security/tenantDekClient';
+import { readFarmOwnerAccountId } from './VoiceClipRetention';
 import { getVoiceDiaryById } from '../voiceDiary/voiceDiaryApiClient';
 
 export type RetainedClipReadError =
@@ -57,9 +58,9 @@ async function localOwnerCandidates(clipId: string): Promise<{ owners: string[];
     const row = await db.voiceClips.get(clipId);
     if (row) {
         const farm = await db.farms.get(row.farmId);
-        push(farm?.ownerAccountId);
+        push(readFarmOwnerAccountId(farm));
     }
-    for (const farm of await db.farms.toArray()) push(farm.ownerAccountId);
+    for (const farm of await db.farms.toArray()) push(readFarmOwnerAccountId(farm));
     return { owners, mimeType: row?.mimeType };
 }
 

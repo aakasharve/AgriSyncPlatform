@@ -39,6 +39,7 @@ import { perUserDatabaseName } from '../../storage/userDatabaseName';
 import { clearCachedDek } from '../../security/tenantDekClient';
 import { drainRetainedArchiveQueue, VoiceArchiveUploader } from '../VoiceArchiveUploader';
 import { deriveCloudArchiveState } from '../../voice/voiceArchiveState';
+import { seedPulledFarm } from '../../voice/__tests__/seedPulledFarm';
 import { purgeExpiredProcessingVoiceClips } from '../../voice/VoiceClipRetention';
 
 const CLIP_1 = 'c1111111-1111-4111-8111-111111111111';
@@ -61,12 +62,7 @@ async function useUser(user: string, owner: string) {
 }
 
 async function seedFarm(farmId: string, ownerAccountId: string) {
-    await getDatabase().farms.put({
-        id: farmId,
-        ownerAccountId,
-        payload: { id: farmId, ownerAccountId },
-        updatedAt: '2026-10-01T00:00:00.000Z',
-    });
+    await seedPulledFarm(farmId, ownerAccountId);
 }
 
 async function seedClip(id: string, farmId: string, overrides: Record<string, unknown> = {}) {
