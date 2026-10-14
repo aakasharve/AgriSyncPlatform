@@ -2337,6 +2337,23 @@ internal sealed class ShramSafalRepository(
         await db.ConsentAuditEntries.AddAsync(entry, ct);
     }
 
+    public async Task<DateTime?> GetFullHistoryCurrentGrantStartUtcAsync(Guid userId, CancellationToken ct = default)
+    {
+        if (userId == Guid.Empty)
+        {
+            return null;
+        }
+
+        var rows = await db.ConsentAuditEntries
+            .AsNoTracking()
+            .Where(e => e.UserId == userId)
+            .OrderBy(e => e.OccurredAtUtc).ThenBy(e => e.Id)
+            .Select(e => new { e.OccurredAtUtc, e.NewStateJson })
+            .ToListAsync(ct);
+
+        return FullHistoryGrantWindow.CurrentGrantStart(rows.Select(r => (r.OccurredAtUtc, r.NewStateJson)));
+    }
+
     // ── DATA_PRINCIPLE_SPINE sub-phase 10.2 / 10.4 (PII review queue) ────
     // spec: data-principle-spine-2026-05-05/10.2
 

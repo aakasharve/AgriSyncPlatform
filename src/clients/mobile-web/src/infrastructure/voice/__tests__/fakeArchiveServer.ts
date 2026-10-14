@@ -30,6 +30,12 @@ class FakeArchiveServer {
     user = 'user-a';
     tenantOwner = 'owner-a';
     consent = new Map<string, boolean>();
+    /**
+     * What GET /consent/me reports as the start of the CURRENT continuous grant.
+     * Unset => a long-ago start (does not constrain). `null` => the server could
+     * not say (older server / unreadable ledger): the field is absent.
+     */
+    grantSince = new Map<string, string | null>();
     /** Owner accounts of the farms each user belongs to (for /me/context). */
     memberships = new Map<string, string[]>();
     stored = new Map<string, Map<string, PersistVoiceClipRetainedRequest>>();
@@ -46,6 +52,7 @@ class FakeArchiveServer {
         this.user = 'user-a';
         this.tenantOwner = 'owner-a';
         this.consent.clear();
+        this.grantSince.clear();
         this.memberships.clear();
         this.stored.clear();
         this.persistCalls = [];
@@ -69,14 +76,19 @@ class FakeArchiveServer {
     }
 
     client = {
-        getConsent: async () => ({
-            fullHistoryJournal: this.consent.get(this.user) === true,
-            crossFarmAggregation: false,
-            researchCorpusExport: false,
-            version: 1,
-            acceptedAtUtc: null,
-            revokedAtUtc: null,
-        }),
+        getConsent: async () => {
+            const granted = this.consent.get(this.user) === true;
+            const since = this.grantSince.has(this.user) ? this.grantSince.get(this.user) : '2026-01-01T00:00:00.000Z';
+            return {
+                fullHistoryJournal: granted,
+                crossFarmAggregation: false,
+                researchCorpusExport: false,
+                version: 1,
+                acceptedAtUtc: null,
+                revokedAtUtc: null,
+                ...(granted && since ? { fullHistoryJournalGrantedSinceUtc: since } : {}),
+            };
+        },
         getTenantDek: async () => {
             this.dekFetches += 1;
             return {

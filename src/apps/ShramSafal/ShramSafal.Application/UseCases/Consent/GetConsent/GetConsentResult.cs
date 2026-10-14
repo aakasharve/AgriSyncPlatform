@@ -13,4 +13,9 @@ public sealed record GetConsentResult(
     bool ResearchCorpusExport,
     int Version,
     DateTime? GrantedAtUtc,
-    DateTime? WithdrawnAtUtc);
+    DateTime? WithdrawnAtUtc,
+    // ADDITIVE (old clients ignore it). Start of the CURRENT continuous grant
+    // of the voice full-history purpose, derived from the consent ledger.
+    // null when not granted or when the ledger cannot show the start; a client
+    // MUST treat null-while-granted as "unknown" and upload nothing.
+    DateTime? FullHistoryJournalGrantedSinceUtc = null);

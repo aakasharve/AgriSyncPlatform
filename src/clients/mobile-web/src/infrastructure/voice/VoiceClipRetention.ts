@@ -25,7 +25,7 @@ import { getCurrentTenantDek, resolveDek } from '../security/tenantDekClient';
 import { agriSyncClient } from '../api/AgriSyncClient';
 import { persistRetainedVoiceClip } from '../voiceDiary/voiceDiaryApiClient';
 import { archiveRetryDelayMs } from './voiceArchiveState';
-import { observeArchiveConsent, recordedUnderConsent } from './voiceArchiveConsent';
+import { observeArchiveConsent, observeArchiveConsentView, recordedUnderConsent } from './voiceArchiveConsent';
 import { emitClientError } from '../../core/telemetry/eventEmitters';
 import { EventSchemas } from '../../core/telemetry/eventSchema';
 
@@ -468,9 +468,12 @@ async function archiveOnce(
     contextFarmId?: string,
 ): Promise<VoiceClipArchiveOutcome> {
     let consentGranted: boolean;
+    let consentSince: string | null = null;
     try {
         const dto = await agriSyncClient.getConsent();
         consentGranted = dto.fullHistoryJournal === true;
+        // max(local marker, server's start of the CURRENT grant); null = fail closed.
+        consentSince = await observeArchiveConsentView(dto);
     } catch {
         // We do not know whether a promise exists. Record, do not report.
         await recordArchiveAttempt(clipId, {
@@ -488,7 +491,6 @@ async function archiveOnce(
     const row = await db.voiceClips.get(clipId);
     // Consent covers recordings made WHILE it was granted. Fail closed: no
     // marker, or a clip older than it, is never uploaded automatically.
-    const consentSince = await observeArchiveConsent(true);
     if (row && !row.s3RetainedKey && !recordedUnderConsent(row.recordedAtUtc, consentSince)) {
         return { status: 'skipped', clipId, reason: 'recorded_before_consent' };
     }

@@ -31,7 +31,7 @@ import { getDatabase, type VoiceClipCacheRecord } from '../storage/DexieDatabase
 import { agriSyncClient } from '../api/AgriSyncClient';
 import { archiveToRetainedTierIfConsented } from '../voice/VoiceClipRetention';
 import { deriveCloudArchiveState } from '../voice/voiceArchiveState';
-import { observeArchiveConsent, recordedUnderConsent } from '../voice/voiceArchiveConsent';
+import { observeArchiveConsentView, recordedUnderConsent } from '../voice/voiceArchiveConsent';
 
 const WORKER_INTERVAL_MS = 30_000;
 /** Clips carried per cycle. Small on purpose: sealing + a base64 POST is heavy on a low-RAM phone. */
@@ -69,13 +69,17 @@ export async function drainRetainedArchiveQueue(): Promise<DrainResult> {
 
     // Consent is read live, every pass. Declined / revoked => nothing leaves the phone.
     let granted: boolean;
+    let consentSince: string | null;
     try {
-        granted = (await agriSyncClient.getConsent()).fullHistoryJournal === true;
+        const consent = await agriSyncClient.getConsent();
+        granted = consent.fullHistoryJournal === true;
+        // eligibleSince = max(this phone's marker, the SERVER's start of the
+        // current continuous grant). null while granted = server value missing
+        // or unparseable = fail closed: nothing qualifies this pass.
+        consentSince = await observeArchiveConsentView(consent);
     } catch {
         return { ...EMPTY, skipped: 'consent_unknown' };
     }
-    // Remember WHEN consent was first seen on; clear it the moment it is off.
-    const consentSince = await observeArchiveConsent(granted);
     if (!granted) {
         return { ...EMPTY, skipped: 'consent_not_granted' };
     }

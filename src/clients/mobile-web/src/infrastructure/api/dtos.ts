@@ -760,6 +760,14 @@ export interface ConsentStateDto {
     version: number;
     acceptedAtUtc: string | null;
     revokedAtUtc: string | null;
+    /**
+     * ADDITIVE, GET only. Start of the CURRENT continuous grant of the voice
+     * full-history purpose, computed by the server from its consent ledger.
+     * Absent from older servers; null when not granted or unknown. Wire name is
+     * exactly `fullHistoryJournalGrantedSinceUtc` (acceptedAtUtc / revokedAtUtc
+     * above do not match the server's grantedAtUtc / withdrawnAtUtc).
+     */
+    fullHistoryJournalGrantedSinceUtc?: string | null;
 }
 
 /**

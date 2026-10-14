@@ -19,9 +19,23 @@ import type {
     IssueConsentTokenResponse,
 } from '../dtos';
 
+/**
+ * Map the wire body. Only the grant-start field needs care: anything that is
+ * not a parseable timestamp string becomes null, so a consumer can fail closed
+ * on one value instead of re-validating.
+ */
+export function normalizeConsentDto(wire: ConsentStateDto): ConsentStateDto {
+    const since = wire?.fullHistoryJournalGrantedSinceUtc;
+    return {
+        ...wire,
+        fullHistoryJournalGrantedSinceUtc:
+            typeof since === 'string' && Number.isFinite(Date.parse(since)) ? since : null,
+    };
+}
+
 export async function getConsent(t: HttpTransport): Promise<ConsentStateDto> {
     const response = await t.http.get<ConsentStateDto>('/shramsafal/consent/me');
-    return response.data;
+    return normalizeConsentDto(response.data);
 }
 
 export async function updateConsent(
