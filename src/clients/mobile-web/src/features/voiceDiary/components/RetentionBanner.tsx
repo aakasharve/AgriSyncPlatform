@@ -3,9 +3,12 @@
 // Consent-aware retention banner. Two states driven by the
 // FullHistoryJournal toggle:
 //
-//   granted  — calm emerald: "voice notes are saved to your cloud"
-//   denied   — warn amber + inline CTA: "not saved to your cloud — turn on
-//              in Settings". CTA navigates to the consent toggle anchor.
+//   granted  — calm emerald: saving to the account is enabled; each
+//              recording shows its own saving status (consent alone never
+//              claims that any recording is saved).
+//   denied   — warn amber + inline CTA: new recordings are not being saved
+//              to the account (earlier saved ones are not erased). CTA
+//              navigates to the consent toggle anchor.
 //
 // All copy flows through `tVoiceDiary(locale, key)`.
 

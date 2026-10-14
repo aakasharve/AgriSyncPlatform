@@ -164,7 +164,7 @@ describe('statements that were measured against the code and found untrue stay o
         // a revoke, and the stop-saving confirmation already says so.
         const whatStops = CONSENT_BUNDLES['en-IN'].revoke.whatStops;
         expect(whatStops).not.toMatch(/no longer be able to play/i);
-        expect(whatStops).toMatch(/already saved stay/i);
+        expect(whatStops).toMatch(/saved earlier will stay/i);
     });
 
     it('does not cite a statute as if it were a compliance statement', () => {

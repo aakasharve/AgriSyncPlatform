@@ -478,6 +478,51 @@ describe('voice archive state machine', () => {
             expect(await getArchiveConsentSince()).toBeNull();
         });
 
+        // KNOWN LIMITATION (characterisation, not a fix). The boundary compares the
+        // DEVICE-declared recordedAtUtc with a server-clock bound. Where the device
+        // clock is wrong near the boundary, the outcome is wrong in one direction
+        // each way. Nothing here is silently corrected: recordedAtUtc is never
+        // rewritten, and the server rule is not loosened.
+        describe('KNOWN LIMITATION: device clock skew near the grant boundary', () => {
+            const SKEW_MS = 90_000;
+            const grantMs = Date.parse(GRANT);
+
+            beforeEach(async () => {
+                const { observeArchiveConsent } = await import('../../voice/voiceArchiveConsent');
+                await observeArchiveConsent(true, GRANT);
+                server.grantSince.set('user-a', GRANT);
+            });
+
+            it('device clock BEHIND: a clip really recorded AFTER the grant is declared before it, stays local and is never sent', async () => {
+                const realRecordedAt = grantMs + 30_000;
+                const declared = new Date(realRecordedAt - SKEW_MS).toISOString(); // device 90 s behind
+                expect(Date.parse(declared)).toBeLessThan(grantMs);
+                await seedClip(CLIP_1, FARM_A, { recordedAtUtc: declared });
+
+                for (let i = 0; i < 3; i++) await drainRetainedArchiveQueue();
+
+                expect(server.persistCalls).toHaveLength(0);
+                const kept = (await row(CLIP_1))!;
+                expect(kept.localBlob).toBeTruthy(); // still playable on the phone
+                expect(kept.recordedAtUtc).toBe(declared); // the declared time is never altered
+                const { getArchiveConsentSince, recordedUnderConsent } = await import('../../voice/voiceArchiveConsent');
+                expect(deriveCloudArchiveState(kept, true, Date.now(), recordedUnderConsent(kept.recordedAtUtc, await getArchiveConsentSince()))).toBe('local_only');
+            });
+
+            it('device clock AHEAD: a clip really recorded BEFORE the grant is declared after it and IS uploaded', async () => {
+                const realRecordedAt = grantMs - 30_000; // recorded in the revoked gap
+                const declared = new Date(realRecordedAt + SKEW_MS).toISOString(); // device 90 s ahead
+                expect(Date.parse(declared)).toBeGreaterThan(grantMs);
+                await seedClip(CLIP_1, FARM_A, { recordedAtUtc: declared });
+
+                await drainRetainedArchiveQueue();
+
+                expect(server.persistCalls.map(c => c.clipId)).toEqual([CLIP_1]);
+                expect(server.persistCalls[0].recordedAtUtc).toBe(declared); // the wrong time goes out unchanged
+                expect(server.stored.get('user-a')?.has(CLIP_1)).toBe(true);
+            });
+        });
+
         it('revoke clears the marker; a later re-grant starts a NEW boundary, so clips from the declined gap stay local', async () => {
             const { observeArchiveConsent, getArchiveConsentSince } = await import('../../voice/voiceArchiveConsent');
             await observeArchiveConsent(true, GRANT);

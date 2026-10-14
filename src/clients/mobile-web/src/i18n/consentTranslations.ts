@@ -61,7 +61,7 @@ const mr: ConsentBundle = {
     toggles: {
         fullHistoryJournal: {
             title: 'आवाज नोंदी जतन करून ठेवा',
-            body: 'होकार दिल्यास तुमचे आवाज तुम्ही मिटवेपर्यंत तुमच्या खात्यात जतन राहतील. नकार दिल्यास ते आवाजी डायरीत जतन केले जात नाहीत.',
+            body: 'होकार दिल्यास नवीन आवाजी नोंदी तुमच्या खात्यात जतन करण्याची सोय सुरू होते. प्रत्येक नोंदीची जतन स्थिती आवाजी डायरीत दिसते. नकार दिल्यास नवीन आवाजी नोंदी तुमच्या खात्यात जतन केल्या जाणार नाहीत.',
         },
         crossFarmAggregation: {
             title: 'माझ्या डी-आयडेंटिफाईड डेटाने अॅप सुधारा',
@@ -76,7 +76,7 @@ const mr: ConsentBundle = {
     revoke: {
         button: 'सर्व रद्द करा',
         confirm: 'तुम्ही खात्रीने सर्व परवानग्या रद्द करू इच्छिता?',
-        whatStops: 'रद्द केल्यावर: यापुढे नवीन आवाज जतन केला जाणार नाही, आणि सुधारणा व संशोधनाच्या दोन परवानग्या तुम्ही मागे घेता. आधी साठवलेले आवाज तुम्ही मिटवेपर्यंत राहतील. बाकी सगळं तसंच चालू राहील — तुमचं शेत, तुमची कामं आणि तुमचा हिशोब जिथल्या तिथेच राहतो. हवं तेव्हा पुन्हा परवानगी देता येते.',
+        whatStops: 'रद्द केल्यावर: यापुढच्या नवीन आवाजी नोंदी तुमच्या खात्यात जतन केल्या जाणार नाहीत. आधी जतन झालेल्या नोंदी राहतील. सुधारणा व संशोधनाच्या दोन परवानग्या तुम्ही मागे घेता. बाकी सगळं तसंच चालू राहील — तुमचं शेत, तुमची कामं आणि तुमचा हिशोब जिथल्या तिथेच राहतो. हवं तेव्हा पुन्हा परवानगी देता येते.',
     },
     save: {
         button: 'जतन करा',
@@ -94,7 +94,7 @@ const en: ConsentBundle = {
     toggles: {
         fullHistoryJournal: {
             title: 'Keep voice recordings saved',
-            body: 'If yes, your clips are kept in your account until you erase them. If no, they are not saved in the Voice Diary.',
+            body: 'If yes, saving of new voice recordings to your account is turned on. Each recording shows its own saving status in the Voice Diary. If no, new voice recordings will not be saved to your account.',
         },
         crossFarmAggregation: {
             title: 'Improve the app using my de-identified data',
@@ -109,7 +109,7 @@ const en: ConsentBundle = {
     revoke: {
         button: 'Revoke all',
         confirm: 'Are you sure you want to revoke every permission?',
-        whatStops: 'If you revoke: no new voice will be saved, and you withdraw the two permissions for improving the app and for research. Recordings already saved stay until you erase them. Everything else keeps working — your farm, your work and your accounts stay exactly where they are. You can grant permission again whenever you like.',
+        whatStops: 'If you revoke: new voice recordings from now on will not be saved to your account. Recordings saved earlier will stay. You also withdraw the two permissions for improving the app and for research. Everything else keeps working — your farm, your work and your accounts stay exactly where they are. You can grant permission again whenever you like.',
     },
     save: {
         button: 'Save',
