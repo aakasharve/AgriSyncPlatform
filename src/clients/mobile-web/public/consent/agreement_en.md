@@ -5,8 +5,8 @@ you can say yes to one and no to another. You can revoke at any time.
 
 ## 1. Keep recordings of my voice saved
 - Default: OFF
-- If you say yes: Your voice clips are saved with the full history, until you erase them or close your account. You can review them any time.
-- If you say no: They are not saved in your Voice Diary.
+- If you say yes: Saving of new voice recordings to your account is turned on. Each recording shows its own saving status in the Voice Diary. Recordings that are saved stay until you erase them or close your account.
+- If you say no: New voice recordings will not be saved to your account.
 
 ## 2. Improve the app using my de-identified data
 - Default: OFF

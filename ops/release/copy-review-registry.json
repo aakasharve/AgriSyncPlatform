@@ -46,12 +46,12 @@
     {
       "path": "src/clients/mobile-web/public/consent/agreement_en.md",
       "reviewStatus": "unreviewed",
-      "sha256": "858e4df556d351646d3ad75bfd5d40405332be0d8ce1dcc939d066ce892484f3"
+      "sha256": "2fc074a862e17bda5b80878600828925bbd84ef482da46f3cfbb0e433b527cb7"
     },
     {
       "path": "src/clients/mobile-web/public/consent/agreement_mr.md",
       "reviewStatus": "unreviewed",
-      "sha256": "3a283eba03b51c076ba4fc65a3b48d340ce1ec52ef09996a0d05598f958368ec"
+      "sha256": "d030c1a9764b676a311216afd1e9053fa790623453ffbe1917e50ffff9f20990"
     },
     {
       "path": "src/clients/mobile-web/public/legal/privacy_en.md",
@@ -81,7 +81,7 @@
     {
       "path": "src/clients/mobile-web/src/i18n/consentTranslations.ts",
       "reviewStatus": "unreviewed",
-      "sha256": "89ed2f6707b0b01039430ca133228cc4b667841ed6c559e37165225cdbfc42bd"
+      "sha256": "96753728ac0d3203416b8d7c68b299d87c5ed6f9c5debafe5712389740b36567"
     },
     {
       "path": "src/clients/mobile-web/src/i18n/dataRightsTranslations.ts",
@@ -96,7 +96,7 @@
     {
       "path": "src/clients/mobile-web/src/i18n/voiceDiaryTranslations.ts",
       "reviewStatus": "unreviewed",
-      "sha256": "efd3ac9c474fad9a649b30cf54834ea0159dc4cf010ba2d8f6ae69095f20131e"
+      "sha256": "158147ba52e125f62a408c9de62ca33fd40bab8235cf84ac6b06ffe32952662a"
     }
   ]
 }
