@@ -30,6 +30,8 @@
  * throwing: the callers are on the boot path.
  */
 
+import { toStorableFarmerId } from './farmerId';
+
 const ACTIVE_USER_ID_KEY = 'agrisync_active_user_id_v1';
 
 /** The last farmer activated on this device, or `null` if there has been none. */
@@ -45,5 +47,9 @@ export function writeActiveUserId(userId: string): void {
     if (typeof localStorage === 'undefined') {
         return;
     }
-    localStorage.setItem(ACTIVE_USER_ID_KEY, userId);
+    const storable = toStorableFarmerId(userId);
+    if (storable === null) {
+        return;
+    }
+    localStorage.setItem(ACTIVE_USER_ID_KEY, storable);
 }
