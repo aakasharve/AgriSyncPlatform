@@ -18,7 +18,7 @@
  *    would still sit under the status bar / gesture bar. Use var(--safe-area-inset-*, env(...)).
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const ROOT = process.cwd();
@@ -50,9 +50,10 @@ describe('Android safe-area insets below API 35 (source contract; real proof = e
     it('no screen uses a raw env(safe-area-inset-*) that the native publisher cannot override', () => {
         const offenders: string[] = [];
         const walk = (dir: string) => {
-            for (const name of readdirSync(dir)) {
+            for (const entry of readdirSync(dir, { withFileTypes: true })) {
+                const name = entry.name;
                 const full = join(dir, name);
-                if (statSync(full).isDirectory()) {
+                if (entry.isDirectory()) {
                     if (name !== '__tests__' && name !== 'node_modules') walk(full);
                     continue;
                 }
