@@ -48,7 +48,7 @@ export class Web {
     this.pkg = pkg; this.port = port; this.log = log;
     this.ws = null; this.nextId = 1; this.pending = new Map();
     this.net = []; this.errors = []; this.consoleErrors = [];
-    this.inputMode = 'unknown'; this.calib = null;
+    this.inputMode = 'unknown'; this.calib = null; this.statusBarPx = 0; this.statusBarCollisions = [];
   }
 
   // ------------------------------------------------------------ connection
@@ -188,7 +188,11 @@ export class Web {
   async #tapAt(cx, cy) {
     if (this.calib) {
       const x = Math.round(cx * this.calib.scale + this.calib.ox); const y = Math.round(cy * this.calib.scale + this.calib.oy);
-      tap(x, y); await sleep(250); return;
+      if (this.statusBarPx && y < this.statusBarPx) {
+        // A finger here would hit the system status bar, not the app. Record it, then use DOM-level input so
+        // the journey can continue; the layout defect itself is asserted separately (check C15).
+        this.statusBarCollisions.push({ x, y, statusBarPx: this.statusBarPx });
+      } else { tap(x, y); await sleep(250); return; }
     }
     await this.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: cx, y: cy });
     await this.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: cx, y: cy, button: 'left', buttons: 1, clickCount: 1 });

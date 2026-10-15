@@ -35,6 +35,7 @@ export function parseNodes(xml) {
     return {
       text: a.text || '', id: a['resource-id'] || '', pkg: a.package || '', desc: a['content-desc'] || '', cls: a.class || '',
       x: b ? Math.round((+b[1] + +b[3]) / 2) : 0, y: b ? Math.round((+b[2] + +b[4]) / 2) : 0,
+      y1: b ? +b[2] : 0, y2: b ? +b[4] : 0,
     };
   });
 }

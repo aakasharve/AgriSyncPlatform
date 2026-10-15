@@ -41,6 +41,7 @@ const writeResults = () => {
 
 let web = null;
 let shotN = 0;
+let statusBarPx = 0;
 const shot = (c, label) => {
   const f = `${LEG}-${c ? c.id : 'x'}-${String(++shotN).padStart(2, '0')}-${label}.png`;
   try { screencap(path.join(OUT, 'shots', f)); c?.screens.push(f); } catch (e) { log('screencap failed', e.message); }
@@ -120,6 +121,7 @@ async function launchCold({ attach = true } = {}) {
   web = new Web({ pkg: PKG, log });
   await web.connect();
   await web.calibrate();
+  web.statusBarPx = statusBarPx;
   results.inputMode = web.inputMode;
   return web;
 }
@@ -306,6 +308,7 @@ async function main() {
     await web.waitVisible(Web.tid('consent-accept-cta'), 60_000, 'consent screen on a fresh install');
     await sleep(8000);
     shot(c, 'consent-screen');
+    try { const dw = sh('dumpsys window', { allowFail: true, timeout: 40_000 }); const m = /type=(?:ITYPE_)?status[Bb]ars?[^\n]*?frame=\[\d+,\d+\]\[\d+,(\d+)\]/.exec(dw) || /mStatusBarHeight=(\d+)/.exec(dw) || /statusBarHeight=(\d+)/.exec(dw); if (m) { statusBarPx = Number(m[1]); web.statusBarPx = statusBarPx; } c.evidence.statusBarPx = statusBarPx; c.evidence.statusBarSource = m ? m[0].slice(0, 120) : 'not found in dumpsys window'; } catch { /* optional */ }
     await noPermissionDialog(c, 'on the consent screen (fresh install, 8 s after launch)');
   });
 
@@ -324,6 +327,20 @@ async function main() {
     await dismissOverlays();
     await sleep(6000);
     await noPermissionDialog(c02, 'after login (home, 6 s)');
+  });
+
+  await check('C15', 'top-bar controls are not under the system status bar (a finger can reach them)', async (c) => {
+    await dismissOverlays();
+    const g = await web.eval(`(() => { const e = document.querySelector('[data-testid="header-setup-hub"]'); if (!e) return null; const r = e.getBoundingClientRect();
+      const p = document.createElement('div'); p.style.cssText = 'position:absolute;visibility:hidden;padding-top:env(safe-area-inset-top)'; document.body.appendChild(p);
+      const inset = parseFloat(getComputedStyle(p).paddingTop) || 0; p.remove();
+      return { top: r.top, bottom: r.bottom, centerY: r.top + r.height / 2, safeAreaInsetTopCss: inset, dpr: window.devicePixelRatio }; })()`);
+    if (!g || !statusBarPx) { c.unverified(`could not measure (header=${JSON.stringify(g)}, statusBarPx=${statusBarPx})`); return; }
+    const topPx = Math.round(g.top * g.dpr); const centerPx = Math.round(g.centerY * g.dpr);
+    c.evidence.geometry = { ...g, headerTopPx: topPx, headerCenterPx: centerPx, statusBarBottomPx: statusBarPx };
+    shot(c, 'header-vs-status-bar');
+    c.assert(centerPx > statusBarPx, `Setup Hub button centre (${centerPx}px) is below the status bar (${statusBarPx}px)`,
+      `Setup Hub button (header, top-left) centre is at ${centerPx}px but the system status bar covers 0-${statusBarPx}px: a real touch hits the status bar, not the app (CSS safe-area-inset-top = ${g.safeAreaInsetTopCss}px)`);
   });
 
   await check('C02b', 'NO microphone prompt on relaunch of a signed-in install', async (c) => {
