@@ -51,8 +51,8 @@
 #   --set-env KEY=VALUE   set ONE env var in the systemd EnvironmentFile, inside the
 #                         step-7 atomic pass. KEY is allowlisted to exactly
 #                         TenantDek__MasterKeyId; VALUE must match
-#                         ^alias/[a-z0-9-]{1,128}$. Anything else exits 18 BEFORE any
-#                         change (before step 0). Idempotent. Only key NAMES, line
+#                         ^alias/[a-z0-9]([a-z0-9-]{0,126}[a-z0-9])?$. Anything else is an
+#                         argument error: exit 18 before step 0 (nothing touched). Idempotent. Only key NAMES, line
 #                         counts and a hash are printed -- never file contents.
 #
 # INVOKED BY
@@ -115,6 +115,7 @@ SET_ENV_VALUE=""
 # before ANY side effect (no sudo, no psql, no file touched). Fails closed (exit 18).
 set_env_register() {
   local arg="$1" key val
+  local LC_ALL=C   # byte-wise [a-z]: no locale-dependent character ranges
   [ -z "$SET_ENV_KEY" ] || die_usage "--set-env may be given only once"
   case "$arg" in
     *=*) ;;
@@ -124,8 +125,8 @@ set_env_register() {
   if [ "$key" != "$SET_ENV_ALLOWED_KEY" ]; then
     die_usage "--set-env key not allowlisted (only $SET_ENV_ALLOWED_KEY may be set)"
   fi
-  if ! [[ "$val" =~ ^alias/[a-z0-9-]{1,128}$ ]]; then
-    die_usage "--set-env value for $key must match ^alias/[a-z0-9-]{1,128}\$ (value not echoed)"
+  if ! [[ "$val" =~ ^alias/[a-z0-9]([a-z0-9-]{0,126}[a-z0-9])?$ ]]; then
+    die_usage "--set-env value for $key must match ^alias/[a-z0-9]([a-z0-9-]{0,126}[a-z0-9])?\$ (value not echoed)"
   fi
   SET_ENV_KEY="$key"; SET_ENV_VALUE="$val"
 }
@@ -221,16 +222,33 @@ GATE_OPENED=0   # set to 1 the moment the gate is written true; drives the EXIT 
 # it and reaching that step left production with startup migrations permanently
 # enabled and said nothing. Doing it here makes that impossible to forget.
 # ---------------------------------------------------------------------------
+ENV_TMPDIR=""
+# Private scratch dir (mktemp -d => 0700, unpredictable name) for any file that holds
+# a copy of the env. Files inside are created under umask 077. Removed by the EXIT
+# trap on EVERY path, whether or not the gate was ever opened.
+mk_env_tmp() {
+  if [ -z "$ENV_TMPDIR" ] || [ ! -d "$ENV_TMPDIR" ]; then
+    ENV_TMPDIR=$(umask 077; mktemp -d "${TMPDIR:-/tmp}/.binswap-env.XXXXXX") || { ENV_TMPDIR=""; return 1; }
+  fi
+}
+
+# Replace $ENV_FILE with $1 via same-directory rename, so a reader never sees a
+# truncated or world-readable file. install(1) sets owner/mode on the temp name.
+install_env() {
+  sudo install -o www-data -g www-data -m 0640 "$1" "$ENV_FILE.new" \
+    && sudo mv -f "$ENV_FILE.new" "$ENV_FILE"
+}
+
 close_gate_on_exit() {
   local rc=$?
   if [ "$GATE_OPENED" = "1" ]; then
     # Force false. Never restore a captured value that was itself true — that would
     # re-open the gate and then report success.
-    if sudo awk '
+    if mk_env_tmp 2>/dev/null && ( umask 077; sudo awk '
         /^(export[[:space:]]+)?ALLOW_PRODUCTION_STARTUP_MIGRATIONS=/ { print "ALLOW_PRODUCTION_STARTUP_MIGRATIONS=false"; next }
         { print }
-      ' "$ENV_FILE" > /tmp/.envnew.$$ 2>/dev/null \
-      && sudo install -o www-data -g www-data -m 0640 /tmp/.envnew.$$ "$ENV_FILE" 2>/dev/null; then
+      ' "$ENV_FILE" > "$ENV_TMPDIR/gate.new" 2>/dev/null ) \
+      && install_env "$ENV_TMPDIR/gate.new" 2>/dev/null; then
       # Match what Program.cs actually reads: OrdinalIgnoreCase "true", whitespace-tolerant.
       local still_open
       still_open=$(sudo grep -ciE '^[[:space:]]*(export[[:space:]]+)?ALLOW_PRODUCTION_STARTUP_MIGRATIONS[[:space:]]*=[[:space:]]*"?true"?[[:space:]]*$' "$ENV_FILE" || true)
@@ -246,7 +264,10 @@ close_gate_on_exit() {
       echo "$LOG    PRODUCTION IS LEFT WITH STARTUP MIGRATIONS ENABLED. Fix by hand NOW." >&2
       [ "$rc" = "0" ] && rc=25
     fi
-    sudo rm -f /tmp/.envnew.$$ 2>/dev/null || true
+  fi
+  if [ -n "$ENV_TMPDIR" ]; then
+    sudo shred -u "$ENV_TMPDIR"/* 2>/dev/null || true
+    sudo rm -rf "$ENV_TMPDIR" 2>/dev/null || true
   fi
   sudo shred -u "$ENV_STASH" 2>/dev/null || true
   sudo rm -f "$ENV_FILE.new" 2>/dev/null || true
@@ -430,27 +451,44 @@ echo "$LOG BINARY_SWAPPED"
 echo "$LOG step 6: restore preserved .env"
 sudo install -o www-data -g www-data -m 0640 "$ENV_STASH" "$ENV_FILE"
 
-# --- Step 7: atomic env mutation: ALLOW gate + BUILD_SHA + DEPLOYED_AT (+ --set-env) ---
+# --- Step 7: env mutation: ALLOW gate + BUILD_SHA + DEPLOYED_AT (+ --set-env) ---
 echo "$LOG step 7: atomic env mutation (gate=$TARGET_ALLOW + stamp build${SET_ENV_KEY:+ + set $SET_ENV_KEY})"
 DEPLOY_TS=$(date -u +%Y%m%dT%H%M%SZ)
-SET_ENV_PRE_LINES=0
+
+# State on a --set-env step-7 failure: new binary AND new (or partly new) env are on
+# disk, the OLD process is still running (the restart is step 8, not yet issued), and
+# the GO token is burned by the non-zero exit.
+step7_fail() {
+  echo "$LOG FATAL: $1" >&2
+  echo "$LOG        STATE: new binary + new/partly-new env are on disk; the OLD process is still running (no restart issued)." >&2
+  echo "$LOG        The GO token is burned by this non-zero exit: re-issue + republish before any retry." >&2
+  echo "$LOG        RESTORE (old binary and old .env): sudo cp -a $BACKUP_DIR/. $TARGET_DIR/   (no restart needed)" >&2
+  exit 25
+}
+
+mk_env_tmp || { echo "$LOG FATAL: cannot create private temp dir. RESTORE: sudo cp -a $BACKUP_DIR/. $TARGET_DIR/" >&2; exit 25; }
+ENV_NEW="$ENV_TMPDIR/env.new"
+
 if [ -n "$SET_ENV_KEY" ]; then
-  # Counts only -- never the line itself.
+  # Counts and a hash only -- never a line.
   SET_ENV_PRE_LINES=$(sudo grep -cE "^[[:space:]]*(export[[:space:]]+)?$SET_ENV_KEY=" "$ENV_FILE" || true)
   SET_ENV_PRE_EXACT=$(sudo grep -cE "^$SET_ENV_KEY=$SET_ENV_VALUE\$" "$ENV_FILE" || true)
+  RESIDUAL_BEFORE=$(env_residual_hash "$ENV_FILE") || step7_fail "--set-env: cannot hash env before mutation"
+  ENV_LINES_BEFORE=$(sudo wc -l "$ENV_FILE" | cut -d' ' -f1) || step7_fail "--set-env: cannot count env lines"
 fi
-RESIDUAL_BEFORE=$(env_residual_hash "$ENV_FILE")
-ENV_LINES_BEFORE=$(sudo wc -l "$ENV_FILE" | cut -d' ' -f1)
+
 [ "$TARGET_ALLOW" = "true" ] && GATE_OPENED=1   # arm the trap BEFORE the write
-if ! sudo awk -v deploy_ts="$DEPLOY_TS" -v sha="$DEPLOY_SHA" -v allow="$TARGET_ALLOW" \
-       -v setkey="$SET_ENV_KEY" -v setval="$SET_ENV_VALUE" "$ENV_AWK_PROG" "$ENV_FILE" > /tmp/.envnew.$$; then
+if ! ( umask 077; sudo awk -v deploy_ts="$DEPLOY_TS" -v sha="$DEPLOY_SHA" -v allow="$TARGET_ALLOW" \
+       -v setkey="$SET_ENV_KEY" -v setval="$SET_ENV_VALUE" "$ENV_AWK_PROG" "$ENV_FILE" > "$ENV_NEW" ); then
   echo "$LOG FATAL: env mutation awk failed. RESTORE: sudo cp -a $BACKUP_DIR/. $TARGET_DIR/" >&2
   exit 25
 fi
-# install(1) creates with the final mode atomically — `tee` would leave the file
-# world-readable, with every production secret in it, for the width of the write.
-sudo install -o www-data -g www-data -m 0640 /tmp/.envnew.$$ "$ENV_FILE"   || { echo "$LOG FATAL: env install failed" >&2; exit 25; }
-sudo rm -f /tmp/.envnew.$$
+# install(1) sets owner and mode on a same-directory temp name, then mv renames it
+# over the live file: there is no window where it is truncated or world-readable
+# (`tee` would leave it so, with every production secret in it).
+install_env "$ENV_NEW" \
+  || { echo "$LOG FATAL: env install failed" >&2; echo "$LOG        RESTORE: sudo cp -a $BACKUP_DIR/. $TARGET_DIR/" >&2; exit 25; }
+sudo shred -u "$ENV_NEW" 2>/dev/null || sudo rm -f "$ENV_NEW"
 ALLOW_CHECK=$(sudo grep -cE "^ALLOW_PRODUCTION_STARTUP_MIGRATIONS=$TARGET_ALLOW\$" "$ENV_FILE" || true)
 BUILD_CHECK=$(sudo grep -cE "^BUILD_SHA=$DEPLOY_SHA\$" "$ENV_FILE" || true)
 if [ "$ALLOW_CHECK" != "1" ] || [ "$BUILD_CHECK" != "1" ]; then
@@ -458,20 +496,17 @@ if [ "$ALLOW_CHECK" != "1" ] || [ "$BUILD_CHECK" != "1" ]; then
   echo "$LOG        RESTORE: sudo cp -a $BACKUP_DIR/. $TARGET_DIR/" >&2
   exit 25
 fi
-RESIDUAL_AFTER=$(env_residual_hash "$ENV_FILE")
-if [ "$RESIDUAL_BEFORE" != "$RESIDUAL_AFTER" ]; then
-  echo "$LOG FATAL: env mutation changed lines it must not touch (residual hash mismatch)." >&2
-  echo "$LOG        RESTORE: sudo cp -a $BACKUP_DIR/. $TARGET_DIR/" >&2
-  exit 25
-fi
-echo "$LOG ENV_OTHER_LINES_UNCHANGED residual_sha256=${RESIDUAL_AFTER:0:16}… lines_before=$ENV_LINES_BEFORE lines_after=$(sudo wc -l "$ENV_FILE" | cut -d' ' -f1)"
 if [ -n "$SET_ENV_KEY" ]; then
+  RESIDUAL_AFTER=$(env_residual_hash "$ENV_FILE") || step7_fail "--set-env: cannot hash env after mutation"
+  if [ "$RESIDUAL_BEFORE" != "$RESIDUAL_AFTER" ]; then
+    step7_fail "env mutation changed lines it must not touch (residual hash mismatch)"
+  fi
+  ENV_LINES_AFTER=$(sudo wc -l "$ENV_FILE" | cut -d' ' -f1) || step7_fail "--set-env: cannot count env lines after"
+  echo "$LOG ENV_OTHER_LINES_UNCHANGED residual_sha256=${RESIDUAL_AFTER:0:16}… lines_before=$ENV_LINES_BEFORE lines_after=$ENV_LINES_AFTER"
   SET_ENV_EXACT=$(sudo grep -cE "^$SET_ENV_KEY=$SET_ENV_VALUE\$" "$ENV_FILE" || true)
   SET_ENV_ANY=$(sudo grep -cE "^[[:space:]]*(export[[:space:]]+)?$SET_ENV_KEY=" "$ENV_FILE" || true)
   if [ "$SET_ENV_EXACT" != "1" ] || [ "$SET_ENV_ANY" != "1" ]; then
-    echo "$LOG FATAL: --set-env post-check (exact=$SET_ENV_EXACT any=$SET_ENV_ANY; expected 1/1)" >&2
-    echo "$LOG        RESTORE: sudo cp -a $BACKUP_DIR/. $TARGET_DIR/" >&2
-    exit 25
+    step7_fail "--set-env post-check (exact=$SET_ENV_EXACT any=$SET_ENV_ANY; expected 1/1)"
   fi
   if [ "$SET_ENV_PRE_EXACT" = "1" ] && [ "$SET_ENV_PRE_LINES" = "1" ]; then SET_ENV_RESULT=unchanged
   elif [ "$SET_ENV_PRE_LINES" = "0" ]; then SET_ENV_RESULT=added
