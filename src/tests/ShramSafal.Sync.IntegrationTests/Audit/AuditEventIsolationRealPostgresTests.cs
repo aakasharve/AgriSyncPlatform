@@ -1194,6 +1194,17 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // all three. Nullable and scratch-empty: the FK has no row to block and
         // the drop rewrites nothing.
         "20260902154713_AddEngagedThroughToLabourAssignments",
+        // WidenVoiceClipRetainedDekId — REVIEWED 2026-10-15 (voice-archive persist
+        // fix). Up() is one AlterColumn on ssf.voice_clips_retained.dek_id,
+        // varchar(128) -> varchar(512): a widening, expand-only. Neither Up() nor
+        // Down() names ssf.audit_events or any GRANT/REVOKE/TRUNCATE, so it cannot
+        // change the fact this proof asserts. Down() NARROWS 512 -> 128 and would
+        // FAIL on any row whose dek_id is longer than 128 (real KMS dek ids are
+        // ~248 chars): Postgres refuses the ALTER rather than truncating. In this
+        // scratch database the table is empty, so both directions succeed. In
+        // PRODUCTION a populated table means Down() is refused; the preferred
+        // rollback is the previous binary on the already-expanded schema.
+        "20261015060121_WidenVoiceClipRetainedDekId",
     ];
 
     /// <summary>
