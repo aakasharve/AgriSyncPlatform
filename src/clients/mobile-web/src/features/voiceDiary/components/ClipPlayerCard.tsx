@@ -211,19 +211,29 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
         }
     }, [audioUrl, clip.id, fetchingCloud]);
 
+    // First tap on a recording that only the server holds: the audio is fetched and opened, then React puts its URL
+    // on the <audio> element. Calling play() before that (or setting src by hand and letting React set it again a
+    // millisecond later) restarts the media load and aborts the play, so playing waits for the committed src.
+    const playWhenReadyRef = React.useRef(false);
+    useEffect(() => {
+        if (!audioUrl || !playWhenReadyRef.current) return;
+        playWhenReadyRef.current = false;
+        const el = audioRef.current;
+        if (!el) return;
+        void el.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+    }, [audioUrl]);
+
     const handlePlayPause = useCallback(async () => {
-        let url = audioUrl;
-        if (!url && (clip.source === 'cloud' || clip.localRecord?.s3RetainedKey)) {
-            url = (await ensureCloudAudioUrl()) ?? '';
+        if (!audioUrl && (clip.source === 'cloud' || clip.localRecord?.s3RetainedKey)) {
+            if (fetchingCloud) return; // taps while the recording is being opened are ignored
+            playWhenReadyRef.current = true;
+            const opened = await ensureCloudAudioUrl();
             // Could not open the recording: the error is already shown; there is nothing to play.
-            if (!url) return;
+            if (!opened) playWhenReadyRef.current = false;
+            return;
         }
         const el = audioRef.current;
         if (!el) return;
-        // The fetched URL is only in React state; set it on the element now so the very first tap plays.
-        if (url && el.getAttribute('src') !== url) {
-            el.src = url;
-        }
         if (el.paused) {
             await el.play().catch(() => undefined);
             setIsPlaying(true);
@@ -231,7 +241,7 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
             el.pause();
             setIsPlaying(false);
         }
-    }, [audioUrl, clip.source, clip.localRecord?.s3RetainedKey, ensureCloudAudioUrl]);
+    }, [audioUrl, clip.source, clip.localRecord?.s3RetainedKey, ensureCloudAudioUrl, fetchingCloud]);
 
     const status = getStatusPresentation(locale, clip.status);
     const StatusIcon = status?.icon ?? CheckCircle2;

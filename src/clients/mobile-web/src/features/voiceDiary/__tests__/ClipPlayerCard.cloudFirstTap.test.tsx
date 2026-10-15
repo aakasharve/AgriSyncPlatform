@@ -51,7 +51,11 @@ describe('ClipPlayerCard - first tap on a server-only recording', () => {
         vi.restoreAllMocks();
     });
 
-    it('has the recovered audio loaded when play() is called on the very first tap', async () => {
+    it('writes the recovered src exactly once, then plays (a second write restarts the load and aborts the play)', async () => {
+        const srcWrites: Array<string | null> = [];
+        const observer = new MutationObserver(records => {
+            for (const r of records) srcWrites.push((r.target as Element).getAttribute('src'));
+        });
         render(
             <ClipPlayerCard
                 locale="mr-IN"
@@ -59,12 +63,20 @@ describe('ClipPlayerCard - first tap on a server-only recording', () => {
             />,
         );
 
+        const audio = document.querySelector('audio') as HTMLAudioElement;
+        observer.observe(audio, { attributes: true, attributeFilter: ['src'] });
+
         fireEvent.click(screen.getByLabelText('Play'));
 
         await waitFor(() => expect(playedWithSrc.length).toBe(1));
+        await new Promise(r => setTimeout(r, 30)); // let any late attribute write land
+        observer.disconnect();
         expect(openRetainedClip).toHaveBeenCalledTimes(1);
-        // The bug: play() ran while the element had no source (null/empty).
+        // Bug 1: play() ran while the element had no source (null/empty).
         expect(playedWithSrc[0]).toBe('blob:recovered-clip');
+        // Bug 2 (seen only in a real browser): the src was written by hand AND by React a millisecond later;
+        // the second write restarted the media load and the first play() was aborted.
+        expect(srcWrites.filter(v => v === 'blob:recovered-clip').length).toBe(1);
     });
 
     it('does not call play() when the recording could not be opened', async () => {
