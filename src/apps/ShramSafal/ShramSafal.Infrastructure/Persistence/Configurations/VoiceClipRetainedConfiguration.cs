@@ -40,9 +40,12 @@ internal sealed class VoiceClipRetainedConfiguration : IEntityTypeConfiguration<
             .HasMaxLength(256)
             .IsRequired();
 
+        // 512, not 128: a real KMS-wrapped DEK id (the base64url CiphertextBlob
+        // from GenerateDataKey) is ~248 chars. At 128 every persist that got
+        // past the clip-id check failed with Postgres 22001 (HTTP 500).
         b.Property(x => x.DekId)
             .HasColumnName("dek_id")
-            .HasMaxLength(128)
+            .HasMaxLength(VoiceClipRetained.MaxDekIdLength)
             .IsRequired();
 
         b.Property(x => x.IvBase64)

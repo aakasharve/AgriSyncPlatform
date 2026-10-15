@@ -57,6 +57,12 @@ public sealed class VoiceClipRetained
     /// </summary>
     public Guid ClipId { get; private set; }
 
+    /// <summary>Column widths of <c>ssf.voice_clips_retained</c>; the persist handler refuses longer input with 400 rather than let Postgres answer 22001 (500).</summary>
+    public const int MaxDekIdLength = 512;
+    public const int MaxIvBase64Length = 64;
+    public const int MaxAuthTagBase64Length = 64;
+    public const int MaxLanguageLength = 16;
+
     /// <summary>The user this clip belongs to. Rejected if empty.</summary>
     public Guid UserId { get; private set; }
 

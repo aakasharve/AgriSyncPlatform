@@ -4535,8 +4535,8 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("DekId")
                         .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("dek_id");
 
                     b.Property<int>("DurationSeconds")
