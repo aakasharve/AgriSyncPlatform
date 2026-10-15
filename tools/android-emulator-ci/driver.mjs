@@ -67,6 +67,7 @@ async function problemEvidence(c) {
   } catch (e) { c.evidence.evidenceError = String(e.message).slice(0, 200); }
 }
 
+let appRenders = true; // false when the WebView cannot even paint the app (e.g. stock WebView 74 on API 29)
 class DeviceDead extends Error {}
 const deviceAlive = () => adb(['get-state'], { allowFail: true, timeout: 15_000 }).trim() === 'device';
 
@@ -75,6 +76,7 @@ async function check(id, title, fn) {
   const c = new Check(id, title);
   checks.push(c);
   log(`--- ${id} ${title}`);
+  if (!appRenders && !['C01', 'C21'].includes(id)) { c.unverified('skipped: the app UI never rendered on this WebView (see C02), so there is nothing to drive'); writeResults(); return c; }
   try { await fn(c); } catch (e) {
     if (e instanceof NavFail) { c.fail(`NAVIGATION PASS RULE: the real touch did not do the job - ${e.message}`); c.evidence.navigationFallback = 'none used (DOM/CDP input is never used to rescue a navigation)'; }
     else if (e instanceof Unreachable) c.unverified(`the UI state needed was not reachable: ${e.message}`);
@@ -207,13 +209,13 @@ async function loginUi(phone) {
   await web.click(Web.css('button[type="submit"]'), { label: 'login submit' });
   const end = Date.now() + 60_000; let alertText = null;
   while (Date.now() < end) {
-    if (await web.visible(Web.tid('header-setup-hub')).catch(() => false)) return { ok: true, diag };
     for (const [name, spec, tid] of [['welcome', Web.tid('welcome-continue'), 'welcome-continue'], ['onboarding', Web.tid('onboarding-skip'), 'onboarding-skip']]) {
       if (await web.visible(spec).catch(() => false)) {
         if (!edge[name]) { await sleep(2500); edge[name] = await web.eval(edgeJs(tid)).catch(() => null); shot(null, `edge-${name}`); }
         try { await web.click(spec, { timeout: 4000 }); } catch { /* retry */ }
       }
     }
+    if (await web.visible(Web.tid('header-setup-hub')).catch(() => false) && !(await web.visible(Web.tid('welcome-continue')).catch(() => false)) && !(await web.visible(Web.tid('onboarding-skip')).catch(() => false))) return { ok: true, diag };
     const a = await web.info(Web.css('[role=alert]')).catch(() => ({ n: 0 }));
     if (a.n) alertText = a.text;
     await sleep(800);
@@ -293,6 +295,18 @@ async function consentMe() {
   const j = await c.json().catch(() => null);
   return j ? j.fullHistoryJournal === true : null;
 }
+async function ensureConsentGranted(c) {
+  let consent = await consentMe();
+  if (!consent) {
+    await web.click(Web.tid('voice-retained-consent-checkbox'), { label: 'consent checkbox' });
+    const fg = Web.tid('voice-retained-first-grant-banner');
+    await web.waitVisible(fg, 8000).catch(() => {});
+    if (await web.visible(fg)) await web.click(Web.tid('voice-retained-first-grant-confirm'), { label: 'first-grant confirm' });
+    await sleep(3000); consent = await consentMe();
+  }
+  c.assert(consent === true, 'server records full-history consent = granted (set through the UI with real taps)', `consent is ${consent} on the server after the UI grant`);
+  return consent;
+}
 const DIARY_BANNER = Web.text(/Open Settings|सेटिंग्ज उघडा/);
 async function openDiaryViaSettings() {
   await openSetupHub();
@@ -343,7 +357,7 @@ async function main() {
     sh(`pm clear ${PKG}`, { allowFail: true });
     await launchCold();
     c.evidence.userAgent = await web.eval('navigator.userAgent');
-    await web.waitVisible(Web.tid('consent-accept-cta'), 60_000, 'consent screen on a fresh install');
+    try { await web.waitVisible(Web.tid('consent-accept-cta'), 60_000, 'consent screen on a fresh install'); } catch (e) { appRenders = false; c.evidence.pageTextAtFailure = (await web.text().catch(() => '')).slice(0, 200); throw e; }
     await sleep(8000);
     shot(c, 'consent-screen');
     try {
@@ -490,25 +504,38 @@ async function main() {
 
   // ---- edge clearance (status bar / gesture bar) on the screens the safe-area fix touches
   await check('C16', 'Welcome, Onboarding permissions, Profile bottom, plot-map action bar clear the status bar and gesture bar', async (c) => {
-    const clears = (name, m) => {
-      if (!m) { c.unverified(`${name}: screen was not shown in this run (first-run screens only appear on first login)`); return; }
+    const clears = (name, m, checkTop = true) => {
+      if (!m) { c.unverified(`${name}: screen could not be reached`); return; }
       c.evidence[name] = m;
-      c.assert(m.contentTopPx >= statusBarPx - 2, `${name}: top content (${m.contentTopPx}px) is below the status bar (${statusBarPx}px)`,
+      if (checkTop) c.assert(m.contentTopPx >= statusBarPx - 2, `${name}: top content (${m.contentTopPx}px) is below the status bar (${statusBarPx}px)`,
         `${name}: top content at ${m.contentTopPx}px is UNDER the status bar (0-${statusBarPx}px); --safe-area-inset-top='${m.safeTopVar}'`);
       c.assert(!navBarPx || m.contentBottomPx <= m.viewportHpx - navBarPx + 2, `${name}: bottom content (${m.contentBottomPx}px) is above the gesture bar (${m.viewportHpx - navBarPx}px)`,
         `${name}: bottom content at ${m.contentBottomPx}px is UNDER the gesture/navigation bar (starts ${m.viewportHpx - navBarPx}px); --safe-area-inset-bottom='${m.safeBottomVar}'`);
     };
-    clears('welcome screen', edge.welcome);
-    clears('onboarding permissions screen', edge.onboarding);
-    await goHome(); await openTeam();
+    // make the first-run screens appear again (clears two stored UI flags), then reach them with real taps
+    await web.eval(`(async () => { const dbs = (await indexedDB.databases()).map((d) => d.name).filter((n) => /^AgriLogDB/.test(n));
+      for (const n of dbs) { const db = await new Promise((r) => { const q = indexedDB.open(n); q.onsuccess = () => r(q.result); q.onerror = () => r(null); }); if (!db) continue;
+        if (db.objectStoreNames.contains('uiPrefs')) await new Promise((r) => { const tx = db.transaction('uiPrefs', 'readwrite'); const st = tx.objectStore('uiPrefs'); st.delete('shramsafal_welcome_seen'); st.delete('shramsafal_permissions_granted'); tx.oncomplete = () => r(); tx.onerror = () => r(); });
+        db.close(); } })()`);
+    await web.reload();
+    const seen = {};
+    for (const [name, tid] of [['welcome screen', 'welcome-continue'], ['onboarding permissions screen', 'onboarding-skip']]) {
+      const ok = await web.waitVisible(Web.tid(tid), 25_000).then(() => true).catch(() => false);
+      if (!ok) { c.unverified(`${name}: did not appear after resetting the first-run flags`); continue; }
+      await sleep(2800); shot(c, name.split(' ')[0]);
+      seen[name] = await web.eval(edgeJs(tid)); clears(name, seen[name]);
+      await web.click(Web.tid(tid), { label: `${name} continue/skip (real tap)` }); await sleep(1500);
+    }
+    await dismissOverlays();
+    await openTeam();
     const prof = await web.eval(`(async () => { document.querySelectorAll('*').forEach((e) => { if (e.scrollHeight > e.clientHeight + 40) e.scrollTop = 1e6; }); window.scrollTo(0, 1e6);
       await new Promise((r) => setTimeout(r, 600)); const dpr = devicePixelRatio; const H = innerHeight * dpr; let low = 0;
       document.querySelectorAll('button, a, [role=button]').forEach((e) => { const r = e.getBoundingClientRect(); if (r.width > 0 && r.height > 0 && r.bottom * dpr > H * 0.8) low = Math.max(low, r.bottom * dpr); });
       let lastText = 0; document.querySelectorAll('p, span, h1, h2, h3, div').forEach((e) => { if (e.children.length === 0 && (e.textContent || '').trim()) { const r = e.getBoundingClientRect(); if (r.width > 0) lastText = Math.max(lastText, r.bottom * dpr); } });
       const rs = getComputedStyle(document.documentElement);
-      return { contentTopPx: 9999, contentBottomPx: Math.round(low || lastText), viewportHpx: Math.round(H), safeTopVar: rs.getPropertyValue('--safe-area-inset-top').trim(), safeBottomVar: rs.getPropertyValue('--safe-area-inset-bottom').trim() }; })()`, { timeout: 20_000 });
+      return { contentTopPx: 0, contentBottomPx: Math.round(low || lastText), viewportHpx: Math.round(H), safeTopVar: rs.getPropertyValue('--safe-area-inset-top').trim(), safeBottomVar: rs.getPropertyValue('--safe-area-inset-bottom').trim() }; })()`, { timeout: 20_000 });
     shot(c, 'profile-bottom');
-    clears('Profile page bottom area', prof);
+    clears('Profile page bottom area', prof, false);
     c.unverified('plot-map action bar: the map screen needs a Google Maps key, which this secretless workflow does not have, so it was not reachable or measured');
   });
 
@@ -673,6 +700,28 @@ async function main() {
   await check('C18', 'Play on a LOCAL recording: one real tap starts audio, src written exactly once', async (c) => {
     await launchCold(); await dismissOverlays();
     await openDiaryViaSettings();
+    await ensureConsentGranted(c);
+    // record a short local clip with the real UI (mic permission was granted in C11)
+    await launchCold(); await dismissOverlays();
+    if (!(await web.visible(Web.tid('input-method-voice')))) {
+      const crop = Web.text(/(द्राक्ष|ऊस|Grapes|Sugarcane)/i);
+      if (await web.visible(crop)) { await web.click(crop, { label: 'a crop' }); await sleep(1200); }
+    }
+    await web.click(Web.tid('input-method-voice'), { label: 'voice input method' }); await sleep(800);
+    const startBtn = Web.css('button[aria-label="Start Recording"]');
+    if (!(await web.visible(startBtn)) && (await web.visible(Web.tidPrefix('crop-selector-entire-farm-row')))) {
+      await web.click(Web.tidPrefix('crop-selector-entire-farm-row'), { label: 'whole farm' }); await sleep(2500);
+      if (await web.visible(Web.tid('input-method-voice'))) { await web.click(Web.tid('input-method-voice'), { label: 'voice input method (again)' }); await sleep(800); }
+    }
+    await web.click(startBtn, { label: 'Start Recording' });
+    const dlg0 = permissionDialog(parseNodes(await dumpUi().catch(() => '')));
+    if (dlg0?.allow) { tap(dlg0.allow.x, dlg0.allow.y); await sleep(2000); }
+    await web.waitVisible(Web.css('button[aria-label="Stop Recording"]'), 20_000, 'Stop Recording (capture running)');
+    await sleep(3500);
+    await web.click(Web.css('button[aria-label="Stop Recording"]'), { label: 'Stop Recording' });
+    await sleep(3500);
+    await launchCold(); await dismissOverlays();
+    await openDiaryViaSettings();
     await web.eval(`(() => { window.__srcWrites = []; const d = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
       if (d && d.set) Object.defineProperty(HTMLMediaElement.prototype, 'src', { configurable: true, get: d.get, set(v) { window.__srcWrites.push({ via: 'prop', v: String(v).slice(0, 30) }); return d.set.call(this, v); } });
       const sa = Element.prototype.setAttribute; Element.prototype.setAttribute = function (n, v) { if (this instanceof HTMLMediaElement && String(n).toLowerCase() === 'src') window.__srcWrites.push({ via: 'attr', v: String(v).slice(0, 30) }); return sa.call(this, n, v); }; })()`);
@@ -680,7 +729,7 @@ async function main() {
     await web.waitVisible(Web.tid('voice-diary-page'), 25_000, 'Voice Diary page');
     await sleep(2500);
     const id = await web.eval(`(() => { const e = document.querySelector('[data-testid^="voice-diary-clip-card-"]'); return e ? e.getAttribute('data-testid').slice('voice-diary-clip-card-'.length) : null; })()`);
-    if (!id) { c.unverified('no recording card in the Voice Diary (the capture in C11 produced no local clip), so playback could not be exercised'); return; }
+    if (!id) { c.unverified('no recording card in the Voice Diary after recording a clip with consent on, so playback could not be exercised'); return; }
     c.evidence.clipId = id;
     const sample = () => web.eval(`(() => { const a = document.querySelector('[data-testid="voice-diary-clip-card-${id}"] audio'); return a ? { paused: a.paused, currentTime: a.currentTime, duration: a.duration, ended: a.ended, readyState: a.readyState, hasSrc: !!a.getAttribute('src') || !!a.src, err: a.error ? a.error.code : null } : null; })()`);
     const writesBefore = await web.eval('window.__srcWrites.length');
@@ -807,15 +856,7 @@ async function main() {
   await check('C19', 'Voice Diary: offline -> online (airplane toggle) re-reads consent and refreshes the page', async (c) => {
     await launchCold(); await dismissOverlays();
     await openDiaryViaSettings();
-    let consent = await consentMe();
-    if (!consent) {
-      await web.click(Web.tid('voice-retained-consent-checkbox'), { label: 'consent checkbox' });
-      const fg = Web.tid('voice-retained-first-grant-banner');
-      await web.waitVisible(fg, 8000).catch(() => {});
-      if (await web.visible(fg)) await web.click(Web.tid('voice-retained-first-grant-confirm'), { label: 'first-grant confirm' });
-      await sleep(3000); consent = await consentMe();
-    }
-    c.assert(consent === true, 'server records full-history consent = granted (set through the UI with real taps)', `consent is ${consent} on the server after the UI grant`);
+    await ensureConsentGranted(c);
     await web.click(Web.tid('voice-retained-open-diary'), { label: 'open Voice Diary' });
     await web.waitVisible(Web.tid('voice-diary-page'), 25_000, 'Voice Diary page');
     await sleep(2500);
@@ -854,7 +895,10 @@ async function main() {
     c.assert(!!reread, 'after reconnect the open Voice Diary re-read the consent (GET /consent/me 200 seen from the WebView)', 'no consent re-read after reconnect: the page kept its offline state');
     if (bannerOffline) c.assert(!bannerNow, 'the stale consent-off banner shown while offline cleared after reconnect', 'the consent-off banner is STILL shown after reconnect although the server has consent on');
     else c.unverified('offline state did not show the consent-off banner, so a stale-state refresh was not exercised (the re-read itself was checked above)');
-    c.unverified('saved-status badge reaching "saved": needs a real S3/KMS persist, which CI does not have; only the consent re-read and badge text before/after are recorded');
+  });
+
+  await check('C22', 'Voice Diary badge reaching "saved" after reconnect (needs a real S3/KMS persist)', async (c) => {
+    c.unverified('NOT COVERED on the emulator: reaching the saved status needs the real S3 bucket and KMS key (tenant DEK), which this secretless CI does not have. C19 covers the consent re-read and page refresh only.');
   });
 
   await check('C20', 'Cloud-recovered (server-only) recording: first tap plays', async (c) => {
@@ -862,26 +906,38 @@ async function main() {
   });
 
   await check('C21', 'keyboard up: --safe-area-inset-bottom stays gesture-bar sized (not keyboard sized)', async (c) => {
-    await launchCold(); await dismissOverlays();
-    await openLabourHub(); await openAttendance();
+    await launchCold();
     const safe = () => web.eval(`(() => { const rs = getComputedStyle(document.documentElement); const el = document.activeElement; const r = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
       return { safeBottom: rs.getPropertyValue('--safe-area-inset-bottom').trim(), safeTop: rs.getPropertyValue('--safe-area-inset-top').trim(), innerHeight, dpr: devicePixelRatio, visualViewportH: window.visualViewport ? window.visualViewport.height : null, focusedBottom: r ? r.bottom : null }; })()`);
-    await web.click(Web.tid('att-add-open'), { label: 'add person' }); await sleep(800);
-    c.evidence.keyboardDown = await safe();
-    await web.click(Web.tid('att-new-name'), { label: 'new name field (real tap raises the keyboard)' });
+    let usingProbe = !appRenders;
+    if (!usingProbe) {
+      try {
+        await dismissOverlays(); await openLabourHub(); await openAttendance();
+        await web.click(Web.tid('att-add-open'), { label: 'add person' }); await sleep(800);
+        c.evidence.keyboardDown = await safe();
+        await web.click(Web.tid('att-new-name'), { label: 'new name field (real tap raises the keyboard)' });
+      } catch (e) { if (e instanceof NavFail) throw e; usingProbe = true; }
+    }
+    if (usingProbe) {
+      // app UI not usable: a plain probe input on the page still exercises the native inset rule (MainActivity), labelled as such
+      c.evidence.method = 'PROBE INPUT injected into the page (the app UI is not usable on this WebView)';
+      await web.eval(`(() => { const i = document.createElement('input'); i.id = '__ci_probe'; i.type = 'text'; i.style.cssText = 'position:fixed;left:10%;top:35%;width:80%;height:56px;z-index:2147483647;font-size:20px;background:#fff;border:2px solid #333'; document.body.appendChild(i); })()`);
+      c.evidence.keyboardDown = await safe();
+      await web.click(Web.css('#__ci_probe'), { label: 'probe input (real tap raises the keyboard)' });
+    }
     let ime = false; for (let k = 0; k < 14; k++) { await sleep(500); if (imeShown()) { ime = true; break; } }
     await sleep(1500);
     const kb = await safe(); c.evidence.keyboardUp = kb; shot(c, 'keyboard-up');
     if (!ime) { c.unverified('the soft keyboard did not appear, so the inset under the keyboard was not measured'); return; }
     const px = parseFloat(kb.safeBottom || '0') * kb.dpr;
-    c.assert(px <= navBarPx + 4, `with the keyboard up --safe-area-inset-bottom is ${kb.safeBottom} (${Math.round(px)}px), not keyboard sized (gesture bar ${navBarPx}px)`,
+    c.evidence.safeBottomPxWithKeyboard = Math.round(px);
+    if (kb.safeBottom === '') { c.unverified(`--safe-area-inset-bottom is unset on this device (API ${env('API_LEVEL')}); the keyboard rule cannot be read`); }
+    else c.assert(px <= navBarPx + 4, `with the keyboard up --safe-area-inset-bottom is ${kb.safeBottom} (${Math.round(px)}px), not keyboard sized (gesture bar ${navBarPx}px)`,
       `with the keyboard up --safe-area-inset-bottom is ${kb.safeBottom} (${Math.round(px)}px): larger than the gesture bar (${navBarPx}px), likely keyboard sized -> oversized bottom gap`);
     if (kb.focusedBottom != null) c.evidence.gapBelowFocusedFieldPx = Math.round((kb.innerHeight - kb.focusedBottom) * kb.dpr);
     key(4); await sleep(500);
   });
 
-
-  // ---- logout and user separation A -> Worker -> B -> A
   await check('C13', 'logout and user separation A -> B -> A (with the Worker as a role check)', async (c) => {
     const haystackNamesA = NAMES_A.map((n) => n.toLowerCase());
     await launchCold(); await dismissOverlays();
