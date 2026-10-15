@@ -34,11 +34,11 @@ const VoiceRetainedFirstGrantBanner: React.FC<Props> = ({
     return (
         <div
             data-testid="voice-retained-first-grant-banner"
-            className="fixed inset-0 bg-stone-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50"
+            className="fixed inset-0 bg-stone-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-[60]"
             role="dialog"
             aria-modal="true"
         >
-            <div className="w-full max-w-md rounded-t-3xl sm:rounded-3xl bg-white p-6 space-y-4 shadow-2xl">
+            <div className="w-full max-w-md max-h-[100dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white p-6 space-y-4 shadow-2xl">
                 <div className="mx-auto h-14 w-14 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
                     <ShieldCheck size={28} strokeWidth={2.4} />
                 </div>

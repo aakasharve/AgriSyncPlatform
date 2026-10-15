@@ -1,10 +1,7 @@
 // spec: data-principle-spine-2026-05-05/06.4
 //
 // Fetches and renders the locale-appropriate consent agreement markdown
-// (`/consent/agreement_{mr|hi|en}.md`). The agreement copy itself is
-// tagged per OQ-7 markdown convention — HTML comments above each
-// section let counsel grep `LEGAL_REVIEW_PENDING` and find every
-// string awaiting review.
+// (`/consent/agreement_{mr|en}.md`).
 //
 // **No new dependency.** We render markdown with a tiny manual parser
 // (headings + lists + bold + paragraphs + `---` rules) because the
@@ -18,13 +15,11 @@ interface Props {
     locale: ConsentLocale;
 }
 
-function localeToFileSuffix(locale: ConsentLocale): 'mr' | 'hi' | 'en' {
-    if (locale === 'mr-IN') return 'mr';
-    if (locale === 'hi-IN') return 'hi';
-    return 'en';
+function localeToFileSuffix(locale: ConsentLocale): 'mr' | 'en' {
+    return locale === 'mr-IN' ? 'mr' : 'en';
 }
 
-/** Strip HTML comments — they are LEGAL_REVIEW_PENDING anchors counsel needs in source, not in UI. */
+/** Strip HTML comments — source-only notes must never reach the UI. */
 function stripHtmlComments(s: string): string {
     return s.replace(/<!--[\s\S]*?-->/g, '');
 }

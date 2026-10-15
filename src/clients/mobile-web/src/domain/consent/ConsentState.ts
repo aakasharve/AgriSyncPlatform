@@ -5,7 +5,7 @@
 // `src/apps/ShramSafal/ShramSafal.Domain/Privacy/UserConsentState.cs`).
 //
 // Three independent purposes per DPDP §6 + V2 Non-Negotiables 1+2:
-//   - fullHistoryJournal:     retain voice clips beyond 30-day local window
+//   - fullHistoryJournal:     keep voice clips in the user's cloud (Voice Diary)
 //   - crossFarmAggregation:   de-identified usage to improve the app
 //   - researchCorpusExport:   de-identified data shared with research partners
 //

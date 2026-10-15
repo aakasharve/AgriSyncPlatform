@@ -2,127 +2,171 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Attendance — where हजेरी is REVIEWED and adjusted, not where it is spoken.
+ * Attendance — the manual हजेरी घ्या screen: WHO came today, by tapping.
  *
- * FOUNDER RULING 2026-08-31 — this screen used to rebuild two controls that
- * belong to the log screen: a crop/plot CropSelector and a 128px mic orb
- * drawn to look exactly like the real recorder. Neither did what it looked
- * like — the orb only navigated away, and the picker fed nothing but its own
- * header label off hardcoded MOCK_CROPS. Two mics and two context pickers in
- * one feature is the confusion, so the copies are gone. The single way in to
- * speaking is the hub hero ("बोलून हजेरी घ्या"), which opens the one real mic.
+ * FOUNDER RULING 2026-08-31 — the single way in to SPEAKING is the hub hero
+ * ("बोलून हजेरी घ्या"); this screen has no mic.
  *
- * The owner sets the "how many people" headcount and shift here directly;
- * ≥1 named worker is required. Present/Half/Absent per worker. Approval
- * happens after (rides the log-approval flow).
+ * WHAT THIS SCREEN SAYS (and nothing else):
+ *   per person  आला / अर्धा / आला नाही  +  रात्र  (+ optional तास / जादा तास)
+ *   Nothing is pre-selected. A person the farmer does not touch gets NO mark —
+ *   untouched is not absent (rule 4).
+ *   The ONLY save is `बरोबर`, and the line above it says nothing is kept
+ *   until it is pressed. There is no approval step in an attendance mark and
+ *   this screen does not pretend there is (LD D7).
+ *
+ * WHAT IT DELIBERATELY DOES NOT HAVE (all deleted, none replaced):
+ *   - a "how many people" counter — the Work Log owns the participation count
+ *     (LD D9.2); a second typed count was collected and discarded (it never
+ *     reached the payload) and seeded `?? 0`, turning unknown into zero;
+ *   - a global shift card — it applied one shift to everyone and mapped
+ *     "absent + night" to a day fact nobody stated;
+ *   - a minimum-names rule or a "+ 2 जण" rounding note — neither was enforced
+ *     and the second would invent people (attribution never changes a count).
+ *
+ * NO-WORK MODE (`mode="no-work"`): the same screen, opened from the hub's
+ * `काम झालं नाही, पण मजूर आले` door when no work was logged. It asks WHO came
+ * and (optionally, P9) WHY there was no work, reusing the six existing
+ * no-work reason chips. The reason is optional: skipping saves.
+ *
+ * The people list, the offline roster cache and "नाव जोडा" live in
+ * `AttendanceRoster`; the status -> wire mapping lives in `attendanceManual`.
  */
-import React, { useState } from 'react';
-import { Plus, Check } from 'lucide-react';
-import type { LabourData, PresenceStatus } from '../labourMock';
-import { Avatar } from './LabourUiKit';
-import { SHIFT_LABEL, type LabourShift } from '../labourParse';
+import React, { useMemo, useRef, useState } from 'react';
+import { Check } from 'lucide-react';
+import type { LabourData } from '../labourMock';
+import type { BucketIssueType } from '../../../domain/types/log.types';
+import { getDateKey } from '../../../core/domain/services/DateKeyService';
+import { t as translate } from '../../../i18n/translations';
+import { NO_WORK_CAUSES } from '../../logs/components/NoWorkReasonSheet';
+import { ATTENDANCE_COPY } from '../attendanceCopy';
+import {
+    EMPTY_PREFILL,
+    prefillFromCell,
+    toMarkPayload,
+    effectivePresentIds,
+    type ManualMarkFacts,
+    type PersonPrefill,
+    type PersonSelection,
+} from '../attendanceManual';
+import { findMarkedAboveStated } from '../attendanceDisagreement';
+import AttendanceRoster from './AttendanceRoster';
+import HeadcountDisagreementCard from './HeadcountDisagreementCard';
 
-/**
- * Labour V2 R1 Task 3.5c — one row of the manual save: WHO and WHAT WAS
- * TAPPED, with the screen's global shift threaded through as stated. The
- * status→mark mapping deliberately does NOT live here — it lives in ONE
- * place, the LabourFeature onSave caller, so the wire vocabulary cannot
- * fork between screens.
- */
-export type ManualAttendanceMark = { fieldOperatorId: string; status: PresenceStatus; shift: LabourShift };
+/** One person's stated facts — only people the farmer actually stated something about. */
+export type ManualAttendanceMark = { fieldOperatorId: string } & ManualMarkFacts;
+
+export type AttendanceMode = 'normal' | 'no-work';
 
 interface Props {
+    /** Read ONLY for today's register cells (prefill); never for who to list. */
     data: LabourData;
-    onSave: (marks: ManualAttendanceMark[]) => void;
-    onToast: (m: string) => void;
+    /** undefined = no farm context: nothing can be listed, added or saved. */
+    farmId: string | undefined;
+    mode?: AttendanceMode;
     /**
-     * Task 3.5c — true when no farm context is resolved: there is nothing a
-     * mark could be recorded AGAINST, so the save disables instead of
-     * toasting (no new farmer-facing Marathi exists for this case).
+     * The day's REPORTED headcount (work log anchor, else the server's read-out
+     * of the day); null = nobody stated one. Read-only: used to show when more
+     * people are marked present than that, never to change either number.
      */
-    saveDisabled?: boolean;
+    statedHeadcount?: number | null;
+    /**
+     * Persist the marks. Resolves when they are safely queued; rejects when
+     * they were not (the screen then re-enables and the farmer can retry).
+     * `noWorkCause` is only ever set in no-work mode, and only when a chip
+     * was chosen.
+     */
+    onSave: (marks: ManualAttendanceMark[], noWorkCause?: BucketIssueType) => Promise<void>;
+    onToast: (m: string) => void;
 }
 
-const SEG: { k: PresenceStatus; label: string }[] = [
-    { k: 'present', label: 'आला' },
-    { k: 'half', label: 'अर्धा' },
-    { k: 'absent', label: 'आला नाही' },
-];
+/** D9.6 — the no-work question is WHO + WHY, no count. */
+const NO_WORK_QUESTION = 'आज कोण आले होते आणि काम का झालं नाही?';
 
-const toMr = (n: number) => String(n).replace(/\d/g, (d) => '०१२३४५६७८९'[Number(d)]);
+const Attendance: React.FC<Props> = ({ data, farmId, mode = 'normal', statedHeadcount = null, onSave, onToast }) => {
+    const [selections, setSelections] = useState<Record<string, PersonSelection>>({});
+    const [cause, setCause] = useState<BucketIssueType | undefined>(undefined);
+    const [saving, setSaving] = useState(false);
+    // A ref, not just state: two taps in the same tick both see `saving`
+    // false from the same render. One press = one save.
+    const savingRef = useRef(false);
 
-const SHIFTS: LabourShift[] = ['full', 'half', 'night'];
+    // Today's register cell per person (read-only context). The register
+    // already composes the device's queued marks over the server's rows, so a
+    // re-opened screen shows what is already recorded.
+    const prefills = useMemo(() => {
+        const out: Record<string, PersonPrefill> = {};
+        const todayIndex = data.ledger.days.indexOf(getDateKey());
+        if (todayIndex < 0) return out;
+        for (const row of data.ledger.rows) {
+            out[row.fieldOperatorId] = prefillFromCell(row.cells[todayIndex]);
+        }
+        return out;
+    }, [data.ledger]);
 
-const Attendance: React.FC<Props> = ({ data, onSave, onToast, saveDisabled }) => {
-    // `headcount` is null when labour was logged today but nobody said how
-    // many. The counter needs a number to start from, and 0 is the honest
-    // starting point for a field he is about to fill in himself — it is his
-    // own tap that will make it a claim, not this default.
-    const [count, setCount] = useState(data.attendance.headcount ?? 0);
-    const [shift, setShift] = useState<LabourShift>('full');
-    const [status, setStatus] = useState<Record<string, PresenceStatus>>(() => {
-        const init: Record<string, PresenceStatus> = {};
-        data.attendance.rows.forEach((r) => { init[r.personId] = r.status; });
-        return init;
-    });
+    const marks = useMemo<ManualAttendanceMark[]>(() => Object.entries(selections).flatMap(([id, sel]) => {
+        const facts = toMarkPayload(sel, prefills[id] ?? EMPTY_PREFILL);
+        return facts ? [{ fieldOperatorId: id, ...facts }] : [];
+    }), [selections, prefills]);
 
-    const segClass = (on: boolean, k: PresenceStatus) => {
-        if (!on) return 'text-slate-400';
-        return k === 'present' ? 'bg-white text-emerald-700 shadow-sm' : k === 'half' ? 'bg-white text-amber-700 shadow-sm' : 'bg-white text-rose-600 shadow-sm';
+    // D2 - more named people marked present than the day's stated headcount:
+    // shown through the existing disagreement card, never resolved here.
+    const presentIds = useMemo(() => effectivePresentIds(selections, prefills), [selections, prefills]);
+    const aboveStated = useMemo(
+        () => findMarkedAboveStated(statedHeadcount, presentIds),
+        [statedHeadcount, presentIds],
+    );
+
+    const canSave = Boolean(farmId) && marks.length > 0 && !saving;
+
+    const save = async () => {
+        if (!canSave || savingRef.current) return;
+        savingRef.current = true;
+        setSaving(true);
+        try {
+            await onSave(marks, mode === 'no-work' ? cause : undefined);
+        } catch {
+            // The host has already said what went wrong; stay on the screen.
+            savingRef.current = false;
+            setSaving(false);
+        }
     };
 
     return (
-        <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2">
-            <div className="rounded-2xl border border-slate-100 bg-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
-                <div className="text-[13px] font-extrabold text-slate-700">आज किती जण होते?</div>
-                <div className="mt-2.5 flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 p-2">
-                    <button type="button" onClick={() => setCount((c) => Math.max(1, c - 1))} className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-white text-[20px] font-bold text-emerald-700 active:scale-90">−</button>
-                    <b className="text-[24px] font-black text-emerald-700 [font-variant-numeric:tabular-nums]">{toMr(count)} जण</b>
-                    <button type="button" onClick={() => setCount((c) => c + 1)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-white text-[20px] font-bold text-emerald-700 active:scale-90">+</button>
-                </div>
-                <div className="mt-2 text-[10.5px] text-slate-400">🎙 "आज ४ लोक कामाला आली" — तुम्ही बोललात त्यातून</div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-100 bg-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
-                <div className="text-[13px] font-extrabold text-slate-700">शिफ्ट · shift</div>
-                <div className="mt-2 flex gap-2">
-                    {SHIFTS.map((s) => (
-                        <button
-                            key={s}
-                            type="button"
-                            onClick={() => setShift(s)}
-                            className={`flex-1 rounded-xl border py-2.5 text-[12.5px] font-extrabold transition-colors ${shift === s ? (s === 'half' ? 'border-amber-300 bg-amber-50 text-amber-700' : s === 'night' ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-emerald-300 bg-emerald-50 text-emerald-700') : 'border-slate-200 bg-white text-slate-400'}`}
-                        >{SHIFT_LABEL[s]}</button>
-                    ))}
-                </div>
-            </div>
-
-            <div className="mb-1 mt-3 px-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">नावं जोडा — किमान १</div>
-            {data.attendance.rows.map((r) => {
-                const person = data.people[r.personId];
-                return (
-                    <div key={r.personId} className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
-                        <Avatar tone={person.tone} initial={person.initial} size="sm" />
-                        <span className="flex-1 truncate text-[15px] font-bold text-slate-800">{person.name}</span>
-                        <div className="flex flex-shrink-0 gap-1 rounded-xl bg-slate-100 p-1">
-                            {SEG.map((s) => (
-                                <button key={s.k} type="button" onClick={() => setStatus((st) => ({ ...st, [r.personId]: s.k }))} className={`rounded-lg px-2.5 py-1.5 text-[11px] font-extrabold transition-colors ${segClass(status[r.personId] === s.k, s.k)}`}>{s.label}</button>
-                            ))}
-                        </div>
+        <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2" data-testid="attendance-screen">
+            {mode === 'no-work' && (
+                <>
+                    <div data-testid="att-no-work-question" className="px-1 pt-1 text-[19px] font-bold text-stone-800">{NO_WORK_QUESTION}</div>
+                    <div className="flex flex-wrap gap-2" role="group" aria-label={NO_WORK_QUESTION}>
+                        {NO_WORK_CAUSES.map(({ cause: c, labelKey }) => (
+                            <button key={c} type="button" disabled={saving}
+                                data-testid={`att-cause-${c}`}
+                                aria-pressed={cause === c}
+                                onClick={() => setCause((cur) => (cur === c ? undefined : c))}
+                                className={`min-h-[48px] rounded-xl border px-4 py-2 text-[16px] font-extrabold transition-colors ${cause === c ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-stone-200 bg-white text-stone-500'}`}>
+                                {translate(`dfes.noWorkReason.${labelKey}`, 'mr')}
+                            </button>
+                        ))}
                     </div>
-                );
-            })}
+                </>
+            )}
 
-            <button type="button" onClick={() => onToast('इतिहासातून निवडा किंवा नवीन नाव')} className="flex items-center justify-center gap-2 rounded-[18px] border-[1.5px] border-dashed border-emerald-200 bg-emerald-50 p-3 text-[13px] font-extrabold text-emerald-700 active:scale-[0.98]">
-                <Plus size={16} /> नाव जोडा — इतिहासातून किंवा नवीन
-            </button>
-            <div className="rounded-xl border border-amber-200 border-l-[3px] border-l-amber-600 bg-amber-50 p-2.5 text-[11.5px] leading-relaxed text-amber-800">
-                <b>किमान एक नाव द्या.</b> बाकीचे "+ २ जण" असे मोजले जातील.
-            </div>
-            <button type="button" disabled={saveDisabled}
-                onClick={() => onSave(Object.entries(status).map(([fieldOperatorId, s]) => ({ fieldOperatorId, status: s, shift })))}
-                className={`flex w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-[13px] font-extrabold text-white transition-transform active:scale-[0.98] ${saveDisabled ? 'bg-slate-300' : 'bg-emerald-600'}`}>
-                <Check size={16} /> बरोबर — तपासणीसाठी
+            <AttendanceRoster
+                farmId={farmId}
+                selections={selections}
+                prefills={prefills}
+                onChange={(id, next) => setSelections((cur) => ({ ...cur, [id]: next }))}
+                onToast={onToast}
+                disabled={saving}
+            />
+
+            {aboveStated && <HeadcountDisagreementCard disagreement={aboveStated} markedCount={presentIds.length} />}
+
+            <p data-testid="att-honesty" className="px-1 pt-1 text-[16px] leading-snug text-stone-600">{ATTENDANCE_COPY.preSaveHonesty}</p>
+            <button type="button" data-testid="att-save" disabled={!canSave}
+                onClick={() => void save()}
+                className={`flex min-h-[56px] w-full items-center justify-center gap-2 rounded-[14px] py-3.5 text-[19px] font-extrabold text-white transition-transform active:scale-[0.98] ${canSave ? 'bg-emerald-600' : 'bg-slate-300'}`}>
+                <Check size={20} /> {ATTENDANCE_COPY.confirmButton}
             </button>
         </div>
     );

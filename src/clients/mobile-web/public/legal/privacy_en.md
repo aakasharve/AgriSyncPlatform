@@ -1,5 +1,4 @@
 <!-- spec: dfes-companion-2026-07-11 (wave-4.3) -->
-<!-- LEGAL_REVIEW_PENDING: ENTIRE FILE — founder-authored, not counsel-reviewed. -->
 <!--
   HOW THIS DOCUMENT WAS WRITTEN, and the rule for editing it.
 
@@ -19,7 +18,7 @@
 
 # Privacy Notice — Shram Safal
 
-**Version `privacy-2026-08-17.1` · in force from 17 August 2026**
+**Version `privacy-2026-10-13.2` · revised 13 October 2026**
 
 > **This is a founder-authored draft. It has not been reviewed by a lawyer.**
 > It is published so that nobody is asked to accept a document that does not exist. It
@@ -90,9 +89,10 @@ lawyer, and it is open. We are not going to pretend it is settled.
 
 - **We will not sell your personal data.**
 - **We will not use it for advertising** without separate permission.
-- **We will not use your voice to train AI models.** Not with permission, not without —
-  this one has no exception, and it says the same thing in Marathi and in English. (See
-  §7 for what the software can and cannot do here.)
+- **We ourselves will not use your voice to train AI models.** Not with permission, not
+  without — this one has no exception, and it says the same thing in Marathi and in
+  English. We have not verified what our speech and AI providers do under their own terms.
+  (See §7 for what the software can and cannot do here.)
 - **We will not make lending, insurance or market decisions from your data** — that would
   need separate, specific consent that we have not asked for.
 
@@ -136,11 +136,11 @@ what their own terms say. We can only tell you what we send, and that is what §
 
 ## 6. How long we keep things
 
-Version `retention-2026-08-17.1`.
+Version `retention-2026-10-13.1`.
 
 | What | How long |
 |---|---|
-| **Voice recording on your phone**, while it is being turned into a record | Deleted automatically **30 days** after you record it |
+| **Voice recording on your phone**, while it is being turned into a record | **Not deleted automatically at present.** It stays on your phone until you clear the app's data or uninstall the app |
 | **Voice recording kept on our servers** as the evidence behind a saved record | **No automatic deletion date.** Kept while your account is open. Deleted when you ask us to |
 | **Voice Diary recordings** — only if you switched "keep my recordings" on | Kept while that setting is on and your account is open. Deleted automatically when you ask us to erase your data |
 | **Farm work records** — logs, labour, costs | Kept while your account is open. If you ask us to erase your data, your name and personal notes are removed and the farm figures are kept **without you attached to them** |
@@ -178,10 +178,10 @@ worse than none:
 
 ## 8. Your rights
 
-From **Settings → Data & Privacy** you can:
+In **Settings → Data & Privacy**, or by writing to arvesystems@gmail.com, you can:
 
 - Review or withdraw the permissions you gave.
-- Access, correct or download your information.
+- Ask to see, correct or get a copy of your information.
 - Request deletion of your account and your data.
 - Raise a grievance with us, or nominate someone to exercise these rights for you.
 
@@ -212,8 +212,9 @@ We do not knowingly collect information from anyone under 18. If you believe som
 
 ## 10. Security
 
-- Voice recordings are **encrypted on your phone** before they are written to storage, and
-  the key is held per-tenant rather than in the app.
+- Files in our cloud storage are kept **encrypted at rest** by our cloud host. The app does
+  not yet encrypt voice recordings on your phone itself — that is owed, and we would rather
+  say so than let you assume it.
 - Your data sits behind row-level database rules that scope every read to your own farm
   and your own account.
 - Consent records are **append-only by database privilege** — the application role is

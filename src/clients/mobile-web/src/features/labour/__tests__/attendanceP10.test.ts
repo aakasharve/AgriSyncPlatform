@@ -73,7 +73,7 @@ describe('P10 — offline mark → reconnect → restart, the fact survives hone
         await reconcileAttendance(
             db,
             { attendanceMarks: [serverDto] } as unknown as SyncPullResponse,
-            '2026-09-02T06:30:00.000Z');
+            new Date().toISOString()); // 7-day cache: a pull stamps rows with the time it received them
 
         const synced = await getLocalAttendanceMarks(FARM);
         expect(synced).toHaveLength(1);

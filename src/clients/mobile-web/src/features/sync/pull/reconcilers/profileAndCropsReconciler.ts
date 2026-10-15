@@ -150,6 +150,8 @@ function buildProfileFromSync(
             capabilities: capabilitiesForRole(role),
             isVerifier: role === 'PRIMARY_OWNER' || role === 'SECONDARY_OWNER',
             isActive: true,
+            // 7-day Labour cache (founder 2026-10-12): when this person was downloaded.
+            downloadedAtUtc: receivedAtUtc,
         };
     });
 

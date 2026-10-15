@@ -21,6 +21,10 @@ import {
     type VoiceClipCacheRecord,
 } from '../../../infrastructure/storage/DexieDatabase';
 import { purgeExpiredProcessingVoiceClips } from '../../../infrastructure/voice/VoiceClipRetention';
+import { archiveFailureKind, deriveCloudArchiveState } from '../../../infrastructure/voice/voiceArchiveState';
+import { getArchiveConsentSince, recordedUnderConsent } from '../../../infrastructure/voice/voiceArchiveConsent';
+import { toArchiveClipId } from '../../../infrastructure/voice/archiveClipId';
+import { voiceArchiveUploader } from '../../../infrastructure/sync/VoiceArchiveUploader';
 import {
     getVoiceDiaryByRange,
     type VoiceDiaryListItem,
@@ -45,7 +49,16 @@ interface VoiceDiaryPageProps {
     forceLocale?: VoiceDiaryLocale;
 }
 
-const DEFAULT_RANGE_DAYS = 60;
+// D9: recordings are kept forever, so the archive window is wide. (It was 60
+// days, which hid every older acknowledged clip on a fresh install.)
+const DEFAULT_RANGE_DAYS = 3650;
+
+/** Re-read the farmer's own recordings, newest first. */
+async function readLocalClips(): Promise<VoiceClipCacheRecord[]> {
+    const rows = await getDatabase().voiceClips.toArray();
+    rows.sort((a, b) => Date.parse(b.recordedAtUtc) - Date.parse(a.recordedAtUtc));
+    return rows;
+}
 
 const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
     onBack,
@@ -59,20 +72,23 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
     const [cloudClips, setCloudClips] = useState<VoiceDiaryListItem[]>([]);
     const [selectedDateKey, setSelectedDateKey] = useState<string>(() => getDateKey());
     const [loading, setLoading] = useState(true);
+    const [consentSince, setConsentSince] = useState<string | null>(null);
 
-    const { granted: consentGranted, loaded: consentLoaded } = useFullHistoryJournalConsent();
+    const { granted: consentGranted, loaded: consentLoaded, reload: reloadConsent } = useFullHistoryJournalConsent();
 
     const loadClips = useCallback(async () => {
         setLoading(true);
         try {
             await purgeExpiredProcessingVoiceClips();
-            const nowUtc = new Date().toISOString();
-            const records = await getDatabase()
-                .voiceClips
-                .where('expiresAtUtc')
-                .above(nowUtc)
-                .toArray();
+            // spec: 2026-08-25-prod-cutover-waves (D9). Every local recording,
+            // not just the ones whose retired 30-day `expiresAtUtc` is still in
+            // the future: the old filter hid a clip from the diary on day 31
+            // although the bytes were never deleted - the farmer could not tell
+            // that apart from deletion. The user's own database is the scope.
+            const records = await getDatabase().voiceClips.toArray();
             records.sort((a, b) => Date.parse(b.recordedAtUtc) - Date.parse(a.recordedAtUtc));
+            // Marker first, so no frame labels a clip with a stale boundary.
+            setConsentSince(await getArchiveConsentSince().catch(() => null));
             setLocalClips(records);
 
             // spec: dfes-companion-2026-07-11 (farm-memory) — ADR-DS-017 (c).
@@ -114,6 +130,55 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
         void loadClips();
     }, [consentLoaded, loadClips]);
 
+    // While any clip is still waiting for the server's acknowledgement, nudge the
+    // uploader and re-read the local rows so the badge follows the truth (queued
+    // -> uploading -> saved, or failed). Stops by itself once everything is acked.
+    const hasUnacknowledged = consentGranted
+        && localClips.some(clip => !clip.s3RetainedKey && recordedUnderConsent(clip.recordedAtUtc, consentSince));
+    useEffect(() => {
+        if (!hasUnacknowledged) return undefined;
+        const timer = window.setInterval(() => {
+            void voiceArchiveUploader.triggerNow();
+        }, 10_000);
+        return () => window.clearInterval(timer);
+    }, [hasUnacknowledged]);
+
+    // Keep the badges true while the page stays open: re-read the local archive state
+    // (and the consent answer, which may have failed to load while offline) when the
+    // uploader finishes an attempt, when the connection returns and when the app comes
+    // back to the foreground. The badge still derives ONLY from the stored row.
+    useEffect(() => {
+        let alive = true;
+        const refresh = () => {
+            void (async () => {
+                try {
+                    const since = await getArchiveConsentSince().catch(() => null);
+                    const rows = await readLocalClips();
+                    if (!alive) return;
+                    setConsentSince(since);
+                    setLocalClips(rows);
+                } catch {
+                    // Keep what is on screen; the next trigger reads again.
+                }
+            })();
+        };
+        const onOnline = () => {
+            void reloadConsent().finally(refresh);
+        };
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') onOnline();
+        };
+        const unsubscribe = voiceArchiveUploader.subscribe(refresh);
+        window.addEventListener('online', onOnline);
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            alive = false;
+            unsubscribe();
+            window.removeEventListener('online', onOnline);
+            document.removeEventListener('visibilitychange', onVisible);
+        };
+    }, [reloadConsent]);
+
     // ---------------------------------------------------------------------
     // Unified projection — merge local + cloud, de-dup by clip id, sort.
     // ---------------------------------------------------------------------
@@ -137,13 +202,26 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
                 // the server. That only matters to a farmer who keeps his
                 // voice — for everyone else the 30-day local journal is
                 // the whole promise and there is nothing pending.
-                pendingCloudSave: consentGranted && !record.s3RetainedKey,
+                // Only clips recorded while consent was in force are ever queued;
+                // older ones stay honestly local (fail closed without a marker).
+                pendingCloudSave: consentGranted && !record.s3RetainedKey
+                    && recordedUnderConsent(record.recordedAtUtc, consentSince),
+                cloudState: deriveCloudArchiveState(
+                    record, consentGranted, Date.now(), recordedUnderConsent(record.recordedAtUtc, consentSince),
+                ),
+                cloudFailure: archiveFailureKind(record),
             });
         }
+        // The server lists the ARCHIVE Guid; the phone keys its own rows by the
+        // local id. Map each local id forward so the same recording is ONE card.
+        const localIdByArchiveId = new Map<string, string>();
+        for (const record of localClips) localIdByArchiveId.set(toArchiveClipId(record.id), record.id);
         for (const cloud of cloudClips) {
-            const existing = map.get(cloud.clipId);
-            map.set(cloud.clipId, {
-                id: cloud.clipId,
+            const localId = localIdByArchiveId.get(cloud.clipId.toLowerCase());
+            const key = localId ?? cloud.clipId;
+            const existing = map.get(key);
+            map.set(key, {
+                id: key,
                 recordedAtUtc: cloud.recordedAtUtc,
                 durationMs: cloud.durationSeconds * 1000,
                 status: existing?.status,
@@ -154,12 +232,13 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
                 // acknowledgement. Nothing pending, whatever the local
                 // row happens to say.
                 pendingCloudSave: false,
+                cloudState: 'acknowledged',
             });
         }
         return Array.from(map.values()).sort(
             (a, b) => Date.parse(b.recordedAtUtc) - Date.parse(a.recordedAtUtc),
         );
-    }, [localClips, cloudClips, consentGranted]);
+    }, [localClips, cloudClips, consentGranted, consentSince]);
 
     const countsByDate = useMemo(() => {
         return unifiedClips.reduce<Record<string, number>>((acc, clip) => {

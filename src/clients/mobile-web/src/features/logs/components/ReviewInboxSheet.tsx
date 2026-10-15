@@ -47,6 +47,7 @@ import { X, ChevronDown, ChevronUp, Check } from 'lucide-react';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { computeVerificationMetrics } from '../../../shared/utils/dayState';
 import ApprovalUnavailableNotice from '../../../shared/components/ApprovalUnavailableNotice';
+import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 
 interface ReviewInboxSheetProps {
     isOpen: boolean;
@@ -228,6 +229,7 @@ export const ReviewInboxSheet: React.FC<ReviewInboxSheetProps> = ({
     const getOperator = (operatorId?: string) =>
         operators.find(op => op.id === operatorId);
 
+    useBackDismiss(isOpen, onClose);
     if (!isOpen) return null;
 
     return (

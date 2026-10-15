@@ -28,6 +28,7 @@
 // These imports enable the native Keystore persist path on Android.
 // On web both helpers are no-ops so web behaviour is unchanged.
 import { isNativeSecureRefreshEnabled, setNativeRefreshSession } from '../../../infrastructure/storage/RefreshSessionStore';
+import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';
 import { getOrCreateDeviceId } from '../../../infrastructure/storage/DeviceIdStore';
 
 interface ViteImportMeta {
@@ -121,6 +122,10 @@ export const verifyOtp = async (
     displayName?: string,
     options?: VerifyOtpOptions,
 ): Promise<VerifyOtpResponse> => {
+    // A pending offline logout of the PREVIOUS user must be attempted before
+    // this sign-in replaces the credential it would revoke. Failure is tolerated.
+    await Promise.resolve(agriSyncClient.completePendingLogout()).catch(() => undefined);
+
     const isNative = isNativeSecureRefreshEnabled();
 
     // On native: override platform to 'android' regardless of what the caller

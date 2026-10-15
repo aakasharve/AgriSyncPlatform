@@ -26,6 +26,7 @@ import {
 } from '../storage/AuthTokenStore';
 import { getOrCreateDeviceId } from '../storage/DeviceIdStore';
 import { getRememberDevice } from '../storage/RememberDeviceStore';
+import { hasPendingLogout } from '../storage/PendingLogoutStore';
 import {
     clearNativeRefreshSession,
     getNativeRefreshSession,
@@ -436,12 +437,12 @@ export class AgriSyncClient implements HttpTransport {
     // implemented in parallel; if its paths or response shapes differ,
     // fix `SecurityResource.ts` + `dtos.ts` in a follow-up.
 
-    getTenantDek(): Promise<TenantDekResponse> {
-        return Security.getTenantDek(this);
+    getTenantDek(farmId: string): Promise<TenantDekResponse> {
+        return Security.getTenantDek(this, farmId);
     }
 
-    resolveDek(dekId: string): Promise<ResolveDekResponse | null> {
-        return Security.resolveDek(this, dekId);
+    resolveDek(dekId: string, farmId: string): Promise<ResolveDekResponse | null> {
+        return Security.resolveDek(this, dekId, farmId);
     }
 
     // --- Consent ----------------------------------------------------------
@@ -456,8 +457,20 @@ export class AgriSyncClient implements HttpTransport {
         return Consent.getConsent(this);
     }
 
-    updateConsent(request: UpdateConsentRequest): Promise<ConsentStateDto> {
-        return Consent.updateConsent(this, request);
+    async updateConsent(request: UpdateConsentRequest): Promise<ConsentStateDto> {
+        const result = await Consent.updateConsent(this, request);
+        // Voice archive: the grant moment is what bounds which recordings may be
+        // uploaded. Best-effort and lazy (no import cycle); never blocks consent.
+        try {
+            const { observeArchiveConsentView } = await import('../voice/voiceArchiveConsent');
+            // The PUT reply carries no grant-start. Read it back from the server
+            // (best effort) so labels use the same bound as the uploader.
+            const fresh = result.fullHistoryJournal === true ? await this.getConsent() : result;
+            await observeArchiveConsentView(fresh);
+        } catch {
+            // marker stays as it was; the uploader re-observes on its next pass
+        }
+        return result;
     }
 
     issueConsentToken(): Promise<IssueConsentTokenResponse> {
@@ -577,6 +590,13 @@ export class AgriSyncClient implements HttpTransport {
             return this.refreshPromise;
         }
 
+        // Signed out locally, server revoke still pending: never silently
+        // re-authenticate (the HttpOnly cookie / Keystore token may still be
+        // valid server-side). Not 'rejected'-with-clearing: nothing to clear.
+        if (hasPendingLogout()) {
+            return { kind: 'rejected' };
+        }
+
         const deviceId = getOrCreateDeviceId();
         const rememberDevice = getRememberDevice();
 
@@ -668,8 +688,12 @@ export class AgriSyncClient implements HttpTransport {
     // sent automatically via withCredentials on authHttp; X-Device-Id is
     // attached by the authHttp interceptor. If the backend is unreachable the
     // caller (AuthProvider.logout) still completes local cleanup.
-    async logoutCurrentDevice(): Promise<void> {
-        await Auth.logout(this);
+    async beginLogout(): Promise<void> {
+        await Auth.beginLogout();
+    }
+
+    async completePendingLogout(): Promise<Auth.PendingLogoutResult> {
+        return Auth.completePendingLogout(this);
     }
 }
 

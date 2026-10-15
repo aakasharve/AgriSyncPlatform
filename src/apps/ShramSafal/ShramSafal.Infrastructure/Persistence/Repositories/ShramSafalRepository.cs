@@ -1199,6 +1199,47 @@ internal sealed class ShramSafalRepository(
             : (false, Guid.Empty);
     }
 
+    public async Task<(bool IsActiveMember, Guid OwnerAccountId)> GetActiveFarmMembershipForTenantAsync(
+        Guid farmId,
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        if (farmId == Guid.Empty || userId == Guid.Empty)
+        {
+            return (false, Guid.Empty);
+        }
+
+        var typedFarmId = new FarmId(farmId);
+        var typedUserId = new UserId(userId);
+
+        // The farm row is the single source of the owner account. A farm the caller
+        // cannot see under RLS (or that does not exist) yields null -> not a member.
+        var farm = await db.Farms
+            .AsNoTracking()
+            .Where(f => f.Id == typedFarmId)
+            .Select(f => new { OwnerUserId = f.OwnerUserId, OwnerAccountId = f.OwnerAccountId.Value })
+            .FirstOrDefaultAsync(ct);
+        if (farm is null || farm.OwnerAccountId == Guid.Empty)
+        {
+            return (false, Guid.Empty);
+        }
+
+        if (farm.OwnerUserId == typedUserId)
+        {
+            return (true, farm.OwnerAccountId);
+        }
+
+        var isActive = await db.FarmMemberships
+            .AsNoTracking()
+            .AnyAsync(
+                m => m.FarmId == typedFarmId &&
+                     m.UserId == typedUserId &&
+                     m.Status == MembershipStatus.Active,
+                ct);
+
+        return isActive ? (true, farm.OwnerAccountId) : (false, Guid.Empty);
+    }
+
     public async Task<int> CountActivePrimaryOwnersAsync(Guid farmId, CancellationToken ct = default)
     {
         var typedFarmId = new FarmId(farmId);
@@ -1297,6 +1338,48 @@ internal sealed class ShramSafalRepository(
     public async Task SaveChangesAsync(CancellationToken ct = default)
     {
         await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<bool> TrySaveNewMembershipAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolationOn(ex, "ix_farm_memberships_farm_user_nonterminal"))
+        {
+            // Lost the double-tap race. Discard everything this unit staged (membership + audit)
+            // so a later SaveChanges cannot replay the doomed INSERTs.
+            foreach (var entry in db.ChangeTracker.Entries()
+                         .Where(e => e.State == EntityState.Added).ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            return false;
+        }
+    }
+
+    private static bool IsUniqueViolationOn(DbUpdateException ex, string constraintName)
+    {
+        for (Exception? inner = ex; inner is not null; inner = inner.InnerException)
+        {
+            if (inner.GetType().Name != "PostgresException")
+            {
+                continue;
+            }
+
+            var sqlState = inner.GetType().GetProperty("SqlState")?.GetValue(inner) as string;
+            var constraint = inner.GetType().GetProperty("ConstraintName")?.GetValue(inner) as string;
+            if (string.Equals(sqlState, "23505", StringComparison.Ordinal)
+                && string.Equals(constraint, constraintName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // --- CEI Phase 1 §4.4 -----------------------------------------------------------------
@@ -1515,6 +1598,53 @@ internal sealed class ShramSafalRepository(
     public async Task AddFieldOperatorAsync(FieldOperator o, CancellationToken ct = default)
     {
         await db.FieldOperators.AddAsync(o, ct);
+    }
+
+    public async Task<bool> TryAddFieldOperatorAsync(FieldOperator o, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(o);
+
+        await db.FieldOperators.AddAsync(o, ct);
+
+        // A duplicate id must not abort the surrounding (tenant) transaction: the follow-up
+        // lookup and the response still need it. Absorb the conflict with a SAVEPOINT — it
+        // needs no row visibility, unlike ON CONFLICT (see InsertIgnoringDuplicateAsync).
+        var transaction = db.Database.CurrentTransaction;
+        string? savepoint = null;
+        if (transaction is not null)
+        {
+            savepoint = "sp_field_operator_" + Guid.NewGuid().ToString("N");
+            await transaction.CreateSavepointAsync(savepoint, ct);
+        }
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            db.Entry(o).State = EntityState.Detached;
+            if (transaction is not null && savepoint is not null)
+            {
+                await RollBackQuietlyAsync(transaction, savepoint);
+            }
+
+            return false;
+        }
+
+        if (transaction is not null && savepoint is not null)
+        {
+            try
+            {
+                await transaction.ReleaseSavepointAsync(savepoint, ct);
+            }
+            catch (PostgresException)
+            {
+                // Housekeeping only; the savepoint is discarded at COMMIT.
+            }
+        }
+
+        return true;
     }
 
     public async Task<FieldOperator?> GetFieldOperatorByIdAsync(Guid id, CancellationToken ct = default)
@@ -2246,6 +2376,23 @@ internal sealed class ShramSafalRepository(
     {
         ArgumentNullException.ThrowIfNull(entry);
         await db.ConsentAuditEntries.AddAsync(entry, ct);
+    }
+
+    public async Task<DateTime?> GetFullHistoryCurrentGrantStartUtcAsync(Guid userId, CancellationToken ct = default)
+    {
+        if (userId == Guid.Empty)
+        {
+            return null;
+        }
+
+        var rows = await db.ConsentAuditEntries
+            .AsNoTracking()
+            .Where(e => e.UserId == userId)
+            .OrderBy(e => e.OccurredAtUtc).ThenBy(e => e.Id)
+            .Select(e => new { e.OccurredAtUtc, e.NewStateJson })
+            .ToListAsync(ct);
+
+        return FullHistoryGrantWindow.CurrentGrantStart(rows.Select(r => (r.OccurredAtUtc, r.NewStateJson)));
     }
 
     // ── DATA_PRINCIPLE_SPINE sub-phase 10.2 / 10.4 (PII review queue) ────

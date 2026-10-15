@@ -1,26 +1,21 @@
 // spec: voice-diary-e2e-2026-05-17 (D.4)
 //
-// Voice Diary i18n bundle — mr-IN / hi-IN / en-IN. Per OQ-7 verdict
-// (carried over from Phase 06.4 consent translations), every visible
-// string ships tagged with the [LEGAL_REVIEW_PENDING] runtime prefix
-// via `tagLegalString(...)` (single-arg signature; mirrors
-// `consentTranslations.ts` + `piiReviewTranslations.ts`). Counsel removes
-// the prefix in one place (legalReviewMarker.ts) or per-string at
-// sign-off.
-
-import { tagLegalString } from './legalReviewMarker';
+// Voice Diary i18n bundle — mr-IN / en-IN. Strings render exactly
+// as written here: no visible review prefix is added at runtime. Copy
+// review status is tracked in the private review records, not in this file.
 
 /** Locale codes accepted by the Voice Diary feature. */
-export type VoiceDiaryLocale = 'mr-IN' | 'hi-IN' | 'en-IN';
+export type VoiceDiaryLocale = 'mr-IN' | 'en-IN';
 
 /**
  * Map the base app's `Language` ('en' | 'mr') onto Voice Diary locales.
- * Hindi falls through to 'hi-IN' when callers route it manually. Unknown
- * values map to en-IN. Mirrors `toConsentLocale` in consentTranslations.ts.
+ * Hindi is not offered: 'hi' falls back to Marathi. Unknown values map to en-IN. Mirrors `toConsentLocale` in consentTranslations.ts.
  */
 export function toVoiceDiaryLocale(lang: string | null | undefined): VoiceDiaryLocale {
     if (lang === 'mr' || lang === 'mr-IN') return 'mr-IN';
-    if (lang === 'hi' || lang === 'hi-IN') return 'hi-IN';
+    // Hindi is not offered. A stored or server-sent 'hi' falls back to Marathi,
+    // the app default (same rule as LanguageContext / LanguageSyncFromServer).
+    if (lang === 'hi' || lang === 'hi-IN') return 'mr-IN';
     return 'en-IN';
 }
 
@@ -92,6 +87,28 @@ export interface VoiceDiaryBundle {
          * everything he records is already kept.
          */
         pendingCloudSave: string;
+        /**
+         * spec: 2026-08-25-prod-cutover-waves (voice archive path).
+         * An upload is in flight. Still NOT saved - only the server's
+         * acknowledgement makes it saved.
+         */
+        uploading: string;
+        /**
+         * The last upload failed BECAUSE OF CONNECTIVITY (no answer from the
+         * server). The only failure that promises a retry, because the
+         * uploader really does retry on a backoff once the internet is back.
+         */
+        uploadFailed: string;
+        /**
+         * The last upload failed for a reason that is not connectivity (the
+         * server refused or could not take it). Says it is not saved and
+         * makes NO promise about a retry.
+         */
+        uploadRefused: string;
+        /** Speech understanding failed for this clip (separate from playback). */
+        understandFailed: string;
+        /** The recording could not be played (separate from understanding). */
+        playbackUnavailable: string;
         local: string;
         cloud: string;
         processed: string;
@@ -108,218 +125,153 @@ export interface VoiceDiaryBundle {
 }
 
 // -- mr-IN --------------------------------------------------------------
-// LEGAL_REVIEW_PENDING: all values below — Marathi, awaiting counsel.
 const mr: VoiceDiaryBundle = {
     page: {
-        title: tagLegalString('आवाजी डायरी'),
-        subtitle: tagLegalString('Voice Diary · सर्व नोंदी'),
-        refresh: tagLegalString('रिफ्रेश'),
-        back: tagLegalString('मागे'),
+        title: 'आवाजी डायरी',
+        subtitle: 'Voice Diary · सर्व नोंदी',
+        refresh: 'रिफ्रेश',
+        back: 'मागे',
     },
     retentionBanner: {
-        grantedTitle: tagLegalString('आवाजी नोंदी क्लाउडमध्ये कायम सुरक्षित'),
-        grantedBody: tagLegalString('Voice notes kept forever in your cloud'),
-        deniedTitle: tagLegalString('फक्त ३० दिवस — सेटिंग्जमध्ये चालू करा'),
-        deniedBody: tagLegalString('30 days only — turn on Full History Journal'),
-        deniedCta: tagLegalString('चालू करा'),
+        grantedTitle: 'आवाजी नोंदी खात्यात जतन करण्याची सोय सुरू आहे.',
+        grantedBody: 'प्रत्येक नोंदीची जतन स्थिती खाली पाहा.',
+        deniedTitle: 'नवीन आवाजी नोंदी खात्यात जतन करणे बंद आहे.',
+        deniedBody: 'यामुळे आधी जतन झालेल्या नोंदी मिटणार नाहीत.',
+        deniedCta: 'चालू करा',
     },
     emptyState: {
-        headline: tagLegalString('अजून आवाजी नोंदी नाहीत'),
-        headlineEn: tagLegalString('No voice notes yet'),
-        body: tagLegalString('३० दिवसांपेक्षा जास्त नोंदी ठेवायच्या असतील तर Full History Journal चालू करा.'),
-        bodyEn: tagLegalString('Turn on Full History Journal in Settings to keep recordings beyond 30 days.'),
-        cta: tagLegalString('सेटिंग्ज उघडा · Open Settings'),
+        headline: 'अजून आवाजी नोंदी नाहीत',
+        headlineEn: 'No voice notes yet',
+        body: 'आवाजी नोंदी खात्यात जतन करण्यासाठी सेटिंग्जमध्ये Full History Journal चालू करा.',
+        bodyEn: 'Turn on Full History Journal in Settings to allow saving of recordings to your account.',
+        cta: 'सेटिंग्ज उघडा · Open Settings',
     },
     consentToggle: {
-        title: tagLegalString('आवाजी नोंदी ३० दिवसांपेक्षा जास्त ठेवा'),
-        titleEn: tagLegalString('Keep voice journal beyond 30 days'),
-        helper: tagLegalString('तुमच्या क्लाउडमध्ये कायमस्वरूपी सुरक्षित. कधीही बंद करता येते — जुन्या नोंदी तुम्ही मिटवेपर्यंत राहतील.'),
-        helperEn: tagLegalString('Stored encrypted in your private cloud. You can turn off any time — old clips stay until you erase them.'),
-        expand: tagLegalString('+ अधिक'),
+        title: 'आवाजी नोंदी जतन करून ठेवा',
+        titleEn: 'Keep voice recordings saved',
+        helper: 'यामुळे नवीन आवाजी नोंदी खात्यात जतन करण्याची सोय सुरू होते. कधीही बंद करता येते — आधी जतन झालेल्या नोंदी तुम्ही मिटवेपर्यंत राहतील.',
+        helperEn: 'This turns on saving of new voice recordings to your account. You can turn off any time — recordings saved earlier stay until you erase them.',
+        expand: '+ अधिक',
     },
     firstGrant: {
-        headline: tagLegalString('आवाजी इतिहास कायम ठेवा'),
-        headlineEn: tagLegalString('Keep your voice history forever'),
-        body: tagLegalString('तुमच्या सर्व आवाजी नोंदी एनक्रिप्ट केल्या जातील आणि फक्त तुम्हालाच ऐकता येतील.'),
-        bodyEn: tagLegalString('Your voice notes will be encrypted and stored in your private AgriSync cloud. Only you can play them back.'),
-        bullet1: tagLegalString('३० दिवसांनंतरही उपलब्ध'),
-        bullet2: tagLegalString('कधीही बंद करता येते'),
-        bullet3: tagLegalString('मिटवण्याचा हक्क राखलेला आहे (DPDP)'),
-        primaryCta: tagLegalString('मी सहमत आहे · I agree'),
-        secondaryCta: tagLegalString('नंतर / Not now'),
-        attestation: tagLegalString('DPDP §6 — Consent recorded with full attestation'),
+        headline: 'आवाजी नोंदी जतन करण्याची परवानगी',
+        headlineEn: 'Allow saving of voice recordings',
+        body: 'नवीन आवाजी नोंदी तुमच्या खात्यात जतन करण्याची सोय सुरू होईल. प्रत्येक नोंदीची जतन स्थिती डायरीत दिसेल. फक्त तुमच्या खात्यातूनच जतन झालेल्या नोंदी ऐकता येतील.',
+        bodyEn: 'Saving of new voice recordings to your account will be turned on. Each recording shows its own saving status in the diary. Only your account can play saved recordings back in the app.',
+        bullet1: 'प्रत्येक नोंदीची जतन स्थिती दिसते',
+        bullet2: 'कधीही बंद करता येते',
+        bullet3: 'तुम्ही नोंदी मिटवायला सांगू शकता',
+        primaryCta: 'मी सहमत आहे · I agree',
+        secondaryCta: 'नंतर / Not now',
+        attestation: 'तुमची संमती नोंदवली जाते.',
     },
     stopFutureConfirm: {
-        headline: tagLegalString('यापुढे नवीन आवाज साठवणे बंद करायचे?'),
-        headlineEn: tagLegalString('Stop saving future voice?'),
-        body: tagLegalString('यापुढच्या नवीन आवाजी नोंदी क्लाउडमध्ये साठवल्या जाणार नाहीत.'),
-        bodyEn: tagLegalString('New recordings will no longer be saved to your cloud.'),
-        keptNote: tagLegalString('तुमच्या आधीच्या सर्व नोंदी जशाच्या तशा राहतील. त्या मिटवायच्या असतील तर ती वेगळी कृती आहे.'),
-        keptNoteEn: tagLegalString('Everything you have already saved stays. Deleting it is a separate action.'),
-        primaryCta: tagLegalString('होय, यापुढे साठवू नका'),
-        secondaryCta: tagLegalString('नको / Cancel'),
+        headline: 'यापुढे नवीन आवाजी नोंदी जतन करणे बंद करायचे?',
+        headlineEn: 'Stop saving new voice recordings?',
+        body: 'यापुढच्या नवीन आवाजी नोंदी तुमच्या खात्यात जतन केल्या जाणार नाहीत. आधी जतन झालेल्या नोंदी राहतील.',
+        bodyEn: 'New voice recordings from now on will not be saved to your account. Recordings saved earlier will stay.',
+        keptNote: 'आधी जतन झालेल्या नोंदी जशाच्या तशा राहतील. त्या मिटवायच्या असतील तर ती वेगळी कृती आहे.',
+        keptNoteEn: 'Recordings already saved stay as they are. Deleting them is a separate action.',
+        primaryCta: 'होय, यापुढे साठवू नका',
+        secondaryCta: 'नको / Cancel',
     },
     clipBadge: {
-        pendingCloudSave: tagLegalString('अजून क्लाउडमध्ये सेव्ह झाले नाही'),
-        local: tagLegalString('क्लाउड · cloud'),
-        cloud: tagLegalString('क्लाउड · cloud'),
-        processed: tagLegalString('प्रक्रिया झाली'),
-        parsing: tagLegalString('प्रक्रिया चालू'),
-        queued: tagLegalString('रांगेत'),
-        failed: tagLegalString('पुन्हा प्रयत्न'),
-        recorded: tagLegalString('नोंदले'),
+        pendingCloudSave: 'अजून जतन झाले नाही — फक्त या फोनमध्ये आहे',
+        uploading: 'श्रमसाथी जतन करत आहे.',
+        uploadFailed: 'श्रमसाथी जतन करू शकला नाही. इंटरनेट व्यवस्थित झाल्यावर पुन्हा प्रयत्न करेल.',
+        uploadRefused: 'श्रमसाथी जतन करू शकला नाही.',
+        understandFailed: 'समजून घेऊ शकत नाही.',
+        playbackUnavailable: 'ऐकता आले नाही.',
+        local: 'फक्त या फोनमध्ये',
+        cloud: 'जतन झाले',
+        processed: 'प्रक्रिया झाली',
+        parsing: 'प्रक्रिया चालू',
+        queued: 'रांगेत',
+        failed: 'समजून घेऊ शकत नाही.',
+        recorded: 'नोंदले',
     },
     dayHeading: {
-        countSingular: tagLegalString('क्लिप'),
-        countPlural: tagLegalString('क्लिप'),
-        empty: tagLegalString('या दिवशी कोणत्याही नोंदी नाहीत'),
-    },
-};
-
-// Override: badge.local should read "local" not "cloud".
-mr.clipBadge.local = tagLegalString('लोकल · local');
-
-// -- hi-IN --------------------------------------------------------------
-// LEGAL_REVIEW_PENDING: all values below — Hindi, awaiting counsel.
-const hi: VoiceDiaryBundle = {
-    page: {
-        title: tagLegalString('आवाज़ डायरी'),
-        subtitle: tagLegalString('Voice Diary · सभी क्लिप'),
-        refresh: tagLegalString('रिफ्रेश'),
-        back: tagLegalString('वापस'),
-    },
-    retentionBanner: {
-        grantedTitle: tagLegalString('आवाज़ रिकॉर्डिंग्स क्लाउड में हमेशा सुरक्षित'),
-        grantedBody: tagLegalString('Voice notes kept forever in your cloud'),
-        deniedTitle: tagLegalString('केवल ३० दिन — Settings में चालू करें'),
-        deniedBody: tagLegalString('30 days only — turn on Full History Journal'),
-        deniedCta: tagLegalString('चालू करें'),
-    },
-    emptyState: {
-        headline: tagLegalString('अभी तक कोई आवाज़ नोट नहीं'),
-        headlineEn: tagLegalString('No voice notes yet'),
-        body: tagLegalString('३० दिनों के बाद भी रिकॉर्डिंग रखने के लिए Full History Journal चालू करें.'),
-        bodyEn: tagLegalString('Turn on Full History Journal in Settings to keep recordings beyond 30 days.'),
-        cta: tagLegalString('Settings खोलें · Open Settings'),
-    },
-    consentToggle: {
-        title: tagLegalString('आवाज़ रिकॉर्डिंग्स ३० दिनों के बाद भी रखें'),
-        titleEn: tagLegalString('Keep voice journal beyond 30 days'),
-        helper: tagLegalString('आपके क्लाउड में एनक्रिप्टेड सुरक्षित. किसी भी समय बंद कर सकते हैं — पुरानी क्लिप्स आप तक मिटाने तक रहेंगी.'),
-        helperEn: tagLegalString('Stored encrypted in your private cloud. You can turn off any time — old clips stay until you erase them.'),
-        expand: tagLegalString('+ और'),
-    },
-    firstGrant: {
-        headline: tagLegalString('आवाज़ इतिहास हमेशा रखें'),
-        headlineEn: tagLegalString('Keep your voice history forever'),
-        body: tagLegalString('आपकी सभी आवाज़ नोट्स एनक्रिप्ट की जाएंगी और केवल आप ही सुन सकेंगे.'),
-        bodyEn: tagLegalString('Your voice notes will be encrypted and stored in your private AgriSync cloud. Only you can play them back.'),
-        bullet1: tagLegalString('३० दिनों के बाद भी उपलब्ध'),
-        bullet2: tagLegalString('किसी भी समय बंद कर सकते हैं'),
-        bullet3: tagLegalString('मिटाने का अधिकार सुरक्षित (DPDP)'),
-        primaryCta: tagLegalString('मैं सहमत हूँ · I agree'),
-        secondaryCta: tagLegalString('बाद में / Not now'),
-        attestation: tagLegalString('DPDP §6 — Consent recorded with full attestation'),
-    },
-    stopFutureConfirm: {
-        headline: tagLegalString('आगे से नई आवाज़ सहेजना बंद करें?'),
-        headlineEn: tagLegalString('Stop saving future voice?'),
-        body: tagLegalString('आगे की नई आवाज़ रिकॉर्डिंग्स आपके क्लाउड में सहेजी नहीं जाएंगी.'),
-        bodyEn: tagLegalString('New recordings will no longer be saved to your cloud.'),
-        keptNote: tagLegalString('आपकी पहले से सहेजी गई सभी रिकॉर्डिंग्स वैसी ही रहेंगी. उन्हें मिटाना एक अलग काम है.'),
-        keptNoteEn: tagLegalString('Everything you have already saved stays. Deleting it is a separate action.'),
-        primaryCta: tagLegalString('हाँ, आगे से न सहेजें'),
-        secondaryCta: tagLegalString('रहने दें / Cancel'),
-    },
-    clipBadge: {
-        pendingCloudSave: tagLegalString('अभी क्लाउड में सेव नहीं हुआ'),
-        local: tagLegalString('लोकल · local'),
-        cloud: tagLegalString('क्लाउड · cloud'),
-        processed: tagLegalString('प्रोसेस हुआ'),
-        parsing: tagLegalString('प्रोसेस हो रहा'),
-        queued: tagLegalString('कतार में'),
-        failed: tagLegalString('फिर से कोशिश'),
-        recorded: tagLegalString('रिकॉर्डेड'),
-    },
-    dayHeading: {
-        countSingular: tagLegalString('क्लिप'),
-        countPlural: tagLegalString('क्लिप'),
-        empty: tagLegalString('इस दिन कोई क्लिप नहीं'),
+        countSingular: 'क्लिप',
+        countPlural: 'क्लिप',
+        empty: 'या दिवशी कोणत्याही नोंदी नाहीत',
     },
 };
 
 // -- en-IN --------------------------------------------------------------
-// LEGAL_REVIEW_PENDING: all values below — English, awaiting counsel.
 const en: VoiceDiaryBundle = {
     page: {
-        title: tagLegalString('Voice Diary'),
-        subtitle: tagLegalString('All clips'),
-        refresh: tagLegalString('Refresh'),
-        back: tagLegalString('Back'),
+        title: 'Voice Diary',
+        subtitle: 'All clips',
+        refresh: 'Refresh',
+        back: 'Back',
     },
     retentionBanner: {
-        grantedTitle: tagLegalString('Voice notes kept forever in your cloud'),
-        grantedBody: tagLegalString('Encrypted end-to-end. Only you can play them back.'),
-        deniedTitle: tagLegalString('30 days only — turn on in Settings'),
-        deniedBody: tagLegalString('Voice recordings auto-delete after 30 days. Turn on Full History Journal to keep them.'),
-        deniedCta: tagLegalString('Turn on'),
+        grantedTitle: 'Saving of voice recordings to your account is on.',
+        grantedBody: "See each recording's saving status below.",
+        deniedTitle: 'New voice recordings are not being saved to your account.',
+        deniedBody: 'This does not erase recordings saved earlier.',
+        deniedCta: 'Turn on',
     },
     emptyState: {
-        headline: tagLegalString('No voice notes yet'),
-        headlineEn: tagLegalString('No voice notes yet'),
-        body: tagLegalString('Turn on Full History Journal in Settings to keep recordings beyond 30 days.'),
-        bodyEn: tagLegalString('Turn on Full History Journal in Settings to keep recordings beyond 30 days.'),
-        cta: tagLegalString('Open Settings'),
+        headline: 'No voice notes yet',
+        headlineEn: 'No voice notes yet',
+        body: 'Turn on Full History Journal in Settings to allow saving of recordings to your account.',
+        bodyEn: 'Turn on Full History Journal in Settings to allow saving of recordings to your account.',
+        cta: 'Open Settings',
     },
     consentToggle: {
-        title: tagLegalString('Keep voice journal beyond 30 days'),
-        titleEn: tagLegalString('Keep voice journal beyond 30 days'),
-        helper: tagLegalString('Stored encrypted in your private cloud. You can turn off any time — old clips stay until you erase them.'),
-        helperEn: tagLegalString('Stored encrypted in your private cloud. You can turn off any time — old clips stay until you erase them.'),
-        expand: tagLegalString('+ more'),
+        title: 'Keep voice recordings saved',
+        titleEn: 'Keep voice recordings saved',
+        helper: 'This turns on saving of new voice recordings to your account. You can turn off any time — recordings saved earlier stay until you erase them.',
+        helperEn: 'This turns on saving of new voice recordings to your account. You can turn off any time — recordings saved earlier stay until you erase them.',
+        expand: '+ more',
     },
     firstGrant: {
-        headline: tagLegalString('Keep your voice history forever'),
-        headlineEn: tagLegalString('Keep your voice history forever'),
-        body: tagLegalString('Your voice notes will be encrypted and stored in your private AgriSync cloud. Only you can play them back.'),
-        bodyEn: tagLegalString('Your voice notes will be encrypted and stored in your private AgriSync cloud. Only you can play them back.'),
-        bullet1: tagLegalString('Available beyond 30 days'),
-        bullet2: tagLegalString('Turn off any time'),
-        bullet3: tagLegalString('Right to erase preserved (DPDP)'),
-        primaryCta: tagLegalString('I agree'),
-        secondaryCta: tagLegalString('Not now'),
-        attestation: tagLegalString('DPDP §6 — Consent recorded with full attestation'),
+        headline: 'Allow saving of voice recordings',
+        headlineEn: 'Allow saving of voice recordings',
+        body: 'Saving of new voice recordings to your account will be turned on. Each recording shows its own saving status in the diary. Only your account can play saved recordings back in the app.',
+        bodyEn: 'Saving of new voice recordings to your account will be turned on. Each recording shows its own saving status in the diary. Only your account can play saved recordings back in the app.',
+        bullet1: 'Each recording shows its saving status',
+        bullet2: 'Turn off any time',
+        bullet3: 'You can ask us to erase them',
+        primaryCta: 'I agree',
+        secondaryCta: 'Not now',
+        attestation: 'Your consent is recorded.',
     },
     stopFutureConfirm: {
-        headline: tagLegalString('Stop saving future voice?'),
-        headlineEn: tagLegalString('Stop saving future voice?'),
-        body: tagLegalString('New recordings will no longer be saved to your cloud.'),
-        bodyEn: tagLegalString('New recordings will no longer be saved to your cloud.'),
-        keptNote: tagLegalString('Everything you have already saved stays where it is. Deleting your saved history is a separate action.'),
-        keptNoteEn: tagLegalString('Everything you have already saved stays where it is. Deleting your saved history is a separate action.'),
-        primaryCta: tagLegalString('Yes, stop saving'),
-        secondaryCta: tagLegalString('Cancel'),
+        headline: 'Stop saving new voice recordings?',
+        headlineEn: 'Stop saving new voice recordings?',
+        body: 'New voice recordings from now on will not be saved to your account. Recordings saved earlier will stay.',
+        bodyEn: 'New voice recordings from now on will not be saved to your account. Recordings saved earlier will stay.',
+        keptNote: 'Recordings already saved stay as they are. Deleting them is a separate action.',
+        keptNoteEn: 'Recordings already saved stay as they are. Deleting them is a separate action.',
+        primaryCta: 'Yes, stop saving',
+        secondaryCta: 'Cancel',
     },
     clipBadge: {
-        pendingCloudSave: tagLegalString('Not saved to cloud yet'),
-        local: tagLegalString('local'),
-        cloud: tagLegalString('cloud'),
-        processed: tagLegalString('processed'),
-        parsing: tagLegalString('parsing'),
-        queued: tagLegalString('queued'),
-        failed: tagLegalString('retry'),
-        recorded: tagLegalString('recorded'),
+        pendingCloudSave: 'Not saved yet — only on this phone',
+        uploading: 'ShramSathi is saving.',
+        uploadFailed: 'ShramSathi could not save. It will try again when the internet is working.',
+        uploadRefused: 'ShramSathi could not save.',
+        understandFailed: 'Could not understand.',
+        playbackUnavailable: 'Could not play.',
+        local: 'only on this phone',
+        cloud: 'saved',
+        processed: 'processed',
+        parsing: 'parsing',
+        queued: 'queued',
+        failed: 'Could not understand.',
+        recorded: 'recorded',
     },
     dayHeading: {
-        countSingular: tagLegalString('clip'),
-        countPlural: tagLegalString('clips'),
-        empty: tagLegalString('No clips on this day'),
+        countSingular: 'clip',
+        countPlural: 'clips',
+        empty: 'No clips on this day',
     },
 };
 
 export const VOICE_DIARY_BUNDLES: Record<VoiceDiaryLocale, VoiceDiaryBundle> = {
     'mr-IN': mr,
-    'hi-IN': hi,
     'en-IN': en,
 };
 

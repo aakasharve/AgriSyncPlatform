@@ -4,7 +4,6 @@
  *
  * UI:
  *   - Avatar + name + role
- *   - ReliabilityScoreCard
  *   - 30-day stats strip (jobs completed, paid out, earnings)
  *   - Job history list (last 20 cards)
  */
@@ -12,7 +11,6 @@
 import React from 'react';
 import { useFarmContext } from '../../../core/session/FarmContext';
 import { useWorkerProfile } from '../hooks/useWorkerProfile';
-import ReliabilityScoreCard from '../components/ReliabilityScoreCard';
 import JobCardRow from '../components/JobCardRow';
 import { getRoleLabel } from '../../../shared/roles/roleLabels';
 // TASK 8 — reused as-is, no new copy. See the note in `JobCardsPage.tsx`.
@@ -105,10 +103,8 @@ const WorkerProfilePage: React.FC<WorkerProfilePageProps> = ({
                     </div>
                 )}
 
-                {/* Reliability score card */}
-                {profile && (
-                    <ReliabilityScoreCard score={profile.reliability} />
-                )}
+                {/* The reliability card was REMOVED here (not flagged): the server
+                    computes it from zero metrics, so every worker read 100. */}
 
                 {/* 30-day stats strip */}
                 {profile && (

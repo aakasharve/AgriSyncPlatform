@@ -210,6 +210,8 @@ export interface LabourDataDto {
     attendance: LabourAttendanceDraftDto;
     // D-H8 — which projection the server sent: "owner" | "crew" | "own".
     view: string;
+    // Journey fix 3 - additive and optional: absent/null = unknown (old server).
+    canManageLabour?: boolean | null;
     // D6 — the two money truths + आज कामावर counts. Nulls are blanks (never
     // 0); the server nulls the money members for non-owner views.
     home: { rojandariStated: number | null; ukteAgreed: number | null; onFarmToday: number | null; rojandariToday: number | null; ukteToday: number | null; };
@@ -396,6 +398,8 @@ export async function fetchLabourData(
         // the server owns that (D-H8). On the real new stack this branch
         // never runs — View is always present on the wire.
         view: dto.view === 'owner' || dto.view === 'crew' ? dto.view : 'own',
+        // Only an explicit boolean counts; absent/null/anything else stays unknown.
+        canManageLabour: typeof dto.canManageLabour === 'boolean' ? dto.canManageLabour : undefined,
         // Old-server fallback (deploy skew): a wire without `home` renders
         // all blanks — '—', never a fabricated figure.
         home: dto.home ?? { rojandariStated: null, ukteAgreed: null, onFarmToday: null, rojandariToday: null, ukteToday: null },

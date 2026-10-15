@@ -1,19 +1,14 @@
 // spec: data-principle-spine-2026-05-05/10.4
 //
 // PII review queue admin surface — i18n bundle. Three locales
-// (mr-IN, hi-IN, en-IN). Per Phase 06 OQ-7 verdict (now binding via
-// DS-015 Track-B) every value is tagged with the
-// `[LEGAL_REVIEW_PENDING] ` marker via `tagLegalString(...)` until
-// counsel signs off on the final copy.
+// (mr-IN, en-IN). Strings render exactly as written: no visible review
+// prefix is added at runtime. Copy review status is tracked in the private
+// review records.
 //
-// Shape mirrors consentTranslations.ts — keep the surface predictable
-// so the legal-review-gate CI workflow can reason about both bundles
-// uniformly.
-
-import { tagLegalString } from './legalReviewMarker';
+// Shape mirrors consentTranslations.ts.
 
 /** Locale codes accepted by the PII review feature. */
-export type PiiReviewLocale = 'mr-IN' | 'hi-IN' | 'en-IN';
+export type PiiReviewLocale = 'mr-IN' | 'en-IN';
 
 /**
  * Map the base app's `Language` ('en' | 'mr') onto PII review locales.
@@ -22,7 +17,9 @@ export type PiiReviewLocale = 'mr-IN' | 'hi-IN' | 'en-IN';
  */
 export function toPiiReviewLocale(lang: string | null | undefined): PiiReviewLocale {
     if (lang === 'mr' || lang === 'mr-IN') return 'mr-IN';
-    if (lang === 'hi' || lang === 'hi-IN') return 'hi-IN';
+    // Hindi is not offered. A stored or server-sent 'hi' falls back to Marathi,
+    // the app default (same rule as LanguageContext / LanguageSyncFromServer).
+    if (lang === 'hi' || lang === 'hi-IN') return 'mr-IN';
     return 'en-IN';
 }
 
@@ -60,113 +57,75 @@ export interface PiiReviewBundle {
 }
 
 // -- mr-IN --------------------------------------------------------------
-// LEGAL_REVIEW_PENDING: all values below — Marathi, awaiting counsel.
 const mr: PiiReviewBundle = {
     queue: {
-        title: tagLegalString('गोपनीयता परीक्षण रांग'),
-        empty: tagLegalString('कोणतीही परीक्षण-प्रलंबित नोंद नाही.'),
-        loading: tagLegalString('रांग लोड होत आहे…'),
-        loadError: tagLegalString('रांग आणता आली नाही. पुन्हा प्रयत्न करा.'),
-        statusPending: tagLegalString('परीक्षण बाकी'),
-        statusAutoRedacted: tagLegalString('स्वयं-रिडॅक्ट केले'),
-        statusReviewApproved: tagLegalString('मंजूर'),
-        statusReviewRejected: tagLegalString('नाकारले'),
-        statusDiscarded: tagLegalString('टाकून दिले'),
+        title: 'गोपनीयता परीक्षण रांग',
+        empty: 'कोणतीही परीक्षण-प्रलंबित नोंद नाही.',
+        loading: 'रांग लोड होत आहे…',
+        loadError: 'रांग आणता आली नाही. पुन्हा प्रयत्न करा.',
+        statusPending: 'परीक्षण बाकी',
+        statusAutoRedacted: 'स्वयं-रिडॅक्ट केले',
+        statusReviewApproved: 'मंजूर',
+        statusReviewRejected: 'नाकारले',
+        statusDiscarded: 'टाकून दिले',
         listColumns: {
-            transcriptId: tagLegalString('प्रतिलेख आयडी'),
-            score: tagLegalString('स्कोर'),
-            occurredAtUtc: tagLegalString('वेळ (UTC)'),
-            action: tagLegalString('कृती'),
+            transcriptId: 'प्रतिलेख आयडी',
+            score: 'स्कोर',
+            occurredAtUtc: 'वेळ (UTC)',
+            action: 'कृती',
         },
     },
     decision: {
-        title: tagLegalString('रिडॅक्शन परीक्षण'),
-        originalLabel: tagLegalString('मूळ मजकूर'),
-        redactedLabel: tagLegalString('रिडॅक्ट केलेला मजकूर'),
-        notePlaceholder: tagLegalString('परीक्षकाची टिप्पणी (पर्यायी)'),
-        approveButton: tagLegalString('मंजूर करा'),
-        rejectButton: tagLegalString('नाकारा'),
-        approveSuccess: tagLegalString('मंजुरी जतन झाली.'),
-        rejectSuccess: tagLegalString('नाकारणी जतन झाली.'),
-        approveError: tagLegalString('मंजूर करता आले नाही. पुन्हा प्रयत्न करा.'),
-        rejectError: tagLegalString('नाकारता आले नाही. पुन्हा प्रयत्न करा.'),
-        backToQueue: tagLegalString('रांगेवर परत'),
-    },
-};
-
-// -- hi-IN --------------------------------------------------------------
-// LEGAL_REVIEW_PENDING: all values below — Hindi, awaiting counsel.
-const hi: PiiReviewBundle = {
-    queue: {
-        title: tagLegalString('गोपनीयता समीक्षा क़तार'),
-        empty: tagLegalString('कोई समीक्षा-लंबित प्रविष्टि नहीं।'),
-        loading: tagLegalString('क़तार लोड हो रही है…'),
-        loadError: tagLegalString('क़तार लोड नहीं हो सकी। फिर से कोशिश करें।'),
-        statusPending: tagLegalString('समीक्षा शेष'),
-        statusAutoRedacted: tagLegalString('स्वतः-रिडैक्ट'),
-        statusReviewApproved: tagLegalString('स्वीकृत'),
-        statusReviewRejected: tagLegalString('अस्वीकृत'),
-        statusDiscarded: tagLegalString('त्यागी गई'),
-        listColumns: {
-            transcriptId: tagLegalString('प्रतिलेख आईडी'),
-            score: tagLegalString('स्कोर'),
-            occurredAtUtc: tagLegalString('समय (UTC)'),
-            action: tagLegalString('कार्रवाई'),
-        },
-    },
-    decision: {
-        title: tagLegalString('रिडैक्शन समीक्षा'),
-        originalLabel: tagLegalString('मूल पाठ'),
-        redactedLabel: tagLegalString('रिडैक्टेड पाठ'),
-        notePlaceholder: tagLegalString('समीक्षक की टिप्पणी (वैकल्पिक)'),
-        approveButton: tagLegalString('स्वीकृत करें'),
-        rejectButton: tagLegalString('अस्वीकृत करें'),
-        approveSuccess: tagLegalString('स्वीकृति सहेज ली गई।'),
-        rejectSuccess: tagLegalString('अस्वीकृति सहेज ली गई।'),
-        approveError: tagLegalString('स्वीकृत नहीं किया जा सका। पुनः प्रयास करें।'),
-        rejectError: tagLegalString('अस्वीकृत नहीं किया जा सका। पुनः प्रयास करें।'),
-        backToQueue: tagLegalString('क़तार पर वापस'),
+        title: 'रिडॅक्शन परीक्षण',
+        originalLabel: 'मूळ मजकूर',
+        redactedLabel: 'रिडॅक्ट केलेला मजकूर',
+        notePlaceholder: 'परीक्षकाची टिप्पणी (पर्यायी)',
+        approveButton: 'मंजूर करा',
+        rejectButton: 'नाकारा',
+        approveSuccess: 'मंजुरी जतन झाली.',
+        rejectSuccess: 'नाकारणी जतन झाली.',
+        approveError: 'मंजूर करता आले नाही. पुन्हा प्रयत्न करा.',
+        rejectError: 'नाकारता आले नाही. पुन्हा प्रयत्न करा.',
+        backToQueue: 'रांगेवर परत',
     },
 };
 
 // -- en-IN --------------------------------------------------------------
-// LEGAL_REVIEW_PENDING: all values below — English, awaiting counsel.
 const en: PiiReviewBundle = {
     queue: {
-        title: tagLegalString('PII Review Queue'),
-        empty: tagLegalString('No review-pending entries.'),
-        loading: tagLegalString('Loading queue…'),
-        loadError: tagLegalString('Could not load the queue. Please try again.'),
-        statusPending: tagLegalString('Pending'),
-        statusAutoRedacted: tagLegalString('Auto-redacted'),
-        statusReviewApproved: tagLegalString('Approved'),
-        statusReviewRejected: tagLegalString('Rejected'),
-        statusDiscarded: tagLegalString('Discarded'),
+        title: 'PII Review Queue',
+        empty: 'No review-pending entries.',
+        loading: 'Loading queue…',
+        loadError: 'Could not load the queue. Please try again.',
+        statusPending: 'Pending',
+        statusAutoRedacted: 'Auto-redacted',
+        statusReviewApproved: 'Approved',
+        statusReviewRejected: 'Rejected',
+        statusDiscarded: 'Discarded',
         listColumns: {
-            transcriptId: tagLegalString('Transcript ID'),
-            score: tagLegalString('Score'),
-            occurredAtUtc: tagLegalString('Time (UTC)'),
-            action: tagLegalString('Action'),
+            transcriptId: 'Transcript ID',
+            score: 'Score',
+            occurredAtUtc: 'Time (UTC)',
+            action: 'Action',
         },
     },
     decision: {
-        title: tagLegalString('Redaction review'),
-        originalLabel: tagLegalString('Original text'),
-        redactedLabel: tagLegalString('Redacted text'),
-        notePlaceholder: tagLegalString('Reviewer note (optional)'),
-        approveButton: tagLegalString('Approve'),
-        rejectButton: tagLegalString('Reject'),
-        approveSuccess: tagLegalString('Approval saved.'),
-        rejectSuccess: tagLegalString('Rejection saved.'),
-        approveError: tagLegalString('Could not approve. Please try again.'),
-        rejectError: tagLegalString('Could not reject. Please try again.'),
-        backToQueue: tagLegalString('Back to queue'),
+        title: 'Redaction review',
+        originalLabel: 'Original text',
+        redactedLabel: 'Redacted text',
+        notePlaceholder: 'Reviewer note (optional)',
+        approveButton: 'Approve',
+        rejectButton: 'Reject',
+        approveSuccess: 'Approval saved.',
+        rejectSuccess: 'Rejection saved.',
+        approveError: 'Could not approve. Please try again.',
+        rejectError: 'Could not reject. Please try again.',
+        backToQueue: 'Back to queue',
     },
 };
 
 export const PII_REVIEW_BUNDLES: Record<PiiReviewLocale, PiiReviewBundle> = {
     'mr-IN': mr,
-    'hi-IN': hi,
     'en-IN': en,
 };
 

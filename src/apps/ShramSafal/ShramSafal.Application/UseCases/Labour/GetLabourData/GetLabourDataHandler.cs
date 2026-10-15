@@ -751,7 +751,30 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
 
         var built = new LabourDataDto(
             topLevelIds, people, dashboard, ledger, review, attendance, View: "owner", Home: home);
-        return Result.Success(ApplyRegisterView(built, ResolveRegisterView(resolvedCallerRole)));
+        // A plain own-row caller (Worker etc. with NO explicit labour-management
+        // grant) is narrowed to his own row: other people's identities and the
+        // logs of others are crew data. A GRANTED member keeps the review inbox
+        // and people he needs to act on the grant (money stays withheld either
+        // way, as before).
+        var registerView = ResolveRegisterView(resolvedCallerRole);
+        var narrowToCaller = registerView == LabourRegisterView.OwnRow && !hasLabourManagementGrant;
+        var ownReviewIds = narrowToCaller
+            ? reviewLogs
+                .Where(l => l.OperatorUserId == query.CallerUserId)
+                .Select(l => l.Id.ToString())
+                .ToHashSet()
+            : null;
+        return Result.Success(ApplyRegisterView(
+            built,
+            registerView,
+            narrowToCaller ? query.CallerUserId.Value.ToString() : null,
+            ownReviewIds,
+            narrowToCaller,
+            // WRITE authority, not read visibility: the SAME rule LabourManagementGate
+            // .IsAllowedAsync applies on every governed write (owner-tier by role,
+            // everyone else - a Mukadam included - only on a live explicit grant).
+            canManageLabour: LabourManagementPermission.IsAllowed(
+                resolvedCallerRole, hasLabourManagementGrant)));
     }
 
     /// <summary>Latest <see cref="FinanceCorrection"/> per <c>CostEntryId</c>, by <c>CorrectedAtUtc</c>.</summary>
@@ -1089,20 +1112,72 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
     /// rather than fabricated as ₹0. Attendance stays: "An attendance register
     /// is safe to show anyone on the farm. A wage book is not." (D-H8.)
     /// </summary>
-    internal static LabourDataDto ApplyRegisterView(LabourDataDto dto, LabourRegisterView view)
+    internal static LabourDataDto ApplyRegisterView(
+        LabourDataDto dto,
+        LabourRegisterView view,
+        string? ownPersonId = null,
+        IReadOnlySet<string>? ownReviewIds = null,
+        bool narrowToCaller = false,
+        bool? canManageLabour = null)
     {
         if (view == LabourRegisterView.OwnerBook)
         {
-            return dto with { View = "owner" };
+            // Pending is the size of the list the caller receives - by
+            // construction the same number the handler already counted (one
+            // review card per pending log), restated here so the two can never
+            // drift. It is never windowed: the inbox is an obligation.
+            return dto with
+            {
+                View = "owner",
+                Dashboard = dto.Dashboard with { Pending = dto.Review.Count },
+                CanManageLabour = true,
+            };
         }
 
+        // narrowToCaller (own-row callers without a grant): only the caller's own
+        // People row survives, and the review inbox keeps only logs he made.
+        // Fails closed — a null id/set narrows to nothing, never to everything.
         var people = dto.People
+            .Where(p => !narrowToCaller || (ownPersonId is not null && p.Id == ownPersonId))
             .Select(p => p with { RecordedWages = null, Paid = null, Advance = null })
             .ToList();
-        var dashboard = dto.Dashboard with { Wages = null, Advances = null, Owed = null, Money = null };
+        // N1: every id list that points INTO People is narrowed with it, so no
+        // reference in the response can name a person who is not in it (the hub
+        // dereferences topLevelIds into people). Un-narrowed views keep their
+        // lists exactly as built.
+        var keptIds = people.Select(p => p.Id).ToHashSet();
+        var topLevelIds = narrowToCaller
+            ? dto.TopLevelIds.Where(keptIds.Contains).ToList()
+            : dto.TopLevelIds;
+        if (narrowToCaller)
+        {
+            people = people
+                .Select(p => p with
+                {
+                    MemberIds = p.MemberIds?.Where(keptIds.Contains).ToList(),
+                    AppointedById = p.AppointedById is not null && keptIds.Contains(p.AppointedById)
+                        ? p.AppointedById
+                        : null,
+                })
+                .ToList();
+        }
+
         var review = dto.Review
+            .Where(r => !narrowToCaller || (ownReviewIds is not null && ownReviewIds.Contains(r.Id)))
             .Select(r => r with { Points = r.Points with { Amount = null } })
             .ToList();
+        // The badge must agree with the list under it, for every role: pending
+        // is the number of cards THIS caller receives. For owner, secondary
+        // owner, Mukadam and a granted member that is the farm's whole inbox
+        // (unchanged); for a no-grant Worker it is his own.
+        var dashboard = dto.Dashboard with
+        {
+            Wages = null,
+            Advances = null,
+            Owed = null,
+            Money = null,
+            Pending = review.Count,
+        };
         var ledger = view == LabourRegisterView.OwnRow
             ? dto.Ledger with { Rows = [], CrewRows = [] }
             : dto.Ledger;
@@ -1112,10 +1187,21 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
 
         return dto with
         {
+            // Journey fix 3 (P3): the same decision that narrows the register above,
+            // told to the client so it does not offer what the server will refuse.
+            // `canManageLabour` (when the handler supplies it) is the WRITE authority:
+            // an un-granted Mukadam reads the crew register but is refused every write,
+            // so he gets false. The `!narrowToCaller` fallback is only for direct
+            // callers of this pure function that have no role/grant to hand.
+            CanManageLabour = canManageLabour ?? !narrowToCaller,
             View = view == LabourRegisterView.CrewAttendance ? "crew" : "own",
+            TopLevelIds = topLevelIds,
             People = people,
             Dashboard = dashboard,
             Review = review,
+            // Attendance rows name FIELD OPERATORS (other people's presence today);
+            // a narrowed caller is not permitted to see them.
+            Attendance = narrowToCaller ? dto.Attendance with { Rows = [] } : dto.Attendance,
             Ledger = ledger,
             Home = home,
         };

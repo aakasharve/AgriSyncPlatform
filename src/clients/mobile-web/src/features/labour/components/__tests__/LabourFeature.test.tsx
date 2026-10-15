@@ -64,6 +64,7 @@ const EMPTY_PEOPLE_LABEL = 'अजून कोणाचंही नाव ज�
 const ERROR_LABEL = 'माहिती आणता आली नाही';
 const RETRY_LABEL = 'पुन्हा प्रयत्न करा';
 
+
 describe('LabourFeature — loading gate (Decision 4b; extended Task 6d)', () => {
     afterEach(() => {
         cleanup();
@@ -161,36 +162,55 @@ describe('LabourFeature — error state asserts nothing (Task 6d)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Task 18 (spec: 2026-08-28-labour-v2-release-1) — `useLabourState`'s
-// `isPreview` must reach `LabourHub` unchanged, so the founder-review
-// exception for हजेरी घ्या (LabourHub's SHOW_ATTENDANCE_TILE) actually works
-// end-to-end through THIS component's own wiring, not just inside LabourHub's
-// isolated tests. (The हजेरी वही tile left this exception with Correction 5:
-// its switch was deleted, so it renders for real farms and preview alike.)
+// The attendance door is not tied to the preview flag any more (Task 18's
+// `isPreview` threading was deleted with SHOW_ATTENDANCE_TILE): whatever the
+// hook reports, the tile is there. Real-mount coverage of the screen behind it
+// lives in LabourFeature.attendanceDoor.test.tsx.
 // ---------------------------------------------------------------------------
 
-describe('LabourFeature — threads isPreview to LabourHub (Task 18)', () => {
+describe('LabourFeature - हजेरी घ्या is normal Labour navigation, driven only by the server flag', () => {
+    const mount = (canManageLabour: boolean | undefined, isPreview = false) => {
+        mockUseLabourState.mockReturnValue({
+            data: { ...EMPTY_LABOUR_DATA, ...(canManageLabour === undefined ? {} : { canManageLabour }) },
+            loading: false, error: false, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn(), isPreview,
+        });
+        return render(<LabourFeature onExit={() => {}} />);
+    };
+    const tapTitle = (n: number) => {
+        const title = screen.getByText('कामाचा हिशोब');
+        for (let i = 0; i < n; i++) fireEvent.click(title);
+    };
+
     afterEach(() => {
         cleanup();
         mockUseLabourState.mockReset();
+        window.localStorage.clear();
     });
 
-    it('reveals हजेरी घ्या / हजेरी वही when the hook reports isPreview: true', () => {
-        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: false, error: false, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn(), isPreview: true });
-
-        render(<LabourFeature onExit={() => {}} />);
-
+    it.each([true, false])('server says canManageLabour=true (isPreview: %s): हजेरी घ्या and हजेरी वही both show', (isPreview) => {
+        mount(true, isPreview);
         expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
         expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
     });
 
-    it('keeps हजेरी घ्या hidden when the hook reports isPreview: false — the हजेरी वही stays (Correction 5)', () => {
-        mockUseLabourState.mockReturnValue({ data: EMPTY_LABOUR_DATA, loading: false, error: false, refresh: vi.fn(), timeWindow: 'alltime', setTimeWindow: vi.fn(), isPreview: false });
-
-        render(<LabourFeature onExit={() => {}} />);
-
-        expect(screen.queryByText('हजेरी घ्या')).toBeNull();
+    it.each([[false], [undefined]])('canManageLabour=%s: no हजेरी घ्या, no no-work tile; हजेरी वही still there', (flag) => {
+        mount(flag);
+        expect(screen.queryByText('हजेरी घ्या')).not.toBeInTheDocument();
+        expect(screen.queryByText('काम झालं नाही, पण मजूर आले')).not.toBeInTheDocument();
         expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
+    });
+
+    it('the old hidden gesture is gone: 7 (or 20) taps on the title neither toast nor open the door', () => {
+        mount(false);
+        tapTitle(20);
+        expect(screen.queryByText('हजेरी घ्या')).not.toBeInTheDocument();
+        expect(screen.queryByText(/हजेरीचं नवं दार/)).not.toBeInTheDocument();
+    });
+
+    it('a stored legacy device flag changes nothing', () => {
+        window.localStorage.setItem('agrisync.early.attendanceDoor', '1');
+        mount(false);
+        expect(screen.queryByText('हजेरी घ्या')).not.toBeInTheDocument();
     });
 });
 

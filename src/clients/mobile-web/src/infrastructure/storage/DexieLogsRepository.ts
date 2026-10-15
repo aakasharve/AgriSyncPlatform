@@ -21,6 +21,7 @@ import { VersionRegistry } from '../../core/contracts/VersionRegistry';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
 import { normalizeMojibakeDeep } from '../../shared/utils/textEncoding';
+import { logsForDisplay } from './downloadedLabourCache';
 
 const SCHEMA_VERSION = VersionRegistry.DB_SCHEMA_VERSION;
 
@@ -69,11 +70,24 @@ function toRecordPreservingWatermark(
         ...(existing?.serverModifiedAtUtc
             ? { serverModifiedAtUtc: existing.serverModifiedAtUtc }
             : {}),
+        // The age of the downloaded names survives a local edit (it is the names' age, not the edit's).
+        ...(existing?.labourNamesDownloadedAtUtc
+            ? { labourNamesDownloadedAtUtc: existing.labourNamesDownloadedAtUtc }
+            : {}),
     };
 }
 
 function normalizeForRead(log: DailyLog): DailyLog {
     return normalizeMojibakeDeep(log).value as DailyLog;
+}
+
+/**
+ * Every read goes through here: worker names inside a DOWNLOADED log older than 7 days
+ * (or of unknown age) are not handed to a screen; a log with unsent work is shown whole.
+ * See downloadedLabourCache.ts (founder 2026-10-12).
+ */
+async function displayLogs(db: ReturnType<typeof getDatabase>, records: DexieLogRecord[]): Promise<DailyLog[]> {
+    return (await logsForDisplay(db, records)).map(normalizeForRead);
 }
 
 /**
@@ -104,10 +118,10 @@ export class DexieLogsRepository implements LogsRepository {
         const db = getDatabase();
         if (filters?.includeDeleted) {
             const records = await db.logs.toArray();
-            return records.map(r => normalizeForRead(r.log));
+            return displayLogs(db, records);
         }
         const records = await db.logs.where('isDeleted').equals(0).toArray();
-        return records.map(r => normalizeForRead(r.log));
+        return displayLogs(db, records);
     }
 
     async getByDate(date: string): Promise<DailyLog[]> {
@@ -116,25 +130,23 @@ export class DexieLogsRepository implements LogsRepository {
             .where('[date+isDeleted]')
             .equals([date, 0])
             .toArray();
-        return records.map(r => normalizeForRead(r.log));
+        return displayLogs(db, records);
     }
 
     async getByPlot(plotId: string): Promise<DailyLog[]> {
         const db = getDatabase();
         const records = await db.logs.where('isDeleted').equals(0).toArray();
-        return records
-            .filter(r =>
-                r.log.context.selection.some(sel =>
-                    sel.selectedPlotIds.includes(plotId)
-                )
+        return displayLogs(db, records.filter(r =>
+            r.log.context.selection.some(sel =>
+                sel.selectedPlotIds.includes(plotId)
             )
-            .map(r => normalizeForRead(r.log));
+        ));
     }
 
     async getById(id: string): Promise<DailyLog | null> {
         const db = getDatabase();
         const record = await db.logs.get(id);
-        return record ? normalizeForRead(record.log) : null;
+        return record ? (await displayLogs(db, [record]))[0] : null;
     }
 
     // ============================================
@@ -364,19 +376,17 @@ export class DexieLogsRepository implements LogsRepository {
             .where('verificationStatus')
             .equals(status)
             .toArray();
-        return records.filter(r => !r.isDeleted).map(r => normalizeForRead(r.log));
+        return displayLogs(db, records.filter(r => !r.isDeleted));
     }
 
     async getUnverifiedLogs(): Promise<DailyLog[]> {
         const db = getDatabase();
         const records = await db.logs.where('isDeleted').equals(0).toArray();
-        return records
-            .filter(r =>
-                !r.verificationStatus ||
-                r.verificationStatus === 'PENDING' ||
-                r.verificationStatus === 'DRAFT'
-            )
-            .map(r => normalizeForRead(r.log));
+        return displayLogs(db, records.filter(r =>
+            !r.verificationStatus ||
+            r.verificationStatus === 'PENDING' ||
+            r.verificationStatus === 'DRAFT'
+        ));
     }
 
     async getByOperator(operatorId: string): Promise<DailyLog[]> {
@@ -385,7 +395,7 @@ export class DexieLogsRepository implements LogsRepository {
             .where('[createdByOperatorId+isDeleted]')
             .equals([operatorId, 0])
             .toArray();
-        return records.map(r => normalizeForRead(r.log));
+        return displayLogs(db, records);
     }
 
     async getByDateRange(startDate: string, endDate: string): Promise<DailyLog[]> {
@@ -394,7 +404,7 @@ export class DexieLogsRepository implements LogsRepository {
             .where('date')
             .between(startDate, endDate, true, true)
             .toArray();
-        return records.filter(r => !r.isDeleted).map(r => normalizeForRead(r.log));
+        return displayLogs(db, records.filter(r => !r.isDeleted));
     }
 
     async count(): Promise<number> {

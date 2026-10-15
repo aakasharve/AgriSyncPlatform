@@ -542,7 +542,7 @@ describe('the notice document', () => {
         // absolute on AI training, AND the Terms/Privacy versions moved to documents that
         // exist; anyone who accepted `.4` was shown a weaker English promise and two
         // version strings that named nothing.
-        expect(NOTICE_VERSION).toBe('notice-2026-08-17.5');
+        expect(NOTICE_VERSION).toBe('notice-2026-10-13.2');
     });
 
     // The other half of `.5` — that TERMS_VERSION and PRIVACY_POLICY_VERSION name
@@ -564,9 +564,9 @@ describe('the notice document', () => {
         // UserConsentState but is reachable by no endpoint and no screen, and both jobs
         // that could build a training set are off by default and enabled nowhere.
         expect(CONSENT_NOTICE.en.willNotDo.items[2])
-            .toBe('We will not use your voice to train AI models.');
+            .toBe('We ourselves will not use your voice to train AI models.');
         expect(CONSENT_NOTICE.mr.willNotDo.items[2])
-            .toBe('तुमचा आवाज AI मॉडेल शिकवण्यासाठी वापरणार नाही.');
+            .toBe('आम्ही स्वतः तुमचा आवाज AI मॉडेल शिकवण्यासाठी वापरणार नाही.');
 
         // No "unless" may creep back into either. A qualifier on one side only is exactly
         // how the two drifted apart the first time.

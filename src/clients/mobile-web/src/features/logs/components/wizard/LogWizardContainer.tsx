@@ -16,6 +16,7 @@ import {
     emitClosureAbandoned,
 } from '../../../../core/telemetry/eventEmitters';
 import { useFarmContext } from '../../../../core/session/FarmContext';
+import { useBackDismiss } from '../../../../core/navigation/useBackDismiss';
 
 interface LogWizardContainerProps {
     isOpen: boolean;
@@ -90,6 +91,7 @@ const LogWizardContainer: React.FC<LogWizardContainerProps> = ({ isOpen, onClose
         };
     }, []);
 
+    useBackDismiss(isOpen, onClose);
     if (!isOpen) return null;
 
     const initialBuckets = voiceParseResult ? deriveEditableBucketsFromParseResult(voiceParseResult) : [];

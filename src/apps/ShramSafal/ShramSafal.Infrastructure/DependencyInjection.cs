@@ -421,6 +421,7 @@ public static class DependencyInjection
         // above. The interface lives in ShramSafal.Application.Ports so Api adapters
         // can inject it.
         services.AddScoped<ICallerFarmTenantScope, CallerFarmTenantScope>();
+        services.AddScoped<IJoinClaimTenantScope, JoinClaimTenantScope>();
         // spec: dfes-companion-2026-07-11 — user-scoped (no farm dimension)
         // tenant scope for POST /shramsafal/corrections. See
         // ICallerUserTenantScope for why this is a distinct port from

@@ -48,6 +48,20 @@ interface Props {
      */
     onApproved?: () => void;
     /**
+     * True when the review list could NOT be fetched fresh (offline, or only a
+     * stale read-out is on screen - the cached read-out deliberately carries no
+     * review rows). An empty list in that state is "we cannot tell", never
+     * "nothing left to check": the sheet must not claim completeness.
+     */
+    reviewListUnknown?: boolean;
+    /**
+     * The list is being (re)fetched - e.g. right after an attendance save, when
+     * the hook blanks `data` before the new read-out arrives. An empty list in
+     * that window is NOT an answer, so neither "all checked" nor "could not
+     * fetch" may show; the body stays blank until the fetch settles.
+     */
+    reviewListLoading?: boolean;
+    /**
      * Labour V1 Task 13 — the farm whose engagements are being attributed.
      * Optional: `LabourPreview.tsx`'s bare `?preview=labour` mount has no
      * farm context at all, and without a farm there is no Field Operator
@@ -339,7 +353,7 @@ const ReviewFacts: React.FC<{ item: ReviewItem }> = ({ item }) => {
     );
 };
 
-const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved, farmId, history }) => {
+const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved, farmId, history, reviewListUnknown, reviewListLoading }) => {
     const [gone, setGone] = useState<Record<string, boolean>>({});
     const [confirming, setConfirming] = useState<Record<string, ConfirmKind>>({});
     const [undoQueue, setUndoQueue] = useState<UndoEntry[]>([]);
@@ -401,6 +415,13 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
     // target — otherwise a fast मंजूर-then-सगळं-मंजूर double-tap could fold
     // the same card into two independent pending batches (double-send).
     const actionable = items.filter((i) => !confirming[i.id]);
+    // Journey fix 3 (P3): an un-granted own-row Worker is not offered approval the
+    // server refuses. Only an explicit `false` hides it (absent = unknown = today).
+    // The शंका (dispute) is the same `verify_log_v2` write: the server refuses it to a caller
+    // without labour authority exactly as it refuses मंजूर (VerifyLogAuthorizer runs for every
+    // decision; pinned by OwnerCanApproveAMukadamsLogRealPostgresTests proof 3c), so it is
+    // offered on the same server-sent flag. Cards stay readable.
+    const mayApprove = data.canManageLabour !== false;
 
     /**
      * The ONLY place that actually calls `sendVerification`. Runs either
@@ -627,7 +648,7 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                             only a team's — "टीमच्या नोंदी" (your team's entries) claimed
                             something not always true. Neutral phrasing that doesn't assert
                             whose entries they are. */}
-                        <p className="text-[16px] text-stone-500">{items.length ? `${items.length} नोंदी — मंजूर करा` : 'सगळं झालं ✓'}</p>
+                        <p className="text-[16px] text-stone-500">{items.length ? `${items.length} नोंदी — मंजूर करा` : reviewListLoading ? '' : reviewListUnknown ? 'यादी आत्ता दिसत नाही' : 'सगळं झालं ✓'}</p>
                     </div>
                     <button type="button" onClick={onClose} aria-label="बंद करा" className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-stone-100 text-stone-500"><X size={26} /></button>
                 </div>
@@ -636,10 +657,10 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                     <HelpNote
                         what="रोजच्या नोंदी इथे तुम्ही मंजूर करता — स्वतःच्या किंवा तुमच्या माणसांच्या."
                         act="बरोबर असेल तर 'मंजूर', काही चुकलं असेल तर 'शंका' — नंतर विचारता येतं."
-                        why="चुका आधीच पकडल्या जातात व हिशोब बरोबर राहतो. ज्याच्यावर विश्वास दिला, त्याच्या नोंदी इथे येत नाहीत — आपोआप मंजूर."
+                        why="चुका आधीच पकडल्या जातात व हिशोब बरोबर राहतो."
                         label="तपासणी म्हणजे काय?"
                     />
-                    {actionable.length > 1 && (
+                    {mayApprove && actionable.length > 1 && (
                         <button type="button" data-testid="review-approve-all" onClick={() => approveAll()} className="flex min-h-[60px] w-full items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 py-4 text-[19px] font-bold text-white shadow-lg shadow-emerald-200 active:scale-[0.98]"><Check size={24} strokeWidth={2.5} /> सगळं मंजूर ({actionable.length})</button>
                     )}
                     {items.map((it) => {
@@ -690,8 +711,8 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                                       * green one and the two can never be confused by shape.
                                       */}
                                     <div className="mt-3 flex gap-3">
-                                        <button type="button" data-testid={`review-approve-${it.id}`} disabled={!!kind} onClick={() => approve(it.id)} className="flex min-h-[60px] flex-1 items-center justify-center gap-2.5 rounded-xl bg-emerald-600 py-3.5 text-[19px] font-extrabold text-white active:scale-[0.98] disabled:opacity-60"><Check size={24} strokeWidth={2.6} /> मंजूर</button>
-                                        <button type="button" data-testid={`review-query-${it.id}`} disabled={!!kind} onClick={() => query(it.id)} className="flex min-h-[60px] w-[112px] flex-shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-stone-200 bg-white py-3.5 text-[19px] font-bold text-stone-600 active:scale-[0.98] disabled:opacity-60"><MessageSquare size={20} /> शंका</button>
+                                        {mayApprove && <button type="button" data-testid={`review-approve-${it.id}`} disabled={!!kind} onClick={() => approve(it.id)} className="flex min-h-[60px] flex-1 items-center justify-center gap-2.5 rounded-xl bg-emerald-600 py-3.5 text-[19px] font-extrabold text-white active:scale-[0.98] disabled:opacity-60"><Check size={24} strokeWidth={2.6} /> मंजूर</button>}
+                                        {mayApprove && <button type="button" data-testid={`review-query-${it.id}`} disabled={!!kind} onClick={() => query(it.id)} className="flex min-h-[60px] w-[112px] flex-shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-stone-200 bg-white py-3.5 text-[19px] font-bold text-stone-600 active:scale-[0.98] disabled:opacity-60"><MessageSquare size={20} /> शंका</button>}
                                     </div>
                                     {/*
                                       * Labour V1 Task 13 — the attribution
@@ -710,7 +731,13 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                             </div>
                         );
                     })}
-                    {items.length === 0 && (
+                    {items.length === 0 && !reviewListLoading && reviewListUnknown && (
+                        <div data-testid="review-list-unknown" className="py-8 text-center">
+                            <p className="text-[20px] font-bold text-stone-800">तपासायची यादी आत्ता आणता आली नाही</p>
+                            <p className="mt-1.5 text-[17px] text-stone-500">नेट आल्यावर पुन्हा उघडा.</p>
+                        </div>
+                    )}
+                    {items.length === 0 && !reviewListLoading && !reviewListUnknown && (
                         <div className="py-8 text-center">
                             <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600"><Check size={30} /></div>
                             <p className="text-[20px] font-bold text-stone-800">सगळ्या नोंदी तपासून झाल्या</p>

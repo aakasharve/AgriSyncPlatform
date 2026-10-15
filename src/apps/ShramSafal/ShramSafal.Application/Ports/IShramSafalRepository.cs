@@ -266,6 +266,24 @@ public interface IShramSafalRepository
         => Task.FromResult((false, Guid.Empty));
 
     /// <summary>
+    /// spec: 2026-08-25-prod-cutover-waves (D1, tenant-DEK authorization) — STRICTER
+    /// than <see cref="GetFarmMembershipForTenantAsync"/>: that one admits every
+    /// non-terminal status (PendingOtpClaim, PendingApproval, Suspended), which is right
+    /// for "may this person see the farm" and wrong for "may this person be handed the
+    /// farm's owner-account encryption key". Here only the farm's declared owner or an
+    /// <c>Active</c> membership counts. The owner account is read from the FARM row
+    /// (never from the caller), so the key is always bound to the account that really
+    /// owns the farm. Returns <c>(false, Guid.Empty)</c> otherwise (no such farm, not a
+    /// member, pending, suspended, revoked, exited) — the caller cannot tell which.
+    /// Default impl returns "not a member" so in-tree test doubles compile.
+    /// </summary>
+    Task<(bool IsActiveMember, Guid OwnerAccountId)> GetActiveFarmMembershipForTenantAsync(
+        Guid farmId,
+        Guid userId,
+        CancellationToken ct = default)
+        => Task.FromResult((false, Guid.Empty));
+
+    /// <summary>
     /// Count of <c>Active</c> <c>PrimaryOwner</c> memberships on a farm.
     /// Used by the exit-membership handler to defend invariant I3 (the
     /// last PrimaryOwner cannot leave).
@@ -304,6 +322,20 @@ public interface IShramSafalRepository
     Task<List<ScheduleTemplate>> GetScheduleLineageAsync(Guid rootTemplateId, CancellationToken ct = default);
 
     Task SaveChangesAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Commits the staged new <see cref="FarmMembership"/> (and its audit row). Returns
+    /// <c>true</c> when committed. Returns <c>false</c> ONLY when this exact save lost a race to
+    /// a concurrent insert of the same (farm, user) non-terminal membership
+    /// (<c>ix_farm_memberships_farm_user_nonterminal</c>, SQLSTATE 23505): the staged entities
+    /// are discarded and the caller re-reads the winner's row. Any other failure still throws.
+    /// Provider specifics never leave Infrastructure. Default body = plain save.
+    /// </summary>
+    async Task<bool> TrySaveNewMembershipAsync(CancellationToken ct = default)
+    {
+        await SaveChangesAsync(ct);
+        return true;
+    }
 
     // --- CEI Phase 1 §4.4 ----------------------------------------------------------------
     /// <summary>
@@ -597,6 +629,15 @@ public interface IShramSafalRepository
     Task AddConsentAuditEntryAsync(ConsentAuditEntry entry, CancellationToken ct = default)
         => Task.CompletedTask;
 
+    /// <summary>
+    /// Start of the CURRENT continuous grant of the voice full-history purpose,
+    /// computed read-side from the append-only consent ledger (see
+    /// <c>FullHistoryGrantWindow</c>). <c>null</c> when it is not granted or the
+    /// ledger cannot show when it started. Never mutates the ledger.
+    /// </summary>
+    Task<DateTime?> GetFullHistoryCurrentGrantStartUtcAsync(Guid userId, CancellationToken ct = default)
+        => Task.FromResult<DateTime?>(null);
+
     // --- DATA_PRINCIPLE_SPINE sub-phase 10.2 / 10.4 (PII review queue) ---
     /// <summary>
     /// Append a brand-new <see cref="ShramSafal.Domain.Privacy.Pii.PiiReviewQueueEntry"/>
@@ -865,6 +906,20 @@ public interface IShramSafalRepository
     /// <summary>Stage a new <see cref="FieldOperator"/> identity (Task 9). No SaveChanges — the caller commits.</summary>
     Task AddFieldOperatorAsync(FieldOperator o, CancellationToken ct = default)
         => Task.CompletedTask;
+
+    /// <summary>
+    /// Idempotent-create insert for a CLIENT-CHOSEN <see cref="FieldOperator"/> id: commits
+    /// now and reports <c>true</c> = inserted, <c>false</c> = that id already exists (a retry,
+    /// or an id that belongs to a person this tenant cannot see). A duplicate never throws and
+    /// never poisons the caller's transaction. The default body is the plain add + save used by
+    /// in-memory repositories (no unique index to race).
+    /// </summary>
+    async Task<bool> TryAddFieldOperatorAsync(FieldOperator o, CancellationToken ct = default)
+    {
+        await AddFieldOperatorAsync(o, ct);
+        await SaveChangesAsync(ct);
+        return true;
+    }
 
     /// <summary>
     /// Single <see cref="FieldOperator"/> lookup by id. <b>NOT farm-scoped by

@@ -73,7 +73,7 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
         db.dayLedgers, db.plannedTasks, db.attentionCards, db.attendanceMarks,
     ], async () => {
         if (pendingLogIds) {
-            importedLogs = await reconcileLogs(db, payload, plotLookup, pendingLogIds);
+            importedLogs = await reconcileLogs(db, payload, plotLookup, pendingLogIds, receivedAtUtc);
         }
         await reconcileAttachments(db, payload, receivedAtUtc);
         referenceDataUpdated = await reconcileReferenceData(db, payload, receivedAtUtc);

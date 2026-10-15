@@ -47,6 +47,15 @@ using ShramSafal.Domain.Privacy;
 
 namespace ShramSafal.Application.Privacy.Ports;
 
+/// <summary>
+/// The client-minted retained clip id is already held by another account.
+/// </summary>
+public sealed class RetainedClipIdConflictException(Guid clipId)
+    : Exception($"Retained clip id {clipId:D} belongs to another account.")
+{
+    public Guid ClipId { get; } = clipId;
+}
+
 public interface IRetainedBlobStore
 {
     /// <summary>
@@ -90,6 +99,16 @@ public interface IRetainedBlobStore
     /// Idempotent on (userId, clipId): a repeated persist for an
     /// already-stored clip is a no-op and returns the same id (HEAD
     /// short-circuit pattern mirrors <c>S3RawBlobStore.PutAsync</c>).
+    /// </para>
+    ///
+    /// <para>
+    /// <b>The returned id IS the acknowledgement.</b> It is returned only when
+    /// a row owned by <c>metadata.UserId</c> exists after the call. A clip id
+    /// already held by a DIFFERENT user throws
+    /// <see cref="RetainedClipIdConflictException"/> instead of "succeeding":
+    /// the client mints these ids, and answering success for a row the caller
+    /// does not own would tell their phone a recording is saved when it is not
+    /// (and could never be read back by them).
     /// </para>
     /// </summary>
     Task<Guid> PersistAsync(

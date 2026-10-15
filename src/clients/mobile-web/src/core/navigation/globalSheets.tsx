@@ -9,6 +9,7 @@ import { TaskCreationSheet, ReviewInboxSheet, QuickLogSheet } from './lazyCompon
 import { AppRouterContext } from './routeContext';
 import { ConflictBadge } from '../../features/sync/conflict/ConflictBadge';
 import { NoWorkReasonSheet } from '../../features/logs/components/NoWorkReasonSheet';
+import { buildNoWorkDayPayload } from './noWorkDay';
 
 export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
     const {
@@ -36,17 +37,7 @@ export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
      */
     const declareNoWorkDay = (cause?: BucketIssueType) => {
         setShowNoWorkReason(false);
-        void handleManualSubmit({
-            date: todayDateKey,
-            dayOutcome: 'NO_WORK_PLANNED',
-            // P9 — absent chip, absent disturbance. DisturbanceEvent.Create requires a
-            // non-empty reason, so an empty one would be dropped server-side rather than
-            // rejecting the record; sending nothing is the honest form of the same thing.
-            disturbance: cause
-                ? { scope: 'FULL_DAY' as const, group: 'no_work', reason: cause, cause, blockedSegments: [] }
-                : undefined,
-            provenance: { source: 'manual' as const, timestamp: new Date().toISOString() },
-        });
+        void handleManualSubmit(buildNoWorkDayPayload(todayDateKey, cause));
     };
 
     return (

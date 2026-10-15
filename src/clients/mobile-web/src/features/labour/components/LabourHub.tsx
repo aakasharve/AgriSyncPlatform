@@ -7,44 +7,43 @@
  * line, drill-in optional). Simple for a semi-literate farmer, in the app's
  * design.
  *
- * Decision 4b (2026-07-19, screen honesty): हजेरी घ्या's capture tile stays
- * hidden behind `SHOW_ATTENDANCE_TILE` below until the capture work finishes.
- * The हजेरी वही tile is NOT gated — Correction 5 (founder, 2026-09-01)
- * deleted its switch once Phase 4 finished the register it opens.
+ * हजेरी घ्या's capture tile is shown by `canTakeManualAttendance()` (the ONE
+ * place that decides — `../attendanceDoor.ts`). The old hard-`false`
+ * `SHOW_ATTENDANCE_TILE` constant and its `isPreview` escape were DELETED once
+ * the screen behind the tile was finished (a switch that can be flipped back
+ * is still a gate). The हजेरी वही tile was never gated — Correction 5
+ * (founder, 2026-09-01).
  */
 import React from 'react';
-import { Mic, ClipboardCheck, Inbox, LayoutDashboard, BookText, Users } from 'lucide-react';
+import { Mic, ClipboardCheck, Inbox, LayoutDashboard, BookText, Users, CloudRain } from 'lucide-react';
 import type { LabourData } from '../labourMock';
 import { inr } from '../labourMock';
 import type { DailyLog, LedgerDefaults } from '../../../types';
 import { generateDayWorkSummary } from '../../analysis/dayWorkSummary';
 import { formatCurrency } from '../../../shared/utils/currency';
-import { GroupLabel, PersonRow, HelpNote, EmptyState } from './LabourUiKit';
+import { GroupLabel, PersonRow, HelpNote, EmptyState, Avatar } from './LabourUiKit';
 import { toMr } from './LabourDataPoints';
 import type { LabourAnchor } from '../labourAnchor';
-import { NO_ANCHOR_TEST_IDS } from '../labourAnchor';
+import { NO_ANCHOR_TEST_IDS, serverStatesLabourToday } from '../labourAnchor';
 import { ATTENDANCE_COPY } from '../attendanceCopy';
-
-/**
- * Task 3.5c (Labour V2 R1) killed the lie this gate was hiding: हजेरी घ्या's
- * save now enqueues REAL attendance.mark mutations through MutationQueue and
- * toasts the honest offline vocabulary — nothing claims "saved" before
- * acknowledgement (P10). The tile itself STAYS hidden: un-hiding is Phase 4's
- * call, when the register that reads these marks back exists.
- */
-// STAYS false for every real farm (Task 18, spec: 2026-08-28-labour-v2-
-// release-1). This is NOT the founder-review switch — see `isPreview` in the
-// render below, which is the one declared exception: it reveals this tile
-// only inside the `import.meta.env.DEV`-gated `?preview=labour` mount
-// (App.tsx), never for a real farmer. Preview mounts have no farm context, so
-// the screen's save renders disabled there (Attendance.tsx `saveDisabled`).
-const SHOW_ATTENDANCE_TILE = false;
+import { canTakeManualAttendance } from '../attendanceDoor';
+import { findMarkedAboveStated, resolveStatedHeadcount } from '../attendanceDisagreement';
+import { presentTodayFromLedger } from '../attendanceManual';
+import { getDateKey } from '../../../core/domain/services/DateKeyService';
+import HeadcountDisagreementCard from './HeadcountDisagreementCard';
 
 interface Props {
     data: LabourData;
     onOpenMukadam: (id: string) => void;
     onOpenPerson: (id: string) => void;
     onAttendance: () => void;
+    /**
+     * Opens the same attendance screen in no-work mode (`काम झालं नाही, पण
+     * मजूर आले`). Rendered ONLY while the voice hero is grey (no work logged
+     * today), because with a logged day the hero and the हजेरी घ्या tile
+     * already cover "who came".
+     */
+    onNoWorkAttendance?: () => void;
     onDashboard: () => void;
     onLedger: () => void;
     onReview: () => void;
@@ -79,15 +78,11 @@ interface Props {
     ledgerDefaults?: LedgerDefaults;
     lastLabourLogIds?: string[];
     /**
-     * Task 18 (spec: 2026-08-28-labour-v2-release-1) — true only inside the
-     * `?preview=labour` dev preview (threaded from `useLabourState`'s
-     * `isPreview`, itself `farmCtx === null`). Reveals `SHOW_ATTENDANCE_TILE`
-     * below for founder review WITHOUT flipping the constant for a real
-     * farm. Defaults to `false` so every existing
-     * real-app caller (and this component's own pre-Task-18 tests) is
-     * unaffected.
+     * People the farm has NAMED (FieldOperators) that this device already knows
+     * from its cached roster - so a person who was added but not yet marked
+     * still appears. Names only: nothing here carries money.
      */
-    isPreview?: boolean;
+    rosterPeople?: ReadonlyArray<{ id: string; displayName: string }>;
 }
 
 /**
@@ -285,7 +280,7 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
     );
 };
 
-const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onDashboard, onLedger, onReview, onGoToLog, onInviteWorker, anchor, history, ledgerDefaults, lastLabourLogIds, isPreview = false }) => {
+const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onNoWorkAttendance, onDashboard, onLedger, onReview, onGoToLog, onInviteWorker, anchor, history, ledgerDefaults, lastLabourLogIds, rosterPeople }) => {
     const justLoggedLogs = (history && ledgerDefaults && lastLabourLogIds && lastLabourLogIds.length > 0)
         ? lastLabourLogIds
             .map((id) => history.find((log) => log.id === id))
@@ -295,6 +290,30 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
     // Task 3.1 — no anchor → the recorder's doorway goes inactive. ONLY the
     // recorder: every other surface on this hub renders exactly as before.
     const heroInactive = anchor?.state === 'no-anchor';
+    // Journey fix 3 (P3): the server says this caller may not rewrite labour truth
+    // (un-granted own-row Worker). Only an explicit `false` hides anything.
+    const mayRecord = data.canManageLabour !== false;
+
+    // Journey fix D7 - the people the farm has NAMED: the cached roster (added,
+    // perhaps never marked) plus every named row of the register (marked). Once
+    // each, by id. A register row with no name is skipped - a name is never
+    // invented - and nobody here carries a balance (blank is not zero).
+    // N1 - a top-level id whose person is not in the response is skipped, never
+    // dereferenced: a narrowed or older server must not be able to crash the hub.
+    const shownIds = data.topLevelIds.filter((id) => data.people[id] != null);
+
+    const namedPeople = (() => {
+        const seen = new Set<string>();
+        const out: Array<{ id: string; name: string }> = [];
+        const add = (id: string, name: string) => {
+            if (name.trim() === '' || seen.has(id)) return;
+            seen.add(id);
+            out.push({ id, name });
+        };
+        (rosterPeople ?? []).forEach((o) => add(o.id, o.displayName));
+        data.ledger.rows.forEach((r) => add(r.fieldOperatorId, r.name));
+        return out;
+    })();
 
     return (
     <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2">
@@ -325,6 +344,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
           * takes हजेरी and has nowhere to see it — closed by Correction 5:
           * the हजेरी वही tile below renders unconditionally.
           */}
+        {mayRecord && (<>
         <button type="button" disabled={heroInactive} onClick={heroInactive ? undefined : onGoToLog}
             className={`relative flex w-full items-center gap-4 overflow-hidden rounded-[24px] p-5 text-left transition-transform ${heroInactive
                 ? 'bg-slate-100 shadow-none'
@@ -344,6 +364,12 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
                 {ATTENDANCE_COPY.noAnchorReason}
             </div>
         )}
+        {heroInactive && onNoWorkAttendance && canTakeManualAttendance(data.canManageLabour) && !serverStatesLabourToday(data) && (
+            <div className="grid grid-cols-1">
+                <QuickTile icon={<CloudRain size={20} />} chip="bg-sky-50 text-sky-600 ring-1 ring-sky-100" label="काम झालं नाही, पण मजूर आले" onClick={onNoWorkAttendance} />
+            </div>
+        )}
+        </>)}
 
         {/* D6 (master review 2026-09-02) — one Labour, TWO money truths, never
             one figure. Owner view only: D-H8 keeps money off every non-owner
@@ -396,10 +422,16 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
             </div>
         )}
 
+        {/* D2 - the register holds more people marked present today than the
+            day's stated headcount. Both stay as they are; this only says so. */}
+        {(() => {
+            const presentIds = presentTodayFromLedger(data, getDateKey());
+            const disagreement = findMarkedAboveStated(resolveStatedHeadcount(anchor, data.home.onFarmToday), presentIds);
+            return disagreement ? <HeadcountDisagreementCard disagreement={disagreement} markedCount={presentIds.length} /> : null;
+        })()}
+
         <div className="grid grid-cols-2 gap-2.5">
-            {/* Task 18 — `isPreview` is the one declared exception to the
-                hard-`false` SHOW_ATTENDANCE_TILE above; see its own comment. */}
-            {(SHOW_ATTENDANCE_TILE || isPreview) && (
+            {canTakeManualAttendance(data.canManageLabour) && (
                 <QuickTile icon={<ClipboardCheck size={20} />} chip="bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100" label="हजेरी घ्या" sub="आज कोण आलं" onClick={onAttendance} />
             )}
             {/* Correction 5 (founder, 2026-09-01): the हजेरी वही is NEVER gated —
@@ -468,7 +500,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
         />
 
         <GroupLabel>माणसं</GroupLabel>
-        {data.topLevelIds.length === 0 ? (
+        {shownIds.length === 0 && namedPeople.length === 0 ? (
             <EmptyState
                 icon={<Users size={22} />}
                 title="अजून कोणाचंही नाव जोडलेलं नाही"
@@ -490,18 +522,43 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
                 ) : undefined}
             />
         ) : (
-            data.topLevelIds.map((id) => {
-                const person = data.people[id];
-                const isMukadam = person.role !== 'worker';
-                return (
-                    <PersonRow
-                        key={id}
-                        person={person}
-                        teamCount={person.memberIds?.length}
-                        onOpen={() => (isMukadam ? onOpenMukadam(id) : onOpenPerson(id))}
-                    />
-                );
-            })
+            <>
+                {shownIds.map((id) => {
+                    const person = data.people[id];
+                    const isMukadam = person.role !== 'worker';
+                    return (
+                        <PersonRow
+                            key={id}
+                            person={person}
+                            teamCount={person.memberIds?.length}
+                            onOpen={() => (isMukadam ? onOpenMukadam(id) : onOpenPerson(id))}
+                        />
+                    );
+                })}
+                {namedPeople.length > 0 && (
+                    <ul data-testid="hub-named-people" className="flex flex-col gap-2.5">
+                        {namedPeople.map((p) => (
+                            <li key={p.id} data-testid="hub-named-person"
+                                className="flex min-h-[64px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+                                <Avatar tone="em" initial={[...p.name][0]} />
+                                <span className="min-w-0 flex-1 truncate text-[20px] font-bold text-stone-800">{p.name}</span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+                {/* Nobody has joined by QR yet, so the empty state's one real next step
+                    (show the QR) must not disappear just because names were added. */}
+                {shownIds.length === 0 && onInviteWorker && (
+                    <button
+                        type="button"
+                        data-testid="hub-invite-qr"
+                        onClick={onInviteWorker}
+                        className="flex min-h-[60px] w-full items-center justify-center gap-2.5 rounded-[16px] bg-emerald-600 px-5 py-4 text-[19px] font-extrabold text-white transition-transform active:scale-[0.98]"
+                    >
+                        <Users size={22} /> QR दाखवा
+                    </button>
+                )}
+            </>
         )}
     </div>
     );

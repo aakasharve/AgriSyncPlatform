@@ -10,14 +10,12 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Sprout, Zap, Tractor, FlaskConical, ArrowLeft, Globe, Shield, Download, Trash2, CreditCard, Mic } from 'lucide-react';
-import { idGenerator } from '../../core/domain/services/IdGenerator';
+import { User, Sprout, Zap, Tractor, FlaskConical, ArrowLeft, Globe, Shield, Download, Trash2, CreditCard, Mic, BookOpen } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useFarmContext } from '../../core/session/FarmContext';
 import { requestCreateFarmWizard, promptAndJoinFarmViaQr } from '../../app/hooks/useFarmContextState';
 import { useWorkerProfile } from '../work/hooks/useWorkerProfile';
-import { AddMemberWizard } from '../people/components/AddMemberWizard';
 import FarmInviteQrSheet from '../onboarding/qr/FarmInviteQrSheet';
 
 import IdentitySection from './sections/IdentitySection';
@@ -33,7 +31,7 @@ import { useFarmAdminState } from './hooks/useFarmAdminState';
 import SubscriptionCard from '../admin/billing/SubscriptionCard';
 import { buildSettingsExtraIds } from './settingsItems';
 
-import type { CropProfile, FarmerProfile, FarmOperator, Person } from '../../types';
+import type { CropProfile, FarmerProfile } from '../../types';
 
 /**
  * The eight tabs rendered by ProfilePage. Exported so tests (and any
@@ -60,8 +58,6 @@ interface ProfilePageProps {
     onUpdateCrops: (c: CropProfile[]) => void;
     waterResources?: unknown;
     electricity?: unknown;
-    onAddPerson?: (person: Person) => void;
-    onDeletePerson?: (id: string) => void;
     onOpenScheduleLibrary?: (cropId?: string) => void;
     onOpenFinanceManager?: () => void;
     onOpenLabour?: () => void;
@@ -73,6 +69,8 @@ interface ProfilePageProps {
     /** spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — offline
      * voice-note drafts waiting for the farmer's review. */
     onOpenAiDrafts?: () => void;
+    /** Settings page: Voice Journal / Voice Diary + retention consent. */
+    onOpenSettings?: () => void;
     /** Leave the Profile screen (back to the main app / daily log). */
     onExit?: () => void;
     /**
@@ -86,9 +84,8 @@ interface ProfilePageProps {
 
 const ProfilePage: React.FC<ProfilePageProps> = ({
     profile, crops, onUpdateProfile, onUpdateCrops,
-    onAddPerson, onDeletePerson,
     onOpenScheduleLibrary, onOpenFinanceManager, onOpenLabour, onOpenReferrals,
-    onOpenConsent, onOpenExport, onOpenErasure, onOpenAiDrafts,
+    onOpenConsent, onOpenExport, onOpenErasure, onOpenAiDrafts, onOpenSettings,
     onExit,
     initialTab,
 }) => {
@@ -122,14 +119,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
             adminSetShowFarmBoundary(true);
         }
     }, [adminMyFarm, adminSetShowFarmBoundary]);
-
-    const [showMemberWizard, setShowMemberWizard] = useState(false);
-    const handleAddMember = (member: Partial<FarmOperator>) => {
-        if (onAddPerson) {
-            onAddPerson({ ...(member as unknown as Person), id: `p_${idGenerator.generate()}` });
-        }
-        setShowMemberWizard(false);
-    };
 
     // CEI Phase 4 §4.8 — show own reliability score if user is a Worker or
     // Mukadam on any farm.
@@ -188,13 +177,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
 
     return (
         <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-4 pb-[calc(8rem+env(safe-area-inset-bottom))]">
-            {showMemberWizard && (
-                <AddMemberWizard
-                    onSave={handleAddMember}
-                    onCancel={() => setShowMemberWizard(false)}
-                />
-            )}
-
             {farmAdmin.myFarm && (
                 <FarmInviteQrSheet
                     isOpen={farmAdmin.showInviteQr}
@@ -255,7 +237,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             <IdentitySection
                                 profile={profile}
                                 onUpdateProfile={onUpdateProfile}
-                                onDeletePerson={onDeletePerson}
                                 logout={logout}
                                 myFarm={farmAdmin.myFarm}
                                 myMemberships={farmAdmin.myMemberships}
@@ -266,7 +247,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                                 handleConnectWeather={farmAdmin.handleConnectWeather}
                                 setShowFarmBoundary={farmAdmin.setShowFarmBoundary}
                                 handleOpenInviteQr={farmAdmin.handleOpenInviteQr}
-                                setShowMemberWizard={setShowMemberWizard}
                                 nonExitableFarmIds={nonExitableFarmIds}
                                 handleExitMembership={farmAdmin.handleExitMembership}
                                 isWorkerOnAnyFarm={isWorkerOnAnyFarm}
@@ -338,8 +318,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 const isOwner = billingFarm?.role === 'PrimaryOwner';
                 const settingsMeta: Record<string, { label: string; icon: React.ReactNode; subtitle?: string }> = {
                     language: { label: 'भाषा · Language', icon: <Globe size={20} />, subtitle: langLabel },
+                    // Both strings already exist in the app (nav 'सेटिंग्ज'; Voice Diary bundle 'आवाजी डायरी').
+                    'voice-diary': { label: 'सेटिंग्ज · Settings', icon: <BookOpen size={20} />, subtitle: 'आवाजी डायरी · Voice Diary' },
                     consent: { label: 'गोपनीयता · Consent', icon: <Shield size={20} />, subtitle: 'तुमच्या परवानग्या · Your permissions' },
-                    export: { label: 'डेटा डाउनलोड · Export my data', icon: <Download size={20} />, subtitle: 'सर्व डेटाची प्रत · A copy of your data' },
+                    export: { label: 'डेटा डाउनलोड · Export my data', icon: <Download size={20} />, subtitle: 'तुमच्या नोंदींची प्रत · A copy of your records' },
                     erase: { label: 'डेटा पुसा · Erase my data', icon: <Trash2 size={20} />, subtitle: 'कायमचा पुसा · Permanent' },
                     billing: { label: 'बिलिंग · Billing', icon: <CreditCard size={20} />, subtitle: 'तुमचा प्लॅन · Your plan' },
                     // English-only placeholder copy (Global Constraint: never compose new
@@ -354,6 +336,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     if (id === 'export') { onOpenExport?.(); return; }
                     if (id === 'erase') { onOpenErasure?.(); return; }
                     if (id === 'ai-drafts') { onOpenAiDrafts?.(); return; }
+                    if (id === 'voice-diary') { onOpenSettings?.(); return; }
                     setActiveExtra(id); // 'language' | 'billing' — folded sub-screens
                 };
 

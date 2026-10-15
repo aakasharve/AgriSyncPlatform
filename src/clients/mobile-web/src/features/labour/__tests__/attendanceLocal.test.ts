@@ -61,7 +61,7 @@ describe('getLocalAttendanceMarks — only LIVE intent surfaces from the queue',
         // parks the row for HIS decision; blanking his statement from the
         // register while the question is open would be a silent vanish.
         const id = await enqueueOneMark();
-        await mutationQueue.markRejectedUserReview(id, 'ShramSafal.AttendanceContradiction');
+        await mutationQueue.markRejectedUserReview(id, 'contradiction', 'ShramSafal.AttendanceContradiction');
 
         const marks = await getLocalAttendanceMarks(FARM);
         expect(marks).toHaveLength(1);
@@ -88,6 +88,8 @@ describe('getLocalAttendanceNameHints — the attach-time snapshot, never an inv
     const seedLog = async (id: string, farmId: string, date: string, name: string) => {
         await getDatabase().logs.add({
             id, schemaVersion: 1, date, isDeleted: 0,
+            // 7-day Labour cache: a downloaded log's names carry the time they were downloaded.
+            labourNamesDownloadedAtUtc: new Date().toISOString(),
             log: {
                 id, date, meta: { farmId },
                 labour: [{

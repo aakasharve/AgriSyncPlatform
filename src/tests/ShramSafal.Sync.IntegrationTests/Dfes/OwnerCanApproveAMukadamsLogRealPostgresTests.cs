@@ -127,6 +127,13 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
     /// </summary>
     private static readonly Guid StrangerUserId = Guid.Parse("1d000000-0000-0000-0000-00000000000f");
 
+    /// <summary>
+    /// Team/actions reconciliation (release 1.0.13): a plain Worker the owner has NOT granted
+    /// labour responsibility. Used to prove the server refuses the शंका (dispute) the
+    /// Review sheet used to offer him, so the client may hide it on server-sent truth.
+    /// </summary>
+    private static readonly Guid UngrantedWorkerUserId = Guid.Parse("1d000000-0000-0000-0000-000000000009");
+
     private string _adminConn = string.Empty;
     private string _superuserConn = string.Empty;
     private string _appConn = string.Empty;
@@ -174,6 +181,7 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
             await SeedFarmMembershipAsync(raw, OwnerUserId, "PrimaryOwner");
             await SeedFarmMembershipAsync(raw, MukadamUserId, "Mukadam");
             await SeedFarmMembershipAsync(raw, OtherMukadamUserId, "Mukadam");
+            await SeedFarmMembershipAsync(raw, UngrantedWorkerUserId, "Worker");
             await SeedFarmMembershipAsync(
                 raw, GrantedMukadamUserId, "Mukadam",
                 canManageLabourRecords: GrantsLabourManagementToTheGrantedMukadam);
@@ -398,6 +406,41 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
         var pulled = await PullDailyLogAsync(OwnerUserId, dailyLogId);
         pulled.LastVerificationStatus.Should().Be("Draft");
         pulled.VerificationEvents.Should().BeEmpty();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PROOF 3c - THE शंका (DISPUTE) IS REFUSED TO AN UN-GRANTED WORKER TOO.
+    //
+    // The Review sheet offered every viewer a "शंका" button. It is a verify_log_v2
+    // decision="dispute"; VerifyLogAuthorizer (EnsureCanVerify -> LabourManagementGate)
+    // runs for EVERY decision, so a plain Worker with no grant is refused exactly like
+    // an approval. The client now hides the button on the server-sent canManageLabour.
+    // ─────────────────────────────────────────────────────────────────────────
+    [SkippableFact]
+    public async Task An_ungranted_worker_cannot_raise_a_shanka_dispute_either()
+    {
+        SkipIfPostgresUnavailable();
+
+        var dailyLogId = Guid.Parse("1ddd8888-8888-8888-8888-888888888888");
+
+        var created = await PushAsync(
+            MukadamUserId, "Mukadam", "req-mukadam-log-3c",
+            "create_daily_log", CreateLogPayload(dailyLogId, MukadamUserId, new DateOnly(2026, 8, 17)));
+        Assert.Single(created.Value!.Results).Status.Should().Be("applied");
+
+        var payload = ApprovePayload(dailyLogId, UngrantedWorkerUserId);
+        payload["decision"] = "dispute";
+        payload["reason"] = "या नोंदीवर शंका आहे";
+        var dispute = await PushAsync(UngrantedWorkerUserId, "Worker", "req-worker-shanka", "verify_log_v2", payload);
+
+        var result = Assert.Single(dispute.Value!.Results);
+        output.WriteLine($"[EVIDENCE] ungranted Worker shanka -> status='{result.Status}' errorCode='{result.ErrorCode}'");
+        result.Status.Should().Be("failed");
+        result.ErrorCode.Should().Be("ShramSafal.Forbidden");
+
+        var pulled = await PullDailyLogAsync(OwnerUserId, dailyLogId);
+        pulled.LastVerificationStatus.Should().Be("Draft");
+        pulled.VerificationEvents.Should().BeEmpty("a refused dispute must leave the ledger untouched");
     }
 
     // ─────────────────────────────────────────────────────────────────────────

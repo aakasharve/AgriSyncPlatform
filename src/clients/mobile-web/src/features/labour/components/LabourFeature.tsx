@@ -17,9 +17,14 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLabourState } from '../useLabourState';
-import { resolveLabourAnchor } from '../labourAnchor';
+import { resolveEffectiveLabourAnchor } from '../labourAnchor';
+import { resolveStatedHeadcount } from '../attendanceDisagreement';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { MarkAttendanceCommand } from '../../../application/usecases/sync/MarkAttendanceCommand';
+import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
+import { getRootStore } from '../../../app/state/RootStore';
+import { hasDeclaredNoWorkDay } from '../../../core/navigation/noWorkDay';
+import type { BucketIssueType } from '../../../domain/types/log.types';
 import {
     listParkedAttendanceContradictions,
     buildContradictionQuestion,
@@ -27,20 +32,29 @@ import {
     type ContradictionQuestion,
     type ParkedAttendanceContradiction,
 } from '../data/attendanceParked';
+import {
+    listRefusedLabourState,
+    EMPTY_REFUSED_LABOUR_STATE,
+    type RefusedLabourState,
+} from '../data/attendanceRefused';
+import { readCachedRoster } from '../data/fieldOperatorRosterCache';
+import { ConflictResolutionService } from '../../sync/conflict/ConflictResolutionService';
 import { t as translate } from '../../../i18n/translations';
 import { SYNC_HONESTY_I18N_KEYS } from '../../sync/status/syncHonestyState';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
 import type { DailyLog, LedgerDefaults } from '../../../types';
 import type { LedgerRow } from '../labour.types';
 import { BackHeader, LoadErrorBanner, LoadingState } from './LabourUiKit';
+import { ATTENDANCE_COPY } from '../attendanceCopy';
 import LabourHub from './LabourHub';
 import MukadamDetail from './MukadamDetail';
 import PersonDetail from './PersonDetail';
-import Attendance from './Attendance';
+import Attendance, { type ManualAttendanceMark } from './Attendance';
 import WeeklyDashboard from './WeeklyDashboard';
 import HajeriLedger from './HajeriLedger';
 import HajeriCellDetail from './HajeriCellDetail';
 import AttendanceContradictionPrompt from './AttendanceContradictionPrompt';
+import RefusedLabourNotice from './RefusedLabourNotice';
 import ReviewSheet from './ReviewSheet';
 import FarmInviteQrSheet from '../../onboarding/qr/FarmInviteQrSheet';
 
@@ -50,10 +64,19 @@ import FarmInviteQrSheet from '../../onboarding/qr/FarmInviteQrSheet';
  * idiom): लक्षात ठेवलं ✓ — never transcribed, so a founder copy edit reaches
  * this toast automatically.
  */
+/** Age of the offline read-out in farmer words (placeholder copy in attendanceCopy.ts). */
+function staleAgeLabel(savedAtUtc: string): string {
+    const ms = Date.now() - Date.parse(savedAtUtc);
+    const hours = Math.floor(ms / 3_600_000);
+    if (!Number.isFinite(hours) || hours < 1) return ATTENDANCE_COPY.staleAgeJustNow;
+    if (hours < 24) return ATTENDANCE_COPY.staleAgeHours(hours);
+    return ATTENDANCE_COPY.staleAgeDays(Math.floor(hours / 24));
+}
+
 const ON_PHONE_MR = translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr');
 
 type ScreenName = 'hub' | 'mukadam' | 'person' | 'attendance' | 'dashboard' | 'ledger';
-interface ScreenState { name: ScreenName; id?: string }
+interface ScreenState { name: ScreenName; id?: string; mode?: 'normal' | 'no-work' }
 
 const TITLES: Record<ScreenName, string> = {
     /*
@@ -89,7 +112,7 @@ const TITLES: Record<ScreenName, string> = {
 
 export const LabourFeature: React.FC<{
     onExit: () => void;
-    onGoToLog?: () => void;
+    onGoToLog?: (opts?: { anchoredByServer?: boolean }) => void;
     /**
      * Task 3.5 — optional log-history threading so the hub can show a
      * labour-only "just logged" summary after an auto-return from the log
@@ -100,8 +123,17 @@ export const LabourFeature: React.FC<{
     history?: DailyLog[];
     ledgerDefaults?: LedgerDefaults;
     lastLabourLogIds?: string[];
-}> = ({ onExit, onGoToLog, history, ledgerDefaults, lastLabourLogIds }) => {
-    const { data, loading, error, refresh, timeWindow, setTimeWindow, isPreview } = useLabourState();
+    /**
+     * The rained-out-day lane (`काम झालं नाही, पण मजूर आले`). `onDeclareNoWorkDay`
+     * records the day as a declared no-work day through the app's one existing
+     * path and resolves TRUE only when that really happened. Both are absent on
+     * the bare `?preview=labour` mount, and then the lane's door is not drawn:
+     * a door that could only half-record the day would be a false promise.
+     */
+    onBeginNoWorkLane?: () => void;
+    onDeclareNoWorkDay?: (cause?: BucketIssueType) => Promise<boolean>;
+}> = ({ onExit, onGoToLog, history, ledgerDefaults, lastLabourLogIds, onBeginNoWorkLane, onDeclareNoWorkDay }) => {
+    const { data, loading, error, refresh, timeWindow, setTimeWindow, staleSinceIso } = useLabourState();
     // Safe (non-throwing) outside a provider (`?preview=labour` mounts with
     // none) — `farm` stays `null` there, and the QR-invite CTA below hides
     // itself accordingly.
@@ -164,9 +196,26 @@ export const LabourFeature: React.FC<{
     const [parkedQuestions, setParkedQuestions] = useState<Array<{
         park: ParkedAttendanceContradiction; question: ContradictionQuestion;
     }>>([]);
-    const farmId = farm?.farmId;
+    // OFFLINE COLD START: `/me` failed, so `farm` is null - but the farm id this
+    // user last had CONFIRMED by the server is still on the device (a per-user
+    // pointer, FarmContext drops it on logout / user change). The roster cache
+    // and the mark queue only need the id, so they run on it. We use it ONLY
+    // while the last `/me` failed: once `/me` answers, `farm` is the authority
+    // (and if the answer excludes the remembered farm, it is no longer used).
+    const farmId = farm?.farmId ?? (farmCtx?.loadFailed ? farmCtx.currentFarmId ?? undefined : undefined);
+    /**
+     * Journey fixes D1/D6 - what the SERVER REFUSED (a mark with no
+     * responsibility behind it, a no-work declaration that did not land),
+     * read from the same parked rows the ⚠ badge counts.
+     */
+    const [refused, setRefused] = useState<RefusedLabourState>(EMPTY_REFUSED_LABOUR_STATE);
     const loadParkedQuestions = useCallback(async () => {
-        if (!farmId) { setParkedQuestions([]); return; }
+        if (!farmId) { setParkedQuestions([]); setRefused(EMPTY_REFUSED_LABOUR_STATE); return; }
+        try {
+            setRefused(await listRefusedLabourState(farmId));
+        } catch {
+            setRefused(EMPTY_REFUSED_LABOUR_STATE); // no queue, nothing refused
+        }
         try {
             const parks = await listParkedAttendanceContradictions(farmId);
             setParkedQuestions(parks.flatMap((park) => {
@@ -181,6 +230,15 @@ export const LabourFeature: React.FC<{
     }, [farmId, history]);
     useEffect(() => { void loadParkedQuestions(); }, [loadParkedQuestions]);
 
+    const retryRefused = useCallback(() => {
+        void (async () => {
+            for (const id of refused.clientRequestIds) {
+                try { await ConflictResolutionService.retry(id); } catch { /* the notice stays if it fails */ }
+            }
+            await loadParkedQuestions();
+        })();
+    }, [refused, loadParkedQuestions]);
+
     const push = useCallback((s: ScreenState) => setStack((st) => [...st, s]), []);
     const back = useCallback(() => setStack((st) => (st.length > 1 ? st.slice(0, -1) : st)), []);
     const handleBack = () => { if (stack.length > 1) back(); else onExit(); };
@@ -191,7 +249,7 @@ export const LabourFeature: React.FC<{
     }, []);
     // No router available (e.g. bare `?preview=labour` mount) → surface the
     // existing toast instead of navigating or crashing.
-    const goToLog = onGoToLog ?? (() => showToast('🎙 बोलून नोंद करायची असेल तर कामाच्या पानावर जा.'));
+    const goToLogFallback = () => showToast('🎙 बोलून नोंद करायची असेल तर कामाच्या पानावर जा.');
 
     const title = cur.name === 'mukadam' && cur.id ? (data.people[cur.id]?.name ?? 'मुकादम')
         : cur.name === 'person' && cur.id ? (data.people[cur.id]?.name ?? 'कामगार')
@@ -205,14 +263,117 @@ export const LabourFeature: React.FC<{
     // stays undefined, which the hub's contract reads as "keep today's
     // behaviour: hero active" (its onGoToLog fallback is already a toast).
     const anchor = React.useMemo(
-        () => (history ? resolveLabourAnchor(history, getDateKey()) : undefined),
-        [history],
+        () => (history ? resolveEffectiveLabourAnchor(history, getDateKey(), data.home.onFarmToday) : undefined),
+        [history, data.home.onFarmToday],
+    );
+    // The route re-checks the anchor from THIS device's history; tell it when
+    // the day is anchored by the server's read-out instead (journey fix D4).
+    const goToLog = onGoToLog
+        ? () => onGoToLog({ anchoredByServer: anchor?.state === 'anchored' && anchor.source === 'server' })
+        : goToLogFallback;
+
+    /**
+     * Refetch when the sync actor settles (SYNC_DONE). Nothing refetched after
+     * an acknowledgement before, so a cell the farmer just marked stayed
+     * "weaker" (queued) until he re-entered the screen. The refetch resets the
+     * hook to its loading state, which would unmount the attendance screen and
+     * throw away what he has tapped, so while that screen is open the refresh
+     * is deferred until he leaves it.
+     */
+    const settledRef = useRef<() => void>(() => {});
+    settledRef.current = () => { if (farm) { refresh(); void loadParkedQuestions(); } };
+    const onAttendanceScreenRef = useRef(false);
+    onAttendanceScreenRef.current = cur.name === 'attendance';
+    const refreshOwedRef = useRef(false);
+    useEffect(() => {
+        const sync = getRootStore().sync;
+        let previous = String(sync.getSnapshot().value);
+        const subscription = sync.subscribe((snapshot) => {
+            const now = String(snapshot.value);
+            const finishedCycle = previous === 'syncing' && now !== 'syncing' && now !== 'offline';
+            previous = now;
+            if (!finishedCycle) return;
+            if (onAttendanceScreenRef.current) refreshOwedRef.current = true;
+            else settledRef.current();
+        });
+        return () => subscription.unsubscribe();
+    }, []);
+    useEffect(() => {
+        if (cur.name !== 'attendance' && refreshOwedRef.current) {
+            refreshOwedRef.current = false;
+            settledRef.current();
+        }
+    }, [cur.name]);
+
+    /**
+     * The REAL save of the manual door. One `attendance.mark` per person the
+     * farmer stated something about (untouched people never reach here); each
+     * is queued locally, so what we may claim is "remembered on the phone"
+     * (P10), never "saved" - the register shows it weaker until acknowledged.
+     * Rejecting leaves the screen open so he can press the button again; the
+     * value-keyed request id makes a retry safe (no duplicate marks).
+     */
+    const saveManualAttendance = async (marks: ManualAttendanceMark[], noWorkCause?: BucketIssueType): Promise<void> => {
+        if (!farmId) throw new Error('no farm context'); // the button is disabled without a farm
+        const workDate = getDateKey();
+        try {
+            await Promise.all(marks.map(({ fieldOperatorId, ...facts }) => MarkAttendanceCommand.enqueue({
+                attendanceMarkId: crypto.randomUUID(),
+                farmId,
+                fieldOperatorId,
+                workDate,
+                ...facts,
+            })));
+            if (cur.mode === 'no-work' && onDeclareNoWorkDay && !hasDeclaredNoWorkDay(history ?? [], workDate)) {
+                if (!(await onDeclareNoWorkDay(noWorkCause))) throw new Error('no_work_day_not_declared');
+            }
+        } catch (error: unknown) {
+            // Named landing place: do not navigate away and do not claim
+            // remembering. 'पुन्हा प्रयत्न करा' is the feature's existing retry
+            // vocabulary (LabourUiKit.tsx) - no new Marathi.
+            console.error(JSON.stringify({
+                component: 'LabourFeature',
+                action: 'attendance_mark_enqueue_failed',
+                reason: error instanceof Error ? error.message : String(error),
+            }));
+            showToast('पुन्हा प्रयत्न करा');
+            throw error;
+        }
+        // Best effort: the queue is the durable path, the periodic worker retries.
+        void Promise.resolve().then(() => backgroundSyncWorker.triggerNow()).catch(() => { /* queued either way */ });
+        showToast(ON_PHONE_MR);
+        // Show him where it landed: replace this screen with the हजेरी वही.
+        setStack((st) => [...st.slice(0, -1), { name: 'ledger' }]);
+        // AFTER the queue rows exist, so the register composes the new marks
+        // (attendanceOverlay); offline the refetch fails into the local-plane
+        // register with the marks intact.
+        refresh();
+        void loadParkedQuestions();
+    };
+
+    const attendanceScreen = (
+        <Attendance
+            data={data}
+            farmId={farmId}
+            mode={cur.mode ?? 'normal'}
+            statedHeadcount={resolveStatedHeadcount(anchor, data.home.onFarmToday)}
+            onSave={saveManualAttendance}
+            onToast={showToast}
+        />
     );
 
     return (
         <div className="relative flex min-h-screen flex-col bg-[#f6f7f5]">
-            <BackHeader title={title} onBack={handleBack} />
+            <BackHeader
+                title={title}
+                onBack={handleBack}
+            />
             {error && <LoadErrorBanner onRetry={refresh} />}
+            {error && Boolean(staleSinceIso) && (
+                <div data-testid="labour-stale-readout" className="mx-4 mt-2 rounded-[14px] border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[15px] font-bold leading-snug text-amber-800">
+                    {ATTENDANCE_COPY.staleReadoutNote(staleAgeLabel(staleSinceIso as string))}
+                </div>
+            )}
             <div className="flex-1">
                 {/* Task 9 (B001) — the parked contradiction question(s). The
                     end of EditSurfaceRegistry's 'labour' route: rendered above
@@ -235,9 +396,20 @@ export const LabourFeature: React.FC<{
                         }}
                     />
                 ))}
+                {!loading && (
+                    <RefusedLabourNotice
+                        state={refused}
+                        nameOf={(operatorId) => {
+                            const fromRegister = data.ledger.rows.find((r) => r.fieldOperatorId === operatorId)?.name;
+                            if (fromRegister) return fromRegister;
+                            return farmId ? readCachedRoster(farmId)?.find((o) => o.id === operatorId)?.displayName : undefined;
+                        }}
+                        onRetry={retryRefused}
+                    />
+                )}
                 {loading ? (
                     <LoadingState />
-                ) : error ? (
+                ) : error && !staleSinceIso ? (
                     /*
                      * Task 9 (B001) — the outage is no longer a dead-end when
                      * THIS DEVICE holds attendance facts: useLabourState
@@ -247,13 +419,24 @@ export const LabourFeature: React.FC<{
                      * screen cannot claim (money, workers, review). An empty
                      * plane keeps rendering nothing, exactly as Task 6d ruled.
                      */
-                    data.ledger.rows.length > 0 ? (
-                        <HajeriLedger
-                            data={data}
-                            onToast={showToast}
-                            onOpenCell={(row, dayIndex) => setCellDetail({ row, dayIndex })}
-                        />
-                    ) : null
+                    cur.name === 'attendance' ? attendanceScreen : (
+                        <>
+                            {/*
+                              * No attendance door here: with no cached read-out
+                              * the server's canManageLabour answer is unknown, and
+                              * unknown means hidden. An authorised farmer with a
+                              * cached read-out gets the normal hub (with the tile,
+                              * from the cached server answer) instead of this branch.
+                              */}
+                            {data.ledger.rows.length > 0 ? (
+                                <HajeriLedger
+                                    data={data}
+                                    onToast={showToast}
+                                    onOpenCell={(row, dayIndex) => setCellDetail({ row, dayIndex })}
+                                />
+                            ) : null}
+                        </>
+                    )
                 ) : (
                     /*
                      * Task 6d (spec: 2026-08-28-labour-v2-release-1, P4/P5,
@@ -280,6 +463,10 @@ export const LabourFeature: React.FC<{
                                 onOpenMukadam={(id) => push({ name: 'mukadam', id })}
                                 onOpenPerson={(id) => push({ name: 'person', id })}
                                 onAttendance={() => push({ name: 'attendance' })}
+                                onNoWorkAttendance={farm && onDeclareNoWorkDay ? () => {
+                                    onBeginNoWorkLane?.();
+                                    push({ name: 'attendance', mode: 'no-work' });
+                                } : undefined}
                                 onDashboard={() => push({ name: 'dashboard' })}
                                 onLedger={() => push({ name: 'ledger' })}
                                 onReview={() => setReviewOpen(true)}
@@ -289,7 +476,7 @@ export const LabourFeature: React.FC<{
                                 history={history}
                                 ledgerDefaults={ledgerDefaults}
                                 lastLabourLogIds={lastLabourLogIds}
-                                isPreview={isPreview}
+                                rosterPeople={farmId ? readCachedRoster(farmId)?.filter((o) => o.isActive) ?? undefined : undefined}
                             />
                         )}
                         {cur.name === 'mukadam' && cur.id && (
@@ -311,53 +498,7 @@ export const LabourFeature: React.FC<{
                                 onToast={showToast}
                             />
                         )}
-                        {cur.name === 'attendance' && (
-                            <Attendance
-                                data={data}
-                                saveDisabled={!farm}
-                                onSave={(marks) => {
-                                    // Labour V2 R1 Task 3.5c — the REAL save. The "saved" lie that
-                                    // lived here (write nothing, claim saved) is dead; the toast is
-                                    // now the app's honest offline vocabulary, driven by the queue
-                                    // row actually written (P10: never rendered as saved before
-                                    // acknowledgement). The status→mark mapping lives HERE and only
-                                    // here: present+full → Full · present+half → Half ·
-                                    // present+night → Worked · half → Half · absent → Absent.
-                                    if (!farm) return; // button is disabled without a farm; no invented Marathi
-                                    const workDate = getDateKey();
-                                    void Promise.all(marks.map((m) => MarkAttendanceCommand.enqueue({
-                                        attendanceMarkId: crypto.randomUUID(),
-                                        farmId: farm.farmId,
-                                        fieldOperatorId: m.fieldOperatorId,
-                                        workDate,
-                                        ...(m.status === 'absent' ? { dayMark: 'Absent' as const }
-                                            : m.status === 'half' ? { dayMark: 'Half' as const }
-                                            : m.shift === 'night' ? { nightMark: 'Worked' as const }
-                                            : m.shift === 'half' ? { dayMark: 'Half' as const }
-                                            : { dayMark: 'Full' as const }),
-                                    // Task 9 (B001) — refresh AFTER the queue rows
-                                    // exist, so the next register render composes
-                                    // the just-made marks (attendanceOverlay via
-                                    // useLabourState) instead of showing data that
-                                    // predates them; offline that refresh fails
-                                    // into the local-plane register, marks intact.
-                                    }))).then(() => { back(); showToast(ON_PHONE_MR); refresh(); })
-                                        .catch((error: unknown) => {
-                                            // Named landing place: nothing was queued for at least one
-                                            // mark, so neither navigate away nor claim remembering.
-                                            // 'पुन्हा प्रयत्न करा' is the feature's existing retry
-                                            // vocabulary (LabourUiKit.tsx) — no new Marathi.
-                                            console.error(JSON.stringify({
-                                                component: 'LabourFeature',
-                                                action: 'attendance_mark_enqueue_failed',
-                                                reason: error instanceof Error ? error.message : String(error),
-                                            }));
-                                            showToast('पुन्हा प्रयत्न करा');
-                                        });
-                                }}
-                                onToast={showToast}
-                            />
-                        )}
+                        {cur.name === 'attendance' && attendanceScreen}
                         {cur.name === 'dashboard' && (
                             <WeeklyDashboard
                                 data={data}
@@ -384,7 +525,7 @@ export const LabourFeature: React.FC<{
                 roster belongs to, and the local log the engagement id was
                 minted on. Both already exist here; neither is required, and
                 without them the sheet renders exactly as it did before. */}
-            <ReviewSheet open={reviewOpen} data={data} onClose={() => setReviewOpen(false)} onToast={showToast} onApproved={refresh} farmId={farm?.farmId} history={history} />
+            <ReviewSheet open={reviewOpen} data={data} onClose={() => setReviewOpen(false)} onToast={showToast} onApproved={refresh} farmId={farm?.farmId} history={history} reviewListUnknown={error} reviewListLoading={loading} />
 
             {cellDetail && (
                 <HajeriCellDetail

@@ -1,3 +1,4 @@
+using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using FluentAssertions;
@@ -24,7 +25,7 @@ public sealed class GetFieldOperatorsHandlerTests
     private static readonly Guid FarmAGuid = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static readonly Guid CallerGuid = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
 
-    private static GetFieldOperatorsHandler BuildHandler(FakeRepo repo) => new(repo);
+    private static GetFieldOperatorsHandler BuildHandler(FakeRepo repo) => new(repo, new FixedClock(Now));
 
     private static FieldOperator MakeOperator(Guid id, Guid farmGuid, string displayName, string? fullName = null) =>
         FieldOperator.Create(id, displayName, fullName, new FarmId(farmGuid), new UserId(CallerGuid), Now);
@@ -66,6 +67,38 @@ public sealed class GetFieldOperatorsHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Contain("Forbidden");
         repo.ListCalls.Should().Be(0, "a Forbidden caller must never reach the repository list read");
+    }
+
+    [Theory]
+    [InlineData(AppRole.Worker)]
+    [InlineData(AppRole.Agronomist)]
+    public async Task Own_row_roles_without_a_grant_are_refused_the_roster_with_a_read_forbidden_and_no_listing(AppRole role)
+    {
+        var repo = new FakeRepo();
+        repo.SetRole(FarmAGuid, CallerGuid, role);
+        repo.Seed(MakeOperator(Guid.NewGuid(), FarmAGuid, "बाळू"));
+        var handler = BuildHandler(repo);
+
+        var result = await handler.HandleAsync(new GetFieldOperatorsQuery(new FarmId(FarmAGuid), new UserId(CallerGuid)));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Kind.Should().Be(AgriSync.BuildingBlocks.Results.ErrorKind.Forbidden);
+        result.Error.Description.Should().NotContain("modify");
+        repo.ListCalls.Should().Be(0, "a refused caller must never reach the roster read");
+    }
+
+    [Fact]
+    public async Task A_worker_the_owner_granted_labour_management_keeps_the_roster()
+    {
+        var repo = new FakeRepo { Grant = true };
+        repo.SetRole(FarmAGuid, CallerGuid, AppRole.Worker);
+        repo.Seed(MakeOperator(Guid.NewGuid(), FarmAGuid, "बाळू"));
+        var handler = BuildHandler(repo);
+
+        var result = await handler.HandleAsync(new GetFieldOperatorsQuery(new FarmId(FarmAGuid), new UserId(CallerGuid)));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
     }
 
     [Fact]
@@ -123,8 +156,18 @@ public sealed class GetFieldOperatorsHandlerTests
 
     // ─── Test doubles ────────────────────────────────────────────────────────
 
+    private sealed class FixedClock(DateTime utcNow) : IClock
+    {
+        public DateTime UtcNow => utcNow;
+    }
+
     private sealed class FakeRepo : StubShramSafalRepository
     {
+        public bool Grant { get; init; }
+
+        public override Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, DateTime nowUtc, CancellationToken ct = default)
+            => Task.FromResult(Grant);
+
         private readonly Dictionary<(Guid farmId, Guid userId), AppRole> _roles = new();
         private readonly List<FieldOperator> _operators = new();
 

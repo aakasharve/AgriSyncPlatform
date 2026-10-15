@@ -3,44 +3,46 @@
  *
  * spec_id: voice-diary-e2e-2026-05-17 (Envelope G — Playwright e2e smoke)
  *
- * Verifies the full FullHistoryJournal consent lifecycle from the Farmer's
- * perspective:
+ * Verifies the full Settings -> Voice Diary journey from the Farmer's
+ * perspective, in NORMAL navigation (no test-only door):
  *
  *   1. Launch the app and log in (Purvesh fixture).
- *   2. Open Settings via the AppHeader Settings button.
- *   3. Toggle `VoiceRetainedConsentToggle` ON — the first-grant attestation
- *      banner (`VoiceRetainedFirstGrantBanner`) opens; click "I agree" to
- *      POST `fullHistoryJournal=true` to /shramsafal/consent/me.
- *   4. Mock-record a voice clip — seed Dexie `voiceClips` directly with a
- *      row that mirrors what `persistVoiceClip()` writes after MediaRecorder
- *      stops. Real MediaRecorder + getUserMedia is intentionally NOT exercised
- *      in this spec (existing specs 01-05 follow the same pattern of stubbing
- *      capture rather than driving the browser's media APIs).
- *   5. Navigate to the new 'voiceDiary' route via the consent toggle's
- *      "Open Voice Diary" link.
- *   6. Assert: the seeded clip appears on today's date — both the calendar
- *      day-cell dot and the DayClipList player card are visible.
- *   7. Navigate back to Settings; toggle the consent OFF (no first-grant
- *      modal on toggle-OFF — direct PUT).
- *   8. Attempt a new retained-tier persist by calling
- *      `/shramsafal/voice-diary/persist` directly with the user's bearer
- *      token (this is what `archiveToRetainedTierIfConsented` does after a
- *      Dexie write, and it is the hop the consent gate guards). Persist must
- *      fail closed.
- *   9. Assert two things on the diary:
- *       (a) Retention banner switches to the denied state.
- *       (b) The persist response carries the contract error
- *           `ShramSafal.ConsentRequired` (or a 4xx with the canonical body).
+ *   2. Open the Setup Hub (profile avatar in the header) and tap the
+ *      "Settings" row (data-testid hub-settings-voice-diary). The header gear
+ *      that used to lead here was removed with the floating header, and for a
+ *      while nothing in the signed-in app reached Settings at all; this step
+ *      is the regression guard for that.
+ *   3. Consent gate: the retention toggle starts OFF (server has no grant).
+ *      DECLINE path - toggle ON, the first-grant attestation opens, tap the
+ *      secondary "not now" button: the banner closes, the toggle stays OFF and
+ *      the server still has NO grant.
+ *   4. ACCEPT path - toggle ON, confirm: the server records
+ *      fullHistoryJournal=true and the toggle is ON.
+ *   5. Retention consent survives a full page reload (read back from the
+ *      server, not from component state).
+ *   6. Record a clip. On chromium this drives the REAL recorder (MediaRecorder
+ *      fed by Chromium's fake audio device: --use-fake-device-for-media-stream
+ *      --use-fake-ui-for-media-stream). WebKit has no fake audio device, so
+ *      the same row shape is seeded instead. Either way the clip must land in
+ *      the PER-USER database (AgriLogDB_u_<userId>), never the legacy
+ *      AgriLogDB.
+ *   7. Open the Voice Diary from the Settings link: the clip's calendar dot,
+ *      day list and player card are visible, with the granted retention banner.
+ *      PLAYBACK: tap play and assert the <audio> element actually advances.
+ *   8. The clip is still there after a reload (persisted in the per-user DB).
+ *   9. Revoke: toggle OFF opens the "stop future" confirmation; confirm. A
+ *      retained-tier persist attempt now fails closed with ConsentRequired,
+ *      the diary shows the denied banner, and the already-recorded clip is
+ *      still listed (revoking stops FUTURE retention, it does not delete).
  *
- * Mock-record rationale:
- *  The plan says "use a stub MediaRecorder or fixture upload — pattern
- *  depends on existing Playwright setup". Existing specs (02, 04) take the
- *  Dexie-seed / setInputFiles approach for the same reason: real
- *  getUserMedia is gated on browser permissions and Playwright's
- *  --permissions=microphone still cannot produce deterministic audio
- *  bytes. Seeding the Dexie row directly exercises the same display
- *  contract the VoiceDiaryPage reads (local clips before
- *  archiveToRetainedTierIfConsented runs).
+ * Recording rationale:
+ *  Playwright cannot produce deterministic audio bytes from a real microphone,
+ *  but Chromium's fake media device produces a synthetic tone stream that the
+ *  app's own MediaRecorder encodes, so the recorder -> Dexie write path is
+ *  exercised for real. What headless cannot prove: audible output (we assert
+ *  the media element's clock advances, not that sound reaches a speaker) and
+ *  the server-side AI parse of the clip (Sarvam/Gemini are not reachable from a
+ *  throwaway backend).
  *
  * Backend dependency:
  *  This spec requires the backend to be running with `ALLOW_E2E_SEED=true`
@@ -55,85 +57,145 @@
 import { test, expect, type Page } from '@playwright/test';
 import { resetAndSeed } from '../fixtures/seed.api';
 import { loginViaPassword } from '../fixtures/loginHelper';
+import { selectFirstPlotLogContext } from '../fixtures/logContextHelper';
 
 const PURVESH_PHONE = '8888888888';
 const PURVESH_PASSWORD = 'Testuser@123';
 
 const BACKEND_URL = process.env.E2E_API_URL ?? 'http://localhost:5000';
 
-// Deterministic clip identifier used by the seed + the persist attempt.
-// Format must be a UUID v4 because the backend's /voice-diary/persist
-// endpoint declares clipId as Guid. Generated once and reused so the
-// negative-path persist can target the same id without colliding with
-// the seeded local row.
+// UUID v4 (the backend declares clipId as Guid). Used for the seeded clip on
+// engines without a fake audio device, and for the negative-path persist.
 const SEEDED_CLIP_ID = '11111111-2222-3333-4444-555555555555';
 const NEGATIVE_PERSIST_CLIP_ID = '22222222-3333-4444-5555-666666666666';
 
+// Chromium's synthetic microphone (--use-fake-device-for-media-stream, microphone
+// permission) is configured per project in playwright.config.ts, for the
+// Chromium-based projects ONLY. WebKit rejects those switches at launch
+// ("Unknown option --use-fake-device-for-media-stream"), so the webkit project
+// must not receive them; it takes the seeded-clip branch below instead.
+
 interface AuthSessionShape {
     userId: string;
-    accessToken: string;
-    refreshToken: string;
-    expiresAtUtc: string;
 }
 
-/**
- * Open the AppHeader Settings button. The header is always mounted while
- * authenticated; the button is a `<button>` with an embedded Settings
- * lucide icon. The route transition is state-machine driven, not URL,
- * so we navigate by clicking — not page.goto.
- */
-async function openSettings(page: Page): Promise<void> {
-    // The Settings button lives in the sticky <header> AppHeader and has
-    // no data-testid today. Anchor on the embedded lucide-settings SVG,
-    // scoped to the <header> banner role so we don't race a Settings
-    // icon elsewhere on the page (e.g. SchedulerPage uses the same icon
-    // in its toolbar).
-    const settingsBtn = page.getByRole('banner').getByRole('button').filter({
-        has: page.locator('svg.lucide-settings'),
-    }).first();
-    await expect(settingsBtn).toBeVisible({ timeout: 15_000 });
-    await settingsBtn.click();
+// The access token is deliberately NOT persisted by the app (CodeQL
+// hardening), so the bearer is taken from the app's own API calls instead.
+const bearerByPage = new WeakMap<Page, { token: string | null }>();
 
-    // Anchor on the consent toggle wrapper — it is the canonical marker
-    // that the route-rendered SettingsPage (pages/SettingsPage.tsx) is
-    // mounted. The toggle is rendered immediately below the existing
-    // "Voice Journal" CTA card per D.19.
-    await expect(page.getByTestId('voice-retained-consent-toggle')).toBeVisible({
-        timeout: 15_000,
+function captureBearer(page: Page): void {
+    const box = { token: null as string | null };
+    bearerByPage.set(page, box);
+    page.on('request', (req) => {
+        if (!req.url().startsWith(BACKEND_URL)) return;
+        const auth = req.headers()['authorization'];
+        if (auth && auth.startsWith('Bearer ')) box.token = auth.slice('Bearer '.length);
     });
 }
 
-/**
- * Seed a single voice clip directly into Dexie `voiceClips` so the
- * VoiceDiaryPage's local-clip query (records where expiresAtUtc > now)
- * picks it up. This stands in for a successful `persistVoiceClip()`
- * call after MediaRecorder finishes — same row shape, same indexes.
- *
- * The seed deliberately omits ciphertext/iv/wrappedDekId. VoiceDiaryPage
- * does not read those fields; only DayClipList playback would, and
- * playback is gated on a "play" click that this spec does NOT exercise.
- */
-async function seedLocalVoiceClipForToday(page: Page, clipId: string): Promise<void> {
-    await page.evaluate(async ({ id }) => {
-        const nowMs = Date.now();
-        const expiryMs = nowMs + 30 * 24 * 60 * 60 * 1000;
-        const recordedAtUtc = new Date(nowMs).toISOString();
-        const expiresAtUtc = new Date(expiryMs).toISOString();
+async function bearerToken(page: Page): Promise<string> {
+    await expect
+        .poll(() => bearerByPage.get(page)?.token ?? null, { timeout: 15_000, message: 'app never sent an authenticated API call' })
+        .not.toBeNull();
+    return bearerByPage.get(page)!.token as string;
+}
 
-        await new Promise<void>((resolve, reject) => {
-            const req = indexedDB.open('AgriLogDB');
+async function readSession(page: Page): Promise<AuthSessionShape> {
+    const session = await page.evaluate(() => {
+        const raw = window.localStorage.getItem('agrisync_auth_session_v1');
+        if (!raw) return null;
+        try {
+            return JSON.parse(raw) as AuthSessionShape;
+        } catch {
+            return null;
+        }
+    });
+    if (!session?.userId) {
+        throw new Error('No session cached in localStorage - login likely failed');
+    }
+    return session;
+}
+
+/**
+ * The database the app routes this signed-in farmer to. Mirrors
+ * userDatabaseName.resolveDatabaseNameForUser: the farmer recorded as the
+ * device's first user adopts the legacy `AgriLogDB`; every other farmer gets
+ * `AgriLogDB_u_<id>`.
+ */
+async function activeDbName(page: Page): Promise<string> {
+    const { userId } = await readSession(page);
+    const owner = await page.evaluate(() => window.localStorage.getItem('agrisync_legacy_db_owner_v1'));
+    return owner === userId ? 'AgriLogDB' : `AgriLogDB_u_${encodeURIComponent(userId)}`;
+}
+
+/** Every IndexedDB database whose name starts with AgriLogDB. */
+async function listAgriDatabases(page: Page): Promise<string[]> {
+    return page.evaluate(async () =>
+        (await indexedDB.databases()).map((d) => d.name ?? '').filter((n) => n.startsWith('AgriLogDB')),
+    );
+}
+
+interface ClipRow {
+    id: string;
+    sizeBytes: number;
+    blobSize: number;
+    mimeType: string;
+}
+
+/** voiceClips rows from a named database; [] if the database is absent. */
+async function readVoiceClips(page: Page, dbName: string): Promise<ClipRow[]> {
+    return page.evaluate(async (name) => {
+        const names = (await indexedDB.databases()).map((d) => d.name);
+        if (!names.includes(name)) return [] as ClipRow[];
+        return new Promise<ClipRow[]>((resolve) => {
+            const req = indexedDB.open(name);
+            req.onerror = () => resolve([]);
             req.onsuccess = () => {
                 const db = req.result;
                 if (!db.objectStoreNames.contains('voiceClips')) {
                     db.close();
-                    reject(new Error('voiceClips store missing from AgriLogDB'));
+                    resolve([]);
                     return;
                 }
-                const tx = db.transaction('voiceClips', 'readwrite');
-                const store = tx.objectStore('voiceClips');
-                const row = {
+                const all = db.transaction('voiceClips', 'readonly').objectStore('voiceClips').getAll();
+                all.onsuccess = () => {
+                    db.close();
+                    resolve(
+                        (all.result as Array<Record<string, unknown>>).map((r) => ({
+                            id: String(r.id),
+                            sizeBytes: Number(r.sizeBytes ?? 0),
+                            blobSize: r.localBlob instanceof Blob ? r.localBlob.size : 0,
+                            mimeType: String(r.mimeType ?? ''),
+                        })),
+                    );
+                };
+                all.onerror = () => {
+                    db.close();
+                    resolve([]);
+                };
+            };
+        });
+    }, dbName);
+}
+
+/** Seed one voice clip into the PER-USER database (engines without a fake mic). */
+async function seedLocalVoiceClip(page: Page, dbName: string, clipId: string): Promise<void> {
+    await page.evaluate(async ({ id, name }) => {
+        const nowMs = Date.now();
+        const recordedAtUtc = new Date(nowMs).toISOString();
+        const expiresAtUtc = new Date(nowMs + 30 * 24 * 60 * 60 * 1000).toISOString();
+        await new Promise<void>((resolve, reject) => {
+            const req = indexedDB.open(name);
+            req.onerror = () => reject(new Error(`${name} open failed`));
+            req.onsuccess = () => {
+                const db = req.result;
+                if (!db.objectStoreNames.contains('voiceClips')) {
+                    db.close();
+                    reject(new Error(`voiceClips store missing from ${name}`));
+                    return;
+                }
+                const put = db.transaction('voiceClips', 'readwrite').objectStore('voiceClips').put({
                     id,
-                    // farmId left blank — VoiceDiaryPage does not filter on it.
                     farmId: '00000000-0000-0000-0000-000000000001',
                     recordedAtUtc,
                     durationMs: 4500,
@@ -144,49 +206,55 @@ async function seedLocalVoiceClipForToday(page: Page, clipId: string): Promise<v
                     expiresAtUtc,
                     createdAt: recordedAtUtc,
                     updatedAt: recordedAtUtc,
-                };
-                const putReq = store.put(row);
-                putReq.onsuccess = () => {
+                });
+                put.onsuccess = () => {
                     db.close();
                     resolve();
                 };
-                putReq.onerror = () => {
+                put.onerror = () => {
                     db.close();
                     reject(new Error('voiceClips put failed'));
                 };
             };
-            req.onerror = () => reject(new Error('AgriLogDB open failed'));
         });
-    }, { id: clipId });
+    }, { id: clipId, name: dbName });
 }
 
 /**
- * Read the bearer token the app cached after login. Used by the
- * negative-path persist that calls the backend directly outside the
- * app's axios instance — we need to mirror the same Authorization
- * header the app would have sent.
+ * Normal navigation to Settings: header profile avatar -> Setup Hub ->
+ * "Settings" row. The route is state-machine driven (not URL), so we walk it
+ * by tapping, exactly like a farmer.
  */
-async function readBearerToken(page: Page): Promise<string> {
-    const session = await page.evaluate(() => {
-        const raw = window.localStorage.getItem('agrisync_auth_session_v1');
-        if (!raw) return null;
-        try {
-            return JSON.parse(raw) as AuthSessionShape;
-        } catch {
-            return null;
-        }
+async function openSettings(page: Page): Promise<void> {
+    const avatar = page.getByTestId('header-setup-hub');
+    await expect(avatar).toBeVisible({ timeout: 15_000 });
+    await avatar.click();
+
+    const settingsRow = page.getByTestId('hub-settings-voice-diary');
+    await settingsRow.scrollIntoViewIfNeeded();
+    await expect(settingsRow).toBeVisible({ timeout: 10_000 });
+    await settingsRow.click();
+
+    // The consent toggle is the canonical marker that pages/SettingsPage.tsx
+    // is mounted (rendered right under the Voice Journal card).
+    await expect(page.getByTestId('voice-retained-consent-toggle')).toBeVisible({ timeout: 15_000 });
+}
+
+/** The consent state exactly as the server holds it. */
+async function readServerConsent(page: Page): Promise<{ status: number; fullHistoryJournal: boolean }> {
+    const accessToken = await bearerToken(page);
+    const res = await page.request.get(`${BACKEND_URL}/shramsafal/consent/me`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        failOnStatusCode: false,
     });
-    if (!session?.accessToken) {
-        throw new Error('No accessToken cached in localStorage — login likely failed');
-    }
-    return session.accessToken;
+    if (!res.ok()) return { status: res.status(), fullHistoryJournal: false };
+    const body = (await res.json().catch(() => ({}))) as { fullHistoryJournal?: boolean };
+    return { status: res.status(), fullHistoryJournal: body.fullHistoryJournal === true };
 }
 
 /**
- * Open the Voice Diary surface from the Settings consent toggle. The
- * toggle renders an "Open Voice Diary" link (data-testid
- * `voice-retained-open-diary`) when an `onOpenVoiceDiary` prop is wired
- * — which `pages/SettingsPage.tsx` does (D.19).
+ * Open the Voice Diary from the Settings consent toggle's "Open Voice Diary"
+ * link (data-testid voice-retained-open-diary).
  */
 async function openVoiceDiary(page: Page): Promise<void> {
     const openLink = page.getByTestId('voice-retained-open-diary');
@@ -195,154 +263,209 @@ async function openVoiceDiary(page: Page): Promise<void> {
     await expect(page.getByTestId('voice-diary-page')).toBeVisible({ timeout: 15_000 });
 }
 
+/** IST-adjusted date key, same arithmetic as the app's DateKeyService. */
+async function todayKeyIst(page: Page): Promise<string> {
+    return page.evaluate(() => {
+        const ist = new Date(Date.now() + 330 * 60 * 1000);
+        const y = ist.getUTCFullYear();
+        const m = String(ist.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(ist.getUTCDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    });
+}
+
+/**
+ * Drive the real recorder: pick a plot, switch to voice input, start, let the
+ * fake tone run for ~3 s, stop. Returns the id of the voiceClips row that the
+ * app wrote into the per-user database.
+ */
+async function recordClipWithFakeMic(page: Page, dbName: string): Promise<string> {
+    await selectFirstPlotLogContext(page);
+    await page.getByTestId('input-method-voice').click();
+
+    const startBtn = page.getByRole('button', { name: 'Start Recording' });
+    await expect(startBtn).toBeVisible({ timeout: 15_000 });
+    await startBtn.click();
+
+    const stopBtn = page.getByRole('button', { name: 'Stop Recording' });
+    await expect(stopBtn).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(3_000);
+    await stopBtn.click();
+
+    await expect
+        .poll(async () => (await readVoiceClips(page, dbName)).length, {
+            timeout: 30_000,
+            message: 'recorder wrote no voiceClips row to the per-user DB',
+        })
+        .toBeGreaterThan(0);
+    const clips = await readVoiceClips(page, dbName);
+    return clips[0].id;
+}
+
 test.describe('Voice Diary consent gate @persona:Farmer', () => {
-    test('grant → record → diary shows clip; revoke → persist fails with ConsentRequired @persona:Farmer', async ({ page }) => {
+    test('Settings -> decline/accept retention consent -> record -> play -> reload -> revoke @persona:Farmer', async ({ page, browserName }) => {
+        test.setTimeout(180_000);
         await resetAndSeed('purvesh-demo');
 
-        // --- 1. Launch + login ------------------------------------------
-        await loginViaPassword(page, PURVESH_PHONE, PURVESH_PASSWORD);
+        // Shared-handset scenario: another farmer used this device first and
+        // adopted the legacy `AgriLogDB`, so Purvesh is routed to his OWN
+        // per-user database (AgriLogDB_u_<id>) - the path this journey must
+        // prove. Set once, before any app code runs, and kept across reloads.
+        await page.addInitScript(() => {
+            if (!window.localStorage.getItem('agrisync_legacy_db_owner_v1')) {
+                window.localStorage.setItem('agrisync_legacy_db_owner_v1', 'e2e-previous-farmer-on-this-handset');
+            }
+        });
 
-        // --- 2. Navigate to Settings ------------------------------------
+        // --- 1. Launch + login -------------------------------------------
+        captureBearer(page);
+        await loginViaPassword(page, PURVESH_PHONE, PURVESH_PASSWORD);
+        const dbName = await activeDbName(page);
+        expect(dbName).toMatch(/^AgriLogDB_u_/);
+        await expect
+            .poll(async () => listAgriDatabases(page), { timeout: 20_000, message: 'per-user database was never created' })
+            .toContain(dbName);
+
+        // --- 2. Settings is reachable in normal navigation ----------------
         await openSettings(page);
 
-        // --- 3. Toggle FullHistoryJournal ON via the checkbox; expect
-        //       the first-grant attestation modal to appear, then click
-        //       "I agree" to persist the grant. --------------------------
+        // --- 3. Consent gate: starts OFF; DECLINE keeps it OFF ------------
         const consentCheckbox = page.getByTestId('voice-retained-consent-checkbox');
         await expect(consentCheckbox).toBeVisible({ timeout: 10_000 });
-        // Sanity: the checkbox starts OFF because /__e2e/reset wipes any
-        // prior user_consents row written by an earlier run. (The endpoint
-        // returns 404 → useFullHistoryJournalConsent defaults to false.)
-        await expect(consentCheckbox).not.toBeChecked();
-        // NOTE: this is a *controlled* checkbox — VoiceRetainedConsentToggle
-        // intercepts the first ON click and opens the first-grant attestation
-        // modal BEFORE persisting (server PUT) and BEFORE the controlled
-        // `checked` state flips. Playwright's `.check()` asserts post-click
-        // state and would fail here because the state stays false until the
-        // modal flow completes. Use `.click()` (no post-state assertion); the
-        // explicit `toBeChecked` assertion after the modal confirm validates
-        // the eventual real outcome.
-        await consentCheckbox.click();
+        // /__e2e/reset does NOT clear ssf.user_consent_state (verified against
+        // the schema: the row survives a reset, keyed on the fixture's fixed
+        // user id), so a previous run may have left a grant behind. Start from
+        // a known OFF state through the same UI a farmer would use.
+        if (await consentCheckbox.isChecked()) {
+            await consentCheckbox.click();
+            await page.getByTestId('voice-retained-stop-future-confirm').click();
+        }
+        await expect(consentCheckbox).not.toBeChecked({ timeout: 10_000 });
+        expect((await readServerConsent(page)).fullHistoryJournal).toBe(false);
 
+        // The checkbox is controlled: the first ON tap opens the attestation
+        // and the state only flips after the server round-trip, so use
+        // click() (not check()) and assert the eventual outcome.
+        await consentCheckbox.click();
         const firstGrantBanner = page.getByTestId('voice-retained-first-grant-banner');
+        await expect(firstGrantBanner).toBeVisible({ timeout: 5_000 });
+        await page.getByTestId('voice-retained-first-grant-dismiss').click();
+        await expect(firstGrantBanner).toBeHidden({ timeout: 5_000 });
+        await expect(consentCheckbox).not.toBeChecked();
+        // Declining must not have written anything to the server.
+        expect((await readServerConsent(page)).fullHistoryJournal).toBe(false);
+
+        // --- 4. ACCEPT: confirm the attestation ---------------------------
+        await consentCheckbox.click();
         await expect(firstGrantBanner).toBeVisible({ timeout: 5_000 });
         const confirmBtn = page.getByTestId('voice-retained-first-grant-confirm');
         await expect(confirmBtn).toBeEnabled({ timeout: 5_000 });
         await confirmBtn.click();
-
-        // Modal closes + reload() re-fetches consent + checkbox is now ON.
         await expect(firstGrantBanner).toBeHidden({ timeout: 10_000 });
         await expect(consentCheckbox).toBeChecked({ timeout: 10_000 });
+        await expect.poll(async () => (await readServerConsent(page)).fullHistoryJournal, { timeout: 10_000 }).toBe(true);
 
-        // --- 4. Mock-record a voice clip --------------------------------
-        // Seed Dexie directly (see helper docstring for rationale).
-        await seedLocalVoiceClipForToday(page, SEEDED_CLIP_ID);
-
-        // --- 5. Navigate to the Voice Diary -----------------------------
-        await openVoiceDiary(page);
-
-        // --- 6. Assert the seeded clip surfaces on today's date ---------
-        // VoiceDiaryPage auto-advances `selectedDateKey` to the most
-        // recent day that has clips. Today's date is the seed's date, so
-        // the calendar should show a dot AND the DayClipList should
-        // render a player card.
-        //
-        // Date key must be computed IST-adjusted (the app's canonical
-        // DateKeyService logic) — naive `toISOString().slice(0,10)` would
-        // mis-key around the IST midnight boundary. Compute it in-page
-        // using the same IST offset constant the service uses.
-        const todayKey = await page.evaluate(() => {
-            const IST_OFFSET_MINUTES = 330;
-            const istMs = Date.now() + IST_OFFSET_MINUTES * 60 * 1000;
-            const ist = new Date(istMs);
-            const y = ist.getUTCFullYear();
-            const m = String(ist.getUTCMonth() + 1).padStart(2, '0');
-            const d = String(ist.getUTCDate()).padStart(2, '0');
-            return `${y}-${m}-${d}`;
-        });
-        const dayCell = page.getByTestId(`voice-diary-calendar-cell-${todayKey}`);
-        await expect(dayCell).toBeVisible({ timeout: 15_000 });
-
-        const dayList = page.getByTestId('voice-diary-day-list');
-        await expect(dayList).toBeVisible({ timeout: 10_000 });
-        // ClipPlayerCard testid is `voice-diary-clip-card-${clip.id}` so
-        // we can target the seeded clip exactly. If the testid scheme
-        // changes upstream, the prefix locator below picks up any card.
-        const seededCard = page.getByTestId(`voice-diary-clip-card-${SEEDED_CLIP_ID}`);
-        await expect(seededCard).toBeVisible({ timeout: 10_000 });
-
-        // While consent is granted, the granted-state retention banner
-        // is the one that renders.
-        await expect(
-            page.getByTestId('voice-diary-retention-banner-granted'),
-        ).toBeVisible({ timeout: 5_000 });
-
-        // --- 7. Back to Settings; toggle OFF ----------------------------
+        // --- 5. Retention consent survives a full reload -------------------
+        await page.reload();
+        await expect(page.getByTestId('main-view-transition')).toBeVisible({ timeout: 30_000 });
         await openSettings(page);
-        // Toggle OFF path does NOT open the first-grant modal (only ON
-        // from a never-granted state does). The checkbox uncheck PUTs
-        // fullHistoryJournal=false directly.
+        await expect(page.getByTestId('voice-retained-consent-checkbox')).toBeChecked({ timeout: 10_000 });
+
+        // --- 6. Record a clip (real recorder on chromium) -----------------
+        // A reload lands on Home, where the recorder lives.
+        await page.reload();
+        await expect(page.getByTestId('main-view-transition')).toBeVisible({ timeout: 30_000 });
+        let clipId: string;
+        if (browserName === 'chromium') {
+            clipId = await recordClipWithFakeMic(page, dbName);
+            const row = (await readVoiceClips(page, dbName)).find((r) => r.id === clipId)!;
+            // A real recording: non-empty audio bytes were stored.
+            expect(row.blobSize).toBeGreaterThan(0);
+            expect(row.mimeType).toMatch(/audio\//);
+            test.info().annotations.push({ type: 'recorded-clip', description: `${clipId} ${row.mimeType} ${row.blobSize} bytes in ${dbName}` });
+        } else {
+            clipId = SEEDED_CLIP_ID;
+            await seedLocalVoiceClip(page, dbName, clipId);
+        }
+        // Written to the per-user DB; neither the other farmer's legacy DB nor
+        // the pre-identity boundary received it.
+        expect((await readVoiceClips(page, dbName)).some((r) => r.id === clipId)).toBe(true);
+        expect(await readVoiceClips(page, 'AgriLogDB')).toEqual([]);
+        expect(await readVoiceClips(page, 'AgriLogDB_unidentified')).toEqual([]);
+
+        // --- 7. Voice Diary shows the clip; playback advances --------------
+        await openSettings(page);
+        await openVoiceDiary(page);
+        const todayKey = await todayKeyIst(page);
+        await expect(page.getByTestId(`voice-diary-calendar-cell-${todayKey}`)).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId('voice-diary-day-list')).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByTestId(`voice-diary-clip-card-${clipId}`)).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByTestId('voice-diary-retention-banner-granted')).toBeVisible({ timeout: 5_000 });
+
+        if (browserName === 'chromium') {
+            // Real audio: tapping play must start the media element and its
+            // clock must advance (headless cannot prove it is audible).
+            await page.getByTestId(`voice-diary-clip-play-${clipId}`).click();
+            await expect
+                .poll(
+                    async () =>
+                        page.evaluate(() => {
+                            const a = document.querySelector('audio');
+                            return a ? a.currentTime > 0 || (!a.paused && !a.ended) : false;
+                        }),
+                    { timeout: 10_000, message: 'audio element never started playing' },
+                )
+                .toBe(true);
+        }
+
+        // --- 8. Clip survives a reload (persisted per-user) ----------------
+        await page.reload();
+        await expect(page.getByTestId('main-view-transition')).toBeVisible({ timeout: 30_000 });
+        expect((await readVoiceClips(page, dbName)).some((r) => r.id === clipId)).toBe(true);
+        await openSettings(page);
+        await openVoiceDiary(page);
+        await expect(page.getByTestId(`voice-diary-clip-card-${clipId}`)).toBeVisible({ timeout: 15_000 });
+
+        // --- 9. Revoke: stop-future confirmation, then fail-closed persist --
+        await openSettings(page);
         await expect(consentCheckbox).toBeChecked();
-        // OFF transition does NOT open the modal — VoiceRetainedConsentToggle
-        // falls through to a direct PUT + reload, but the controlled `checked`
-        // attribute only flips after the network round-trip resolves. Playwright's
-        // `.uncheck()` would assert post-click state synchronously and race the
-        // reload. Use `.click()` + the eventual `not.toBeChecked` assertion below.
         await consentCheckbox.click();
-        // The first-grant banner must NOT appear on the OFF transition.
-        await expect(firstGrantBanner).toBeHidden({ timeout: 5_000 });
-        // After reload, the checkbox lands on unchecked.
+        // Turning OFF asks first and says what it does NOT do.
+        const stopBanner = page.getByTestId('voice-retained-stop-future-banner');
+        await expect(stopBanner).toBeVisible({ timeout: 5_000 });
+        await page.getByTestId('voice-retained-stop-future-confirm').click();
+        await expect(stopBanner).toBeHidden({ timeout: 10_000 });
         await expect(consentCheckbox).not.toBeChecked({ timeout: 10_000 });
+        await expect.poll(async () => (await readServerConsent(page)).fullHistoryJournal, { timeout: 10_000 }).toBe(false);
 
-        // --- 8. Attempt a new retained-tier persist directly against the
-        //       backend with the user's bearer token. This mirrors what
-        //       the in-app `archiveToRetainedTierIfConsented` would do
-        //       after a fresh recording sealed into Dexie. ---------------
-        const accessToken = await readBearerToken(page);
-        const persistResponse = await page.request.post(
-            `${BACKEND_URL}/shramsafal/voice-diary/persist`,
-            {
-                headers: {
-                    Authorization: `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json',
-                },
-                data: {
-                    clipId: NEGATIVE_PERSIST_CLIP_ID,
-                    recordedAtUtc: new Date().toISOString(),
-                    // Minimal but well-formed cipher payload — the consent
-                    // gate fires BEFORE shape validation, so these bytes
-                    // never reach storage. We supply realistic base64 to
-                    // avoid a false-positive 400 from payload checks.
-                    cipherBase64: 'AAAAAAAAAAAAAAAAAAAAAA==',
-                    dekId: 'test-dek-id',
-                    ivBase64: 'AAAAAAAAAAAAAAAA',
-                    authTagBase64: 'AAAAAAAAAAAAAAAAAAAAAA==',
-                    durationSeconds: 4,
-                    language: 'mr-IN',
-                },
-                failOnStatusCode: false,
+        // A new retained-tier persist (the hop archiveToRetainedTierIfConsented
+        // makes after a Dexie write) must fail closed with ConsentRequired.
+        const accessToken = await bearerToken(page);
+        const persistResponse = await page.request.post(`${BACKEND_URL}/shramsafal/voice-diary/persist`, {
+            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            data: {
+                clipId: NEGATIVE_PERSIST_CLIP_ID,
+                recordedAtUtc: new Date().toISOString(),
+                // Well-formed but meaningless cipher payload: the consent gate
+                // fires BEFORE shape validation, so it never reaches storage.
+                cipherBase64: 'AAAAAAAAAAAAAAAAAAAAAA==',
+                dekId: 'test-dek-id',
+                ivBase64: 'AAAAAAAAAAAAAAAA',
+                authTagBase64: 'AAAAAAAAAAAAAAAAAAAAAA==',
+                durationSeconds: 4,
+                language: 'mr-IN',
             },
-        );
-
-        // --- 9. Assert persist fails closed with the canonical contract
-        //       error AND the diary UI surfaces the denied-state banner.
+            failOnStatusCode: false,
+        });
         expect(persistResponse.ok()).toBeFalsy();
-        // Per ShramSafal.Domain ConsentRequired error mapped through
-        // ToErrorResult: ErrorKind.Forbidden → 403. (The handler also
-        // rejects with Validation in some shape-violation paths; the
-        // canonical consent-deny response code is 403 with body
-        // `{ error: "ShramSafal.ConsentRequired", ... }`.)
+        // ErrorKind.Forbidden -> 403 (some shape-violation paths answer 400).
         expect([400, 403]).toContain(persistResponse.status());
         const persistBody = await persistResponse.json().catch(() => ({}));
         expect(JSON.stringify(persistBody)).toMatch(/ConsentRequired/i);
 
-        // Re-open the diary and confirm the denied-state retention banner
-        // is now showing (proves the UI reads the revoked consent state
-        // — the existing diary tab was opened pre-revoke; we re-navigate
-        // so the page mounts with the new consent value).
+        // Re-open the diary: denied banner, and the recorded clip is kept.
         await openVoiceDiary(page);
-        await expect(
-            page.getByTestId('voice-diary-retention-banner-denied'),
-        ).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByTestId('voice-diary-retention-banner-denied')).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByTestId(`voice-diary-clip-card-${clipId}`)).toBeVisible({ timeout: 10_000 });
     });
 });

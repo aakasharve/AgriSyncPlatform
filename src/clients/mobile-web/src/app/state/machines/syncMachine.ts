@@ -33,7 +33,9 @@ export type SyncEvent =
     | { type: 'MUTATION_REJECTED'; mutationId: string; reason: string; hint?: string }
     | { type: 'CONFLICT_RESOLVED'; mutationId: string }
     | { type: 'GO_OFFLINE' }
-    | { type: 'GO_ONLINE' };
+    | { type: 'GO_ONLINE' }
+    /** The signed-in user changed (logout / switch): forget the previous user's in-memory badge state. */
+    | { type: 'RESET' };
 
 export const syncMachine = setup({
     types: {} as { context: SyncContext; events: SyncEvent },
@@ -69,6 +71,7 @@ export const syncMachine = setup({
             },
         }),
         stampSync: assign({ lastSyncAtMs: () => Date.now() }),
+        resetForUserChange: assign({ rejectedMutations: () => [], lastSyncAtMs: () => null }),
     },
     guards: {
         hasNoConflictsAfterEvent: ({ context, event }) => {
@@ -113,6 +116,7 @@ export const syncMachine = setup({
                 MUTATION_REJECTED: { target: 'conflict', actions: 'appendRejection' },
                 CONFLICT_RESOLVED: { actions: 'removeResolution' },
                 GO_OFFLINE: 'offline',
+                RESET: { target: 'idle', actions: 'resetForUserChange', reenter: true },
             },
         },
         syncing: {
@@ -124,6 +128,7 @@ export const syncMachine = setup({
                 MUTATION_REJECTED: { target: 'conflict', actions: 'appendRejection' },
                 CONFLICT_RESOLVED: { actions: 'removeResolution' },
                 GO_OFFLINE: 'offline',
+                RESET: { target: 'idle', actions: 'resetForUserChange', reenter: true },
             },
         },
         conflict: {
@@ -135,10 +140,12 @@ export const syncMachine = setup({
                 MUTATION_REJECTED: { actions: 'appendRejection' },
                 TRIGGER: 'syncing',
                 GO_OFFLINE: 'offline',
+                RESET: { target: 'idle', actions: 'resetForUserChange' },
             },
         },
         offline: {
-            on: { GO_ONLINE: 'idle' },
+            // RESET keeps 'offline': connectivity is a device fact, not a user's.
+            on: { GO_ONLINE: 'idle', RESET: { actions: 'resetForUserChange' } },
         },
     },
 });

@@ -52,6 +52,7 @@ import { useOpenSurfaceRequest } from '../../oversight/useOpenSurfaceRequest';
 import { useOversightAcknowledgement } from '../../oversight/useOversightAcknowledgement';
 import { LocalOversightAcknowledgementStore } from '../../../infrastructure/storage/LocalOversightAcknowledgementStore';
 import { systemClock } from '../../../core/domain/services/Clock';
+import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 
 interface AppHeaderProps {
   currentRoute: AppRoute;
@@ -173,6 +174,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   const [isSyncDrawerOpen, setIsSyncDrawerOpen] = React.useState(false);
   const [isFarmSwitcherOpen, setIsFarmSwitcherOpen] = React.useState(false);
   const [isWaitingDrawerOpen, setIsWaitingDrawerOpen] = React.useState(false);
+  // spec: 2026-08-25-prod-cutover-waves — hardware Back closes these first.
+  // (SyncStatusDrawer registers itself.)
+  useBackDismiss(isFarmSwitcherOpen, () => setIsFarmSwitcherOpen(false));
+  useBackDismiss(isWaitingDrawerOpen, () => setIsWaitingDrawerOpen(false));
   const queueStatus = useSyncQueueStatus();
 
   // FINDING F6 — the one class of dropped record `queueStatus` structurally

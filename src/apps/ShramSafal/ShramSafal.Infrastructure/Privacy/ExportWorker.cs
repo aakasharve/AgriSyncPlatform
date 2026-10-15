@@ -12,7 +12,7 @@
 //        /audit_events.json
 //        /cross_border_transfers.json
 //        /dpa_registry.json
-//        /README.md (LEGAL_REVIEW_PENDING-tagged)
+//        /README.md
 //   2. Uploads via IRawBlobStore (content-addressed: the ZIP's SHA-256
 //      is the object key) + records the path in ssf.export_artifacts.
 //   3. Emits AuditEvent entityType=DataExport action=Generated.
@@ -233,7 +233,7 @@ public sealed class ExportWorker(
 
             // Voice clips deferred to Phase 07 (voice_clips_retained).
             await WriteTextEntryAsync(zip, "voice/README.txt",
-                "[LEGAL_REVIEW_PENDING] Raw voice clip export becomes available once Phase 07 voice_clips_retained ships.",
+                "Raw voice clips are not yet included in this archive.",
                 ct).ConfigureAwait(false);
 
             await WriteTextEntryAsync(zip, "README.md", BuildReadmeMarkdown(userId, requestId, nowUtc), ct).ConfigureAwait(false);
@@ -410,9 +410,6 @@ VALUES ({0}, {1}, {2}, {3}, {4});";
         await s.WriteAsync(bytes.AsMemory(), ct).ConfigureAwait(false);
     }
 
-    // LEGAL_REVIEW_PENDING: README intentionally carries the marker
-    // until counsel finalizes copy. Mirrors the OQ-7 i18n convention.
-    //
     // (Comments moved above the signature from between `=>` and the expression:
     // `dotnet format` cannot lay that shape out and reports WHITESPACE errors it
     // will not auto-fix, which blocks the pre-commit hook for anyone who stages
@@ -420,10 +417,9 @@ VALUES ({0}, {1}, {2}, {3}, {4});";
     // semantic or output change to the exported README.)
     private static string BuildReadmeMarkdown(Guid userId, Guid requestId, DateTime generatedAtUtc) =>
         $"""
-        <!-- LEGAL_REVIEW_PENDING: counsel must finalize this README before counsel-clearance gate -->
         # AgriSync — Your Data Export
 
-        [LEGAL_REVIEW_PENDING] This archive contains the personal data AgriSync holds about you.
+        This archive contains part of the personal data AgriSync holds about you: your consent and audit records. Transcripts, parsed records and raw voice clips are not included yet (see Contents).
 
         - **User ID**: {userId}
         - **Request ID**: {requestId}

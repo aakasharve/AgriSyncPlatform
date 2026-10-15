@@ -7,6 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
+import { onActiveDatabaseChanged } from '../../infrastructure/storage/activeDatabaseName';
 
 /**
  * @returns `[value, setValue, loaded]`.
@@ -19,9 +20,32 @@ import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
  * read as `false`). Appended as a THIRD element so every existing
  * `const [v, set] = useUiPref(...)` is untouched.
  */
-export function useUiPref<T>(key: string, fallback: T): readonly [T, (next: T) => void, boolean] {
+export function useUiPref<T>(
+    key: string,
+    fallback: T,
+    options?: { rereadOnDatabaseChange?: boolean },
+): readonly [T, (next: T) => void, boolean] {
     const [value, setValue] = useState<T>(fallback);
     const [loaded, setLoaded] = useState(false);
+    const reread = options?.rereadOnDatabaseChange === true;
+    // Bumped when the active per-farmer database changes (login / logout). Only subscribed
+    // when the caller opts in: a device-level decision (the consent gate) is stored in ONE
+    // database but read while ANOTHER may be active, so a read taken before the switch is
+    // not the answer after it.
+    const [dbEpoch, setDbEpoch] = useState(0);
+
+    useEffect(() => {
+        if (!reread) return;
+        return onActiveDatabaseChanged(() => {
+            // Back to "don't know yet" in the same breath as the switch, so the caller
+            // never acts on the previous database's answer (no flash of a wrong screen).
+            setLoaded(false);
+            setValue(fallback);
+            setDbEpoch((n) => n + 1);
+        });
+        // fallback is a literal at the call sites that opt in
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [reread]);
 
     useEffect(() => {
         let cancelled = false;
@@ -40,7 +64,7 @@ export function useUiPref<T>(key: string, fallback: T): readonly [T, (next: T) =
             }
         })();
         return () => { cancelled = true; };
-    }, [key]);
+    }, [key, dbEpoch]);
 
     const update = (next: T) => {
         setValue(next);

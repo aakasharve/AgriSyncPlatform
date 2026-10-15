@@ -48,7 +48,8 @@ const mockLogin = vi.fn();
 vi.mock('../../api/AgriSyncClient', () => ({
     agriSyncClient: {
         get refreshSession() { return mockRefreshSession; },
-        get logoutCurrentDevice() { return mockLogoutCurrentDevice; },
+        get completePendingLogout() { return mockLogoutCurrentDevice; },
+        beginLogout: vi.fn(() => Promise.resolve()),
         get login() { return mockLogin; },
         register: vi.fn(),
     },

@@ -18,8 +18,12 @@ import {
     isNativeSecureRefreshEnabled,
     setNativeRefreshSession,
     getNativeRefreshSession,
-    clearNativeRefreshSession,
+    stashPendingRevoke,
+    getPendingRevoke,
+    clearPendingRevoke,
 } from '../../storage/RefreshSessionStore';
+import { markPendingLogout, clearPendingLogout, hasPendingLogout } from '../../storage/PendingLogoutStore';
+import { categorizePushFailure } from '../../sync/RejectionPolicy';
 
 /**
  * Writes the native refresh token to the Android Keystore after a successful
@@ -75,33 +79,65 @@ export async function getMeContext(t: HttpTransport): Promise<import('../../../c
 }
 
 /**
- * POST /user/auth/logout — revoke the CURRENT device session.
+ * LOGOUT is two steps, so the farmer is signed out locally AT ONCE and the
+ * server revoke can finish later if the phone is offline.
+ *
+ * 1. beginLogout() - local and fast, no network. Records the NON-SECRET
+ *    pending-logout marker, and on Android MOVES the Keystore refresh token into
+ *    the separate pending-revoke slot (never used for refresh; deleted when the
+ *    revoke is judged or once the server credential has expired, 30 days). The caller then clears the live
+ *    session. From this moment boot will not re-authenticate.
+ * 2. completePendingLogout() - POST /user/auth/logout (AllowAnonymous; web
+ *    carries the HttpOnly cookie, Android sends the slot's token). Reached
+ *    server (2xx) or the server judged it (any non-transport answer) => clear
+ *    marker + slot. No response => leave both and report 'retry'; it is run
+ *    again on every boot and 'online' event.
+ *
  * spec: secure-remembered-device-sessions-2026-06-24 / Task 6.1
- *
- * Web: the HttpOnly agrisync_refresh cookie is sent automatically via
- * withCredentials. No body is required.
- *
- * Android/native: the backend is AllowAnonymous on /logout so the bearer is
- * not required. We read the Keystore refresh token and send it in the body so
- * the server can look up the session row by token hash and revoke it — even
- * when the 15-min access token has already expired.
- * After the POST we clear the local Keystore entry regardless of outcome.
  */
-export async function logout(t: HttpTransport): Promise<void> {
+export async function beginLogout(): Promise<void> {
     if (isNativeSecureRefreshEnabled()) {
-        // Native path: send the Keystore token so the server can revoke by hash.
         const stored = await getNativeRefreshSession();
-        try {
-            await t.authHttp.post('/user/auth/logout', stored ? { refreshToken: stored.refreshToken } : undefined);
-        } finally {
-            // Always clear local Keystore entry — even on network failure the user
-            // intends to log out on this device.
-            await clearNativeRefreshSession();
+        if (stored) {
+            try {
+                await stashPendingRevoke(stored.refreshToken);
+            } catch {
+                // If the slot cannot be written we still sign out locally below;
+                // the server credential then simply ages out on the server (its 30-day life).
+            }
         }
-    } else {
-        // Web path: cookie carries the token (withCredentials); no body needed.
-        await t.authHttp.post('/user/auth/logout');
     }
+    markPendingLogout();
+}
+
+export type PendingLogoutResult = 'none' | 'done' | 'retry';
+
+export async function completePendingLogout(t: HttpTransport): Promise<PendingLogoutResult> {
+    const native = isNativeSecureRefreshEnabled();
+    const nativeToken = native ? await getPendingRevoke() : null;
+    if (!hasPendingLogout() && nativeToken === null) {
+        return 'none';
+    }
+
+    try {
+        if (native) {
+            if (nativeToken !== null) {
+                await t.authHttp.post('/user/auth/logout', { refreshToken: nativeToken });
+            }
+        } else {
+            await t.authHttp.post('/user/auth/logout');
+        }
+    } catch (error) {
+        if (categorizePushFailure(error) === 'TRANSPORT') {
+            return 'retry';
+        }
+        // The server answered and refused: there is nothing it will revoke by
+        // asking again. Fall through and clear.
+    }
+
+    await clearPendingRevoke();
+    clearPendingLogout();
+    return 'done';
 }
 
 /** GET /accounts/affiliation/stats — referral counters. */

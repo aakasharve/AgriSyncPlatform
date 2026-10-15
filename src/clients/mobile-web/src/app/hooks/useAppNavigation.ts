@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { AppRoute, PageView } from '../../types';
 
 // spec: 2026-07-13-labour-attendance-approval-design (Task 3.4) — carries a
@@ -23,7 +23,15 @@ export interface UseAppNavigationResult {
     // resurfaces on an unrelated later visit.
     lastLabourLogIds: string[];
     setLastLabourLogIds: (ids: string[]) => void;
+    // spec: 2026-08-25-prod-cutover-waves — Android hardware Back. Steps back
+    // through the app's own route history. Returns true if it moved (or
+    // changed the home tab back to 'log'), false at the root so the caller can
+    // exit the app. Moves nothing but the route/tab: it never touches queued
+    // or unsaved data.
+    goBack: () => boolean;
 }
+
+const MAX_HISTORY = 20;
 
 const KNOWN_ROUTES: readonly AppRoute[] = [
     'main',
@@ -72,6 +80,11 @@ export const useAppNavigation = (): UseAppNavigationResult => {
     const [mainView, setMainView] = useState<PageView>('log');
     const [logIntent, setLogIntentState] = useState<LogIntent>(null);
     const [lastLabourLogIds, setLastLabourLogIdsState] = useState<string[]>([]);
+    // Back-button history. Refs (not state): reading them must not re-render,
+    // and goBack must see the latest value without a stale closure.
+    const routeRef = useRef<AppRoute>(currentRoute);
+    const mainViewRef = useRef<PageView>(mainView);
+    const historyRef = useRef<AppRoute[]>([]);
 
     // Any route change away from the log page ('main') clears the labour
     // hint, so it never lingers into an unrelated later visit. Routing back
@@ -82,7 +95,8 @@ export const useAppNavigation = (): UseAppNavigationResult => {
     // lastLabourLogIds — it must survive the 'labour' arrival itself (the
     // save-completion hop sets it right alongside routing there), but not
     // linger once the farmer leaves the feature.
-    const setCurrentRoute = useCallback((route: AppRoute) => {
+    const applyRoute = useCallback((route: AppRoute) => {
+        routeRef.current = route;
         setCurrentRouteState(route);
         if (route !== 'main') {
             setLogIntentState(null);
@@ -92,12 +106,54 @@ export const useAppNavigation = (): UseAppNavigationResult => {
         }
     }, []);
 
+    // Records history for hardware Back. Home ('main') is the root: arriving
+    // there clears history. Going back to the page you just came from pops
+    // instead of pushing, so an in-page "back to hub" button cannot build a
+    // ping-pong that Back would then replay.
+    const setCurrentRoute = useCallback((route: AppRoute) => {
+        const from = routeRef.current;
+        if (route !== from) {
+            const history = historyRef.current;
+            if (route === 'main') {
+                history.length = 0;
+            } else if (history[history.length - 1] === route) {
+                history.pop();
+            } else {
+                history.push(from);
+                if (history.length > MAX_HISTORY) history.shift();
+            }
+        }
+        applyRoute(route);
+    }, [applyRoute]);
+
+    const setMainViewTracked = useCallback((view: PageView) => {
+        mainViewRef.current = view;
+        setMainView(view);
+    }, []);
+
+    const goBack = useCallback((): boolean => {
+        const history = historyRef.current;
+        if (history.length > 0) {
+            applyRoute(history.pop() as AppRoute);
+            return true;
+        }
+        if (routeRef.current !== 'main') {
+            applyRoute('main');
+            return true;
+        }
+        if (mainViewRef.current !== 'log') {
+            setMainViewTracked('log');
+            return true;
+        }
+        return false;
+    }, [applyRoute, setMainViewTracked]);
+
     const navigateTo = useCallback((route: AppRoute, view?: PageView) => {
         setCurrentRoute(route);
         if (view) {
-            setMainView(view);
+            setMainViewTracked(view);
         }
-    }, [setCurrentRoute]);
+    }, [setCurrentRoute, setMainViewTracked]);
 
     const setLogIntent = useCallback((intent: LogIntent) => {
         setLogIntentState(intent);
@@ -111,11 +167,12 @@ export const useAppNavigation = (): UseAppNavigationResult => {
         currentRoute,
         setCurrentRoute,
         mainView,
-        setMainView,
+        setMainView: setMainViewTracked,
         navigateTo,
         logIntent,
         setLogIntent,
         lastLabourLogIds,
-        setLastLabourLogIds
+        setLastLabourLogIds,
+        goBack
     };
 };

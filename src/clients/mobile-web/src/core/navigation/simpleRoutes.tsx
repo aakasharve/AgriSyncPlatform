@@ -45,6 +45,7 @@ import {
 import { requestOpenWaitingDrawer } from '../../features/oversight/oversightNavigationEvents';
 import { resolveLabourAnchor } from '../../features/labour/labourAnchor';
 import { getDateKey } from '../domain/services/DateKeyService';
+import { buildNoWorkDayPayload } from './noWorkDay';
 
 export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'profile') return null;
@@ -55,8 +56,6 @@ export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
                 crops={ctx.crops}
                 onUpdateProfile={ctx.setFarmerProfile}
                 onUpdateCrops={ctx.handleUpdateCrops}
-                onAddPerson={ctx.handleAddPerson}
-                onDeletePerson={ctx.handleDeletePerson}
                 onOpenScheduleLibrary={(cropId?: string) => {
                     if (typeof window !== 'undefined' && cropId) {
                         window.sessionStorage.setItem('schedule_library_crop_id', cropId);
@@ -71,6 +70,7 @@ export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
                 onOpenErasure={() => ctx.setCurrentRoute('dataRights/erasure')}
                 onOpenQrDemo={() => ctx.setCurrentRoute('qr-demo')}
                 onOpenAiDrafts={() => ctx.setCurrentRoute('ai-drafts')}
+                onOpenSettings={() => ctx.setCurrentRoute('settings')}
                 onExit={() => ctx.setCurrentRoute('main')}
             />
         </div>
@@ -83,13 +83,17 @@ export const renderLabourRoute = (ctx: AppRouterContext): React.ReactNode => {
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
             <LabourFeaturePage
                 onExit={() => ctx.setCurrentRoute('profile')}
-                onGoToLog={() => {
+                onGoToLog={(opts) => {
                     // Labour V2 R1 Task 3.1 — the labour mic is a VERIFICATION instrument.
                     // No anchor → no mic. This is the door (the hub hero is already drawn
                     // inactive with the approved reason); gating here as well means no future
                     // caller of onGoToLog can walk past the rule. It gates ONLY the recorder:
                     // the labour route, hub and हजेरी वही render regardless (Correction 11).
-                    if (resolveLabourAnchor(ctx.history ?? [], getDateKey()).state !== 'anchored') return;
+                    //
+                    // Journey fix D4: a day stated by the SERVER's read-out (a Mukadam on
+                    // another phone holds no local log) is an anchor too - the hub says so
+                    // via `anchoredByServer` when it drew the hero live for exactly that.
+                    if (!opts?.anchoredByServer && resolveLabourAnchor(ctx.history ?? [], getDateKey()).state !== 'anchored') return;
                     // spec: 2026-07-13-labour-attendance-approval-design (Task 3.4) —
                     // tag the intent BEFORE navigating so mainView can show a
                     // "why am I here" hint on arrival.
@@ -106,6 +110,31 @@ export const renderLabourRoute = (ctx: AppRouterContext): React.ReactNode => {
                 history={ctx.history}
                 ledgerDefaults={ctx.ledgerDefaults}
                 lastLabourLogIds={ctx.lastLabourLogIds}
+                // काम झालं नाही, पण मजूर आले — the rained-out-day door. The marks
+                // are ordinary attendance.mark mutations; THIS records the day as
+                // a declared no-work day through the same payload and the same
+                // handler the main screen's `आज काम नाही` sheet uses.
+                //
+                // `handleManualSubmit` refuses silently (`'not_saved'`) while no
+                // log scope is selected, and the Labour route is reachable
+                // without one. So when the lane opens with NO scope we select
+                // the entire farm (a rest day is a farm-wide fact); a scope the
+                // farmer already chose is left alone, exactly as the main
+                // screen's sheet would use it. The save is only reported as
+                // done when the handler says it was.
+                onBeginNoWorkLane={() => {
+                    if (!ctx.hasActiveLogContext) {
+                        ctx.setLogScope({ selectedCropIds: ['FARM_GLOBAL'], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' });
+                    }
+                }}
+                onDeclareNoWorkDay={async (cause) => {
+                    const outcome = await ctx.handleManualSubmit(buildNoWorkDayPayload(ctx.todayDateKey, cause));
+                    // The manual-save path parks the main log screen on its
+                    // "Saved to Ledger" panel; we are not on that screen, and
+                    // leaving it armed would greet the farmer with it later.
+                    ctx.setStatus('idle');
+                    return outcome === 'saved' || outcome === 'saved_with_warning';
+                }}
             />
         </div>
     );

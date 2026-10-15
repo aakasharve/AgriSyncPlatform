@@ -547,7 +547,7 @@ export const translations: Record<Language, Translations> = {
             savedTranscriptBody: 'तुमचे शब्द मी ऐकले आणि सुरक्षित ठेवले. लवकरच ते पूर्णपणे समजून घेईन.',
             savedAudioBody: 'तुमची नोंद मी सुरक्षित ठेवली आहे. पुन्हा ऐकून लवकरच समजून घेईन.',
             savedReassure: 'तुमचा आजचा दिवस मोजला गेला आहे. काहीही हरवलेले नाही.',
-            transcriptHeardLabel: 'तुम्ही सांगितलं:',
+            transcriptHeardLabel: 'ऐकलेलं:',
             unverifiedSourceLabel: 'हे मी नक्की ऐकलं नाही — बरोबर आहे का?',
         },
         reflectPage: {
@@ -622,7 +622,7 @@ export const translations: Record<Language, Translations> = {
             myFarmTeam: 'माझा शेत संघ',
             manageAccess: 'कोणाला काय जबाबदारी, ते इथे ठरवा.',
             addMember: 'सदस्य जोडा',
-            partner: 'भागीदार',
+            partner: 'सहमालक',
             worker: 'कामगार',
             allowLog: 'नोंद करण्याची जबाबदारी',
             noTeamMembers: 'अजून कोणी संघात नाही',

@@ -2,8 +2,7 @@
 //
 // Revoke-all button — confirms with the user, then calls onConfirm
 // which `ConsentScreen` wires to `updateConsent({ all false })`.
-// Confirmation copy is locale-specific and LEGAL_REVIEW_PENDING-tagged
-// per OQ-7 i18n convention.
+// Confirmation copy is locale-specific.
 //
 // spec: dfes-companion-2026-07-11 (wave-4.3) — withdrawal must be no harder than
 // granting, AND must explain which services stop. It was already no harder (one tap,

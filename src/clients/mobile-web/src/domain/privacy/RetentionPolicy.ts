@@ -42,7 +42,13 @@
 // drifting, so do not delete it when a number changes — change both.
 
 /** Bumped whenever any rule below changes. The privacy notice carries the same string. */
-export const RETENTION_POLICY_VERSION = 'retention-2026-08-17.1';
+/**
+ * `retention-2026-10-13.1` - the on-device voice clip row no longer says "30 days,
+ * automatic". `purgeExpiredProcessingVoiceClips` has been a hard-coded no-op since founder
+ * ruling D9 (2026-08-14), so nothing deletes a clip from the phone on a timer; the rule is
+ * restated as what actually happens.
+ */
+export const RETENTION_POLICY_VERSION = 'retention-2026-10-13.1';
 
 /** How a rule is actually applied. There is no third option, and no aspirational one. */
 export type RetentionMechanism =
@@ -76,12 +82,14 @@ export interface RetentionRule {
 
 export const RETENTION_RULES: readonly RetentionRule[] = [
     {
-        // The clip sits in Dexie on his own phone while Sathi turns it into a work
-        // record, then goes. This is the only voice horizon that has ever been real.
+        // The clip sits in Dexie on his own phone. The 30-day sweep that used to remove it
+        // is a no-op under founder ruling D9 (2026-08-14), so nothing deletes it on a timer:
+        // it leaves the phone when he clears the app's data or uninstalls. Not 'on-request'
+        // in the strict sense (no person at ARVE performs it); it is the nearest honest value.
         id: 'deviceVoiceClip',
-        days: 30,
-        mechanism: 'automatic',
-        enforcedBy: 'infrastructure/voice/VoiceClipRetention.ts → purgeExpiredProcessingVoiceClips',
+        days: null,
+        mechanism: 'on-request',
+        enforcedBy: 'no automated enforcement - infrastructure/voice/VoiceClipRetention.ts purgeExpiredProcessingVoiceClips is a no-op (founder ruling D9)',
     },
     {
         // The cold-tier copy kept as the evidence behind a saved record. No expiry rule

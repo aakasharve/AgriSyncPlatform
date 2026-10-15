@@ -1,21 +1,22 @@
 // spec: data-principle-spine-2026-05-05/08.6
 //
-// Data rights namespace i18n bundle. Three locales (mr-IN, hi-IN,
-// en-IN) per DPDP §5 + the Phase 06 OQ-7 convention: every value
-// MUST carry the [LEGAL_REVIEW_PENDING] runtime prefix via
-// tagLegalString(...) so the dev/CI UI surfaces the tag visibly until
-// counsel removes it.
+// Data rights namespace i18n bundle. Two locales (mr-IN,
+// en-IN) per DPDP §5. Strings render exactly as written: no visible review
+// prefix is added at runtime. Copy review status is tracked in the private
+// review records.
 //
-// Per OQ-6 verdict: erasure SLA copy is "48 hours" in all three
-// languages; export copy is "24 hours" (per OQ-9 the URL TTL).
+// Timing wording must describe what the system actually does. The erasure
+// worker polls every 60s but nothing enforces a deadline, and the export worker
+// cannot currently issue a download link (ExportWorker.NoSignerReason), so
+// neither screen states a number of hours.
 
-import { tagLegalString } from './legalReviewMarker';
-
-export type DataRightsLocale = 'mr-IN' | 'hi-IN' | 'en-IN';
+export type DataRightsLocale = 'mr-IN' | 'en-IN';
 
 export function toDataRightsLocale(lang: string | null | undefined): DataRightsLocale {
     if (lang === 'mr' || lang === 'mr-IN') return 'mr-IN';
-    if (lang === 'hi' || lang === 'hi-IN') return 'hi-IN';
+    // Hindi is not offered. A stored or server-sent 'hi' falls back to Marathi,
+    // the app default (same rule as LanguageContext / LanguageSyncFromServer).
+    if (lang === 'hi' || lang === 'hi-IN') return 'mr-IN';
     return 'en-IN';
 }
 
@@ -49,101 +50,67 @@ export interface DataRightsBundle {
 }
 
 // -- mr-IN --------------------------------------------------------------
-// LEGAL_REVIEW_PENDING: all values below — Marathi, awaiting counsel.
 const mr: DataRightsBundle = {
     erasure: {
-        title: tagLegalString('माझा डेटा मिटवा'),
-        intro: tagLegalString('तुमचा डेटा कायमचा मिटवण्याची विनंती. ही क्रिया परत करता येणार नाही.'),
-        confirmHeading: tagLegalString('खात्री आहे का?'),
-        confirmBody: tagLegalString('तुमचा सर्व वैयक्तिक डेटा अनामिक केला जाईल. शेतीचे रेकॉर्ड शिल्लक राहतील पण तुमचे नाव त्यांच्याशी जोडले जाणार नाही.'),
-        submit: tagLegalString('हो, मिटवा'),
-        cancel: tagLegalString('नाही, रद्द करा'),
-        sla: tagLegalString('तुमची विनंती मिळाली आहे. ४८ तासांत प्रक्रिया पूर्ण होईल.'),
-        error: tagLegalString('विनंती पाठवता आली नाही. पुन्हा प्रयत्न करा.'),
+        title: 'माझा डेटा मिटवा',
+        intro: 'तुमचे खाते आणि वैयक्तिक माहिती मिटवण्याची विनंती. ही क्रिया परत करता येणार नाही.',
+        confirmHeading: 'खात्री आहे का?',
+        confirmBody: 'तुमचे खाते आणि वैयक्तिक माहिती काढली किंवा अनामिक केली जाईल. शेतीचे रेकॉर्ड शिल्लक राहतील पण तुमचे नाव त्यांच्याशी जोडले जाणार नाही. सर्व्हरवर साठवलेले काही आवाज अजून आपोआप मिटवता येत नाहीत.',
+        submit: 'हो, मिटवा',
+        cancel: 'नाही, रद्द करा',
+        sla: 'तुमची विनंती मिळाली आहे. आम्ही ती पूर्ण करत आहोत.',
+        error: 'विनंती पाठवता आली नाही. पुन्हा प्रयत्न करा.',
     },
     export: {
-        title: tagLegalString('माझा डेटा निर्यात करा'),
-        intro: tagLegalString('तुमच्या सर्व डेटाची एक प्रत डाउनलोडसाठी तयार केली जाईल.'),
-        submit: tagLegalString('निर्यात तयार करा'),
-        sla: tagLegalString('तुमचा डेटा एक्सपोर्ट २४ तासांत तयार होईल; डाउनलोड लिंकसह सूचना मिळेल.'),
-        downloadLabel: tagLegalString('डाउनलोड करा'),
-        error: tagLegalString('विनंती पाठवता आली नाही. पुन्हा प्रयत्न करा.'),
+        title: 'माझा डेटा निर्यात करा',
+        intro: 'तुमच्या संमतीच्या आणि खात्याच्या नोंदींची प्रत तयार केली जाईल. आवाज आणि मजकुराच्या नोंदी अजून त्यात नाहीत.',
+        submit: 'निर्यात तयार करा',
+        sla: 'विनंती मिळाली. डाउनलोड लिंक अजून उपलब्ध नाही. arvesystems@gmail.com वर संपर्क करा, आम्ही तुम्हाला प्रत देऊ.',
+        downloadLabel: 'डाउनलोड करा',
+        error: 'विनंती पाठवता आली नाही. पुन्हा प्रयत्न करा.',
     },
     recent: {
-        title: tagLegalString('अलीकडील विनंत्या'),
-        empty: tagLegalString('अद्याप कोणतीही विनंती नाही.'),
-        statusRequested: tagLegalString('प्राप्त झाली'),
-        statusInProgress: tagLegalString('चालू आहे'),
-        statusCompleted: tagLegalString('पूर्ण'),
-        statusFailed: tagLegalString('अयशस्वी'),
-    },
-};
-
-// -- hi-IN --------------------------------------------------------------
-// LEGAL_REVIEW_PENDING: all values below — Hindi, awaiting counsel.
-const hi: DataRightsBundle = {
-    erasure: {
-        title: tagLegalString('मेरा डेटा मिटाएं'),
-        intro: tagLegalString('अपना डेटा हमेशा के लिए मिटाने का अनुरोध। यह क्रिया पलटी नहीं जा सकती।'),
-        confirmHeading: tagLegalString('क्या आप निश्चित हैं?'),
-        confirmBody: tagLegalString('आपका सारा व्यक्तिगत डेटा गुमनाम कर दिया जाएगा। खेती के रिकॉर्ड बने रहेंगे लेकिन आपका नाम उनसे नहीं जुड़ा होगा।'),
-        submit: tagLegalString('हाँ, मिटाएं'),
-        cancel: tagLegalString('नहीं, रद्द करें'),
-        sla: tagLegalString('आपका अनुरोध प्राप्त हो गया है। 48 घंटों में संसाधित किया जाएगा।'),
-        error: tagLegalString('अनुरोध भेजा नहीं जा सका। फिर से कोशिश करें।'),
-    },
-    export: {
-        title: tagLegalString('मेरा डेटा निर्यात करें'),
-        intro: tagLegalString('आपके सभी डेटा की एक प्रति डाउनलोड के लिए तैयार की जाएगी।'),
-        submit: tagLegalString('निर्यात तैयार करें'),
-        sla: tagLegalString('आपका डेटा एक्सपोर्ट 24 घंटों में तैयार होगा; डाउनलोड लिंक के साथ सूचना मिलेगी।'),
-        downloadLabel: tagLegalString('डाउनलोड करें'),
-        error: tagLegalString('अनुरोध भेजा नहीं जा सका। फिर से कोशिश करें।'),
-    },
-    recent: {
-        title: tagLegalString('हाल के अनुरोध'),
-        empty: tagLegalString('अभी तक कोई अनुरोध नहीं।'),
-        statusRequested: tagLegalString('प्राप्त'),
-        statusInProgress: tagLegalString('प्रगति पर'),
-        statusCompleted: tagLegalString('पूर्ण'),
-        statusFailed: tagLegalString('विफल'),
+        title: 'अलीकडील विनंत्या',
+        empty: 'अद्याप कोणतीही विनंती नाही.',
+        statusRequested: 'प्राप्त झाली',
+        statusInProgress: 'चालू आहे',
+        statusCompleted: 'पूर्ण',
+        statusFailed: 'अयशस्वी',
     },
 };
 
 // -- en-IN --------------------------------------------------------------
-// LEGAL_REVIEW_PENDING: all values below — English, awaiting counsel.
 const en: DataRightsBundle = {
     erasure: {
-        title: tagLegalString('Erase my data'),
-        intro: tagLegalString('Request permanent erasure of your personal data. This action cannot be undone.'),
-        confirmHeading: tagLegalString('Are you sure?'),
-        confirmBody: tagLegalString('All your personal data will be anonymized. Farm records remain but will not be linked to your name.'),
-        submit: tagLegalString('Yes, erase'),
-        cancel: tagLegalString('No, cancel'),
-        sla: tagLegalString('Request received. Processing within 48 hours.'),
-        error: tagLegalString('Could not submit request. Please try again.'),
+        title: 'Erase my data',
+        intro: 'Request erasure of your account and personal details. This action cannot be undone.',
+        confirmHeading: 'Are you sure?',
+        confirmBody: 'Your account and personal details will be removed or anonymized. Farm records remain but will not be linked to your name. Some voice recordings stored on our servers cannot yet be deleted automatically.',
+        submit: 'Yes, erase',
+        cancel: 'No, cancel',
+        sla: 'Request received. We are processing it.',
+        error: 'Could not submit request. Please try again.',
     },
     export: {
-        title: tagLegalString('Export my data'),
-        intro: tagLegalString('A copy of all your data will be prepared for download.'),
-        submit: tagLegalString('Generate export'),
-        sla: tagLegalString('Your data export will be ready within 24 hours; you will receive a notification with a download link.'),
-        downloadLabel: tagLegalString('Download'),
-        error: tagLegalString('Could not submit request. Please try again.'),
+        title: 'Export my data',
+        intro: 'A copy of your consent and account records will be prepared. Voice and transcript records are not included yet.',
+        submit: 'Generate export',
+        sla: 'Request received. A download link is not available yet. Contact arvesystems@gmail.com and we will hand your copy over to you.',
+        downloadLabel: 'Download',
+        error: 'Could not submit request. Please try again.',
     },
     recent: {
-        title: tagLegalString('Recent requests'),
-        empty: tagLegalString('No requests yet.'),
-        statusRequested: tagLegalString('Received'),
-        statusInProgress: tagLegalString('In progress'),
-        statusCompleted: tagLegalString('Completed'),
-        statusFailed: tagLegalString('Failed'),
+        title: 'Recent requests',
+        empty: 'No requests yet.',
+        statusRequested: 'Received',
+        statusInProgress: 'In progress',
+        statusCompleted: 'Completed',
+        statusFailed: 'Failed',
     },
 };
 
 export const DATA_RIGHTS_BUNDLES: Record<DataRightsLocale, DataRightsBundle> = {
     'mr-IN': mr,
-    'hi-IN': hi,
     'en-IN': en,
 };
 

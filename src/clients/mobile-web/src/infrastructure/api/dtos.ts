@@ -736,6 +736,8 @@ export interface TenantDekResponse {
 
 export interface ResolveDekRequest {
     dekId: string;
+    /** Farm whose owner account the key is unwrapped under; the server checks the caller is an Active member. */
+    farmId: string;
 }
 
 export interface ResolveDekResponse {
@@ -760,12 +762,14 @@ export interface ConsentStateDto {
     version: number;
     acceptedAtUtc: string | null;
     revokedAtUtc: string | null;
+    /** ADDITIVE, GET only: server-derived start of the CURRENT voice grant (null/absent = unknown). */
+    fullHistoryJournalGrantedSinceUtc?: string | null;
 }
 
 /**
  * PUT `/shramsafal/consent/me` body. Any of the three flag fields may
  * be omitted (partial update); the audit row records the new full
- * state regardless. `languageShown` is the locale code (mr-IN, hi-IN,
+ * state regardless. `languageShown` is the locale code (mr-IN,
  * en-IN) the user actually saw when consenting — required for the
  * audit row per plan §6.1.3.
  */

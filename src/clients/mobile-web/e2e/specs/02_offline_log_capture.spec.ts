@@ -4,14 +4,14 @@
  * Verifies that:
  *  1. A user can create a daily log while offline (optimistic save → success view).
  *  2. The sync queue accumulates the pending mutation while offline.
- *  3. Triggering sync after going back online drains the queue to 0.
+ *  3. Going back online drains the queue to 0 (server-acknowledged, APPLIED).
  *
  * Flow overview:
  *  login → pick first crop+plot context (NOT Entire Farm — see helper docstring)
  *   → go offline → FAB → manual mode → fill activity chip → save
  *   → assert "Saved to Ledger" success view
- *   → open sync drawer → assert pending count > 0
- *   → go online → click Sync Now → assert pending count = 0
+ *   → read the mutation queue → assert unacknowledged > 0
+ *   → go online → queue drains: unacknowledged = 0 and a row is APPLIED
  *
  * Why a real plot context (not Entire Farm)?
  *  enqueueLogsForSync needs `selection.selectedPlotIds[0]` to resolve a sync
@@ -21,7 +21,7 @@
  */
 import { test, expect } from '@playwright/test';
 import { resetAndSeed } from '../fixtures/seed.api';
-import { goOffline, goOnline } from '../fixtures/offlineHelper';
+import { goOffline, goOnline, readMutationQueue } from '../fixtures/offlineHelper';
 import { loginViaPassword } from '../fixtures/loginHelper';
 import { selectFirstPlotLogContext } from '../fixtures/logContextHelper';
 
@@ -68,25 +68,19 @@ test.describe('Offline log capture', () => {
         const savedView = page.getByTestId('saved-to-ledger');
         await expect(savedView).toBeVisible({ timeout: 15_000 });
 
-        // --- Open sync status drawer (header indicator stays mounted) ---
-        const syncIndicator = page.getByTestId('sync-status-indicator');
-        await expect(syncIndicator).toBeVisible({ timeout: 10_000 });
-        await syncIndicator.click();
+        // --- Assert the mutation is queued (unacknowledged) while offline ---
+        // The header sync indicator / drawer opener no longer exists (oversight
+        // rework, spec 4.1), so the queue is read from IndexedDB - the same rows the
+        // drawer used to count. Intent unchanged: pending > 0 while offline ...
+        await expect.poll(async () => (await readMutationQueue(page)).unacknowledged, { timeout: 15_000 })
+            .toBeGreaterThan(0);
 
-        // --- Assert pending count > 0 while offline ---
-        const pendingCount = page.getByTestId('sync-pending-count');
-        await expect(pendingCount).toBeVisible({ timeout: 10_000 });
-        // The count text should contain a number ≥ 1
-        await expect(pendingCount).not.toHaveText('0', { timeout: 5_000 });
-
-        // --- Go online and sync ---
+        // --- Go online: the worker's `online` handler drains the queue ---
         await goOnline(page);
 
-        const syncNowBtn = page.getByTestId('sync-trigger-now');
-        await expect(syncNowBtn).toBeEnabled({ timeout: 15_000 });
-        await syncNowBtn.click();
-
-        // --- Assert pending count drains to 0 ---
-        await expect(pendingCount).toHaveText('0', { timeout: 30_000 });
+        // ... and it drains to 0 once the server has acknowledged it.
+        await expect.poll(async () => (await readMutationQueue(page)).unacknowledged, { timeout: 60_000 })
+            .toBe(0);
+        expect((await readMutationQueue(page)).byStatus['APPLIED'] ?? 0).toBeGreaterThan(0);
     });
 });

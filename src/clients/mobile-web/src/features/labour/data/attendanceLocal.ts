@@ -14,6 +14,9 @@ import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import type { MutationQueueStatus } from '../../../infrastructure/storage/DexieDatabase';
 import type { AttendanceMarkPayload } from '../../../application/usecases/sync/MarkAttendanceCommand';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
+import { isContradictionCode } from './attendanceRefused';
+import { systemClock } from '../../../core/domain/services/Clock';
+import { isDownloadFresh, logsForDisplay } from '../../../infrastructure/storage/downloadedLabourCache';
 
 export interface LocalAttendanceMark {
     fieldOperatorId: string;
@@ -33,12 +36,15 @@ export interface LocalAttendanceMark {
  * - PENDING / SENDING — captured, not yet acknowledged. The heart of P10.
  * - FAILED — retry-capped or backed-off, but still the farmer's statement;
  *   parking a fact must not erase it from his own register.
- * - REJECTED_USER_REVIEW — permanently refused THESE BYTES (for
- *   attendance.mark that is the AttendanceContradiction question) and sitting
- *   in the conflict UI awaiting HIS answer. Deliberately shown: the mark is
- *   still his stated, unresolved intent, and a register that blanked it the
- *   moment sync ran would make his statement silently vanish while the
- *   question is still open. It renders as 'queue' — the honest weaker state.
+ * - REJECTED_USER_REVIEW — ONLY when it is the AttendanceContradiction
+ *   question, which sits in the conflict UI awaiting HIS answer. Deliberately
+ *   shown: the mark is still his stated, unresolved intent, and a register
+ *   that blanked it the moment sync ran would make his statement silently
+ *   vanish while the question is still open. It renders as 'queue' - the
+ *   honest weaker state. Any OTHER parked code (e.g. ShramSafal.Forbidden:
+ *   no grant / grant expired) is a REFUSAL, not intent: it is filtered below
+ *   so the register stops drawing a refused mark as remembered
+ *   (attendanceRefused.ts tells the farmer instead).
  *
  * NOT live, by decision:
  * - APPLIED — acknowledged; the server row from /sync/pull owns the fact now.
@@ -57,7 +63,12 @@ const LIVE_INTENT_STATUSES: ReadonlySet<MutationQueueStatus> = new Set<MutationQ
 
 export async function getLocalAttendanceMarks(farmId: string): Promise<LocalAttendanceMark[]> {
     const db = getDatabase();
-    const server = await db.attendanceMarks.where('farmId').equals(farmId).toArray();
+    // 7-day Labour cache (founder 2026-10-12): a server-acknowledged row downloaded
+    // more than 7 days ago (or with no stamp) is not shown, even before the boot sweep
+    // has deleted it. The queue half below is UNSENT work and is never age-filtered.
+    const now = systemClock.nowEpoch();
+    const server = (await db.attendanceMarks.where('farmId').equals(farmId).toArray())
+        .filter(r => isDownloadFresh(r.updatedAt, now));
     const queued = await db.mutationQueue
         .where('mutationType').equals(SyncMutationName.AttendanceMark)
         .filter(row => LIVE_INTENT_STATUSES.has(row.status))
@@ -74,6 +85,11 @@ export async function getLocalAttendanceMarks(farmId: string): Promise<LocalAtte
     for (const row of queued) {
         const p = row.payload as AttendanceMarkPayload;
         if (p.farmId !== farmId) continue;
+        // A mark the SERVER REFUSED is not intent the register may keep
+        // drawing as "remembered": only an unanswered contradiction question
+        // still speaks for the farmer. The refusal is told by the labour
+        // screens' own notice (attendanceRefused.ts).
+        if (row.status === 'REJECTED_USER_REVIEW' && !isContradictionCode(row.errorCode)) continue;
         out.push({
             fieldOperatorId: p.fieldOperatorId, workDate: p.workDate,
             dayMark: p.dayMark, nightMark: p.nightMark,
@@ -104,10 +120,11 @@ export async function getLocalAttendanceNameHints(
     const wanted = new Set(marks.map(m => m.fieldOperatorId));
     const dates = [...new Set(marks.map(m => m.workDate))];
     const db = getDatabase();
-    const records = await db.logs.where('date').anyOf(dates).toArray();
-    for (const record of records) {
-        if (record.isDeleted === 1) continue;
-        const log = record.log;
+    const records = (await db.logs.where('date').anyOf(dates).toArray()).filter(r => r.isDeleted !== 1);
+    // 7-day Labour cache: names in a downloaded log older than 7 days are not a hint
+    // (an unsent log of this user's own still is). See downloadedLabourCache.ts.
+    const logs = await logsForDisplay(db, records);
+    for (const log of logs) {
         if (log?.meta?.farmId !== farmId) continue;
         for (const event of log.labour ?? []) {
             for (const attribution of event.attributedOperators ?? []) {
