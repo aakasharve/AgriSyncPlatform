@@ -202,8 +202,9 @@ export class Web {
       }
       tap(x, y); await sleep(250); return;
     }
-    await this.calibrate();
-    if (!this.calib) throw new NavFail('no touch calibration: refusing to use non-touch input');
+    for (let a = 0; a < 3 && !this.calib; a++) { if (this.onCalibrateRetry) await this.onCalibrateRetry(); await this.calibrate(); }
+    // A harness problem (a system dialog or a dead emulator ate the probe tap), not an app result: never fall back to non-touch input.
+    if (!this.calib) throw new Unreachable('no touch calibration after 3 tries: refusing to use non-touch input');
     return this.#tapAt(cx, cy);
   }
 

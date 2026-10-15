@@ -139,7 +139,8 @@ async function launchCold({ attach = true } = {}) {
   if (!attach) return null;
   web = new Web({ pkg: PKG, log });
   await web.connect();
-  await web.calibrate();
+  web.onCalibrateRetry = dismissSystemDialogs;
+  for (let a = 0; a < 3 && !web.calib; a++) { if (a) await dismissSystemDialogs(); await web.calibrate(); }
   web.statusBarPx = statusBarPx; web.navBarPx = navBarPx; web.screenH = screenSize().h;
   results.inputMode = web.inputMode;
   return web;
@@ -177,7 +178,14 @@ async function dismissOverlays() {
     const i = await web.info(Web.tid('header-setup-hub')).catch(() => ({ n: 0 }));
     if (i.n && !i.covered) return true;
     let clicked = false;
-    // the 'needs attention' bottom sheet can open by itself over the home screen: close it with its own X
+    // a bottom sheet can open by itself over the home screen: find the control at the top-right of whatever covers the header and tap it
+    if (i.n && i.covered && k >= 2) {
+      const tagged = await web.eval(`(() => { let e = document.elementFromPoint(24, 75); while (e && e !== document.body && getComputedStyle(e).position !== 'fixed') e = e.parentElement; if (!e) return false;
+        let best = null; e.querySelectorAll('button, [role=button]').forEach((b) => { const r = b.getBoundingClientRect(); if (r.width > 0 && r.top < innerHeight * 0.5 && (!best || r.right - r.top * 2 > best.score)) best = { b, score: r.right - r.top * 2 }; });
+        if (!best) return false; best.b.setAttribute('data-ci-close', '1'); return true; })()`).catch(() => false);
+      if (tagged) { try { await web.click(Web.css('[data-ci-close="1"]'), { timeout: 4000 }); await sleep(1200); await web.eval(`document.querySelectorAll('[data-ci-close]').forEach((e) => e.removeAttribute('data-ci-close'))`); continue; } catch { /* fall through */ } }
+    }
+    // (older path) the 'needs attention' bottom sheet: close it with its own X
     if (i.n && i.covered && await web.visible(Web.css('svg.lucide-x')).catch(() => false)) { try { await web.click(Web.css('svg.lucide-x'), { timeout: 4000 }); clicked = true; await sleep(1200); continue; } catch { /* fall through */ } }
     for (const spec of [Web.tid('welcome-continue'), Web.tid('onboarding-skip'),
       Web.text(/चला, सुरुवात करूया/), Web.text(/समजलं, पुढे चला/), Web.text(/^\s*पुढे चला\s*$/), Web.text(/^\s*नंतर\s*$/), Web.text(/^\s*Skip\s*$/i)]) {
@@ -431,7 +439,7 @@ async function main() {
 
   const c06 = await check('C06', 'manual attendance tile: present for owner, absent for un-granted Worker', async (c) => {
     if (!hubOk) await openLabourHub();
-    const tile = await web.visible(Web.text(/^\s*हजेरी घ्या\s*$/));
+    let tile = false; for (let k = 0; k < 20 && !tile; k++) { tile = await web.visible(Web.text(/^\s*हजेरी घ्या\s*$/)); if (!tile) await sleep(1000); }
     c.assert(tile, 'owner sees the manual attendance tile (हजेरी घ्या)', 'owner does NOT see the manual attendance tile');
     shot(c, 'owner-hub-tile');
   });
