@@ -15,12 +15,19 @@ import type { HttpTransport } from '../transport';
 import type { TenantDekResponse, ResolveDekRequest, ResolveDekResponse } from '../dtos';
 
 /**
- * Fetch the current tenant DEK. Caller is expected to cache the result
- * in memory for the session (see `tenantDekClient.ts`) and clear on
- * logout — never persist to disk.
+ * Fetch the current tenant DEK for the owner account of `farmId`. Caller is
+ * expected to cache the result in memory for the session (see
+ * `tenantDekClient.ts`) and clear on logout — never persist to disk.
+ *
+ * D1: the route needs a farm to know WHICH tenant the key belongs to (the JWT
+ * carries no owner-account claim). The server proves the caller is an Active
+ * member of that farm and derives the owner account itself; a farm the caller is
+ * not in answers 403, a missing farmId answers 400.
  */
-export async function getTenantDek(t: HttpTransport): Promise<TenantDekResponse> {
-    const response = await t.http.get<TenantDekResponse>('/shramsafal/security/tenant-dek');
+export async function getTenantDek(t: HttpTransport, farmId: string): Promise<TenantDekResponse> {
+    const response = await t.http.get<TenantDekResponse>('/shramsafal/security/tenant-dek', {
+        params: { farmId },
+    });
     return response.data;
 }
 
@@ -29,13 +36,15 @@ export async function getTenantDek(t: HttpTransport): Promise<TenantDekResponse>
  * when reading a sealed clip whose `wrappedDekId` is not the currently
  * cached DEK (the typical case after the daily rotation defined in
  * plan §05.2.1). Returns `null` when the backend refuses (wrong tenant
- * or KMS-bound EncryptionContext mismatch — both surface as 404).
+ * or KMS-bound EncryptionContext mismatch — 404; farm the caller is not an
+ * active member of — 403).
  */
 export async function resolveDek(
     t: HttpTransport,
     dekId: string,
+    farmId: string,
 ): Promise<ResolveDekResponse | null> {
-    const payload: ResolveDekRequest = { dekId };
+    const payload: ResolveDekRequest = { dekId, farmId };
     try {
         const response = await t.http.post<ResolveDekResponse>(
             '/shramsafal/security/tenant-dek/resolve',
@@ -47,7 +56,10 @@ export async function resolveDek(
         // (per plan §05.2.2). Treat it as a clean miss — VoiceClipRetention
         // can then surface the clip as unrecoverable rather than crashing.
         const status = (err as { response?: { status?: number } })?.response?.status;
-        if (status === 404) return null;
+        // 403 = the caller is not an active member of `farmId`, i.e. this is not a
+        // farm whose owner account may be tried. Also a clean miss for a reader that
+        // walks its candidate farms.
+        if (status === 404 || status === 403) return null;
         throw err;
     }
 }

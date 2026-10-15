@@ -1199,6 +1199,47 @@ internal sealed class ShramSafalRepository(
             : (false, Guid.Empty);
     }
 
+    public async Task<(bool IsActiveMember, Guid OwnerAccountId)> GetActiveFarmMembershipForTenantAsync(
+        Guid farmId,
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        if (farmId == Guid.Empty || userId == Guid.Empty)
+        {
+            return (false, Guid.Empty);
+        }
+
+        var typedFarmId = new FarmId(farmId);
+        var typedUserId = new UserId(userId);
+
+        // The farm row is the single source of the owner account. A farm the caller
+        // cannot see under RLS (or that does not exist) yields null -> not a member.
+        var farm = await db.Farms
+            .AsNoTracking()
+            .Where(f => f.Id == typedFarmId)
+            .Select(f => new { OwnerUserId = f.OwnerUserId, OwnerAccountId = f.OwnerAccountId.Value })
+            .FirstOrDefaultAsync(ct);
+        if (farm is null || farm.OwnerAccountId == Guid.Empty)
+        {
+            return (false, Guid.Empty);
+        }
+
+        if (farm.OwnerUserId == typedUserId)
+        {
+            return (true, farm.OwnerAccountId);
+        }
+
+        var isActive = await db.FarmMemberships
+            .AsNoTracking()
+            .AnyAsync(
+                m => m.FarmId == typedFarmId &&
+                     m.UserId == typedUserId &&
+                     m.Status == MembershipStatus.Active,
+                ct);
+
+        return isActive ? (true, farm.OwnerAccountId) : (false, Guid.Empty);
+    }
+
     public async Task<int> CountActivePrimaryOwnersAsync(Guid farmId, CancellationToken ct = default)
     {
         var typedFarmId = new FarmId(farmId);

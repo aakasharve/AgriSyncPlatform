@@ -2,8 +2,10 @@
 // archive tests. It models ONLY what the real contracts promise:
 //   - persist: consent-gated, idempotent per (user, clip), echoes the clip id
 //   - by-id / by-range: scoped to the signed-in user, never across users
-//   - tenant DEK issue / resolve: a per-owner-account key, resolvable only by
-//     a caller whose tenant is that owner account (KMS EncryptionContext)
+//   - tenant DEK issue / resolve (D1): the caller names a FARM; the server derives
+//     the owner account from that farm and the key is per-owner-account, resolvable
+//     only under that owner account (KMS EncryptionContext). A call with no farm id
+//     is refused, as the real route does (400).
 // The server NEVER sees plaintext: `stored` holds exactly what was POSTed, so a
 // test can assert the audio was not sent in the clear.
 
@@ -41,6 +43,8 @@ class FakeArchiveServer {
     stored = new Map<string, Map<string, PersistVoiceClipRetainedRequest>>();
     persistCalls: PersistVoiceClipRetainedRequest[] = [];
     dekFetches = 0;
+    /** Every farm id the client named on a DEK issue / resolve call (D1: it must always name one). */
+    dekFarmIds: Array<string | undefined> = [];
     /** Make the next N persist calls fail like a dropped connection. */
     failPersist = 0;
     /** When set, persist throws THIS (e.g. an HTTP-response error) instead of a dropped connection. */
@@ -59,6 +63,7 @@ class FakeArchiveServer {
         this.stored.clear();
         this.persistCalls = [];
         this.dekFetches = 0;
+        this.dekFarmIds = [];
         this.failPersist = 0;
         this.failPersistWith = null;
         this.ackWrongId = false;
@@ -67,6 +72,15 @@ class FakeArchiveServer {
 
     private dekIdFor(owner: string): string {
         return `dek-${owner}-v1`;
+    }
+
+    /**
+     * The owner account the SERVER would derive from a farm id. Farms a test never mapped
+     * belong to the signed-in tenant's account; the `farm-for-<owner>` ids the /me/context
+     * fake mints belong to that owner.
+     */
+    private ownerOfFarm(farmId: string): string {
+        return farmId.startsWith('farm-for-') ? farmId.slice('farm-for-'.length) : this.tenantOwner;
     }
 
     private mine(): Map<string, PersistVoiceClipRetainedRequest> {
@@ -92,21 +106,30 @@ class FakeArchiveServer {
                 ...(granted && since ? { fullHistoryJournalGrantedSinceUtc: since } : {}),
             };
         },
-        getTenantDek: async () => {
+        getTenantDek: async (farmId?: string) => {
             this.dekFetches += 1;
+            this.dekFarmIds.push(farmId);
+            if (!farmId) throw new Error('400: farmId is required');
+            const owner = this.ownerOfFarm(farmId);
             return {
-                dekId: this.dekIdFor(this.tenantOwner),
-                dekBase64: bytesToBase64(deterministicKey(this.tenantOwner)),
+                dekId: this.dekIdFor(owner),
+                dekBase64: bytesToBase64(deterministicKey(owner)),
                 expiresAtUtc: new Date(Date.now() + 3600_000).toISOString(),
             };
         },
-        resolveDek: async (dekId: string) => {
-            // KMS EncryptionContext: only the owning tenant may unwrap.
-            if (dekId !== this.dekIdFor(this.tenantOwner)) return null;
-            return { dekBase64: bytesToBase64(deterministicKey(this.tenantOwner)) };
+        resolveDek: async (dekId: string, farmId?: string) => {
+            this.dekFarmIds.push(farmId);
+            if (!farmId) throw new Error('400: farmId is required');
+            // KMS EncryptionContext: only the owning account (derived from the farm) may unwrap.
+            const owner = this.ownerOfFarm(farmId);
+            if (dekId !== this.dekIdFor(owner)) return null;
+            return { dekBase64: bytesToBase64(deterministicKey(owner)) };
         },
         getMeContext: async () => ({
-            farms: (this.memberships.get(this.user) ?? []).map(ownerAccountId => ({ ownerAccountId })),
+            farms: (this.memberships.get(this.user) ?? []).map(ownerAccountId => ({
+                ownerAccountId,
+                farmId: `farm-for-${ownerAccountId}`,
+            })),
         }),
     };
 

@@ -4,14 +4,18 @@
 // These are fast (no KMS, no Docker) and cover the auth surface explicitly
 // flagged in the envelope:
 //
-//   (c) handler returns auth-failure when TenantContext.OwnerAccountId is null
+//   (c) handler refuses (403) when the caller is not an Active member of the
+//       named farm, and never touches the DEK service
+//
+// D1 (2026-10-15): the owner account is now derived from the farm, not read from
+// TenantContext (which no route ever set). The HTTP-level proof lives in
+// ShramSafal.Sync.IntegrationTests/Security/TenantDekEndpointRealPostgresTests.
 //
 // The KMS round-trip itself is exercised by
 // TenantDekServiceIntegrationTests against a LocalStack KMS container —
 // see src/tests/ShramSafal.Sync.IntegrationTests/Security/. Splitting auth
 // surface (here) from wire surface (there) keeps the dev-loop fast.
 
-using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.BuildingBlocks.Security;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -40,18 +44,17 @@ public sealed class TenantDekHandlerTests
     private static readonly Guid FarmGuid = Guid.NewGuid();
 
     [Fact]
-    public async Task Issue_NoOwnerAccountInTenantContext_ReturnsAuthFailure_AndDoesNotIssueDek()
+    public async Task Issue_CallerNotActiveMemberOfFarm_ReturnsForbidden_AndDoesNotIssueDek()
     {
         var dek = new RecordingTenantDekService();
-        var repo = new RecordingRepo();
-        var tenantContext = new TenantContext(); // OwnerAccountId stays null
-        var handler = new IssueTenantDekHandler(repo, dek, tenantContext);
+        var repo = new RecordingRepo { IsActiveMember = false };
+        var handler = new IssueTenantDekHandler(repo, dek);
 
         var result = await handler.HandleAsync(BuildIssueCommand());
 
         result.IsSuccess.Should().BeFalse(
-            "no tenant claim means no plaintext DEK should ever be issued");
-        result.Error.Code.Should().Be("join.unauthenticated");
+            "no verified membership means no plaintext DEK should ever be issued");
+        result.Error.Code.Should().Be("ShramSafal.Forbidden");
         dek.IssueCallCount.Should().Be(0,
             "the handler must short-circuit BEFORE touching the DEK service");
         repo.AuditEvents.Should().BeEmpty();
@@ -62,9 +65,7 @@ public sealed class TenantDekHandlerTests
     {
         var dek = new RecordingTenantDekService();
         var repo = new RecordingRepo();
-        var tenantContext = new TenantContext();
-        tenantContext.SetTenant(FarmGuid, OwnerAccountId, OwnerUserId);
-        var handler = new IssueTenantDekHandler(repo, dek, tenantContext);
+        var handler = new IssueTenantDekHandler(repo, dek);
 
         var result = await handler.HandleAsync(BuildIssueCommand());
 
@@ -77,7 +78,7 @@ public sealed class TenantDekHandlerTests
 
         dek.IssueCallCount.Should().Be(1);
         dek.LastIssueOwner.Should().Be(OwnerAccountId,
-            "the DEK must be bound to the tenant from TenantContext, not from the command");
+            "the DEK must be bound to the owner account read from the FARM row, not from the command");
         repo.AuditEvents.Should().HaveCount(1);
         var audit = repo.AuditEvents.Single();
         audit.EntityType.Should().Be("TenantDek");
@@ -87,17 +88,16 @@ public sealed class TenantDekHandlerTests
     }
 
     [Fact]
-    public async Task Resolve_NoOwnerAccountInTenantContext_ReturnsAuthFailure_AndDoesNotCallKms()
+    public async Task Resolve_CallerNotActiveMemberOfFarm_ReturnsForbidden_AndDoesNotCallKms()
     {
         var dek = new RecordingTenantDekService();
-        var repo = new RecordingRepo();
-        var tenantContext = new TenantContext();
-        var handler = new ResolveTenantDekHandler(repo, dek, tenantContext);
+        var repo = new RecordingRepo { IsActiveMember = false };
+        var handler = new ResolveTenantDekHandler(repo, dek);
 
         var result = await handler.HandleAsync(BuildResolveCommand("some-dek-id"));
 
         result.IsSuccess.Should().BeFalse();
-        result.Error.Code.Should().Be("join.unauthenticated");
+        result.Error.Code.Should().Be("ShramSafal.Forbidden");
         dek.ResolveCallCount.Should().Be(0);
         repo.AuditEvents.Should().BeEmpty();
     }
@@ -107,9 +107,7 @@ public sealed class TenantDekHandlerTests
     {
         var dek = new RecordingTenantDekService();
         var repo = new RecordingRepo();
-        var tenantContext = new TenantContext();
-        tenantContext.SetTenant(FarmGuid, OwnerAccountId, OwnerUserId);
-        var handler = new ResolveTenantDekHandler(repo, dek, tenantContext);
+        var handler = new ResolveTenantDekHandler(repo, dek);
 
         var result = await handler.HandleAsync(BuildResolveCommand(""));
 
@@ -123,9 +121,7 @@ public sealed class TenantDekHandlerTests
     {
         var dek = new RecordingTenantDekService { NextResolveResult = null };
         var repo = new RecordingRepo();
-        var tenantContext = new TenantContext();
-        tenantContext.SetTenant(FarmGuid, OwnerAccountId, OwnerUserId);
-        var handler = new ResolveTenantDekHandler(repo, dek, tenantContext);
+        var handler = new ResolveTenantDekHandler(repo, dek);
 
         var result = await handler.HandleAsync(BuildResolveCommand("wrong-tenant-dek-id"));
 
@@ -142,9 +138,7 @@ public sealed class TenantDekHandlerTests
     {
         var dek = new RecordingTenantDekService { NextResolveResult = new byte[32] };
         var repo = new RecordingRepo();
-        var tenantContext = new TenantContext();
-        tenantContext.SetTenant(FarmGuid, OwnerAccountId, OwnerUserId);
-        var handler = new ResolveTenantDekHandler(repo, dek, tenantContext);
+        var handler = new ResolveTenantDekHandler(repo, dek);
 
         var result = await handler.HandleAsync(BuildResolveCommand("valid-dek-id"));
 
@@ -157,6 +151,7 @@ public sealed class TenantDekHandlerTests
 
     private static IssueTenantDekCommand BuildIssueCommand() => new(
         UserId: OwnerUserId,
+        FarmId: FarmGuid,
         ClientAppVersion: "test-v1",
         ActorRole: "Owner",
         AuditDeviceId: "test-device",
@@ -164,6 +159,7 @@ public sealed class TenantDekHandlerTests
 
     private static ResolveTenantDekCommand BuildResolveCommand(string dekId) => new(
         UserId: OwnerUserId,
+        FarmId: FarmGuid,
         DekId: dekId,
         ClientAppVersion: "test-v1",
         ActorRole: "Owner",
@@ -206,6 +202,12 @@ public sealed class TenantDekHandlerTests
     private sealed class RecordingRepo : IShramSafalRepository
     {
         public List<AuditEvent> AuditEvents { get; } = new();
+
+        public bool IsActiveMember { get; set; } = true;
+
+        public Task<(bool IsActiveMember, Guid OwnerAccountId)> GetActiveFarmMembershipForTenantAsync(
+            Guid farmId, Guid userId, CancellationToken ct = default)
+            => Task.FromResult(IsActiveMember ? (true, OwnerAccountId) : (false, Guid.Empty));
 
         public Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken ct = default)
         {

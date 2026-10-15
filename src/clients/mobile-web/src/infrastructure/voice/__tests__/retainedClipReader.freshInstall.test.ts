@@ -112,6 +112,9 @@ describe('fresh install: the acknowledged clip comes back from the server archiv
         if (opened.ok) {
             expect(Array.from(opened.bytes)).toEqual(Array.from(PLAINTEXT));
         }
+        // D1: every DEK call named a farm (the server cannot know the tenant otherwise).
+        expect(server.dekFarmIds.length).toBeGreaterThan(0);
+        expect(server.dekFarmIds.every(f => typeof f === 'string' && f.length > 0)).toBe(true);
     });
 
     it('also plays once the farm cache has been pulled (no server membership lookup needed)', async () => {
@@ -139,7 +142,9 @@ describe('fresh install: the acknowledged clip comes back from the server archiv
         await signIn('user-a', 'owner-a');
         server.memberships.set('user-a', ['owner-zzz']); // not the owner the clip was sealed to
 
-        expect(await openRetainedClip(CLIP)).toEqual({ ok: false, error: 'cannot_open' });
+        // D1: the key is unwrapped under each candidate account's own farm, and KMS refuses
+        // the wrong account before the auth tag is ever consulted.
+        expect(await openRetainedClip(CLIP)).toEqual({ ok: false, error: 'dek_unavailable' });
     });
 
     it('a farmer with no known farms cannot open it (no unbound open)', async () => {
@@ -167,8 +172,9 @@ describe('fresh install: the acknowledged clip comes back from the server archiv
     it('a DEK the caller tenant cannot unwrap surfaces as unavailable, not as a crash', async () => {
         await recordAndUpload();
         await wipeIndexedDb();
-        await signIn('user-a', 'owner-other'); // JWT tenant differs: KMS EncryptionContext refuses
-        server.memberships.set('user-a', ['owner-a']);
+        await signIn('user-a', 'owner-other');
+        // The farmer's only account is not the one that sealed the clip: KMS EncryptionContext refuses.
+        server.memberships.set('user-a', ['owner-other']);
 
         expect(await openRetainedClip(CLIP)).toEqual({ ok: false, error: 'dek_unavailable' });
     });

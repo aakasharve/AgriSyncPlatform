@@ -171,7 +171,7 @@ export async function persistVoiceClip(input: PersistVoiceClipInput): Promise<vo
             + "be moved into another clip's row undetected.",
         );
     }
-    const { dek, dekId } = await getCurrentTenantDek();
+    const { dek, dekId } = await getCurrentTenantDek(input.farmId);
     const sealed = await sealVoiceClip(input.plaintext, dek, dekId, binding);
     const nowIso = new Date().toISOString();
     const row: VoiceClipCacheRecord = {
@@ -221,7 +221,7 @@ export async function readVoiceClipPlaintext(clipId: string): Promise<Uint8Array
     // network — see `resolveVoiceClipBinding`.
     const binding = await resolveVoiceClipBinding(clipId, row.farmId);
     if (!binding) return null;
-    const dek = await resolveDek(row.wrappedDekId);
+    const dek = await resolveDek(row.wrappedDekId, row.farmId);
     if (!dek) return null;
     return openVoiceClip(
         { ciphertext: row.ciphertext, iv: row.iv, wrappedDekId: row.wrappedDekId },
@@ -562,7 +562,7 @@ async function archiveOnce(
         }
         try {
             const bytes = await blobToBytes(row.localBlob);
-            const { dek, dekId } = await getCurrentTenantDek();
+            const { dek, dekId } = await getCurrentTenantDek(row.farmId);
             sealed = await sealVoiceClip(bytes, dek, dekId, binding);
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);

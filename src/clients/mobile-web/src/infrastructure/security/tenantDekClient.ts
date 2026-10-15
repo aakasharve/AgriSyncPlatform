@@ -25,7 +25,10 @@ interface CachedDek {
  * Singleton in-memory cache. Module-scoped so every importer shares
  * the same DEK for the session. Reset on logout via `clearCachedDek()`.
  */
-let _cached: CachedDek | null = null;
+// D1: the key belongs to an OWNER ACCOUNT, but the server only learns which one from a
+// farm the caller is an active member of. The cache is therefore keyed by farm id, so
+// working in a farm of another account never reuses the first account's key.
+const _cached = new Map<string, CachedDek>();
 
 /**
  * Decode a base64 string into raw bytes. Browser-safe (atob + charCodeAt)
@@ -48,17 +51,19 @@ function base64ToBytes(b64: string): Uint8Array {
  *
  * Pair with `sealVoiceClip(plaintext, dek, dekId)` in voiceEnvelope.ts.
  */
-export async function getCurrentTenantDek(): Promise<{ dekId: string; dek: Uint8Array }> {
-    if (_cached && _cached.expiresAtUtc > new Date()) {
-        return { dekId: _cached.dekId, dek: _cached.dek };
+export async function getCurrentTenantDek(farmId: string): Promise<{ dekId: string; dek: Uint8Array }> {
+    const hit = _cached.get(farmId);
+    if (hit && hit.expiresAtUtc > new Date()) {
+        return { dekId: hit.dekId, dek: hit.dek };
     }
-    const resp = await agriSyncClient.getTenantDek();
-    _cached = {
+    const resp = await agriSyncClient.getTenantDek(farmId);
+    const fresh: CachedDek = {
         dekId: resp.dekId,
         dek: base64ToBytes(resp.dekBase64),
         expiresAtUtc: new Date(resp.expiresAtUtc),
     };
-    return { dekId: _cached.dekId, dek: _cached.dek };
+    _cached.set(farmId, fresh);
+    return { dekId: fresh.dekId, dek: fresh.dek };
 }
 
 /**
@@ -69,8 +74,8 @@ export async function getCurrentTenantDek(): Promise<{ dekId: string; dek: Uint8
  * tenant or expired key surfaces as a `null` return — caller should
  * treat as "clip unrecoverable" rather than crashing.
  */
-export async function resolveDek(dekId: string): Promise<Uint8Array | null> {
-    const resp = await agriSyncClient.resolveDek(dekId);
+export async function resolveDek(dekId: string, farmId: string): Promise<Uint8Array | null> {
+    const resp = await agriSyncClient.resolveDek(dekId, farmId);
     if (!resp) return null;
     return base64ToBytes(resp.dekBase64);
 }
@@ -81,5 +86,5 @@ export async function resolveDek(dekId: string): Promise<Uint8Array | null> {
  * without re-authenticating to the backend.
  */
 export function clearCachedDek(): void {
-    _cached = null;
+    _cached.clear();
 }
