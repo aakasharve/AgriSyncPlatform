@@ -158,6 +158,8 @@ async function dismissOverlays() {
     const i = await web.info(Web.tid('header-setup-hub')).catch(() => ({ n: 0 }));
     if (i.n && !i.covered) return true;
     let clicked = false;
+    // the 'needs attention' bottom sheet can open by itself over the home screen: close it with its own X
+    if (i.n && i.covered && await web.visible(Web.css('svg.lucide-x')).catch(() => false)) { try { await web.click(Web.css('svg.lucide-x'), { timeout: 4000 }); clicked = true; await sleep(1200); continue; } catch { /* fall through */ } }
     for (const spec of [Web.tid('welcome-continue'), Web.tid('onboarding-skip'),
       Web.text(/चला, सुरुवात करूया/), Web.text(/समजलं, पुढे चला/), Web.text(/^\s*पुढे चला\s*$/), Web.text(/^\s*नंतर\s*$/), Web.text(/^\s*Skip\s*$/i)]) {
       if (await web.visible(spec).catch(() => false)) { try { await web.click(spec, { timeout: 4000 }); clicked = true; break; } catch { /* next */ } }
@@ -201,9 +203,16 @@ async function loginUi(phone) {
   return { ok: false, alertText, diag };
 }
 
+const SETUP_HUB_OPEN = [Web.text(/बाहेर पडा/), Web.tid('hub-settings-voice-diary'), Web.text(/^\s*कामाचा हिशोब\s*$/)];
+async function setupHubOpen() { for (const m of SETUP_HUB_OPEN) if (await web.visible(m).catch(() => false)) return true; return false; }
 async function openSetupHub() {
   await dismissOverlays();
-  await web.click(Web.tid('header-setup-hub'), { label: 'header setup hub' }); await sleep(1200);
+  // a slow emulator can swallow the first tap; retry until the Setup Hub is really showing
+  for (let a = 0; a < 4; a++) {
+    await web.click(Web.tid('header-setup-hub'), { label: 'header setup hub' });
+    for (let k = 0; k < 8; k++) { await sleep(500); if (await setupHubOpen()) { await sleep(600); return; } }
+    await dismissOverlays();
+  }
 }
 const HUB_MARKERS = [Web.text(/हजेरी वही/), Web.tid('labour-stat-grid'), Web.tid('labour-window-slider'), Web.tid('labour-review-strip'), Web.text(/हजेरी घ्या/), Web.tid('hub-invite-qr')];
 async function hubLoaded(timeout = 30_000) {
