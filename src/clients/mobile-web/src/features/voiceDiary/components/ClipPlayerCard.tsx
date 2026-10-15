@@ -186,31 +186,44 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
     // Cloud clips: lazy-fetch on first play to avoid hauling audio bytes for
     // every calendar paint. Also the fallback for a clip the server holds but
     // this phone no longer does (fresh install, new phone).
-    const ensureCloudAudioUrl = useCallback(async () => {
-        if (audioUrl || fetchingCloud) return;
+    // Returns the playable URL, or null when the recording could not be opened. The URL is returned (not just
+    // stored in state) because the caller must put it on the <audio> element itself: React has not re-rendered yet.
+    const ensureCloudAudioUrl = useCallback(async (): Promise<string | null> => {
+        if (audioUrl) return audioUrl;
+        if (fetchingCloud) return null;
         setFetchingCloud(true);
         setFetchError(null);
         try {
             const result = await openRetainedClip(clip.id);
             if (!result.ok) {
                 setFetchError(result.error);
-                return;
+                return null;
             }
             const blob = new Blob([result.bytes], { type: result.mimeType });
-            setAudioUrl(URL.createObjectURL(blob));
+            const url = URL.createObjectURL(blob);
+            setAudioUrl(url);
+            return url;
         } catch (err) {
             setFetchError(err instanceof Error ? err.message : 'cloud_fetch_failed');
+            return null;
         } finally {
             setFetchingCloud(false);
         }
     }, [audioUrl, clip.id, fetchingCloud]);
 
     const handlePlayPause = useCallback(async () => {
-        if (!audioUrl && (clip.source === 'cloud' || clip.localRecord?.s3RetainedKey)) {
-            await ensureCloudAudioUrl();
+        let url = audioUrl;
+        if (!url && (clip.source === 'cloud' || clip.localRecord?.s3RetainedKey)) {
+            url = (await ensureCloudAudioUrl()) ?? '';
+            // Could not open the recording: the error is already shown; there is nothing to play.
+            if (!url) return;
         }
         const el = audioRef.current;
         if (!el) return;
+        // The fetched URL is only in React state; set it on the element now so the very first tap plays.
+        if (url && el.getAttribute('src') !== url) {
+            el.src = url;
+        }
         if (el.paused) {
             await el.play().catch(() => undefined);
             setIsPlaying(true);
