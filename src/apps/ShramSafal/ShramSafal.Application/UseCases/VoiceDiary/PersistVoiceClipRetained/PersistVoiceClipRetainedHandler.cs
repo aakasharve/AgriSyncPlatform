@@ -54,6 +54,16 @@ public sealed class PersistVoiceClipRetainedHandler(
             return Result.Failure<PersistVoiceClipRetainedResult>(ShramSafalErrors.InvalidCommand);
         }
 
+        // Column widths: an over-long value is a client contract error (400), not
+        // a Postgres 22001 surfacing as a bare 500 after the S3 object was written.
+        if (command.DekId.Trim().Length > VoiceClipRetained.MaxDekIdLength
+            || command.IvBase64.Trim().Length > VoiceClipRetained.MaxIvBase64Length
+            || command.AuthTagBase64.Trim().Length > VoiceClipRetained.MaxAuthTagBase64Length
+            || command.Language.Trim().Length > VoiceClipRetained.MaxLanguageLength)
+        {
+            return Result.Failure<PersistVoiceClipRetainedResult>(ShramSafalErrors.InvalidCommand);
+        }
+
         // RecordedAtUtc must arrive as UTC; the domain factory rejects
         // otherwise. Normalise here so wire-shaped DateTime kinds
         // (Unspecified from JSON deserialisation) don't trip the

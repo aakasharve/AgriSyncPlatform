@@ -23,6 +23,7 @@ import {
 import { purgeExpiredProcessingVoiceClips } from '../../../infrastructure/voice/VoiceClipRetention';
 import { archiveFailureKind, deriveCloudArchiveState } from '../../../infrastructure/voice/voiceArchiveState';
 import { getArchiveConsentSince, recordedUnderConsent } from '../../../infrastructure/voice/voiceArchiveConsent';
+import { toArchiveClipId } from '../../../infrastructure/voice/archiveClipId';
 import { voiceArchiveUploader } from '../../../infrastructure/sync/VoiceArchiveUploader';
 import {
     getVoiceDiaryByRange,
@@ -173,10 +174,16 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
                 cloudFailure: archiveFailureKind(record),
             });
         }
+        // The server lists the ARCHIVE Guid; the phone keys its own rows by the
+        // local id. Map each local id forward so the same recording is ONE card.
+        const localIdByArchiveId = new Map<string, string>();
+        for (const record of localClips) localIdByArchiveId.set(toArchiveClipId(record.id), record.id);
         for (const cloud of cloudClips) {
-            const existing = map.get(cloud.clipId);
-            map.set(cloud.clipId, {
-                id: cloud.clipId,
+            const localId = localIdByArchiveId.get(cloud.clipId.toLowerCase());
+            const key = localId ?? cloud.clipId;
+            const existing = map.get(key);
+            map.set(key, {
+                id: key,
                 recordedAtUtc: cloud.recordedAtUtc,
                 durationMs: cloud.durationSeconds * 1000,
                 status: existing?.status,

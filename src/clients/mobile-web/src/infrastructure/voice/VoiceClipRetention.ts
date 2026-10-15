@@ -16,14 +16,15 @@
 // ciphertext + envelope metadata. `purgeExpiredProcessingVoiceClips`
 // is UNCHANGED — the local 30-day sweep still runs because the S3 copy
 // holds the retained tier independently. Per supervisor risk #1, the
-// local Dexie `voiceClips.id` is reused verbatim as the server PK so
-// the unified VoiceDiary view de-dups cleanly.
+// local Dexie `voiceClips.id` maps deterministically to the server's Guid PK
+// (`toArchiveClipId`, defect D2) so the unified VoiceDiary view de-dups cleanly.
 
 import { getDatabase, type VoiceClipCacheRecord, type VoiceClipStatus } from '../storage/DexieDatabase';
 import { sealVoiceClip, openVoiceClip, type VoiceClipBinding } from '../security/voiceEnvelope';
 import { getCurrentTenantDek, resolveDek } from '../security/tenantDekClient';
 import { agriSyncClient } from '../api/AgriSyncClient';
 import { persistRetainedVoiceClip } from '../voiceDiary/voiceDiaryApiClient';
+import { toArchiveClipId } from './archiveClipId';
 import { archiveRetryDelayMs } from './voiceArchiveState';
 import { observeArchiveConsent, observeArchiveConsentView, recordedUnderConsent } from './voiceArchiveConsent';
 import { isTransportFailure, NETWORK_FAILURE_PREFIX } from './voiceArchiveState';
@@ -546,11 +547,21 @@ async function archiveOnce(
     // (clipId, ownerAccountId). The sealed bytes are sent and then dropped -
     // the local row is NOT rewritten, so no existing recording is altered (D9).
     // A row that already carries a sealed triple is sent as it is.
+    //
+    // THE ARCHIVE ID (defect D2). The server keys a clip by a Guid, the phone by a
+    // 64-hex string. `archiveId` is derived from the local id and is the ONE
+    // string used for the seal AAD, the persist body, the ack check and (in the
+    // reader) the by-id URL and the open AAD. The local row stays keyed by `row.id`.
+    const archiveId = toArchiveClipId(row.id);
     let sealed: { ciphertext: Uint8Array; iv: Uint8Array; wrappedDekId: string };
-    if (row.ciphertext && row.iv && row.wrappedDekId) {
+    if (row.ciphertext && row.iv && row.wrappedDekId && archiveId === row.id) {
+        // Sealed under the SAME id the archive uses (a Guid-keyed row): send as it is.
         sealed = { ciphertext: row.ciphertext, iv: row.iv, wrappedDekId: row.wrappedDekId };
-    } else if (row.localBlob) {
-        const binding = await resolveVoiceClipBinding(row.id, row.farmId);
+    } else if (row.localBlob || (row.ciphertext && row.iv && row.wrappedDekId)) {
+        // A sealed row whose id is not the archive id carries an AAD the reader
+        // would not rebuild: open it under its own binding and seal it again bound
+        // to the archive id. The local row is not rewritten.
+        const binding = await resolveVoiceClipBinding(archiveId, row.farmId);
         if (!binding) {
             await recordArchiveAttempt(clipId, {
                 retainedArchiveError:
@@ -561,7 +572,10 @@ async function archiveOnce(
             return { status: 'skipped', clipId, reason: 'binding_unavailable' };
         }
         try {
-            const bytes = await blobToBytes(row.localBlob);
+            const bytes = row.localBlob
+                ? await blobToBytes(row.localBlob)
+                : await readVoiceClipPlaintext(row.id);
+            if (!bytes) throw new Error('the sealed local copy could not be opened to re-seal it for the archive');
             const { dek, dekId } = await getCurrentTenantDek(row.farmId);
             sealed = await sealVoiceClip(bytes, dek, dekId, binding);
         } catch (error) {
@@ -595,10 +609,8 @@ async function archiveOnce(
     const cipherBody = sealed.ciphertext.subarray(0, sealed.ciphertext.byteLength - AES_GCM_TAG_BYTES);
     const authTag = sealed.ciphertext.subarray(sealed.ciphertext.byteLength - AES_GCM_TAG_BYTES);
 
-    const durationSeconds = Math.max(
-        1,
-        Math.round((row.durationMs ?? 1000) / 1000),
-    );
+    const durationMs = Number.isFinite(row.durationMs) ? (row.durationMs as number) : 1000;
+    const durationSeconds = Math.max(1, Math.round(durationMs / 1000));
 
     // From here until the server answers, the clip is `uploading` - and still
     // NOT saved. The mark is what lets the UI say so, and what lets a crashed
@@ -613,7 +625,7 @@ async function archiveOnce(
     for (let attempt = 1; attempt <= MAX_PERSIST_ATTEMPTS; attempt++) {
         try {
             const result = await persistRetainedVoiceClip({
-                clipId: row.id,
+                clipId: archiveId,
                 recordedAtUtc: row.recordedAtUtc,
                 cipherBase64: uint8ToBase64(cipherBody),
                 dekId: sealed.wrappedDekId,
@@ -629,8 +641,8 @@ async function archiveOnce(
             // THE ACKNOWLEDGEMENT, AND THE ONLY THING THAT MAY BE CALLED ONE.
             // A reply that does not echo THIS clip's id is not an ack of this
             // clip, whatever its status code was.
-            if (String(result.clipId).toLowerCase() !== row.id.toLowerCase()) {
-                throw new Error(`server acknowledged clip ${result.clipId}, not ${row.id}`);
+            if (String(result.clipId).toLowerCase() !== archiveId) {
+                throw new Error(`server acknowledged clip ${result.clipId}, not ${archiveId}`);
             }
 
             // REVIEW I2 - THE STAMP HAS ITS OWN TRY, and the boundary matters.
@@ -645,7 +657,7 @@ async function archiveOnce(
             try {
                 const ackedAt = new Date().toISOString();
                 await db.voiceClips.update(clipId, {
-                    s3RetainedKey: result.clipId,
+                    s3RetainedKey: archiveId,
                     archiveAckedAtUtc: ackedAt,
                     archiveState: undefined,
                     archiveFailCount: undefined,
@@ -667,7 +679,7 @@ async function archiveOnce(
                     row.farmId,
                 );
             }
-            return { status: 'archived', clipId, retainedKey: result.clipId, attempts: attempt };
+            return { status: 'archived', clipId, retainedKey: archiveId, attempts: attempt };
         } catch (error) {
             lastError = error instanceof Error ? error.message : String(error);
             lastWasTransport = isTransportFailure(error);

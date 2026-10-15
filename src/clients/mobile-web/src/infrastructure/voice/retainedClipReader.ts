@@ -28,6 +28,7 @@ import { openVoiceClip } from '../security/voiceEnvelope';
 import { resolveDek } from '../security/tenantDekClient';
 import { readFarmOwnerAccountId } from './VoiceClipRetention';
 import { getVoiceDiaryById } from '../voiceDiary/voiceDiaryApiClient';
+import { toArchiveClipId } from './archiveClipId';
 
 export type RetainedClipReadError =
     | 'not_found'
@@ -97,9 +98,19 @@ async function serverOwnerCandidates(): Promise<OwnerCandidate[]> {
     }
 }
 
+/**
+ * `clipId` may be the local clip id (a clip this phone recorded) or the archive
+ * Guid the server lists (a clip only the archive holds): `toArchiveClipId` maps
+ * both to the same Guid, which is the id the clip was sealed under (AAD), stored
+ * under and is fetched by.
+ */
 export async function openRetainedClip(clipId: string): Promise<RetainedClipReadResult> {
-    const archived = await getVoiceDiaryById(clipId);
+    const archiveId = toArchiveClipId(clipId);
+    const archived = await getVoiceDiaryById(archiveId);
     if (!archived) return { ok: false, error: 'not_found' };
+    // The server must hand back the clip we asked for; the AAD below is built from
+    // OUR archive id, never from whatever a reply claims.
+    if (String(archived.clipId).toLowerCase() !== archiveId) return { ok: false, error: 'not_found' };
 
     // The archive keeps the 16-byte auth tag in its own column; WebCrypto wants it appended.
     const body = base64ToBytes(archived.cipherBase64);
@@ -126,7 +137,7 @@ export async function openRetainedClip(clipId: string): Promise<RetainedClipRead
                 return await openVoiceClip(
                     { ciphertext, iv, wrappedDekId: archived.dekId },
                     dek,
-                    { clipId: archived.clipId, ownerAccountId },
+                    { clipId: archiveId, ownerAccountId },
                 );
             } catch {
                 // Auth tag refused this binding: it is not this clip's owner. Next.
