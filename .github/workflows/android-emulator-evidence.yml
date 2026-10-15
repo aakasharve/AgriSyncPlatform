@@ -62,13 +62,13 @@ jobs:
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os
           legs = [
-            {"name": "api34-normal", "api": 34, "screen": "normal"},
-            {"name": "api34-small",  "api": 34, "screen": "small"},
-            {"name": "api36-normal", "api": 36, "screen": "normal"},
-            {"name": "api36-small",  "api": 36, "screen": "small"},
+            {"name": "api34-normal", "api": 34, "screen": "normal", "gpu": "swangle_indirect", "cores": 4},
+            {"name": "api34-small",  "api": 34, "screen": "small",  "gpu": "swiftshader_indirect", "cores": 4},
+            {"name": "api36-normal", "api": 36, "screen": "normal", "gpu": "swiftshader_indirect", "cores": 2},
+            {"name": "api36-small",  "api": 36, "screen": "small",  "gpu": "swiftshader_indirect", "cores": 2},
           ]
           if os.environ.get("INCLUDE_API24") == "true":
-            legs.append({"name": "api24-normal", "api": 24, "screen": "normal"})
+            legs.append({"name": "api24-normal", "api": 24, "screen": "normal", "gpu": "swiftshader_indirect", "cores": 2})
           print("matrix=" + json.dumps({"include": legs}))
           PY
         env:
@@ -259,7 +259,8 @@ jobs:
           force-avd-creation: true
           emulator-boot-timeout: 900
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          cores: ${{ matrix.cores }}
+          emulator-options: -no-window -gpu ${{ matrix.gpu }} -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash tools/android-emulator-ci/run-leg.sh
 
       # The emulator on a shared runner occasionally dies mid-run. That is an infrastructure failure, not an
@@ -309,7 +310,8 @@ jobs:
           force-avd-creation: true
           emulator-boot-timeout: 900
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          cores: ${{ matrix.cores }}
+          emulator-options: -no-window -gpu ${{ matrix.gpu }} -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash tools/android-emulator-ci/run-leg.sh
 
       - name: Collect redacted backend evidence
