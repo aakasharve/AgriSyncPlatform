@@ -47,4 +47,7 @@ VALUES (md5('m:ownerB')::uuid, md5('farmB')::uuid, md5('u:ownerB')::uuid, 'Prima
 
 UPDATE public.users SET preferred_language = 'mr';
 
+-- the demo fixture leaves farm_code empty; the invite link needs one (earlier harnesses set FRM001 too)
+UPDATE ssf.farms SET farm_code = 'FRM001' WHERE "Id" = (SELECT farm_a FROM k) AND (farm_code IS NULL OR farm_code = '');
+
 COMMIT;
