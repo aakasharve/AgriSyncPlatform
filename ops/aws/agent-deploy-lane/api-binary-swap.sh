@@ -39,6 +39,7 @@
 #   api-binary-swap.sh --sha <7-40 hex> --migrations <N>
 #                      [--expect-user N] [--expect-accounts N] [--expect-analytics N]
 #                      [--expect-before <MigrationId>] [--expect-after <MigrationId>]
+#                      [--set-env TenantDek__MasterKeyId=alias/<name>]
 #
 #   --migrations N        expected ShramSafal (`ssf`) migrations. 0 = none, and then
 #                         the gate is forced false so a phantom pending migration
@@ -47,6 +48,12 @@
 #                         Any context that moves without being declared FAILS the deploy.
 #   --expect-before/after optional `ssf` head-row assertions, checked in addition to
 #                         the set difference.
+#   --set-env KEY=VALUE   set ONE env var in the systemd EnvironmentFile, inside the
+#                         step-7 atomic pass. KEY is allowlisted to exactly
+#                         TenantDek__MasterKeyId; VALUE must match
+#                         ^alias/[a-z0-9-]{1,128}$. Anything else exits 18 BEFORE any
+#                         change (before step 0). Idempotent. Only key NAMES, line
+#                         counts and a hash are printed -- never file contents.
 #
 # INVOKED BY
 #   /opt/agrisync/deploy/ec2-deploy-wrapper.sh, which consumes the GO token before
@@ -98,7 +105,58 @@ die_usage() { echo "FATAL: $1" >&2; echo "Run with --help for usage." >&2; exit 
 
 need_val() { [ $# -ge 2 ] && [ -n "${2:-}" ] || die_usage "$1 requires a value"; }
 
-usage() { sed -n '2,70p' "$0" | sed 's/^# \{0,1\}//'; exit 18; }
+# BEGIN set-env helpers (extracted verbatim by api-binary-swap.set-env.test.sh)
+# Constant allowlist of exactly one key. Widening this is a reviewed code change.
+SET_ENV_ALLOWED_KEY="TenantDek__MasterKeyId"
+SET_ENV_KEY=""
+SET_ENV_VALUE=""
+
+# Validates a --set-env argument and records it. Runs during argument parsing, i.e.
+# before ANY side effect (no sudo, no psql, no file touched). Fails closed (exit 18).
+set_env_register() {
+  local arg="$1" key val
+  [ -z "$SET_ENV_KEY" ] || die_usage "--set-env may be given only once"
+  case "$arg" in
+    *=*) ;;
+    *) die_usage "--set-env requires KEY=VALUE" ;;
+  esac
+  key="${arg%%=*}"; val="${arg#*=}"
+  if [ "$key" != "$SET_ENV_ALLOWED_KEY" ]; then
+    die_usage "--set-env key not allowlisted (only $SET_ENV_ALLOWED_KEY may be set)"
+  fi
+  if ! [[ "$val" =~ ^alias/[a-z0-9-]{1,128}$ ]]; then
+    die_usage "--set-env value for $key must match ^alias/[a-z0-9-]{1,128}\$ (value not echoed)"
+  fi
+  SET_ENV_KEY="$key"; SET_ENV_VALUE="$val"
+}
+
+# One awk pass over the EnvironmentFile (step 7). Rewrites ALLOW/BUILD_SHA/DEPLOYED_AT
+# and, only when setkey is non-empty, the single allowlisted key (replace the first
+# occurrence, drop later duplicates, append once if absent). All other lines pass
+# through untouched.
+ENV_AWK_PROG='
+  /^[[:space:]]*(export[[:space:]]+)?ALLOW_PRODUCTION_STARTUP_MIGRATIONS=/ { print "ALLOW_PRODUCTION_STARTUP_MIGRATIONS=" allow; next }
+  /^[[:space:]]*(export[[:space:]]+)?BUILD_SHA=/                          { print "BUILD_SHA=" sha; next }
+  /^[[:space:]]*(export[[:space:]]+)?DEPLOYED_AT=/                        { print "DEPLOYED_AT=" deploy_ts; next }
+  setkey != "" && $0 ~ ("^[[:space:]]*(export[[:space:]]+)?" setkey "=") {
+    if (!seen) { print setkey "=" setval; seen = 1 }
+    next
+  }
+  { print }
+  END { if (setkey != "" && !seen) print setkey "=" setval }
+'
+
+# sha256 of every line EXCEPT the four keys step 7 may legitimately change. Equal
+# before/after proves "all other lines byte-identical" without printing any line.
+env_residual_hash() {
+  sudo awk '
+    /^[[:space:]]*(export[[:space:]]+)?(ALLOW_PRODUCTION_STARTUP_MIGRATIONS|BUILD_SHA|DEPLOYED_AT|TenantDek__MasterKeyId)=/ { next }
+    { print }
+  ' "$1" | sha256sum | cut -d' ' -f1
+}
+# END set-env helpers
+
+usage() { sed -n '2,78p' "$0" | sed 's/^# \{0,1\}//'; exit 18; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -109,6 +167,7 @@ while [ $# -gt 0 ]; do
     --expect-user)      need_val "$@"; EXPECT_USER="$2";     shift 2 ;;
     --expect-accounts)  need_val "$@"; EXPECT_ACCOUNTS="$2"; shift 2 ;;
     --expect-analytics) need_val "$@"; EXPECT_ANALYTICS="$2";shift 2 ;;
+    --set-env)          need_val "$@"; set_env_register "$2"; shift 2 ;;
     -h|--help)          usage ;;
     *) die_usage "unknown argument: $1" ;;
   esac
@@ -198,6 +257,7 @@ close_gate_on_exit() {
 trap close_gate_on_exit EXIT
 
 echo "$LOG START sha=$DEPLOY_SHA target_allow=$TARGET_ALLOW"
+[ -z "$SET_ENV_KEY" ] || echo "$LOG SET_ENV requested key=$SET_ENV_KEY (value validated)"
 echo "$LOG EXPECTED ssf=$MIGRATION_COUNT user=$EXPECT_USER accounts=$EXPECT_ACCOUNTS analytics=$EXPECT_ANALYTICS (total $TOTAL_EXPECTED)"
 
 # ---------------------------------------------------------------------------
@@ -370,23 +430,26 @@ echo "$LOG BINARY_SWAPPED"
 echo "$LOG step 6: restore preserved .env"
 sudo install -o www-data -g www-data -m 0640 "$ENV_STASH" "$ENV_FILE"
 
-# --- Step 7: atomic env mutation: ALLOW gate + BUILD_SHA + DEPLOYED_AT ---
-echo "$LOG step 7: atomic env mutation (gate=$TARGET_ALLOW + stamp build)"
+# --- Step 7: atomic env mutation: ALLOW gate + BUILD_SHA + DEPLOYED_AT (+ --set-env) ---
+echo "$LOG step 7: atomic env mutation (gate=$TARGET_ALLOW + stamp build${SET_ENV_KEY:+ + set $SET_ENV_KEY})"
 DEPLOY_TS=$(date -u +%Y%m%dT%H%M%SZ)
+SET_ENV_PRE_LINES=0
+if [ -n "$SET_ENV_KEY" ]; then
+  # Counts only -- never the line itself.
+  SET_ENV_PRE_LINES=$(sudo grep -cE "^[[:space:]]*(export[[:space:]]+)?$SET_ENV_KEY=" "$ENV_FILE" || true)
+  SET_ENV_PRE_EXACT=$(sudo grep -cE "^$SET_ENV_KEY=$SET_ENV_VALUE\$" "$ENV_FILE" || true)
+fi
+RESIDUAL_BEFORE=$(env_residual_hash "$ENV_FILE")
+ENV_LINES_BEFORE=$(sudo wc -l "$ENV_FILE" | cut -d' ' -f1)
 [ "$TARGET_ALLOW" = "true" ] && GATE_OPENED=1   # arm the trap BEFORE the write
-if ! sudo awk -v deploy_ts="$DEPLOY_TS" -v sha="$DEPLOY_SHA" -v allow="$TARGET_ALLOW" '
-  /^[[:space:]]*(export[[:space:]]+)?ALLOW_PRODUCTION_STARTUP_MIGRATIONS=/ { print "ALLOW_PRODUCTION_STARTUP_MIGRATIONS=" allow; next }
-  /^[[:space:]]*(export[[:space:]]+)?BUILD_SHA=/                          { print "BUILD_SHA=" sha; next }
-  /^[[:space:]]*(export[[:space:]]+)?DEPLOYED_AT=/                        { print "DEPLOYED_AT=" deploy_ts; next }
-  { print }
-' "$ENV_FILE" > /tmp/.envnew.$$; then
+if ! sudo awk -v deploy_ts="$DEPLOY_TS" -v sha="$DEPLOY_SHA" -v allow="$TARGET_ALLOW" \
+       -v setkey="$SET_ENV_KEY" -v setval="$SET_ENV_VALUE" "$ENV_AWK_PROG" "$ENV_FILE" > /tmp/.envnew.$$; then
   echo "$LOG FATAL: env mutation awk failed. RESTORE: sudo cp -a $BACKUP_DIR/. $TARGET_DIR/" >&2
   exit 25
 fi
 # install(1) creates with the final mode atomically — `tee` would leave the file
 # world-readable, with every production secret in it, for the width of the write.
-sudo install -o www-data -g www-data -m 0640 /tmp/.envnew.$$ "$ENV_FILE" \
-  || { echo "$LOG FATAL: env install failed" >&2; exit 25; }
+sudo install -o www-data -g www-data -m 0640 /tmp/.envnew.$$ "$ENV_FILE"   || { echo "$LOG FATAL: env install failed" >&2; exit 25; }
 sudo rm -f /tmp/.envnew.$$
 ALLOW_CHECK=$(sudo grep -cE "^ALLOW_PRODUCTION_STARTUP_MIGRATIONS=$TARGET_ALLOW\$" "$ENV_FILE" || true)
 BUILD_CHECK=$(sudo grep -cE "^BUILD_SHA=$DEPLOY_SHA\$" "$ENV_FILE" || true)
@@ -394,6 +457,27 @@ if [ "$ALLOW_CHECK" != "1" ] || [ "$BUILD_CHECK" != "1" ]; then
   echo "$LOG FATAL: env mutation post-check (allow=$ALLOW_CHECK build=$BUILD_CHECK; expected 1/1)" >&2
   echo "$LOG        RESTORE: sudo cp -a $BACKUP_DIR/. $TARGET_DIR/" >&2
   exit 25
+fi
+RESIDUAL_AFTER=$(env_residual_hash "$ENV_FILE")
+if [ "$RESIDUAL_BEFORE" != "$RESIDUAL_AFTER" ]; then
+  echo "$LOG FATAL: env mutation changed lines it must not touch (residual hash mismatch)." >&2
+  echo "$LOG        RESTORE: sudo cp -a $BACKUP_DIR/. $TARGET_DIR/" >&2
+  exit 25
+fi
+echo "$LOG ENV_OTHER_LINES_UNCHANGED residual_sha256=${RESIDUAL_AFTER:0:16}… lines_before=$ENV_LINES_BEFORE lines_after=$(sudo wc -l "$ENV_FILE" | cut -d' ' -f1)"
+if [ -n "$SET_ENV_KEY" ]; then
+  SET_ENV_EXACT=$(sudo grep -cE "^$SET_ENV_KEY=$SET_ENV_VALUE\$" "$ENV_FILE" || true)
+  SET_ENV_ANY=$(sudo grep -cE "^[[:space:]]*(export[[:space:]]+)?$SET_ENV_KEY=" "$ENV_FILE" || true)
+  if [ "$SET_ENV_EXACT" != "1" ] || [ "$SET_ENV_ANY" != "1" ]; then
+    echo "$LOG FATAL: --set-env post-check (exact=$SET_ENV_EXACT any=$SET_ENV_ANY; expected 1/1)" >&2
+    echo "$LOG        RESTORE: sudo cp -a $BACKUP_DIR/. $TARGET_DIR/" >&2
+    exit 25
+  fi
+  if [ "$SET_ENV_PRE_EXACT" = "1" ] && [ "$SET_ENV_PRE_LINES" = "1" ]; then SET_ENV_RESULT=unchanged
+  elif [ "$SET_ENV_PRE_LINES" = "0" ]; then SET_ENV_RESULT=added
+  else SET_ENV_RESULT=replaced; fi
+  # The alias is an identifier, not a secret; it is the only value ever echoed.
+  echo "$LOG ENV_SET key=$SET_ENV_KEY value=$SET_ENV_VALUE result=$SET_ENV_RESULT"
 fi
 echo "$LOG ENV_MUTATED allow=$TARGET_ALLOW build_sha=$DEPLOY_SHA deployed_at=$DEPLOY_TS"
 

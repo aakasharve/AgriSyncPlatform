@@ -73,6 +73,7 @@ prevents the confused-deputy problem if the role ARN ever leaks.
 | `api-binary-swap.sh` | The on-box binary swap, and the **only** committed way to apply `ShramSafal` (`ssf`) migrations to production. Parameterized for SHA + expected migration count and history rows. Invoked by `ec2-deploy-wrapper.sh` at G4 |
 | `guardrails.sh` | Pure-bash predicate functions extracted for testability — sourced by `agent-cutover.sh` |
 | `guardrails.test.sh` | 26 unit tests for the predicates. Runs without AWS, without git side-effects |
+| `api-binary-swap.set-env.test.sh` | Tests for `api-binary-swap.sh --set-env KEY=VALUE` (allowlisted to exactly `TenantDek__MasterKeyId`, value `^alias/[a-z0-9-]{1,128}$`, atomic + idempotent, aborts with exit 18 before any change, never prints env contents). Runs the real script against a stubbed temp tree; no AWS, no sudo |
 | `agent-cutover.sh` | The end-to-end script the agent (or operator dry-running this lane) actually runs. Eight guardrails in order, then assume-role + SendCommand + evidence write |
 
 ## Applying ShramSafal (`ssf`) migrations in production
