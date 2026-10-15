@@ -40,7 +40,7 @@ vi.mock('../../../infrastructure/voiceDiary/voiceDiaryApiClient', () => ({
 }));
 
 vi.mock('../../../infrastructure/sync/VoiceArchiveUploader', () => ({
-    voiceArchiveUploader: { triggerNow: vi.fn().mockResolvedValue(undefined) },
+    voiceArchiveUploader: { triggerNow: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn(() => () => undefined) },
 }));
 
 vi.mock('../../../infrastructure/voice/retainedClipReader', () => ({
