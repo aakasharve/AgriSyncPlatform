@@ -1,0 +1,299 @@
+# ANDROID EMULATOR EVIDENCE - manual only. Runs the app on a real Android WebView inside an emulator on a
+# GitHub-hosted Ubuntu runner, against a CI-hosted test API + Postgres.
+#
+#   Android emulator, internal test build, CI-hosted test backend; NOT the production APK, NOT a physical device.
+#
+# Safety properties (each is structural, not a promise):
+#   * workflow_dispatch ONLY. Never on push or pull_request, so it can never be a required check.
+#   * permissions: contents: read. NO repository secrets and NO cloud credentials are referenced anywhere.
+#     Passwords/keys the test backend needs are generated inside the job and masked.
+#   * No signing key exists in this path: the APK is built `assembleDebug` (Gradle's own throwaway debug key),
+#     with applicationId com.agrisync.shramsafal.internaltest and versionName "<release>-internal-test".
+#   * The APK is built from a THROWAWAY COPY of the tracked files (git archive into $RUNNER_TEMP). The
+#     patches (debuggable WebView, allow http://10.0.2.2, new applicationId) touch only that copy; the build
+#     step asserts the checkout is still clean.
+#   * The APK is passed to the emulator jobs as a 1-day artifact named INTERNAL-TEST-... and is never
+#     uploaded to any release/library. Evidence artifacts are screenshots, logs and JSON only.
+#
+# Re-run:  gh workflow run android-emulator-evidence.yml --ref <branch>   (add -f include_api24=true for API 24)
+name: android-emulator-evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      include_api24:
+        description: 'Also run an API 24 (minSdk) leg. Its stock WebView may be too old for the bundle; expect findings about the image, not the app.'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-emulator-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  API_PORT: '5190'
+  PG_PORT: '55432'
+
+jobs:
+  build:
+    name: Build internal-test APK and test API
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Plan the emulator matrix
+        id: plan
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          legs = [
+            {"name": "api34-normal", "api": 34, "screen": "normal"},
+            {"name": "api34-small",  "api": 34, "screen": "small"},
+            {"name": "api36-normal", "api": 36, "screen": "normal"},
+            {"name": "api36-small",  "api": 36, "screen": "small"},
+          ]
+          if os.environ.get("INCLUDE_API24") == "true":
+            legs.append({"name": "api24-normal", "api": 24, "screen": "normal"})
+          print("matrix=" + json.dumps({"include": legs}))
+          PY
+        env:
+          INCLUDE_API24: ${{ inputs.include_api24 }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      # Gate for the harness itself: syntax of every module + unit tests of the result recorder
+      # (a passing fixture AND a failing fixture, so the PASS/FAIL logic is proven to fire).
+      - name: Lint and unit-test the harness
+        working-directory: tools/android-emulator-ci
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          for f in driver.mjs seed-api.mjs summarize.mjs lib/*.mjs; do node --check "$f"; done
+          bash -n backend-up.sh; bash -n run-leg.sh; bash -n build-internal-apk.sh
+          npm test
+
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish the API
+        run: |
+          set -euo pipefail
+          dotnet publish src/AgriSync.Bootstrapper/AgriSync.Bootstrapper.csproj -c Release -o "$RUNNER_TEMP/api-publish" --nologo -v minimal
+          ls "$RUNNER_TEMP/api-publish" | head -5
+
+      - name: Create the throwaway copy and patch it
+        run: bash tools/android-emulator-ci/build-internal-apk.sh copy
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+
+      - name: Install sync-contract deps (tolerant)
+        working-directory: ${{ env.INTERNAL_TREE }}/sync-contract
+        run: npm install --no-audit --no-fund
+
+      - name: Install mobile-web deps
+        working-directory: ${{ env.INTERNAL_TREE }}/src/clients/mobile-web
+        run: npm ci --no-audit --no-fund
+
+      # Same feature flags as release-build.yml. The ONLY differences: the API origin is the CI test API
+      # reached from the emulator as 10.0.2.2, and no Maps key (no secrets in this workflow).
+      - name: Build the web bundle (test API origin)
+        working-directory: ${{ env.INTERNAL_TREE }}/src/clients/mobile-web
+        env:
+          VITE_AGRISYNC_API_URL: http://10.0.2.2:${{ env.API_PORT }}
+          VITE_UNDERSTANDING_METER: '1'
+          VITE_STAGE_QUESTIONS: '1'
+          VITE_DISCIPLINE_SYSTEM: '1'
+          VITE_VOICE_CONTINUITY: '1'
+          VITE_DAILY_LOOP: '1'
+          VITE_TASK_CLOSE_CONFIRM: '1'
+          VITE_UNLOCK_COUNTER_PAUSED: '1'
+          VITE_SIMULATE_UNLOCK: '0'
+        run: npm run build
+
+      # @capacitor/cli 8.x needs Node 22 (same split as release-build.yml).
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          java-version: '21'
+          distribution: temurin
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+
+      - name: Cap sync android (throwaway copy)
+        working-directory: ${{ env.INTERNAL_TREE }}/src/clients/mobile-web
+        run: npx cap sync android
+
+      - name: Assemble the debug-signed internal-test APK
+        env:
+          OUT: ${{ runner.temp }}/apk-out
+        run: bash tools/android-emulator-ci/build-internal-apk.sh gradle
+
+      - name: Upload the internal-test APK (1 day, not a release artifact)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: INTERNAL-TEST-apk-debug-signed-NOT-FOR-RELEASE
+          path: ${{ runner.temp }}/apk-out/
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload the test API build (1 day)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ci-test-api-publish
+          path: ${{ runner.temp }}/api-publish/
+          retention-days: 1
+          if-no-files-found: error
+
+  emulator:
+    name: Emulator ${{ matrix.name }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.build.outputs.matrix) }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          # Job-local disposable container, reachable only from this runner. Not a secret.
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_disposable_container_pw
+          POSTGRES_DB: postgres
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      CI_WORK: ${{ github.workspace }}/../ci-work
+      OUT_DIR: ${{ github.workspace }}/../leg-out
+      APP_ID: com.agrisync.shramsafal.internaltest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install the driver's dependencies
+        working-directory: tools/android-emulator-ci
+        run: npm ci --no-audit --no-fund
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: INTERNAL-TEST-apk-debug-signed-NOT-FOR-RELEASE
+          path: ${{ runner.temp }}/apk
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ci-test-api-publish
+          path: ${{ runner.temp }}/api
+
+      - name: Start the test backend (Postgres 16, real migrations, non-superuser API)
+        env:
+          PG_SUPER_PW: ci_disposable_container_pw
+          API_DIR: ${{ runner.temp }}/api
+        run: |
+          set -euo pipefail
+          command -v psql >/dev/null || { sudo apt-get update -y && sudo apt-get install -y postgresql-client; }
+          mkdir -p "$CI_WORK" "$OUT_DIR"
+          bash tools/android-emulator-ci/backend-up.sh
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run the journeys on the emulator
+        # reactivecircus/android-emulator-runner v2.35.0
+        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b
+        env:
+          APK: ${{ runner.temp }}/apk/app-internal-test-debug.apk
+          LEG_NAME: ${{ matrix.name }}
+          API_LEVEL: ${{ matrix.api }}
+          SCREEN: ${{ matrix.screen }}
+          EMU_TARGET: google_apis
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          ram-size: 4096M
+          heap-size: 576M
+          disk-size: 8192M
+          force-avd-creation: true
+          emulator-boot-timeout: 900
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash tools/android-emulator-ci/run-leg.sh
+
+      - name: Collect redacted backend evidence
+        if: always()
+        run: |
+          set -u
+          mkdir -p "$OUT_DIR/backend"
+          if [ -f "$CI_WORK/ci.env" ]; then set -a; . "$CI_WORK/ci.env"; set +a; fi
+          redact() { sed -E "s/(Password|Pwd)=[^;\" ]+/\1=<redacted>/Ig; s/Bearer [A-Za-z0-9._-]+/Bearer <redacted>/g; s#eyJ[A-Za-z0-9._-]{20,}#<jwt>#g" | { if [ -n "${DEMO_PASSWORD:-}" ]; then sed "s/${DEMO_PASSWORD//\//\\/}/<demo-pw>/g"; else cat; fi; }; }
+          for f in api.app.log api.seed.log migrate.tail.log seed.json seed-api.json roles.txt pg-connections.txt version.json; do
+            [ -f "$CI_WORK/$f" ] && redact < "$CI_WORK/$f" > "$OUT_DIR/backend/$f" || true
+          done
+          if [ -f "$OUT_DIR/logcat-full-tail.txt" ]; then gzip -f "$OUT_DIR/logcat-full-tail.txt"; fi
+          ls -la "$OUT_DIR" | head -30
+
+      - name: Upload evidence (screenshots, logs, JSON only)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: evidence-${{ matrix.name }}
+          path: ${{ env.OUT_DIR }}
+          retention-days: 14
+          if-no-files-found: warn
+
+  report:
+    name: Merge results (red only if a check FAILED)
+    needs: [build, emulator]
+    if: always() && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: evidence-*
+          path: ${{ runner.temp }}/legs
+      - name: Build the matrix
+        run: node tools/android-emulator-ci/summarize.mjs "$RUNNER_TEMP/legs" "$RUNNER_TEMP/matrix"
+      - name: Upload the merged matrix
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: evidence-MATRIX
+          path: ${{ runner.temp }}/matrix
+          retention-days: 14

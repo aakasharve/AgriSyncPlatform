@@ -1,0 +1,13 @@
+{
+  "name": "agrisync-android-emulator-ci",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Driver for the manually dispatched Android emulator evidence workflow. INTERNAL TEST tooling, not shipped.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/results.test.mjs"
+  },
+  "dependencies": {
+    "ws": "8.18.3"
+  }
+}
