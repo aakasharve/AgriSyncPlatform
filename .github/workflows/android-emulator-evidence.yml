@@ -63,7 +63,7 @@ jobs:
           import json, os
           legs = [
             {"name": "api34-normal", "api": 34, "screen": "normal", "gpu": "swangle_indirect", "cores": 4},
-            {"name": "api34-small",  "api": 34, "screen": "small",  "gpu": "swiftshader_indirect", "cores": 4},
+            {"name": "api34-small",  "api": 34, "screen": "small",  "gpu": "swangle_indirect", "cores": 4},
             {"name": "api36-normal", "api": 36, "screen": "normal", "gpu": "swiftshader_indirect", "cores": 2},
             {"name": "api36-small",  "api": 36, "screen": "small",  "gpu": "swiftshader_indirect", "cores": 2},
           ]

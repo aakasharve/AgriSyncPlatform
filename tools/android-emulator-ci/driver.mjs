@@ -72,6 +72,7 @@ async function check(id, title, fn) {
   const c = new Check(id, title);
   checks.push(c);
   log(`--- ${id} ${title}`);
+  await dismissSystemDialogs();
   try { await fn(c); } catch (e) {
     if (e instanceof Unreachable) c.unverified(`the UI state needed was not reachable: ${e.message}`);
     else c.unverified(`harness error: ${String(e.stack || e.message).slice(0, 500)}`);
@@ -89,6 +90,26 @@ const fa = () => psql(`select f."Id" from ssf.farms f join public.users u on u."
 const opId = (name) => psql(`select "Id" from ssf.field_operators where display_name='${name}' limit 1`);
 const marksFor = (id) => psqlNum(`select count(*) from ssf.attendance_marks where field_operator_id='${id}'`);
 const dupPairs = () => psqlNum('select count(*) from (select field_operator_id, work_date from ssf.attendance_marks group by 1,2 having count(*)>1) x');
+
+// An overloaded emulator shows "<system app> isn't responding" (ANR) dialogs that steal Back and permission
+// taps. Those are emulator load artefacts, not app behaviour: count them and tap "Wait".
+results.anrDialogs = [];
+async function dismissSystemDialogs() {
+  try {
+    const nodes = parseNodes(await dumpUi());
+    const hit = nodes.find((n) => /isn't responding|keeps stopping|has stopped/i.test(n.text));
+    const wait = nodes.find((n) => /^(wait|close app|ok)$/i.test(n.text) && !/permissioncontroller/.test(n.pkg));
+    if (hit) {
+      results.anrDialogs.push({ t: new Date().toISOString(), text: hit.text });
+      log('      system dialog: ' + hit.text);
+      const waitBtn = nodes.find((n) => /^wait$/i.test(n.text)) || wait;
+      if (waitBtn) tap(waitBtn.x, waitBtn.y);
+      await sleep(1500);
+      return true;
+    }
+  } catch { /* best effort */ }
+  return false;
+}
 
 function hideIme() { if (imeShown()) key(4); }
 
@@ -133,6 +154,7 @@ async function consentIfShown() {
 
 async function dismissOverlays() {
   for (let k = 0; k < 10; k++) {
+    if (k % 3 === 2) await dismissSystemDialogs();
     const i = await web.info(Web.tid('header-setup-hub')).catch(() => ({ n: 0 }));
     if (i.n && !i.covered) return true;
     let clicked = false;
@@ -409,6 +431,7 @@ async function main() {
     diaryReachable = diaryOk;
 
     const back = async (label, expectSpec) => {
+      await dismissSystemDialogs();
       key(4); // KEYCODE_BACK
       let ok = false; const end = Date.now() + 8000;
       while (Date.now() < end) { if (await web.visible(expectSpec).catch(() => false)) { ok = true; break; } await sleep(400); }
@@ -421,12 +444,14 @@ async function main() {
     c.assert(r.ok && r.fg, 'Back 1: Voice Diary -> Settings (app stays open)', `Back 1 did not return to Settings (settingsVisible=${r.ok}, appForeground=${r.fg})`);
     r = await back('2-from-settings', Web.tid('hub-settings-voice-diary'));
     c.assert(r.ok && r.fg, 'Back 2: Settings -> Setup Hub (app stays open)', `Back 2 did not return to the Setup Hub (hubVisible=${r.ok}, appForeground=${r.fg})`);
+    await dismissSystemDialogs();
     key(4);
     let home = false; const end = Date.now() + 8000;
     while (Date.now() < end) { if (!(await web.visible(Web.tid('hub-settings-voice-diary')).catch(() => true))) { home = true; break; } await sleep(400); }
     c.assert(home && appForeground(), 'Back 3: Setup Hub -> Home (app stays open)', `Back 3 did not leave the Setup Hub or closed the app (home=${home}, fg=${appForeground()})`);
     c.evidence.back3Text = (await web.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 300);
     shot(c, 'back-3-home');
+    await dismissSystemDialogs();
     key(4); // at Home: exits
     let exited = false; const end2 = Date.now() + 10_000;
     while (Date.now() < end2) { if (!appForeground()) { exited = true; break; } await sleep(500); }
@@ -475,6 +500,7 @@ async function main() {
       const nodes = parseNodes(await dumpUi().catch(() => ''));
       dlg = permissionDialog(nodes);
       if (dlg) break;
+      if (nodes.some((n) => /isn't responding/i.test(n.text))) await dismissSystemDialogs();
       await sleep(800);
     }
     shot(c, 'after-first-tap');
