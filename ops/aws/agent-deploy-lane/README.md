@@ -73,6 +73,7 @@ prevents the confused-deputy problem if the role ARN ever leaks.
 | `api-binary-swap.sh` | The on-box binary swap, and the **only** committed way to apply `ShramSafal` (`ssf`) migrations to production. Parameterized for SHA + expected migration count and history rows. Invoked by `ec2-deploy-wrapper.sh` at G4 |
 | `guardrails.sh` | Pure-bash predicate functions extracted for testability — sourced by `agent-cutover.sh` |
 | `guardrails.test.sh` | 26 unit tests for the predicates. Runs without AWS, without git side-effects |
+| `api-binary-swap.set-env.test.sh` | Tests for `api-binary-swap.sh --set-env KEY=VALUE` (key allowlisted to exactly `TenantDek__MasterKeyId`; value `^alias/[a-z0-9]([a-z0-9-]{0,126}[a-z0-9])?$`). Argument errors (bad key/value) exit 18 before any change. Runs the real script against a stubbed temp tree; cannot prove file ownership/0640, a real restart, or the database (see the test header). **If a `--set-env` post-check fails (exit 25) the disk holds the NEW binary and NEW env while the OLD process is still running (the restart has not happened); the GO token is burned by any non-zero exit; restore with `sudo cp -a <api-pre-SHA-backup>/. /opt/agrisync/api/` (no restart needed).** |
 | `agent-cutover.sh` | The end-to-end script the agent (or operator dry-running this lane) actually runs. Eight guardrails in order, then assume-role + SendCommand + evidence write |
 
 ## Applying ShramSafal (`ssf`) migrations in production
