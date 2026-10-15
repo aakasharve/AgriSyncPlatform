@@ -80,6 +80,8 @@ const RESPONSES_FIXTURE = resolve(FIXTURE_DIR, 'responses.json');
 
 const LOCAL_ID = 'a3f5c9d17b2e48a0916c5d3e2f1a0b7c8d9e4f5a6b7c8d9e0f1a2b3c4d5e6f70';
 const FARM = 'f1111111-1111-4111-8111-111111111111';
+/** base64 of 16 zero bytes: a valid AES-GCM tag width, low entropy. */
+const PLACEHOLDER_TAG = 'AAAAAAAAAAAAAAAAAAAAAA==';
 const PLAINTEXT = Uint8Array.from({ length: 96 }, (_, i) => (i * 5 + 1) & 0xff);
 
 function readFixture(path: string): string {
@@ -137,7 +139,15 @@ describe('voice archive wire contract - client half', () => {
             'authTagBase64', 'cipherBase64', 'clipId', 'dekId', 'durationSeconds', 'ivBase64', 'language', 'recordedAtUtc',
         ]);
 
-        const produced = `${JSON.stringify(body, null, 2)}\n`;
+        // The REAL tag must be a 16-byte std-base64 value; the committed fixture carries a
+        // low-entropy 16-zero-byte placeholder in its place (a real GCM tag is random-looking
+        // and trips secret scanners). The server stores the tag and never verifies it, and
+        // every other field is compared byte-for-byte against the real client output.
+        const realTag = (body as { authTagBase64: string }).authTagBase64;
+        expect(realTag).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
+        expect(atob(realTag)).toHaveLength(16);
+        expect(realTag).not.toBe(PLACEHOLDER_TAG);
+        const produced = `${JSON.stringify({ ...(body as object), authTagBase64: PLACEHOLDER_TAG }, null, 2)}\n`;
         if (process.env.UPDATE_CONTRACT_FIXTURES === '1') {
             mkdirSync(dirname(REQUEST_FIXTURE), { recursive: true });
             writeFileSync(REQUEST_FIXTURE, produced, 'utf8');

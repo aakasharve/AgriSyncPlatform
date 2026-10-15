@@ -1,7 +1,0 @@
-# Fingerprints of reviewed false positives. One line each: <path>:<rule>:<line>.
-#
-# The AES-GCM auth tag in the voice-archive wire-contract fixture is the output of sealing
-# 96 bytes of synthetic test data under a fixed synthetic key (see
-# voiceArchive.wireContract.test.ts). It is public test material, not a credential;
-# gitleaks matches the "authTag..." property name plus a high-entropy base64 value.
-src/tests/ShramSafal.Sync.IntegrationTests/Contract/VoiceArchive/persist-request.json:generic-api-key:7
