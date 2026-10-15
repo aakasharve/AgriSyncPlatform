@@ -141,15 +141,27 @@ async function dismissOverlays() {
 }
 
 async function loginUi(phone) {
-  await consentIfShown();
-  await web.click(Web.text(/Use password/i), { label: 'Use password' });
+  const diag = [];
+  const d = (m) => { diag.push(m); log('      login: ' + m); };
+  if (await consentIfShown()) { d('consent passed'); await sleep(3000); }
+  // the password form must really be on screen before typing (a re-render can reset it to OTP mode)
+  for (let a = 0; a < 4; a++) {
+    if (await web.visible(Web.css('#auth-password'))) break;
+    await web.click(Web.text(/Use password/i), { label: 'Use password' });
+    await sleep(1500);
+    d(`use-password tap ${a + 1}; password field visible=${await web.visible(Web.css('#auth-password'))}`);
+  }
   await web.fill(Web.css('#auth-phone'), phone);
   await web.fill(Web.css('#auth-password'), PW);
-  hideIme(); await sleep(500);
+  const vals = await web.eval(`({ phoneLen: (document.querySelector('#auth-phone')||{}).value?.length, pwLen: (document.querySelector('#auth-password')||{}).value?.length })`);
+  d(`field lengths ${JSON.stringify(vals)}`);
+  hideIme(); await sleep(800);
+  shot(null, 'login-filled');
+  const before = web.net.length;
   await web.click(Web.css('button[type="submit"]'), { label: 'login submit' });
   const end = Date.now() + 60_000; let alertText = null;
   while (Date.now() < end) {
-    if (await web.visible(Web.tid('header-setup-hub')).catch(() => false)) return { ok: true };
+    if (await web.visible(Web.tid('header-setup-hub')).catch(() => false)) return { ok: true, diag };
     for (const spec of [Web.tid('welcome-continue'), Web.tid('onboarding-skip')]) {
       if (await web.visible(spec).catch(() => false)) { try { await web.click(spec, { timeout: 4000 }); } catch { /* retry */ } }
     }
@@ -157,7 +169,9 @@ async function loginUi(phone) {
     if (a.n) alertText = a.text;
     await sleep(800);
   }
-  return { ok: false, alertText };
+  d('requests after submit: ' + JSON.stringify(web.net.slice(before).map((n) => `${n.method} ${n.url.replace(/^https?:\/\/[^/]+/, '').slice(0, 50)} ${n.status ?? n.failed ?? '-'}`)).slice(0, 500));
+  shot(null, 'login-failed');
+  return { ok: false, alertText, diag };
 }
 
 async function openSetupHub() {
