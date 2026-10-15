@@ -31,10 +31,10 @@ adb install -r -t "$APK"
 adb shell pm list packages | grep "$APP_ID"
 
 cd "$HERE"
-node driver.mjs 2>&1 | tee "$OUT_DIR/driver.log"
+timeout 2400 node driver.mjs 2>&1 | tee "$OUT_DIR/driver.log"
 rc=${PIPESTATUS[0]}
 echo "driver exit code: $rc"
 echo "$rc" > "$OUT_DIR/driver.exit"
-adb exec-out screencap -p > "$OUT_DIR/final-screen.png" 2>/dev/null || true
-adb logcat -d -t 20000 > "$OUT_DIR/logcat-full-tail.txt" 2>/dev/null || true
+timeout 60 adb exec-out screencap -p > "$OUT_DIR/final-screen.png" 2>/dev/null || true
+timeout 90 adb logcat -d -t 20000 > "$OUT_DIR/logcat-full-tail.txt" 2>/dev/null || true
 exit 0

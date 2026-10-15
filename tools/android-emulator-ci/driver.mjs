@@ -454,9 +454,13 @@ async function main() {
     }
     await web.click(Web.tid('input-method-voice'), { label: 'voice input method' }); await sleep(800);
     const start = Web.css('button[aria-label="Start Recording"]');
-    if (!(await web.visible(start)) && await web.visible(Web.text(/संपूर्ण शेत/))) {
+    c.evidence.scopeTestIds = await web.eval(`Array.from(document.querySelectorAll('[data-testid]')).map((e) => e.getAttribute('data-testid')).filter((t) => /plot|crop|farm|scope/i.test(t)).slice(0, 40)`);
+    const whole = Web.tidPrefix('crop-selector-entire-farm-row');
+    if (!(await web.visible(start)) && (await web.visible(whole) || await web.visible(Web.text(/संपूर्ण शेत/)))) {
       // no plots are listed for the demo farm; the app's own scope for that is "whole farm"
-      await web.click(Web.text(/संपूर्ण शेत/), { label: 'whole farm' }); await sleep(2500);
+      await web.click((await web.visible(whole)) ? whole : Web.text(/संपूर्ण शेत/), { label: 'whole farm' }); await sleep(2500);
+      shot(c, 'after-whole-farm');
+      c.evidence.afterWholeFarmLabels = await web.eval(`Array.from(document.querySelectorAll('button[aria-label]')).map(b => b.getAttribute('aria-label')).slice(0, 20)`);
       if (await web.visible(Web.tid('input-method-voice'))) { await web.click(Web.tid('input-method-voice'), { label: 'voice input method (again)' }); await sleep(800); }
     }
     shot(c, 'voice-ui');

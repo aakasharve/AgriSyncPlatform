@@ -239,6 +239,7 @@ jobs:
       - name: Run the journeys on the emulator (attempt 1)
         id: attempt1
         continue-on-error: true
+        timeout-minutes: 45
         # reactivecircus/android-emulator-runner v2.35.0
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b
         env:
@@ -288,6 +289,7 @@ jobs:
 
       - name: Run the journeys on the emulator (attempt 2, only if attempt 1 lost the emulator)
         if: always() && steps.decide.outputs.retry == 'true'
+        timeout-minutes: 45
         # reactivecircus/android-emulator-runner v2.35.0
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b
         env:

@@ -172,7 +172,7 @@ export class Web {
     const end = Date.now() + timeout; let last = null;
     while (Date.now() < end) {
       let i;
-      try { i = await this.info(spec, true); } catch (e) { last = e.message; await sleep(500); continue; }
+      try { i = await this.info(spec, true); if (i.n) { await sleep(450); i = await this.info(spec, false); } } catch (e) { last = e.message; await sleep(500); continue; }
       last = JSON.stringify(i);
       if (i.n && i.inView && !i.covered) {
         await sleep(150);

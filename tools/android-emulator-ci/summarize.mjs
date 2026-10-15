@@ -9,10 +9,14 @@ if (!inDir || !outDir) { console.error('usage: summarize.mjs <inDir> <outDir>');
 fs.mkdirSync(outDir, { recursive: true });
 
 const legs = [];
-for (const d of fs.readdirSync(inDir)) {
-  const f = path.join(inDir, d, 'results.json');
-  if (fs.existsSync(f)) legs.push(JSON.parse(fs.readFileSync(f, 'utf8')));
-}
+const walk = (d, depth) => {
+  for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+    const f = path.join(d, e.name);
+    if (e.isDirectory() && depth < 3) walk(f, depth + 1);
+    else if (e.name === 'results.json' && !f.includes('attempt1-died')) legs.push(JSON.parse(fs.readFileSync(f, 'utf8')));
+  }
+};
+walk(inDir, 0);
 legs.sort((a, b) => a.leg.name.localeCompare(b.leg.name));
 if (!legs.length) { console.error('no leg results found'); process.exit(3); }
 
