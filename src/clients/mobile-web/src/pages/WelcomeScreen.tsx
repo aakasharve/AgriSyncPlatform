@@ -57,7 +57,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onContinue, farmRole }) =
         mounted ? { animation: `${name} ${dur} cubic-bezier(.16,1,.3,1) ${delay} both` } : { opacity: 0 };
 
     return (
-        <div className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#F4FCF8] pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] select-none">
+        <div className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#F4FCF8] pb-[var(--safe-area-inset-bottom,env(safe-area-inset-bottom))] pt-[var(--safe-area-inset-top,env(safe-area-inset-top))] select-none">
             <style>{`
                 @keyframes ws-rise { from{transform:translateY(24px);opacity:0} to{transform:translateY(0);opacity:1} }
                 @keyframes ws-up { from{transform:translateY(14px);opacity:0} to{transform:translateY(0);opacity:1} }

@@ -503,7 +503,7 @@ const PlotMapWithGoogleMaps: React.FC<PlotMapProps & { mapsApiKey: string }> = (
             {!isReadOnly && (
                 <div
                     className="flex-shrink-0 bg-white border-t border-slate-100 px-4 pt-3"
-                    style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
+                    style={{ paddingBottom: 'max(12px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom)))' }}
                 >
                     {isDrawing ? (
                         <div className="grid grid-cols-3 gap-3">

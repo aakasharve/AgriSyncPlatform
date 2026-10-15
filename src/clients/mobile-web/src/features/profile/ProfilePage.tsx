@@ -176,7 +176,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     }, [profile.name, profile.village, profile.waterResources, profile.machineries, crops.length]);
 
     return (
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-4 pb-[calc(8rem+env(safe-area-inset-bottom))]">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-4 pb-[calc(8rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))]">
             {farmAdmin.myFarm && (
                 <FarmInviteQrSheet
                     isOpen={farmAdmin.showInviteQr}

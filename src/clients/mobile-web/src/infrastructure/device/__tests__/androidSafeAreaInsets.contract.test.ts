@@ -13,10 +13,12 @@
  *    so running it there would double the padding);
  *  - it publishes the exact variables the web layer reads (--safe-area-inset-*), which the
  *    web CSS prefers over env();
- *  - the web layer still prefers the injected variable over env().
+ *  - the web layer still prefers the injected variable over env();
+ *  - no source file uses a RAW env(safe-area-inset-*): on API < 35 that is 0, so such a screen
+ *    would still sit under the status bar / gesture bar. Use var(--safe-area-inset-*, env(...)).
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 const ROOT = process.cwd();
@@ -43,5 +45,25 @@ describe('Android safe-area insets below API 35 (source contract; real proof = e
 
     it('the web utility classes prefer the injected variable over env()', () => {
         expect(css).toMatch(/\.pt-safe-area\s*\{\s*padding-top:\s*var\(--safe-area-inset-top,\s*env\(safe-area-inset-top/);
+    });
+
+    it('no screen uses a raw env(safe-area-inset-*) that the native publisher cannot override', () => {
+        const offenders: string[] = [];
+        const walk = (dir: string) => {
+            for (const name of readdirSync(dir)) {
+                const full = join(dir, name);
+                if (statSync(full).isDirectory()) {
+                    if (name !== '__tests__' && name !== 'node_modules') walk(full);
+                    continue;
+                }
+                if (!/\.(tsx?|css)$/.test(name) || name === 'global-theme.css') continue;
+                const text = readFileSync(full, 'utf8');
+                // every env(safe-area-inset-x) must sit inside var(--safe-area-inset-x, ...)
+                const raw = text.match(/(?<!var\(--safe-area-inset-[a-z]+,\s*)env\(safe-area-inset-/g);
+                if (raw) offenders.push(`${full} (${raw.length})`);
+            }
+        };
+        walk(join(ROOT, 'src'));
+        expect(offenders).toEqual([]);
     });
 });
