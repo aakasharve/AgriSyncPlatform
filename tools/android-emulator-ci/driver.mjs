@@ -72,7 +72,6 @@ async function check(id, title, fn) {
   const c = new Check(id, title);
   checks.push(c);
   log(`--- ${id} ${title}`);
-  await dismissSystemDialogs();
   try { await fn(c); } catch (e) {
     if (e instanceof Unreachable) c.unverified(`the UI state needed was not reachable: ${e.message}`);
     else c.unverified(`harness error: ${String(e.stack || e.message).slice(0, 500)}`);
@@ -154,7 +153,6 @@ async function consentIfShown() {
 
 async function dismissOverlays() {
   for (let k = 0; k < 10; k++) {
-    if (k % 3 === 2) await dismissSystemDialogs();
     const i = await web.info(Web.tid('header-setup-hub')).catch(() => ({ n: 0 }));
     if (i.n && !i.covered) return true;
     let clicked = false;
@@ -517,9 +515,18 @@ async function main() {
     if (!dlg) return;
     c.evidence.dialog = { message: dlg.message, texts: dlg.texts };
     if (!dlg.allow) { c.unverified('dialog found but no Allow button node could be located'); return; }
-    tap(dlg.allow.x, dlg.allow.y); // a real tap on the real dialog (no `pm grant`)
-    await sleep(1500);
-    rec = (sh(`dumpsys package ${PKG}`, { allowFail: true, timeout: 40_000 }).match(/android\.permission\.RECORD_AUDIO: granted=(\w+)/) || [])[1];
+    const recState = () => (sh(`dumpsys package ${PKG}`, { allowFail: true, timeout: 40_000 }).match(/android\.permission\.RECORD_AUDIO: granted=(\w+)/) || [])[1];
+    rec = 'false';
+    for (let attempt = 1; attempt <= 3 && rec !== 'true'; attempt++) {
+      tap(dlg.allow.x, dlg.allow.y); // a real tap on the real dialog (no `pm grant`)
+      for (let k = 0; k < 6 && rec !== 'true'; k++) { await sleep(1500); rec = recState(); }
+      if (rec !== 'true') { // a busy emulator can swallow the tap: look again and re-tap, never pm grant
+        await dismissSystemDialogs();
+        const again = permissionDialog(parseNodes(await dumpUi().catch(() => '')));
+        c.evidence[`allowAttempt${attempt}`] = again ? 'dialog still shown, retapping' : 'dialog gone but permission not granted';
+        if (again?.allow) dlg = again; else break;
+      }
+    }
     c.evidence.recordAudioAfterAllow = rec;
     c.assert(rec === 'true', 'RECORD_AUDIO became granted through the dialog tap', `RECORD_AUDIO is ${rec} after tapping Allow`);
     // capture should start inside the same tap (no second tap)
