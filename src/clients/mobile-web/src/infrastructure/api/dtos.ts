@@ -736,11 +736,7 @@ export interface TenantDekResponse {
 
 export interface ResolveDekRequest {
     dekId: string;
-    /**
-     * The farm whose owner account the key is unwrapped under. The SERVER derives the
-     * owner account from this farm after checking the caller is an Active member of it
-     * (D1); an owner-account id is never sent or trusted.
-     */
+    /** Farm whose owner account the key is unwrapped under; the server checks the caller is an Active member. */
     farmId: string;
 }
 
