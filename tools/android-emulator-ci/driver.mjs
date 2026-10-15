@@ -719,7 +719,16 @@ async function main() {
     await web.waitVisible(Web.css('button[aria-label="Stop Recording"]'), 20_000, 'Stop Recording (capture running)');
     await sleep(3500);
     await web.click(Web.css('button[aria-label="Stop Recording"]'), { label: 'Stop Recording' });
-    await sleep(3500);
+    const clipRows = () => web.eval(`(async () => { const dbs = (await indexedDB.databases()).map((d) => d.name).filter((n) => /^AgriLogDB/.test(n)); let n = 0; const sizes = [];
+      for (const name of dbs) { const db = await new Promise((r) => { const q = indexedDB.open(name); q.onsuccess = () => r(q.result); q.onerror = () => r(null); }); if (!db) continue;
+        if (db.objectStoreNames.contains('voiceClips')) { const rows = await new Promise((r) => { const t = db.transaction('voiceClips').objectStore('voiceClips').getAll(); t.onsuccess = () => r(t.result); t.onerror = () => r([]); }); n += rows.length; rows.forEach((x) => sizes.push({ blob: x.localBlob && x.localBlob.size, state: x.archiveState || null })); }
+        db.close(); } return { n, sizes }; })()`);
+    let rows = { n: 0 };
+    for (let k = 0; k < 20 && !rows.n; k++) { await sleep(2000); rows = await clipRows().catch(() => ({ n: 0 })); }
+    c.evidence.localClipRowsAfterStop = rows;
+    c.evidence.textAfterStop = (await web.text()).replace(/\s+/g, ' ').slice(0, 300);
+    shot(c, 'after-stop');
+    if (!rows.n) { c.unverified('the app stored no local recording after Stop (see textAfterStop); a playable local clip does not exist in this run'); return; }
     await launchCold(); await dismissOverlays();
     await openDiaryViaSettings();
     await web.eval(`(() => { window.__srcWrites = []; const d = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
