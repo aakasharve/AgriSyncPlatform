@@ -10,7 +10,7 @@
 // Phase 06.4 (consent feature) already established. The hook caches the
 // result in component state; the source of truth remains the server.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';
 import { ConsentState } from '../../../domain/consent/ConsentState';
 import { observeArchiveConsentView } from '../../../infrastructure/voice/voiceArchiveConsent';
@@ -26,6 +26,7 @@ export interface UseFullHistoryJournalConsentResult {
 export function useFullHistoryJournalConsent(): UseFullHistoryJournalConsentResult {
     const [state, setState] = useState<ConsentState>(() => ConsentState.default());
     const [loaded, setLoaded] = useState(false);
+    const knownRef = useRef(false);
 
     const reload = useCallback(async () => {
         try {
@@ -33,6 +34,7 @@ export function useFullHistoryJournalConsent(): UseFullHistoryJournalConsentResu
             // Keep the upload boundary (max of this phone and the server's grant start)
             // current, so the diary labels use the same bound as the uploader.
             await observeArchiveConsentView(dto).catch(() => null);
+            knownRef.current = true;
             setState({
                 fullHistoryJournal: dto.fullHistoryJournal,
                 crossFarmAggregation: dto.crossFarmAggregation,
@@ -42,8 +44,9 @@ export function useFullHistoryJournalConsent(): UseFullHistoryJournalConsentResu
                 revokedAtUtc: dto.revokedAtUtc,
             });
         } catch {
-            // No prior consent or endpoint unavailable — default to false.
-            setState(ConsentState.default());
+            // No prior consent or endpoint unavailable — default to false. A later
+            // RE-read that fails (phone offline) keeps the last answer the server gave.
+            if (!knownRef.current) setState(ConsentState.default());
         } finally {
             setLoaded(true);
         }

@@ -53,6 +53,13 @@ interface VoiceDiaryPageProps {
 // days, which hid every older acknowledged clip on a fresh install.)
 const DEFAULT_RANGE_DAYS = 3650;
 
+/** Re-read the farmer's own recordings, newest first. */
+async function readLocalClips(): Promise<VoiceClipCacheRecord[]> {
+    const rows = await getDatabase().voiceClips.toArray();
+    rows.sort((a, b) => Date.parse(b.recordedAtUtc) - Date.parse(a.recordedAtUtc));
+    return rows;
+}
+
 const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
     onBack,
     onOpenSettings,
@@ -67,7 +74,7 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
     const [loading, setLoading] = useState(true);
     const [consentSince, setConsentSince] = useState<string | null>(null);
 
-    const { granted: consentGranted, loaded: consentLoaded } = useFullHistoryJournalConsent();
+    const { granted: consentGranted, loaded: consentLoaded, reload: reloadConsent } = useFullHistoryJournalConsent();
 
     const loadClips = useCallback(async () => {
         setLoading(true);
@@ -131,15 +138,46 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
     useEffect(() => {
         if (!hasUnacknowledged) return undefined;
         const timer = window.setInterval(() => {
-            void voiceArchiveUploader.triggerNow().finally(() => {
-                void getDatabase().voiceClips.toArray().then(rows => {
-                    rows.sort((a, b) => Date.parse(b.recordedAtUtc) - Date.parse(a.recordedAtUtc));
-                    setLocalClips(rows);
-                });
-            });
+            void voiceArchiveUploader.triggerNow();
         }, 10_000);
         return () => window.clearInterval(timer);
     }, [hasUnacknowledged]);
+
+    // Keep the badges true while the page stays open: re-read the local archive state
+    // (and the consent answer, which may have failed to load while offline) when the
+    // uploader finishes an attempt, when the connection returns and when the app comes
+    // back to the foreground. The badge still derives ONLY from the stored row.
+    useEffect(() => {
+        let alive = true;
+        const refresh = () => {
+            void (async () => {
+                try {
+                    const since = await getArchiveConsentSince().catch(() => null);
+                    const rows = await readLocalClips();
+                    if (!alive) return;
+                    setConsentSince(since);
+                    setLocalClips(rows);
+                } catch {
+                    // Keep what is on screen; the next trigger reads again.
+                }
+            })();
+        };
+        const onOnline = () => {
+            void reloadConsent().finally(refresh);
+        };
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') onOnline();
+        };
+        const unsubscribe = voiceArchiveUploader.subscribe(refresh);
+        window.addEventListener('online', onOnline);
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            alive = false;
+            unsubscribe();
+            window.removeEventListener('online', onOnline);
+            document.removeEventListener('visibilitychange', onVisible);
+        };
+    }, [reloadConsent]);
 
     // ---------------------------------------------------------------------
     // Unified projection — merge local + cloud, de-dup by clip id, sort.

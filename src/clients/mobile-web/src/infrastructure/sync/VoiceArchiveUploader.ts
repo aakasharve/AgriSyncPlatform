@@ -118,6 +118,29 @@ export class VoiceArchiveUploader {
     private timerId: number | null = null;
     private running = false;
     private activeCycle: Promise<void> | null = null;
+    private readonly listeners = new Set<() => void>();
+
+    /**
+     * Called after every upload attempt (success or failure) so an open screen can re-read
+     * the local archive state. Carries no data: the screen reads Dexie, the source of truth.
+     * Returns the unsubscribe function.
+     */
+    subscribe(listener: () => void): () => void {
+        this.listeners.add(listener);
+        return () => {
+            this.listeners.delete(listener);
+        };
+    }
+
+    private notify(): void {
+        for (const listener of Array.from(this.listeners)) {
+            try {
+                listener();
+            } catch (error) {
+                console.error('[VoiceArchiveUploader] listener failed', error);
+            }
+        }
+    }
 
     start(): void {
         if (this.running) return;
@@ -162,6 +185,7 @@ export class VoiceArchiveUploader {
         } finally {
             this.activeCycle = null;
         }
+        this.notify();
     }
 }
 
