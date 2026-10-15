@@ -18,8 +18,7 @@ namespace ShramSafal.Application.UseCases.Privacy.ResolveTenantDek;
 
 public sealed class ResolveTenantDekHandler(
     IShramSafalRepository repository,
-    ITenantDekService tenantDekService,
-    TenantContext tenantContext)
+    ITenantDekService tenantDekService)
 {
     public async Task<Result<ResolveTenantDekResult>> HandleAsync(
         ResolveTenantDekCommand command,
@@ -30,14 +29,20 @@ public sealed class ResolveTenantDekHandler(
             return Result.Failure<ResolveTenantDekResult>(ShramSafalErrors.JoinUnauthenticated);
         }
 
-        if (tenantContext.OwnerAccountId is not { } ownerAccountId || ownerAccountId == Guid.Empty)
-        {
-            return Result.Failure<ResolveTenantDekResult>(ShramSafalErrors.JoinUnauthenticated);
-        }
-
-        if (string.IsNullOrWhiteSpace(command.DekId))
+        if (command.FarmId == Guid.Empty || string.IsNullOrWhiteSpace(command.DekId))
         {
             return Result.Failure<ResolveTenantDekResult>(ShramSafalErrors.InvalidCommand);
+        }
+
+        // D1 (2026-10-15): the owner account is derived from the farm the caller names,
+        // only after the caller is proven an Active member (or declared owner) of it.
+        // See IssueTenantDekHandler. A non-member never reaches KMS.
+        var (isActiveMember, ownerAccountId) = await repository
+            .GetActiveFarmMembershipForTenantAsync(command.FarmId, command.UserId, ct)
+            .ConfigureAwait(false);
+        if (!isActiveMember || ownerAccountId == Guid.Empty)
+        {
+            return Result.Failure<ResolveTenantDekResult>(ShramSafalErrors.Forbidden);
         }
 
         var plaintext = await tenantDekService
@@ -57,7 +62,7 @@ public sealed class ResolveTenantDekHandler(
                 ownerAccountId,
                 resolved,
             },
-            farmId: tenantContext.FarmId,
+            farmId: command.FarmId,
             clientCommandId: null,
             appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
                 ? AppVersionProvider.Current

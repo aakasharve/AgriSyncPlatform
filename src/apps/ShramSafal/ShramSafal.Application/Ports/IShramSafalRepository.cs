@@ -266,6 +266,24 @@ public interface IShramSafalRepository
         => Task.FromResult((false, Guid.Empty));
 
     /// <summary>
+    /// spec: 2026-08-25-prod-cutover-waves (D1, tenant-DEK authorization) — STRICTER
+    /// than <see cref="GetFarmMembershipForTenantAsync"/>: that one admits every
+    /// non-terminal status (PendingOtpClaim, PendingApproval, Suspended), which is right
+    /// for "may this person see the farm" and wrong for "may this person be handed the
+    /// farm's owner-account encryption key". Here only the farm's declared owner or an
+    /// <c>Active</c> membership counts. The owner account is read from the FARM row
+    /// (never from the caller), so the key is always bound to the account that really
+    /// owns the farm. Returns <c>(false, Guid.Empty)</c> otherwise (no such farm, not a
+    /// member, pending, suspended, revoked, exited) — the caller cannot tell which.
+    /// Default impl returns "not a member" so in-tree test doubles compile.
+    /// </summary>
+    Task<(bool IsActiveMember, Guid OwnerAccountId)> GetActiveFarmMembershipForTenantAsync(
+        Guid farmId,
+        Guid userId,
+        CancellationToken ct = default)
+        => Task.FromResult((false, Guid.Empty));
+
+    /// <summary>
     /// Count of <c>Active</c> <c>PrimaryOwner</c> memberships on a farm.
     /// Used by the exit-membership handler to defend invariant I3 (the
     /// last PrimaryOwner cannot leave).

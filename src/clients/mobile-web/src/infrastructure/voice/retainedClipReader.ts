@@ -8,7 +8,8 @@
 //
 // Only EXISTING contracts are used, in this order:
 //   GET  /shramsafal/voice-diary/by-id/{clipId}     -> ciphertext + iv + tag + dekId
-//   POST /shramsafal/security/tenant-dek/resolve    -> the DEK (KMS unwrap, server-side)
+//   POST /shramsafal/security/tenant-dek/resolve    -> the DEK (KMS unwrap, server-side, under the
+//                                                      owner account of the named farm - D1)
 //   WebCrypto AES-GCM open, bound to (clipId, ownerAccountId)   [voiceEnvelope.openVoiceClip]
 //
 // THE ONE THING THE ARCHIVE DOES NOT RECORD is which owner account a clip was
@@ -47,28 +48,50 @@ function base64ToBytes(b64: string): Uint8Array {
     return out;
 }
 
+/**
+ * One owner account to try, with a farm of the farmer's that belongs to it.
+ * The server learns the owner account only from the farm (D1): it checks the
+ * farmer is an active member of that farm and unwraps the key under THAT farm's
+ * owner account. So a candidate account is tried through one of its farms.
+ */
+interface OwnerCandidate {
+    ownerAccountId: string;
+    farmId: string;
+}
+
 /** Owner accounts of the farms THIS farmer's own database holds, the clip's own farm first. */
-async function localOwnerCandidates(clipId: string): Promise<{ owners: string[]; mimeType?: string }> {
+async function localOwnerCandidates(clipId: string): Promise<{ owners: OwnerCandidate[]; mimeType?: string }> {
     const db = getDatabase();
-    const owners: string[] = [];
-    const push = (value: unknown) => {
-        const owner = value == null ? '' : String(value).trim();
-        if (owner && !owners.includes(owner)) owners.push(owner);
+    const owners: OwnerCandidate[] = [];
+    const push = (ownerValue: unknown, farmValue: unknown) => {
+        const ownerAccountId = ownerValue == null ? '' : String(ownerValue).trim();
+        const farmId = farmValue == null ? '' : String(farmValue).trim();
+        if (ownerAccountId && farmId && !owners.some(o => o.ownerAccountId === ownerAccountId)) {
+            owners.push({ ownerAccountId, farmId });
+        }
     };
     const row = await db.voiceClips.get(clipId);
     if (row) {
         const farm = await db.farms.get(row.farmId);
-        push(readFarmOwnerAccountId(farm));
+        push(readFarmOwnerAccountId(farm), row.farmId);
     }
-    for (const farm of await db.farms.toArray()) push(readFarmOwnerAccountId(farm));
+    for (const farm of await db.farms.toArray()) push(readFarmOwnerAccountId(farm), (farm as { id?: unknown }).id);
     return { owners, mimeType: row?.mimeType };
 }
 
 /** Same set, from the server, for a device whose farm cache has not filled yet. */
-async function serverOwnerCandidates(): Promise<string[]> {
+async function serverOwnerCandidates(): Promise<OwnerCandidate[]> {
     try {
         const me = await agriSyncClient.getMeContext();
-        return Array.from(new Set(me.farms.map(farm => String(farm.ownerAccountId).trim()).filter(Boolean)));
+        const owners: OwnerCandidate[] = [];
+        for (const farm of me.farms) {
+            const ownerAccountId = String(farm.ownerAccountId ?? '').trim();
+            const farmId = String(farm.farmId ?? '').trim();
+            if (ownerAccountId && farmId && !owners.some(o => o.ownerAccountId === ownerAccountId)) {
+                owners.push({ ownerAccountId, farmId });
+            }
+        }
+        return owners;
     } catch {
         return [];
     }
@@ -86,15 +109,19 @@ export async function openRetainedClip(clipId: string): Promise<RetainedClipRead
     ciphertext.set(tag, body.byteLength);
     const iv = base64ToBytes(archived.ivBase64);
 
-    const dek = await resolveDek(archived.dekId);
-    if (!dek) return { ok: false, error: 'dek_unavailable' };
-
+    // The key is unwrapped PER candidate account: KMS refuses a wrap made under another
+    // account, and that refusal (404) is how a wrong candidate is told apart from a right one
+    // before the AES-GCM tag has the last word.
     const local = await localOwnerCandidates(clipId);
     const tried = new Set<string>();
-    const attempt = async (owners: string[]): Promise<Uint8Array | null> => {
-        for (const ownerAccountId of owners) {
+    let anyKeyResolved = false;
+    const attempt = async (owners: OwnerCandidate[]): Promise<Uint8Array | null> => {
+        for (const { ownerAccountId, farmId } of owners) {
             if (tried.has(ownerAccountId)) continue;
             tried.add(ownerAccountId);
+            const dek = await resolveDek(archived.dekId, farmId);
+            if (!dek) continue; // not this account's key (or not a farm the farmer may use)
+            anyKeyResolved = true;
             try {
                 return await openVoiceClip(
                     { ciphertext, iv, wrappedDekId: archived.dekId },
@@ -111,7 +138,8 @@ export async function openRetainedClip(clipId: string): Promise<RetainedClipRead
     let bytes = await attempt(local.owners);
     if (!bytes) bytes = await attempt(await serverOwnerCandidates());
     if (!bytes) {
-        return { ok: false, error: tried.size === 0 ? 'binding_unavailable' : 'cannot_open' };
+        if (tried.size === 0) return { ok: false, error: 'binding_unavailable' };
+        return { ok: false, error: anyKeyResolved ? 'cannot_open' : 'dek_unavailable' };
     }
     return { ok: true, bytes, mimeType: local.mimeType ?? DEFAULT_MIME };
 }

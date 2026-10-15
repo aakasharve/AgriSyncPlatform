@@ -437,12 +437,12 @@ export class AgriSyncClient implements HttpTransport {
     // implemented in parallel; if its paths or response shapes differ,
     // fix `SecurityResource.ts` + `dtos.ts` in a follow-up.
 
-    getTenantDek(): Promise<TenantDekResponse> {
-        return Security.getTenantDek(this);
+    getTenantDek(farmId: string): Promise<TenantDekResponse> {
+        return Security.getTenantDek(this, farmId);
     }
 
-    resolveDek(dekId: string): Promise<ResolveDekResponse | null> {
-        return Security.resolveDek(this, dekId);
+    resolveDek(dekId: string, farmId: string): Promise<ResolveDekResponse | null> {
+        return Security.resolveDek(this, dekId, farmId);
     }
 
     // --- Consent ----------------------------------------------------------
