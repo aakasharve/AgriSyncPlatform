@@ -11,6 +11,12 @@ export class Check {
   fail(msg) { this.points.push({ s: 'FAIL', m: msg }); return this; }
   unverified(msg) { this.points.push({ s: 'UNVERIFIED', m: msg }); return this; }
   assert(cond, okMsg, badMsg) { return cond ? this.pass(okMsg) : this.fail(badMsg); }
+  /**
+   * NAVIGATION PASS RULE: a navigation only passes when a REAL touch opened the target. If the real touch failed and
+   * some non-touch fallback (DOM click, CDP mouse, JS) then worked, that is a FAIL and the fallback is only a
+   * labelled diagnostic. This point can never be overridden by later PASS points.
+   */
+  fallbackRescued(msg) { this.points.push({ s: 'FAIL', m: `real touch failed; non-touch fallback worked (DIAGNOSTIC ONLY, does not pass): ${msg}`, fallback: true }); return this; }
   /** Worst point wins; a check that asserted nothing is UNVERIFIED, never PASS. */
   get status() {
     if (!this.points.length) return 'UNVERIFIED';
@@ -33,6 +39,7 @@ export function legMarkdown(r) {
   out.push(`### ${r.leg.name}`);
   out.push(`_${BANNER}_`);
   out.push('');
+  if (r.build) out.push(`Application SHA ${r.build.appSha}; harness SHA ${r.build.harnessSha}.`, '');
   out.push(`API level ${r.leg.apiLevel}, screen profile ${r.leg.screen}, app ${r.app?.applicationId ?? '?'} ${r.app?.versionName ?? '?'}. PASS ${c.PASS}, FAIL ${c.FAIL}, UNVERIFIED ${c.UNVERIFIED}.`);
   out.push('');
   out.push('| Check | Result | Detail |');
@@ -49,7 +56,9 @@ export function matrixMarkdown(legs) {
   const ids = [];
   for (const l of legs) for (const k of l.checks) if (!ids.find((x) => x.id === k.id)) ids.push({ id: k.id, title: k.title });
   const out = ['# Android emulator evidence matrix', '', `_${BANNER}_`, ''];
-  out.push(`| Check | ${legs.map((l) => l.leg.name).join(' | ')} |`);
+  const b = (legs.find((l) => l.build) || {}).build;
+  if (b) out.push(`**Application SHA (pinned): ${b.appSha}**  `, `**Harness SHA: ${b.harnessSha}**`, '');
+  out.push(`| Check | ${legs.map((l) => l.leg.name + (l.leg.informational ? ' (informational)' : '')).join(' | ')} |`);
   out.push(`|---|${legs.map(() => '---').join('|')}|`);
   for (const { id, title } of ids) {
     const cells = legs.map((l) => (l.checks.find((k) => k.id === id) || { status: 'n/a' }).status);
@@ -61,5 +70,6 @@ export function matrixMarkdown(legs) {
 }
 
 export function totalFailures(legs) {
-  return legs.reduce((n, l) => n + counts(l.checks).FAIL, 0);
+  // informational legs (e.g. API 29) never turn the run red
+  return legs.filter((l) => !l.leg.informational).reduce((n, l) => n + counts(l.checks).FAIL, 0);
 }

@@ -8,7 +8,9 @@
 #        build-internal-apk.sh gradle     -> cap sync output already in place -> assembleDebug + verify
 set -euo pipefail
 cmd="${1:?copy|gradle}"
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+HARNESS_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# The application under test is a separate checkout pinned to a full SHA (APP_SRC); the harness comes from its own branch.
+REPO="${APP_SRC:-$HARNESS_REPO}"
 
 case "$cmd" in
 copy)

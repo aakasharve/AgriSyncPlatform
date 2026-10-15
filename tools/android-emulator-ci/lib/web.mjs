@@ -5,6 +5,8 @@ import WebSocket from 'ws';
 import { adb, sh, sleep, tap, screenSize } from './adb.mjs';
 
 export class Unreachable extends Error {}
+/** The REAL touch could not do the job (e.g. it lands on the system status bar). Always a FAIL, never rescued. */
+export class NavFail extends Error {}
 
 // ----------------------------------------------------------------- in-page helpers
 const BOOT = `(function(){
@@ -48,7 +50,7 @@ export class Web {
     this.pkg = pkg; this.port = port; this.log = log;
     this.ws = null; this.nextId = 1; this.pending = new Map();
     this.net = []; this.errors = []; this.consoleErrors = [];
-    this.inputMode = 'unknown'; this.calib = null; this.statusBarPx = 0; this.statusBarCollisions = [];
+    this.inputMode = 'unknown'; this.calib = null; this.statusBarPx = 0; this.navBarPx = 0; this.screenH = 0; this.statusBarCollisions = [];
   }
 
   // ------------------------------------------------------------ connection
@@ -189,15 +191,25 @@ export class Web {
     if (this.calib) {
       const x = Math.round(cx * this.calib.scale + this.calib.ox); const y = Math.round(cy * this.calib.scale + this.calib.oy);
       if (this.statusBarPx && y < this.statusBarPx) {
-        // A finger here would hit the system status bar, not the app. Record it, then use DOM-level input so
-        // the journey can continue; the layout defect itself is asserted separately (check C15).
+        // A finger here hits the system status bar, not the app. NAVIGATION PASS RULE: this is a failure; no
+        // DOM/CDP input is used to carry on (see domDiagnostic for the labelled, never-passing diagnostic).
         this.statusBarCollisions.push({ x, y, statusBarPx: this.statusBarPx });
-      } else { tap(x, y); await sleep(250); return; }
+        throw new NavFail(`real touch at device y=${y}px would land on the system status bar (0-${this.statusBarPx}px)`);
+      }
+      if (this.navBarPx && this.screenH && y > this.screenH - this.navBarPx) {
+        this.statusBarCollisions.push({ x, y, navBarPx: this.navBarPx });
+        throw new NavFail(`real touch at device y=${y}px would land on the system gesture/navigation bar (${this.screenH - this.navBarPx}-${this.screenH}px)`);
+      }
+      tap(x, y); await sleep(250); return;
     }
-    await this.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: cx, y: cy });
-    await this.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: cx, y: cy, button: 'left', buttons: 1, clickCount: 1 });
-    await this.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: cx, y: cy, button: 'left', buttons: 0, clickCount: 1 });
-    await sleep(250);
+    await this.calibrate();
+    if (!this.calib) throw new NavFail('no touch calibration: refusing to use non-touch input');
+    return this.#tapAt(cx, cy);
+  }
+
+  /** DIAGNOSTIC ONLY: would a DOM click on this target do something? Never used to pass anything. */
+  async domDiagnostic(spec) {
+    try { await this.eval(`(() => { const ci = ${BOOT}; const el = ci.find(${JSON.stringify(spec)})[0]; if (el) el.click(); })()`); return 'dom click issued'; } catch (e) { return 'dom click failed: ' + String(e.message).slice(0, 80); }
   }
 
   /** Map CSS px -> device px by injecting a probe and tapping a known device pixel. */

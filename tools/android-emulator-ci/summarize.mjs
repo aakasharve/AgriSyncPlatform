@@ -26,7 +26,7 @@ fs.writeFileSync(path.join(outDir, 'all-results.json'), JSON.stringify({ banner:
 if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
 
 const failed = totalFailures(legs);
-const fatal = legs.filter((l) => l.fatal);
+const fatal = legs.filter((l) => l.fatal && !l.leg.informational);
 console.log(`legs=${legs.length} failures=${failed} fatalLegs=${fatal.length}`);
 for (const l of legs) console.log(l.leg.name, JSON.stringify(counts(l.checks)));
 // Red run = at least one check FAILED (an app finding) or a leg's driver crashed. UNVERIFIED does not turn it red.

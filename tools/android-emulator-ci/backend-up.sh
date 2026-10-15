@@ -10,7 +10,7 @@ set -euo pipefail
 
 : "${PG_PORT:?}" "${PG_SUPER_PW:?}" "${API_PORT:?}" "${API_DIR:?}" "${CI_WORK:?}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO="$(cd "$HERE/../.." && pwd)"
+REPO="${APP_SRC:-$(cd "$HERE/../.." && pwd)}"
 mkdir -p "$CI_WORK"
 DB=agrisync_ci
 SUPER_URL="postgresql://postgres:${PG_SUPER_PW}@127.0.0.1:${PG_PORT}/postgres"

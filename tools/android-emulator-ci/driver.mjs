@@ -7,8 +7,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Check, BANNER, counts, legMarkdown } from './lib/results.mjs';
-import { adb, sh, sleep, screencap, dumpUi, parseNodes, permissionDialog, key, imeShown, focusedWindow, resumedActivity, tap } from './lib/adb.mjs';
-import { Web, Unreachable } from './lib/web.mjs';
+import { adb, sh, sleep, screenSize, screencap, dumpUi, parseNodes, permissionDialog, key, imeShown, focusedWindow, resumedActivity, tap } from './lib/adb.mjs';
+import { Web, Unreachable, NavFail } from './lib/web.mjs';
 import { psql, psqlNum } from './lib/db.mjs';
 
 const env = (k, d) => process.env[k] ?? d;
@@ -30,7 +30,8 @@ const NAMES_A = ['Ramesh Patil', 'Sunita Jadhav', 'Kisan More', 'Shankar Mukadam
 
 const results = {
   banner: BANNER,
-  leg: { name: LEG, apiLevel: Number(env('API_LEVEL', 0)), screen: env('SCREEN', 'normal'), target: env('EMU_TARGET', 'google_apis'), arch: 'x86_64' },
+  build: { appSha: env('APP_SHA', 'unknown'), harnessSha: env('HARNESS_SHA', 'unknown') },
+  leg: { informational: env('INFORMATIONAL', '') === 'true', name: LEG, apiLevel: Number(env('API_LEVEL', 0)), screen: env('SCREEN', 'normal'), target: env('EMU_TARGET', 'google_apis'), arch: 'x86_64' },
   app: {}, env: {}, inputMode: '', startedAt: new Date().toISOString(), checks: [],
 };
 const checks = results.checks;
@@ -42,6 +43,7 @@ const writeResults = () => {
 let web = null;
 let shotN = 0;
 let statusBarPx = 0;
+let navBarPx = 0;
 const shot = (c, label) => {
   const f = `${LEG}-${c ? c.id : 'x'}-${String(++shotN).padStart(2, '0')}-${label}.png`;
   try { screencap(path.join(OUT, 'shots', f)); c?.screens.push(f); } catch (e) { log('screencap failed', e.message); }
@@ -74,7 +76,8 @@ async function check(id, title, fn) {
   checks.push(c);
   log(`--- ${id} ${title}`);
   try { await fn(c); } catch (e) {
-    if (e instanceof Unreachable) c.unverified(`the UI state needed was not reachable: ${e.message}`);
+    if (e instanceof NavFail) { c.fail(`NAVIGATION PASS RULE: the real touch did not do the job - ${e.message}`); c.evidence.navigationFallback = 'none used (DOM/CDP input is never used to rescue a navigation)'; }
+    else if (e instanceof Unreachable) c.unverified(`the UI state needed was not reachable: ${e.message}`);
     else c.unverified(`harness error: ${String(e.stack || e.message).slice(0, 500)}`);
   }
   if (!deviceAlive()) { checks.pop(); throw new DeviceDead(`emulator died during ${id}`); }
@@ -111,6 +114,20 @@ async function dismissSystemDialogs() {
   return false;
 }
 
+const edge = {}; // screens measured during the first login: welcome, onboarding
+const edgeJs = (anchorTid) => `(() => { const a = document.querySelector('[data-testid="${anchorTid}"]'); if (!a) return null;
+  let root = a; while (root && root !== document.body) { if (getComputedStyle(root).position === 'fixed') break; root = root.parentElement; }
+  if (!root || root === document.body) root = document.body;
+  const dpr = window.devicePixelRatio; const cs = getComputedStyle(root);
+  let top = 1e9, bottom = 0;
+  root.querySelectorAll('*').forEach((e) => { const r = e.getBoundingClientRect(); if (r.width <= 0 || r.height <= 0) return;
+    const leafText = e.children.length === 0 && (e.textContent || '').trim(); if (!(leafText || e.tagName === 'BUTTON' || e.tagName === 'IMG')) return;
+    top = Math.min(top, r.top); bottom = Math.max(bottom, r.bottom); });
+  const rs = getComputedStyle(document.documentElement);
+  return { padTopPx: Math.round(parseFloat(cs.paddingTop) * dpr), padBottomPx: Math.round(parseFloat(cs.paddingBottom) * dpr),
+    contentTopPx: Math.round(top * dpr), contentBottomPx: Math.round(bottom * dpr), viewportHpx: Math.round(innerHeight * dpr),
+    safeTopVar: rs.getPropertyValue('--safe-area-inset-top').trim(), safeBottomVar: rs.getPropertyValue('--safe-area-inset-bottom').trim() }; })()`;
+
 function hideIme() { if (imeShown()) key(4); }
 
 async function launchCold({ attach = true } = {}) {
@@ -121,7 +138,7 @@ async function launchCold({ attach = true } = {}) {
   web = new Web({ pkg: PKG, log });
   await web.connect();
   await web.calibrate();
-  web.statusBarPx = statusBarPx;
+  web.statusBarPx = statusBarPx; web.navBarPx = navBarPx; web.screenH = screenSize().h;
   results.inputMode = web.inputMode;
   return web;
 }
@@ -191,8 +208,11 @@ async function loginUi(phone) {
   const end = Date.now() + 60_000; let alertText = null;
   while (Date.now() < end) {
     if (await web.visible(Web.tid('header-setup-hub')).catch(() => false)) return { ok: true, diag };
-    for (const spec of [Web.tid('welcome-continue'), Web.tid('onboarding-skip')]) {
-      if (await web.visible(spec).catch(() => false)) { try { await web.click(spec, { timeout: 4000 }); } catch { /* retry */ } }
+    for (const [name, spec, tid] of [['welcome', Web.tid('welcome-continue'), 'welcome-continue'], ['onboarding', Web.tid('onboarding-skip'), 'onboarding-skip']]) {
+      if (await web.visible(spec).catch(() => false)) {
+        if (!edge[name]) { await sleep(2500); edge[name] = await web.eval(edgeJs(tid)).catch(() => null); shot(null, `edge-${name}`); }
+        try { await web.click(spec, { timeout: 4000 }); } catch { /* retry */ }
+      }
     }
     const a = await web.info(Web.css('[role=alert]')).catch(() => ({ n: 0 }));
     if (a.n) alertText = a.text;
@@ -213,6 +233,10 @@ async function openSetupHub() {
     for (let k = 0; k < 8; k++) { await sleep(500); if (await setupHubOpen()) { await sleep(600); return; } }
     await dismissOverlays();
   }
+  const diag = await web.domDiagnostic(Web.tid('header-setup-hub')); // DIAGNOSTIC ONLY, never rescues
+  await sleep(1500);
+  results.diagnostics = (results.diagnostics || []).concat([{ what: 'Setup Hub DOM click after 4 failed real taps (diagnostic only)', result: diag, openedByDom: await setupHubOpen() }]);
+  throw new NavFail('4 real taps on the header Setup Hub button did not open it');
 }
 const HUB_MARKERS = [Web.text(/हजेरी वही/), Web.tid('labour-stat-grid'), Web.tid('labour-window-slider'), Web.tid('labour-review-strip'), Web.text(/हजेरी घ्या/), Web.tid('hub-invite-qr')];
 async function hubLoaded(timeout = 30_000) {
@@ -262,6 +286,20 @@ const fetchApiFromPage = (ms = 5000) => web.eval(`(async () => { const c = new A
   try { const r = await fetch(${JSON.stringify(API_BASE.replace('127.0.0.1', '10.0.2.2'))} + '/health/ready', { signal: c.signal, cache: 'no-store' }); clearTimeout(t); return { ok: r.ok, status: r.status }; }
   catch (e) { clearTimeout(t); return { ok: false, error: String(e && e.name || e) }; } })()`, { timeout: ms + 8000 });
 
+async function consentMe() {
+  const r = await fetch(`${API_BASE}/user/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Device-Id': 'ci-consent' }, body: JSON.stringify({ phone: PHONES.owner, password: PW, rememberDevice: false }) });
+  const tok = (await r.json()).accessToken;
+  const c = await fetch(`${API_BASE}/shramsafal/consent/me`, { headers: { Authorization: `Bearer ${tok}`, 'X-Device-Id': 'ci-consent' } });
+  const j = await c.json().catch(() => null);
+  return j ? j.fullHistoryJournal === true : null;
+}
+const DIARY_BANNER = Web.text(/Open Settings|सेटिंग्ज उघडा/);
+async function openDiaryViaSettings() {
+  await openSetupHub();
+  await web.click(Web.tid('hub-settings-voice-diary'), { label: 'Settings -> Voice Diary row' });
+  await web.waitVisible(Web.tid('voice-retained-consent-toggle'), 25_000, 'Settings (voice retention) screen');
+}
+
 function airplane(on) {
   sh(`cmd connectivity airplane-mode ${on ? 'enable' : 'disable'}`, { allowFail: true });
 }
@@ -308,7 +346,18 @@ async function main() {
     await web.waitVisible(Web.tid('consent-accept-cta'), 60_000, 'consent screen on a fresh install');
     await sleep(8000);
     shot(c, 'consent-screen');
-    try { const dw = sh('dumpsys window', { allowFail: true, timeout: 40_000 }); const m = /type=(?:ITYPE_)?status[Bb]ars?[^\n]*?frame=\[\d+,\d+\]\[\d+,(\d+)\]/.exec(dw) || /mStatusBarHeight=(\d+)/.exec(dw) || /statusBarHeight=(\d+)/.exec(dw); if (m) { statusBarPx = Number(m[1]); web.statusBarPx = statusBarPx; } c.evidence.statusBarPx = statusBarPx; c.evidence.statusBarSource = m ? m[0].slice(0, 120) : 'not found in dumpsys window'; } catch { /* optional */ }
+    try {
+      const dw = sh('dumpsys window', { allowFail: true, timeout: 40_000 });
+      const grab = (re) => [...dw.matchAll(re)].map((m) => ({ top: Number(m[1]), bottom: Number(m[2]) }));
+      const sbs = grab(/type=(?:ITYPE_)?status[Bb]ars?[^\n]*?frame=\[\d+,(\d+)\]\[\d+,(\d+)\]/g);
+      const navs = grab(/type=(?:ITYPE_)?navigation[Bb]ars?[^\n]*?frame=\[\d+,(\d+)\]\[\d+,(\d+)\]/g);
+      const sbH = sbs.map((x) => x.bottom - x.top).filter((h) => h > 0);
+      const nvH = navs.map((x) => x.bottom - x.top).filter((h) => h > 0);
+      statusBarPx = sbH.length ? Math.min(...sbH) : 0; web.statusBarPx = statusBarPx;
+      navBarPx = nvH.length ? Math.min(...nvH) : 0; web.navBarPx = navBarPx; web.screenH = screenSize().h;
+      c.evidence.statusBarPx = statusBarPx; c.evidence.navBarPx = navBarPx;
+      c.evidence.insetCandidates = { statusBars: sbH, navigationBars: nvH, screenH: web.screenH };
+    } catch { /* optional */ }
     await noPermissionDialog(c, 'on the consent screen (fresh install, 8 s after launch)');
   });
 
@@ -439,6 +488,64 @@ async function main() {
     }
   });
 
+  // ---- edge clearance (status bar / gesture bar) on the screens the safe-area fix touches
+  await check('C16', 'Welcome, Onboarding permissions, Profile bottom, plot-map action bar clear the status bar and gesture bar', async (c) => {
+    const clears = (name, m) => {
+      if (!m) { c.unverified(`${name}: screen was not shown in this run (first-run screens only appear on first login)`); return; }
+      c.evidence[name] = m;
+      c.assert(m.contentTopPx >= statusBarPx - 2, `${name}: top content (${m.contentTopPx}px) is below the status bar (${statusBarPx}px)`,
+        `${name}: top content at ${m.contentTopPx}px is UNDER the status bar (0-${statusBarPx}px); --safe-area-inset-top='${m.safeTopVar}'`);
+      c.assert(!navBarPx || m.contentBottomPx <= m.viewportHpx - navBarPx + 2, `${name}: bottom content (${m.contentBottomPx}px) is above the gesture bar (${m.viewportHpx - navBarPx}px)`,
+        `${name}: bottom content at ${m.contentBottomPx}px is UNDER the gesture/navigation bar (starts ${m.viewportHpx - navBarPx}px); --safe-area-inset-bottom='${m.safeBottomVar}'`);
+    };
+    clears('welcome screen', edge.welcome);
+    clears('onboarding permissions screen', edge.onboarding);
+    await goHome(); await openTeam();
+    const prof = await web.eval(`(async () => { document.querySelectorAll('*').forEach((e) => { if (e.scrollHeight > e.clientHeight + 40) e.scrollTop = 1e6; }); window.scrollTo(0, 1e6);
+      await new Promise((r) => setTimeout(r, 600)); const dpr = devicePixelRatio; const H = innerHeight * dpr; let low = 0;
+      document.querySelectorAll('button, a, [role=button]').forEach((e) => { const r = e.getBoundingClientRect(); if (r.width > 0 && r.height > 0 && r.bottom * dpr > H * 0.8) low = Math.max(low, r.bottom * dpr); });
+      let lastText = 0; document.querySelectorAll('p, span, h1, h2, h3, div').forEach((e) => { if (e.children.length === 0 && (e.textContent || '').trim()) { const r = e.getBoundingClientRect(); if (r.width > 0) lastText = Math.max(lastText, r.bottom * dpr); } });
+      const rs = getComputedStyle(document.documentElement);
+      return { contentTopPx: 9999, contentBottomPx: Math.round(low || lastText), viewportHpx: Math.round(H), safeTopVar: rs.getPropertyValue('--safe-area-inset-top').trim(), safeBottomVar: rs.getPropertyValue('--safe-area-inset-bottom').trim() }; })()`, { timeout: 20_000 });
+    shot(c, 'profile-bottom');
+    clears('Profile page bottom area', prof);
+    c.unverified('plot-map action bar: the map screen needs a Google Maps key, which this secretless workflow does not have, so it was not reachable or measured');
+  });
+
+  // ---- cold-start safe-area variables + header not double padded
+  await check('C17', 'safe-area variables at cold start (timeline) and header position (no double padding)', async (c) => {
+    sh(`am force-stop ${PKG}`, { allowFail: true }); await sleep(1200);
+    sh(`monkey -p ${PKG} -c android.intent.category.LAUNCHER 1`, { allowFail: true });
+    if (web) await web.close();
+    web = new Web({ pkg: PKG, log }); const t0 = Date.now(); await web.connect(); const attachMs = Date.now() - t0;
+    await web.calibrate(); web.statusBarPx = statusBarPx; web.navBarPx = navBarPx; web.screenH = screenSize().h;
+    const series = [];
+    for (let i = 0; i < 24; i++) {
+      series.push(await web.eval(`(() => { const rs = getComputedStyle(document.documentElement); const hdr = document.querySelector('[data-testid="header-setup-hub"]');
+        return { t: ${i * 250}, safeTop: rs.getPropertyValue('--safe-area-inset-top').trim(), safeBottom: rs.getPropertyValue('--safe-area-inset-bottom').trim(), headerTop: hdr ? Math.round(hdr.getBoundingClientRect().top * 100) / 100 : null }; })()`).catch(() => ({ t: i * 250, err: true })));
+      await sleep(250);
+    }
+    c.evidence.attachMsAfterLaunch = attachMs; c.evidence.timeline = series;
+    const vals = series.filter((x) => !x.err);
+    const zeroSeen = vals.some((x) => x.safeTop === '' || x.safeTop === '0px');
+    c.evidence.transientZeroOrUnsetSeen = zeroSeen;
+    const last = vals[vals.length - 1] || {};
+    await dismissOverlays();
+    const g = await web.eval(`(() => { const e = document.querySelector('[data-testid="header-setup-hub"]'); const r = e && e.getBoundingClientRect(); const rs = getComputedStyle(document.documentElement); return r ? { top: r.top, safeTop: rs.getPropertyValue('--safe-area-inset-top').trim() } : null; })()`);
+    c.evidence.headerNow = g;
+    if (!g) { c.unverified('header not measurable'); return; }
+    const api = Number(env('API_LEVEL', 0));
+    const baseline = SMALL ? 47.52 : 62.36; // run12 (before any fix) API 36 header top, CSS px
+    if (api >= 35) {
+      c.assert(Math.abs(g.top - baseline) <= 6, `API ${api}: header top ${Math.round(g.top * 10) / 10}px matches the unpatched value ${baseline}px (no double padding)`,
+        `API ${api}: header top is ${Math.round(g.top * 10) / 10}px but was ${baseline}px before the fix: the inset is being applied twice (--safe-area-inset-top='${g.safeTop}')`);
+    } else {
+      c.assert(parseFloat(g.safeTop) > 0, `API ${api}: --safe-area-inset-top is published (${g.safeTop})`, `API ${api}: --safe-area-inset-top is '${g.safeTop}' (not published)`);
+      c.assert(g.top * (web.calib?.scale || 1) >= statusBarPx - 2, `API ${api}: header top (${Math.round(g.top * (web.calib?.scale || 1))}px) is below the status bar (${statusBarPx}px)`, `API ${api}: header is under the status bar`);
+    }
+    c.evidence.observation = zeroSeen ? 'an early sample showed the variable unset/0 before the app published it (transient flash, see timeline)' : 'no unset/0 sample seen in the timeline (first sample is only possible after DevTools attaches)';
+  });
+
   // ---- Back chain + Voice Diary
   let diaryReachable = null;
   await check('C08', 'hardware Back from Voice Diary / Settings returns through the app and exits only at home', async (c) => {
@@ -562,32 +669,64 @@ async function main() {
     }
   });
 
-  // ---- large font
-  await check('C14', 'large font (1.5, 2.0): Labour / Team / attendance stay usable (screenshots + overflow metrics)', async (c) => {
+  // ---- local recording playback (real tap), src written once
+  await check('C18', 'Play on a LOCAL recording: one real tap starts audio, src written exactly once', async (c) => {
+    await launchCold(); await dismissOverlays();
+    await openDiaryViaSettings();
+    await web.eval(`(() => { window.__srcWrites = []; const d = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
+      if (d && d.set) Object.defineProperty(HTMLMediaElement.prototype, 'src', { configurable: true, get: d.get, set(v) { window.__srcWrites.push({ via: 'prop', v: String(v).slice(0, 30) }); return d.set.call(this, v); } });
+      const sa = Element.prototype.setAttribute; Element.prototype.setAttribute = function (n, v) { if (this instanceof HTMLMediaElement && String(n).toLowerCase() === 'src') window.__srcWrites.push({ via: 'attr', v: String(v).slice(0, 30) }); return sa.call(this, n, v); }; })()`);
+    await web.click(Web.tid('voice-retained-open-diary'), { label: 'open Voice Diary' });
+    await web.waitVisible(Web.tid('voice-diary-page'), 25_000, 'Voice Diary page');
+    await sleep(2500);
+    const id = await web.eval(`(() => { const e = document.querySelector('[data-testid^="voice-diary-clip-card-"]'); return e ? e.getAttribute('data-testid').slice('voice-diary-clip-card-'.length) : null; })()`);
+    if (!id) { c.unverified('no recording card in the Voice Diary (the capture in C11 produced no local clip), so playback could not be exercised'); return; }
+    c.evidence.clipId = id;
+    const sample = () => web.eval(`(() => { const a = document.querySelector('[data-testid="voice-diary-clip-card-${id}"] audio'); return a ? { paused: a.paused, currentTime: a.currentTime, duration: a.duration, ended: a.ended, readyState: a.readyState, hasSrc: !!a.getAttribute('src') || !!a.src, err: a.error ? a.error.code : null } : null; })()`);
+    const writesBefore = await web.eval('window.__srcWrites.length');
+    c.evidence.before = await sample();
+    shot(c, 'diary-clip-before-play');
+    await web.click(Web.tid(`voice-diary-clip-play-${id}`), { label: 'Play (single real tap)' });
+    const s1 = await (async () => { await sleep(700); return sample(); })();
+    const s2 = await (async () => { await sleep(700); return sample(); })();
+    const label = await web.eval(`(document.querySelector('[data-testid="voice-diary-clip-play-${id}"]') || {}).getAttribute ? document.querySelector('[data-testid="voice-diary-clip-play-${id}"]').getAttribute('aria-label') : null`);
+    shot(c, 'diary-clip-after-play');
+    const writes = await web.eval('window.__srcWrites');
+    c.evidence.samples = { s1, s2, buttonLabel: label, srcWrites: writes, writesBeforeTap: writesBefore };
+    const started = !!s1 && !!s2 && ((!s2.paused && s2.currentTime > s1.currentTime) || s2.ended || s1.currentTime > 0 || s2.currentTime > 0);
+    c.assert(started, `audio actually played after one real tap (paused=${s2?.paused}, currentTime ${s1?.currentTime} -> ${s2?.currentTime}, ended=${s2?.ended})`, `no audio playback after the tap: ${JSON.stringify({ s1, s2 })}`);
+    c.assert(writes.length - writesBefore === 0, 'no src write caused by the tap', `the tap caused ${writes.length - writesBefore} src write(s)`);
+    c.assert(writes.length <= 1, `src was written ${writes.length} time(s) in total (never twice)`, `src was written ${writes.length} times: ${JSON.stringify(writes)}`);
+  });
+
+  // ---- large font (Team page at 1.0 / 1.5 / 2.0, hub + attendance at 1.5 / 2.0)
+  await check('C14', 'large font 1.0 / 1.5 / 2.0: Team page (and Labour hub, attendance at 1.5 / 2.0) stay inside the screen', async (c) => {
     const probe = `(() => { const d = document.createElement('div'); d.style.cssText = 'position:absolute;left:-9999px;font-size:16px;line-height:normal;white-space:nowrap'; d.textContent = 'Hgj'; document.body.appendChild(d); const h = d.getBoundingClientRect().height; d.remove(); return h; })()`;
     const metrics = `(() => { const vw = window.innerWidth; const bad = []; document.querySelectorAll('body *').forEach((e) => { const r = e.getBoundingClientRect(); if (r.width > 0 && r.right > vw + 2 && getComputedStyle(e).position !== 'fixed') bad.push((e.getAttribute('data-testid') || e.tagName) + ':' + Math.round(r.right)); });
       return { vw, scrollW: document.documentElement.scrollWidth, overflowingElements: bad.slice(0, 8), overflowCount: bad.length }; })()`;
+    sh('settings put system font_scale 1.0'); await sleep(1500);
     await launchCold(); await dismissOverlays();
     const base = await web.eval(probe);
     const per = {};
     try {
-      for (const scale of ['1.5', '2.0']) {
+      for (const scale of ['1.0', '1.5', '2.0']) {
         sh(`settings put system font_scale ${scale}`); await sleep(2500);
         await launchCold(); await dismissOverlays();
         const eff = await web.eval(probe);
         const ratio = Math.round((eff / base) * 100) / 100;
         const rec = { effectiveTextScale: ratio };
-        await openLabourHub(); rec.hub = await web.eval(metrics); shot(c, `hub-x${scale}`);
-        await openAttendance(); rec.attendance = await web.eval(metrics); shot(c, `attendance-x${scale}`);
-        const save = await web.info(Web.tid('att-save'), true); rec.saveButtonReachable = !!(save.n && save.inView && !save.covered);
-        await goHome(); await openTeam(); rec.team = await web.eval(metrics); shot(c, `team-x${scale}`);
-        per[scale] = rec;
-        if (ratio <= 1.15) c.unverified(`system font scale ${scale} did NOT change text size inside the WebView (probe ratio ${ratio}): the app ignores the Android font-size setting, so large-font layout is not exercised (screenshots show the unscaled layout)`);
-        else {
-          c.pass(`system font scale ${scale} reached the WebView (probe text ${ratio}x taller)`);
-          for (const k of ['hub', 'attendance', 'team']) c.assert(rec[k].scrollW <= rec[k].vw + 2 && rec[k].overflowCount === 0, `${k}: nothing extends past the screen edge at ${scale}x`, `${k}: content extends past the right screen edge at ${scale}x (clipped): ${JSON.stringify(rec[k].overflowingElements)}`);
-          c.assert(rec.saveButtonReachable, `attendance Save is reachable at ${scale}x`, `attendance Save NOT reachable at ${scale}x`);
+        if (scale !== '1.0') {
+          await openLabourHub(); rec.hub = await web.eval(metrics); shot(c, `hub-x${scale}`);
+          await openAttendance(); rec.attendance = await web.eval(metrics); shot(c, `attendance-x${scale}`);
+          const save = await web.info(Web.tid('att-save'), true); rec.saveButtonReachable = !!(save.n && save.inView && !save.covered);
+          await goHome();
         }
+        await openTeam(); rec.team = await web.eval(metrics); shot(c, `team-x${scale}`);
+        per[scale] = rec;
+        if (scale !== '1.0' && ratio <= 1.15) { c.unverified(`system font scale ${scale} did NOT change text size inside the WebView (probe ratio ${ratio})`); continue; }
+        if (scale !== '1.0') c.pass(`system font scale ${scale} reached the WebView (probe text ${ratio}x taller)`);
+        for (const k of scale === '1.0' ? ['team'] : ['hub', 'attendance', 'team']) c.assert(rec[k].scrollW <= rec[k].vw + 2 && rec[k].overflowCount === 0, `${k}: nothing extends past the screen edge at ${scale}x`, `${k}: content extends past the right screen edge at ${scale}x (clipped): ${JSON.stringify(rec[k].overflowingElements)}`);
+        if (scale !== '1.0') c.assert(rec.saveButtonReachable, `attendance Save is reachable at ${scale}x`, `attendance Save NOT reachable at ${scale}x`);
       }
     } finally { sh('settings put system font_scale 1.0', { allowFail: true }); }
     c.evidence.perScale = per;
@@ -664,6 +803,83 @@ async function main() {
     shot(c, 'after-reconnect-hub');
   });
   airplane(false); sh('svc wifi enable', { allowFail: true }); sh('svc data enable', { allowFail: true });
+
+  await check('C19', 'Voice Diary: offline -> online (airplane toggle) re-reads consent and refreshes the page', async (c) => {
+    await launchCold(); await dismissOverlays();
+    await openDiaryViaSettings();
+    let consent = await consentMe();
+    if (!consent) {
+      await web.click(Web.tid('voice-retained-consent-checkbox'), { label: 'consent checkbox' });
+      const fg = Web.tid('voice-retained-first-grant-banner');
+      await web.waitVisible(fg, 8000).catch(() => {});
+      if (await web.visible(fg)) await web.click(Web.tid('voice-retained-first-grant-confirm'), { label: 'first-grant confirm' });
+      await sleep(3000); consent = await consentMe();
+    }
+    c.assert(consent === true, 'server records full-history consent = granted (set through the UI with real taps)', `consent is ${consent} on the server after the UI grant`);
+    await web.click(Web.tid('voice-retained-open-diary'), { label: 'open Voice Diary' });
+    await web.waitVisible(Web.tid('voice-diary-page'), 25_000, 'Voice Diary page');
+    await sleep(2500);
+    const bannerOnline = await web.visible(DIARY_BANNER);
+    const srcText = () => web.eval(`(() => { const e = document.querySelector('[data-testid^="voice-diary-clip-source-"]'); return e ? e.innerText.trim() : null; })()`);
+    c.evidence.online = { consentOffBannerVisible: bannerOnline, firstClipSourceBadge: await srcText() };
+    shot(c, 'diary-online');
+
+    airplane(true); await sleep(5000);
+    let probe = await fetchApiFromPage(5000).catch(() => ({ ok: false }));
+    let radios = false;
+    if (probe.ok) { sh('svc wifi disable', { allowFail: true }); sh('svc data disable', { allowFail: true }); radios = true; await sleep(4000); probe = await fetchApiFromPage(5000).catch(() => ({ ok: false })); }
+    c.assert(!probe.ok, `device offline (airplane mode${radios ? ' + radios' : ''})`, 'still online: not a genuine offline test');
+    await launchCold(); await dismissOverlays();
+    await openDiaryViaSettings();
+    await web.click(Web.tid('voice-retained-open-diary'), { label: 'open Voice Diary (offline)' });
+    await web.waitVisible(Web.tid('voice-diary-page'), 25_000, 'Voice Diary page (offline)');
+    await sleep(3000);
+    const bannerOffline = await web.visible(DIARY_BANNER);
+    c.evidence.offline = { consentOffBannerVisible: bannerOffline, firstClipSourceBadge: await srcText() };
+    shot(c, 'diary-offline');
+
+    const tBack = Date.now();
+    if (radios) { sh('svc wifi enable', { allowFail: true }); sh('svc data enable', { allowFail: true }); }
+    airplane(false);
+    let reread = null; let bannerNow = bannerOffline;
+    for (let k = 0; k < 45; k++) {
+      await sleep(2000);
+      reread = web.net.find((n) => n.t >= tBack && n.method === 'GET' && /\/consent\/me/.test(n.url) && n.status === 200) || reread;
+      bannerNow = await web.visible(DIARY_BANNER).catch(() => bannerNow);
+      if (reread && (!bannerNow || !bannerOffline)) break;
+    }
+    await sleep(2000);
+    shot(c, 'diary-after-reconnect');
+    c.evidence.after = { consentReadAfterReconnect: reread ? { url: reread.url.replace(/\?.*/, ''), status: reread.status, secondsAfter: Math.round((reread.t - tBack) / 1000) } : null, consentOffBannerVisible: bannerNow, firstClipSourceBadge: await srcText() };
+    c.assert(!!reread, 'after reconnect the open Voice Diary re-read the consent (GET /consent/me 200 seen from the WebView)', 'no consent re-read after reconnect: the page kept its offline state');
+    if (bannerOffline) c.assert(!bannerNow, 'the stale consent-off banner shown while offline cleared after reconnect', 'the consent-off banner is STILL shown after reconnect although the server has consent on');
+    else c.unverified('offline state did not show the consent-off banner, so a stale-state refresh was not exercised (the re-read itself was checked above)');
+    c.unverified('saved-status badge reaching "saved": needs a real S3/KMS persist, which CI does not have; only the consent re-read and badge text before/after are recorded');
+  });
+
+  await check('C20', 'Cloud-recovered (server-only) recording: first tap plays', async (c) => {
+    c.unverified('NOT COVERED on the emulator: a recording that only the server holds needs the real S3 bucket and KMS key, which this secretless CI has none of. Browser real-chain proof exists (RECOVERY_TEST_RUN3); nothing here fakes it.');
+  });
+
+  await check('C21', 'keyboard up: --safe-area-inset-bottom stays gesture-bar sized (not keyboard sized)', async (c) => {
+    await launchCold(); await dismissOverlays();
+    await openLabourHub(); await openAttendance();
+    const safe = () => web.eval(`(() => { const rs = getComputedStyle(document.documentElement); const el = document.activeElement; const r = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+      return { safeBottom: rs.getPropertyValue('--safe-area-inset-bottom').trim(), safeTop: rs.getPropertyValue('--safe-area-inset-top').trim(), innerHeight, dpr: devicePixelRatio, visualViewportH: window.visualViewport ? window.visualViewport.height : null, focusedBottom: r ? r.bottom : null }; })()`);
+    await web.click(Web.tid('att-add-open'), { label: 'add person' }); await sleep(800);
+    c.evidence.keyboardDown = await safe();
+    await web.click(Web.tid('att-new-name'), { label: 'new name field (real tap raises the keyboard)' });
+    let ime = false; for (let k = 0; k < 14; k++) { await sleep(500); if (imeShown()) { ime = true; break; } }
+    await sleep(1500);
+    const kb = await safe(); c.evidence.keyboardUp = kb; shot(c, 'keyboard-up');
+    if (!ime) { c.unverified('the soft keyboard did not appear, so the inset under the keyboard was not measured'); return; }
+    const px = parseFloat(kb.safeBottom || '0') * kb.dpr;
+    c.assert(px <= navBarPx + 4, `with the keyboard up --safe-area-inset-bottom is ${kb.safeBottom} (${Math.round(px)}px), not keyboard sized (gesture bar ${navBarPx}px)`,
+      `with the keyboard up --safe-area-inset-bottom is ${kb.safeBottom} (${Math.round(px)}px): larger than the gesture bar (${navBarPx}px), likely keyboard sized -> oversized bottom gap`);
+    if (kb.focusedBottom != null) c.evidence.gapBelowFocusedFieldPx = Math.round((kb.innerHeight - kb.focusedBottom) * kb.dpr);
+    key(4); await sleep(500);
+  });
+
 
   // ---- logout and user separation A -> Worker -> B -> A
   await check('C13', 'logout and user separation A -> B -> A (with the Worker as a role check)', async (c) => {
