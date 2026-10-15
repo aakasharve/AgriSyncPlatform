@@ -64,7 +64,11 @@ async function problemEvidence(c) {
   } catch (e) { c.evidence.evidenceError = String(e.message).slice(0, 200); }
 }
 
+class DeviceDead extends Error {}
+const deviceAlive = () => adb(['get-state'], { allowFail: true, timeout: 15_000 }).trim() === 'device';
+
 async function check(id, title, fn) {
+  if (!deviceAlive()) throw new DeviceDead(`emulator is gone before ${id}`);
   const c = new Check(id, title);
   checks.push(c);
   log(`--- ${id} ${title}`);
@@ -72,6 +76,7 @@ async function check(id, title, fn) {
     if (e instanceof Unreachable) c.unverified(`the UI state needed was not reachable: ${e.message}`);
     else c.unverified(`harness error: ${String(e.stack || e.message).slice(0, 500)}`);
   }
+  if (!deviceAlive()) { checks.pop(); throw new DeviceDead(`emulator died during ${id}`); }
   if (c.status !== 'PASS') await problemEvidence(c);
   writeResults();
   log(`=== ${id} ${c.status}  ${c.points.map((p) => p.s[0]).join('')}`);
@@ -178,7 +183,7 @@ async function openSetupHub() {
   await dismissOverlays();
   await web.click(Web.tid('header-setup-hub'), { label: 'header setup hub' }); await sleep(1200);
 }
-const HUB_MARKERS = [Web.tid('labour-stat-grid'), Web.tid('labour-window-slider'), Web.tid('labour-review-strip'), Web.text(/हजेरी घ्या/), Web.tid('hub-invite-qr')];
+const HUB_MARKERS = [Web.text(/हजेरी वही/), Web.tid('labour-stat-grid'), Web.tid('labour-window-slider'), Web.tid('labour-review-strip'), Web.text(/हजेरी घ्या/), Web.tid('hub-invite-qr')];
 async function hubLoaded(timeout = 30_000) {
   const end = Date.now() + timeout;
   while (Date.now() < end) {
@@ -446,15 +451,18 @@ async function main() {
       const crop = Web.text(/(द्राक्ष|ऊस|Grapes|Sugarcane)/i);
       if (await web.visible(crop)) { await web.click(crop, { label: 'a crop' }); await sleep(1200); }
       if (await web.visible(Web.tid('plot-tray-button'))) { await web.click(Web.tid('plot-tray-button'), { label: 'plot tray' }); await sleep(900); }
-      // plots may not be listed; 'whole farm' is the app's own way to pick a scope
-      if (!(await web.visible(Web.tid('input-method-voice'))) && await web.visible(Web.text(/संपूर्ण शेत/))) { await web.click(Web.text(/संपूर्ण शेत/), { label: 'whole farm' }); await sleep(2500); }
     }
     await web.click(Web.tid('input-method-voice'), { label: 'voice input method' }); await sleep(800);
-    shot(c, 'voice-ui');
     const start = Web.css('button[aria-label="Start Recording"]');
+    if (!(await web.visible(start)) && await web.visible(Web.text(/संपूर्ण शेत/))) {
+      // no plots are listed for the demo farm; the app's own scope for that is "whole farm"
+      await web.click(Web.text(/संपूर्ण शेत/), { label: 'whole farm' }); await sleep(2500);
+      if (await web.visible(Web.tid('input-method-voice'))) { await web.click(Web.tid('input-method-voice'), { label: 'voice input method (again)' }); await sleep(800); }
+    }
+    shot(c, 'voice-ui');
     if (!(await web.visible(start))) {
       c.evidence.voiceButtons = await web.eval(`Array.from(document.querySelectorAll('button[aria-label]')).map(b => b.getAttribute('aria-label')).slice(0, 20)`);
-      throw new Unreachable('Start Recording button not available (plot may need selecting): ' + JSON.stringify(c.evidence.voiceButtons));
+      throw new Unreachable('Start Recording button not available: ' + JSON.stringify(c.evidence.voiceButtons));
     }
     await web.click(start, { label: 'Start Recording (first tap)' });
     // look for the real OS dialog
@@ -657,6 +665,7 @@ async function main() {
 
 main().then(() => process.exit(0)).catch((e) => {
   console.error('DRIVER FATAL', e);
+  if (e instanceof DeviceDead) { try { fs.writeFileSync(path.join(OUT, 'device-died'), String(e.message)); } catch { /* ignore */ } }
   results.fatal = String(e.stack || e).slice(0, 1500);
   results.finishedAt = new Date().toISOString();
   results.totals = counts(checks);

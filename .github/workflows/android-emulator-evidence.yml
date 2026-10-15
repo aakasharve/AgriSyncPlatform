@@ -236,7 +236,58 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Run the journeys on the emulator
+      - name: Run the journeys on the emulator (attempt 1)
+        id: attempt1
+        continue-on-error: true
+        # reactivecircus/android-emulator-runner v2.35.0
+        uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b
+        env:
+          APK: ${{ runner.temp }}/apk/app-internal-test-debug.apk
+          LEG_NAME: ${{ matrix.name }}
+          API_LEVEL: ${{ matrix.api }}
+          SCREEN: ${{ matrix.screen }}
+          EMU_TARGET: google_apis
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          ram-size: 4096M
+          heap-size: 576M
+          disk-size: 8192M
+          force-avd-creation: true
+          emulator-boot-timeout: 900
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: bash tools/android-emulator-ci/run-leg.sh
+
+      # The emulator on a shared runner occasionally dies mid-run. That is an infrastructure failure, not an
+      # app result, so retry once on a fresh AVD with a fresh backend and keep the first attempt's logs.
+      - name: Decide whether the emulator died
+        id: decide
+        if: always()
+        run: |
+          if [ -f "$OUT_DIR/device-died" ] || [ ! -f "$OUT_DIR/driver.exit" ]; then
+            echo "retry=true" >> "$GITHUB_OUTPUT"
+            mkdir -p "$OUT_DIR/../attempt1-died" && cp -r "$OUT_DIR"/. "$OUT_DIR/../attempt1-died/" || true
+            rm -rf "$OUT_DIR"/*
+          else
+            echo "retry=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Reset the backend for the retry
+        if: always() && steps.decide.outputs.retry == 'true'
+        env:
+          PG_SUPER_PW: ci_disposable_container_pw
+          API_DIR: ${{ runner.temp }}/api
+        run: |
+          set -euo pipefail
+          [ -f "$CI_WORK/api.pid" ] && kill "$(cat "$CI_WORK/api.pid")" 2>/dev/null || true
+          sleep 5
+          bash tools/android-emulator-ci/backend-up.sh
+
+      - name: Run the journeys on the emulator (attempt 2, only if attempt 1 lost the emulator)
+        if: always() && steps.decide.outputs.retry == 'true'
         # reactivecircus/android-emulator-runner v2.35.0
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b
         env:
@@ -277,7 +328,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: evidence-${{ matrix.name }}
-          path: ${{ env.OUT_DIR }}
+          path: |
+            ${{ env.OUT_DIR }}
+            /home/runner/work/_temp/attempt1-died
           retention-days: 14
           if-no-files-found: warn
 
