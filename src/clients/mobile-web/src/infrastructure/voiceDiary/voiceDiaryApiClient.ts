@@ -17,13 +17,18 @@
 // runtime validation at the wire boundary to fail closed on a server
 // shape drift.
 //
-// The persist call passes the LOCAL Dexie `voiceClips.id` as the
-// server-side `clipId` PK so the unified VoiceDiary view de-dupes
-// cleanly when the same clip arrives via the local-30d path AND the
-// retained-tier path (supervisor risk #1 mitigation per envelope brief).
+// The `clipId` on the wire is the ARCHIVE id: a Guid derived
+// deterministically from the local Dexie `voiceClips.id` by
+// `toArchiveClipId` (the local id is a 64-hex SHA-256 string; the server
+// column, route and object key are Guid-typed). Callers pass the archive id;
+// `buildPersistRequestBody` refuses anything that is not a Guid BEFORE the
+// network, so a contract drift fails in the unit suite, not as a production 500.
+// The unified VoiceDiary view de-dupes local and cloud clips by mapping the
+// archive id back through the same function.
 
 import { z } from 'zod';
 import { agriSyncClient } from '../api/AgriSyncClient';
+import { isGuidString } from '../voice/archiveClipId';
 
 // ---------------------------------------------------------------------------
 // Wire shapes (mirror VoiceDiaryEndpoints.cs / RetainedClipResult /
@@ -31,7 +36,7 @@ import { agriSyncClient } from '../api/AgriSyncClient';
 // ---------------------------------------------------------------------------
 
 export interface PersistVoiceClipRetainedRequest {
-    /** Client-side Dexie `voiceClips.id` reused as the server PK (UUID v4). */
+    /** ARCHIVE id (a Guid): `toArchiveClipId(voiceClips.id)`. Never the raw local id. */
     clipId: string;
     /** ISO-8601 UTC timestamp of the original recording. */
     recordedAtUtc: string;
@@ -45,8 +50,68 @@ export interface PersistVoiceClipRetainedRequest {
     authTagBase64: string;
     /** Whole-seconds duration. Backend invariant requires >= 1. */
     durationSeconds: number;
-    /** BCP-47 locale (e.g. 'mr-IN'); used for downstream search bucketing. */
-    language: string;
+    /** BCP-47 locale the app offers. Hindi was removed; 'hi' can never be sent. */
+    language: ArchiveLanguage;
+}
+
+/** Languages the app offers (Marathi, English). The server stores any <=16-char tag. */
+export type ArchiveLanguage = 'mr-IN' | 'en-IN';
+const ARCHIVE_LANGUAGES: readonly string[] = ['mr-IN', 'en-IN'];
+
+/**
+ * Column limits of `ssf.voice_clips_retained` (VoiceClipRetainedConfiguration):
+ * iv_b64 64, auth_tag_b64 64, language 16, dek_id 512 (widened from 128 because
+ * a real KMS-wrapped DEK id is ~248 chars). A longer value is a Postgres 22001
+ * = HTTP 500 on the server; refusing it here makes it a named client failure.
+ */
+const MAX_DEK_ID = 512;
+const MAX_IV_B64 = 64;
+const MAX_TAG_B64 = 64;
+/** Server ceiling on the base64 ciphertext (VoiceDiaryEndpoints.MaxCipherPayloadBase64Bytes). */
+const MAX_CIPHER_B64 = 16 * 1024 * 1024;
+const STANDARD_B64 = /^[A-Za-z0-9+/]+={0,2}$/;
+
+function requireBase64(name: string, value: unknown, max: number): string {
+    if (typeof value !== 'string' || value.length === 0 || value.length > max || !STANDARD_B64.test(value)) {
+        throw new Error(`voiceDiaryApiClient: ${name} must be non-empty standard base64 of at most ${max} chars.`);
+    }
+    return value;
+}
+
+/**
+ * THE function that serialises the persist body. `persistRetainedVoiceClip`
+ * POSTs exactly what this returns, and the cross-stack contract test feeds the
+ * same JSON to the real ASP.NET endpoint. Field names are the camelCase form of
+ * `PersistVoiceDiaryRequest`; `recordedAtUtc` is a UTC ISO-8601 instant (the
+ * server field is DateTime), `durationSeconds` a whole number >= 1 (server int).
+ */
+export function buildPersistRequestBody(request: PersistVoiceClipRetainedRequest): Record<string, string | number> {
+    if (typeof request.clipId !== 'string' || !isGuidString(request.clipId)) {
+        throw new Error('voiceDiaryApiClient: clipId must be the archive Guid (toArchiveClipId), not a local clip id.');
+    }
+    const recordedAtMs = Date.parse(request.recordedAtUtc);
+    if (!Number.isFinite(recordedAtMs)) {
+        throw new Error('voiceDiaryApiClient: recordedAtUtc must be an ISO-8601 instant.');
+    }
+    if (!Number.isInteger(request.durationSeconds) || request.durationSeconds < 1) {
+        throw new Error('voiceDiaryApiClient: durationSeconds must be a whole number of at least 1.');
+    }
+    if (!ARCHIVE_LANGUAGES.includes(request.language)) {
+        throw new Error(`voiceDiaryApiClient: language must be one of ${ARCHIVE_LANGUAGES.join(', ')}.`);
+    }
+    if (typeof request.dekId !== 'string' || request.dekId.trim().length === 0 || request.dekId.length > MAX_DEK_ID) {
+        throw new Error(`voiceDiaryApiClient: dekId must be non-empty and at most ${MAX_DEK_ID} chars.`);
+    }
+    return {
+        clipId: request.clipId.trim().toLowerCase(),
+        recordedAtUtc: new Date(recordedAtMs).toISOString(),
+        cipherBase64: requireBase64('cipherBase64', request.cipherBase64, MAX_CIPHER_B64),
+        dekId: request.dekId,
+        ivBase64: requireBase64('ivBase64', request.ivBase64, MAX_IV_B64),
+        authTagBase64: requireBase64('authTagBase64', request.authTagBase64, MAX_TAG_B64),
+        durationSeconds: request.durationSeconds,
+        language: request.language,
+    };
 }
 
 export interface PersistVoiceClipRetainedResponse {
@@ -78,7 +143,7 @@ export interface VoiceDiaryByIdResult {
 // last place we can stop a server shape drift).
 // ---------------------------------------------------------------------------
 
-const PersistResponseSchema = z.object({
+export const PersistResponseSchema = z.object({
     clipId: z.string().min(1),
 });
 
@@ -90,11 +155,11 @@ const ListItemSchema = z.object({
     s3Key: z.string(),
 });
 
-const RangeResponseSchema = z.object({
+export const RangeResponseSchema = z.object({
     clips: z.array(ListItemSchema),
 });
 
-const ByIdSchema = z.object({
+export const ByIdSchema = z.object({
     clipId: z.string().min(1),
     recordedAtUtc: z.string(),
     durationSeconds: z.number().int().nonnegative(),
@@ -127,16 +192,10 @@ export async function persistRetainedVoiceClip(
     request: PersistVoiceClipRetainedRequest,
 ): Promise<PersistVoiceClipRetainedResponse> {
     const axiosClient = agriSyncClient.http;
-    const response = await axiosClient.post<unknown>('/shramsafal/voice-diary/persist', {
-        clipId: request.clipId,
-        recordedAtUtc: request.recordedAtUtc,
-        cipherBase64: request.cipherBase64,
-        dekId: request.dekId,
-        ivBase64: request.ivBase64,
-        authTagBase64: request.authTagBase64,
-        durationSeconds: request.durationSeconds,
-        language: request.language,
-    });
+    const response = await axiosClient.post<unknown>(
+        '/shramsafal/voice-diary/persist',
+        buildPersistRequestBody(request),
+    );
 
     const parsed = PersistResponseSchema.safeParse(response.data);
     if (!parsed.success) {
@@ -178,6 +237,11 @@ export async function getVoiceDiaryByRange(
  * owned by the caller — the endpoint conflates both for privacy).
  */
 export async function getVoiceDiaryById(clipId: string): Promise<VoiceDiaryByIdResult | null> {
+    // The route is `{clipId:guid}`: a non-Guid can never match, so refuse it here
+    // instead of asking the server a question it answers with a bare 404.
+    if (!isGuidString(clipId)) {
+        throw new Error('voiceDiaryApiClient.getVoiceDiaryById: clipId must be the archive Guid.');
+    }
     const axiosClient = agriSyncClient.http;
     try {
         const response = await axiosClient.get<unknown>(`/shramsafal/voice-diary/by-id/${encodeURIComponent(clipId)}`);

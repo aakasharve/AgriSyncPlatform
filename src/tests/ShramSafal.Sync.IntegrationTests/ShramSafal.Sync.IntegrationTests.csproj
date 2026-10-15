@@ -37,6 +37,10 @@
     <None Update="GoldenSnapshots/**/*.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- D2: client-produced wire fixtures (drift-checked by mobile-web voiceArchive.wireContract.test.ts). -->
+    <None Update="Contract/VoiceArchive/*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>

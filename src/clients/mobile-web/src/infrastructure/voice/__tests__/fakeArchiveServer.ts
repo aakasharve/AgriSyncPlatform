@@ -1,6 +1,7 @@
 // Test double for the server half of the voice archive, shared by the voice
 // archive tests. It models ONLY what the real contracts promise:
-//   - persist: consent-gated, idempotent per (user, clip), echoes the clip id
+//   - persist: Guid-typed clip id (a non-Guid is the server's FormatException -> 500, defect D2),
+//     consent-gated, idempotent per (user, clip), echoes the clip id
 //   - by-id / by-range: scoped to the signed-in user, never across users
 //   - tenant DEK issue / resolve (D1): the caller names a FARM; the server derives
 //     the owner account from that farm and the key is per-owner-account, resolvable
@@ -14,6 +15,7 @@ import type {
     VoiceDiaryByIdResult,
     VoiceDiaryListItem,
 } from '../../voiceDiary/voiceDiaryApiClient';
+import { isGuidString } from '../archiveClipId';
 
 function bytesToBase64(bytes: Uint8Array): string {
     let s = '';
@@ -136,6 +138,10 @@ class FakeArchiveServer {
     api = {
         persistRetainedVoiceClip: async (req: PersistVoiceClipRetainedRequest) => {
             this.persistCalls.push(req);
+            // The real endpoint binds `Guid ClipId`: anything else never reaches the handler.
+            if (!isGuidString(req.clipId)) {
+                throw new Error('Request failed with status code 500 (System.FormatException: $.clipId is not a Guid)');
+            }
             if (this.holdPersist) await this.holdPersist;
             if (this.failPersistWith) throw this.failPersistWith;
             if (this.failPersist > 0) {
@@ -150,6 +156,8 @@ class FakeArchiveServer {
             return { clipId: this.ackWrongId ? '99999999-9999-4999-8999-999999999999' : req.clipId };
         },
         getVoiceDiaryById: async (clipId: string): Promise<VoiceDiaryByIdResult | null> => {
+            // The real route is `{clipId:guid}`: a non-Guid never matches (404).
+            if (!isGuidString(clipId)) return null;
             const row = this.mine().get(clipId);
             if (!row) return null; // not found OR not owned: the endpoint conflates both
             return {
