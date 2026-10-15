@@ -55,6 +55,12 @@ async function problemEvidence(c) {
       c.evidence.pageText = (await web.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 1200);
     }
     c.evidence.focus = focusedWindow();
+    if (web) {
+      c.evidence.netTail = web.net.slice(-14).map((n) => `${n.method} ${n.url.replace(/^https?:\/\/[^/]+/, '').slice(0, 70)} ${n.status ?? n.failed ?? '-'}`);
+      c.evidence.pageErrors = web.errors.slice(-4);
+      log('      page: ' + String(c.evidence.pageText || '').slice(0, 220));
+      log('      net: ' + JSON.stringify(c.evidence.netTail).slice(0, 700));
+    }
   } catch (e) { c.evidence.evidenceError = String(e.message).slice(0, 200); }
 }
 
@@ -69,6 +75,7 @@ async function check(id, title, fn) {
   if (c.status !== 'PASS') await problemEvidence(c);
   writeResults();
   log(`=== ${id} ${c.status}  ${c.points.map((p) => p.s[0]).join('')}`);
+  if (c.status !== 'PASS') for (const p of c.points) if (p.s !== 'PASS') log(`      ${p.s}: ${p.m}`.slice(0, 600));
   return c;
 }
 

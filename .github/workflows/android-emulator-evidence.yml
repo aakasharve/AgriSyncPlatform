@@ -192,8 +192,8 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     env:
-      CI_WORK: ${{ github.workspace }}/../ci-work
-      OUT_DIR: ${{ github.workspace }}/../leg-out
+      CI_WORK: /home/runner/work/_temp/ci-work
+      OUT_DIR: /home/runner/work/_temp/leg-out
       APP_ID: com.agrisync.shramsafal.internaltest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
