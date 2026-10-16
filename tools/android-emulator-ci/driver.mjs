@@ -130,6 +130,8 @@ const edgeJs = (anchorTid) => `(() => { const a = document.querySelector('[data-
     contentTopPx: Math.round(top * dpr), contentBottomPx: Math.round(bottom * dpr), viewportHpx: Math.round(innerHeight * dpr),
     safeTopVar: rs.getPropertyValue('--safe-area-inset-top').trim(), safeBottomVar: rs.getPropertyValue('--safe-area-inset-bottom').trim() }; })()`;
 
+const presentTid = (tid) => web.eval(`!!document.querySelector('[data-testid="${tid}"]')`).catch(() => false);
+
 function hideIme() { if (imeShown()) key(4); }
 
 // Killing the app while a token refresh is in flight can leave the server with a rotated token the app never stored
@@ -206,9 +208,10 @@ async function dismissOverlays() {
     // 1. the known first-run / intro buttons (real taps)
     for (const spec of [Web.tid('welcome-continue'), Web.tid('onboarding-skip'),
       Web.text(/चला, सुरुवात करूया/), Web.text(/समजलं, पुढे चला/), Web.text(/^\s*पुढे चला\s*$/), Web.text(/^\s*नंतर\s*$/), Web.text(/^\s*Skip\s*$/i)]) {
-      if (await web.visible(spec).catch(() => false)) { try { await web.click(spec, { timeout: 4000 }); clicked = true; break; } catch (e) { log('      overlay click failed: ' + String(e.message).slice(0, 160)); } }
+      if (await web.visible(spec).catch(() => false)) { try { await web.click(spec, { timeout: 4000 }); clicked = true; log('      overlay tapped: ' + JSON.stringify(spec).slice(0, 90)); break; } catch (e) { log('      overlay click failed: ' + String(e.message).slice(0, 160)); } }
     }
     if (clicked) { await sleep(1500); continue; }
+    if ((await presentTid('welcome-continue')) || (await presentTid('onboarding-skip'))) { log('      first-run screen present but its button is not visible/tappable yet; waiting'); await sleep(1500); continue; }
     // 2. the 'needs attention' bottom sheet that can open by itself over home: its own X
     if (i.n && i.covered && await web.visible(Web.css('svg.lucide-x')).catch(() => false)) { try { await web.click(Web.css('svg.lucide-x'), { timeout: 4000 }); await sleep(1200); continue; } catch { /* fall through */ } }
     // 3. last resort: the control at the top-right of whatever covers the header
@@ -251,7 +254,7 @@ async function loginUi(phone) {
         try { await web.click(spec, { timeout: 4000 }); } catch (e) { log('      first-run click failed: ' + String(e.message).slice(0, 160)); }
       }
     }
-    if (await web.visible(Web.tid('header-setup-hub')).catch(() => false) && !(await web.visible(Web.tid('welcome-continue')).catch(() => false)) && !(await web.visible(Web.tid('onboarding-skip')).catch(() => false))) return { ok: true, diag };
+    if (await web.visible(Web.tid('header-setup-hub')).catch(() => false) && !(await presentTid('welcome-continue')) && !(await presentTid('onboarding-skip'))) return { ok: true, diag };
     const a = await web.info(Web.css('[role=alert]')).catch(() => ({ n: 0 }));
     if (a.n) alertText = a.text;
     await sleep(800);
@@ -752,7 +755,7 @@ async function main() {
       if (await web.visible(Web.tid('input-method-voice'))) { await web.click(Web.tid('input-method-voice'), { label: 'voice input method (again)' }); await sleep(800); }
     }
     let running = false;
-    for (let attempt = 1; attempt <= 2 && !running; attempt++) {
+    for (let attempt = 1; attempt <= 3 && !running; attempt++) {
       await web.click(startBtn, { label: `Start Recording (attempt ${attempt})` });
       const dlg0 = permissionDialog(parseNodes(await dumpUi().catch(() => '')));
       if (dlg0?.allow) { tap(dlg0.allow.x, dlg0.allow.y); await sleep(2000); }
@@ -764,14 +767,14 @@ async function main() {
       }
     }
     if (!running) throw new Unreachable('capture did not start in 2 real-tap attempts (Stop Recording never shown)');
-    await sleep(3500);
+    await sleep(6000);
     await web.click(Web.css('button[aria-label="Stop Recording"]'), { label: 'Stop Recording' });
     const clipRows = () => web.eval(`(async () => { const dbs = (await indexedDB.databases()).map((d) => d.name).filter((n) => /^AgriLogDB/.test(n)); let n = 0; const sizes = [];
       for (const name of dbs) { const db = await new Promise((r) => { const q = indexedDB.open(name); q.onsuccess = () => r(q.result); q.onerror = () => r(null); }); if (!db) continue;
         if (db.objectStoreNames.contains('voiceClips')) { const rows = await new Promise((r) => { const t = db.transaction('voiceClips').objectStore('voiceClips').getAll(); t.onsuccess = () => r(t.result); t.onerror = () => r([]); }); n += rows.length; rows.forEach((x) => sizes.push({ blob: x.localBlob && x.localBlob.size, state: x.archiveState || null })); }
         db.close(); } return { n, sizes }; })()`);
     let rows = { n: 0 };
-    for (let k = 0; k < 20 && !rows.n; k++) { await sleep(2000); rows = await clipRows().catch(() => ({ n: 0 })); }
+    for (let k = 0; k < 30 && !rows.n; k++) { await sleep(2000); rows = await clipRows().catch(() => ({ n: 0 })); }
     c.evidence.localClipRowsAfterStop = rows;
     c.evidence.textAfterStop = (await web.text()).replace(/\s+/g, ' ').slice(0, 300);
     shot(c, 'after-stop');
@@ -1023,7 +1026,7 @@ async function main() {
       shot(c, 'worker-hub');
       c06.evidence.workerHub = { mode, text: (await web.text()).replace(/\s+/g, ' ').slice(0, 400) };
       c06.assert(!workerTile, 'un-granted Worker (Raju) does NOT see the manual attendance tile', 'un-granted Worker (Raju) SEES the manual attendance tile');
-    } catch (e) { shot(c, 'worker-hub-unreachable'); c06.evidence.workerHubText = (await web.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 500); c06.unverified('could not open the Labour hub as the Worker: ' + String(e.message).slice(0, 200)); }
+    } catch (e) { shot(c, 'worker-hub-unreachable'); c06.evidence.workerVisibleTestIds = await web.eval(`Array.from(document.querySelectorAll('[data-testid]')).map((e) => e.getAttribute('data-testid')).slice(0, 40)`).catch(() => null); c06.evidence.workerHubText = (await web.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 500); c06.unverified('could not open the Labour hub as the Worker: ' + String(e.message).slice(0, 200)); }
     writeResults();
     await goHome(); await logoutUi();
 

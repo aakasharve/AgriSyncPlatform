@@ -126,7 +126,12 @@ export class Web {
 
   send(method, params = {}, timeout = 30_000) {
     return new Promise((resolve, reject) => {
-      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return reject(new Error('devtools socket not open'));
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        if (this.userClosed || this.reattaching) return reject(new Error('devtools socket not open'));
+        // the WebView page was replaced under us (navigation / reload): attach to the new page once and retry
+        this.reattaching = true;
+        return this.connect(30_000).then(() => { this.reattaching = false; this.send(method, params, timeout).then(resolve, reject); }, (e) => { this.reattaching = false; reject(new Error('devtools socket not open: ' + e.message)); });
+      }
       const id = this.nextId++;
       const timer = setTimeout(() => { this.pending.delete(id); reject(new Error(`CDP timeout: ${method}`)); }, timeout);
       this.pending.set(id, { resolve: (r) => { clearTimeout(timer); resolve(r); }, reject: (e) => { clearTimeout(timer); reject(e); } });
@@ -134,7 +139,7 @@ export class Web {
     });
   }
 
-  async close() { try { this.ws?.close(); } catch { /* ignore */ } this.ws = null; }
+  async close() { this.userClosed = true; try { this.ws?.close(); } catch { /* ignore */ } this.ws = null; }
 
   // ------------------------------------------------------------ evaluation
   async eval(expr, { timeout = 30_000, retries = 3 } = {}) {
