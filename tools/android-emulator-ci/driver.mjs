@@ -812,7 +812,11 @@ async function main() {
     }
     if (!running) throw new Unreachable('capture did not start in 2 real-tap attempts (Stop Recording never shown)');
     await sleep(6000);
-    await web.click(Web.css('button[aria-label="Stop Recording"]'), { label: 'Stop Recording' });
+    for (let st = 1; st <= 4; st++) { // a real tap can be swallowed (animating button, system dialog): tap again until recording has really stopped
+      await web.click(Web.css('button[aria-label="Stop Recording"]'), { label: `Stop Recording (tap ${st})` });
+      await sleep(2500);
+      if (!(await web.visible(Web.css('button[aria-label="Stop Recording"]')).catch(() => false))) break;
+    }
     const clipRows = () => web.eval(`(async () => { const dbs = (await indexedDB.databases()).map((d) => d.name).filter((n) => /^AgriLogDB/.test(n)); let n = 0; const sizes = [];
       for (const name of dbs) { const db = await new Promise((r) => { const q = indexedDB.open(name); q.onsuccess = () => r(q.result); q.onerror = () => r(null); }); if (!db) continue;
         if (db.objectStoreNames.contains('voiceClips')) { const rows = await new Promise((r) => { const t = db.transaction('voiceClips').objectStore('voiceClips').getAll(); t.onsuccess = () => r(t.result); t.onerror = () => r([]); }); n += rows.length; rows.forEach((x) => sizes.push({ blob: x.localBlob && x.localBlob.size, state: x.archiveState || null })); }
