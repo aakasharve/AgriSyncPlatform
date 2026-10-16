@@ -9,5 +9,5 @@
  * (index.tsx) so the Chrome DevTools agent can read it, and (Android side) via
  * the OS app-version which the founder can check in Settings → Apps.
  */
-export const APP_VERSION = '1.0.13';
-export const BUILD_TAG = `ShramSafal v${APP_VERSION} · Labour V2 R1 human-execution layer, farm-scoped audit role, DFES scoring fix 2026-10-10`;
+export const APP_VERSION = '1.0.14';
+export const BUILD_TAG = `ShramSafal v${APP_VERSION} · Labour hub Android tile layout + section named कामगार व हजेरी 2026-10-16`;

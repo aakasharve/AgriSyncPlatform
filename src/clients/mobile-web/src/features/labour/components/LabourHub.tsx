@@ -109,15 +109,15 @@ interface Props {
  */
 const QuickTile: React.FC<{ icon: React.ReactNode; chip: string; label: string; sub?: string; badge?: number; layout?: 'stacked' | 'row'; onClick: () => void }> = ({ icon, chip, label, sub, badge, layout = 'stacked', onClick }) => {
     const badgeEl = badge != null && (
-        <span data-testid="quick-tile-badge" className="absolute right-3 top-3 min-w-[28px] rounded-full bg-amber-600 px-2 py-0.5 text-center text-[14px] font-extrabold leading-5 text-white">{badge}</span>
+        <span data-testid="quick-tile-badge" className="absolute right-3 top-3 min-w-[28px] rounded-full bg-amber-600 px-2 py-0.5 text-center text-[15px] font-extrabold leading-5 text-white">{badge}</span>
     );
     // TASK 11 — optional. A tile whose sub-line would have to name a period the
     // farmer now chooses for himself carries no sub-line rather than a fixed one;
     // see the आढावा tile below.
-    const subEl = sub && <span className="mt-0.5 block text-[15px] leading-snug text-stone-500">{sub}</span>;
+    const subEl = sub && <span className="mt-0.5 block text-[16px] leading-snug text-stone-500">{sub}</span>;
     if (layout === 'row') {
         return (
-            <button type="button" onClick={onClick} className="relative flex min-h-[92px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 pr-12 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-transform active:scale-[0.98]">
+            <button type="button" onClick={onClick} className={`relative flex min-h-[92px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 ${badge != null ? 'pr-12' : ''} text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-transform active:scale-[0.98]`}>
                 <span className={`flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[16px] ${chip}`}>{icon}</span>
                 <span className="min-w-0 flex-1">
                     <span className="block text-[19px] font-bold leading-snug text-stone-800">{label}</span>
@@ -131,7 +131,7 @@ const QuickTile: React.FC<{ icon: React.ReactNode; chip: string; label: string; 
         <button type="button" onClick={onClick} className="relative flex min-h-[116px] min-w-0 flex-col items-start gap-2.5 rounded-[20px] border border-stone-100 bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-transform active:scale-[0.98]">
             <span className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[14px] ${chip}`}>{icon}</span>
             <span className="block w-full min-w-0">
-                <span className="block text-[18px] font-bold leading-snug text-stone-800 [overflow-wrap:anywhere]">{label}</span>
+                <span className="block text-[19px] font-bold leading-snug text-stone-800 [overflow-wrap:anywhere]">{label}</span>
                 {subEl}
             </span>
             {badgeEl}

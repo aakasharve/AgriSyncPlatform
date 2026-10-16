@@ -95,7 +95,7 @@ export const LabourLogBanner: React.FC<{ onBackToLabour: () => void }> = ({ onBa
         type="button"
         onClick={onBackToLabour}
         data-testid="labour-log-banner"
-        aria-label="कामाच्या नोंदींकडे परत जा"
+        aria-label="कामगार व हजेरीकडे परत जा"
         className="relative mb-3 flex w-full items-center gap-3 overflow-hidden rounded-[20px] bg-gradient-to-br from-emerald-500 to-emerald-700 p-3.5 text-left shadow-[0_14px_28px_-12px_rgba(5,150,105,0.6)] transition-transform active:scale-[0.99] animate-in fade-in slide-in-from-top-2 duration-300"
     >
         <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white">
