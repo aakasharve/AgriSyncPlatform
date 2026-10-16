@@ -34,11 +34,21 @@ const BOOT = `(function(){
     const el = l[spec.index || 0];
     if (!el) return { n: 0 };
     if (scroll) el.scrollIntoView({ block: 'center', inline: 'center' });
-    const r = el.getBoundingClientRect(); const cx = r.left + r.width / 2; const cy = r.top + r.height / 2;
-    const top = document.elementFromPoint(cx, cy);
+    const r = el.getBoundingClientRect();
     const vw = window.innerWidth, vh = window.innerHeight;
+    // a finger may land anywhere on the control: use the centre, else the first uncovered of a few other points on it
+    const pts = [[0.5, 0.5], [0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75], [0.15, 0.5], [0.85, 0.5]];
+    let cx = r.left + r.width / 2, cy = r.top + r.height / 2, covered = true, coveredBy = null;
+    for (const [fx, fy] of pts) {
+      const px = r.left + r.width * fx, py = r.top + r.height * fy;
+      if (px < 0 || py < 0 || px > vw || py > vh) continue;
+      const t = document.elementFromPoint(px, py);
+      const ok = !!t && (el === t || el.contains(t) || t.contains(el));
+      if (ok) { cx = px; cy = py; covered = false; coveredBy = null; break; }
+      if (coveredBy === null && t) coveredBy = t.getAttribute('data-testid') || t.tagName;
+    }
     return { n, x: cx, y: cy, w: r.width, h: r.height, inView: cx >= 0 && cy >= 0 && cx <= vw && cy <= vh,
-      covered: !!top && !(el === top || el.contains(top) || top.contains(el)), coveredBy: top ? (top.getAttribute('data-testid') || top.tagName) : null,
+      covered, coveredBy,
       text: (el.innerText || '').trim().slice(0, 160), disabled: !!el.disabled, vw, vh };
   };
   window.__ci = { vis, find, info };

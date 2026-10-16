@@ -182,7 +182,7 @@ async function dismissOverlays() {
     // 1. the known first-run / intro buttons (real taps)
     for (const spec of [Web.tid('welcome-continue'), Web.tid('onboarding-skip'),
       Web.text(/चला, सुरुवात करूया/), Web.text(/समजलं, पुढे चला/), Web.text(/^\s*पुढे चला\s*$/), Web.text(/^\s*नंतर\s*$/), Web.text(/^\s*Skip\s*$/i)]) {
-      if (await web.visible(spec).catch(() => false)) { try { await web.click(spec, { timeout: 4000 }); clicked = true; break; } catch { /* next */ } }
+      if (await web.visible(spec).catch(() => false)) { try { await web.click(spec, { timeout: 4000 }); clicked = true; break; } catch (e) { log('      overlay click failed: ' + String(e.message).slice(0, 160)); } }
     }
     if (clicked) { await sleep(1500); continue; }
     // 2. the 'needs attention' bottom sheet that can open by itself over home: its own X
@@ -223,7 +223,7 @@ async function loginUi(phone) {
     for (const [name, spec, tid] of [['welcome', Web.tid('welcome-continue'), 'welcome-continue'], ['onboarding', Web.tid('onboarding-skip'), 'onboarding-skip']]) {
       if (await web.visible(spec).catch(() => false)) {
         if (!edge[name]) { await sleep(2500); edge[name] = await web.eval(edgeJs(tid)).catch(() => null); shot(null, `edge-${name}`); }
-        try { await web.click(spec, { timeout: 4000 }); } catch { /* retry */ }
+        try { await web.click(spec, { timeout: 4000 }); } catch (e) { log('      first-run click failed: ' + String(e.message).slice(0, 160)); }
       }
     }
     if (await web.visible(Web.tid('header-setup-hub')).catch(() => false) && !(await web.visible(Web.tid('welcome-continue')).catch(() => false)) && !(await web.visible(Web.tid('onboarding-skip')).catch(() => false))) return { ok: true, diag };
@@ -571,7 +571,7 @@ async function main() {
     c.evidence.transientZeroOrUnsetSeen = zeroSeen;
     const last = vals[vals.length - 1] || {};
     await dismissOverlays();
-    const g = await web.eval(`(() => { const e = document.querySelector('[data-testid="header-setup-hub"]'); const r = e && e.getBoundingClientRect(); const rs = getComputedStyle(document.documentElement); return r ? { top: r.top, safeTop: rs.getPropertyValue('--safe-area-inset-top').trim() } : null; })()`);
+    const g = await web.eval(`(() => { const e = document.querySelector('[data-testid="header-setup-hub"]'); const r = e && e.getBoundingClientRect(); const rs = getComputedStyle(document.documentElement); return r ? { top: r.top, dpr: devicePixelRatio, safeTop: rs.getPropertyValue('--safe-area-inset-top').trim() } : null; })()`);
     c.evidence.headerNow = g;
     if (!g) { c.unverified('header not measurable'); return; }
     const api = Number(env('API_LEVEL', 0));
@@ -581,7 +581,7 @@ async function main() {
         `API ${api}: header top is ${Math.round(g.top * 10) / 10}px but was ${baseline}px before the fix: the inset is being applied twice (--safe-area-inset-top='${g.safeTop}')`);
     } else {
       c.assert(parseFloat(g.safeTop) > 0, `API ${api}: --safe-area-inset-top is published (${g.safeTop})`, `API ${api}: --safe-area-inset-top is '${g.safeTop}' (not published)`);
-      c.assert(g.top * (web.calib?.scale || 1) >= statusBarPx - 2, `API ${api}: header top (${Math.round(g.top * (web.calib?.scale || 1))}px) is below the status bar (${statusBarPx}px)`, `API ${api}: header is under the status bar`);
+      c.assert(g.top * g.dpr >= statusBarPx - 2, `API ${api}: header top (${Math.round(g.top * g.dpr)}px) is below the status bar (${statusBarPx}px)`, `API ${api}: header is under the status bar`);
     }
     c.evidence.observation = zeroSeen ? 'an early sample showed the variable unset/0 before the app published it (transient flash, see timeline)' : 'no unset/0 sample seen in the timeline (first sample is only possible after DevTools attaches)';
   });
@@ -726,10 +726,19 @@ async function main() {
       await web.click(Web.tidPrefix('crop-selector-entire-farm-row'), { label: 'whole farm' }); await sleep(2500);
       if (await web.visible(Web.tid('input-method-voice'))) { await web.click(Web.tid('input-method-voice'), { label: 'voice input method (again)' }); await sleep(800); }
     }
-    await web.click(startBtn, { label: 'Start Recording' });
-    const dlg0 = permissionDialog(parseNodes(await dumpUi().catch(() => '')));
-    if (dlg0?.allow) { tap(dlg0.allow.x, dlg0.allow.y); await sleep(2000); }
-    await web.waitVisible(Web.css('button[aria-label="Stop Recording"]'), 20_000, 'Stop Recording (capture running)');
+    let running = false;
+    for (let attempt = 1; attempt <= 2 && !running; attempt++) {
+      await web.click(startBtn, { label: `Start Recording (attempt ${attempt})` });
+      const dlg0 = permissionDialog(parseNodes(await dumpUi().catch(() => '')));
+      if (dlg0?.allow) { tap(dlg0.allow.x, dlg0.allow.y); await sleep(2000); }
+      running = await web.waitVisible(Web.css('button[aria-label="Stop Recording"]'), 12_000).then(() => true).catch(() => false);
+      if (!running) {
+        c.evidence[`recordAttempt${attempt}`] = { labels: await web.eval(`Array.from(document.querySelectorAll('button[aria-label]')).map((b) => b.getAttribute('aria-label')).slice(0, 12)`).catch(() => null), focus: focusedWindow() };
+        shot(c, `record-attempt-${attempt}`);
+        if (await web.visible(Web.tid('input-method-voice'))) { await web.click(Web.tid('input-method-voice'), { label: 'voice input method (retry)' }); await sleep(800); }
+      }
+    }
+    if (!running) throw new Unreachable('capture did not start in 2 real-tap attempts (Stop Recording never shown)');
     await sleep(3500);
     await web.click(Web.css('button[aria-label="Stop Recording"]'), { label: 'Stop Recording' });
     const clipRows = () => web.eval(`(async () => { const dbs = (await indexedDB.databases()).map((d) => d.name).filter((n) => /^AgriLogDB/.test(n)); let n = 0; const sizes = [];
