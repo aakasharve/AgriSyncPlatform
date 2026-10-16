@@ -10,6 +10,7 @@ import { Check, BANNER, counts, legMarkdown } from './lib/results.mjs';
 import { adb, sh, sleep, screenSize, screencap, dumpUi, parseNodes, permissionDialog, key, imeShown, focusedWindow, resumedActivity, tap } from './lib/adb.mjs';
 import { Web, Unreachable, NavFail } from './lib/web.mjs';
 import { psql, psqlNum } from './lib/db.mjs';
+import { classifySrcWrites } from './lib/srcwrites.mjs';
 
 const env = (k, d) => process.env[k] ?? d;
 const PKG = env('APP_ID', 'com.agrisync.shramsafal.internaltest');
@@ -77,7 +78,7 @@ async function check(id, title, fn) {
   checks.push(c);
   log(`--- ${id} ${title}`);
   if (!appRenders && !['C01', 'C21'].includes(id)) { c.unverified('skipped: the app UI never rendered on this WebView (see C02), so there is nothing to drive'); writeResults(); return c; }
-  try { await fn(c); } catch (e) {
+  try { await Promise.race([fn(c), new Promise((_, rej) => setTimeout(() => rej(new Unreachable('check watchdog: no result after 9 minutes (harness hang)')), 9 * 60_000))]); } catch (e) {
     if (e instanceof NavFail) { c.fail(`NAVIGATION PASS RULE: the real touch did not do the job - ${e.message}`); c.evidence.navigationFallback = 'none used (DOM/CDP input is never used to rescue a navigation)'; }
     else if (e instanceof Unreachable) c.unverified(`the UI state needed was not reachable: ${e.message}`);
     else c.unverified(`harness error: ${String(e.stack || e.message).slice(0, 500)}`);
@@ -396,7 +397,22 @@ async function main() {
     sh(`pm clear ${PKG}`, { allowFail: true });
     await launchCold();
     c.evidence.userAgent = await web.eval('navigator.userAgent');
-    try { await web.waitVisible(Web.tid('consent-accept-cta'), 60_000, 'consent screen on a fresh install'); } catch (e) { appRenders = false; c.evidence.pageTextAtFailure = (await web.text().catch(() => '')).slice(0, 200); throw e; }
+    try { await web.waitVisible(Web.tid('consent-accept-cta'), 60_000, 'consent screen on a fresh install'); } catch (e) {
+      appRenders = false; c.evidence.pageTextAtFailure = (await web.text().catch(() => '')).slice(0, 200);
+      // classify WHY nothing rendered: reload with the console attached, then probe what this WebView supports
+      try {
+        web.errors.length = 0; web.consoleErrors.length = 0;
+        await web.reload(); await sleep(10_000);
+        c.evidence.classification = {
+          webview: results.env.webview, userAgent: await web.eval('navigator.userAgent').catch(() => null),
+          scriptRequests: web.net.filter((n) => /\.js(\?|$)/.test(n.url)).map((n) => `${n.status ?? n.failed}`).slice(0, 12),
+          uncaughtExceptions: web.errors.slice(0, 6), consoleErrors: web.consoleErrors.slice(0, 6),
+          featureProbe: await web.eval(`(() => { const t = (f) => { try { return !!f(); } catch (e) { return 'ERR:' + e.name; } };
+            return { optionalChaining: t(() => eval('({a:1})?.a===1')), nullishCoalescing: t(() => eval('null ?? 1')), bigInt: typeof BigInt !== 'undefined', objectHasOwn: typeof Object.hasOwn === 'function', arrayAt: typeof [].at === 'function',
+              replaceAll: typeof ''.replaceAll === 'function', structuredClone: typeof structuredClone === 'function', privateClassFields: t(() => eval('(class{#a=1})')), classStaticBlock: t(() => eval('(class{static{}})')) }; })()`).catch((x) => String(x.message).slice(0, 100)),
+          readout: 'Unclassified observation: the bundle did not render on this WebView. See uncaughtExceptions and featureProbe. No compatibility is claimed or implied for this WebView or any API below 34.' };
+      } catch (x) { c.evidence.classificationError = String(x.message).slice(0, 200); }
+      throw e; }
     await sleep(8000);
     shot(c, 'consent-screen');
     try {
@@ -781,9 +797,9 @@ async function main() {
     if (!rows.n) { c.unverified('the app stored no local recording after Stop (see textAfterStop); a playable local clip does not exist in this run'); return; }
     await launchCold(); await dismissOverlays();
     await openDiaryViaSettings();
-    await web.eval(`(() => { window.__srcWrites = []; const d = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
-      if (d && d.set) Object.defineProperty(HTMLMediaElement.prototype, 'src', { configurable: true, get: d.get, set(v) { window.__srcWrites.push({ t: Date.now(), via: 'prop', v: String(v).slice(0, 30), stack: String(new Error().stack).split('\\n').slice(2, 6).map((l) => l.trim().slice(0, 90)).join(' < ') }); return d.set.call(this, v); } });
-      const sa = Element.prototype.setAttribute; Element.prototype.setAttribute = function (n, v) { if (this instanceof HTMLMediaElement && String(n).toLowerCase() === 'src') window.__srcWrites.push({ t: Date.now(), via: 'attr', v: String(v).slice(0, 30), stack: String(new Error().stack).split('\\n').slice(2, 6).map((l) => l.trim().slice(0, 90)).join(' < ') }); return sa.call(this, n, v); }; })()`);
+    await web.eval(`(() => { window.__srcWrites = []; window.__ciSeq = 0; const d = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
+      if (d && d.set) Object.defineProperty(HTMLMediaElement.prototype, 'src', { configurable: true, get: d.get, set(v) { (this.__ciId = this.__ciId || ++window.__ciSeq); window.__srcWrites.push({ elId: this.__ciId, t: Date.now(), via: 'prop', v: String(v).slice(0, 30), stack: String(new Error().stack).split('\\n').slice(2, 6).map((l) => l.trim().slice(0, 90)).join(' < ') }); return d.set.call(this, v); } });
+      const sa = Element.prototype.setAttribute; Element.prototype.setAttribute = function (n, v) { if (this instanceof HTMLMediaElement && String(n).toLowerCase() === 'src') (this.__ciId = this.__ciId || ++window.__ciSeq); window.__srcWrites.push({ elId: this.__ciId, t: Date.now(), via: 'attr', v: String(v).slice(0, 30), stack: String(new Error().stack).split('\\n').slice(2, 6).map((l) => l.trim().slice(0, 90)).join(' < ') }); return sa.call(this, n, v); }; })()`);
     await web.click(Web.tid('voice-retained-open-diary'), { label: 'open Voice Diary' });
     await web.waitVisible(Web.tid('voice-diary-page'), 25_000, 'Voice Diary page');
     await sleep(2500);
@@ -808,17 +824,24 @@ async function main() {
     shot(c, 'diary-clip-after-play');
     const writes = await web.eval('window.__srcWrites');
     const tEnd = tStarted ?? await web.eval('Date.now()');
-    const inWindow = writes.filter((w) => w.t >= tTap && w.t <= tEnd + 100);
-    const before = writes.filter((w) => w.t < tTap);
-    c.evidence.samples = { s1, s2, s3, buttonLabel: label };
-    c.evidence.srcWritesInformational = { note: 'writes BEFORE the tap, outside its window (mount / list refresh); timestamps relative to the tap', beforeTap: before.map((w) => ({ msBeforeTap: tTap - w.t, via: w.via, blob: w.v, stack: w.stack })), writesBeforeTapCount: writesBefore };
-    c.evidence.srcWritesInTapWindow = inWindow;
+    const selectedElId = await web.eval(`(() => { const a = document.querySelector('[data-testid="voice-diary-clip-card-${id}"] audio'); return a ? (a.__ciId ?? null) : null; })()`);
+    const cls = classifySrcWrites(writes, { selectedElId, tTap, tEnd: tEnd + 100 });
+    c.evidence.samples = { s1, s2, s3, buttonLabel: label, selectedAudioElementId: selectedElId };
+    c.evidence.srcWritesInformational = { note: 'writes on the SELECTED clip element BEFORE the tap (mount / list refresh); other elements ignored', beforeTap: cls.before.map((w) => ({ msBeforeTap: tTap - w.t, via: w.via, blob: w.v, stack: w.stack })), otherElementWrites: cls.otherElementWrites };
+    c.evidence.srcWritesInTapWindow = cls.inWindow;
     const started = !!s3 && ((s2 && (!s2.paused || s2.currentTime > 0)) || (!s3.paused && s3.currentTime > 0) || s3.ended);
     const advancing = !!s2 && !!s3 && (s3.currentTime > s2.currentTime || s3.ended);
     c.assert(started, `audio actually started after one real tap (paused=${s3?.paused}, currentTime ${s2?.currentTime ?? s1?.currentTime} -> ${s3?.currentTime}, ended=${s3?.ended})`, `no audio playback after the tap: ${JSON.stringify({ s1, s2, s3 })}`);
     c.assert(advancing || s3?.ended, 'media position advanced after the tap (really playing)', `media position did not advance: ${JSON.stringify({ s2, s3 })}`);
-    c.assert(inWindow.length === 0, 'no src write between the tap and the start of playback', `${inWindow.length} src write(s) between the tap and playback start: ${JSON.stringify(inWindow)}`);
-    c.pass(`informational: src was written ${before.length} time(s) before the tap (mount/refresh), see srcWritesInformational`);
+    c.assert(cls.ok, `selected element: ${cls.inWindow.length} src write(s) between the real tap and playback start (never a double write)`, `DOUBLE WRITE on the selected element between tap and playback start: ${JSON.stringify(cls.inWindow)}`);
+    c.pass(`informational: the selected element's src was written ${cls.before.length} time(s) before the tap (mount/refresh), see srcWritesInformational`);
+    // NEGATIVE CONTROL: deliberately write src twice on THIS element; the same classifier must flag it, or the counter is blind.
+    await web.eval(`(() => { const a = document.querySelector('[data-testid="voice-diary-clip-card-${id}"] audio'); a.pause(); window.__ctl0 = Date.now(); const v = a.getAttribute('src'); a.setAttribute('src', v); a.setAttribute('src', v); window.__ctl1 = Date.now(); })()`);
+    const w2 = await web.eval('window.__srcWrites'); const t0 = await web.eval('window.__ctl0'); const t1 = await web.eval('window.__ctl1');
+    const selId2 = await web.eval(`document.querySelector('[data-testid="voice-diary-clip-card-${id}"] audio').__ciId`);
+    const ctl = classifySrcWrites(w2, { selectedElId: selId2, tTap: t0, tEnd: t1 + 50 });
+    c.evidence.negativeControl = { injectedWrites: 2, detectedInWindow: ctl.inWindow.length, flaggedAsDoubleWrite: ctl.doubleWrite };
+    c.assert(ctl.doubleWrite && !ctl.ok, 'negative control: a deliberately injected double src write on the selected element is flagged (the counter is not blind)', 'negative control FAILED: an injected double src write was NOT flagged - the C18 write counter cannot be trusted');
   });
 
   // ---- large font (Team page at 1.0 / 1.5 / 2.0, hub + attendance at 1.5 / 2.0)

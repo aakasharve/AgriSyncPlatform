@@ -127,7 +127,7 @@ export class Web {
   send(method, params = {}, timeout = 30_000) {
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-        if (this.userClosed || this.reattaching) return reject(new Error('devtools socket not open'));
+        if (this.userClosed || this.reattaching || (this.reattachCount = (this.reattachCount || 0) + 1) > 3) return reject(new Error('devtools socket not open'));
         // the WebView page was replaced under us (navigation / reload): attach to the new page once and retry
         this.reattaching = true;
         return this.connect(30_000).then(() => { this.reattaching = false; this.send(method, params, timeout).then(resolve, reject); }, (e) => { this.reattaching = false; reject(new Error('devtools socket not open: ' + e.message)); });
