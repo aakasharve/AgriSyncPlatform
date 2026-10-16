@@ -30,9 +30,15 @@ adb uninstall "$APP_ID" >/dev/null 2>&1 || true
 adb install -r -t "$APK"
 adb shell pm list packages | grep "$APP_ID"
 
+# crash + activity-manager events for the whole run (app process deaths, ANRs, low-memory kills), filtered
+adb logcat -c >/dev/null 2>&1 || true
+( adb logcat -b crash,events -v time 2>/dev/null | grep --line-buffered -E "am_proc_died|am_crash|am_anr|am_kill|am_proc_start.*agrisync|FATAL|AndroidRuntime|lowmemorykiller|Fatal signal|com.agrisync" > "$OUT_DIR/logcat-crash-events.txt" ) &
+LOGCAT_PID=$!
+
 cd "$HERE"
 timeout 2400 node driver.mjs 2>&1 | tee "$OUT_DIR/driver.log"
 rc=${PIPESTATUS[0]}
+kill "$LOGCAT_PID" 2>/dev/null || true
 echo "driver exit code: $rc"
 echo "$rc" > "$OUT_DIR/driver.exit"
 timeout 60 adb exec-out screencap -p > "$OUT_DIR/final-screen.png" 2>/dev/null || true

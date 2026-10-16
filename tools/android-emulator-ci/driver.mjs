@@ -78,7 +78,19 @@ async function check(id, title, fn) {
   checks.push(c);
   log(`--- ${id} ${title}`);
   if (!appRenders && !['C01', 'C21'].includes(id)) { c.unverified('skipped: the app UI never rendered on this WebView (see C02), so there is nothing to drive'); writeResults(); return c; }
-  try { await Promise.race([fn(c), new Promise((_, rej) => setTimeout(() => rej(new Unreachable('check watchdog: no result after 9 minutes (harness hang)')), 9 * 60_000))]); } catch (e) {
+  const runOnce = () => Promise.race([fn(c), new Promise((_, rej) => setTimeout(() => rej(new Unreachable('check watchdog: no result after 9 minutes (harness hang)')), 9 * 60_000))]);
+  try {
+    try { await runOnce(); } catch (e0) {
+      // The app process vanished mid-check (crash / low-memory kill / OOM on a loaded emulator). Record it with the crash and
+      // event logs, relaunch and run the check ONCE more; the death stays on the record either way.
+      if (!deviceAlive() || appRunning() || c.__rerun) throw e0;
+      snapshotAppDeath(id); c.__rerun = true;
+      c.evidence.firstAttemptLostTheAppProcess = String(e0.message).slice(0, 200);
+      c.points.length = 0; shotN += 0;
+      await launchCold(); await dismissOverlays().catch(() => false);
+      await runOnce();
+    }
+  } catch (e) {
     if (e instanceof NavFail) { c.fail(`NAVIGATION PASS RULE: the real touch did not do the job - ${e.message}`); c.evidence.navigationFallback = 'none used (DOM/CDP input is never used to rescue a navigation)'; }
     else if (e instanceof Unreachable) c.unverified(`the UI state needed was not reachable: ${e.message}`);
     else c.unverified(`harness error: ${String(e.stack || e.message).slice(0, 500)}`);
@@ -152,6 +164,13 @@ async function quiesceAuth() {
   await sleep(800);
 }
 let currentPhone = PHONES.owner;
+results.appProcessDeaths = [];
+const appRunning = () => sh(`pidof ${PKG}`, { allowFail: true }).trim().length > 0;
+function snapshotAppDeath(label) {
+  const ev = adb(['logcat', '-b', 'events,crash', '-d', '-v', 'time'], { allowFail: true, timeout: 60_000 }).split('\n').filter((l) => /am_proc_died|am_crash|am_anr|am_kill|FATAL|AndroidRuntime|lowmemorykiller|Fatal signal|agrisync/i.test(l)).slice(-25);
+  results.appProcessDeaths.push({ at: new Date().toISOString(), during: label, eventsAndCrashLines: ev });
+  log(`      APP PROCESS WAS NOT RUNNING during ${label}; recorded in results.appProcessDeaths (${ev.length} log lines)`);
+}
 results.relogins = [];
 
 async function launchCold({ attach = true } = {}) {
@@ -253,6 +272,7 @@ async function loginUi(phone) {
   await web.click(Web.css('button[type="submit"]'), { label: 'login submit' });
   const end = Date.now() + 60_000; let alertText = null;
   while (Date.now() < end) {
+    if (!appRunning()) throw new Error('app process not running: pid=none');
     for (const [name, spec, tid] of [['welcome', Web.tid('welcome-continue'), 'welcome-continue'], ['onboarding', Web.tid('onboarding-skip'), 'onboarding-skip']]) {
       if (await web.visible(spec).catch(() => false)) {
         if (!edge[name]) { await sleep(2500); edge[name] = await web.eval(edgeJs(tid)).catch(() => null); shot(null, `edge-${name}`); }
