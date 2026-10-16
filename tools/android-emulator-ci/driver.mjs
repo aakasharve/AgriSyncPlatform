@@ -133,6 +133,10 @@ const edgeJs = (anchorTid) => `(() => { const a = document.querySelector('[data-
 
 const presentTid = (tid) => web.eval(`!!document.querySelector('[data-testid="${tid}"]')`).catch(() => false);
 
+// The system launcher is the usual source of "isn't responding" dialogs on a loaded emulator, and those dialogs
+// swallow permission dialogs and taps. Stopping it is harmless (it restarts on demand) and not an app action.
+function calmLauncher() { sh('am force-stop com.google.android.apps.nexuslauncher', { allowFail: true }); }
+
 function hideIme() { if (imeShown()) key(4); }
 
 // Killing the app while a token refresh is in flight can leave the server with a rotated token the app never stored
@@ -633,6 +637,7 @@ async function main() {
   // ---- Back chain + Voice Diary
   let diaryReachable = null;
   await check('C08', 'hardware Back from Voice Diary / Settings returns through the app and exits only at home', async (c) => {
+    calmLauncher();
     await goHome();
     await openSetupHub();
     await web.click(Web.tid('hub-settings-voice-diary'), { label: 'Settings -> Voice Diary row' });
@@ -681,6 +686,7 @@ async function main() {
 
   // ---- voice capture: first tap -> real OS dialog
   await check('C11', 'first tap on voice capture raises the OS microphone dialog; capture starts after the real Allow tap', async (c) => {
+    calmLauncher(); const anrBefore = results.anrDialogs.length;
     await launchCold();
     await dismissOverlays();
     sh(`pm revoke ${PKG} android.permission.RECORD_AUDIO`, { allowFail: true }); // makes the "not yet asked" state explicit
@@ -719,7 +725,8 @@ async function main() {
       await sleep(800);
     }
     shot(c, 'after-first-tap');
-    c.assert(!!dlg, `OS permission dialog appeared on the first tap ("${dlg?.message ?? ''}")`, 'no OS permission dialog appeared within 25 s of the first tap');
+    if (!dlg && results.anrDialogs.length > anrBefore) { c.unverified(`the OS permission dialog was not observed, but the emulator showed ${results.anrDialogs.length - anrBefore} "isn't responding" dialog(s) during the wait (system overload), so the absence cannot be attributed to the app`); return; }
+    c.assert(!!dlg, `OS permission dialog appeared on the first tap ("${dlg?.message ?? ''}")`, 'no OS permission dialog appeared within 25 s of the first tap (no system overload dialogs were seen)');
     if (!dlg) return;
     c.evidence.dialog = { message: dlg.message, texts: dlg.texts };
     if (!dlg.allow) { c.unverified('dialog found but no Allow button node could be located'); return; }
@@ -755,6 +762,7 @@ async function main() {
 
   // ---- local recording playback (real tap), src written once
   await check('C18', 'Play on a LOCAL recording: one real tap starts audio, src written exactly once', async (c) => {
+    calmLauncher();
     await launchCold(); await dismissOverlays();
     await openDiaryViaSettings();
     await ensureConsentGranted(c);
