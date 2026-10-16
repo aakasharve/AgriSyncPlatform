@@ -93,7 +93,10 @@ const TITLES: Record<ScreenName, string> = {
      * UNTOUCHED by design — presentation and internal vocabulary are allowed
      * to diverge.
      */
-    hub: 'कामाचा हिशोब',
+    // FOUNDER NAMING DECISION (2026-10-16): the section's name is `कामगार व हजेरी`.
+    // This supersedes the provisional work-centred wording above by the founder's
+    // own call; internal names stay unchanged.
+    hub: 'कामगार व हजेरी',
     mukadam: 'मुकादम',
     person: 'कामगार',
     attendance: 'आजची हजेरी',

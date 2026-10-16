@@ -116,7 +116,8 @@ export const LabourLogBanner: React.FC<{ onBackToLabour: () => void }> = ({ onBa
         </span>
         <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-white/20 px-3 py-1.5 text-[11px] font-extrabold text-white">
             <ArrowLeft size={13} strokeWidth={2.6} />
-            कामाचा हिशोब
+            {/* FOUNDER NAMING DECISION (2026-10-16): the section is `कामगार व हजेरी`. */}
+            कामगार व हजेरी
         </span>
     </button>
 );

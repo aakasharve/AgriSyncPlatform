@@ -28,10 +28,15 @@ const baseProps = () => ({
 describe('SetupHubMenu — Labour row honesty (Task 7)', () => {
     afterEach(() => cleanup());
 
+    // Task 7 removed हजेरी from this row when no attendance capture existed. Attendance
+    // now exists (हजेरी घ्या, Labour V2) and the founder named the section
+    // `कामगार व हजेरी` (2026-10-16), so the founder-chosen NAME is the one allowed
+    // हजेरी; the subtitle still makes no attendance claim.
     it('does not claim हजेरी (attendance) in the Labour row subtitle', () => {
         render(<SetupHubMenu {...baseProps()} onOpenLabour={vi.fn()} />);
-        expect(screen.getByText('कामाचा हिशोब')).toBeInTheDocument();
-        expect(screen.queryByText(/हजेरी/)).toBeNull();
+        expect(screen.getByText('कामगार व हजेरी')).toBeInTheDocument();
+        expect(screen.getAllByText(/हजेरी/)).toHaveLength(1);
+        expect(screen.getByText('मजुरी')).toBeInTheDocument();
     });
 
     it('keeps मजुरी in the subtitle — the surgical deletion removes only हजेरी', () => {
@@ -46,7 +51,7 @@ describe('SetupHubMenu — Labour row honesty (Task 7)', () => {
     // claim Task 7 already removed from this same string.
     it('does not claim उचल (advance) in the Labour row subtitle', () => {
         render(<SetupHubMenu {...baseProps()} onOpenLabour={vi.fn()} />);
-        expect(screen.getByText('कामाचा हिशोब')).toBeInTheDocument();
+        expect(screen.getByText('कामगार व हजेरी')).toBeInTheDocument();
         expect(screen.queryByText(/उचल/)).toBeNull();
     });
 });

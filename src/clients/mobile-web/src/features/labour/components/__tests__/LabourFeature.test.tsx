@@ -177,7 +177,7 @@ describe('LabourFeature - हजेरी घ्या is normal Labour navigati
         return render(<LabourFeature onExit={() => {}} />);
     };
     const tapTitle = (n: number) => {
-        const title = screen.getByText('कामाचा हिशोब');
+        const title = screen.getByText('कामगार व हजेरी');
         for (let i = 0; i < n; i++) fireEvent.click(title);
     };
 
