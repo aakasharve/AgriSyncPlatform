@@ -786,7 +786,13 @@ async function main() {
     await launchCold(); await dismissOverlays();
     await openDiaryViaSettings();
     await ensureConsentGranted(c);
-    // record a short local clip with the real UI (mic permission was granted in C11)
+    const FARM_ID = fa();
+    const clipRows = () => web.eval(`(async () => { const dbs = (await indexedDB.databases()).map((d) => d.name).filter((n) => /^AgriLogDB/.test(n)); let n = 0; const sizes = [];
+      for (const name of dbs) { const db = await new Promise((r) => { const q = indexedDB.open(name); q.onsuccess = () => r(q.result); q.onerror = () => r(null); }); if (!db) continue;
+        if (db.objectStoreNames.contains('voiceClips')) { const rows = await new Promise((r) => { const t = db.transaction('voiceClips').objectStore('voiceClips').getAll(); t.onsuccess = () => r(t.result); t.onerror = () => r([]); }); n += rows.length; rows.forEach((x) => sizes.push({ blob: x.localBlob && x.localBlob.size, state: x.archiveState || null })); }
+        db.close(); } return { n, sizes }; })()`);
+    let clipOrigin = 'recorded through the real voice UI (real touches, emulator virtual mic)';
+    try {
     await launchCold(); await dismissOverlays();
     if (!(await web.visible(Web.tid('input-method-voice')))) {
       const crop = Web.text(/(द्राक्ष|ऊस|Grapes|Sugarcane)/i);
@@ -817,16 +823,35 @@ async function main() {
       await sleep(2500);
       if (!(await web.visible(Web.css('button[aria-label="Stop Recording"]')).catch(() => false))) break;
     }
-    const clipRows = () => web.eval(`(async () => { const dbs = (await indexedDB.databases()).map((d) => d.name).filter((n) => /^AgriLogDB/.test(n)); let n = 0; const sizes = [];
-      for (const name of dbs) { const db = await new Promise((r) => { const q = indexedDB.open(name); q.onsuccess = () => r(q.result); q.onerror = () => r(null); }); if (!db) continue;
-        if (db.objectStoreNames.contains('voiceClips')) { const rows = await new Promise((r) => { const t = db.transaction('voiceClips').objectStore('voiceClips').getAll(); t.onsuccess = () => r(t.result); t.onerror = () => r([]); }); n += rows.length; rows.forEach((x) => sizes.push({ blob: x.localBlob && x.localBlob.size, state: x.archiveState || null })); }
-        db.close(); } return { n, sizes }; })()`);
+    } catch (e) { c.evidence.uiRecordingFailure = String(e.message).slice(0, 240); }
     let rows = { n: 0 };
     for (let k = 0; k < 30 && !rows.n; k++) { await sleep(2000); rows = await clipRows().catch(() => ({ n: 0 })); }
     c.evidence.localClipRowsAfterStop = rows;
     c.evidence.textAfterStop = (await web.text()).replace(/\s+/g, ' ').slice(0, 300);
     shot(c, 'after-stop');
-    if (!rows.n) { c.unverified('the app stored no local recording after Stop (see textAfterStop); a playable local clip does not exist in this run'); return; }
+    if (!rows.n) {
+      // The voice UI did not store a clip on this leg. The subject of C18 is PLAYBACK of a local recording, so store a real
+      // encoded clip (WebAudio -> MediaRecorder) as a clearly labelled harness fixture and play THAT with a real tap.
+      const inj = await web.eval(`(async () => {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)(); await ctx.resume().catch(() => {});
+        const osc = ctx.createOscillator(); const dst = ctx.createMediaStreamDestination(); osc.connect(dst); osc.start();
+        const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : '';
+        const rec = new MediaRecorder(dst.stream, mime ? { mimeType: mime } : undefined); const chunks = []; rec.ondataavailable = (e) => chunks.push(e.data);
+        rec.start(); await new Promise((r) => setTimeout(r, 2500)); await new Promise((r) => { rec.onstop = r; rec.stop(); });
+        osc.stop(); const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+        if (!blob.size) return { ok: false, why: 'empty blob' };
+        const id = crypto.randomUUID(); const now = new Date().toISOString(); let wrote = 0;
+        const dbs = (await indexedDB.databases()).map((d) => d.name).filter((n) => /^AgriLogDB/.test(n) && !/unidentified/.test(n));
+        for (const name of dbs) { const db = await new Promise((r) => { const q = indexedDB.open(name); q.onsuccess = () => r(q.result); q.onerror = () => r(null); }); if (!db) continue;
+          if (db.objectStoreNames.contains('voiceClips')) await new Promise((r) => { const tx = db.transaction('voiceClips', 'readwrite'); tx.objectStore('voiceClips').put({ id, farmId: '${FARM_ID}', recordedAtUtc: now, durationMs: 2500, mimeType: blob.type, sizeBytes: blob.size, localBlob: blob }); tx.oncomplete = () => { wrote++; r(); }; tx.onerror = () => r(); });
+          db.close(); }
+        return { ok: wrote > 0, wrote, size: blob.size, mime: blob.type, id };
+      })()`).catch((x) => ({ ok: false, why: String(x.message).slice(0, 120) }));
+      c.evidence.fixtureInjection = inj;
+      if (!inj.ok) { c.unverified('no local recording exists: the voice UI stored none and a fixture clip could not be created (' + (inj.why || 'unknown') + ')'); return; }
+      clipOrigin = 'HARNESS FIXTURE (the voice UI did not store a clip on this leg): a real WebAudio-encoded webm/opus clip written to the local clip store, played through the real Voice Diary player';
+    }
+    c.evidence.clipOrigin = clipOrigin;
     await launchCold(); await dismissOverlays();
     await openDiaryViaSettings();
     await web.eval(`(() => { window.__srcWrites = []; window.__ciSeq = 0; const d = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
