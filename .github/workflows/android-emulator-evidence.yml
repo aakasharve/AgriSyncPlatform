@@ -19,14 +19,6 @@
 name: android-emulator-evidence
 
 on:
-  # TEMPORARY BOOTSTRAP (remove before merge): GitHub only lets workflow_dispatch target a workflow file
-  # that already exists on the default branch, so while this file lives only on its own scratch branch
-  # the only way to run it is a push to that ONE branch. The final version is workflow_dispatch only.
-  push:
-    branches: [task/android-emulator-ci]
-    paths:
-      - '.github/workflows/android-emulator-evidence.yml'
-      - 'tools/android-emulator-ci/**'
   workflow_dispatch:
     inputs:
       app_ref:
