@@ -219,6 +219,10 @@ describe('AuthProvider - offline cold start (real AuthTokenStore)', () => {
         spy().mockResolvedValue({ kind: 'unreachable' });
         render(<AuthProvider><Probe /></AuthProvider>);
         await waitFor(() => expect(screen.getByTestId('offline').textContent).toBe('yes'));
+        // Let the boot refresh finish and its outcome re-render settle BEFORE 'online' fires, so
+        // the event cannot land while the presence-mode listener is being re-subscribed (CI flake).
+        await waitFor(() => expect(spy()).toHaveBeenCalledTimes(1));
+        await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
         await act(async () => { window.dispatchEvent(new Event('online')); });
         await waitFor(() => expect(spy()).toHaveBeenCalledTimes(2));
         expect(status()).toBe('authenticated');

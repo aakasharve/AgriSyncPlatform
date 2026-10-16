@@ -157,7 +157,7 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                     </div>
 
                     <div className="flex items-start gap-5 relative z-10">
-                        <div className="relative">
+                        <div className="relative shrink-0">
                             <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-3xl shadow-inner border-4 border-white">
                                 👨‍🌾
                             </div>
@@ -175,22 +175,22 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
 
                         <div className="flex-1 min-w-0">
                             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
-                                <h2 className="text-2xl font-black text-slate-800 break-words">{profile.name || '—'}</h2>
+                                <h2 className="min-w-0 max-w-full text-2xl font-black text-slate-800 [overflow-wrap:anywhere]">{profile.name || '—'}</h2>
                                 <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide border border-emerald-200 whitespace-nowrap">
                                     {t('profile.primaryOwner')}
                                 </span>
                             </div>
 
-                            <div className="flex flex-wrap gap-4 text-sm text-slate-500 mb-3">
-                                <div className="flex items-center gap-1.5">
-                                    <MapPin size={16} className="text-slate-400" />
+                            <div className="flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-sm text-slate-500 mb-3">
+                                <div className="flex min-w-0 max-w-full items-center gap-1.5">
+                                    <MapPin size={16} className="shrink-0 text-slate-400" />
                                     {profile.village || '—'}
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                    <Phone size={16} className="text-slate-400" />
+                                <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-1">
+                                    <Phone size={16} className="shrink-0 text-slate-400" />
                                     {profile.phone || '—'}
                                     {profile.phone && (
-                                        <span className="text-emerald-600 text-xs font-bold flex items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                        <span className="text-emerald-600 text-xs font-bold flex shrink-0 items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded">
                                             <Check size={10} /> {t('profile.verified')}
                                         </span>
                                     )}
