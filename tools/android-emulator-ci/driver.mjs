@@ -754,10 +754,8 @@ async function main() {
     await launchCold(); await dismissOverlays();
     await openDiaryViaSettings();
     await web.eval(`(() => { window.__srcWrites = []; const d = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
-      if (d && d.set) Object.defineProperty(HTMLMediaElement.prototype, 'src', { configurable: true, get: d.get, set(v) { window.__srcWrites.push({ t: Date.now(), via: 'prop', v: String(v).slice(0, 30), stack: String(new Error().stack).split('
-').slice(2, 6).map((l) => l.trim().slice(0, 90)).join(' < ') }); return d.set.call(this, v); } });
-      const sa = Element.prototype.setAttribute; Element.prototype.setAttribute = function (n, v) { if (this instanceof HTMLMediaElement && String(n).toLowerCase() === 'src') window.__srcWrites.push({ t: Date.now(), via: 'attr', v: String(v).slice(0, 30), stack: String(new Error().stack).split('
-').slice(2, 6).map((l) => l.trim().slice(0, 90)).join(' < ') }); return sa.call(this, n, v); }; })()`);
+      if (d && d.set) Object.defineProperty(HTMLMediaElement.prototype, 'src', { configurable: true, get: d.get, set(v) { window.__srcWrites.push({ t: Date.now(), via: 'prop', v: String(v).slice(0, 30), stack: String(new Error().stack).split('\\n').slice(2, 6).map((l) => l.trim().slice(0, 90)).join(' < ') }); return d.set.call(this, v); } });
+      const sa = Element.prototype.setAttribute; Element.prototype.setAttribute = function (n, v) { if (this instanceof HTMLMediaElement && String(n).toLowerCase() === 'src') window.__srcWrites.push({ t: Date.now(), via: 'attr', v: String(v).slice(0, 30), stack: String(new Error().stack).split('\\n').slice(2, 6).map((l) => l.trim().slice(0, 90)).join(' < ') }); return sa.call(this, n, v); }; })()`);
     await web.click(Web.tid('voice-retained-open-diary'), { label: 'open Voice Diary' });
     await web.waitVisible(Web.tid('voice-diary-page'), 25_000, 'Voice Diary page');
     await sleep(2500);
