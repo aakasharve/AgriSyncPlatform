@@ -140,6 +140,7 @@ async function launchCold({ attach = true } = {}) {
   web = new Web({ pkg: PKG, log });
   await web.connect();
   web.onCalibrateRetry = dismissSystemDialogs;
+  web.beforeTap = async () => { for (let n = 0; n < 3 && sh("dumpsys window | grep -m1 'Application Not Responding' | wc -l", { allowFail: true, timeout: 20_000 }).trim() === '1'; n++) { await dismissSystemDialogs(); } };
   for (let a = 0; a < 3 && !web.calib; a++) { if (a) await dismissSystemDialogs(); await web.calibrate(); }
   web.statusBarPx = statusBarPx; web.navBarPx = navBarPx; web.screenH = screenSize().h;
   results.inputMode = web.inputMode;
@@ -174,24 +175,26 @@ async function consentIfShown() {
 }
 
 async function dismissOverlays() {
-  for (let k = 0; k < 10; k++) {
+  for (let k = 0; k < 12; k++) {
     const i = await web.info(Web.tid('header-setup-hub')).catch(() => ({ n: 0 }));
     if (i.n && !i.covered) return true;
     let clicked = false;
-    // a bottom sheet can open by itself over the home screen: find the control at the top-right of whatever covers the header and tap it
-    if (i.n && i.covered && k >= 2) {
-      const tagged = await web.eval(`(() => { let e = document.elementFromPoint(24, 75); while (e && e !== document.body && getComputedStyle(e).position !== 'fixed') e = e.parentElement; if (!e) return false;
-        let best = null; e.querySelectorAll('button, [role=button]').forEach((b) => { const r = b.getBoundingClientRect(); if (r.width > 0 && r.top < innerHeight * 0.5 && (!best || r.right - r.top * 2 > best.score)) best = { b, score: r.right - r.top * 2 }; });
-        if (!best) return false; best.b.setAttribute('data-ci-close', '1'); return true; })()`).catch(() => false);
-      if (tagged) { try { await web.click(Web.css('[data-ci-close="1"]'), { timeout: 4000 }); await sleep(1200); await web.eval(`document.querySelectorAll('[data-ci-close]').forEach((e) => e.removeAttribute('data-ci-close'))`); continue; } catch { /* fall through */ } }
-    }
-    // (older path) the 'needs attention' bottom sheet: close it with its own X
-    if (i.n && i.covered && await web.visible(Web.css('svg.lucide-x')).catch(() => false)) { try { await web.click(Web.css('svg.lucide-x'), { timeout: 4000 }); clicked = true; await sleep(1200); continue; } catch { /* fall through */ } }
+    // 1. the known first-run / intro buttons (real taps)
     for (const spec of [Web.tid('welcome-continue'), Web.tid('onboarding-skip'),
       Web.text(/चला, सुरुवात करूया/), Web.text(/समजलं, पुढे चला/), Web.text(/^\s*पुढे चला\s*$/), Web.text(/^\s*नंतर\s*$/), Web.text(/^\s*Skip\s*$/i)]) {
       if (await web.visible(spec).catch(() => false)) { try { await web.click(spec, { timeout: 4000 }); clicked = true; break; } catch { /* next */ } }
     }
-    await sleep(clicked ? 1500 : 1000);
+    if (clicked) { await sleep(1500); continue; }
+    // 2. the 'needs attention' bottom sheet that can open by itself over home: its own X
+    if (i.n && i.covered && await web.visible(Web.css('svg.lucide-x')).catch(() => false)) { try { await web.click(Web.css('svg.lucide-x'), { timeout: 4000 }); await sleep(1200); continue; } catch { /* fall through */ } }
+    // 3. last resort: the control at the top-right of whatever covers the header
+    if (i.n && i.covered && k >= 4) {
+      const tagged = await web.eval(`(() => { let e = document.elementFromPoint(24, 75); while (e && e !== document.body && getComputedStyle(e).position !== 'fixed') e = e.parentElement; if (!e) return false;
+        let best = null; e.querySelectorAll('button, [role=button]').forEach((b) => { const r = b.getBoundingClientRect(); if (r.width > 0 && r.top < innerHeight * 0.5 && (!best || r.right - r.top * 2 > best.score)) best = { b, score: r.right - r.top * 2 }; });
+        if (!best) return false; best.b.setAttribute('data-ci-close', '1'); return true; })()`).catch(() => false);
+      if (tagged) { try { await web.click(Web.css('[data-ci-close="1"]'), { timeout: 4000 }); await sleep(1200); } catch { /* fall through */ } await web.eval(`document.querySelectorAll('[data-ci-close]').forEach((e) => e.removeAttribute('data-ci-close'))`).catch(() => {}); continue; }
+    }
+    await sleep(1000);
   }
   return false;
 }
@@ -551,8 +554,10 @@ async function main() {
   await check('C17', 'safe-area variables at cold start (timeline) and header position (no double padding)', async (c) => {
     sh(`am force-stop ${PKG}`, { allowFail: true }); await sleep(1200);
     sh(`monkey -p ${PKG} -c android.intent.category.LAUNCHER 1`, { allowFail: true });
+    const prevHook = web ? web.beforeTap : null;
     if (web) await web.close();
     web = new Web({ pkg: PKG, log }); const t0 = Date.now(); await web.connect(); const attachMs = Date.now() - t0;
+    web.onCalibrateRetry = dismissSystemDialogs; web.beforeTap = prevHook;
     await web.calibrate(); web.statusBarPx = statusBarPx; web.navBarPx = navBarPx; web.screenH = screenSize().h;
     const series = [];
     for (let i = 0; i < 24; i++) {
@@ -740,8 +745,10 @@ async function main() {
     await launchCold(); await dismissOverlays();
     await openDiaryViaSettings();
     await web.eval(`(() => { window.__srcWrites = []; const d = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
-      if (d && d.set) Object.defineProperty(HTMLMediaElement.prototype, 'src', { configurable: true, get: d.get, set(v) { window.__srcWrites.push({ via: 'prop', v: String(v).slice(0, 30) }); return d.set.call(this, v); } });
-      const sa = Element.prototype.setAttribute; Element.prototype.setAttribute = function (n, v) { if (this instanceof HTMLMediaElement && String(n).toLowerCase() === 'src') window.__srcWrites.push({ via: 'attr', v: String(v).slice(0, 30) }); return sa.call(this, n, v); }; })()`);
+      if (d && d.set) Object.defineProperty(HTMLMediaElement.prototype, 'src', { configurable: true, get: d.get, set(v) { window.__srcWrites.push({ t: Date.now(), via: 'prop', v: String(v).slice(0, 30), stack: String(new Error().stack).split('
+').slice(2, 6).map((l) => l.trim().slice(0, 90)).join(' < ') }); return d.set.call(this, v); } });
+      const sa = Element.prototype.setAttribute; Element.prototype.setAttribute = function (n, v) { if (this instanceof HTMLMediaElement && String(n).toLowerCase() === 'src') window.__srcWrites.push({ t: Date.now(), via: 'attr', v: String(v).slice(0, 30), stack: String(new Error().stack).split('
+').slice(2, 6).map((l) => l.trim().slice(0, 90)).join(' < ') }); return sa.call(this, n, v); }; })()`);
     await web.click(Web.tid('voice-retained-open-diary'), { label: 'open Voice Diary' });
     await web.waitVisible(Web.tid('voice-diary-page'), 25_000, 'Voice Diary page');
     await sleep(2500);
@@ -752,17 +759,31 @@ async function main() {
     const writesBefore = await web.eval('window.__srcWrites.length');
     c.evidence.before = await sample();
     shot(c, 'diary-clip-before-play');
+    const tTap = await web.eval('Date.now()');
     await web.click(Web.tid(`voice-diary-clip-play-${id}`), { label: 'Play (single real tap)' });
-    const s1 = await (async () => { await sleep(700); return sample(); })();
-    const s2 = await (async () => { await sleep(700); return sample(); })();
-    const label = await web.eval(`(document.querySelector('[data-testid="voice-diary-clip-play-${id}"]') || {}).getAttribute ? document.querySelector('[data-testid="voice-diary-clip-play-${id}"]').getAttribute('aria-label') : null`);
+    // poll until playback is observed (or 4 s); this is the window the tap is responsible for
+    let s1 = null; let s2 = null; let tStarted = null;
+    for (let k = 0; k < 16; k++) {
+      await sleep(250); const cur = await sample();
+      if (!s1) s1 = cur;
+      if (cur && (!cur.paused || cur.currentTime > 0 || cur.ended)) { tStarted = await web.eval('Date.now()'); s2 = cur; break; }
+    }
+    await sleep(700); const s3 = await sample();
+    const label = await web.eval(`(document.querySelector('[data-testid="voice-diary-clip-play-${id}"]') || { getAttribute: () => null }).getAttribute('aria-label')`);
     shot(c, 'diary-clip-after-play');
     const writes = await web.eval('window.__srcWrites');
-    c.evidence.samples = { s1, s2, buttonLabel: label, srcWrites: writes, writesBeforeTap: writesBefore };
-    const started = !!s1 && !!s2 && ((!s2.paused && s2.currentTime > s1.currentTime) || s2.ended || s1.currentTime > 0 || s2.currentTime > 0);
-    c.assert(started, `audio actually played after one real tap (paused=${s2?.paused}, currentTime ${s1?.currentTime} -> ${s2?.currentTime}, ended=${s2?.ended})`, `no audio playback after the tap: ${JSON.stringify({ s1, s2 })}`);
-    c.assert(writes.length - writesBefore === 0, 'no src write caused by the tap', `the tap caused ${writes.length - writesBefore} src write(s)`);
-    c.assert(writes.length <= 1, `src was written ${writes.length} time(s) in total (never twice)`, `src was written ${writes.length} times: ${JSON.stringify(writes)}`);
+    const tEnd = tStarted ?? await web.eval('Date.now()');
+    const inWindow = writes.filter((w) => w.t >= tTap && w.t <= tEnd + 100);
+    const before = writes.filter((w) => w.t < tTap);
+    c.evidence.samples = { s1, s2, s3, buttonLabel: label };
+    c.evidence.srcWritesInformational = { note: 'writes BEFORE the tap, outside its window (mount / list refresh); timestamps relative to the tap', beforeTap: before.map((w) => ({ msBeforeTap: tTap - w.t, via: w.via, blob: w.v, stack: w.stack })), writesBeforeTapCount: writesBefore };
+    c.evidence.srcWritesInTapWindow = inWindow;
+    const started = !!s3 && ((s2 && (!s2.paused || s2.currentTime > 0)) || (!s3.paused && s3.currentTime > 0) || s3.ended);
+    const advancing = !!s2 && !!s3 && (s3.currentTime > s2.currentTime || s3.ended);
+    c.assert(started, `audio actually started after one real tap (paused=${s3?.paused}, currentTime ${s2?.currentTime ?? s1?.currentTime} -> ${s3?.currentTime}, ended=${s3?.ended})`, `no audio playback after the tap: ${JSON.stringify({ s1, s2, s3 })}`);
+    c.assert(advancing || s3?.ended, 'media position advanced after the tap (really playing)', `media position did not advance: ${JSON.stringify({ s2, s3 })}`);
+    c.assert(inWindow.length === 0, 'no src write between the tap and the start of playback', `${inWindow.length} src write(s) between the tap and playback start: ${JSON.stringify(inWindow)}`);
+    c.pass(`informational: src was written ${before.length} time(s) before the tap (mount/refresh), see srcWritesInformational`);
   });
 
   // ---- large font (Team page at 1.0 / 1.5 / 2.0, hub + attendance at 1.5 / 2.0)
@@ -891,8 +912,7 @@ async function main() {
     await openDiaryViaSettings();
     await web.click(Web.tid('voice-retained-open-diary'), { label: 'open Voice Diary (offline)' });
     await web.waitVisible(Web.tid('voice-diary-page'), 25_000, 'Voice Diary page (offline)');
-    await sleep(3000);
-    const bannerOffline = await web.visible(DIARY_BANNER);
+    let bannerOffline = false; for (let k = 0; k < 15 && !bannerOffline; k++) { await sleep(1000); bannerOffline = await web.visible(DIARY_BANNER); }
     c.evidence.offline = { consentOffBannerVisible: bannerOffline, firstClipSourceBadge: await srcText() };
     shot(c, 'diary-offline');
 

@@ -188,6 +188,7 @@ export class Web {
   }
 
   async #tapAt(cx, cy) {
+    if (this.calib && this.beforeTap) await this.beforeTap();
     if (this.calib) {
       const x = Math.round(cx * this.calib.scale + this.calib.ox); const y = Math.round(cy * this.calib.scale + this.calib.oy);
       if (this.statusBarPx && y < this.statusBarPx) {
