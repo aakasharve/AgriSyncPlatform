@@ -132,7 +132,23 @@ const edgeJs = (anchorTid) => `(() => { const a = document.querySelector('[data-
 
 function hideIme() { if (imeShown()) key(4); }
 
+// Killing the app while a token refresh is in flight can leave the server with a rotated token the app never stored
+// (the next launch then gets 401 and shows the login screen). Let in-flight refresh/login calls finish first.
+async function quiesceAuth() {
+  if (!web) return;
+  const end = Date.now() + 8000;
+  while (Date.now() < end) {
+    const pending = web.net.filter((n) => /\/user\/auth\/(refresh|login|logout)/.test(n.url) && n.status === null && !n.failed && Date.now() - n.t < 15_000);
+    if (!pending.length) break;
+    await sleep(400);
+  }
+  await sleep(800);
+}
+let currentPhone = PHONES.owner;
+results.relogins = [];
+
 async function launchCold({ attach = true } = {}) {
+  await quiesceAuth();
   if (web) { await web.close(); }
   sh(`am force-stop ${PKG}`, { allowFail: true }); await sleep(1500);
   sh(`monkey -p ${PKG} -c android.intent.category.LAUNCHER 1`, { allowFail: true });
@@ -176,6 +192,14 @@ async function consentIfShown() {
 
 async function dismissOverlays() {
   for (let k = 0; k < 12; k++) {
+    // session lost (e.g. refresh token 401 after the app was killed mid-refresh): recorded, then signed in again so the journey can continue
+    if (k === 1 && !(await web.visible(Web.tid('header-setup-hub')).catch(() => false)) && await web.visible(Web.text(/Use password|OTP पाठवा/i)).catch(() => false)) {
+      const lastRefresh = web.net.filter((n) => /\/auth\/refresh/.test(n.url)).slice(-1)[0];
+      results.relogins.push({ at: new Date().toISOString(), phone: currentPhone, lastRefreshStatus: lastRefresh ? (lastRefresh.status ?? lastRefresh.failed) : null });
+      log('      SESSION LOST - signing in again (recorded in results.relogins)');
+      const r = await loginUi(currentPhone); if (!r.ok) return false;
+      continue;
+    }
     const i = await web.info(Web.tid('header-setup-hub')).catch(() => ({ n: 0 }));
     if (i.n && !i.covered) return true;
     let clicked = false;
@@ -200,6 +224,7 @@ async function dismissOverlays() {
 }
 
 async function loginUi(phone) {
+  currentPhone = phone;
   const diag = [];
   const d = (m) => { diag.push(m); log('      login: ' + m); };
   if (await consentIfShown()) { d('consent passed'); await sleep(3000); }
