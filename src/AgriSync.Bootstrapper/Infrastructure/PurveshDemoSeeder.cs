@@ -4,6 +4,7 @@ using Accounts.Domain.Affiliation;
 using Accounts.Domain.OwnerAccounts;
 using Accounts.Domain.Subscriptions;
 using Accounts.Infrastructure.Persistence;
+using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.EntityFrameworkCore;
 using ShramSafal.Domain.Attachments;
@@ -21,7 +22,7 @@ using UserAppRole = User.Domain.Membership.AppRole;
 
 namespace AgriSync.Bootstrapper.Infrastructure;
 
-public sealed class PurveshDemoSeeder
+public sealed partial class PurveshDemoSeeder
 {
     private const string AppId = "shramsafal";
     // v2 (2026-05-13): single-test-user redesign per founder spec.
@@ -469,35 +470,26 @@ public sealed class PurveshDemoSeeder
     ];
 
     // ── Labour V1 Task 10 (spec: 2026-07-13-labour-attendance-approval-design) ──
-    // The SINGLE SOURCE OF TRUTH for which ssf.field_operators rows this seeder
-    // owns. It is the teardown's identification set: ClearPurveshDemoAsync mints
-    // ids from CreateDeterministicGuid($"{SeedVersion}:field-operator:{key}")
-    // and deletes ONLY those, on the demo farm only.
+    // The SINGLE SOURCE OF TRUTH for which ssf.field_operators /
+    // ssf.field_operator_work_rows / ssf.attendance_marks /
+    // ssf.labour_assignments rows this seeder owns is the demo LABOUR PLAN in
+    // PurveshDemoSeeder.Labour.cs (BuildDemoLabourPlan). Every id there is
+    // minted from CreateDeterministicGuid($"{SeedVersion}:<kind>:<key>"), and the
+    // teardowns below identify rows ONLY by re-minting those ids — correct by
+    // construction, never by inference — on the demo farm only.
     //
-    // DELIBERATELY EMPTY (founder-gated, 2026-08-11). The seeder creates no
-    // field operators, so the teardown can only ever throw-or-no-op on this
-    // table: with an empty set there is no id it will ever delete, which is
-    // zero deletion risk BY CONSTRUCTION on the founder's only real farm.
-    // Seeding demo identities is not ours to decide — a FieldOperator is a work
-    // subject rather than a login, but the standing directive that the demo seed
-    // contains only Purvesh and no other named people is close enough that it is
-    // the founder's call. Worse, these rows carry NO seed-marker column, so once
-    // the Task 11+ UI lists operators they would be indistinguishable from real
-    // workers.
+    // History: until 2026-10-17 this set was DELIBERATELY EMPTY (founder-gated,
+    // 2026-08-11) — "seeding demo identities is the founder's call". The founder
+    // has now asked for demo workers, a Mukadam crew and attendance on the demo
+    // farm (spec 2026-08-25-prod-cutover-waves, demo-seed-v3 envelope). They are
+    // written ONLY by the one-shot `--reseed-purvesh-demo` command
+    // (PurveshDemoSeeder.Reseed.cs), never by SeedPurveshDemoAsync, so the
+    // startup / e2e fixture path is unchanged.
     //
-    // If the founder later approves demo operators, add the key here AND a
-    // creation side that mints the id from the SAME expression above — so
-    // identification stays correct by construction, never by inference.
-    private static readonly FieldOperatorSeed[] FieldOperatorSeeds = [];
-
-    // Seed keys for ssf.field_operator_work_rows. EMPTY for a second, structural
-    // reason on top of the one above: a work row requires a LabourAssignment
-    // (FK, ON DELETE RESTRICT), and this seeder creates no LabourAssignments —
-    // its daily logs are written directly, never through the create_daily_log
-    // handler that stages canonical labour. So the seeder owns ZERO work rows,
-    // and every work row on the demo farm is real attribution of a real person's
-    // work: the teardown throws on any of them and deletes nothing.
-    private static readonly string[] FieldOperatorWorkRowSeedKeys = [];
+    // NOTE the cross-file rule: the plan lives in another partial file, so it is
+    // reached through METHODS, never through a static field initializer here —
+    // C# does not define the order in which static initializers of different
+    // partial-class files run.
 
     /// <summary>
     /// Thrown by <see cref="ClearPurveshDemoAsync"/> when the demo farm holds
@@ -561,21 +553,27 @@ public sealed class PurveshDemoSeeder
         var plotContexts = await EnsurePlotsAndCropCyclesAsync(farm.Id, nowUtc, cancellationToken);
         var phase3Stats = await EnsureScheduleTemplatesAndPlannedActivitiesAsync(plotContexts, purvesh.Id, nowUtc, cancellationToken);
         var contextByPlotKey = plotContexts.ToDictionary(c => c.Seed.Key, c => c, StringComparer.Ordinal);
+        var userIdsByKey = usersByKey.ToDictionary(pair => pair.Key, pair => pair.Value.Id, StringComparer.Ordinal);
         var phase4LogStats = await EnsureDailyLogsAndVerificationsAsync(
             farm.Id,
             contextByPlotKey,
-            usersByKey,
+            userIdsByKey,
             nowUtc,
+            DemoVerificationMode.Legacy,
+            retainedLogIds: null,
             cancellationToken);
         var phase4FinanceStats = await EnsureFinanceAsync(
             farm.Id,
             contextByPlotKey,
-            usersByKey,
+            userIdsByKey,
             nowUtc,
+            includePriceConfigs: true,
+            BuildCostEntrySeeds(),
+            retainedCostIds: null,
             cancellationToken);
         var phase5AttachmentStats = await EnsureAttachmentsAsync(
             farm.Id,
-            usersByKey,
+            userIdsByKey,
             nowUtc,
             cancellationToken);
 
@@ -628,9 +626,219 @@ public sealed class PurveshDemoSeeder
                $"anchorUtc={nowUtc:O}.";
     }
 
+    /// <summary>
+    /// The startup / e2e teardown of the WHOLE demo spine (<c>CLEAR_PURVESH_DEMO=true</c>, and
+    /// <c>TestFixtureService</c>'s "purvesh-demo" reset): the demo farm with its content and labour
+    /// layer, then the seeder's own global rows — its logins, owner account, templates and price
+    /// configs.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>No silent partial clear (2026-10-17).</b> Run as <c>agrisync_app</c> — the role the
+    /// tracked appsettings.Development.json gives the startup path — the clear used to query the
+    /// FORCE-RLS tables with no tenant setting, see none of the farm's rows, delete the logins,
+    /// account, templates and price configs anyway, and report "Cleared" while the farm, its 135
+    /// logs and its labour layer stayed behind. Now, in this order:</para>
+    /// <list type="number">
+    /// <item><b>Who must survive is decided first, read-only.</b> A seed login that still owns or
+    /// belongs to ANY other farm, and the owner account when any other farm is attached to it, are
+    /// kept and named in the result — multi-farm-per-login is core, and those rows are not the
+    /// demo's to delete.</item>
+    /// <item><b>The demo farm goes in ONE transaction under its own tenant scope</b>
+    /// (<see cref="RlsIdentityScope.RunAsFarmAsync(DbContext, Guid, Guid, Guid?, Func{CancellationToken, Task}, CancellationToken)"/>),
+    /// so FORCE-RLS shows the clear exactly the rows it must remove. Before that transaction
+    /// commits, the clear re-reads that the farm row and every seed row it targeted are gone —
+    /// through the farm scope AND through each demo login's own view of its farms. Anything left:
+    /// it throws, the transaction rolls back, nothing is deleted.</item>
+    /// <item><b>Only then</b> are the account rows and the logins removed — so identity and
+    /// account rows can never be deleted while the farm's rows survive.</item>
+    /// </list>
+    /// </remarks>
     public async Task<string> ClearPurveshDemoAsync(CancellationToken cancellationToken = default)
     {
-        var farmId = new FarmId(CreateDeterministicGuid($"{SeedVersion}:farm:khardi"));
+        var farmId = new FarmId(DemoFarmId);
+        var userPhones = UserSeeds.Select(seed => seed.Phone).ToHashSet(StringComparer.Ordinal);
+
+        // ── 1. Who must survive — decided BEFORE anything is deleted. ───────────────────
+        var seedLogins = await _userContext.Users
+            .Where(u => userPhones.Contains(u.Phone.Value))
+            .ToListAsync(cancellationToken);
+        var loginsToDelete = new List<User.Domain.Identity.User>();
+        var keptLogins = new List<string>();
+        foreach (var login in seedLogins)
+        {
+            var otherFarms = await CountOtherFarmsOfLoginAsync(login.Id, farmId, cancellationToken);
+            if (otherFarms > 0)
+            {
+                // Named by its SEED KEY, never by phone or id: this summary is logged.
+                var seedKey = UserSeeds.FirstOrDefault(seed => seed.Phone == login.Phone.Value)?.Key ?? "seed-login";
+                keptLogins.Add($"{seedKey} (still on {otherFarms} other farm(s))");
+            }
+            else
+            {
+                loginsToDelete.Add(login);
+            }
+        }
+
+        var ownerAccount = await _accountsContext.OwnerAccounts
+            .Include(o => o.Memberships)
+            .FirstOrDefaultAsync(o => o.Id == PurveshOwnerAccountId, cancellationToken);
+        var accountUserIds = (ownerAccount?.Memberships.Select(m => m.UserId) ?? [])
+            .Concat(seedLogins.Select(u => u.Id))
+            .Distinct()
+            .ToList();
+        var otherFarmsOnAccount = await CountOtherFarmsOnOwnerAccountAsync(
+            PurveshOwnerAccountId, farmId, accountUserIds, cancellationToken);
+
+        // ── 2. The demo farm: one transaction, its own tenant scope, verified before commit. ──
+        // No ssf policy reads agrisync.owner_account_id; the seeder's own account is the
+        // truthful claim for the farm it seeded, whichever account the row is attached to now.
+        var seedLoginIds = seedLogins.Select(u => u.Id).ToList();
+        var farm = await RlsIdentityScope.RunAsFarmAsync(
+            _ssfContext,
+            farmId.Value,
+            (Guid)PurveshOwnerAccountId,
+            actorUserId: null,
+            ct => ClearDemoFarmRowsAsync(farmId, seedLoginIds, ct),
+            cancellationToken);
+
+        // ── 3. Account rows — after the farm is provably gone, and only if no other farm
+        //       is attached to the account. ────────────────────────────────────────────────
+        var account = otherFarmsOnAccount > 0
+            ? new DemoAccountClearCounts(KeptBecauseOtherFarms: otherFarmsOnAccount)
+            : await ClearDemoOwnerAccountRowsAsync(ownerAccount, cancellationToken);
+
+        // ── 4. Logins no other farm uses. public.memberships is FORCE-RLS on the user's own
+        //       id, so each login's rows are removed under that login's own scope. ──────────
+        var deletedMembershipCount = 0;
+        foreach (var login in loginsToDelete)
+        {
+            deletedMembershipCount += await RlsIdentityScope.RunAsUserAsync(
+                _userContext,
+                login.Id.Value,
+                async ct =>
+                {
+                    var memberships = await _userContext.Memberships
+                        .Where(m => m.UserId == login.Id)
+                        .ToListAsync(ct);
+                    _userContext.Memberships.RemoveRange(memberships);
+                    _userContext.Users.Remove(login);
+                    await _userContext.SaveChangesAsync(ct);
+                    return memberships.Count;
+                },
+                cancellationToken);
+        }
+
+        return $"Cleared {SeedVersion}: users={loginsToDelete.Count}, farms={farm.Farms}, plots={farm.Plots}, " +
+               $"cropCycles={farm.CropCycles}, templates={farm.Templates}, templateActivities={farm.TemplateActivities}, " +
+               $"plannedActivities={farm.PlannedActivities}, dailyLogs={farm.DailyLogs}, dayLedgers={farm.DayLedgers}, " +
+               $"costEntries={farm.CostEntries}, corrections={farm.Corrections}, attachments={farm.Attachments}, " +
+               $"priceConfigs={farm.PriceConfigs}, memberships={deletedMembershipCount}, " +
+               $"farmMemberships={farm.FarmMemberships}, " +
+               $"farmInvitations={farm.FarmInvitations}, farmJoinTokens={farm.FarmJoinTokens}, " +
+               $"ownerAccounts={account.OwnerAccounts}, ownerMemberships={account.OwnerMemberships}, " +
+               $"subscriptions={account.Subscriptions}, referralCodes={account.ReferralCodes}, " +
+               $"referralRelationships={account.ReferralRelationships}, growthEvents={account.GrowthEvents}, " +
+               $"benefitLedgerEntries={account.BenefitLedgerEntries}, " +
+               $"fieldOperators={farm.FieldOperators}, " +
+               $"fieldOperatorWorkRows={farm.FieldOperatorWorkRows}, " +
+               $"attendanceMarks={farm.AttendanceMarks}, " +
+               $"labourAssignments={farm.LabourAssignments}. " +
+               $"Kept logins (still used by another farm): {(keptLogins.Count == 0 ? "none" : string.Join(", ", keptLogins))}. " +
+               $"Kept demo owner account: {(account.KeptBecauseOtherFarms > 0 ? $"yes (still on {account.KeptBecauseOtherFarms} other farm(s))" : "no")}.";
+    }
+
+    /// <summary>
+    /// How many farms OTHER than the demo farm this login owns or belongs to (non-terminal
+    /// membership). Read under the login's own scope, so FORCE-RLS shows the app role exactly
+    /// that login's farms; the explicit predicate keeps the answer right for a role that
+    /// bypasses RLS too.
+    /// </summary>
+    private Task<int> CountOtherFarmsOfLoginAsync(UserId loginId, FarmId demoFarmId, CancellationToken cancellationToken) =>
+        RlsIdentityScope.RunAsUserAsync(
+            _ssfContext,
+            loginId.Value,
+            ct => _ssfContext.Farms
+                .AsNoTracking()
+                .Where(f => f.Id != demoFarmId
+                    && (f.OwnerUserId == loginId
+                        || _ssfContext.FarmMemberships.Any(m =>
+                            m.FarmId == f.Id
+                            && m.UserId == loginId
+                            && m.Status != MembershipStatus.Revoked
+                            && m.Status != MembershipStatus.Exited)))
+                .CountAsync(ct),
+            cancellationToken);
+
+    /// <summary>
+    /// How many farms OTHER than the demo farm are attached to the owner account. A role that
+    /// bypasses RLS answers in one read; the app role can only see a farm through someone's own
+    /// scope, so the account's members (and the seed logins) are asked too.
+    /// </summary>
+    private async Task<int> CountOtherFarmsOnOwnerAccountAsync(
+        OwnerAccountId ownerAccountId,
+        FarmId demoFarmId,
+        IReadOnlyList<UserId> accountUserIds,
+        CancellationToken cancellationToken)
+    {
+        var count = await _ssfContext.Farms
+            .AsNoTracking()
+            .CountAsync(f => f.OwnerAccountId == ownerAccountId && f.Id != demoFarmId, cancellationToken);
+        foreach (var userId in accountUserIds)
+        {
+            var seenByUser = await RlsIdentityScope.RunAsUserAsync(
+                _ssfContext,
+                userId.Value,
+                ct => _ssfContext.Farms
+                    .AsNoTracking()
+                    .CountAsync(f => f.OwnerAccountId == ownerAccountId && f.Id != demoFarmId, ct),
+                cancellationToken);
+            count = Math.Max(count, seenByUser);
+        }
+
+        return count;
+    }
+
+    private sealed record DemoFarmClearCounts(
+        int Farms,
+        int Plots,
+        int CropCycles,
+        int Templates,
+        int TemplateActivities,
+        int PlannedActivities,
+        int DailyLogs,
+        int DayLedgers,
+        int CostEntries,
+        int Corrections,
+        int Attachments,
+        int PriceConfigs,
+        int FarmMemberships,
+        int FarmInvitations,
+        int FarmJoinTokens,
+        int FieldOperators,
+        int FieldOperatorWorkRows,
+        int AttendanceMarks,
+        int LabourAssignments);
+
+    private sealed record DemoAccountClearCounts(
+        int OwnerAccounts = 0,
+        int OwnerMemberships = 0,
+        int Subscriptions = 0,
+        int ReferralCodes = 0,
+        int ReferralRelationships = 0,
+        int GrowthEvents = 0,
+        int BenefitLedgerEntries = 0,
+        int KeptBecauseOtherFarms = 0);
+
+    /// <summary>
+    /// The demo farm's rows. Runs INSIDE the farm-scoped transaction opened by
+    /// <see cref="ClearPurveshDemoAsync"/>; every guard throws before the first write, and the
+    /// closing check throws (rolling everything back) if anything it targeted survived.
+    /// </summary>
+    private async Task<DemoFarmClearCounts> ClearDemoFarmRowsAsync(
+        FarmId farmId,
+        IReadOnlyList<UserId> seedLoginIds,
+        CancellationToken cancellationToken)
+    {
         var cycleIds = PlotSeeds
             .Select(seed => CreateDeterministicGuid($"{SeedVersion}:cycle:{seed.Key}"))
             .ToHashSet();
@@ -647,8 +855,15 @@ public sealed class PurveshDemoSeeder
         var attachmentIds = AttachmentSeeds
             .Select(seed => CreateDeterministicGuid($"{SeedVersion}:attachment:{seed.SeedKey}"))
             .ToHashSet();
-        var userPhones = UserSeeds.Select(seed => seed.Phone).ToHashSet(StringComparer.Ordinal);
         var purveshUserId = new UserId(CreateDeterministicGuid($"{SeedVersion}:user:purvesh"));
+        var joinTokenIds = new[]
+        {
+            new FarmJoinTokenId(CreateDeterministicGuid($"{SeedVersion}:joinToken:active"))
+        }.ToHashSet();
+        var invitationIds = new[]
+        {
+            new FarmInvitationId(CreateDeterministicGuid($"{SeedVersion}:invitation:worker-anchor"))
+        }.ToHashSet();
 
         var plannedRows = await _ssfContext.PlannedActivities
             .Where(p => cycleIds.Contains(p.CropCycleId))
@@ -690,12 +905,20 @@ public sealed class PurveshDemoSeeder
         // FieldOperatorId: a real attribution attached to a SEEDED demo
         // operator is still real work, and deleting it because its parent was
         // seeded is exactly the mistake this scoping exists to prevent.
-        var seededFieldOperatorIds = FieldOperatorSeeds
-            .Select(seed => CreateDeterministicGuid($"{SeedVersion}:field-operator:{seed.Key}"))
-            .ToHashSet();
-        var seededFieldOperatorWorkRowIds = FieldOperatorWorkRowSeedKeys
-            .Select(key => CreateDeterministicGuid($"{SeedVersion}:field-operator-work-row:{key}"))
-            .ToHashSet();
+        //
+        // 2026-10-17 (demo-seed-v3): the seed sets are no longer empty — they
+        // come from the demo labour plan written by `--reseed-purvesh-demo`.
+        // Attendance marks join the guarded set (a mark is a ruling about a
+        // person; the seeder owns only the marks it minted), and the seed's own
+        // labour assignments are removed explicitly BEFORE the operators,
+        // because labour_assignments.engaged_through_field_operator_id is ON
+        // DELETE RESTRICT.
+        var labourPlan = BuildDemoLabourPlan();
+        var seededFieldOperatorIds = labourPlan.OperatorIds;
+        var seededFieldOperatorWorkRowIds = labourPlan.WorkRowIds;
+        var seededAttendanceMarkIds = labourPlan.AttendanceMarkIds;
+        var seededLabourAssignmentIds = labourPlan.LabourAssignmentIds;
+        costIds.UnionWith(labourPlan.CostEntryIds);
 
         var fieldOperatorWorkRows = await _ssfContext.FieldOperatorWorkRows
             .Where(r => r.FarmId == farmId)
@@ -725,11 +948,71 @@ public sealed class PurveshDemoSeeder
                 + "Remove them deliberately, or clear a different database.");
         }
 
+        var attendanceMarks = await _ssfContext.AttendanceMarks
+            .Where(m => m.FarmId == farmId)
+            .ToListAsync(cancellationToken);
+        var nonSeedAttendanceMarks = attendanceMarks
+            .Count(m => !seededAttendanceMarkIds.Contains(m.Id));
+        var attendanceCorrections = await _ssfContext.AttendanceMarkCorrections
+            .CountAsync(c => c.FarmId == farmId, cancellationToken);
+        var labourCorrections = await _ssfContext.LabourCorrections
+            .CountAsync(c => c.FarmId == farmId, cancellationToken);
+        if (nonSeedAttendanceMarks > 0 || attendanceCorrections > 0 || labourCorrections > 0)
+        {
+            // The seeder writes no correction rows of either kind (both are
+            // append-only history), so ANY correction here is a real person's
+            // act — as is any mark it did not mint.
+            throw new InvalidOperationException(
+                $"{NonSeedFieldOperatorDataMessage} farm {farmId.Value} holds {nonSeedAttendanceMarks} "
+                + $"ssf.attendance_marks row(s), {attendanceCorrections} ssf.attendance_mark_corrections "
+                + $"row(s) and {labourCorrections} ssf.labour_corrections row(s) not created by seed "
+                + $"version '{SeedVersion}'. The seeder will never delete them. Use "
+                + "`--reseed-purvesh-demo`, which leaves them untouched, or clear a different database.");
+        }
+
+        var farmLabourAssignments = await (
+                from assignment in _ssfContext.LabourAssignments
+                join log in _ssfContext.DailyLogs on assignment.DailyLogId equals log.Id
+                where log.FarmId == farmId
+                select assignment)
+            .ToListAsync(cancellationToken);
+        var nonSeedCrewLinks = farmLabourAssignments.Count(a =>
+            !seededLabourAssignmentIds.Contains(a.Id)
+            && a.EngagedThroughFieldOperatorId is { } throughId
+            && seededFieldOperatorIds.Contains(throughId));
+        if (nonSeedCrewLinks > 0)
+        {
+            throw new InvalidOperationException(
+                $"{NonSeedFieldOperatorDataMessage} {nonSeedCrewLinks} ssf.labour_assignments row(s) on "
+                + $"farm {farmId.Value} that the seeder did not create name a demo worker as their mukadam. "
+                + "They are real records; the seeder will never delete them.");
+        }
+
+        var seededLabourAssignments = farmLabourAssignments
+            .Where(a => seededLabourAssignmentIds.Contains(a.Id))
+            .ToList();
+
         var deletedFieldOperatorWorkRowsCount = fieldOperatorWorkRows.Count;
         if (fieldOperatorWorkRows.Count > 0)
         {
             _ssfContext.FieldOperatorWorkRows.RemoveRange(fieldOperatorWorkRows);
         }
+
+        var deletedAttendanceMarksCount = attendanceMarks.Count;
+        if (attendanceMarks.Count > 0)
+        {
+            _ssfContext.AttendanceMarks.RemoveRange(attendanceMarks);
+        }
+
+        var deletedLabourAssignmentsCount = seededLabourAssignments.Count;
+        if (seededLabourAssignments.Count > 0)
+        {
+            _ssfContext.LabourAssignments.RemoveRange(seededLabourAssignments);
+        }
+
+        // Own flush so the RESTRICT children (work rows; seed engagements that
+        // name a demo mukadam) are gone BEFORE their parents below.
+        await _ssfContext.SaveChangesAsync(cancellationToken);
 
         var deletedFieldOperatorsCount = fieldOperators.Count;
         if (fieldOperators.Count > 0)
@@ -738,12 +1021,9 @@ public sealed class PurveshDemoSeeder
         }
 
         // Own flush so the ordering above is explicit. The rest of this
-        // teardown flushes once further down, where EF's ordering is not
+        // teardown flushes further down, where EF's ordering is not
         // guaranteed to satisfy the RESTRICT constraints.
-        if (deletedFieldOperatorWorkRowsCount > 0 || deletedFieldOperatorsCount > 0)
-        {
-            await _ssfContext.SaveChangesAsync(cancellationToken);
-        }
+        await _ssfContext.SaveChangesAsync(cancellationToken);
 
         var dailyLogs = await _ssfContext.DailyLogs
             .Where(l =>
@@ -774,6 +1054,12 @@ public sealed class PurveshDemoSeeder
         {
             _ssfContext.FinanceCorrections.RemoveRange(corrections);
         }
+
+        // Own flush BEFORE the cost entries: under the app role, the tenant policy on
+        // ssf.finance_corrections is an EXISTS on its cost entry, and the model has no
+        // FK to make EF order the two — a cost deleted first would hide its correction
+        // from the correction's own DELETE (0 rows affected).
+        await _ssfContext.SaveChangesAsync(cancellationToken);
 
         var costs = await _ssfContext.CostEntries
             .Where(c => costIds.Contains(c.Id))
@@ -834,10 +1120,6 @@ public sealed class PurveshDemoSeeder
 
         // v2 Phase 6 cleanup — FarmJoinTokens BEFORE FarmInvitations
         // (token.InvitationId FK referential discipline).
-        var joinTokenIds = new[]
-        {
-            new FarmJoinTokenId(CreateDeterministicGuid($"{SeedVersion}:joinToken:active"))
-        }.ToHashSet();
         var joinTokens = await _ssfContext.FarmJoinTokens
             .Where(t => joinTokenIds.Contains(t.Id))
             .ToListAsync(cancellationToken);
@@ -847,10 +1129,6 @@ public sealed class PurveshDemoSeeder
             _ssfContext.FarmJoinTokens.RemoveRange(joinTokens);
         }
 
-        var invitationIds = new[]
-        {
-            new FarmInvitationId(CreateDeterministicGuid($"{SeedVersion}:invitation:worker-anchor"))
-        }.ToHashSet();
         var invitations = await _ssfContext.FarmInvitations
             .Where(i => invitationIds.Contains(i.Id))
             .ToListAsync(cancellationToken);
@@ -885,10 +1163,85 @@ public sealed class PurveshDemoSeeder
 
         await _ssfContext.SaveChangesAsync(cancellationToken);
 
-        // v2 Phase 6 cleanup — Accounts context. Reverse dependency order:
-        //   BenefitLedgerEntries -> GrowthEvents -> ReferralRelationships
-        //   -> ReferralCodes -> Subscriptions -> OwnerAccountMemberships
-        //   -> OwnerAccounts
+        // ── Closing check, still inside the transaction: nothing this clear targeted survived.
+        //    First through the farm's own tenant scope …
+        var survivors = new List<string>();
+        void Survived(string table, int count)
+        {
+            if (count > 0)
+            {
+                survivors.Add($"{table}: {count}");
+            }
+        }
+
+        Survived("ssf.farms", await _ssfContext.Farms.CountAsync(f => f.Id == farmId, cancellationToken));
+        Survived("ssf.plots", await _ssfContext.Plots.CountAsync(p => plotIds.Contains(p.Id), cancellationToken));
+        Survived("ssf.crop_cycles", await _ssfContext.CropCycles.CountAsync(c => cycleIds.Contains(c.Id), cancellationToken));
+        Survived("ssf.planned_activities", await _ssfContext.PlannedActivities.CountAsync(p => cycleIds.Contains(p.CropCycleId), cancellationToken));
+        Survived("ssf.daily_logs", await _ssfContext.DailyLogs.CountAsync(
+            l => l.FarmId == farmId && l.IdempotencyKey != null && l.IdempotencyKey.StartsWith($"{SeedVersion}:log:"),
+            cancellationToken));
+        Survived("ssf.cost_entries", await _ssfContext.CostEntries.CountAsync(c => costIds.Contains(c.Id), cancellationToken));
+        Survived("ssf.finance_corrections", await _ssfContext.FinanceCorrections.CountAsync(c => costIds.Contains(c.CostEntryId), cancellationToken));
+        Survived("ssf.day_ledgers", await _ssfContext.DayLedgers.CountAsync(l => costIds.Contains(l.SourceCostEntryId), cancellationToken));
+        Survived("ssf.attachments", await _ssfContext.Attachments.CountAsync(a => attachmentIds.Contains(a.Id), cancellationToken));
+        Survived("ssf.field_operators", await _ssfContext.FieldOperators.CountAsync(o => o.OriginatingFarmId == farmId, cancellationToken));
+        Survived("ssf.field_operator_work_rows", await _ssfContext.FieldOperatorWorkRows.CountAsync(r => r.FarmId == farmId, cancellationToken));
+        Survived("ssf.attendance_marks", await _ssfContext.AttendanceMarks.CountAsync(m => m.FarmId == farmId, cancellationToken));
+        Survived("ssf.farm_memberships", await _ssfContext.FarmMemberships.CountAsync(m => m.FarmId == farmId, cancellationToken));
+
+        // … then through each demo login's OWN view of its farms — an independent policy, so
+        // a farm row the tenant scope somehow failed to show is still caught here.
+        foreach (var loginId in seedLoginIds)
+        {
+            var stillVisible = await RlsIdentityScope.RunAsUserAsync(
+                _ssfContext,
+                loginId.Value,
+                ct => _ssfContext.Farms.AsNoTracking().CountAsync(f => f.Id == farmId, ct),
+                cancellationToken);
+            Survived($"ssf.farms (seen by login {loginId.Value})", stillVisible);
+        }
+
+        if (survivors.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"PurveshDemoSeeder refuses to report a partial clear of demo farm {farmId.Value}: "
+                + $"{string.Join("; ", survivors)} row(s) it targeted are still there. The whole clear has "
+                + "been rolled back and no login or account row was touched.");
+        }
+
+        return new DemoFarmClearCounts(
+            Farms: deletedFarmCount,
+            Plots: deletedPlotCount,
+            CropCycles: deletedCycleCount,
+            Templates: deletedTemplateCount,
+            TemplateActivities: deletedTemplateActivityCount,
+            PlannedActivities: deletedPlannedCount,
+            DailyLogs: deletedDailyLogsCount,
+            DayLedgers: deletedDayLedgersCount,
+            CostEntries: deletedCostEntriesCount,
+            Corrections: deletedCorrectionsCount,
+            Attachments: deletedAttachmentsCount,
+            PriceConfigs: deletedPriceConfigsCount,
+            FarmMemberships: deletedFarmMembershipsCount,
+            FarmInvitations: deletedFarmInvitationsCount,
+            FarmJoinTokens: deletedFarmJoinTokensCount,
+            FieldOperators: deletedFieldOperatorsCount,
+            FieldOperatorWorkRows: deletedFieldOperatorWorkRowsCount,
+            AttendanceMarks: deletedAttendanceMarksCount,
+            LabourAssignments: deletedLabourAssignmentsCount);
+    }
+
+    /// <summary>
+    /// The seeder's own owner-account rows (affiliation chain, subscriptions, the account and its
+    /// memberships), in reverse dependency order:
+    /// BenefitLedgerEntries -> GrowthEvents -> ReferralRelationships -> ReferralCodes ->
+    /// Subscriptions -> OwnerAccountMemberships -> OwnerAccounts.
+    /// </summary>
+    private async Task<DemoAccountClearCounts> ClearDemoOwnerAccountRowsAsync(
+        OwnerAccount? ownerAccount,
+        CancellationToken cancellationToken)
+    {
         var benefitEntryIds = new[]
         {
             new BenefitLedgerEntryId(CreateDeterministicGuid($"{SeedVersion}:affiliation:benefit-ledger-entry"))
@@ -896,11 +1249,7 @@ public sealed class PurveshDemoSeeder
         var benefitEntries = await _accountsContext.BenefitLedgerEntries
             .Where(b => benefitEntryIds.Contains(b.Id))
             .ToListAsync(cancellationToken);
-        var deletedBenefitEntriesCount = benefitEntries.Count;
-        if (benefitEntries.Count > 0)
-        {
-            _accountsContext.BenefitLedgerEntries.RemoveRange(benefitEntries);
-        }
+        _accountsContext.BenefitLedgerEntries.RemoveRange(benefitEntries);
 
         var growthEventIds = new[]
         {
@@ -909,11 +1258,7 @@ public sealed class PurveshDemoSeeder
         var growthEvents = await _accountsContext.GrowthEvents
             .Where(g => growthEventIds.Contains(g.Id))
             .ToListAsync(cancellationToken);
-        var deletedGrowthEventsCount = growthEvents.Count;
-        if (growthEvents.Count > 0)
-        {
-            _accountsContext.GrowthEvents.RemoveRange(growthEvents);
-        }
+        _accountsContext.GrowthEvents.RemoveRange(growthEvents);
 
         var relationshipIds = new[]
         {
@@ -922,11 +1267,7 @@ public sealed class PurveshDemoSeeder
         var relationships = await _accountsContext.ReferralRelationships
             .Where(r => relationshipIds.Contains(r.Id))
             .ToListAsync(cancellationToken);
-        var deletedRelationshipsCount = relationships.Count;
-        if (relationships.Count > 0)
-        {
-            _accountsContext.ReferralRelationships.RemoveRange(relationships);
-        }
+        _accountsContext.ReferralRelationships.RemoveRange(relationships);
 
         var codeIds = new[]
         {
@@ -935,74 +1276,33 @@ public sealed class PurveshDemoSeeder
         var codes = await _accountsContext.ReferralCodes
             .Where(c => codeIds.Contains(c.Id))
             .ToListAsync(cancellationToken);
-        var deletedReferralCodesCount = codes.Count;
-        if (codes.Count > 0)
-        {
-            _accountsContext.ReferralCodes.RemoveRange(codes);
-        }
+        _accountsContext.ReferralCodes.RemoveRange(codes);
 
         var subscriptions = await _accountsContext.Subscriptions
             .Where(s => s.OwnerAccountId == PurveshOwnerAccountId)
             .ToListAsync(cancellationToken);
-        var deletedSubscriptionsCount = subscriptions.Count;
-        if (subscriptions.Count > 0)
-        {
-            _accountsContext.Subscriptions.RemoveRange(subscriptions);
-        }
+        _accountsContext.Subscriptions.RemoveRange(subscriptions);
 
         // OwnerAccountMemberships cascade from OwnerAccount via EF cascade
         // delete (configured in OwnerAccountConfiguration). Explicit removal
         // keeps the cleanup deterministic across configurations.
-        var ownerAccount = await _accountsContext.OwnerAccounts
-            .Include(o => o.Memberships)
-            .FirstOrDefaultAsync(o => o.Id == PurveshOwnerAccountId, cancellationToken);
-        var deletedOwnerAccountCount = 0;
-        var deletedOwnerMembershipsCount = 0;
+        var ownerMemberships = 0;
         if (ownerAccount is not null)
         {
-            deletedOwnerMembershipsCount = ownerAccount.Memberships.Count;
+            ownerMemberships = ownerAccount.Memberships.Count;
             _accountsContext.OwnerAccounts.Remove(ownerAccount);
-            deletedOwnerAccountCount = 1;
         }
 
         await _accountsContext.SaveChangesAsync(cancellationToken);
 
-        var users = await _userContext.Users
-            .Where(u => userPhones.Contains(u.Phone.Value))
-            .ToListAsync(cancellationToken);
-        var userIds = users
-            .Select(u => u.Id)
-            .ToHashSet();
-        var memberships = await _userContext.Memberships
-            .Where(m => userIds.Contains(m.UserId))
-            .ToListAsync(cancellationToken);
-        var deletedMembershipCount = memberships.Count;
-        if (memberships.Count > 0)
-        {
-            _userContext.Memberships.RemoveRange(memberships);
-        }
-
-        var deletedUserCount = users.Count;
-        if (users.Count > 0)
-        {
-            _userContext.Users.RemoveRange(users);
-        }
-
-        await _userContext.SaveChangesAsync(cancellationToken);
-
-        return $"Cleared {SeedVersion}: users={deletedUserCount}, farms={deletedFarmCount}, plots={deletedPlotCount}, " +
-               $"cropCycles={deletedCycleCount}, templates={deletedTemplateCount}, templateActivities={deletedTemplateActivityCount}, " +
-               $"plannedActivities={deletedPlannedCount}, dailyLogs={deletedDailyLogsCount}, dayLedgers={deletedDayLedgersCount}, " +
-               $"costEntries={deletedCostEntriesCount}, corrections={deletedCorrectionsCount}, attachments={deletedAttachmentsCount}, " +
-               $"priceConfigs={deletedPriceConfigsCount}, memberships={deletedMembershipCount}, " +
-               $"farmMemberships={deletedFarmMembershipsCount}, " +
-               $"farmInvitations={deletedFarmInvitationsCount}, farmJoinTokens={deletedFarmJoinTokensCount}, " +
-               $"ownerAccounts={deletedOwnerAccountCount}, ownerMemberships={deletedOwnerMembershipsCount}, " +
-               $"subscriptions={deletedSubscriptionsCount}, referralCodes={deletedReferralCodesCount}, " +
-               $"referralRelationships={deletedRelationshipsCount}, growthEvents={deletedGrowthEventsCount}, " +
-               $"benefitLedgerEntries={deletedBenefitEntriesCount}, " +
-               $"fieldOperators={deletedFieldOperatorsCount}, " +
-               $"fieldOperatorWorkRows={deletedFieldOperatorWorkRowsCount}.";
+        return new DemoAccountClearCounts(
+            OwnerAccounts: ownerAccount is null ? 0 : 1,
+            OwnerMemberships: ownerMemberships,
+            Subscriptions: subscriptions.Count,
+            ReferralCodes: codes.Count,
+            ReferralRelationships: relationships.Count,
+            GrowthEvents: growthEvents.Count,
+            BenefitLedgerEntries: benefitEntries.Count);
     }
 
     private async Task<User.Domain.Identity.User> EnsureUserAsync(
@@ -1295,6 +1595,27 @@ public sealed class PurveshDemoSeeder
             }
         }
 
+        var plannedAdded = await EnsurePlannedActivitiesAsync(
+            plotContexts, ownerUserId, nowUtc, PlannedSeedsByPlotKey, cancellationToken);
+
+        return new Phase3Stats(templatesAdded, activitiesAdded, plannedAdded);
+    }
+
+    /// <summary>
+    /// The planned-activity half of <see cref="EnsureScheduleTemplatesAndPlannedActivitiesAsync"/>,
+    /// split out so the one-shot re-seed can re-anchor the demo farm's planned work WITHOUT
+    /// touching <c>ssf.schedule_templates</c>, which are global rows rather than demo-farm rows.
+    /// Behaviour for the startup path is unchanged: <c>createdAt</c> is clamped to
+    /// <paramref name="nowUtc"/>, which every pre-existing seed already satisfied
+    /// (StartOffsetDays + DayOffset is never positive for them).
+    /// </summary>
+    private async Task<int> EnsurePlannedActivitiesAsync(
+        IReadOnlyList<PlotCycleContext> plotContexts,
+        UserId ownerUserId,
+        DateTime nowUtc,
+        IReadOnlyDictionary<string, PlannedActivitySeed[]> seedsByPlotKey,
+        CancellationToken cancellationToken)
+    {
         var contextByPlotKey = plotContexts.ToDictionary(c => c.Seed.Key, c => c, StringComparer.Ordinal);
         var cycleIds = contextByPlotKey.Values.Select(c => c.CropCycleId).ToHashSet();
 
@@ -1309,7 +1630,7 @@ public sealed class PurveshDemoSeeder
 
         var plannedAdded = 0;
 
-        foreach (var kvp in PlannedSeedsByPlotKey)
+        foreach (var kvp in seedsByPlotKey)
         {
             if (!contextByPlotKey.TryGetValue(kvp.Key, out var context))
             {
@@ -1328,7 +1649,7 @@ public sealed class PurveshDemoSeeder
 
                 var plannedId = CreateDeterministicGuid(
                     $"{SeedVersion}:planned:{context.Seed.Key}:{plannedSeed.DayOffset}:{Normalize(plannedSeed.ActivityName)}");
-                var createdAt = nowUtc.AddDays(context.Seed.StartOffsetDays + plannedSeed.DayOffset);
+                var createdAt = nowUtc.AddDays(Math.Min(0, context.Seed.StartOffsetDays + plannedSeed.DayOffset));
 
                 // Seeded as a locally-added activity owned by Purvesh (the demo
                 // farm's primary owner). The sentinel reason "seed:purvesh-demo"
@@ -1351,14 +1672,21 @@ public sealed class PurveshDemoSeeder
             }
         }
 
-        return new Phase3Stats(templatesAdded, activitiesAdded, plannedAdded);
+        return plannedAdded;
     }
 
+    /// <param name="retainedLogIds">
+    /// Re-seed only (null on the startup path): seed logs the re-seed RETAINED because a row
+    /// the seeder did not create depends on them. They are skipped entirely — neither re-created
+    /// nor given missing tasks/verifications — so a retained log stays exactly as found.
+    /// </param>
     private async Task<Phase4LogStats> EnsureDailyLogsAndVerificationsAsync(
         FarmId farmId,
         IReadOnlyDictionary<string, PlotCycleContext> contextByPlotKey,
-        IReadOnlyDictionary<string, User.Domain.Identity.User> usersByKey,
+        IReadOnlyDictionary<string, UserId> usersByKey,
         DateTime nowUtc,
+        DemoVerificationMode verificationMode,
+        IReadOnlySet<Guid>? retainedLogIds,
         CancellationToken cancellationToken)
     {
         var existingLogs = await _ssfContext.DailyLogs
@@ -1402,17 +1730,22 @@ public sealed class PurveshDemoSeeder
                 var logDate = DateOnly.FromDateTime(nowUtc.AddDays(dayOffset));
                 var occurredAtUtc = BuildIstAnchoredUtc(logDate, index);
                 var operatorKey = ResolveOperatorKey(routing, index);
-                var operatorUser = usersByKey[operatorKey];
+                var operatorUserId = usersByKey[operatorKey];
+                var logId = CreateDeterministicGuid($"{SeedVersion}:daily-log:{plotKey}:{dayOffset}");
+
+                if (retainedLogIds is not null && retainedLogIds.Contains(logId))
+                {
+                    continue;
+                }
 
                 if (!logsByKey.TryGetValue(idempotencyKey, out var log))
                 {
-                    var logId = CreateDeterministicGuid($"{SeedVersion}:daily-log:{plotKey}:{dayOffset}");
                     log = DailyLog.Create(
                         logId,
                         farmId,
                         context.PlotId,
                         context.CropCycleId,
-                        operatorUser.Id,
+                        operatorUserId,
                         logDate,
                         idempotencyKey,
                         null,
@@ -1443,18 +1776,26 @@ public sealed class PurveshDemoSeeder
                     tasksAdded++;
                 }
 
-                verificationsAdded += ApplyVerificationPattern(
-                    log,
-                    plotKey,
-                    dayOffset,
-                    index,
-                    offsets.Length,
-                    occurredAtUtc,
-                    usersByKey);
+                verificationsAdded += verificationMode == DemoVerificationMode.RecentPending
+                    ? ApplyRecentPendingVerificationPattern(
+                        log,
+                        plotKey,
+                        dayOffset,
+                        index,
+                        occurredAtUtc,
+                        usersByKey)
+                    : ApplyVerificationPattern(
+                        log,
+                        plotKey,
+                        dayOffset,
+                        index,
+                        offsets.Length,
+                        occurredAtUtc,
+                        usersByKey);
             }
         }
 
-        return new Phase4LogStats(logsAdded, tasksAdded, verificationsAdded);
+        return new Phase4LogStats(logsAdded, tasksAdded, verificationsAdded, logsByKey);
     }
 
     private int ApplyVerificationPattern(
@@ -1464,7 +1805,7 @@ public sealed class PurveshDemoSeeder
         int index,
         int totalLogs,
         DateTime occurredAtUtc,
-        IReadOnlyDictionary<string, User.Domain.Identity.User> usersByKey)
+        IReadOnlyDictionary<string, UserId> usersByKey)
     {
         var added = 0;
         var confirmedAtUtc = occurredAtUtc.AddHours(2);
@@ -1592,7 +1933,7 @@ public sealed class PurveshDemoSeeder
         string? reason,
         string actorUserKey,
         DateTime occurredAtUtc,
-        IReadOnlyDictionary<string, User.Domain.Identity.User> usersByKey)
+        IReadOnlyDictionary<string, UserId> usersByKey)
     {
         if (log.VerificationEvents.Any(v => v.Status == targetStatus))
         {
@@ -1613,20 +1954,32 @@ public sealed class PurveshDemoSeeder
             targetStatus,
             reason,
             actorRole,
-            usersByKey[actorUserKey].Id,
+            usersByKey[actorUserKey],
             occurredAtUtc);
 
         return 1;
     }
 
+    /// <param name="includePriceConfigs">
+    /// <c>ssf.price_configs</c> are GLOBAL rows (no farm column — every farm pulls them), so
+    /// only the startup demo seed may write them. The one-shot re-seed passes <c>false</c>.
+    /// </param>
+    /// <param name="costSeeds">The cost rows to ensure (v2 set, or v2 + demo labour payouts).</param>
+    /// <param name="retainedCostIds">
+    /// Re-seed only: seed cost entries retained because a row the seeder did not create depends on
+    /// them. Skipped entirely, including their corrections and day ledgers.
+    /// </param>
     private async Task<Phase4FinanceStats> EnsureFinanceAsync(
         FarmId farmId,
         IReadOnlyDictionary<string, PlotCycleContext> contextByPlotKey,
-        IReadOnlyDictionary<string, User.Domain.Identity.User> usersByKey,
+        IReadOnlyDictionary<string, UserId> usersByKey,
         DateTime nowUtc,
-        CancellationToken cancellationToken)
+        bool includePriceConfigs,
+        IReadOnlyList<CostEntrySeed> costSeeds,
+        IReadOnlySet<Guid>? retainedCostIds,
+        CancellationToken cancellationToken,
+        Func<Task>? flushAfterCostEntries = null)
     {
-        var costSeeds = BuildCostEntrySeeds();
         var costIdByKey = costSeeds.ToDictionary(
             seed => seed.Key,
             seed => CreateDeterministicGuid($"{SeedVersion}:cost:{seed.Key}"),
@@ -1670,7 +2023,7 @@ public sealed class PurveshDemoSeeder
                 costSeed.Amount,
                 "INR",
                 entryDate,
-                usersByKey[costSeed.CreatedByUserKey].Id,
+                usersByKey[costSeed.CreatedByUserKey],
                 null,
                 createdAtUtc,
                 // Stated, not assumed. Every row in `costSeeds` is authored
@@ -1686,6 +2039,14 @@ public sealed class PurveshDemoSeeder
             _ssfContext.CostEntries.Add(entry);
             costById[costId] = entry;
             costsAdded++;
+        }
+
+        // Re-seed only (null on the startup path, which keeps its single save): under the
+        // app role, ssf.finance_corrections' tenant policy checks its cost entry with an
+        // EXISTS, so the cost rows must be written before their corrections.
+        if (flushAfterCostEntries is not null)
+        {
+            await flushAfterCostEntries();
         }
 
         // v2 (post-supervisor Option C): re-anchored from p1_pesticide_03/06
@@ -1724,6 +2085,7 @@ public sealed class PurveshDemoSeeder
             }
 
             if (!costIdByKey.TryGetValue(correctionSeed.CostKey, out var costId) ||
+                retainedCostIds?.Contains(costId) == true ||
                 !costById.TryGetValue(costId, out var costEntry))
             {
                 continue;
@@ -1745,7 +2107,7 @@ public sealed class PurveshDemoSeeder
                 correctedAmount,
                 "INR",
                 correctionSeed.Reason,
-                usersByKey[correctionSeed.CorrectedByUserKey].Id,
+                usersByKey[correctionSeed.CorrectedByUserKey],
                 correctedAtUtc);
 
             _ssfContext.FinanceCorrections.Add(correction);
@@ -1753,7 +2115,7 @@ public sealed class PurveshDemoSeeder
             correctionsAdded++;
         }
 
-        var dayLedgerSeeds = new[] { "farmwide_01", "farmwide_02", "farmwide_03", "farmwide_04", "farmwide_05" };
+        var dayLedgerSeeds = SeedDayLedgerKeys;
         var sourceCostIds = dayLedgerSeeds
             .Where(costIdByKey.ContainsKey)
             .Select(key => costIdByKey[key])
@@ -1769,6 +2131,7 @@ public sealed class PurveshDemoSeeder
         {
             if (!costIdByKey.TryGetValue(dayLedgerSeed, out var sourceCostId) ||
                 existingDayLedgerSources.Contains(sourceCostId) ||
+                retainedCostIds?.Contains(sourceCostId) == true ||
                 !costById.TryGetValue(sourceCostId, out var sourceCost))
             {
                 continue;
@@ -1790,7 +2153,7 @@ public sealed class PurveshDemoSeeder
                 sourceCost.Id,
                 sourceCost.EntryDate,
                 "ByAcreage",
-                usersByKey["purvesh"].Id,
+                usersByKey["purvesh"],
                 allocations,
                 createdAtUtc);
 
@@ -1798,7 +2161,12 @@ public sealed class PurveshDemoSeeder
             dayLedgersAdded++;
         }
 
-        var purveshUserId = usersByKey["purvesh"].Id;
+        if (!includePriceConfigs)
+        {
+            return new Phase4FinanceStats(costsAdded, correctionsAdded, dayLedgersAdded, 0);
+        }
+
+        var purveshUserId = usersByKey["purvesh"];
         var priceItemNames = PriceConfigSeeds
             .Select(seed => seed.ItemName)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -1852,7 +2220,7 @@ public sealed class PurveshDemoSeeder
 
     private async Task<Phase5AttachmentStats> EnsureAttachmentsAsync(
         FarmId farmId,
-        IReadOnlyDictionary<string, User.Domain.Identity.User> usersByKey,
+        IReadOnlyDictionary<string, UserId> usersByKey,
         DateTime nowUtc,
         CancellationToken cancellationToken)
     {
@@ -1886,7 +2254,7 @@ public sealed class PurveshDemoSeeder
                 seed.LinkedEntityType,
                 seed.FileName,
                 "image/jpeg",
-                usersByKey[seed.CreatedByUserKey].Id,
+                usersByKey[seed.CreatedByUserKey],
                 createdAtUtc);
 
             var uploadedAtUtc = createdAtUtc.AddMinutes(5);
@@ -2677,7 +3045,11 @@ public sealed class PurveshDemoSeeder
 
     private sealed record Phase3Stats(int TemplatesAdded, int TemplateActivitiesAdded, int PlannedActivitiesAdded);
 
-    private sealed record Phase4LogStats(int LogsAdded, int TasksAdded, int VerificationsAdded);
+    private sealed record Phase4LogStats(
+        int LogsAdded,
+        int TasksAdded,
+        int VerificationsAdded,
+        IReadOnlyDictionary<string, DailyLog> LogsByIdempotencyKey);
 
     private sealed record Phase4FinanceStats(
         int CostEntriesAdded,
