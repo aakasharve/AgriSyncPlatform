@@ -67,18 +67,28 @@ public static class PurveshDemoReseedCommand
             // RlsIdentityScope (admin elevation grants NO row visibility on its own).
             provider.GetRequiredService<TenantContext>().ElevateToAdminCrossTenant();
 
-            foreach (var (name, context) in new (string, DbContext)[]
-                     {
-                         ("UserDbContext", provider.GetRequiredService<UserDbContext>()),
-                         ("ShramSafalDbContext", provider.GetRequiredService<ShramSafalDbContext>()),
-                     })
+            // The schema must match this binary. A Development database is built by
+            // EnsureCreated (Program.InitializeApplicationDataAsync), which writes no migration
+            // history, so the check is only meaningful — and only run — outside Development.
+            if (provider.GetService<IHostEnvironment>()?.IsDevelopment() == true)
             {
-                var pending = (await context.Database.GetPendingMigrationsAsync(cancellationToken)).ToArray();
-                if (pending.Length > 0)
+                await output.WriteLineAsync($"{Flag}: Development — migration-history check skipped.");
+            }
+            else
+            {
+                foreach (var (name, context) in new (string, DbContext)[]
+                         {
+                             ("UserDbContext", provider.GetRequiredService<UserDbContext>()),
+                             ("ShramSafalDbContext", provider.GetRequiredService<ShramSafalDbContext>()),
+                         })
                 {
-                    throw new PurveshDemoReseedRefusedException(
-                        $"{name} has {pending.Length} pending migration(s) ({string.Join(", ", pending)}). "
-                        + "The re-seed never migrates; run the normal deployment first.");
+                    var pending = (await context.Database.GetPendingMigrationsAsync(cancellationToken)).ToArray();
+                    if (pending.Length > 0)
+                    {
+                        throw new PurveshDemoReseedRefusedException(
+                            $"{name} has {pending.Length} pending migration(s) ({string.Join(", ", pending)}). "
+                            + "The re-seed never migrates; run the normal deployment first.");
+                    }
                 }
             }
 
