@@ -632,6 +632,9 @@ export type { ProvenanceTag, ScoreContext, VlogScoreDimension, VlogScore } from 
 // DAILY LOG (The Aggregate Root)
 // =============================================================================
 
+/** Which door captured a record — `create_daily_log.zod.ts` `captureScope` (B002). */
+export type LogCaptureScope = 'labour';
+
 /**
  * DailyLog - The immutable execution record for a single day.
  * This is the "truth" of what happened on the farm.
@@ -663,14 +666,6 @@ export interface DailyLog {
     observations?: ObservationNote[];  // Capture net for unstructured content
     plannedTasks?: PlannedTask[];      // Future intent items
     disturbance?: DisturbanceEvent;
-    /**
-     * Which door wrote this record, when that door limits what it may say.
-     * `'labour'` = the हजेरी door's बरोबर: the record carries labour only
-     * (founder ruling 2026-08-31). Absent = an ordinary log. Set only by
-     * `toAttendanceSubmission` on a NEW record. Not sent to the server by this
-     * client yet; the sync contract field arrives with its own change.
-     */
-    captureScope?: 'labour';
 
     // History & Audit (Fix-12)
     deletion?: LogDeletion; // If present, treated as deleted
@@ -690,6 +685,9 @@ export interface DailyLog {
         totalActivityExpenses?: number;
         grandTotal: number;
     };
+
+    /** B002 — `'labour'` for a हजेरी-door save (server derives labour only); read at queue time, never pulled back. */
+    captureScope?: LogCaptureScope;
 
     /**
      * Understanding Meter score — stamped at save time (W1.P3.T1, task 1c).

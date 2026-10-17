@@ -32,7 +32,7 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
 
     public async Task<DerivationOutcome> DeriveAsync(
         DailyLog log, AiJob sourceJob, IIdGenerator ids, IClock clock,
-        bool deriveLabour = true, CancellationToken ct = default)
+        bool deriveLabour = true, bool labourOnly = false, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(log);
         ArgumentNullException.ThrowIfNull(sourceJob);
@@ -56,12 +56,12 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         // nor softens it.
         return await DeriveCoreAsync(
             log, sourceJob.NormalizedResultJson, provenance, sourceJob.Id, ids, clock,
-            deriveLabour, ct);
+            deriveLabour, labourOnly, ct);
     }
 
     public Task<DerivationOutcome> DeriveFromManualDraftAsync(
         DailyLog log, string manualWireJson, string? appVersion,
-        IIdGenerator ids, IClock clock, bool deriveLabour, CancellationToken ct = default)
+        IIdGenerator ids, IClock clock, bool deriveLabour, bool labourOnly = false, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(log);
 
@@ -91,7 +91,7 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         // server assumption over a duration the farmer had stated outright.
         return DeriveCoreAsync(
             log, manualWireJson, provenance, log.Id, ids, clock,
-            deriveLabour, ct);
+            deriveLabour, labourOnly, ct);
     }
 
     /// <summary>
@@ -105,9 +105,13 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
     /// ONLY the labour branch. Required (no default) so neither caller can acquire
     /// this behaviour by omission.
     /// </param>
+    /// <param name="labourOnly">
+    /// B002 — the हजेरी-door gate: every family EXCEPT labour is skipped. Required here
+    /// for the same reason as <paramref name="deriveLabour"/>.
+    /// </param>
     private async Task<DerivationOutcome> DeriveCoreAsync(
         DailyLog log, string? wireJson, Provenance provenance, Guid sourceId,
-        IIdGenerator ids, IClock clock, bool deriveLabour, CancellationToken ct)
+        IIdGenerator ids, IClock clock, bool deriveLabour, bool labourOnly, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(ids);
         ArgumentNullException.ThrowIfNull(clock);
@@ -141,8 +145,15 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         // DerivedPlotScope / RoutineIsRepresentableForScope.
         var derivedPlotScope = DerivedPlotScope(log);
 
+        // B002 (founder ruling 2026-08-31) — at the हजेरी door (`labourOnly`) every
+        // branch below EXCEPT labour is skipped: the same utterance may have parsed a
+        // spray or an irrigation, but the farmer confirmed only WHO came, so nothing
+        // else may become a record. Each gate sits on the branch it guards, so a new
+        // family added later has to choose its door explicitly.
+
         // ── inputs → FarmOperation(application) + ApplicationInputItem children ──
-        if (root.TryGetProperty("inputs", out var inputs) && inputs.ValueKind == JsonValueKind.Array)
+        if (!labourOnly
+            && root.TryGetProperty("inputs", out var inputs) && inputs.ValueKind == JsonValueKind.Array)
         {
             var ordinal = 0;
             foreach (var input in inputs.EnumerateArray())
@@ -277,7 +288,9 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         // First derived irrigation entry per (farm, plot, "irrigation") also seeds
         // the RoutineMemory upsert below (WP-2d / D5).
         var irrigationRoutine = default(RoutineSeed?);
-        if (root.TryGetProperty("irrigation", out var irrigation) && irrigation.ValueKind == JsonValueKind.Array)
+        // labourOnly also leaves `irrigationRoutine` null, so no routine is seeded either.
+        if (!labourOnly
+            && root.TryGetProperty("irrigation", out var irrigation) && irrigation.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in irrigation.EnumerateArray())
             {
@@ -374,7 +387,8 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         }
 
         // ── machinery → MachineryUsage (daily_logs child) ──────────────────────
-        if (root.TryGetProperty("machinery", out var machinery) && machinery.ValueKind == JsonValueKind.Array)
+        if (!labourOnly
+            && root.TryGetProperty("machinery", out var machinery) && machinery.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in machinery.EnumerateArray())
             {
@@ -400,7 +414,8 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         }
 
         // ── observations → ObservationEvent (daily_logs child) ─────────────────
-        if (root.TryGetProperty("observations", out var observations) && observations.ValueKind == JsonValueKind.Array)
+        if (!labourOnly
+            && root.TryGetProperty("observations", out var observations) && observations.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in observations.EnumerateArray())
             {
@@ -428,7 +443,12 @@ public sealed class LedgerDerivationService(IShramSafalRepository repository) : 
         }
 
         // ── disturbance → DisturbanceEvent (single object, daily_logs child) ────
-        if (root.TryGetProperty("disturbance", out var disturbance) && disturbance.ValueKind == JsonValueKind.Object)
+        // NOTE (B002 vs spec D11): the client's attendance draft (attendanceDraft.ts)
+        // still KEEPS the disturbance locally, but no हजेरी-door surface shows it to the
+        // farmer before बरोबर, so under labourOnly it is not derived here. Re-admitting
+        // it is a one-line change to this gate once the confirm screen shows it.
+        if (!labourOnly
+            && root.TryGetProperty("disturbance", out var disturbance) && disturbance.ValueKind == JsonValueKind.Object)
         {
             var reason = ReadString(disturbance, "reason");
             if (!string.IsNullOrWhiteSpace(reason))

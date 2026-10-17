@@ -231,8 +231,6 @@ export class LogFactory {
             observations: mirroredObservations,
             plannedTasks: finalPlannedTasks,
             disturbance: data.disturbance,
-            // See `DailyLog.captureScope`; conditional so ordinary records are unchanged.
-            ...(data.captureScope ? { captureScope: data.captureScope } : {}),
             fullTranscript: data.fullTranscript,
             manualTotalCost: data.manualTotalCost,
             financialSummary: {
@@ -249,6 +247,8 @@ export class LogFactory {
                 // BUGFIX_2026-07-19 — see ManualEntryData.provenance doc comment.
                 provenance: data.provenance
             },
+            // B002 — present only for a हजेरी-door save; see ManualEntryData.captureScope.
+            ...(data.captureScope === 'labour' && { captureScope: 'labour' as const }),
             verification: {
                 status: verificationStatus,
                 required: !isOwner,

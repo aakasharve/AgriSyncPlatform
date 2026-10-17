@@ -315,7 +315,8 @@ describe('ManualEntry save — the corrections POST carries no invented value', 
 /**
  * PR #82 re-review R2 (spec: 2026-08-25-prod-cutover-waves): the बदल करा form on
  * the labour door saves a NEW record with `captureScope: 'labour'`, so the server
- * takes only labour from the voice job behind it (mapping lands with PR #83).
+ * takes only labour from the voice job behind it (`enqueueLogsForSync` puts it
+ * on the queued create_daily_log; PR #83 contract).
  * What the form submits is otherwise unchanged; an ordinary form adds no key.
  */
 describe('ManualEntry save — captureScope from the labour door', () => {

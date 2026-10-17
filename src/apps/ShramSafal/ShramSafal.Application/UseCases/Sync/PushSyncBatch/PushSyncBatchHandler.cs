@@ -27,6 +27,7 @@ using ShramSafal.Application.UseCases.Finance.AddCostEntry;
 using ShramSafal.Application.UseCases.Finance.AllocateGlobalExpense;
 using ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
 using ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion;
+using ShramSafal.Application.UseCases.Labour;
 using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
@@ -871,7 +872,8 @@ public sealed class PushSyncBatchHandler(
         // LABOUR_PHASE2 P2.2 adds "scope" and "plotIds" here, in lockstep with
         // sync-contract/schemas/payloads/create_daily_log.zod.ts and the
         // generated CreateDailyLogPayload record.
-        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "scope", "plotIds", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId", "labour", "manualDraft"))
+        // B002 adds "captureScope" (which door captured the record), same lockstep.
+        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "scope", "plotIds", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId", "labour", "manualDraft", "captureScope"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -887,6 +889,15 @@ public sealed class PushSyncBatchHandler(
         if (ValidateManualDraft(payload) is { } draftFailure)
         {
             return draftFailure;
+        }
+
+        // spec: 2026-08-25-prod-cutover-waves — the names a farmer gave for each
+        // engagement. Same boundary, same posture as the manual draft above:
+        // shape and size only, loud on violation, ABSENT = skipped, which is what
+        // every shipped APK sends (none has ever carried the field).
+        if (ValidateLabourWorkerNames(payload) is { } namesFailure)
+        {
+            return namesFailure;
         }
 
         var request = DeserializePayload<CreateDailyLogPayload>(payload);
@@ -934,6 +945,27 @@ public sealed class PushSyncBatchHandler(
                 return MutationExecutionOutcome.Failure(
                     "ShramSafal.SyncInvalidPayload",
                     "create_daily_log payload carries an unrecognised scope.");
+        }
+
+        // B002 (PR #82 review), founder ruling 2026-08-31 — which door captured the
+        // record. Absent => the whole parse, which is what every older client means.
+        // "labour" => derive the labour bucket only. Anything else is REFUSED, never
+        // read as absent: an unknown door silently widened to the whole parse would
+        // write exactly the records this field exists to keep out (P1). Exact match,
+        // like the zod enum it mirrors. Checked here, before any write is staged.
+        DailyLogCaptureScope captureScope;
+        switch (request.CaptureScope)
+        {
+            case null:
+                captureScope = DailyLogCaptureScope.WholeDay;
+                break;
+            case "labour":
+                captureScope = DailyLogCaptureScope.Labour;
+                break;
+            default:
+                return MutationExecutionOutcome.Failure(
+                    "ShramSafal.SyncInvalidPayload",
+                    "create_daily_log payload carries an unrecognised captureScope.");
         }
 
         // Fix 1 (ai-intelligence-plan-2026-06-25) — establish the membership-
@@ -995,7 +1027,9 @@ public sealed class PushSyncBatchHandler(
                 PlotIds: request.PlotIds,
                 // task-0b — the farmer's typed day. Null on voice confirms and on every
                 // client older than this contract, which is the pre-task-0b path exactly.
-                ManualDraft: request.ManualDraft),
+                ManualDraft: request.ManualDraft,
+                // B002 — the door, mapped strictly above.
+                CaptureScope: captureScope),
             ct);
 
         return ToOutcome(result);
@@ -1067,6 +1101,101 @@ public sealed class PushSyncBatchHandler(
                 return MutationExecutionOutcome.Failure(
                     "ShramSafal.SyncInvalidPayload",
                     $"create_daily_log manualDraft bucket '{bucket.Name}' must be an array.");
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// spec: 2026-08-25-prod-cutover-waves. Boundary check for the OPTIONAL
+    /// <c>labour[].workerNames</c> on <c>create_daily_log</c>: when present it must be an
+    /// array of strings, at most <see cref="LabourAssignmentFactory.MaxWorkerNamesPerEngagement"/>
+    /// long, each name at most <see cref="LabourAssignmentFactory.MaxWorkerNameLength"/>
+    /// after trimming. Returns <c>null</c> when every engagement is acceptable, or the
+    /// failure outcome to return to the client.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>What it does NOT police, on purpose.</b> A blank or <c>null</c> entry is
+    /// "no name", not malformed: <c>LabourAssignment.Create</c>'s own write boundary
+    /// already sheds it (B002), so rejecting the farmer's whole day over it would let an
+    /// optional field reject a record (P9). Names out-numbering the stated headcount are
+    /// accepted too: the count is the farmer's statement and names are an overlay on it
+    /// (P7), so a mismatch is something to show him, never a reason to refuse him.</para>
+    /// <para><b>Why loud, not trimmed.</b> Silently dropping names is the very defect
+    /// this field was added to close, so an over-bound list is refused whole, exactly as
+    /// an over-sized manual draft is. The bounds sit far above any real dictation.</para>
+    /// <para>Property names are matched case-insensitively because
+    /// <see cref="SerializerOptions"/> deserializes them that way: a check the
+    /// deserializer can be steered around by casing is not a boundary.</para>
+    /// </remarks>
+    private static MutationExecutionOutcome? ValidateLabourWorkerNames(JsonElement payload)
+    {
+        if (payload.ValueKind != JsonValueKind.Object)
+        {
+            return null; // PayloadHasOnly has already refused a non-object payload.
+        }
+
+        foreach (var labour in payload.EnumerateObject())
+        {
+            // Not an array: a shape DeserializePayload owns, exactly as before this check.
+            if (!string.Equals(labour.Name, "labour", StringComparison.OrdinalIgnoreCase)
+                || labour.Value.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var item in labour.Value.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                foreach (var field in item.EnumerateObject())
+                {
+                    if (!string.Equals(field.Name, "workerNames", StringComparison.OrdinalIgnoreCase)
+                        || field.Value.ValueKind == JsonValueKind.Null)
+                    {
+                        continue; // absent and null both mean "no names given".
+                    }
+
+                    if (field.Value.ValueKind != JsonValueKind.Array)
+                    {
+                        return MutationExecutionOutcome.Failure(
+                            "ShramSafal.SyncInvalidPayload",
+                            "create_daily_log labour[].workerNames must be an array of strings.");
+                    }
+
+                    if (field.Value.GetArrayLength() > LabourAssignmentFactory.MaxWorkerNamesPerEngagement)
+                    {
+                        return MutationExecutionOutcome.Failure(
+                            "ShramSafal.SyncInvalidPayload",
+                            $"create_daily_log labour[].workerNames exceeds {LabourAssignmentFactory.MaxWorkerNamesPerEngagement} names.");
+                    }
+
+                    foreach (var name in field.Value.EnumerateArray())
+                    {
+                        if (name.ValueKind == JsonValueKind.Null)
+                        {
+                            continue;
+                        }
+
+                        if (name.ValueKind != JsonValueKind.String)
+                        {
+                            return MutationExecutionOutcome.Failure(
+                                "ShramSafal.SyncInvalidPayload",
+                                "create_daily_log labour[].workerNames must be an array of strings.");
+                        }
+
+                        if (name.GetString()!.Trim().Length > LabourAssignmentFactory.MaxWorkerNameLength)
+                        {
+                            return MutationExecutionOutcome.Failure(
+                                "ShramSafal.SyncInvalidPayload",
+                                $"create_daily_log labour[].workerNames has a name longer than {LabourAssignmentFactory.MaxWorkerNameLength} characters.");
+                        }
+                    }
+                }
             }
         }
 

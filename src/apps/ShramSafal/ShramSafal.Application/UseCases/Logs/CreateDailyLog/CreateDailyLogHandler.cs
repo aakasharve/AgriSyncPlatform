@@ -440,10 +440,17 @@ public sealed class CreateDailyLogHandler(
         // When the flag was OFF the NormalizedResultJson has no provenance keys
         // so ExtractFieldProvenanceJson returns "[]" and EvidenceSourcesJson
         // stays at its "[]" default — byte-identical to pre-W1.P2 behaviour.
+        // B002 (PR #82 review), founder ruling 2026-08-31 — "the labour door saves labour
+        // only". At the हजेरी door the job link and its Voice provenance above stay
+        // exactly as they are (the parse DID produce this record), but nothing other
+        // than labour may be recorded from it: the evidence map, the day outcome and
+        // the side-car derivation below all read this one flag.
+        var labourOnly = command.CaptureScope == DailyLogCaptureScope.Labour;
+
         if (sourceJobForEvidence?.NormalizedResultJson is { } normalizedJson
             && !string.IsNullOrWhiteSpace(normalizedJson))
         {
-            var evidenceJson = ExtractFieldProvenanceJson(normalizedJson);
+            var evidenceJson = ExtractFieldProvenanceJson(normalizedJson, labourOnly);
             log.SetEvidenceSourcesJson(evidenceJson);
         }
 
@@ -458,7 +465,9 @@ public sealed class CreateDailyLogHandler(
         // swallowed. A declaration is canonical data the farmer supplied, and canonical
         // data never lives in a best-effort side-car; on the side-car path a rolled-back
         // savepoint would silently discard the only record that his day was a rest day.
-        log.SetDayOutcome(command.ManualDraft?.DayOutcome);
+        // B002 — the हजेरी door offers no day declaration, so a labour-scoped record
+        // stamps none: NULL is the honest "he did not say" (P4).
+        log.SetDayOutcome(labourOnly ? null : command.ManualDraft?.DayOutcome);
 
         // ── spec: dfes-companion-2026-07-11 (wave-1.3) ───────────────────────────
         // THE SERVER HALF of the owner-confirm fix. The device stamps the owner's own
@@ -573,6 +582,17 @@ public sealed class CreateDailyLogHandler(
                     // Descriptive only — never touches the money fields above.
                     shift: LabourAssignmentFactory.MapLabourShift(item.Shift),
                     task: item.Task,
+                    // spec: 2026-08-25-prod-cutover-waves — the names the farmer
+                    // gave for this crew ("बरोबर doesn't save the name"). The column
+                    // (ssf.labour_assignments.worker_names_json) has existed since
+                    // 20260718132540 and the voice path already fills it; the
+                    // manual/attendance path dropped the names HERE because the wire
+                    // had no member for them. IDENTITY, not quantity (P7): workerCount
+                    // above is resolved without ever looking at this list, and
+                    // LabourAssignment.Create trims and sheds blanks (B002). Bounds
+                    // are enforced at the transport boundary (PushSyncBatchHandler,
+                    // CreateDailyLogValidator), never by trimming the list here.
+                    workerNames: item.WorkerNames,
                     // LABOUR_PHASE2 migration ③ (founder decision O-3). `notes`
                     // has been on the wire since Labour V1 Task 5
                     // (create_daily_log.zod.ts) and was DROPPED HERE, on this
@@ -921,9 +941,14 @@ public sealed class CreateDailyLogHandler(
             // already carried structured labour[] (staged as canonical Phase-1 rows
             // above). Everything else in the blob — farm operations, inputs,
             // irrigation, machinery, observations, disturbance — still derives.
+            //
+            // B002 — at the हजेरी door (CaptureScope.Labour) the labour branch is the
+            // ONLY one allowed to derive; with structured labour[] also present that
+            // means nothing derives at all, and the job link stays for provenance.
             await ledgerDerivation.DeriveAsync(
                 log, sourceJobForEvidence, idGenerator, clock,
                 deriveLabour: command.Labour is not { Count: > 0 },
+                labourOnly: command.CaptureScope == DailyLogCaptureScope.Labour,
                 ct: ct);
         }
         else if (ManualDraftNormalizer.Normalize(command.ManualDraft) is { } manualWireJson)
@@ -952,9 +977,12 @@ public sealed class CreateDailyLogHandler(
             // eight-hour server assumption over the hours he actually stated. Everything
             // else in the draft — inputs, irrigation, machinery, observations,
             // disturbance — still derives.
+            // B002 — the same हजेरी-door gate as the voice branch: a labour-scoped
+            // manual draft (the बदल करा edit surface) records labour only.
             await ledgerDerivation.DeriveFromManualDraftAsync(
                 log, manualWireJson, log.Provenance.AppVersion, idGenerator, clock,
                 deriveLabour: command.Labour is not { Count: > 0 },
+                labourOnly: command.CaptureScope == DailyLogCaptureScope.Labour,
                 ct: ct);
         }
 
@@ -998,7 +1026,11 @@ public sealed class CreateDailyLogHandler(
         "plannedTasks", "cropActivities", "machinery", "activityExpenses"
     ];
 
-    private static string ExtractFieldProvenanceJson(string normalizedResultJson)
+    // B002 — at the हजेरी door only the labour array's provenance is recorded, so the
+    // evidence map can never vouch for a spray or irrigation that was never written.
+    private static readonly string[] LabourOnlyEvidenceArrayKeys = ["labour"];
+
+    private static string ExtractFieldProvenanceJson(string normalizedResultJson, bool labourOnly)
     {
         try
         {
@@ -1009,7 +1041,7 @@ public sealed class CreateDailyLogHandler(
             }
 
             var fields = new JsonArray();
-            foreach (var arrayKey in EvidenceArrayKeys)
+            foreach (var arrayKey in labourOnly ? LabourOnlyEvidenceArrayKeys : EvidenceArrayKeys)
             {
                 if (root[arrayKey] is not JsonArray items)
                 {

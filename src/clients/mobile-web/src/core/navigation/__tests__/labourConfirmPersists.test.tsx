@@ -20,7 +20,11 @@
  *     tasks, its dayOutcome, a disturbance, the transcript) is not saved;
  *   - B005: only the provenance BOUND TO THIS DRAFT is used, never the voice
  *     state's last one (which an edit opened from Reflect would inherit);
- *   - captureScope: the record says it came from the labour door (not sent yet).
+ *   - captureScope: the record says it came from the labour door, and the
+ *     queued create_daily_log carries it (the PR #83 contract: the server then
+ *     takes only labour from the voice job);
+ *   - the founder's "save the name" proof: the queued labour item carries the
+ *     worker names, trimmed and blanks shed, and the headcount is unchanged.
  *
  * WHY THIS RUNS THE REAL CHAIN. The payload is taken from the REAL
  * `renderLogView` wiring and run through the same production chain
@@ -144,6 +148,13 @@ function pressConfirm(draftLog: AgriLogResponse): { payload: Record<string, unkn
 /** A parse draft, bound to its own provenance the way useVoiceRecorder binds it. */
 const parsedDraft = () => bindDraftProvenance(parse(), OWN);
 
+/** The same parse as dictation really arrives: padded names and a blank one. */
+const parsedDraftWithPadding = () => {
+    const raw = parse();
+    raw.labour = [{ ...raw.labour[0], workerNames: [' विलास जाधव ', 'संतू रोकडे', '   ', 'बाळू कदम', 'अक्षय घाडगे '] }];
+    return bindDraftProvenance(raw, OWN);
+};
+
 async function seedReferenceData() {
     const db = getDatabase();
     await db.farms.bulkPut([{ id: FARM_ID, payload: { id: FARM_ID }, updatedAt: '2026-08-01T00:00:00.000Z' }] as never);
@@ -191,8 +202,8 @@ describe('बरोबर on the labour door (APK 1.0.14 report + PR #82 review)
         expect(reflectEdit.payload.date).toBe(getDateKey());
     });
 
-    it('end to end: QUEUED as a valid create_daily_log for the capture day, labour only, names readable', async () => {
-        const { payload } = pressConfirm(parsedDraft());
+    it('end to end: QUEUED as a valid create_daily_log for the capture day, labour only, WITH the names', async () => {
+        const { payload } = pressConfirm(parsedDraftWithPadding());
 
         // The production chain handleManualSubmit runs for a new log.
         const logs = LogFactory.createFromManualEntry(payload as never, plotScope, [grapes], owner);
@@ -206,19 +217,26 @@ describe('बरोबर on the labour door (APK 1.0.14 report + PR #82 review)
         const rows = await getDatabase().mutationQueue
             .where('mutationType').equals(SyncMutationName.CreateDailyLog).toArray();
         expect(rows).toHaveLength(1);
-        const wire = rows[0].payload as Record<string, unknown> & { labour?: unknown[] };
+        const wire = rows[0].payload as Record<string, unknown> & {
+            labour?: Array<{ workerNames?: string[]; workerCount?: number }>;
+        };
         expect(validatePayload(SyncMutationName.CreateDailyLog, wire)).toEqual({ ok: true });
         expect(wire.logDate).toBe(CAPTURE_DAY);
         expect(wire.sourceAiJobId).toBe(OWN.sourceAiJobId);
+        // The server takes only labour from the voice job behind this record.
+        expect(wire.captureScope).toBe('labour');
+        // "बरोबर doesn't save the name": the names now travel, trimmed, the blank shed.
         expect(wire.labour).toHaveLength(1);
-        // Not on the wire until the contract carries it (PR #83).
-        expect(wire).not.toHaveProperty('captureScope');
+        expect(wire.labour![0].workerNames).toEqual(NAMES);
+        // P7: names never change the count; the stated 4 stays 4.
+        expect(wire.labour![0].workerCount).toBe(4);
 
         // Re-read through the production repository.
         const [stored] = await DexieLogsRepository.getInstance().getAll();
         expect(stored.date).toBe(CAPTURE_DAY);
         expect(stored.captureScope).toBe('labour');
-        expect(stored.labour[0].workerNames).toEqual(NAMES); // queued work: the farmer's own names are shown
+        // Queued work: the farmer's own names are shown (kept as dictated; the wire trims them).
+        expect((stored.labour[0].workerNames ?? []).map(n => n.trim()).filter(Boolean)).toEqual(NAMES);
         // B004 end to end: nothing the card did not show reached the record.
         expect(stored.observations ?? []).toEqual([]);
         expect(stored.plannedTasks ?? []).toEqual([]);

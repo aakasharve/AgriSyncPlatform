@@ -10,6 +10,7 @@ import {
     LogTimelineEntry, PlannedTask, DailyLog, DisturbanceEvent
 } from '../../../../types';
 import type { LogProvenance } from '../../../../domain/ai/LogProvenance';
+import type { LogCaptureScope } from '../../../../domain/types/log.types';
 import type { FarmWideDaySummary } from '../../../../app/helpers/appContentDailyCounts';
 
 export const SAFE_DEFAULTS: LedgerDefaults = {
@@ -103,7 +104,7 @@ export interface ManualEntryProps {
          */
         provenance?: LogProvenance | null;
         /** Present only on a NEW record saved from the labour door (see `captureScope` below). */
-        captureScope?: 'labour';
+        captureScope?: LogCaptureScope;
     }) => void;
     /**
      * The form was opened from the labour (हजेरी) door. A NEW record saved here
@@ -111,7 +112,7 @@ export interface ManualEntryProps {
      * server takes only labour from the voice job behind it. What the form
      * submits is unchanged; only the server's derivation from the job is scoped.
      */
-    captureScope?: 'labour';
+    captureScope?: LogCaptureScope;
     disabled?: boolean;
     initialData?: AgriLogResponse | null;
     provenance?: LogProvenance | null;

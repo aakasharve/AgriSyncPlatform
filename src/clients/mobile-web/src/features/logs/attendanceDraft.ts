@@ -34,6 +34,7 @@
  */
 import type { AgriLogResponse } from '../../types';
 import type { LogProvenance } from '../../domain/ai/LogProvenance';
+import type { LogCaptureScope } from '../../domain/types/log.types';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 
 /**
@@ -101,7 +102,7 @@ export interface AttendanceSubmission {
     /** New record only, and only the draft's OWN parse provenance. */
     provenance?: LogProvenance;
     /** New record only. See `DailyLog.captureScope`. */
-    captureScope?: 'labour';
+    captureScope?: LogCaptureScope;
     /** Edit only: the record whose labour this replaces. */
     originalLogId?: string;
 }

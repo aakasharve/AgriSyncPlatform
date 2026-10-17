@@ -50,6 +50,10 @@ import { enqueueLogsForSync } from '../logSyncMutationService';
 // NOT mocked, deliberately — this is the real canonical validator.
 import { validatePayload } from '../../../../infrastructure/sync/PayloadValidator';
 import { SyncMutationName } from '../../../../infrastructure/sync/SyncMutationCatalog';
+import {
+    WORKER_NAME_MAX_LENGTH,
+    WORKER_NAMES_MAX_PER_ENGAGEMENT,
+} from '../../../../../../../../sync-contract/schemas/payloads/create_daily_log.zod';
 
 const UUID_A = '11111111-1111-4111-8111-111111111111';
 const UUID_B = '22222222-2222-4222-8222-222222222222';
@@ -368,5 +372,154 @@ describe('enqueueLogsForSync — a malformed labour number must never block the 
         expect(item.femaleCount).toBe(0);
         expect(item.workerCount).toBe(0);
         expect(item.totalCost).toBe(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// spec: 2026-08-25-prod-cutover-waves — THE NAMES THE FARMER GAVE.
+//
+// "बरोबर doesn't save the name": the farmer named his workers, tapped बरोबर, and
+// the names were gone after the next sync. They never left the phone — this
+// payload had no member for them, so the server stored `[]` and the pull that
+// acknowledged the log replaced the local names with that `[]`.
+//
+// Two rules pinned here, both from the doctrine:
+//   P7 — names are IDENTITY, never quantity: they never create, change or
+//        replace `workerCount`.
+//   P9 — an optional field never costs the record: a name the contract would
+//        refuse is clamped HERE, because `MutationQueue.enqueue` throws on a
+//        payload the canonical schema rejects.
+// ---------------------------------------------------------------------------
+
+describe('enqueueLogsForSync — the worker names the farmer gave', () => {
+    beforeEach(() => {
+        enqueueCreate.mockReset().mockResolvedValue('m1');
+        enqueueTask.mockReset().mockResolvedValue('m2');
+        triggerNow.mockReset().mockResolvedValue(undefined);
+        plotsGet.mockReset().mockResolvedValue({ payload: { id: PLOT_UUID, farmId: FARM_UUID } });
+        cropCyclesWhere.mockReset().mockReturnValue({
+            equals: () => ({
+                toArray: async () => [{ payload: { id: CYCLE_UUID, cropName: 'Grapes', modifiedAtUtc: '2026-08-01T00:00:00Z' } }],
+            }),
+        });
+    });
+
+    it('carries the names as stated — edges trimmed, blanks shed, a repeated name KEPT', async () => {
+        await enqueueLogsForSync([logWith([{
+            id: 'l1', labourAssignmentId: UUID_A, type: 'HIRED', count: 8,
+            workerNames: [' रमेश ', 'सीता', '   ', '', 'बाळू', 'बाळू'],
+        }], LOG_UUID, PLOT_UUID)]);
+
+        // Two real people can both be called बाळू: merging is identity
+        // resolution's job, never serialization's (LabourAssignment.Create, B002).
+        expect(sentLabour()[0].workerNames).toEqual(['रमेश', 'सीता', 'बाळू', 'बाळू']);
+    });
+
+    it('sends NO workerNames key when nobody was named — absent, never an empty array', async () => {
+        await enqueueLogsForSync([logWith([
+            { id: 'l1', labourAssignmentId: UUID_A, type: 'HIRED', count: 4 },
+            { id: 'l2', labourAssignmentId: UUID_B, type: 'HIRED', count: 2, workerNames: ['  ', ''] },
+        ], LOG_UUID, PLOT_UUID)]);
+
+        const [unnamed, blanksOnly] = sentLabour();
+        expect(Object.prototype.hasOwnProperty.call(unnamed, 'workerNames')).toBe(false);
+        expect(Object.prototype.hasOwnProperty.call(blanksOnly, 'workerNames')).toBe(false);
+        expect(JSON.stringify(sentLabour())).not.toContain('workerNames');
+    });
+
+    it('P7 — names never change the headcount: 8 workers with 2 names is still 8', async () => {
+        await enqueueLogsForSync([logWith([
+            { id: 'l1', labourAssignmentId: UUID_A, type: 'HIRED', count: 8, workerNames: ['रमेश', 'सीता'] },
+            // More names than the stated count: still the farmer's count, verbatim.
+            { id: 'l2', labourAssignmentId: UUID_B, type: 'HIRED', count: 1, workerNames: ['गणेश', 'सुनीता', 'बाळू'] },
+        ], LOG_UUID, PLOT_UUID)]);
+
+        const [eight, one] = sentLabour();
+        expect(eight.workerCount).toBe(8);
+        expect(eight.workerNames).toHaveLength(2);
+        expect(one.workerCount).toBe(1);
+        expect(one.workerNames).toHaveLength(3);
+    });
+
+    it('P7 — names never INVENT a headcount: an unstated count stays absent beside three names', async () => {
+        await enqueueLogsForSync([logWith([
+            { id: 'l1', labourAssignmentId: UUID_A, type: 'HIRED', workerNames: ['गणेश', 'सुनीता', 'बाळू'] },
+        ], LOG_UUID, PLOT_UUID)]);
+
+        const [item] = sentLabour();
+        for (const key of ['workerCount', 'maleCount', 'femaleCount']) {
+            expect(Object.prototype.hasOwnProperty.call(item, key)).toBe(false);
+        }
+        expect(item.workerNames).toEqual(['गणेश', 'सुनीता', 'बाळू']);
+    });
+
+    it('P9 — a list over the contract bounds is CLAMPED, so the real canonical schema accepts the payload', async () => {
+        const crowd = Array.from({ length: WORKER_NAMES_MAX_PER_ENGAGEMENT + 50 }, (_, i) => `कामगार ${i + 1}`);
+        const longName = 'अ'.repeat(WORKER_NAME_MAX_LENGTH + 300);
+        // An emoji is a surrogate PAIR; cutting between its halves would put a
+        // lone surrogate on the wire, which the server's JSON reader refuses.
+        const emojiAtTheCut = `${'ब'.repeat(WORKER_NAME_MAX_LENGTH - 1)}\u{1F33E}tail`;
+
+        const result = await enqueueLogsForSync([logWith([
+            { id: 'l1', labourAssignmentId: UUID_A, type: 'HIRED', count: 300, workerNames: crowd },
+            { id: 'l2', labourAssignmentId: UUID_B, type: 'HIRED', count: 2, workerNames: [longName, emojiAtTheCut] },
+        ], LOG_UUID, PLOT_UUID)]);
+
+        expect(result.queuedLogIds).toEqual([LOG_UUID]);
+        const [crowdItem, longItem] = sentLabour();
+        expect(crowdItem.workerNames).toHaveLength(WORKER_NAMES_MAX_PER_ENGAGEMENT);
+        expect(crowdItem.workerNames[0]).toBe('कामगार 1');
+        expect(crowdItem.workerCount).toBe(300); // P7 — the clamp touches names only
+        expect(longItem.workerNames[0]).toHaveLength(WORKER_NAME_MAX_LENGTH);
+        expect(longItem.workerNames[1]).toBe('ब'.repeat(WORKER_NAME_MAX_LENGTH - 1));
+
+        const payload = enqueueCreate.mock.calls[0][0];
+        expect(validatePayload(SyncMutationName.CreateDailyLog, payload)).toEqual({ ok: true });
+        expect(validatePayload(SyncMutationName.CreateDailyLog, JSON.parse(JSON.stringify(payload)))).toEqual({ ok: true });
+    });
+
+    it('the clamp is load-bearing: the same list UNclamped is refused by the canonical schema', () => {
+        // The control for the test above — without `workerNamesForWire` this is
+        // the payload that would have thrown at MutationQueue.enqueue.
+        const unclamped = {
+            dailyLogId: LOG_UUID, farmId: FARM_UUID, plotId: PLOT_UUID, cropCycleId: CYCLE_UUID, logDate: '2026-08-11',
+            labour: [{
+                labourAssignmentId: UUID_A, engagementType: 'HIRED',
+                workerNames: Array.from({ length: WORKER_NAMES_MAX_PER_ENGAGEMENT + 1 }, (_, i) => `n${i}`),
+            }],
+        };
+        expect(validatePayload(SyncMutationName.CreateDailyLog, unclamped).ok).toBe(false);
+    });
+
+    it('B002 — a हजेरी-door record queues captureScope "labour", read from the log at queue time', async () => {
+        const labourDoorLog = {
+            ...logWith([{ id: 'l1', labourAssignmentId: UUID_A, type: 'HIRED', count: 8 }], LOG_UUID, PLOT_UUID),
+            captureScope: 'labour',
+        } as DailyLog;
+
+        await enqueueLogsForSync([labourDoorLog]);
+
+        const payload = enqueueCreate.mock.calls[0][0];
+        expect(payload.captureScope).toBe('labour');
+        expect(validatePayload(SyncMutationName.CreateDailyLog, payload)).toEqual({ ok: true });
+        expect(validatePayload(SyncMutationName.CreateDailyLog, JSON.parse(JSON.stringify(payload)))).toEqual({ ok: true });
+    });
+
+    it('B002 — an ordinary record sends NO captureScope key (an old server refuses unknown keys)', async () => {
+        await enqueueLogsForSync([logWith([{ id: 'l1', labourAssignmentId: UUID_A, type: 'HIRED', count: 8 }], LOG_UUID, PLOT_UUID)]);
+
+        expect(Object.prototype.hasOwnProperty.call(enqueueCreate.mock.calls[0][0], 'captureScope')).toBe(false);
+    });
+
+    it('a corrupt Dexie entry (null, a number, a bare string) is shed without throwing', async () => {
+        await enqueueLogsForSync([logWith([
+            { id: 'l1', labourAssignmentId: UUID_A, type: 'HIRED', count: 2, workerNames: [null, 7, 'रमेश', undefined] },
+            { id: 'l2', labourAssignmentId: UUID_B, type: 'HIRED', count: 2, workerNames: 'रमेश' },
+        ], LOG_UUID, PLOT_UUID)]);
+
+        const [listed, scalar] = sentLabour();
+        expect(listed.workerNames).toEqual(['रमेश']);
+        expect(Object.prototype.hasOwnProperty.call(scalar, 'workerNames')).toBe(false);
+        expect(validatePayload(SyncMutationName.CreateDailyLog, enqueueCreate.mock.calls[0][0])).toEqual({ ok: true });
     });
 });

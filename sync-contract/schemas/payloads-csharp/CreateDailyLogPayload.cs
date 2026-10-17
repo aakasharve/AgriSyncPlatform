@@ -54,7 +54,8 @@ public sealed record LabourItem(
     string? Task = null,
     string? Notes = null,
     decimal? DurationHours = null,
-    Guid? EngagedThroughFieldOperatorId = null
+    Guid? EngagedThroughFieldOperatorId = null,
+    IReadOnlyList<string>? WorkerNames = null
 );
 
 public sealed record DisturbanceItem(
@@ -99,5 +100,7 @@ public sealed record CreateDailyLogPayload(
     WeatherStampItem? WeatherStamp = null,
     Guid? SourceAiJobId = null,
     IReadOnlyList<LabourItem>? Labour = null,
-    ManualDraftItem? ManualDraft = null
+    ManualDraftItem? ManualDraft = null,
+    /// <summary>Allowed values: "labour".</summary>
+    string? CaptureScope = null
 );

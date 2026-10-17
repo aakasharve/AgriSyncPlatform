@@ -39,9 +39,17 @@ public interface ILedgerDerivationService
     /// irrigation, machinery, observations and disturbance still derive normally —
     /// this is a labour-shaped scalpel, never an off-switch for the side-car.
     /// </param>
+    /// <param name="labourOnly">
+    /// B002 (PR #82 review), founder ruling 2026-08-31 — the record was captured at the
+    /// हजेरी door (<c>captureScope: "labour"</c>), so ONLY the labour branch may derive.
+    /// Inputs/farm operations, irrigation (and the routine it seeds), machinery,
+    /// observations and disturbance are all left underived: the farmer never saw them at
+    /// that door. The labour branch still obeys <paramref name="deriveLabour"/>. Default
+    /// <c>false</c> = the whole parse, exactly as before.
+    /// </param>
     Task<DerivationOutcome> DeriveAsync(
         DailyLog log, AiJob sourceJob, IIdGenerator ids, IClock clock,
-        bool deriveLabour = true, CancellationToken ct = default);
+        bool deriveLabour = true, bool labourOnly = false, CancellationToken ct = default);
 
     /// <summary>
     /// spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — the MANUAL
@@ -75,9 +83,10 @@ public interface ILedgerDerivationService
     /// <para>Required (no default), mirroring <c>DeriveCoreAsync</c>: neither caller may
     /// acquire this behaviour by omission.</para>
     /// </param>
+    /// <param name="labourOnly">The same हजेरी-door gate as on <see cref="DeriveAsync"/>.</param>
     Task<DerivationOutcome> DeriveFromManualDraftAsync(
         DailyLog log, string manualWireJson, string? appVersion,
-        IIdGenerator ids, IClock clock, bool deriveLabour, CancellationToken ct = default);
+        IIdGenerator ids, IClock clock, bool deriveLabour, bool labourOnly = false, CancellationToken ct = default);
 }
 
 /// <summary>Small tally of what a derivation staged, for the audit / log line.</summary>
