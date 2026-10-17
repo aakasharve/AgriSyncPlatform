@@ -18,7 +18,7 @@ export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
         showReviewInbox, setShowReviewInbox, history,
         showQuickLog, setShowQuickLog,
         setMode, setStatus, setRecordingSegment,
-        currentRoute, setCurrentRoute, mainView, status, recordingSegment, hasActiveLogContext,
+        currentRoute, setCurrentRoute, mainView, status, recordingSegment, hasActiveLogContext, logIntent,
         showNoWorkReason, setShowNoWorkReason, handleManualSubmit, todayDateKey
     } = ctx;
 
@@ -105,9 +105,12 @@ export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
                 onClose={() => setShowNoWorkReason(false)}
             />
 
-            {/* DFES: FAB to open QuickLogSheet (visible on main log view when idle) */}
+            {/* DFES: FAB to open QuickLogSheet (visible on main log view when idle).
+                NOT on the labour (हजेरी) door: there it floated over the बरोबर button
+                and took its taps (APK 1.0.14 founder report), and QuickLog writes the
+                other buckets, which that door must not (founder ruling 2026-08-31). */}
             {
-                currentRoute === 'main' && mainView === 'log' && status === 'idle' && !recordingSegment && hasActiveLogContext && (
+                currentRoute === 'main' && mainView === 'log' && status === 'idle' && !recordingSegment && hasActiveLogContext && logIntent !== 'labour' && (
                     <button
                         onClick={() => setShowQuickLog(true)}
                         data-testid="add-log-fab"

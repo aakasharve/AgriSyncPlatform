@@ -39,7 +39,7 @@ import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
 // file's render functions are plain functions, not components — see
 // `mainViewComponents.tsx`'s header for why that hook rule forces the split.
 import SathiGuideCard from '../../features/oversight/components/SathiGuideCard';
-import { toAttendanceOnlyDraft } from '../../features/logs/attendanceDraft';
+import { toAttendanceOnlyDraft, toAttendanceSubmission } from '../../features/logs/attendanceDraft';
 // Labour V2 R1 Task 3.4b — the Labour-owned result surface + the anchor it
 // renders against. The invoking feature owns the meaning of a labour parse.
 import AttendanceResult from '../../features/labour/components/AttendanceResult';
@@ -552,7 +552,9 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                                             draft={attendanceDraft}
                                                             anchor={anchorForDraft}
                                                             farmId={anchorLog?.meta?.farmId ?? currentLogContext?.selection?.[0]?.farmId}
-                                                            onConfirm={(d) => { void handleManualSubmit(d); setDraftLog(null); }}
+                                                            // The save path builds from the manual-entry shape: the
+                                                            // raw parse has no date/provenance (see toAttendanceSubmission).
+                                                            onConfirm={(d) => { void handleManualSubmit(toAttendanceSubmission(d, provenance)); setDraftLog(null); }}
                                                             renderEditSurface={renderManualEntry}
                                                             onSpeakMore={() => { setRecordingSegment('labour'); setMode('voice'); }}
                                                         />

@@ -33,6 +33,8 @@
  * into Labour Management. Only this direction needed a gate.
  */
 import type { AgriLogResponse } from '../../types';
+import type { LogProvenance } from '../../domain/ai/LogProvenance';
+import { getDateKey } from '../../core/domain/services/DateKeyService';
 
 /**
  * The हजेरी view of a parsed draft: labour only.
@@ -69,6 +71,38 @@ export function toAttendanceOnlyDraft(draft: AgriLogResponse | null): AgriLogRes
         // payload carries it end to end (create_daily_log.zod.ts:126,130 →
         // CreateDailyLogPayload.cs:83-84), verified 2026-09-02.
         disturbance: draft.disturbance,
+    };
+}
+
+/**
+ * What बरोबर hands the one manual save path (`useLogCommands.handleManualSubmit`).
+ *
+ * APK 1.0.14 founder report: "I can't tap बरोबर; it doesn't save the name". The
+ * confirm passed the raw parse (`AgriLogResponse`) straight to the save path,
+ * but that path builds the record from the MANUAL-ENTRY shape, which also
+ * carries `date` and `provenance`. A parse has neither, so the record was
+ * written with no date, `create_daily_log` was refused at the queue
+ * (`logDate Required`), nothing reached the server, and with no queued work the
+ * names inside the record were hidden on every read. The save also threw
+ * before its route back to Labour, so the screen stayed where it was.
+ *
+ * This adds exactly the two fields `ManualEntry` adds on the same save:
+ *   - `date`: today's key, the day the attendance is for (the marks the same
+ *     tap queues use the same `getDateKey()`);
+ *   - `provenance`: the parse's own claim, passed through and never invented.
+ *     No parse provenance means no claim; this never asserts 'manual' for
+ *     something the parser produced (P8). An edit of an existing log
+ *     (`originalLogId`) carries none, as in `ManualEntry`.
+ */
+export function toAttendanceSubmission(
+    draft: AgriLogResponse,
+    provenance: LogProvenance | null | undefined,
+    dateKey: string = getDateKey(),
+): AgriLogResponse & { date: string; provenance?: LogProvenance } {
+    return {
+        ...draft,
+        date: dateKey,
+        provenance: draft.originalLogId ? undefined : (provenance ?? undefined),
     };
 }
 

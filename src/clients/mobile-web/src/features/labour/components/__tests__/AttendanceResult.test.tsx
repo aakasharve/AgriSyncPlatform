@@ -218,3 +218,23 @@ describe('AttendanceResult — 3.5c: बरोबर enqueues marks for uniquely
         expect(mockEnqueue).not.toHaveBeenCalled();
     });
 });
+
+// APK 1.0.14 founder report (spec: 2026-08-25-prod-cutover-waves): at the end of
+// the scroll the bottom bar's raised centre button covered the lower edge of
+// बरोबर. The page's bottom padding (6rem) clears the bar (80px) but not that
+// button, which rises 24px above it (measured: top at viewport - 104px).
+// HONESTY NOTE: jsdom has no layout; this pins the class that lifts the
+// buttons clear. Real proof is the browser measurement (every one of 15 points
+// on each button is the topmost element at 360x800 and 393x852, text 1.0/1.3).
+describe('AttendanceResult — the buttons clear the bottom bar', () => {
+    it('the screen ends with 24px of clearance below बरोबर / बदल करा', () => {
+        const { container } = render(<AttendanceResult
+            draft={{ ...base, labour: [{ id: 'l1', type: 'hired', count: 1, workerNames: ['गणेश'] } as unknown as AgriLogResponse['labour'][number]] }}
+            anchor={anchor} farmId={undefined}
+            onConfirm={vi.fn()} renderEditSurface={() => <div data-testid="edit-surface" />}
+            onSpeakMore={vi.fn()} />);
+        const root = container.firstElementChild;
+        expect(root?.contains(screen.getByRole('button', { name: 'बरोबर' }))).toBe(true);
+        expect((root?.getAttribute('class') ?? '').split(/\s+/)).toContain('pb-6');
+    });
+});

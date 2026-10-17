@@ -107,8 +107,12 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
         : rung === 4 ? COPY.rungConfirm
         : null;
 
+    // pb-6: the page's bottom padding clears the bottom bar but not its raised
+    // centre button (24px higher), which covered the lower edge of बरोबर at the
+    // end of the scroll (APK 1.0.14 founder report). The extra 24px lifts the
+    // buttons clear of it.
     return (
-        <div className="flex flex-col gap-2.5" style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}>
+        <div className="flex flex-col gap-2.5 pb-6" style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}>
             {/* ShramSafalला समजलं — what memory already holds + what was heard */}
             <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
                 <div className="text-[13px] font-extrabold text-slate-800">{COPY.understoodHeading}</div>

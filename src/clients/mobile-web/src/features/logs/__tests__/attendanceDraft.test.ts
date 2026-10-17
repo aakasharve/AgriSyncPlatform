@@ -11,7 +11,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import type { AgriLogResponse } from '../../../types';
-import { toAttendanceOnlyDraft, isAttendanceOnlyDraft } from '../attendanceDraft';
+import { toAttendanceOnlyDraft, isAttendanceOnlyDraft, toAttendanceSubmission } from '../attendanceDraft';
 
 const labourEntry = {
     id: 'l1',
@@ -97,5 +97,33 @@ describe('isAttendanceOnlyDraft', () => {
 
     it('is false for null', () => {
         expect(isAttendanceOnlyDraft(null)).toBe(false);
+    });
+});
+
+// APK 1.0.14 founder report: बरोबर handed the save path a parse with no date
+// and no provenance, so the record could not be queued for the server.
+describe('toAttendanceSubmission — what बरोबर hands the save path', () => {
+    const ai = { source: 'ai' as const, sourceAiJobId: '11111111-2222-4333-8444-555555555555', timestamp: '2026-10-17T05:00:00.000Z' };
+    const draft = () => toAttendanceOnlyDraft(fullDraft())!;
+
+    it('carries the day the attendance is for and the parse\'s own provenance', () => {
+        const out = toAttendanceSubmission(draft(), ai, '2026-10-17');
+        expect(out.date).toBe('2026-10-17');
+        expect(out.provenance).toEqual(ai);
+        // Nothing else changes: the हजेरी the farmer saw is what is saved.
+        expect(out.labour).toEqual([labourEntry]);
+        expect(out.cropActivities).toEqual([]);
+        expect(out.fullTranscript).toBe(fullDraft().fullTranscript);
+    });
+
+    it('never invents a provenance claim (P8): no parse provenance -> none', () => {
+        expect(toAttendanceSubmission(draft(), null, '2026-10-17').provenance).toBeUndefined();
+        expect(toAttendanceSubmission(draft(), undefined, '2026-10-17').provenance).toBeUndefined();
+    });
+
+    it('an edit of an existing log carries no provenance, exactly as ManualEntry', () => {
+        const out = toAttendanceSubmission({ ...draft(), originalLogId: 'log-1' }, ai, '2026-10-17');
+        expect(out.provenance).toBeUndefined();
+        expect(out.originalLogId).toBe('log-1');
     });
 });
