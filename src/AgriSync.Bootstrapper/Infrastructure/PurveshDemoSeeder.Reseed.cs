@@ -42,8 +42,17 @@ public sealed record PurveshDemoReseedTableCounts(
     int SeedCreated,
     int? NonSeedUntouched);
 
+/// <param name="SeedVersion">The dataset this run wrote (<c>purvesh-demo-v3</c>).</param>
+/// <param name="IdNamespace">
+/// The namespace every deterministic id is minted under (<c>purvesh-demo-v2</c>). It is kept
+/// from v2 on purpose: that is how this run recognises — and replaces — the rows the v2 seed
+/// wrote, and how installed apps receive the refreshed rows under the ids they already hold.
+/// </param>
+/// <param name="TimestampPolicy">How the run chose its record times (see the command help).</param>
 public sealed record PurveshDemoReseedReport(
     string SeedVersion,
+    string IdNamespace,
+    string TimestampPolicy,
     bool DryRun,
     string AnchorFarmLocalDate,
     string LabourWindowFrom,
@@ -87,8 +96,11 @@ public sealed record PurveshDemoReseedReport(
 /// architecture pins stay single).</para>
 /// <para><b>Sync.</b> Re-written rows carry <c>ModifiedAtUtc</c> = the run instant, so an
 /// already-installed app pulls the re-anchored versions (its cursor would otherwise skip rows
-/// dated in the past). Business dates/times (log date, mark time, cost date) are anchored to the
-/// farm-local day of the run, so two runs on the same day produce the same content.</para>
+/// dated in the past). Business dates (log date, mark date, cost date) are anchored to the
+/// farm-local day of the run. NO FUTURE DATA: record times on earlier days are fixed farm-local
+/// times, and every record time on the run day is the run instant itself, so nothing is ever
+/// later than the run and two runs on the same day write the same content apart from those
+/// run-instant stamps (<see cref="TimestampPolicyText"/>).</para>
 /// <para><b>No side effects.</b> Domain events raised by re-seeded aggregates are discarded
 /// before each save, so the re-seed queues no outbox messages (no WTL projection, no analytics,
 /// no notifications), and it writes no audit or correction rows.</para>
@@ -96,6 +108,26 @@ public sealed record PurveshDemoReseedReport(
 public sealed partial class PurveshDemoSeeder
 {
     private const string SeedLogKeyPrefix = SeedVersion + ":log:";
+
+    /// <summary>
+    /// The dataset the one-shot re-seed writes. Its ids stay in the <see cref="SeedVersion"/>
+    /// namespace (see <see cref="PurveshDemoReseedReport.IdNamespace"/>).
+    /// </summary>
+    public const string DatasetVersion = "purvesh-demo-v3";
+
+    /// <summary>
+    /// NO FUTURE DATA. Every record time the re-seed writes is either a fixed farm-local time on
+    /// a day BEFORE the run day, or — for anything dated on the run day itself — the run instant
+    /// exactly. So no timestamp is ever later than the run, whatever time of day it runs, and
+    /// two runs on the same farm-local day write the same content: the only values that differ
+    /// are the run-instant stamps (each row's sync clock, and the record time of the run day's
+    /// own entries). Planned work dated after today is a PLAN (a calendar date), not a record.
+    /// </summary>
+    public const string TimestampPolicyText =
+        "Rows dated before the run day keep fixed farm-local (IST) times; every record time on the run day "
+        + "itself is the run instant (RunUtc). No timestamp is later than RunUtc, whatever time of day the "
+        + "command runs; a rerun on the same farm-local day changes only those run-instant stamps. Planned "
+        + "work dated after today is a plan (a calendar date), not a record.";
     private const string SeedPlannedReason = "seed:purvesh-demo";
 
     /// <summary>The demo farm's deterministic id — the ONLY farm the re-seed will open.</summary>
@@ -256,6 +288,12 @@ public sealed partial class PurveshDemoSeeder
         // date, so DateOnly.FromDateTime(anchor.AddDays(n)) is "today + n" on the farm.
         var anchorUtc = DateTime.SpecifyKind(today.ToDateTime(new TimeOnly(6, 0)), DateTimeKind.Utc);
 
+        // NO FUTURE DATA (see TimestampPolicyText): anything whose natural record time falls on
+        // the run day is recorded AT the run instant — never later than it, and the same for
+        // every run that day.
+        var (todayStartUtc, _) = FarmLocalDay.UtcWindow(today);
+        DateTime Stamp(DateTime natural) => natural >= todayStartUtc ? runUtc : natural;
+
         var plan = BuildDemoLabourPlan();
         var retained = new List<string>();
         var skipped = new List<string>();
@@ -324,7 +362,7 @@ public sealed partial class PurveshDemoSeeder
 
         created["planned_activities"] = await EnsurePlannedActivitiesAsync(
             contexts, ownerUserId, anchorUtc, plannedSeeds, ct);
-        eventsSuppressed += await SaveSeedChangesAsync(runUtc, ct);
+        eventsSuppressed += await SaveSeedChangesAsync(runUtc, todayStartUtc, ct);
 
         // Field operators — through the product's own create path, backdated to when the farm
         // first knew each person.
@@ -413,7 +451,7 @@ public sealed partial class PurveshDemoSeeder
         }
 
         created["labour_assignments"] = assignmentsCreated.Count;
-        eventsSuppressed += await SaveSeedChangesAsync(runUtc, ct);
+        eventsSuppressed += await SaveSeedChangesAsync(runUtc, todayStartUtc, ct);
 
         // Attribution — who worked which engagement — through the attach use case.
         var workRowsCreated = 0;
@@ -423,7 +461,7 @@ public sealed partial class PurveshDemoSeeder
             {
                 var ids = new QueuedIdGenerator(DemoWorkRowId(engagement.Key, operatorKey));
                 var handler = new AttachFieldOperatorHandler(
-                    repository, ids, new FixedClock(FarmEveningUtc(logDate)));
+                    repository, ids, new FixedClock(Stamp(FarmEveningUtc(logDate))));
                 var result = await handler.HandleAsync(
                     new AttachFieldOperatorCommand(farmId, DemoOperatorId(operatorKey), assignment.Id, ownerUserId), ct);
                 if (!result.IsSuccess || result.Value!.AlreadyAttached)
@@ -464,7 +502,7 @@ public sealed partial class PurveshDemoSeeder
             // No id is queued: a FIRST mark mints none, and an amendment (which would mint
             // correction ids) must never happen here — the empty queue makes it throw.
             var handler = new RecordAttendanceMarkHandler(
-                repository, new QueuedIdGenerator(), new FixedClock(MarkRecordedAtUtc(workDate, mark.DayOffset)));
+                repository, new QueuedIdGenerator(), new FixedClock(Stamp(MarkRecordedAtUtc(workDate))));
             var result = await handler.HandleAsync(
                 new RecordAttendanceMarkCommand(
                     markId, farmId.Value, operatorId, workDate, mark.Day, mark.Night,
@@ -501,21 +539,21 @@ public sealed partial class PurveshDemoSeeder
         }
 
         created["attendance_marks"] = createdMarkIds.Count;
-        eventsSuppressed += await SaveSeedChangesAsync(runUtc, ct);
+        eventsSuppressed += await SaveSeedChangesAsync(runUtc, todayStartUtc, ct);
 
         // Money — the v2 costs plus the labour payouts, without the GLOBAL price configs.
         var costSeeds = BuildCostEntrySeeds().Concat(plan.LabourPayouts).ToList();
         var financeStats = await EnsureFinanceAsync(
             farmId, contextByPlotKey, userIdsByKey, anchorUtc, includePriceConfigs: false, costSeeds,
             pins.CostEntryIds, ct,
-            flushAfterCostEntries: async () => eventsSuppressed += await SaveSeedChangesAsync(runUtc, ct));
+            flushAfterCostEntries: async () => eventsSuppressed += await SaveSeedChangesAsync(runUtc, todayStartUtc, ct));
         created["cost_entries"] = financeStats.CostEntriesAdded;
         created["finance_corrections"] = financeStats.CorrectionsAdded;
         created["day_ledgers"] = financeStats.DayLedgersAdded;
 
         var attachmentStats = await EnsureAttachmentsAsync(farmId, userIdsByKey, anchorUtc, ct);
         created["attachments"] = attachmentStats.AttachmentsAdded;
-        eventsSuppressed += await SaveSeedChangesAsync(runUtc, ct);
+        eventsSuppressed += await SaveSeedChangesAsync(runUtc, todayStartUtc, ct);
 
         // ── VERIFY — nothing that was not ours moved. ─────────────────────────────────────
         _ssfContext.ChangeTracker.Clear();
@@ -523,7 +561,9 @@ public sealed partial class PurveshDemoSeeder
         var tables = BuildTableCounts(census, after, pins, deleted, created, plan);
 
         return new PurveshDemoReseedReport(
-            SeedVersion: SeedVersion,
+            SeedVersion: DatasetVersion,
+            IdNamespace: SeedVersion,
+            TimestampPolicy: TimestampPolicyText,
             DryRun: dryRun,
             AnchorFarmLocalDate: today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             LabourWindowFrom: today.AddDays(LabourWindowStartOffset).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
@@ -967,10 +1007,12 @@ public sealed partial class PurveshDemoSeeder
 
     /// <summary>
     /// Saves staged seed rows after (1) discarding their domain events, so nothing is queued
-    /// in the outbox, and (2) stamping every inserted/updated row's sync clock with the run
-    /// instant, so devices that already synced pull the refreshed rows.
+    /// in the outbox, (2) stamping every inserted/updated row's sync clock with the run
+    /// instant, so devices that already synced pull the refreshed rows, and (3) recording every
+    /// time that falls on the run day AT the run instant, so no stored time is ever later than
+    /// the run (<see cref="TimestampPolicyText"/>).
     /// </summary>
-    private async Task<int> SaveSeedChangesAsync(DateTime runUtc, CancellationToken ct)
+    private async Task<int> SaveSeedChangesAsync(DateTime runUtc, DateTime todayStartUtc, CancellationToken ct)
     {
         _ssfContext.ChangeTracker.DetectChanges();
         var suppressed = 0;
@@ -982,10 +1024,23 @@ public sealed partial class PurveshDemoSeeder
                 aggregate.ClearDomainEvents();
             }
 
-            if (entry.State is EntityState.Added or EntityState.Modified
-                && entry.Metadata.FindProperty("ModifiedAtUtc") is { } modified)
+            if (entry.State is not (EntityState.Added or EntityState.Modified))
             {
-                entry.Property(modified.Name).CurrentValue = runUtc;
+                continue;
+            }
+
+            foreach (var property in entry.Properties)
+            {
+                if (property.Metadata.ClrType != typeof(DateTime) && property.Metadata.ClrType != typeof(DateTime?))
+                {
+                    continue;
+                }
+
+                if (property.Metadata.Name == "ModifiedAtUtc"
+                    || (property.CurrentValue is DateTime value && value >= todayStartUtc))
+                {
+                    property.CurrentValue = runUtc;
+                }
             }
         }
 
@@ -1182,11 +1237,12 @@ public sealed partial class PurveshDemoSeeder
     private static DateTime FarmEveningUtc(DateOnly farmDate) =>
         DateTime.SpecifyKind(farmDate.ToDateTime(new TimeOnly(13, 30)), DateTimeKind.Utc);
 
-    /// <summary>Marks are taken in the evening; today's are taken at the morning roll-call.</summary>
-    private static DateTime MarkRecordedAtUtc(DateOnly workDate, int dayOffset) =>
-        dayOffset == 0
-            ? DateTime.SpecifyKind(workDate.ToDateTime(new TimeOnly(3, 0)), DateTimeKind.Utc)   // 08:30 IST
-            : DateTime.SpecifyKind(workDate.ToDateTime(new TimeOnly(14, 0)), DateTimeKind.Utc); // 19:30 IST
+    /// <summary>
+    /// Marks are written up at 19:30 IST on their day. A mark for the run day itself is
+    /// recorded at the run instant instead (Stamp), so it is never later than the run.
+    /// </summary>
+    private static DateTime MarkRecordedAtUtc(DateOnly workDate) =>
+        DateTime.SpecifyKind(workDate.ToDateTime(new TimeOnly(14, 0)), DateTimeKind.Utc);
 
     private sealed class FixedClock(DateTime utcNow) : IClock
     {

@@ -22,6 +22,11 @@ namespace AgriSync.Bootstrapper.Infrastructure;
 /// environment variable — it uses the same connection strings as the API.</para>
 /// <para><b>Exit codes:</b> 0 = done (or dry run done); 2 = refused by a safety precondition,
 /// nothing written; 1 = failed and rolled back.</para>
+/// <para><b>When to run it: any time of day.</b> No timestamp it writes is later than the run
+/// instant: rows dated before today keep fixed farm-local times, and everything dated today is
+/// recorded at the run instant itself (<see cref="PurveshDemoSeeder.TimestampPolicyText"/>). A
+/// second run on the same farm-local day writes the same content; only those run-instant stamps
+/// move. Close the demo app while it runs (a concurrent sync could make it roll back).</para>
 /// </remarks>
 public static class PurveshDemoReseedCommand
 {
@@ -56,7 +61,9 @@ public static class PurveshDemoReseedCommand
         var dryRun = args.Contains(DryRunFlag, StringComparer.Ordinal);
         await output.WriteLineAsync(
             $"{Flag}: {(dryRun ? "DRY RUN — every change will be rolled back" : "COMMIT")}; "
-            + "touches only the demo farm's seed rows. No migration, no hosted service.");
+            + $"writes dataset {PurveshDemoSeeder.DatasetVersion}; touches only the demo farm's seed rows. "
+            + "No migration, no hosted service.");
+        await output.WriteLineAsync($"{Flag}: timestamps — {PurveshDemoSeeder.TimestampPolicyText}");
 
         await using var scope = services.CreateAsyncScope();
         var provider = scope.ServiceProvider;
