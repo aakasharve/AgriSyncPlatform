@@ -27,6 +27,7 @@ using ShramSafal.Application.UseCases.Finance.AddCostEntry;
 using ShramSafal.Application.UseCases.Finance.AllocateGlobalExpense;
 using ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
 using ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion;
+using ShramSafal.Application.UseCases.Labour;
 using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
@@ -889,6 +890,15 @@ public sealed class PushSyncBatchHandler(
             return draftFailure;
         }
 
+        // spec: 2026-08-25-prod-cutover-waves — the names a farmer gave for each
+        // engagement. Same boundary, same posture as the manual draft above:
+        // shape and size only, loud on violation, ABSENT = skipped, which is what
+        // every shipped APK sends (none has ever carried the field).
+        if (ValidateLabourWorkerNames(payload) is { } namesFailure)
+        {
+            return namesFailure;
+        }
+
         var request = DeserializePayload<CreateDailyLogPayload>(payload);
         if (request is null)
         {
@@ -1067,6 +1077,101 @@ public sealed class PushSyncBatchHandler(
                 return MutationExecutionOutcome.Failure(
                     "ShramSafal.SyncInvalidPayload",
                     $"create_daily_log manualDraft bucket '{bucket.Name}' must be an array.");
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// spec: 2026-08-25-prod-cutover-waves. Boundary check for the OPTIONAL
+    /// <c>labour[].workerNames</c> on <c>create_daily_log</c>: when present it must be an
+    /// array of strings, at most <see cref="LabourAssignmentFactory.MaxWorkerNamesPerEngagement"/>
+    /// long, each name at most <see cref="LabourAssignmentFactory.MaxWorkerNameLength"/>
+    /// after trimming. Returns <c>null</c> when every engagement is acceptable, or the
+    /// failure outcome to return to the client.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>What it does NOT police, on purpose.</b> A blank or <c>null</c> entry is
+    /// "no name", not malformed: <c>LabourAssignment.Create</c>'s own write boundary
+    /// already sheds it (B002), so rejecting the farmer's whole day over it would let an
+    /// optional field reject a record (P9). Names out-numbering the stated headcount are
+    /// accepted too: the count is the farmer's statement and names are an overlay on it
+    /// (P7), so a mismatch is something to show him, never a reason to refuse him.</para>
+    /// <para><b>Why loud, not trimmed.</b> Silently dropping names is the very defect
+    /// this field was added to close, so an over-bound list is refused whole, exactly as
+    /// an over-sized manual draft is. The bounds sit far above any real dictation.</para>
+    /// <para>Property names are matched case-insensitively because
+    /// <see cref="SerializerOptions"/> deserializes them that way: a check the
+    /// deserializer can be steered around by casing is not a boundary.</para>
+    /// </remarks>
+    private static MutationExecutionOutcome? ValidateLabourWorkerNames(JsonElement payload)
+    {
+        if (payload.ValueKind != JsonValueKind.Object)
+        {
+            return null; // PayloadHasOnly has already refused a non-object payload.
+        }
+
+        foreach (var labour in payload.EnumerateObject())
+        {
+            // Not an array: a shape DeserializePayload owns, exactly as before this check.
+            if (!string.Equals(labour.Name, "labour", StringComparison.OrdinalIgnoreCase)
+                || labour.Value.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var item in labour.Value.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                foreach (var field in item.EnumerateObject())
+                {
+                    if (!string.Equals(field.Name, "workerNames", StringComparison.OrdinalIgnoreCase)
+                        || field.Value.ValueKind == JsonValueKind.Null)
+                    {
+                        continue; // absent and null both mean "no names given".
+                    }
+
+                    if (field.Value.ValueKind != JsonValueKind.Array)
+                    {
+                        return MutationExecutionOutcome.Failure(
+                            "ShramSafal.SyncInvalidPayload",
+                            "create_daily_log labour[].workerNames must be an array of strings.");
+                    }
+
+                    if (field.Value.GetArrayLength() > LabourAssignmentFactory.MaxWorkerNamesPerEngagement)
+                    {
+                        return MutationExecutionOutcome.Failure(
+                            "ShramSafal.SyncInvalidPayload",
+                            $"create_daily_log labour[].workerNames exceeds {LabourAssignmentFactory.MaxWorkerNamesPerEngagement} names.");
+                    }
+
+                    foreach (var name in field.Value.EnumerateArray())
+                    {
+                        if (name.ValueKind == JsonValueKind.Null)
+                        {
+                            continue;
+                        }
+
+                        if (name.ValueKind != JsonValueKind.String)
+                        {
+                            return MutationExecutionOutcome.Failure(
+                                "ShramSafal.SyncInvalidPayload",
+                                "create_daily_log labour[].workerNames must be an array of strings.");
+                        }
+
+                        if (name.GetString()!.Trim().Length > LabourAssignmentFactory.MaxWorkerNameLength)
+                        {
+                            return MutationExecutionOutcome.Failure(
+                                "ShramSafal.SyncInvalidPayload",
+                                $"create_daily_log labour[].workerNames has a name longer than {LabourAssignmentFactory.MaxWorkerNameLength} characters.");
+                        }
+                    }
+                }
             }
         }
 
