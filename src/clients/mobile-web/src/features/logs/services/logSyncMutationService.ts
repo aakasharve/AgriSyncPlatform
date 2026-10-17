@@ -5,6 +5,10 @@ import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
 import { type DailyLog } from '../../../types';
 import { buildTaskPayloads, ensureUuid, normalizeName } from './logTaskPayloads';
+import {
+    WORKER_NAME_MAX_LENGTH,
+    WORKER_NAMES_MAX_PER_ENGAGEMENT,
+} from '../../../../../../../sync-contract/schemas/payloads/create_daily_log.zod';
 
 // `UUID_REGEX` / `ensureUuid` moved to `logTaskPayloads.ts` and imported
 // back above. They had to travel WITH the task builders: those call
@@ -152,6 +156,33 @@ export function wholeOrOmitted(value: number | undefined): number | undefined {
 }
 
 /**
+ * spec: 2026-08-25-prod-cutover-waves — the names the farmer gave for one crew, in a
+ * shape the contract can never refuse ("बरोबर doesn't save the name": the payload
+ * carried no names, so the server never stored them and the next pull erased them).
+ *
+ * Same rule as the server's write boundary (`LabourAssignment.Create`, B002): trim
+ * each name, shed blanks, never dedupe (two real people can both be बाळू). Then clamp
+ * to the contract's own bounds, because `MutationQueue.enqueue` safeParses and THROWS
+ * — one over-long dictation must not cost the farmer his whole day (P9). A cut never
+ * ends on half a surrogate pair. `undefined` when nobody was named, so the key is not
+ * sent. Identity only (P7): no count is read from or written to this list.
+ */
+export function workerNamesForWire(names: readonly unknown[] | undefined): string[] | undefined {
+    if (!Array.isArray(names)) return undefined;
+    const kept: string[] = [];
+    for (const raw of names) {
+        if (kept.length === WORKER_NAMES_MAX_PER_ENGAGEMENT) break;
+        const name = typeof raw === 'string' ? raw.trim() : '';
+        if (!name) continue;
+        let cut = name.slice(0, WORKER_NAME_MAX_LENGTH);
+        const last = cut.charCodeAt(cut.length - 1);
+        if (cut.length < name.length && last >= 0xd800 && last <= 0xdbff) cut = cut.slice(0, -1);
+        kept.push(cut.trimEnd());
+    }
+    return kept.length > 0 ? kept : undefined;
+}
+
+/**
  * Labour V1 Task 8.1 — THE STRUCTURED LABOUR PAYLOAD.
  *
  * WHY THIS IS LOAD-BEARING, not a payload tweak: the server routes labour to
@@ -201,6 +232,7 @@ function buildLabourPayloads(log: DailyLog): LabourItemPayload[] {
         // Absent means "the farmer did not state hours"; the server then records
         // Assumed. Zero and negatives are unstated too — not an error (P9).
         const durationHours = finiteOrOmitted(event.durationHours);
+        const workerNames = workerNamesForWire(event.workerNames);
 
         // Conditional spreads, so a value we cannot send is simply NOT SENT: the
         // key is absent rather than present-and-undefined. One uniform rule for
@@ -235,6 +267,7 @@ function buildLabourPayloads(log: DailyLog): LabourItemPayload[] {
             shift: event.shiftId,
             task: event.activity,
             notes: event.notes,
+            ...(workerNames !== undefined && { workerNames }),
         };
     });
 }

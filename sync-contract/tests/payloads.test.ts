@@ -209,6 +209,47 @@ describe('CreateDailyLogPayload', () => {
         });
         expect(r.success).toBe(false);
     });
+
+    // spec: 2026-08-25-prod-cutover-waves — labour[].workerNames. The bounds
+    // themselves are pinned to the server's in workerNamesBounds.parity.test.ts.
+    const withNames = (workerNames: unknown) => ({
+        dailyLogId: VALID_GUID_A,
+        farmId: VALID_GUID_B,
+        plotId: VALID_GUID_C,
+        cropCycleId: VALID_GUID_D,
+        logDate: VALID_LOG_DATE,
+        labour: [{
+            labourAssignmentId: VALID_GUID_E,
+            engagementType: 'hired_daily',
+            workerCount: 8,
+            workerNames,
+        }],
+    });
+    it('accepts a labour item carrying the names the farmer gave', () => {
+        expect(payloads.CreateDailyLogPayload.safeParse(withNames(['रमेश', 'सीता'])).success).toBe(true);
+    });
+    it('accepts a labour item with no workerNames key — every shipped APK sends that', () => {
+        const r = payloads.CreateDailyLogPayload.safeParse(withNames(undefined));
+        expect(r.success).toBe(true);
+    });
+    it('accepts an empty list, a blank and a padded name — P9: none may reject the day', () => {
+        // No .min(1) and no .trim() on purpose: MutationQueue.enqueue THROWS on a
+        // refused payload, and the server's own write boundary sheds blanks.
+        expect(payloads.CreateDailyLogPayload.safeParse(withNames([])).success).toBe(true);
+        expect(payloads.CreateDailyLogPayload.safeParse(withNames(['', '  ', ' रमेश '])).success).toBe(true);
+    });
+    it('accepts more names than the stated headcount — names are identity, not quantity (P7)', () => {
+        const r = payloads.CreateDailyLogPayload.safeParse({
+            ...withNames(['रमेश', 'सीता', 'गणेश']),
+            labour: [{ labourAssignmentId: VALID_GUID_E, engagementType: 'hired_daily', workerCount: 1, workerNames: ['रमेश', 'सीता', 'गणेश'] }],
+        });
+        expect(r.success).toBe(true);
+    });
+    it('rejects workerNames that is not an array of strings', () => {
+        expect(payloads.CreateDailyLogPayload.safeParse(withNames('रमेश')).success).toBe(false);
+        expect(payloads.CreateDailyLogPayload.safeParse(withNames([7])).success).toBe(false);
+        expect(payloads.CreateDailyLogPayload.safeParse(withNames([null])).success).toBe(false);
+    });
 });
 
 describe('AddLogTaskPayload', () => {

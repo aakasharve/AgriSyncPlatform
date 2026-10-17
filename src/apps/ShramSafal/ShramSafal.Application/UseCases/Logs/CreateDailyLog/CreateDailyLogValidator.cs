@@ -1,5 +1,7 @@
 using AgriSync.BuildingBlocks.Application.PipelineBehaviors;
 using AgriSync.BuildingBlocks.Results;
+using ShramSafal.Application.Contracts.Sync.Payloads;
+using ShramSafal.Application.UseCases.Labour;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Logs;
 
@@ -11,7 +13,7 @@ namespace ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 /// <see cref="ValidationBehavior{TCommand,TResult}"/> pipeline stage.
 ///
 /// <para>
-/// Two gates are extracted, both yielding
+/// Three gates are extracted, all yielding
 /// <see cref="ShramSafalErrors.InvalidCommand"/>:
 /// <list type="number">
 /// <item>Any of <see cref="CreateDailyLogCommand.FarmId"/>,
@@ -20,6 +22,8 @@ namespace ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 /// SCOPE-CONDITIONAL spatial shape (see the LABOUR_PHASE2 P2.2 note below).</item>
 /// <item>An explicit <see cref="CreateDailyLogCommand.DailyLogId"/>
 /// was supplied but is empty (null is fine — the handler generates one).</item>
+/// <item>A labour engagement's <c>WorkerNames</c> exceed the transport bounds
+/// (spec: 2026-08-25-prod-cutover-waves) — the same bounds /sync/push enforces.</item>
 /// </list>
 /// </para>
 ///
@@ -66,10 +70,60 @@ public sealed class CreateDailyLogValidator : IValidator<CreateDailyLogCommand>
             yield break;
         }
 
+        // spec: 2026-08-25-prod-cutover-waves — the same worker-name bounds the
+        // /sync/push boundary enforces (PushSyncBatchHandler.ValidateLabourWorkerNames),
+        // because this HTTP path threads the very same generated LabourItem through.
+        // /sync/push skips this pipeline, so neither gate may rely on the other.
+        if (!AreWorkerNamesWithinBounds(command.Labour))
+        {
+            yield return ShramSafalErrors.InvalidCommand;
+            yield break;
+        }
+
         if (command.DailyLogId.HasValue && command.DailyLogId.Value == Guid.Empty)
         {
             yield return ShramSafalErrors.InvalidCommand;
         }
+    }
+
+    /// <summary>
+    /// Shape-and-size only, in the posture of the push boundary: at most
+    /// <see cref="LabourAssignmentFactory.MaxWorkerNamesPerEngagement"/> names per
+    /// engagement, each at most <see cref="LabourAssignmentFactory.MaxWorkerNameLength"/>
+    /// after trimming. A blank or null entry is "no name", not a malformed one
+    /// (<c>LabourAssignment.Create</c> sheds it, B002), and names out-numbering the
+    /// stated headcount are accepted: the count is the farmer's statement and names are
+    /// an overlay on it (P7), so a mismatch is never a reason to refuse him (P9).
+    /// </summary>
+    private static bool AreWorkerNamesWithinBounds(IReadOnlyList<LabourItem>? labour)
+    {
+        if (labour is null)
+        {
+            return true;
+        }
+
+        foreach (var item in labour)
+        {
+            if (item?.WorkerNames is not { } names)
+            {
+                continue;
+            }
+
+            if (names.Count > LabourAssignmentFactory.MaxWorkerNamesPerEngagement)
+            {
+                return false;
+            }
+
+            foreach (var name in names)
+            {
+                if (name is not null && name.Trim().Length > LabourAssignmentFactory.MaxWorkerNameLength)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     private static bool IsSpatialShapeValid(CreateDailyLogCommand command) => command.Scope switch

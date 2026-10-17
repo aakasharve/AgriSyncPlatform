@@ -54,7 +54,8 @@ public sealed record LabourItem(
     string? Task = null,
     string? Notes = null,
     decimal? DurationHours = null,
-    Guid? EngagedThroughFieldOperatorId = null
+    Guid? EngagedThroughFieldOperatorId = null,
+    IReadOnlyList<string>? WorkerNames = null
 );
 
 public sealed record DisturbanceItem(

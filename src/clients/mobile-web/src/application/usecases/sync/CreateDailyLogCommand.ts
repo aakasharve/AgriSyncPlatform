@@ -49,6 +49,13 @@ export interface LabourItemPayload {
      // its own default and records Assumed. Never invent a value here just
      // to fill the field — omitting it is the correct way to say "not stated".
      durationHours?: number;
+     // spec: 2026-08-25-prod-cutover-waves — the names the farmer gave for this
+     // crew, as stated. IDENTITY, never a headcount (P7): `workerCount` above is
+     // the only count and nothing derives it from this list. Sent only when the
+     // farmer named someone; trimmed, blanks shed and clamped to the contract's
+     // bounds BEFORE enqueue (`buildLabourPayloads`), because a payload the zod
+     // schema refuses throws at `MutationQueue.enqueue` and costs the whole day.
+     workerNames?: string[];
 }
 
 /**

@@ -573,6 +573,17 @@ public sealed class CreateDailyLogHandler(
                     // Descriptive only — never touches the money fields above.
                     shift: LabourAssignmentFactory.MapLabourShift(item.Shift),
                     task: item.Task,
+                    // spec: 2026-08-25-prod-cutover-waves — the names the farmer
+                    // gave for this crew ("बरोबर doesn't save the name"). The column
+                    // (ssf.labour_assignments.worker_names_json) has existed since
+                    // 20260718132540 and the voice path already fills it; the
+                    // manual/attendance path dropped the names HERE because the wire
+                    // had no member for them. IDENTITY, not quantity (P7): workerCount
+                    // above is resolved without ever looking at this list, and
+                    // LabourAssignment.Create trims and sheds blanks (B002). Bounds
+                    // are enforced at the transport boundary (PushSyncBatchHandler,
+                    // CreateDailyLogValidator), never by trimming the list here.
+                    workerNames: item.WorkerNames,
                     // LABOUR_PHASE2 migration ③ (founder decision O-3). `notes`
                     // has been on the wire since Labour V1 Task 5
                     // (create_daily_log.zod.ts) and was DROPPED HERE, on this
