@@ -669,7 +669,9 @@ public sealed partial class PurveshDemoSeeder
             var otherFarms = await CountOtherFarmsOfLoginAsync(login.Id, farmId, cancellationToken);
             if (otherFarms > 0)
             {
-                keptLogins.Add($"{login.Phone.Value} (still on {otherFarms} other farm(s))");
+                // Named by its SEED KEY, never by phone or id: this summary is logged.
+                var seedKey = UserSeeds.FirstOrDefault(seed => seed.Phone == login.Phone.Value)?.Key ?? "seed-login";
+                keptLogins.Add($"{seedKey} (still on {otherFarms} other farm(s))");
             }
             else
             {
@@ -742,7 +744,7 @@ public sealed partial class PurveshDemoSeeder
                $"attendanceMarks={farm.AttendanceMarks}, " +
                $"labourAssignments={farm.LabourAssignments}. " +
                $"Kept logins (still used by another farm): {(keptLogins.Count == 0 ? "none" : string.Join(", ", keptLogins))}. " +
-               $"Kept owner account: {(account.KeptBecauseOtherFarms > 0 ? $"{PurveshOwnerAccountId.Value} (still on {account.KeptBecauseOtherFarms} other farm(s))" : "no")}.";
+               $"Kept demo owner account: {(account.KeptBecauseOtherFarms > 0 ? $"yes (still on {account.KeptBecauseOtherFarms} other farm(s))" : "no")}.";
     }
 
     /// <summary>

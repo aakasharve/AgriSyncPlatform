@@ -49,6 +49,13 @@ public sealed record PurveshDemoReseedTableCounts(
 /// wrote, and how installed apps receive the refreshed rows under the ids they already hold.
 /// </param>
 /// <param name="TimestampPolicy">How the run chose its record times (see the command help).</param>
+/// <param name="FarmId">The deterministic demo farm id — a constant of this seeder, not a secret.</param>
+/// <param name="OwnerUserId">
+/// The login the run treated as the demo owner (the holder of the demo phone). Printed so the
+/// operator can confirm, from the report alone, WHICH account the run acted for — that check is
+/// part of the command's safety contract. It is an opaque internal id written only to the
+/// operator's own console, never to an application log; no account id, phone or name is printed.
+/// </param>
 public sealed record PurveshDemoReseedReport(
     string SeedVersion,
     string IdNamespace,
@@ -60,7 +67,6 @@ public sealed record PurveshDemoReseedReport(
     DateTime RunUtc,
     Guid FarmId,
     Guid OwnerUserId,
-    Guid OwnerAccountId,
     IReadOnlyDictionary<string, PurveshDemoReseedTableCounts> Tables,
     IReadOnlyList<string> Retained,
     IReadOnlyList<string> Skipped,
@@ -251,7 +257,7 @@ public sealed partial class PurveshDemoSeeder
                 ownerAccountId,
                 actorUserId: null,
                 ct => ReseedInsideDemoFarmScopeAsync(
-                    repository, farmId, ownerUserId, ownerAccountId, userIdsByKey, crewPresent, runUtc,
+                    repository, farmId, ownerUserId, userIdsByKey, crewPresent, runUtc,
                     options.DryRun, ct),
                 cancellationToken);
 
@@ -276,7 +282,6 @@ public sealed partial class PurveshDemoSeeder
         IShramSafalRepository repository,
         FarmId farmId,
         UserId ownerUserId,
-        Guid ownerAccountId,
         IReadOnlyDictionary<string, UserId> userIdsByKey,
         IReadOnlyDictionary<string, bool> crewPresent,
         DateTime runUtc,
@@ -571,7 +576,6 @@ public sealed partial class PurveshDemoSeeder
             RunUtc: runUtc,
             FarmId: farmId.Value,
             OwnerUserId: ownerUserId.Value,
-            OwnerAccountId: ownerAccountId,
             Tables: tables,
             Retained: retained,
             Skipped: skipped,
