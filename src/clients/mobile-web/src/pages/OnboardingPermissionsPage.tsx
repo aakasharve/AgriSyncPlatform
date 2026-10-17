@@ -91,6 +91,8 @@ const OnboardingPermissionsPage: React.FC<OnboardingPermissionsPageProps> = ({ o
                 @keyframes cs-rise { from{transform:translateY(30px);opacity:0} to{transform:translateY(0);opacity:1} }
                 @keyframes cs-up { from{transform:translateY(14px);opacity:0} to{transform:translateY(0);opacity:1} }
                 @media (prefers-reduced-motion:reduce){ [data-cs-anim]{animation-duration:.01ms!important;animation-delay:0ms!important} }
+                .cs-mascot-slot{container-type:size}
+                @container (max-height:120px){ .cs-mascot-img{display:none} }
             `}</style>
 
             <DawnScene lit={mounted} />
@@ -109,8 +111,9 @@ const OnboardingPermissionsPage: React.FC<OnboardingPermissionsPageProps> = ({ o
             </div>
 
             {/* PERMISSION ROWS — directly under the header (natural reading order),
-                scrollable on short screens. */}
-            <div className="relative z-10 min-h-0 flex-1 overflow-y-auto scrollbar-hide">
+                scrollable on short screens. Sized to their content (flex-initial) so the
+                space left below them belongs to the farmer slot that follows. */}
+            <div className="relative z-10 min-h-0 flex-initial overflow-y-auto scrollbar-hide">
               <div className="mx-auto flex w-full max-w-[440px] flex-col space-y-3 px-6 py-5">
                 {CARDS.map((c, idx) => (
                     <div
@@ -142,12 +145,17 @@ const OnboardingPermissionsPage: React.FC<OnboardingPermissionsPageProps> = ({ o
               </div>
             </div>
 
-            {/* pointing farmer — gestures at the CTA. Sized by viewport WIDTH and
-                anchored fully inside the frame, so he is never clipped by the
-                root's overflow-hidden on narrow phones / the APK webview. */}
+            {/* pointing farmer — stands on the CTA dock and gestures at the button.
+                He lives in the space BETWEEN the permission rows and the dock, never
+                over them: he was positioned against the screen bottom and his head
+                sat behind the साठवण card on a phone (founder report, APK 1.0.14).
+                Same size as before when the space allows (52% of the width, at most
+                212px); smaller when it does not; hidden when that space is under
+                120px (see .cs-mascot-slot above), and on short screens, where the
+                rows scroll, the slot is empty. */}
             <div
                 data-cs-anim
-                className="pointer-events-none absolute bottom-[96px] right-0 z-[5] w-[52%] max-w-[212px]"
+                className="cs-mascot-slot pointer-events-none relative z-[5] min-h-0 flex-1"
                 style={anim('cs-rise', '.8s', '.3s')}
             >
                 {!imgFailed && (
@@ -156,7 +164,7 @@ const OnboardingPermissionsPage: React.FC<OnboardingPermissionsPageProps> = ({ o
                         alt=""
                         aria-hidden="true"
                         onError={() => setImgFailed(true)}
-                        className="h-auto w-full object-contain object-bottom"
+                        className="cs-mascot-img absolute bottom-0 right-0 h-auto max-h-full w-[52%] max-w-[212px] object-contain object-right-bottom"
                         style={{
                             filter: 'drop-shadow(0 14px 20px rgba(6,78,59,.22))',
                             WebkitMaskImage: 'linear-gradient(180deg,#000 70%,transparent 97%)',
