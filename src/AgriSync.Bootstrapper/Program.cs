@@ -780,6 +780,19 @@ try
     //
     // Applying nothing is the point: this runs BEFORE any migration authority
     // exists, so the declared set can be proven before the gate is ever opened.
+    //
+    // spec: 2026-08-25-prod-cutover-waves (demo-seed-v3) — ONE-SHOT re-seed of the
+    // demo farm's content (`--reseed-purvesh-demo [--dry-run]`). Same shape as
+    // --list-migrations / --migrate-only: it returns before app.Run(), so no hosted
+    // service starts, and it never migrates (it refuses on pending migrations). It
+    // reads no environment flag — CLEAR_PURVESH_DEMO / SEED_PURVESH_DEMO stay the
+    // dev-only startup path. See PurveshDemoReseedCommand for its exit codes.
+    if (args.Contains(AgriSync.Bootstrapper.Infrastructure.PurveshDemoReseedCommand.Flag, StringComparer.Ordinal))
+    {
+        return await AgriSync.Bootstrapper.Infrastructure.PurveshDemoReseedCommand.RunAsync(
+            app.Services, args, Console.Out, DateTime.UtcNow, CancellationToken.None);
+    }
+
     if (args.Contains("--list-migrations", StringComparer.Ordinal))
     {
         await ListMigrationsAndExitAsync(app);
