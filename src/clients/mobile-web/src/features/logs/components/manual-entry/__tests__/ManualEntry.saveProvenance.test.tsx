@@ -311,3 +311,44 @@ describe('ManualEntry save — the corrections POST carries no invented value', 
         expect(userDraft.inputs?.[0].method).toBeUndefined();
     });
 });
+
+/**
+ * PR #82 re-review R2 (spec: 2026-08-25-prod-cutover-waves): the बदल करा form on
+ * the labour door saves a NEW record with `captureScope: 'labour'`, so the server
+ * takes only labour from the voice job behind it (`enqueueLogsForSync` puts it
+ * on the queued create_daily_log; PR #83 contract).
+ * What the form submits is otherwise unchanged; an ordinary form adds no key.
+ */
+describe('ManualEntry save — captureScope from the labour door', () => {
+    function renderWithScope(captureScope: 'labour' | undefined) {
+        const onSubmit = vi.fn();
+        render(
+            <ManualEntry
+                context={CONTEXT}
+                crops={CROPS}
+                defaults={DEFAULTS}
+                profile={PROFILE}
+                onSubmit={onSubmit}
+                initialData={AI_PARSED_DRAFT}
+                provenance={{ source: 'ai', sourceAiJobId: 'job-1', timestamp: '2026-08-15T04:00:00.000Z' }}
+                onDataConsumed={vi.fn()}
+                todayLogs={NO_TODAY_LOGS}
+                attendanceOnly={captureScope === 'labour'}
+                captureScope={captureScope}
+            />
+        );
+        save();
+        expect(onSubmit).toHaveBeenCalledTimes(1);
+        return onSubmit.mock.calls[0][0] as Record<string, unknown>;
+    }
+
+    it('a new record saved from the labour door carries captureScope "labour" (and keeps its provenance)', () => {
+        const submitted = renderWithScope('labour');
+        expect(submitted.captureScope).toBe('labour');
+        expect((submitted.provenance as { sourceAiJobId?: string }).sourceAiJobId).toBe('job-1');
+    });
+
+    it('an ordinary form adds no captureScope key', () => {
+        expect(renderWithScope(undefined)).not.toHaveProperty('captureScope');
+    });
+});

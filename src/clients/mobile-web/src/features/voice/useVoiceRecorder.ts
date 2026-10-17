@@ -15,7 +15,7 @@ import { CoreConsentMissingError } from '../consent/separation/coreConsentGate';
 import type { PendingLadderLevel } from './continuity/pendingInterpretation';
 import { PendingInterpretationStore } from './continuity/PendingInterpretationStore';
 import { DeviceSpeechRecognizer } from '../../infrastructure/voice/DeviceSpeechRecognizer';
-import { yieldToPaint, hasSuccessfulIrrigation, type UseVoiceRecorderProps, type PreprocessedAudioResult } from './useVoiceRecorder.types';
+import { yieldToPaint, hasSuccessfulIrrigation, bindDraftProvenance, type UseVoiceRecorderProps, type PreprocessedAudioResult } from './useVoiceRecorder.types';
 
 
 
@@ -633,11 +633,11 @@ export const useVoiceRecorder = ({
                 mergedDraft.questionsForUser = mergedDraft.questionsForUser?.filter(q => q.target !== 'LABOUR');
             }
 
-            setDraftLog(mergedDraft);
+            setDraftLog(bindDraftProvenance(mergedDraft, prov)); // this parse's provenance, bound to its draft (draftProvenance.ts)
             setRecordingSegment(null);
         } else {
             // Fallback: If no auto-save prop (e.g. testing) or it was unclear, set draft
-            setDraftLog(response);
+            setDraftLog(bindDraftProvenance(response, prov));
         }
 
         setStatus('idle');

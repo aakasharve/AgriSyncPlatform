@@ -24,6 +24,10 @@ import type { VoiceParserPort } from '../../application/ports';
 import type { LogScope } from '../../domain/types/log.types';
 import type { VoicePreprocessor } from '../../infrastructure/voice/VoicePreprocessor';
 
+// Re-exported HERE so the hook can bind a parse's provenance to its draft through
+// an import it already has: `useVoiceRecorder.ts` is quarantined at its line
+// count (`check:file-sizes`) and may not grow by an import line.
+export { bindDraftProvenance } from './draftProvenance';
 
 // TASK 3 (voice-live-captions-banner-2026-06-10) — yield to the browser so a
 // just-committed React state change can paint before heavy synchronous-ish

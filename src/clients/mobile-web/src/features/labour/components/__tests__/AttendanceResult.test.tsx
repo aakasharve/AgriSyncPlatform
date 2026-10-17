@@ -16,6 +16,7 @@ import '@testing-library/jest-dom/vitest';
 import AttendanceResult from '../AttendanceResult';
 import type { AgriLogResponse } from '../../../../types';
 import type { LabourAnchor } from '../../labourAnchor';
+import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 
 // Task 3.5c — the confirm now enqueues attendance.mark rows for
 // uniquely-resolved names. Both seams are mocked module-level (hoisted):
@@ -216,5 +217,56 @@ describe('AttendanceResult — 3.5c: बरोबर enqueues marks for uniquely
         fireEvent.click(screen.getByRole('button', { name: 'बरोबर' }));
         expect(onConfirm).toHaveBeenCalledTimes(1);
         expect(mockEnqueue).not.toHaveBeenCalled();
+    });
+});
+
+// APK 1.0.14 founder report (spec: 2026-08-25-prod-cutover-waves): at the end of
+// the scroll the bottom bar's raised centre button covered the lower edge of
+// बरोबर. The page's bottom padding (6rem) clears the bar (80px) but not that
+// button, which rises 24px above it (measured: top at viewport - 104px).
+// HONESTY NOTE: jsdom has no layout; this pins the class that lifts the
+// buttons clear. Real proof is the browser measurement (every one of 15 points
+// on each button is the topmost element at 360x800 and 393x852, text 1.0/1.3).
+describe('AttendanceResult — the buttons clear the bottom bar', () => {
+    it('the screen ends with 24px of clearance below बरोबर / बदल करा', () => {
+        const { container } = render(<AttendanceResult
+            draft={{ ...base, labour: [{ id: 'l1', type: 'hired', count: 1, workerNames: ['गणेश'] } as unknown as AgriLogResponse['labour'][number]] }}
+            anchor={anchor} farmId={undefined}
+            onConfirm={vi.fn()} renderEditSurface={() => <div data-testid="edit-surface" />}
+            onSpeakMore={vi.fn()} />);
+        const root = container.firstElementChild;
+        expect(root?.contains(screen.getByRole('button', { name: 'बरोबर' }))).toBe(true);
+        expect((root?.getAttribute('class') ?? '').split(/\s+/)).toContain('pb-6');
+    });
+});
+
+// PR #82 review B003: the marks the same tap queues are for the day the record
+// is filed under (the day he spoke), passed in as workDate; today only when absent.
+describe('AttendanceResult — marks are for the record\'s day', () => {
+    const FARM = '22222222-2222-2222-2222-222222222222';
+
+    async function confirmWith(workDate: string | undefined) {
+        mockEnqueue.mockClear();
+        mockFetchOperators.mockClear();
+        mockFetchOperators.mockResolvedValueOnce([{ id: 'op-1', displayName: 'गणेश', isActive: true }]);
+        render(<AttendanceResult
+            draft={{ ...base, labour: [{ id: 'l1', type: 'hired', count: 1, workerNames: ['गणेश'] } as unknown as AgriLogResponse['labour'][number]] }}
+            anchor={anchor} farmId={FARM} workDate={workDate}
+            onConfirm={vi.fn()} renderEditSurface={() => <div data-testid="edit-surface" />}
+            onSpeakMore={vi.fn()} />);
+        await waitFor(() => expect(mockFetchOperators).toHaveBeenCalledWith(FARM));
+        // The roster resolves in a microtask after the fetch is called.
+        await new Promise((r) => setTimeout(r, 0));
+        fireEvent.click(screen.getByRole('button', { name: 'बरोबर' }));
+        expect(mockEnqueue).toHaveBeenCalledTimes(1);
+        return (mockEnqueue.mock.calls[0][0] as Record<string, unknown>).workDate;
+    }
+
+    it('uses the workDate it is given (the capture day)', async () => {
+        expect(await confirmWith('2026-01-05')).toBe('2026-01-05');
+    });
+
+    it('falls back to today when no workDate is given', async () => {
+        expect(await confirmWith(undefined)).toBe(getDateKey());
     });
 });

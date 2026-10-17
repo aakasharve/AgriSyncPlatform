@@ -14,6 +14,26 @@ import { isCompletedIrrigationEvent } from '../../../services/irrigationCompleti
 import { getDateKey } from '../../../../../core/domain/services/DateKeyService';
 import type { ManualEntryFormOrigin } from '../types';
 
+/**
+ * The names the parse heard for one crew, as the form carries them (PR #82
+ * review M2; "बरोबर doesn't save the name"). The voice overlay below rebuilds
+ * each labour row field by field, so a field it does not name is DROPPED, and
+ * `workerNames` was not named: a बदल करा save from a parsed draft lost every name.
+ *
+ * Same rule as the payload builder (`workerNamesForWire`,
+ * logSyncMutationService.ts): trim each name, shed blanks, never dedupe (two real
+ * people can both be बाळू); `undefined` when nobody was named. The wire's length
+ * clamp stays where it is, at the payload builder. Identity only (P7): no count
+ * is read from or written to this list.
+ */
+export function formWorkerNames(names: readonly unknown[] | undefined): string[] | undefined {
+    if (!Array.isArray(names)) return undefined;
+    const kept = names
+        .map((raw) => (typeof raw === 'string' ? raw.trim() : ''))
+        .filter((name) => name.length > 0);
+    return kept.length > 0 ? kept : undefined;
+}
+
 interface HydrationParams {
     initialData?: AgriLogResponse | null;
     activePlot: Plot | undefined;
@@ -261,6 +281,8 @@ export function useManualEntryHydration(params: HydrationParams): void {
                         // if one was already minted upstream.
                         durationHours: aiLabour.durationHours,
                         labourAssignmentId: aiLabour.labourAssignmentId,
+                        // PR #82 review M2 — the names the farmer gave (see formWorkerNames).
+                        workerNames: formWorkerNames(aiLabour.workerNames),
                         sourceText: aiLabour.sourceText,
                         systemInterpretation: aiLabour.systemInterpretation,
                         // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11)

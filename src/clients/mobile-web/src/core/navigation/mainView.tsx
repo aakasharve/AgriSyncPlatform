@@ -39,7 +39,9 @@ import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
 // file's render functions are plain functions, not components — see
 // `mainViewComponents.tsx`'s header for why that hook rule forces the split.
 import SathiGuideCard from '../../features/oversight/components/SathiGuideCard';
-import { toAttendanceOnlyDraft } from '../../features/logs/attendanceDraft';
+import { toAttendanceOnlyDraft, toAttendanceSubmission, attendanceCaptureDay } from '../../features/logs/attendanceDraft';
+import { draftProvenance } from '../../features/voice/draftProvenance';
+import type { LogProvenance } from '../../domain/ai/LogProvenance';
 // Labour V2 R1 Task 3.4b — the Labour-owned result surface + the anchor it
 // renders against. The invoking feature owns the meaning of a labour parse.
 import AttendanceResult from '../../features/labour/components/AttendanceResult';
@@ -466,7 +468,10 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                         // stopped being the landing. The call moved verbatim into
                                         // this closure — it is NOT modified.
                                         const attendanceDraft = logIntent === 'labour' ? toAttendanceOnlyDraft(draftLog) : null;
-                                        const renderManualEntry = () => (
+                                        // `labourEdit`: the बदल करा surface of the labour door's confirm
+                                        // card. It takes THAT draft's own parse provenance (never the
+                                        // voice state's last one) and its capture day.
+                                        const renderManualEntry = (labourEdit?: { provenance: LogProvenance | undefined; recordedDateKey: string }) => (
                                     <ManualEntry
                                         context={currentLogContext}
                                         crops={crops}
@@ -484,7 +489,10 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                         // itself — see attendanceDraft.ts.
                                         initialData={logIntent === 'labour' ? toAttendanceOnlyDraft(draftLog) : draftLog}
                                         attendanceOnly={logIntent === 'labour'}
-                                        provenance={provenance}
+                                        provenance={labourEdit ? labourEdit.provenance : provenance}
+                                        recordedDateKey={labourEdit?.recordedDateKey}
+                                        // Labour door: the server takes only labour from the voice job.
+                                        captureScope={logIntent === 'labour' ? 'labour' : undefined}
                                         onDataConsumed={() => setDraftLog(null)}
                                         todayCountsMap={(() => {
                                             const map: Record<string, TodayCounts> = {};
@@ -543,7 +551,12 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                             // draft with no labour rows falls through to the empty
                                             // ManualEntry — "he said something this door cannot
                                             // record… He sees it and decides" survives as behaviour.
-                                            const anchorForDraft = resolveLabourAnchor(history, getDateKey());
+                                            // Only THIS draft's parse provenance (bound when the parse
+                                            // arrived), never the voice state's last one; and the day he
+                                            // spoke, which the record, its marks and the anchor all use.
+                                            const ownProvenance = draftProvenance(draftLog);
+                                            const captureDay = attendanceCaptureDay(ownProvenance);
+                                            const anchorForDraft = resolveLabourAnchor(history, captureDay);
                                             const anchorLog = history.find((l) => anchorForDraft.state === 'anchored' && l.id === anchorForDraft.logId);
                                             return (
                                                 <LabourResultHost renderManualEntry={renderManualEntry}>
@@ -552,8 +565,10 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                                             draft={attendanceDraft}
                                                             anchor={anchorForDraft}
                                                             farmId={anchorLog?.meta?.farmId ?? currentLogContext?.selection?.[0]?.farmId}
-                                                            onConfirm={(d) => { void handleManualSubmit(d); setDraftLog(null); }}
-                                                            renderEditSurface={renderManualEntry}
+                                                            workDate={captureDay}
+                                                            // Labour only, dated and attributed (see toAttendanceSubmission).
+                                                            onConfirm={(d) => { void handleManualSubmit(toAttendanceSubmission(d, ownProvenance)); setDraftLog(null); }}
+                                                            renderEditSurface={() => renderManualEntry({ provenance: ownProvenance, recordedDateKey: captureDay })}
                                                             onSpeakMore={() => { setRecordingSegment('labour'); setMode('voice'); }}
                                                         />
                                                     ) : null}

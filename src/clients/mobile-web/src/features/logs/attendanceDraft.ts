@@ -33,6 +33,9 @@
  * into Labour Management. Only this direction needed a gate.
  */
 import type { AgriLogResponse } from '../../types';
+import type { LogProvenance } from '../../domain/ai/LogProvenance';
+import type { LogCaptureScope } from '../../domain/types/log.types';
+import { getDateKey } from '../../core/domain/services/DateKeyService';
 
 /**
  * The हजेरी view of a parsed draft: labour only.
@@ -43,7 +46,10 @@ import type { AgriLogResponse } from '../../types';
  * buckets that belong to the other door are emptied.
  *
  * The disturbance SURVIVES this filter (see below): on a no-work day it is the
- * reason the day had no work, and the हजेरी confirm screen shows it beside WHO came.
+ * reason the day had no work. Neither the confirm card (AttendanceResult) nor the
+ * attendance-only edit form displays it. बरोबर does not save it
+ * (`toAttendanceSubmission`); the बदल करा form's save still carries it, because
+ * that form is filled from this draft.
  */
 export function toAttendanceOnlyDraft(draft: AgriLogResponse | null): AgriLogResponse | null {
     if (!draft) return null;
@@ -69,6 +75,74 @@ export function toAttendanceOnlyDraft(draft: AgriLogResponse | null): AgriLogRes
         // payload carries it end to end (create_daily_log.zod.ts:126,130 →
         // CreateDailyLogPayload.cs:83-84), verified 2026-09-02.
         disturbance: draft.disturbance,
+    };
+}
+
+/**
+ * The day a labour-door record is filed under: the day the farmer SPOKE, not the
+ * day he pressed बरोबर.
+ *
+ * That is the local (IST) date of the parse's `provenance.timestamp`, which the
+ * parser stamps the moment the parse comes back, seconds after he spoke. With no
+ * parse provenance (or an unreadable timestamp) it is today. Words he says about
+ * time are NOT interpreted: "काल चार जण आले" ("four came yesterday") is filed on
+ * the day he said it, not the day before. The attendance marks the same tap
+ * queues use this same day.
+ */
+export function attendanceCaptureDay(provenance: LogProvenance | null | undefined): string {
+    const stamp = provenance?.timestamp;
+    return stamp && !Number.isNaN(Date.parse(stamp)) ? getDateKey(stamp) : getDateKey();
+}
+
+/** What बरोबर hands the save path: labour, and only the facts about this record. */
+export interface AttendanceSubmission {
+    labour: AgriLogResponse['labour'];
+    /** New record only. See `attendanceCaptureDay`. */
+    date?: string;
+    /** New record only, and only the draft's OWN parse provenance. */
+    provenance?: LogProvenance;
+    /** New record only. See `DailyLog.captureScope`. */
+    captureScope?: LogCaptureScope;
+    /** Edit only: the record whose labour this replaces. */
+    originalLogId?: string;
+}
+
+/**
+ * What बरोबर hands the one manual save path (`useLogCommands.handleManualSubmit`).
+ *
+ * APK 1.0.14 founder report: "I can't tap बरोबर; it doesn't save the name". The
+ * confirm passed the raw parse (`AgriLogResponse`) straight to the save path,
+ * which builds the record from the MANUAL-ENTRY shape and needs a `date`. A
+ * parse has none, so `create_daily_log` was refused at the queue
+ * (`logDate Required`), nothing reached the server, the screen stayed where it
+ * was, and with no queued work the names in the record were hidden on read.
+ *
+ * LABOUR ONLY (founder ruling 2026-08-31): the record carries what the
+ * confirmation card showed, which is the labour, and nothing else from the parse.
+ * Observations, planned tasks, the parser's `dayOutcome`, the disturbance and the
+ * full transcript are not on the card, so they are not saved by it.
+ *
+ *   - NEW record: `labour`, `date` (`attendanceCaptureDay`), `captureScope:
+ *     'labour'`, and `provenance` only when the caller passes the draft's own
+ *     (`draftProvenance(draft)`). Never a 'manual' claim for a parse (P8), and
+ *     never another parse's provenance.
+ *   - EDIT of an existing record (`originalLogId`): `labour` only. No date (the
+ *     record keeps its own day), no provenance, no scope, and no empty buckets:
+ *     the update merges what is sent, so sending `[]` would erase the record's
+ *     other work.
+ */
+export function toAttendanceSubmission(
+    draft: AgriLogResponse,
+    provenance: LogProvenance | null | undefined,
+): AttendanceSubmission {
+    if (draft.originalLogId) {
+        return { originalLogId: draft.originalLogId, labour: draft.labour };
+    }
+    return {
+        labour: draft.labour,
+        date: attendanceCaptureDay(provenance),
+        ...(provenance ? { provenance } : {}),
+        captureScope: 'labour',
     };
 }
 
