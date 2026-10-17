@@ -156,7 +156,7 @@ public sealed class AttendanceAttachabilityRules
             "20260831185516_AddAttendanceMarkCorrections.cs");
 
         File.Exists(migration).Should().BeTrue(
-            "the creating migration is the ONLY carrier of the append-only grant; " +
+            "the creating migration carries the SELECT + INSERT grant; " +
             "if it moved or was renamed this pin must follow it deliberately, not vanish");
 
         // Comment-strip BEFORE matching (the house idiom this phase copies —
@@ -181,6 +181,26 @@ public sealed class AttendanceAttachabilityRules
             "RLS enabled AND forced is a hard rule for every ssf table");
         source.Should().Contain("FORCE ROW LEVEL SECURITY",
             "enable alone leaves the table owner outside the policy");
+
+        // The GRANT text above was never enough on its own: GRANT only adds, and
+        // 20260515090000_BootstrapDbRoles' default privileges had already handed the
+        // app role UPDATE and DELETE on every new ssf table — measured, the table was
+        // writable while every assertion above passed. The REVOKE that actually
+        // enforces append-only lives in its own migration; pin that it stays. The
+        // EFFECTIVE privilege is proven against real Postgres, as the app role, by
+        // Security/AppendOnlyLedgerGrantsRealPostgresTests — text cannot prove it.
+        var enforcing = Path.Combine(
+            TestPathHelper.GetSolutionRoot(),
+            "apps", "ShramSafal", "ShramSafal.Infrastructure",
+            "Persistence", "Migrations",
+            "20261017080742_EnforceAppendOnlyLedgerGrants.cs");
+        File.Exists(enforcing).Should().BeTrue(
+            "the migration that REVOKEs UPDATE/DELETE/TRUNCATE is what makes the ledger append-only");
+        var enforcingSource = StripComments(File.ReadAllText(enforcing));
+        enforcingSource.Should().Contain("'ssf.attendance_mark_corrections'",
+            "the corrections ledger must stay in the revoked set");
+        enforcingSource.Should().Contain("REVOKE UPDATE, DELETE, TRUNCATE ON %s FROM agrisync_app",
+            "the revoke must cover every way a history can be rewritten or erased");
     }
 
     // ── copied from LabourAnchorRules (private there; copy, do not import) ──
