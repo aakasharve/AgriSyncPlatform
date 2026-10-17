@@ -31,7 +31,7 @@ import { isFarmWideSelection } from '../../../../app/helpers/appContentDailyCoun
 import { emitClosureSubmitted } from '../../../../core/telemetry/eventEmitters';
 import { useFarmContext } from '../../../../core/session/FarmContext';
 
-const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, profile, onSubmit, initialData, provenance, onDataConsumed, todayCountsMap, farmWideToday, transcriptEntries = [], todayLogs = [], onLogSelect, recordedDateKey, attendanceOnly = false }) => {
+const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, profile, onSubmit, initialData, provenance, onDataConsumed, todayCountsMap, farmWideToday, transcriptEntries = [], todayLogs = [], onLogSelect, recordedDateKey, attendanceOnly = false, captureScope }) => {
 
     // DWC v2 §2.8 — closure.submitted emit context. The downstream
     // logCommandService generates the persisted DailyLog.id, so for
@@ -359,7 +359,10 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                 ? undefined
                 : (provenance ?? (formOriginRef.current === 'blank'
                     ? { source: 'manual' as const, timestamp: new Date().toISOString() }
-                    : undefined))
+                    : undefined)),
+            // Labour door: a NEW record says so (see ManualEntryProps.captureScope).
+            // Never on an edit: that record's scope is its own.
+            ...(captureScope && !selectedLogId ? { captureScope } : {}),
         };
 
         if (initialAiDataRef.current && provenance?.source === 'ai') {

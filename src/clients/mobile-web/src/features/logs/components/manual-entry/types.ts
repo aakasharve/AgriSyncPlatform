@@ -102,7 +102,16 @@ export interface ManualEntryProps {
          * log or when the entry is genuinely manual.
          */
         provenance?: LogProvenance | null;
+        /** Present only on a NEW record saved from the labour door (see `captureScope` below). */
+        captureScope?: 'labour';
     }) => void;
+    /**
+     * The form was opened from the labour (हजेरी) door. A NEW record saved here
+     * carries `captureScope: 'labour'` (see `DailyLog.captureScope`), so the
+     * server takes only labour from the voice job behind it. What the form
+     * submits is unchanged; only the server's derivation from the job is scoped.
+     */
+    captureScope?: 'labour';
     disabled?: boolean;
     initialData?: AgriLogResponse | null;
     provenance?: LogProvenance | null;

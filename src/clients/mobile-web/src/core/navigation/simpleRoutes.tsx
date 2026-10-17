@@ -44,7 +44,7 @@ import {
 // header for why this hop is a window event and not a prop path.
 import { requestOpenWaitingDrawer } from '../../features/oversight/oversightNavigationEvents';
 import { resolveLabourAnchor } from '../../features/labour/labourAnchor';
-import { getDateKey } from '../domain/services/DateKeyService';
+import { attendanceCaptureDay } from '../../features/logs/attendanceDraft';
 import { buildNoWorkDayPayload } from './noWorkDay';
 
 export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
@@ -93,7 +93,11 @@ export const renderLabourRoute = (ctx: AppRouterContext): React.ReactNode => {
                     // Journey fix D4: a day stated by the SERVER's read-out (a Mukadam on
                     // another phone holds no local log) is an anchor too - the hub says so
                     // via `anchoredByServer` when it drew the hero live for exactly that.
-                    if (!opts?.anchoredByServer && resolveLabourAnchor(ctx.history ?? [], getDateKey()).state !== 'anchored') return;
+                    //
+                    // The day checked is the day a capture made NOW is filed under: the
+                    // same rule as the record, its marks and the confirm card's anchor
+                    // (attendanceCaptureDay). No parse exists yet, so that is today.
+                    if (!opts?.anchoredByServer && resolveLabourAnchor(ctx.history ?? [], attendanceCaptureDay(null)).state !== 'anchored') return;
                     // spec: 2026-07-13-labour-attendance-approval-design (Task 3.4) —
                     // tag the intent BEFORE navigating so mainView can show a
                     // "why am I here" hint on arrival.

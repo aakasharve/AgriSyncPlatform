@@ -35,6 +35,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderLogView } from '../mainView';
 import type { AppRouterContext } from '../routeContext';
 import AttendanceResult, { type AttendanceResultProps } from '../../../features/labour/components/AttendanceResult';
+import ManualEntry from '../../../features/logs/components/ManualEntry';
+import { LabourResultHost } from '../mainView';
 import { bindDraftProvenance } from '../../../features/voice/draftProvenance';
 import { LogFactory } from '../../domain/LogFactory';
 import { getDateKey } from '../../domain/services/DateKeyService';
@@ -45,7 +47,7 @@ import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatal
 import { validatePayload } from '../../../infrastructure/sync/PayloadValidator';
 import { enqueueLogsForSync } from '../../../features/logs/services/logSyncMutationService';
 import type { LogProvenance } from '../../../domain/ai/LogProvenance';
-import type { AgriLogResponse, CropProfile, FarmerProfile, LogScope } from '../../../types';
+import type { AgriLogResponse, CropProfile, DailyLog, FarmerProfile, LogScope } from '../../../types';
 
 vi.mock('../../../infrastructure/sync/BackgroundSyncWorker', () => ({
     backgroundSyncWorker: { triggerNow: vi.fn().mockResolvedValue(undefined) },
@@ -106,7 +108,7 @@ function findByType(node: React.ReactNode, type: unknown): React.ReactElement | 
 }
 
 /** The labour door exactly as the founder had it: idle, manual, labour intent, a draft waiting. */
-function labourDoorCtx(draftLog: AgriLogResponse, handleManualSubmit: (d: unknown) => unknown): AppRouterContext {
+function labourDoorCtx(draftLog: AgriLogResponse, handleManualSubmit: (d: unknown) => unknown, extra: Record<string, unknown> = {}): AppRouterContext {
     return {
         currentRoute: 'main', mainView: 'log', status: 'idle', mode: 'manual', logIntent: 'labour',
         recordingSegment: null, crops: [grapes], logScope: plotScope,
@@ -124,6 +126,7 @@ function labourDoorCtx(draftLog: AgriLogResponse, handleManualSubmit: (d: unknow
         yesterdayCost: 0, setRecordingSegment: vi.fn(), lastSavedLogSummary: null, lastSavedLogIds: [],
         mockHistory: [], handleReset: vi.fn(), todayDayState: { pendingCount: 0, closurePercent: 0 },
         weatherData: null,
+        ...extra,
     } as unknown as AppRouterContext;
 }
 
@@ -222,5 +225,66 @@ describe('बरोबर on the labour door (APK 1.0.14 report + PR #82 review)
         expect(stored.disturbance).toBeUndefined();
         expect(stored.fullTranscript).toBeUndefined();
         expect(stored.dayOutcome).toBe('WORK_RECORDED'); // derived from the labour, not the parser's DISTURBANCE_RECORDED
+    });
+});
+
+// ─── PR #82 re-review follow-ups (R1, R2) ──────────────────────────────────
+type ManualEntryElementProps = { provenance?: LogProvenance | null; captureScope?: string; recordedDateKey?: string; attendanceOnly?: boolean };
+
+function confirmCard(draftLog: AgriLogResponse, extra: Record<string, unknown> = {}): AttendanceResultProps {
+    const node = renderLogView(labourDoorCtx(draftLog, vi.fn(), extra));
+    const result = findByType(node, AttendanceResult) as React.ReactElement<AttendanceResultProps> | null;
+    expect(result).not.toBeNull();
+    return result!.props;
+}
+
+/** An accepted log of 6 people on the CAPTURE day, on another farm than the context's. */
+const CAPTURE_DAY_FARM = 'f0000000-0000-4000-8000-0000000000c1';
+const captureDayLog = {
+    id: 'log-capture-day', date: CAPTURE_DAY, context: { selection: [] },
+    cropActivities: [], irrigation: [], inputs: [], machinery: [],
+    labour: [{ id: 'x1', type: 'HIRED', count: 6 }],
+    verification: { status: 'APPROVED' },
+    meta: { farmId: CAPTURE_DAY_FARM },
+} as unknown as DailyLog;
+
+describe("R1: the confirm card compares against the CAPTURE day's record", () => {
+    it('the anchor (headcount-disagreement source) and its farm come from the day he spoke', () => {
+        const props = confirmCard(parsedDraft(), { history: [captureDayLog] });
+        expect(props.anchor).toEqual({ state: 'anchored', headcount: 6, logId: 'log-capture-day' });
+        expect(props.farmId).toBe(CAPTURE_DAY_FARM);
+    });
+});
+
+describe('R2: the बदल करा edit form on the labour door', () => {
+    it("takes THIS draft's own provenance, the capture day, and captureScope 'labour'", () => {
+        const edit = findByType(confirmCard(parsedDraft()).renderEditSurface(), ManualEntry) as React.ReactElement<ManualEntryElementProps> | null;
+        expect(edit).not.toBeNull();
+        expect(edit!.props.attendanceOnly).toBe(true);
+        expect(edit!.props.provenance).toEqual(OWN);
+        expect(edit!.props.recordedDateKey).toBe(CAPTURE_DAY);
+        expect(edit!.props.captureScope).toBe('labour');
+    });
+
+    it("a draft no parse produced (opened from Reflect) gets NO provenance, never the voice state's stale one", () => {
+        const edit = findByType(confirmCard(parse()).renderEditSurface(), ManualEntry) as React.ReactElement<ManualEntryElementProps> | null;
+        expect(edit!.props.provenance).toBeUndefined();
+        expect(edit!.props.captureScope).toBe('labour');
+    });
+
+    it("the labour door's fall-through form (no labour heard) is labour-scoped too", () => {
+        const node = renderLogView(labourDoorCtx({ ...parse(), labour: [] }, vi.fn()));
+        const host = findByType(node, LabourResultHost) as React.ReactElement<{ renderManualEntry: () => React.ReactNode }> | null;
+        const form = findByType(host!.props.renderManualEntry(), ManualEntry) as React.ReactElement<ManualEntryElementProps> | null;
+        expect(form!.props.captureScope).toBe('labour');
+    });
+
+    it('the ordinary log door is unchanged: shared provenance, no scope, no date override', () => {
+        const node = renderLogView(labourDoorCtx(parse(), vi.fn(), { logIntent: null }));
+        const form = findByType(node, ManualEntry) as React.ReactElement<ManualEntryElementProps> | null;
+        expect(form).not.toBeNull();
+        expect(form!.props.provenance).toEqual(STALE); // the ctx value, exactly as before
+        expect(form!.props.captureScope).toBeUndefined();
+        expect(form!.props.recordedDateKey).toBeUndefined();
     });
 });

@@ -45,7 +45,10 @@ import { getDateKey } from '../../core/domain/services/DateKeyService';
  * buckets that belong to the other door are emptied.
  *
  * The disturbance SURVIVES this filter (see below): on a no-work day it is the
- * reason the day had no work, and the हजेरी confirm screen shows it beside WHO came.
+ * reason the day had no work. Neither the confirm card (AttendanceResult) nor the
+ * attendance-only edit form displays it. बरोबर does not save it
+ * (`toAttendanceSubmission`); the बदल करा form's save still carries it, because
+ * that form is filled from this draft.
  */
 export function toAttendanceOnlyDraft(draft: AgriLogResponse | null): AgriLogResponse | null {
     if (!draft) return null;
