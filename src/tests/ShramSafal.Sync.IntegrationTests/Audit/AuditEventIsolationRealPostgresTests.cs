@@ -1205,6 +1205,21 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // PRODUCTION a populated table means Down() is refused; the preferred
         // rollback is the previous binary on the already-expanded schema.
         "20261015060121_WidenVoiceClipRetainedDekId",
+        // EnforceAppendOnlyLedgerGrants — REVIEWED 2026-10-17 (append-only ledger
+        // grants). Pure privilege DDL, no data, no schema change. Up() REVOKEs
+        // UPDATE, DELETE, TRUNCATE from agrisync_app on nine append-only ledgers,
+        // ssf.audit_events among them, then RAISES if the app role can still
+        // update, delete or truncate any of them. Relevance to THIS proof: on the
+        // roll-forward it re-revokes TRUNCATE on ssf.audit_events, which
+        // RevokeTruncateOnAuditEvents has already removed by then — a no-op that
+        // agrees with the assertion here, never against it; INSERT and SELECT are
+        // untouched. Down() GRANTs UPDATE, DELETE on ssf.attendance_mark_corrections
+        // and TRUNCATE on five ledgers ONLY where agrisync_app owns the table; in
+        // this scratch database the superuser owns them, so Down() grants nothing
+        // on ssf.audit_events and cannot pre-empt the TRUNCATE loadability step
+        // above. Safe mid-proof in both directions. Its own proof is
+        // Security/AppendOnlyLedgerGrantsRealPostgresTests.
+        "20261017080742_EnforceAppendOnlyLedgerGrants",
     ];
 
     /// <summary>
