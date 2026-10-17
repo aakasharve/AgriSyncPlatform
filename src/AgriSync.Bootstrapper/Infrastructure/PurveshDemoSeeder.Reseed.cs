@@ -56,6 +56,12 @@ public sealed record PurveshDemoReseedTableCounts(
 /// part of the command's safety contract. It is an opaque internal id written only to the
 /// operator's own console, never to an application log; no account id, phone or name is printed.
 /// </param>
+/// <param name="OtherMembers">
+/// Active members of the demo farm OTHER than the demo owner, counted by role (e.g.
+/// <c>{"Mukadam": 1, "Worker": 2}</c>). Counts only — no ids, phones or names. Report only: the
+/// re-seed neither changes memberships nor refuses because of them; it tells the operator who
+/// else sees the demo farm's data.
+/// </param>
 public sealed record PurveshDemoReseedReport(
     string SeedVersion,
     string IdNamespace,
@@ -67,6 +73,7 @@ public sealed record PurveshDemoReseedReport(
     DateTime RunUtc,
     Guid FarmId,
     Guid OwnerUserId,
+    IReadOnlyDictionary<string, int> OtherMembers,
     IReadOnlyDictionary<string, PurveshDemoReseedTableCounts> Tables,
     IReadOnlyList<string> Retained,
     IReadOnlyList<string> Skipped,
@@ -109,7 +116,12 @@ public sealed record PurveshDemoReseedReport(
 /// run-instant stamps (<see cref="TimestampPolicyText"/>).</para>
 /// <para><b>No side effects.</b> Domain events raised by re-seeded aggregates are discarded
 /// before each save, so the re-seed queues no outbox messages (no WTL projection, no analytics,
-/// no notifications), and it writes no audit or correction rows.</para>
+/// no notifications), and it writes no audit rows. Correction rows: it deletes and re-writes the
+/// demo seed's OWN two money corrections (<c>ssf.finance_corrections</c>, deterministic ids — part
+/// of the v2 demo data), and it writes NO labour or attendance correction rows
+/// (<c>ssf.labour_corrections</c>, <c>ssf.attendance_mark_corrections</c>): those are append-only
+/// history, so a correction the founder makes in the app is never deleted — the row it corrects
+/// is retained instead.</para>
 /// </remarks>
 public sealed partial class PurveshDemoSeeder
 {
@@ -311,6 +323,17 @@ public sealed partial class PurveshDemoSeeder
             throw new PurveshDemoReseedRefusedException(
                 "The demo owner is not the PrimaryOwner of the demo farm under its own tenancy; refusing.");
         }
+
+        // Who ELSE is an active member of the demo farm — counted by role, nothing else.
+        var otherMemberRoles = await _ssfContext.FarmMemberships
+            .AsNoTracking()
+            .Where(m => m.FarmId == farmId && m.UserId != ownerUserId && m.Status == MembershipStatus.Active)
+            .Select(m => m.Role)
+            .ToListAsync(ct);
+        var otherMembers = otherMemberRoles
+            .GroupBy(role => role.ToString(), StringComparer.Ordinal)
+            .OrderBy(group => group.Key, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
 
         var seedPlotIds = PlotSeeds.ToDictionary(
             p => p.Key, p => CreateDeterministicGuid($"{SeedVersion}:plot:{p.Key}"), StringComparer.Ordinal);
@@ -576,6 +599,7 @@ public sealed partial class PurveshDemoSeeder
             RunUtc: runUtc,
             FarmId: farmId.Value,
             OwnerUserId: ownerUserId.Value,
+            OtherMembers: otherMembers,
             Tables: tables,
             Retained: retained,
             Skipped: skipped,

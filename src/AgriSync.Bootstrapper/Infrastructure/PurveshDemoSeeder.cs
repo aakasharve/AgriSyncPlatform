@@ -504,21 +504,58 @@ public sealed partial class PurveshDemoSeeder
     private readonly UserDbContext _userContext;
     private readonly AccountsDbContext _accountsContext;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly IHostEnvironment? _hostEnvironment;
 
+    /// <summary>
+    /// The text every Production refusal of the startup clear/seed carries. Public so tests and
+    /// operators can recognise the refusal without matching on prose.
+    /// </summary>
+    public const string ProductionRefusalMessage =
+        "PurveshDemoSeeder refuses the startup demo clear/seed in Production: DemoFarmId is the real "
+        + "production demo farm, and these methods would delete or rebuild it. Nothing was read or written. "
+        + "Use the one-shot `--reseed-purvesh-demo` command (with --dry-run first) instead.";
+
+    /// <param name="hostEnvironment">
+    /// The host's environment, injected by DI for every real caller (Program.cs startup,
+    /// <c>--migrate-only</c>, TestFixtureService). It is what makes
+    /// <see cref="ClearPurveshDemoAsync"/> and <see cref="SeedPurveshDemoAsync"/> refuse in
+    /// Production BY CONSTRUCTION. Optional only so an existing direct construction (a test, no
+    /// DI) keeps compiling; then the process's <c>ASPNETCORE_ENVIRONMENT</c> /
+    /// <c>DOTNET_ENVIRONMENT</c> decides, and "Production" still refuses.
+    /// </param>
     public PurveshDemoSeeder(
         ShramSafalDbContext ssfContext,
         UserDbContext userContext,
         AccountsDbContext accountsContext,
-        IPasswordHasher passwordHasher)
+        IPasswordHasher passwordHasher,
+        IHostEnvironment? hostEnvironment = null)
     {
         _ssfContext = ssfContext;
         _userContext = userContext;
         _accountsContext = accountsContext;
         _passwordHasher = passwordHasher;
+        _hostEnvironment = hostEnvironment;
+    }
+
+    /// <summary>
+    /// The Production guard for the STARTUP clear/seed — checked before any database access.
+    /// The one-shot <see cref="ReseedDemoContentAsync"/> never calls the guarded methods and is
+    /// not guarded: it is the production path.
+    /// </summary>
+    private void RefuseInProduction(string operation)
+    {
+        var environmentName = _hostEnvironment?.EnvironmentName
+            ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+            ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT");
+        if (string.Equals(environmentName, Environments.Production, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new PurveshDemoStartupSeedRefusedException($"{operation}: {ProductionRefusalMessage}");
+        }
     }
 
     public async Task<string> SeedPurveshDemoAsync(CancellationToken cancellationToken = default)
     {
+        RefuseInProduction(nameof(SeedPurveshDemoAsync));
         var refreshResult = await ClearPurveshDemoAsync(cancellationToken);
         var nowUtc = DateTime.UtcNow;
         var usersByKey = new Dictionary<string, User.Domain.Identity.User>(StringComparer.Ordinal);
@@ -655,6 +692,7 @@ public sealed partial class PurveshDemoSeeder
     /// </remarks>
     public async Task<string> ClearPurveshDemoAsync(CancellationToken cancellationToken = default)
     {
+        RefuseInProduction(nameof(ClearPurveshDemoAsync));
         var farmId = new FarmId(DemoFarmId);
         var userPhones = UserSeeds.Select(seed => seed.Phone).ToHashSet(StringComparer.Ordinal);
 
@@ -3087,3 +3125,10 @@ public sealed partial class PurveshDemoSeeder
         int FarmJoinTokensAdded,
         int AffiliationRowsAdded);
 }
+
+/// <summary>
+/// Thrown by <see cref="PurveshDemoSeeder.ClearPurveshDemoAsync"/> and
+/// <see cref="PurveshDemoSeeder.SeedPurveshDemoAsync"/> in a Production host, before any database
+/// access. The message carries <see cref="PurveshDemoSeeder.ProductionRefusalMessage"/>.
+/// </summary>
+public sealed class PurveshDemoStartupSeedRefusedException(string message) : InvalidOperationException(message);

@@ -1142,7 +1142,24 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
             "true",
             StringComparison.OrdinalIgnoreCase);
 
-        if (clearPurveshDemo || seedPurveshDemo)
+        if ((clearPurveshDemo || seedPurveshDemo) && app.Environment.IsProduction())
+        {
+            // spec: 2026-08-25-prod-cutover-waves — never in Production. The demo farm's
+            // deterministic id IS the real production demo farm, so a restart (or a
+            // --migrate-only run) with either flag would delete or rebuild it. The seeder
+            // itself refuses in Production too (PurveshDemoSeeder.RefuseInProduction); this
+            // skips before it is even resolved, and names the flag — never its value.
+            var flagNames = string.Join(
+                " and ",
+                new[] { (clearPurveshDemo, "CLEAR_PURVESH_DEMO"), (seedPurveshDemo, "SEED_PURVESH_DEMO") }
+                    .Where(flag => flag.Item1)
+                    .Select(flag => flag.Item2));
+            logger.LogWarning(
+                "{Flags} is set but ignored in Production: the startup demo clear/seed never runs there. "
+                + "Use the one-shot `--reseed-purvesh-demo` command (with --dry-run first) instead.",
+                flagNames);
+        }
+        else if (clearPurveshDemo || seedPurveshDemo)
         {
             // Non-fatal startup data-seeding (spec: auth-rework-testuser-otp-first-2026-06-03).
             // A data-seeder failure must NEVER crash the host. Schema migrations above stay
