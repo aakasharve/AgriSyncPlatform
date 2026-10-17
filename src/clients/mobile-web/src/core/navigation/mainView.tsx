@@ -39,7 +39,8 @@ import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
 // file's render functions are plain functions, not components — see
 // `mainViewComponents.tsx`'s header for why that hook rule forces the split.
 import SathiGuideCard from '../../features/oversight/components/SathiGuideCard';
-import { toAttendanceOnlyDraft, toAttendanceSubmission } from '../../features/logs/attendanceDraft';
+import { toAttendanceOnlyDraft, toAttendanceSubmission, attendanceCaptureDay } from '../../features/logs/attendanceDraft';
+import { draftProvenance } from '../../features/voice/draftProvenance';
 // Labour V2 R1 Task 3.4b — the Labour-owned result surface + the anchor it
 // renders against. The invoking feature owns the meaning of a labour parse.
 import AttendanceResult from '../../features/labour/components/AttendanceResult';
@@ -545,6 +546,9 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                             // record… He sees it and decides" survives as behaviour.
                                             const anchorForDraft = resolveLabourAnchor(history, getDateKey());
                                             const anchorLog = history.find((l) => anchorForDraft.state === 'anchored' && l.id === anchorForDraft.logId);
+                                            // Only THIS draft's parse provenance (bound when the parse
+                                            // arrived), never the voice state's last one; and the day he spoke.
+                                            const ownProvenance = draftProvenance(draftLog);
                                             return (
                                                 <LabourResultHost renderManualEntry={renderManualEntry}>
                                                     {attendanceDraft && attendanceDraft.labour.length > 0 ? (
@@ -552,9 +556,9 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                                             draft={attendanceDraft}
                                                             anchor={anchorForDraft}
                                                             farmId={anchorLog?.meta?.farmId ?? currentLogContext?.selection?.[0]?.farmId}
-                                                            // The save path builds from the manual-entry shape: the
-                                                            // raw parse has no date/provenance (see toAttendanceSubmission).
-                                                            onConfirm={(d) => { void handleManualSubmit(toAttendanceSubmission(d, provenance)); setDraftLog(null); }}
+                                                            workDate={attendanceCaptureDay(ownProvenance)}
+                                                            // Labour only, dated and attributed (see toAttendanceSubmission).
+                                                            onConfirm={(d) => { void handleManualSubmit(toAttendanceSubmission(d, ownProvenance)); setDraftLog(null); }}
                                                             renderEditSurface={renderManualEntry}
                                                             onSpeakMore={() => { setRecordingSegment('labour'); setMode('voice'); }}
                                                         />

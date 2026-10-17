@@ -94,6 +94,8 @@ export interface ManualEntryData {
      * so every partition of one voice-drafted save is equally AI-derived.
      */
     provenance?: LogProvenance;
+    /** See `DailyLog.captureScope`. Copied onto every record of the save, never inferred. */
+    captureScope?: 'labour';
 }
 
 /** Inline type for a single element of AgriLogResponse.plannedTasks. */
@@ -301,6 +303,8 @@ export function buildManualPartitionLog(
         observations: mirroredObservations,
         plannedTasks: finalPlannedTasks,
         disturbance,
+        // Conditional, so every ordinary record keeps exactly its old shape.
+        ...(data.captureScope ? { captureScope: data.captureScope } : {}),
 
         fullTranscript: carriesDayFacts ? data.fullTranscript : undefined,
         manualTotalCost: carriesDayFacts ? data.manualTotalCost : undefined,

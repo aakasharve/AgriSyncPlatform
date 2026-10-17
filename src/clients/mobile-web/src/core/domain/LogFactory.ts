@@ -231,6 +231,8 @@ export class LogFactory {
             observations: mirroredObservations,
             plannedTasks: finalPlannedTasks,
             disturbance: data.disturbance,
+            // See `DailyLog.captureScope`; conditional so ordinary records are unchanged.
+            ...(data.captureScope ? { captureScope: data.captureScope } : {}),
             fullTranscript: data.fullTranscript,
             manualTotalCost: data.manualTotalCost,
             financialSummary: {

@@ -11,7 +11,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import type { AgriLogResponse } from '../../../types';
-import { toAttendanceOnlyDraft, isAttendanceOnlyDraft, toAttendanceSubmission } from '../attendanceDraft';
+import { toAttendanceOnlyDraft, isAttendanceOnlyDraft, toAttendanceSubmission, attendanceCaptureDay } from '../attendanceDraft';
+import { getDateKey } from '../../../core/domain/services/DateKeyService';
 
 const labourEntry = {
     id: 'l1',
@@ -100,30 +101,52 @@ describe('isAttendanceOnlyDraft', () => {
     });
 });
 
-// APK 1.0.14 founder report: बरोबर handed the save path a parse with no date
-// and no provenance, so the record could not be queued for the server.
+// APK 1.0.14 founder report + PR #82 review (B003/B004/B005, captureScope):
+// what बरोबर on the labour door hands the save path.
 describe('toAttendanceSubmission — what बरोबर hands the save path', () => {
-    const ai = { source: 'ai' as const, sourceAiJobId: '11111111-2222-4333-8444-555555555555', timestamp: '2026-10-17T05:00:00.000Z' };
-    const draft = () => toAttendanceOnlyDraft(fullDraft())!;
+    const ai = { source: 'ai' as const, sourceAiJobId: '11111111-2222-4333-8444-555555555555', timestamp: '2026-01-05T18:20:00.000Z' };
+    /** A parse that also heard things the card does not show. */
+    const parsed = (): AgriLogResponse => ({
+        ...toAttendanceOnlyDraft(fullDraft())!,
+        observations: [{ textRaw: 'पाऊस पडला', noteType: 'observation' }],
+        plannedTasks: [{ title: 'उद्या फवारणी', category: 'general', sourceText: 'उद्या फवारणी', systemInterpretation: '' }],
+        dayOutcome: 'DISTURBANCE_RECORDED',
+    } as unknown as AgriLogResponse);
 
-    it('carries the day the attendance is for and the parse\'s own provenance', () => {
-        const out = toAttendanceSubmission(draft(), ai, '2026-10-17');
-        expect(out.date).toBe('2026-10-17');
-        expect(out.provenance).toEqual(ai);
-        // Nothing else changes: the हजेरी the farmer saw is what is saved.
+    it('B004: a new record carries LABOUR ONLY — nothing the card did not show', () => {
+        const out = toAttendanceSubmission(parsed(), ai);
+        expect(Object.keys(out).sort()).toEqual(['captureScope', 'date', 'labour', 'provenance']);
         expect(out.labour).toEqual([labourEntry]);
-        expect(out.cropActivities).toEqual([]);
-        expect(out.fullTranscript).toBe(fullDraft().fullTranscript);
+        for (const dropped of ['observations', 'plannedTasks', 'dayOutcome', 'disturbance', 'fullTranscript', 'summary', 'cropActivities']) {
+            expect(out, dropped).not.toHaveProperty(dropped);
+        }
     });
 
-    it('never invents a provenance claim (P8): no parse provenance -> none', () => {
-        expect(toAttendanceSubmission(draft(), null, '2026-10-17').provenance).toBeUndefined();
-        expect(toAttendanceSubmission(draft(), undefined, '2026-10-17').provenance).toBeUndefined();
+    it('captureScope: a new record says it came from the labour door', () => {
+        expect(toAttendanceSubmission(parsed(), ai).captureScope).toBe('labour');
+        expect(toAttendanceSubmission(parsed(), null).captureScope).toBe('labour');
     });
 
-    it('an edit of an existing log carries no provenance, exactly as ManualEntry', () => {
-        const out = toAttendanceSubmission({ ...draft(), originalLogId: 'log-1' }, ai, '2026-10-17');
-        expect(out.provenance).toBeUndefined();
-        expect(out.originalLogId).toBe('log-1');
+    it('B003: filed under the IST day of the capture, not the day of the tap', () => {
+        // 18:20Z on 5 Jan = 23:50 IST on 5 Jan; whenever this test runs, the tap day differs.
+        expect(toAttendanceSubmission(parsed(), ai).date).toBe('2026-01-05');
+        // 18:31Z = 00:01 IST on the 6th: the farmer's local day, not UTC's.
+        expect(attendanceCaptureDay({ ...ai, timestamp: '2026-01-05T18:31:00.000Z' })).toBe('2026-01-06');
+    });
+
+    it('B003: no capture timestamp (or an unreadable one) -> today', () => {
+        expect(toAttendanceSubmission(parsed(), null).date).toBe(getDateKey());
+        expect(attendanceCaptureDay({ ...ai, timestamp: 'not a time' })).toBe(getDateKey());
+    });
+
+    it('provenance is passed through, never invented (P8): none in -> none out', () => {
+        expect(toAttendanceSubmission(parsed(), ai).provenance).toEqual(ai);
+        expect(toAttendanceSubmission(parsed(), null)).not.toHaveProperty('provenance');
+        expect(toAttendanceSubmission(parsed(), undefined)).not.toHaveProperty('provenance');
+    });
+
+    it('an EDIT sends labour only: no date (keeps its day), no provenance, no scope, no empty buckets to erase its other work', () => {
+        const out = toAttendanceSubmission({ ...parsed(), originalLogId: 'log-1' }, ai);
+        expect(out).toEqual({ originalLogId: 'log-1', labour: [labourEntry] });
     });
 });

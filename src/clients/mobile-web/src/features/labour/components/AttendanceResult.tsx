@@ -31,6 +31,8 @@ export interface AttendanceResultProps {
     anchor: LabourAnchor;
     /** meta.farmId of the anchor log / context farm — undefined ⇒ marks are skipped, statement still saves. */
     farmId: string | undefined;
+    /** The day the marks are for: the day the record is filed under (attendanceCaptureDay). Default today. */
+    workDate?: string;
     /** THE only save. Wired to useLogCommands.handleManualSubmit. */
     onConfirm: (draft: AgriLogResponse) => void;
     /** बदल करा → the existing ManualEntry(attendanceOnly) branch. */
@@ -42,7 +44,7 @@ export interface AttendanceResultProps {
 const shiftWord = (s: DayShift): string => COPY.markWord[s];
 
 const AttendanceResult: React.FC<AttendanceResultProps> = ({
-    draft, anchor, farmId, onConfirm, renderEditSurface, onSpeakMore,
+    draft, anchor, farmId, workDate, onConfirm, renderEditSurface, onSpeakMore,
 }) => {
     const [editing, setEditing] = React.useState(false);
     // Task 3.5c — the farm's FieldOperator roster, fetched for name→identity
@@ -207,7 +209,7 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                         // NOBODY — never auto-merged). Offline/unfetchable roster ⇒ no marks; the
                         // statement save below still records every spoken name on the engagement.
                         if (farmId && roster) {
-                            const workDate = getDateKey();
+                            const markDate = workDate ?? getDateKey();
                             const byName = new Map<string, FieldOperator[]>();
                             for (const op of roster.filter((o) => o.isActive)) {
                                 // B002: server names are trimmed at the write boundary; trim here
@@ -225,7 +227,7 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                                 // nothing invented can leak.
                                 return [MarkAttendanceCommand.enqueue({
                                     attendanceMarkId: crypto.randomUUID(),
-                                    farmId, fieldOperatorId: matches[0].id, workDate,
+                                    farmId, fieldOperatorId: matches[0].id, workDate: markDate,
                                     ...(ruling === 'half' ? { dayMark: 'Half' as const }
                                         : ruling === 'night' ? { nightMark: 'Worked' as const }
                                         : { dayMark: 'Full' as const }),

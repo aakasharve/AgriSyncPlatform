@@ -75,34 +75,70 @@ export function toAttendanceOnlyDraft(draft: AgriLogResponse | null): AgriLogRes
 }
 
 /**
+ * The day a labour-door record is filed under: the day the farmer SPOKE, not the
+ * day he pressed बरोबर.
+ *
+ * That is the local (IST) date of the parse's `provenance.timestamp`, which the
+ * parser stamps the moment the parse comes back, seconds after he spoke. With no
+ * parse provenance (or an unreadable timestamp) it is today. Words he says about
+ * time are NOT interpreted: "काल चार जण आले" ("four came yesterday") is filed on
+ * the day he said it, not the day before. The attendance marks the same tap
+ * queues use this same day.
+ */
+export function attendanceCaptureDay(provenance: LogProvenance | null | undefined): string {
+    const stamp = provenance?.timestamp;
+    return stamp && !Number.isNaN(Date.parse(stamp)) ? getDateKey(stamp) : getDateKey();
+}
+
+/** What बरोबर hands the save path: labour, and only the facts about this record. */
+export interface AttendanceSubmission {
+    labour: AgriLogResponse['labour'];
+    /** New record only. See `attendanceCaptureDay`. */
+    date?: string;
+    /** New record only, and only the draft's OWN parse provenance. */
+    provenance?: LogProvenance;
+    /** New record only. See `DailyLog.captureScope`. */
+    captureScope?: 'labour';
+    /** Edit only: the record whose labour this replaces. */
+    originalLogId?: string;
+}
+
+/**
  * What बरोबर hands the one manual save path (`useLogCommands.handleManualSubmit`).
  *
  * APK 1.0.14 founder report: "I can't tap बरोबर; it doesn't save the name". The
  * confirm passed the raw parse (`AgriLogResponse`) straight to the save path,
- * but that path builds the record from the MANUAL-ENTRY shape, which also
- * carries `date` and `provenance`. A parse has neither, so the record was
- * written with no date, `create_daily_log` was refused at the queue
- * (`logDate Required`), nothing reached the server, and with no queued work the
- * names inside the record were hidden on every read. The save also threw
- * before its route back to Labour, so the screen stayed where it was.
+ * which builds the record from the MANUAL-ENTRY shape and needs a `date`. A
+ * parse has none, so `create_daily_log` was refused at the queue
+ * (`logDate Required`), nothing reached the server, the screen stayed where it
+ * was, and with no queued work the names in the record were hidden on read.
  *
- * This adds exactly the two fields `ManualEntry` adds on the same save:
- *   - `date`: today's key, the day the attendance is for (the marks the same
- *     tap queues use the same `getDateKey()`);
- *   - `provenance`: the parse's own claim, passed through and never invented.
- *     No parse provenance means no claim; this never asserts 'manual' for
- *     something the parser produced (P8). An edit of an existing log
- *     (`originalLogId`) carries none, as in `ManualEntry`.
+ * LABOUR ONLY (founder ruling 2026-08-31): the record carries what the
+ * confirmation card showed, which is the labour, and nothing else from the parse.
+ * Observations, planned tasks, the parser's `dayOutcome`, the disturbance and the
+ * full transcript are not on the card, so they are not saved by it.
+ *
+ *   - NEW record: `labour`, `date` (`attendanceCaptureDay`), `captureScope:
+ *     'labour'`, and `provenance` only when the caller passes the draft's own
+ *     (`draftProvenance(draft)`). Never a 'manual' claim for a parse (P8), and
+ *     never another parse's provenance.
+ *   - EDIT of an existing record (`originalLogId`): `labour` only. No date (the
+ *     record keeps its own day), no provenance, no scope, and no empty buckets:
+ *     the update merges what is sent, so sending `[]` would erase the record's
+ *     other work.
  */
 export function toAttendanceSubmission(
     draft: AgriLogResponse,
     provenance: LogProvenance | null | undefined,
-    dateKey: string = getDateKey(),
-): AgriLogResponse & { date: string; provenance?: LogProvenance } {
+): AttendanceSubmission {
+    if (draft.originalLogId) {
+        return { originalLogId: draft.originalLogId, labour: draft.labour };
+    }
     return {
-        ...draft,
-        date: dateKey,
-        provenance: draft.originalLogId ? undefined : (provenance ?? undefined),
+        labour: draft.labour,
+        date: attendanceCaptureDay(provenance),
+        ...(provenance ? { provenance } : {}),
+        captureScope: 'labour',
     };
 }
 
