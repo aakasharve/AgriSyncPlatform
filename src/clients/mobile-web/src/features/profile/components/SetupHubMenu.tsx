@@ -294,7 +294,8 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                     translated: any English noun here would be a new name, and
                     the founder's naming session owns that. The subtitle
                     `मजुरी` is untouched (Task 7 / 7b honesty deletions stand). */}
-                {onOpenLabour && <RowCard icon={<Users size={20} />} label="कामाचा हिशोब" subtitle="मजुरी" tone="emerald" onClick={onOpenLabour} />}
+                {/* FOUNDER NAMING DECISION (2026-10-16): the section is `कामगार व हजेरी` (door and room agree). */}
+                {onOpenLabour && <RowCard icon={<Users size={20} />} label="कामगार व हजेरी" subtitle="मजुरी" tone="emerald" onClick={onOpenLabour} />}
                 <RowCard icon={<BarChart3 size={20} />} label="पैसे व हिशोब" onClick={onOpenFinance} />
                 {onOpenReferrals && <RowCard icon={<Medal size={20} />} label="रेफरल्स · Referrals" onClick={onOpenReferrals} />}
             </div>

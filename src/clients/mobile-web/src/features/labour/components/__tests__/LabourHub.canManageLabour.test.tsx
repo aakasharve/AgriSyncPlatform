@@ -135,7 +135,7 @@ describe('LabourHub - an un-granted Worker is not offered what the server refuse
     it('there is no hidden gesture: the screen title does nothing on tap', async () => {
         const data = await load(wire('own', false));
         render(<LabourHub {...hubProps(data)} />);
-        const title = screen.queryByText('कामाचा हिशोब');
+        const title = screen.queryByText('कामगार व हजेरी');
         if (title) for (let i = 0; i < 9; i++) title.click();
         expect(screen.queryByText(MANUAL_TILE)).toBeNull();
     });

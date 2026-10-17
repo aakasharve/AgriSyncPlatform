@@ -98,18 +98,46 @@ interface Props {
  * used `slate-*`, which is off the app's design language — see
  * shared/components/ui/LogCard.tsx for the canonical card).
  */
-const QuickTile: React.FC<{ icon: React.ReactNode; chip: string; label: string; sub?: string; badge?: number; onClick: () => void }> = ({ icon, chip, label, sub, badge, onClick }) => (
-    <button type="button" onClick={onClick} className="flex min-h-[92px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-transform active:scale-[0.98]">
-        <span className={`flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[16px] ${chip}`}>{icon}</span>
-        <span className="min-w-0">
-            <span className="flex items-center gap-2 text-[19px] font-bold leading-tight text-stone-800">{label}{badge != null && <span className="rounded-full bg-amber-600 px-2 py-0.5 text-[15px] font-extrabold text-white">{badge}</span>}</span>
-            {/* TASK 11 — optional. A tile whose sub-line would have to name a
-                period the farmer now chooses for himself carries no sub-line
-                rather than a fixed one; see the आढावा tile below. */}
-            {sub && <span className="mt-0.5 block truncate text-[16px] text-stone-500">{sub}</span>}
-        </span>
-    </button>
-);
+/*
+ * Android layout (founder, 2026-10-16): in the two-column grid a phone gives a
+ * tile ~170px, and an icon BESIDE the text left ~70px for the words, so titles
+ * broke mid-phrase ("हजेरी / घ्या"), sub-lines were cut to "आज …", and the तपासा
+ * count, sitting inline after the title, spilled outside the tile. Grid tiles now
+ * STACK (icon on top, then the title, then a sub-line that wraps instead of
+ * truncating), and the count is pinned INSIDE the tile's top-right corner. The
+ * single full-width tile keeps the side-by-side `row` layout it has room for.
+ */
+const QuickTile: React.FC<{ icon: React.ReactNode; chip: string; label: string; sub?: string; badge?: number; layout?: 'stacked' | 'row'; onClick: () => void }> = ({ icon, chip, label, sub, badge, layout = 'stacked', onClick }) => {
+    const badgeEl = badge != null && (
+        <span data-testid="quick-tile-badge" className="absolute right-3 top-3 min-w-[28px] rounded-full bg-amber-600 px-2 py-0.5 text-center text-[15px] font-extrabold leading-5 text-white">{badge}</span>
+    );
+    // TASK 11 — optional. A tile whose sub-line would have to name a period the
+    // farmer now chooses for himself carries no sub-line rather than a fixed one;
+    // see the आढावा tile below.
+    const subEl = sub && <span className="mt-0.5 block text-[16px] leading-snug text-stone-500">{sub}</span>;
+    if (layout === 'row') {
+        return (
+            <button type="button" onClick={onClick} className={`relative flex min-h-[92px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 ${badge != null ? 'pr-12' : ''} text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-transform active:scale-[0.98]`}>
+                <span className={`flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[16px] ${chip}`}>{icon}</span>
+                <span className="min-w-0 flex-1">
+                    <span className="block text-[19px] font-bold leading-snug text-stone-800">{label}</span>
+                    {subEl}
+                </span>
+                {badgeEl}
+            </button>
+        );
+    }
+    return (
+        <button type="button" onClick={onClick} className="relative flex min-h-[116px] min-w-0 flex-col items-start gap-2.5 rounded-[20px] border border-stone-100 bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-transform active:scale-[0.98]">
+            <span className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[14px] ${chip}`}>{icon}</span>
+            <span className="block w-full min-w-0">
+                <span className="block text-[19px] font-bold leading-snug text-stone-800 [overflow-wrap:anywhere]">{label}</span>
+                {subEl}
+            </span>
+            {badgeEl}
+        </button>
+    );
+};
 
 /**
  * "Just logged" labour summary — Task 3.5. MONEY-CONSISTENCY RULE: this uses
@@ -366,7 +394,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
         )}
         {heroInactive && onNoWorkAttendance && canTakeManualAttendance(data.canManageLabour) && !serverStatesLabourToday(data) && (
             <div className="grid grid-cols-1">
-                <QuickTile icon={<CloudRain size={20} />} chip="bg-sky-50 text-sky-600 ring-1 ring-sky-100" label="काम झालं नाही, पण मजूर आले" onClick={onNoWorkAttendance} />
+                <QuickTile icon={<CloudRain size={20} />} chip="bg-sky-50 text-sky-600 ring-1 ring-sky-100" label="काम झालं नाही, पण मजूर आले" layout="row" onClick={onNoWorkAttendance} />
             </div>
         )}
         </>)}
@@ -377,7 +405,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
             spares the owner-shaped empty shells. Blanks are '—', never ₹0. */}
         {data.view === 'owner' && (
             <div className="grid grid-cols-2 gap-2.5">
-                <div className="rounded-[20px] border border-stone-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+                <div className="flex min-w-0 flex-col rounded-[20px] border border-stone-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
                     {/* FOUNDER VOCABULARY RULE (2026-09-03) — was `रोजंदारी`.
                         रोजंदारी names the BASIS on which the farmer owes money;
                         as a card title standing over a headcount breakdown it
@@ -389,12 +417,14 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
                         arrangement, not the human. */}
                     <span className="block text-[16px] font-bold leading-tight text-stone-600">दिवसाच्या हिशोबाने</span>
                     <span className="block text-[13px] font-semibold text-stone-400">नोंदलेली</span>
-                    <span className="mt-1 block text-[23px] font-black text-stone-800 [font-variant-numeric:tabular-nums]">{data.home.rojandariStated === null ? '—' : inr(data.home.rojandariStated)}</span>
+                    {/* Android layout (2026-10-16): the value sits at the card's foot (mt-auto) so the two
+                        figures line up even when one title wraps to two lines and the other does not. */}
+                    <span className="mt-auto block pt-1 text-[23px] font-black text-stone-800 [font-variant-numeric:tabular-nums]">{data.home.rojandariStated === null ? '—' : inr(data.home.rojandariStated)}</span>
                 </div>
-                <div className="rounded-[20px] border border-violet-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
-                    <span className="block text-[16px] font-bold text-violet-700">उक्ते काम</span>
+                <div className="flex min-w-0 flex-col rounded-[20px] border border-violet-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+                    <span className="block text-[16px] font-bold leading-tight text-violet-700">उक्ते काम</span>
                     <span className="block text-[13px] font-semibold text-stone-400">ठरलेली</span>
-                    <span className="mt-1 block text-[23px] font-black text-stone-800 [font-variant-numeric:tabular-nums]">{data.home.ukteAgreed === null ? '—' : inr(data.home.ukteAgreed)}</span>
+                    <span className="mt-auto block pt-1 text-[23px] font-black text-stone-800 [font-variant-numeric:tabular-nums]">{data.home.ukteAgreed === null ? '—' : inr(data.home.ukteAgreed)}</span>
                 </div>
             </div>
         )}

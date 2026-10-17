@@ -11,7 +11,7 @@
 // of them) — the "renders nothing, doesn't crash" cases guard that.
 import React from 'react';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import LabourHub from '../LabourHub';
 import { EMPTY_LABOUR_DATA, LABOUR_MOCK } from '../../labourMock';
@@ -482,5 +482,46 @@ describe('Task 3.1 — anchor gates ONLY the recorder', () => {
         renderHub({ anchor: { state: 'anchored', headcount: 12, logId: 'x' } });
         expect(screen.getByRole('button', { name: /बोलून हजेरी घ्या/ })).toBeEnabled();
         expect(screen.queryByTestId('labour-no-anchor-reason')).toBeNull();
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// Android tile layout (founder, 2026-10-16). On a phone a half-width tile is
+// ~170px: titles broke mid-phrase, sub-lines were cut to "आज …" and the तपासा
+// count spilled outside the tile. These pin the layout CONTRACT in jsdom (class
+// names and DOM placement); jsdom cannot measure overflow, so the real proof is
+// a phone / emulator screenshot.
+// ---------------------------------------------------------------------------
+
+describe('LabourHub - Android tile layout', () => {
+    afterEach(() => cleanup());
+
+    const data = { ...LABOUR_MOCK, canManageLabour: true, dashboard: { ...LABOUR_MOCK.dashboard, pending: 75 } };
+
+    it('pins the तपासा count INSIDE its own tile, not inline after the title', () => {
+        render(<LabourHub {...baseProps()} data={data} />);
+        const title = screen.getByText('तपासा');
+        const tile = title.closest('button') as HTMLButtonElement;
+        const badge = within(tile).getByTestId('quick-tile-badge');
+        expect(badge).toHaveTextContent('75');
+        expect(badge.className).toMatch(/\babsolute\b/);
+        expect(tile.className).toMatch(/\brelative\b/);
+        expect(title.contains(badge)).toBe(false);
+    });
+
+    it('lets sub-lines wrap instead of truncating them', () => {
+        render(<LabourHub {...baseProps()} data={data} />);
+        for (const sub of ['आज कोण आलं', 'सर्व दिवस', 'मंजूर करा']) {
+            expect(screen.getByText(sub).className).not.toMatch(/\btruncate\b/);
+        }
+    });
+
+    it('stacks the grid tiles (icon above the title) so a half-width tile does not break its title', () => {
+        render(<LabourHub {...baseProps()} data={data} />);
+        for (const label of ['हजेरी घ्या', 'हजेरी वही', 'तपासा', 'आढावा']) {
+            const tile = screen.getByText(label).closest('button') as HTMLButtonElement;
+            expect(tile.className).toMatch(/\bflex-col\b/);
+        }
     });
 });
