@@ -48,6 +48,11 @@ import { enqueueLogsForSync } from '../logSyncMutationService';
 import { getDatabase } from '../../../../infrastructure/storage/DexieDatabase';
 import { SyncMutationName } from '../../../../infrastructure/sync/SyncMutationCatalog';
 import { reconcileLogs } from '../../../sync/pull/reconcilers/logsReconciler';
+import {
+    DOWNLOADED_LABOUR_MAX_AGE_MS,
+    logsForDisplay,
+    sweepExpiredDownloadedLabour,
+} from '../../../../infrastructure/storage/downloadedLabourCache';
 import { generateDayWorkSummary } from '../../../analysis/dayWorkSummary';
 import { sumLabourHeadcount } from '../../../../domain/logs/labourHeadcount';
 import type { PlotLookupEntry } from '../../../sync/pull/reconcilers/profileAndCropsReconciler';
@@ -168,6 +173,7 @@ interface QueuedLabourItem {
     shift?: string;
     task?: string;
     notes?: string;
+    workerNames?: string[];
 }
 
 /** What Phone A actually put on the wire. */
@@ -270,12 +276,13 @@ async function wipeToCleanDevice() {
     await db.mutationQueue.clear();
 }
 
-async function pull(dtos: DailyLogDto[]) {
+async function pull(dtos: DailyLogDto[], receivedAtUtc?: string) {
     await reconcileLogs(
         getDatabase(),
         { dailyLogs: dtos } as unknown as SyncPullResponse,
         plotLookup(),
         new Set<string>(),
+        receivedAtUtc,
     );
 }
 
@@ -452,5 +459,132 @@ describe('THE SAME PHONE — the record stops contradicting itself', () => {
         expect(reloaded.labour).toHaveLength(1);
         expect(reloaded.labour[0].count).toBe(8);
         expect(generateDayWorkSummary(reloaded, ledgerDefaults).labour.headcount).toBe(8);
+    });
+});
+
+/**
+ * spec: 2026-08-25-prod-cutover-waves — "बरोबर doesn't save the name".
+ *
+ * THE SAME PHONE, ACROSS THE 7-DAY NAME RULE. `downloadedLabourCache` shows a log's
+ * worker names only while the log has unsent work OR a fresh download stamp. So
+ * the moment the server applies the farmer's create, his own names are hidden
+ * until a pull vouches for them — and before this fix the pull vouched for `[]`,
+ * because the create payload carried no names and the server stored none. The
+ * names a farmer gave on this very phone were gone after the next sync.
+ *
+ * The server half (push with names -> stored -> pull returns them) is proven on
+ * real Postgres in `LabourWorkerNamesSyncRealPostgresTests` and over the HTTP
+ * wire in `LabourReadBackPullTests`. Here the server's answer is the projection
+ * of the ACTUAL queued payload, exactly as `serverEngagementFor` does above.
+ */
+describe('THE SAME PHONE — the names the farmer gave survive the sync that acknowledges them', () => {
+    const namedCrew = (): LabourEvent[] => ([{
+        ...eightWorkers()[0],
+        workerNames: ['रमेश', 'सीता'],
+    } as LabourEvent]);
+
+    const shownLabour = async () => {
+        const db = getDatabase();
+        const [log] = await logsForDisplay(db, await db.logs.toArray());
+        return log.labour;
+    };
+
+    beforeEach(async () => {
+        const db = getDatabase();
+        await db.mutationQueue.clear();
+        await db.logs.clear();
+        await db.farms.clear();
+        await db.plots.clear();
+        await db.cropCycles.clear();
+        localStorage.clear();
+        await seedReferenceData();
+        vi.clearAllMocks();
+    });
+
+    it('THE HEADLINE: the names ride the create, and the next pull brings them back', async () => {
+        const [savedLog] = await recordOnPhoneA(namedCrew());
+        const [item] = await queuedLabour();
+
+        // On the wire, through the REAL MutationQueue (which validates against the
+        // canonical schema and would have thrown on a bad payload).
+        expect(item.workerNames).toEqual(['रमेश', 'सीता']);
+        expect(item.workerCount).toBe(8);
+
+        // Unsent work is the farmer's own: his names show.
+        expect((await shownLabour())[0].workerNames).toEqual(['रमेश', 'सीता']);
+
+        // The server applies the create. Nothing is unsent any more and no
+        // download has vouched for the names yet, so the 7-day rule hides them —
+        // which is exactly why the pull below must carry them.
+        await getDatabase().mutationQueue.clear();
+        expect((await shownLabour())[0].workerNames).toBeUndefined();
+
+        await pull([serverLogDto(savedLog.id, [
+            serverEngagementFor(item, savedLog.id, [], item.workerNames ?? []),
+        ])]);
+
+        const labour = await shownLabour();
+        expect(labour[0].workerNames).toEqual(['रमेश', 'सीता']);
+        // P7 — the names came back as identity; the headcount is still the farmer's 8.
+        expect(labour[0].count).toBe(8);
+        expect(sumLabourHeadcount(labour)).toBe(8);
+    });
+
+    it('THE DEFECT, AS IT SHIPPED: a server that stored no names answers [] and the names are gone', async () => {
+        // The control. Before this fix the payload carried no names, so the
+        // server's truthful answer was `[]` — and server engagements win.
+        const [savedLog] = await recordOnPhoneA(namedCrew());
+        const [item] = await queuedLabour();
+        await getDatabase().mutationQueue.clear();
+
+        await pull([serverLogDto(savedLog.id, [serverEngagementFor(item, savedLog.id, [], [])])]);
+
+        expect((await shownLabour())[0].workerNames).toEqual([]);
+    });
+
+    it('THE 7-DAY RULE STILL HOLDS: names pulled more than 7 days ago are hidden and swept, the count is not', async () => {
+        const [savedLog] = await recordOnPhoneA(namedCrew());
+        const [item] = await queuedLabour();
+        await getDatabase().mutationQueue.clear();
+
+        const stale = new Date(Date.now() - DOWNLOADED_LABOUR_MAX_AGE_MS - 24 * 60 * 60 * 1000).toISOString();
+        await pull([serverLogDto(savedLog.id, [
+            serverEngagementFor(item, savedLog.id, [], item.workerNames ?? []),
+        ])], stale);
+
+        expect((await shownLabour())[0].workerNames).toBeUndefined();
+
+        await sweepExpiredDownloadedLabour(getDatabase());
+        const [swept] = await DexieLogsRepository.getInstance().getAll();
+        expect(swept.labour[0].workerNames).toBeUndefined();
+        // Only the names go; the farmer's own record of 8 workers is not a cache.
+        expect(swept.labour[0].count).toBe(8);
+    });
+
+    it('B002 — the हजेरी door\'s captureScope is read at QUEUE time and outlives a pull that rebuilds the record', async () => {
+        // The labour-door submission (PR #82's toAttendanceSubmission / बदल करा path)
+        // hands `captureScope: 'labour'` to the SAME manual factory every save uses.
+        const logs = LogFactory.createFromManualEntry(
+            { date: DATE, labour: namedCrew(), captureScope: 'labour' },
+            plotScope, [grapes], ownerProfile,
+        );
+        await new LogCommandServiceImpl(DexieLogsRepository.getInstance()).confirmAndSave(logs);
+        await enqueueLogsForSync(logs);
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const queuedPayload = async () => (await getDatabase().mutationQueue
+            .where('mutationType').equals(SyncMutationName.CreateDailyLog).toArray())[0]
+            .payload as { captureScope?: string };
+        expect((await queuedPayload()).captureScope).toBe('labour');
+
+        // A pull rebuilds the local record from the DTO, which has no word for the
+        // door, so the LOCAL copy loses it...
+        const [item] = await queuedLabour();
+        await pull([serverLogDto(logs[0].id, [serverEngagementFor(item, logs[0].id, [], item.workerNames ?? [])])]);
+        const [rebuilt] = await DexieLogsRepository.getInstance().getAll();
+        expect(rebuilt.captureScope).toBeUndefined();
+
+        // ...and that costs nothing: the payload that syncs (and replays) already holds it.
+        expect((await queuedPayload()).captureScope).toBe('labour');
     });
 });

@@ -26,6 +26,32 @@ namespace ShramSafal.Application.UseCases.Labour;
 /// </summary>
 public static class LabourAssignmentFactory
 {
+    // ── worker-name transport bounds (spec: 2026-08-25-prod-cutover-waves) ──
+    // The names a farmer gives for ONE engagement (create_daily_log
+    // labour[].workerNames) are IDENTITY, an overlay on the stated headcount and
+    // never a quantity (doctrine P7): they are stored beside WorkerCount and
+    // nothing ever counts them into it. These two numbers exist only to refuse an
+    // abusive or broken payload — /sync/push accepts a 50 MiB body — so both sit
+    // far above any real dictation and no farmer's real utterance can reach them
+    // (doctrine P9). The transport boundary enforces them; the domain's own
+    // trim + drop-blank normalisation (LabourAssignment.Create, B002) is unchanged.
+
+    /// <summary>
+    /// Most names one labour engagement may carry on the wire. Far above any crew a
+    /// farmer names one by one; a payload above it is refused loudly, never trimmed,
+    /// because silently dropping names is the defect this bound ships with.
+    /// </summary>
+    public const int MaxWorkerNamesPerEngagement = 200;
+
+    /// <summary>
+    /// Longest single name, in UTF-16 code units after trimming (the unit both C#
+    /// <c>string.Length</c> and zod <c>.max()</c> measure). Equal to the identity
+    /// tables' own name columns (<c>field_operators.display_name</c>,
+    /// <c>workers.name_raw</c>, both varchar(200)), so a name recorded here always
+    /// fits wherever it may later seed an identity.
+    /// </summary>
+    public const int MaxWorkerNameLength = 200;
+
     /// <summary>
     /// Builds a <see cref="LabourAssignment"/> from already-mapped values,
     /// resolving the canonical headcount through

@@ -155,3 +155,31 @@ describe('LogFactory.createFromManualEntry — voice provenance threading (BUGFI
         expect(log!.meta?.provenance).toBeUndefined();
     });
 });
+
+// B002 (PR #82 review), founder ruling 2026-08-31 — the हजेरी door's `captureScope`
+// must survive the manual factory branch, or the labour-door submission's flag never
+// reaches `enqueueLogsForSync` and the server derives the whole parse again.
+describe('LogFactory.createFromManualEntry — captureScope threading (B002)', () => {
+    it('carries captureScope "labour" onto the record on the plot branch', () => {
+        const [log] = LogFactory.createFromManualEntry(
+            { ...RICH_DATA, provenance: makeAiProvenance(), captureScope: 'labour' },
+            makeSinglePlotScope(), makeCrops(), makeProfile(),
+        );
+        expect(log!.captureScope).toBe('labour');
+    });
+
+    it('carries captureScope "labour" onto the record on the farm-global branch', () => {
+        const [log] = LogFactory.createFromManualEntry(
+            { ...RICH_DATA, captureScope: 'labour' },
+            makeFarmGlobalScope(), makeCrops(), makeProfile(),
+        );
+        expect(log!.captureScope).toBe('labour');
+    });
+
+    it('adds NO captureScope key to an ordinary log on either branch', () => {
+        for (const scope of [makeSinglePlotScope(), makeFarmGlobalScope()]) {
+            const [log] = LogFactory.createFromManualEntry(RICH_DATA, scope, makeCrops(), makeProfile());
+            expect(Object.prototype.hasOwnProperty.call(log, 'captureScope')).toBe(false);
+        }
+    });
+});
