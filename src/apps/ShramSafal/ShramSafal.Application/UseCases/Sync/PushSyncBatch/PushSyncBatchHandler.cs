@@ -872,7 +872,8 @@ public sealed class PushSyncBatchHandler(
         // LABOUR_PHASE2 P2.2 adds "scope" and "plotIds" here, in lockstep with
         // sync-contract/schemas/payloads/create_daily_log.zod.ts and the
         // generated CreateDailyLogPayload record.
-        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "scope", "plotIds", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId", "labour", "manualDraft"))
+        // B002 adds "captureScope" (which door captured the record), same lockstep.
+        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "scope", "plotIds", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId", "labour", "manualDraft", "captureScope"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -946,6 +947,27 @@ public sealed class PushSyncBatchHandler(
                     "create_daily_log payload carries an unrecognised scope.");
         }
 
+        // B002 (PR #82 review), founder ruling 2026-08-31 — which door captured the
+        // record. Absent => the whole parse, which is what every older client means.
+        // "labour" => derive the labour bucket only. Anything else is REFUSED, never
+        // read as absent: an unknown door silently widened to the whole parse would
+        // write exactly the records this field exists to keep out (P1). Exact match,
+        // like the zod enum it mirrors. Checked here, before any write is staged.
+        DailyLogCaptureScope captureScope;
+        switch (request.CaptureScope)
+        {
+            case null:
+                captureScope = DailyLogCaptureScope.WholeDay;
+                break;
+            case "labour":
+                captureScope = DailyLogCaptureScope.Labour;
+                break;
+            default:
+                return MutationExecutionOutcome.Failure(
+                    "ShramSafal.SyncInvalidPayload",
+                    "create_daily_log payload carries an unrecognised captureScope.");
+        }
+
         // Fix 1 (ai-intelligence-plan-2026-06-25) — establish the membership-
         // VALIDATED single-farm tenant scope so the confirm-time typed-ledger
         // derivation inside CreateDailyLogHandler can WRITE ssf.farm_operations
@@ -1005,7 +1027,9 @@ public sealed class PushSyncBatchHandler(
                 PlotIds: request.PlotIds,
                 // task-0b — the farmer's typed day. Null on voice confirms and on every
                 // client older than this contract, which is the pre-task-0b path exactly.
-                ManualDraft: request.ManualDraft),
+                ManualDraft: request.ManualDraft,
+                // B002 — the door, mapped strictly above.
+                CaptureScope: captureScope),
             ct);
 
         return ToOutcome(result);

@@ -100,5 +100,7 @@ public sealed record CreateDailyLogPayload(
     WeatherStampItem? WeatherStamp = null,
     Guid? SourceAiJobId = null,
     IReadOnlyList<LabourItem>? Labour = null,
-    ManualDraftItem? ManualDraft = null
+    ManualDraftItem? ManualDraft = null,
+    /// <summary>Allowed values: "labour".</summary>
+    string? CaptureScope = null
 );

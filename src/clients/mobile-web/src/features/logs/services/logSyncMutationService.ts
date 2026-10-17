@@ -716,6 +716,10 @@ export async function enqueueLogsForSync(
             // payload, including the voice ones — which is what B1a/B1c mean by
             // "byte-identical to what it sent before", and they read Object.keys.
             ...(manualDraft !== undefined && { manualDraft }),
+            // B002 (founder ruling 2026-08-31) — a हजेरी-door save tells the server to
+            // derive labour only. Read HERE, at queue time: the queued payload is what
+            // syncs and replays, and `captureScope` does not survive a pull's rebuild.
+            ...(log.captureScope === 'labour' && { captureScope: 'labour' as const }),
             // B2.8 — carry the weather already captured at confirm-time to the server
             // (persisted into ssf.weather_stamps). Omit the client-only `id` (server generates).
             //

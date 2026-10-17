@@ -1,4 +1,4 @@
-import type { DayOutcome } from '../../../domain/types/log.types';
+import type { DayOutcome, LogCaptureScope } from '../../../domain/types/log.types';
 import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 
@@ -175,6 +175,11 @@ export interface CreateDailyLogPayload {
      // task-0b — present on a MANUAL save so the server has something to persist.
      // Omitted on voice confirms; omitting it entirely is the pre-task-0b behaviour.
      manualDraft?: ManualDraftPayload;
+     // B002 (PR #82 review), founder ruling 2026-08-31 — `'labour'` for a हजेरी-door
+     // save: the server then derives ONLY labour from the linked voice job. Omitted
+     // for every other log. NOTE: a server older than this contract refuses the key
+     // (strict allow-list), so it must ship server-first.
+     captureScope?: LogCaptureScope;
 }
 
 export class CreateDailyLogCommand {

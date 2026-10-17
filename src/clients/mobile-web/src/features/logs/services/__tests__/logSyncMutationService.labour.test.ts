@@ -491,6 +491,26 @@ describe('enqueueLogsForSync — the worker names the farmer gave', () => {
         expect(validatePayload(SyncMutationName.CreateDailyLog, unclamped).ok).toBe(false);
     });
 
+    it('B002 — a हजेरी-door record queues captureScope "labour", read from the log at queue time', async () => {
+        const labourDoorLog = {
+            ...logWith([{ id: 'l1', labourAssignmentId: UUID_A, type: 'HIRED', count: 8 }], LOG_UUID, PLOT_UUID),
+            captureScope: 'labour',
+        } as DailyLog;
+
+        await enqueueLogsForSync([labourDoorLog]);
+
+        const payload = enqueueCreate.mock.calls[0][0];
+        expect(payload.captureScope).toBe('labour');
+        expect(validatePayload(SyncMutationName.CreateDailyLog, payload)).toEqual({ ok: true });
+        expect(validatePayload(SyncMutationName.CreateDailyLog, JSON.parse(JSON.stringify(payload)))).toEqual({ ok: true });
+    });
+
+    it('B002 — an ordinary record sends NO captureScope key (an old server refuses unknown keys)', async () => {
+        await enqueueLogsForSync([logWith([{ id: 'l1', labourAssignmentId: UUID_A, type: 'HIRED', count: 8 }], LOG_UUID, PLOT_UUID)]);
+
+        expect(Object.prototype.hasOwnProperty.call(enqueueCreate.mock.calls[0][0], 'captureScope')).toBe(false);
+    });
+
     it('a corrupt Dexie entry (null, a number, a bare string) is shed without throwing', async () => {
         await enqueueLogsForSync([logWith([
             { id: 'l1', labourAssignmentId: UUID_A, type: 'HIRED', count: 2, workerNames: [null, 7, 'रमेश', undefined] },

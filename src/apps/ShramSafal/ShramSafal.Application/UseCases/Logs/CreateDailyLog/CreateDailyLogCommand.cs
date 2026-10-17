@@ -75,7 +75,11 @@ public sealed record CreateDailyLogCommand(
     // it (ManualDraftNormalizer) and derives the typed ledger from it with
     // Provenance.Manual. NULL is the pre-task-0b behaviour exactly — older
     // clients omit it and voice confirms do not send it.
-    ManualDraftItem? ManualDraft = null)
+    ManualDraftItem? ManualDraft = null,
+    // B002 (PR #82 review), founder ruling 2026-08-31 — which door captured this
+    // record. Added LAST with the default every existing caller means: the whole
+    // parse, exactly as before. See DailyLogCaptureScope.
+    DailyLogCaptureScope CaptureScope = DailyLogCaptureScope.WholeDay)
 {
     public string? IdempotencyKey
     {
@@ -94,4 +98,24 @@ public sealed record CreateDailyLogCommand(
             return $"{DeviceId.Trim()}:{ClientRequestId.Trim()}";
         }
     }
+}
+
+/// <summary>
+/// B002 (PR #82 review), FOUNDER RULING 2026-08-31 — "the labour door saves labour
+/// only". Which door captured a <c>create_daily_log</c>, mapped from the wire's
+/// <c>captureScope</c> (absent → <see cref="WholeDay"/>, <c>"labour"</c> →
+/// <see cref="Labour"/>, anything else refused at the sync boundary).
+/// </summary>
+public enum DailyLogCaptureScope
+{
+    /// <summary>The ordinary log door: everything the farmer confirmed, as before.</summary>
+    WholeDay = 0,
+
+    /// <summary>
+    /// The हजेरी door. Only the labour bucket is derived from the linked AI job (or a
+    /// manual draft); every other family the same utterance parsed is left
+    /// underived, and no day outcome is stamped. The job link and its provenance
+    /// stay honest — the record still says the parse produced it.
+    /// </summary>
+    Labour = 1,
 }

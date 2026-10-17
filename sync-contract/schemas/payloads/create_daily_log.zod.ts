@@ -203,6 +203,18 @@ export const CreateDailyLogPayload = z.object({
     // confirm (whose facts already ride sourceAiJobId's AiJob) and omitted by
     // every older client — an absent draft must behave exactly as before.
     manualDraft: ManualDraftSchema.optional(),
+    // B002 (PR #82 review), FOUNDER RULING 2026-08-31 — "the labour door saves
+    // labour only". WHICH DOOR captured this record. `'labour'` = the हजेरी door:
+    // the server derives ONLY the labour bucket from the linked AI job (its
+    // provenance and job link stay honest), never the spray, irrigation,
+    // machinery, observations, disturbance or day outcome the same utterance
+    // may also have parsed — the farmer never saw those at that door, so
+    // writing them would record what he never confirmed (P1).
+    //
+    // OPTIONAL, absent = the whole parse, exactly as every older client gets.
+    // An UNKNOWN value is refused by the server (SyncInvalidPayload), never read
+    // as absent: guessing the door would decide what gets written.
+    captureScope: z.enum(['labour']).optional(),
 });
 
 export type CreateDailyLogPayloadType = z.infer<typeof CreateDailyLogPayload>;

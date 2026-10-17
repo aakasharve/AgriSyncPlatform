@@ -250,6 +250,28 @@ describe('CreateDailyLogPayload', () => {
         expect(payloads.CreateDailyLogPayload.safeParse(withNames([7])).success).toBe(false);
         expect(payloads.CreateDailyLogPayload.safeParse(withNames([null])).success).toBe(false);
     });
+
+    // B002 (PR #82 review) — captureScope: which door captured the record.
+    const withScope = (captureScope: unknown) => ({
+        dailyLogId: VALID_GUID_A,
+        farmId: VALID_GUID_B,
+        plotId: VALID_GUID_C,
+        cropCycleId: VALID_GUID_D,
+        logDate: VALID_LOG_DATE,
+        sourceAiJobId: VALID_GUID_E,
+        captureScope,
+    });
+    it('accepts captureScope "labour" — the हजेरी door', () => {
+        expect(payloads.CreateDailyLogPayload.safeParse(withScope('labour')).success).toBe(true);
+    });
+    it('accepts a payload with no captureScope — every older client', () => {
+        expect(payloads.CreateDailyLogPayload.safeParse(withScope(undefined)).success).toBe(true);
+    });
+    it('rejects any other captureScope, including casing and blank', () => {
+        for (const bad of ['Labour', 'whole_day', '', null, 1]) {
+            expect(payloads.CreateDailyLogPayload.safeParse(withScope(bad)).success, String(bad)).toBe(false);
+        }
+    });
 });
 
 describe('AddLogTaskPayload', () => {

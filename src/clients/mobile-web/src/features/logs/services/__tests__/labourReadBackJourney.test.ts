@@ -560,4 +560,31 @@ describe('THE SAME PHONE — the names the farmer gave survive the sync that ack
         // Only the names go; the farmer's own record of 8 workers is not a cache.
         expect(swept.labour[0].count).toBe(8);
     });
+
+    it('B002 — the हजेरी door\'s captureScope is read at QUEUE time and outlives a pull that rebuilds the record', async () => {
+        // The labour-door submission (PR #82's toAttendanceSubmission / बदल करा path)
+        // hands `captureScope: 'labour'` to the SAME manual factory every save uses.
+        const logs = LogFactory.createFromManualEntry(
+            { date: DATE, labour: namedCrew(), captureScope: 'labour' },
+            plotScope, [grapes], ownerProfile,
+        );
+        await new LogCommandServiceImpl(DexieLogsRepository.getInstance()).confirmAndSave(logs);
+        await enqueueLogsForSync(logs);
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const queuedPayload = async () => (await getDatabase().mutationQueue
+            .where('mutationType').equals(SyncMutationName.CreateDailyLog).toArray())[0]
+            .payload as { captureScope?: string };
+        expect((await queuedPayload()).captureScope).toBe('labour');
+
+        // A pull rebuilds the local record from the DTO, which has no word for the
+        // door, so the LOCAL copy loses it...
+        const [item] = await queuedLabour();
+        await pull([serverLogDto(logs[0].id, [serverEngagementFor(item, logs[0].id, [], item.workerNames ?? [])])]);
+        const [rebuilt] = await DexieLogsRepository.getInstance().getAll();
+        expect(rebuilt.captureScope).toBeUndefined();
+
+        // ...and that costs nothing: the payload that syncs (and replays) already holds it.
+        expect((await queuedPayload()).captureScope).toBe('labour');
+    });
 });

@@ -632,6 +632,9 @@ export type { ProvenanceTag, ScoreContext, VlogScoreDimension, VlogScore } from 
 // DAILY LOG (The Aggregate Root)
 // =============================================================================
 
+/** Which door captured a record — `create_daily_log.zod.ts` `captureScope` (B002). */
+export type LogCaptureScope = 'labour';
+
 /**
  * DailyLog - The immutable execution record for a single day.
  * This is the "truth" of what happened on the farm.
@@ -682,6 +685,9 @@ export interface DailyLog {
         totalActivityExpenses?: number;
         grandTotal: number;
     };
+
+    /** B002 — `'labour'` for a हजेरी-door save (server derives labour only); read at queue time, never pulled back. */
+    captureScope?: LogCaptureScope;
 
     /**
      * Understanding Meter score — stamped at save time (W1.P3.T1, task 1c).
