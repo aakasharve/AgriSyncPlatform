@@ -780,6 +780,19 @@ try
     //
     // Applying nothing is the point: this runs BEFORE any migration authority
     // exists, so the declared set can be proven before the gate is ever opened.
+    //
+    // spec: 2026-08-25-prod-cutover-waves (demo-seed-v3) — ONE-SHOT re-seed of the
+    // demo farm's content (`--reseed-purvesh-demo [--dry-run]`). Same shape as
+    // --list-migrations / --migrate-only: it returns before app.Run(), so no hosted
+    // service starts, and it never migrates (it refuses on pending migrations). It
+    // reads no environment flag — CLEAR_PURVESH_DEMO / SEED_PURVESH_DEMO stay the
+    // dev-only startup path. See PurveshDemoReseedCommand for its exit codes.
+    if (args.Contains(AgriSync.Bootstrapper.Infrastructure.PurveshDemoReseedCommand.Flag, StringComparer.Ordinal))
+    {
+        return await AgriSync.Bootstrapper.Infrastructure.PurveshDemoReseedCommand.RunAsync(
+            app.Services, args, Console.Out, DateTime.UtcNow, CancellationToken.None);
+    }
+
     if (args.Contains("--list-migrations", StringComparer.Ordinal))
     {
         await ListMigrationsAndExitAsync(app);
@@ -1129,7 +1142,24 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
             "true",
             StringComparison.OrdinalIgnoreCase);
 
-        if (clearPurveshDemo || seedPurveshDemo)
+        if ((clearPurveshDemo || seedPurveshDemo) && app.Environment.IsProduction())
+        {
+            // spec: 2026-08-25-prod-cutover-waves — never in Production. The demo farm's
+            // deterministic id IS the real production demo farm, so a restart (or a
+            // --migrate-only run) with either flag would delete or rebuild it. The seeder
+            // itself refuses in Production too (PurveshDemoSeeder.RefuseInProduction); this
+            // skips before it is even resolved, and names the flag — never its value.
+            var flagNames = string.Join(
+                " and ",
+                new[] { (clearPurveshDemo, "CLEAR_PURVESH_DEMO"), (seedPurveshDemo, "SEED_PURVESH_DEMO") }
+                    .Where(flag => flag.Item1)
+                    .Select(flag => flag.Item2));
+            logger.LogWarning(
+                "{Flags} is set but ignored in Production: the startup demo clear/seed never runs there. "
+                + "Use the one-shot `--reseed-purvesh-demo` command (with --dry-run first) instead.",
+                flagNames);
+        }
+        else if (clearPurveshDemo || seedPurveshDemo)
         {
             // Non-fatal startup data-seeding (spec: auth-rework-testuser-otp-first-2026-06-03).
             // A data-seeder failure must NEVER crash the host. Schema migrations above stay
