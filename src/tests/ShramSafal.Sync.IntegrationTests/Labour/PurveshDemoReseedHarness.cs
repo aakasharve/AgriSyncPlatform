@@ -680,6 +680,35 @@ public static class PurveshDemoReseedHarness
         _ => throw new InvalidCastException($"not a date: {value ?? "NULL"}"),
     };
 
+    private static readonly Regex DateTimePattern = new(
+        @"(?<![0-9])\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?(?<offset>Z|[+-]\d{2}(?::?\d{2})?)?",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Every date-TIME value in a row's text rendering, as UTC: the columns Postgres renders
+    /// (snapshots run with session TimeZone = UTC, so <c>2026-03-10 06:30:00+00</c>) AND any ISO
+    /// instant embedded in a json/jsonb column (<c>2026-03-10T06:30:00Z</c>). A value with no offset
+    /// (<c>timestamp without time zone</c>) is read as UTC. A bare date (no time of day) is not a
+    /// date-time and is not returned — a planned item may legitimately be dated ahead.
+    /// </summary>
+    public static IEnumerable<DateTime> TimestampsIn(string row)
+    {
+        foreach (Match m in DateTimePattern.Matches(row))
+        {
+            var offset = m.Groups["offset"].Value;
+            var body = m.Value[..(m.Value.Length - offset.Length)].Replace(' ', 'T');
+            var normalisedOffset = offset switch
+            {
+                "" or "Z" => "+00:00",
+                { Length: 3 } => offset + ":00",
+                { Length: 5 } => offset[..3] + ":" + offset[3..],
+                _ => offset,
+            };
+            yield return DateTimeOffset.Parse(body + normalisedOffset, System.Globalization.CultureInfo.InvariantCulture)
+                .UtcDateTime;
+        }
+    }
+
     private sealed class FixedHostEnvironment(string environmentName) : IHostEnvironment
     {
         public string EnvironmentName { get; set; } = environmentName;

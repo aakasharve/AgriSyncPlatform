@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using AgriSync.Bootstrapper.Infrastructure;
 using AgriSync.SharedKernel.Contracts.Ids;
@@ -246,20 +245,12 @@ public sealed class PurveshDemoReseedCommandRealPostgresTests(
             """, farm, ("from", Today.AddDays(-34)), ("to", Today))).Should().BeGreaterThan(0,
             "labour payouts are recorded in the labour window");
 
-        // No re-written row is stamped on a farm-local day after the run day — so none carries the
-        // real clock (2026-10 here) either. Time-of-day within the run day is NOT checked: the spec's
-        // same-day idempotency means a 00:30 IST run and a 17:45 IST run write identical content.
-        var after = await s.SnapshotAsync();
-        var demoOwned = await H.OwnedIdsAsync(s.SuperuserConn, PurveshDemoSeeder.DemoFarmId, before, after);
-        var added = H.Diff(before, after)
-            .SelectMany(d => d.Added.Where(r => H.Mentions(r, demoOwned)).Select(r => (d.Table, Row: r)))
-            .ToList();
-        added.Should().NotBeEmpty();
-        var future = added
-            .SelectMany(x => Timestamps(x.Row).Where(ts => H.FarmLocalDate(ts) > Today)
-                .Select(ts => $"{x.Table}: {ts:O} in {x.Row}"))
-            .ToList();
-        future.Should().BeEmpty("every timestamp is anchored to the run's farm-local day or before it");
+        // No row the re-seed wrote carries a timestamp after the run INSTANT — at any time of day, not
+        // merely "on or before the farm-local run date" — so none carries the real clock (2026-10
+        // here) either. This run is at 12:00 IST; the 06:00 IST and 00:30 IST runs (the latter's
+        // UTC date is the day before) are pinned by
+        // No_row_the_reseed_writes_is_stamped_after_the_run_instant_at_any_time_of_day.
+        AssertNothingStampedAfter(T1, before, await s.SnapshotAsync());
 
         (await H.CountAsync(s.SuperuserConn, """
             SELECT count(*) FROM ssf.cost_entries WHERE farm_id = @farm AND entry_date > @today
@@ -394,6 +385,121 @@ public sealed class PurveshDemoReseedCommandRealPostgresTests(
         }
     }
 
+    /// <summary>
+    /// The re-seed writes TODAY's diary, marks and photos for the run's farm-local day, so an early
+    /// run is where a record "later today" would land in the run's future: 06:00 IST, and 00:30 IST
+    /// — whose UTC date is still the day before. (The 12:00 IST run is checked by
+    /// <see cref="Every_rewritten_date_is_anchored_to_the_farm_local_run_day_and_the_data_has_the_specified_shape"/>.)
+    /// </summary>
+    [Theory]
+    [InlineData("2026-03-10T00:30:00Z")]
+    [InlineData("2026-03-09T19:00:00Z")]
+    public async Task No_row_the_reseed_writes_is_stamped_after_the_run_instant_at_any_time_of_day(string runUtcIso)
+    {
+        var runUtc = DateTime.Parse(runUtcIso, CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+        await using var s = await PurveshDemoReseedScratch.CloneAsync(Template);
+
+        var before = await s.SnapshotAsync();
+        var run = await H.RunReseedAsync(s.AppProvider(), runUtc, dryRun: false);
+        run.ExitCode.Should().Be(PurveshDemoReseedCommand.ExitOk, run.Output);
+
+        var report = run.RequireReport();
+        report.Prop("RunUtc").GetDateTime().ToUniversalTime().Should().Be(runUtc,
+            "the report states the instant the run was anchored to");
+        report.Prop("AnchorFarmLocalDate").GetString().Should().Be("2026-03-10",
+            $"{runUtcIso} is 2026-03-10 on the farm's (IST) calendar");
+        output.WriteLine("[EVIDENCE] TimestampPolicy: "
+            + (report.TryProp("TimestampPolicy", out var policy) ? policy.GetString() : "(absent)"));
+
+        AssertNothingStampedAfter(runUtc, before, await s.SnapshotAsync());
+    }
+
+    /// <summary>
+    /// The report tells the operator who ELSE sees the demo farm's data — counted by role, never
+    /// identified. The default template's demo farm holds the owner plus the v2 seed's crew logins:
+    /// one Mukadam and two Workers. The rehearsal and the commit must say the same.
+    /// </summary>
+    [Fact]
+    public async Task The_report_counts_the_other_active_members_by_role_and_carries_none_of_their_ids()
+    {
+        await using var s = await PurveshDemoReseedScratch.CloneAsync(Template);
+        var memberIds = (await H.RowsAsync(s.SuperuserConn,
+                "SELECT user_id FROM ssf.farm_memberships WHERE farm_id = @farm AND user_id <> @owner",
+                ("farm", PurveshDemoSeeder.DemoFarmId), ("owner", Template.OwnerUserId)))
+            .Select(r => (Guid)r[0]!)
+            .ToList();
+        memberIds.Should().HaveCount(3, "arrange: the template's demo farm has three members besides its owner");
+
+        var provider = s.AppProvider();
+        foreach (var dryRun in new[] { true, false })
+        {
+            var run = await H.RunReseedAsync(provider, T1, dryRun);
+            run.ExitCode.Should().Be(PurveshDemoReseedCommand.ExitOk, run.Output);
+            var report = run.RequireReport();
+
+            Canonical(OtherMembersOf(report)).Should().Be("Mukadam=1,Worker=2",
+                $"(dryRun={dryRun}) OtherMembers counts the active members other than the owner, by role name only");
+
+            var serialized = report.GetRawText();
+            foreach (var id in memberIds)
+            {
+                serialized.Should().NotContainEquivalentOf(id.ToString("D"),
+                    $"(dryRun={dryRun}) the report must not identify a member — counts only");
+                serialized.Should().NotContainEquivalentOf(id.ToString("N"));
+            }
+        }
+    }
+
+    /// <summary>
+    /// "Active members other than the owner": an ACTIVE SecondaryOwner is counted under his role;
+    /// an Exited Worker, a Suspended Mukadam and a Worker still PendingApproval are not members
+    /// who see the farm's data, and are not counted. None of them is named.
+    /// </summary>
+    [Fact]
+    public async Task OtherMembers_counts_only_active_memberships_other_than_the_owner()
+    {
+        await using var s = await PurveshDemoReseedScratch.CloneAsync(Template);
+        var extra = new (Guid User, string Role, int Status, string Phone)[]
+        {
+            (Guid.Parse("6d000000-0000-0000-0000-0000000000a1"), "SecondaryOwner", 3, "9822222201"), // Active
+            (Guid.Parse("6d000000-0000-0000-0000-0000000000a2"), "Worker", 6, "9822222202"),         // Exited
+            (Guid.Parse("6d000000-0000-0000-0000-0000000000a3"), "Mukadam", 4, "9822222203"),        // Suspended
+            (Guid.Parse("6d000000-0000-0000-0000-0000000000a4"), "Worker", 2, "9822222204"),         // PendingApproval
+        };
+        foreach (var (user, role, status, phone) in extra)
+        {
+            await H.ExecAsync(s.SuperuserConn, """
+                INSERT INTO public.users
+                SELECT (jsonb_populate_record(NULL::public.users,
+                            to_jsonb(u) || jsonb_build_object('Id', @user, 'phone', @phone, 'display_name', 'Other member'))).*
+                FROM public.users u WHERE u.phone = @demoPhone;
+                INSERT INTO ssf.farm_memberships
+                    ("Id", farm_id, user_id, role, granted_at_utc, modified_at_utc, exited_at_utc, owner_account_id,
+                     status, joined_via, can_manage_labour_records)
+                SELECT gen_random_uuid(), f."Id", @user, @role, TIMESTAMPTZ '2026-01-05 05:00:00+00',
+                       TIMESTAMPTZ '2026-01-05 05:00:00+00',
+                       CASE WHEN @status = 6 THEN TIMESTAMPTZ '2026-02-01 05:00:00+00' END,
+                       f.owner_account_id, @status, 2, FALSE
+                FROM ssf.farms f WHERE f."Id" = @farm;
+                """,
+                ("user", user), ("phone", phone), ("demoPhone", PurveshDemoSeeder.DemoOwnerPhone),
+                ("role", role), ("status", status), ("farm", PurveshDemoSeeder.DemoFarmId));
+        }
+
+        var run = await H.RunReseedAsync(s.AppProvider(), T1, dryRun: true);
+        run.ExitCode.Should().Be(PurveshDemoReseedCommand.ExitOk, run.Output);
+        var report = run.RequireReport();
+
+        Canonical(OtherMembersOf(report)).Should().Be("Mukadam=1,SecondaryOwner=1,Worker=2",
+            "only ACTIVE memberships other than the owner's are counted, by role");
+        var serialized = report.GetRawText();
+        foreach (var (user, _, _, _) in extra)
+        {
+            serialized.Should().NotContainEquivalentOf(user.ToString("D"), "a member is counted, never named");
+        }
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     private static string? RowById(H.DbSnapshot snapshot, string table, Guid id)
@@ -417,14 +523,36 @@ public sealed class PurveshDemoReseedCommandRealPostgresTests(
         yield return ("attendance_marks", $"{Count} FROM ssf.attendance_marks t WHERE t.farm_id = @farm AND t.\"Id\" <> @keep");
     }
 
-    private static readonly Regex TimestampPattern = new(
-        @"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?\+00", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    /// <summary>
+    /// Every date-time value (a timestamp column, or an instant inside a json column) in every row
+    /// the run ADDED or MODIFIED — a modified row's new version is an added text in the diff — must
+    /// be at or before <paramref name="runUtc"/> itself.
+    /// </summary>
+    private void AssertNothingStampedAfter(DateTime runUtc, H.DbSnapshot before, H.DbSnapshot after)
+    {
+        var written = H.Diff(before, after)
+            .SelectMany(d => d.Added.Select(r => (d.Table, Row: r)))
+            .ToList();
+        written.Should().NotBeEmpty("the run must have written rows for this check to prove anything");
 
-    private static IEnumerable<DateTime> Timestamps(string row) =>
-        TimestampPattern.Matches(row).Select(m => DateTime.SpecifyKind(
-            DateTime.ParseExact(m.Value[..^3], ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm:ss.FFFFFFF"],
-                CultureInfo.InvariantCulture, DateTimeStyles.None),
-            DateTimeKind.Utc));
+        var stamps = written
+            .SelectMany(x => H.TimestampsIn(x.Row).Select(ts => (x.Table, x.Row, Stamp: ts)))
+            .ToList();
+        stamps.Should().NotBeEmpty("the written rows carry record times");
+        output.WriteLine($"[EVIDENCE] run {runUtc:O}: {written.Count} rows written, {stamps.Count} date-time values, "
+            + $"latest {stamps.Max(x => x.Stamp):O}");
+
+        var future = stamps.Where(x => x.Stamp > runUtc).ToList();
+        string.Join("\n", future.Take(15).Select(x => $"{x.Table}: {x.Stamp:O} in {x.Row}")).Should().BeEmpty(
+            $"no row the re-seed writes may be stamped after the run instant {runUtc:O} "
+            + $"({future.Count} value(s) in {future.Select(x => x.Table).Distinct().Count()} table(s) are)");
+    }
+
+    private static Dictionary<string, int> OtherMembersOf(JsonElement report) =>
+        report.Prop("OtherMembers").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetInt32(), StringComparer.Ordinal);
+
+    private static string Canonical(IReadOnlyDictionary<string, int> counts) =>
+        string.Join(",", counts.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => $"{kv.Key}={kv.Value}"));
 
     /// <summary>Replaces the run instant's rendering (the sync stamp) with a placeholder.</summary>
     private static H.DbSnapshot Normalize(H.DbSnapshot snapshot, DateTime runUtc)
