@@ -5,6 +5,7 @@ import { useDataSource } from '../providers/DataSourceProvider';
 import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
 import { resolveVerifierUserId } from '../../core/domain/verifierIdentity';
 import { getSessionUserId } from '../../infrastructure/storage/AuthTokenStore';
+import { keepDatedLogs } from '../helpers/datedHistory';
 
 export interface UseTrustLayerResult {
     handleVerifyLog: (logId: string, status: LogVerificationStatus, notes?: string) => void;
@@ -65,7 +66,9 @@ export const useTrustLayer = ({
      */
     const restoreFromStore = useCallback(async () => {
         try {
-            setHistory(await dataSource.logs.getAll());
+            // Same check as every other read of the store into `history`
+            // (helpers/datedHistory.ts): a row with no date stays out.
+            setHistory(keepDatedLogs(await dataSource.logs.getAll()));
         } catch (error) {
             console.error('Failed to restore log history after a verification failure', error);
         }
@@ -149,7 +152,7 @@ export const useTrustLayer = ({
             setToast({ message: QUEUED_MESSAGE, type: 'success' });
             await backgroundSyncWorker.triggerNow();
             const refreshed = await dataSource.logs.getAll();
-            setHistory(refreshed);
+            setHistory(keepDatedLogs(refreshed));
         } catch (e) {
             console.error('Verification queue error', e);
             await restoreFromStore();

@@ -10,6 +10,7 @@ import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWo
 import { useAuth } from '../providers/AuthProvider';
 import { generateDemoHarvestSessions, generateDemoPlannedTasks, generateDemoProcurementExpenses } from '../../features/demo/DemoDataService';
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
+import { keepDatedLogs } from '../helpers/datedHistory';
 
 const PLANNED_TASKS_META_KEY = 'agrisync_local_planned_tasks_v1';
 
@@ -230,7 +231,9 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
 
             const loadedLogs = await dataSource.logs.getAll();
             if (!mounted) return;
-            setHistory(loadedLogs);
+            // A stored row with no date never reaches `history` (it stays in
+            // Dexie, untouched). Why, and why here: helpers/datedHistory.ts.
+            setHistory(keepDatedLogs(loadedLogs));
 
             const plannedTasksMeta = await db.appMeta.get(PLANNED_TASKS_META_KEY);
             if (!mounted) return;
@@ -256,7 +259,7 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
 
                     // Load demo logs
                     const loadedLogs = await dataSource.logs.getAll();
-                    if (mounted) setHistory(loadedLogs);
+                    if (mounted) setHistory(keepDatedLogs(loadedLogs));
 
                     // Load demo profile or use default
                     const loadedProfile = await dataSource.profile.get();
