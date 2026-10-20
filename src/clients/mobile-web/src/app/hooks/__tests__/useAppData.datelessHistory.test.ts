@@ -69,6 +69,9 @@ const legacyDateless = {
 
 const storedLedger: DailyLog[] = [todaysLog, legacyDateless, priorSpray];
 
+/** Which load `useAppData` runs: the real one (default) or the demo one. */
+const mode = { demo: false };
+
 const dataSource = {
     crops: { getAll: vi.fn(async () => []), save: vi.fn(async () => { }) },
     profile: { get: vi.fn(async () => null) },
@@ -85,7 +88,7 @@ vi.mock('../../providers/DataSourceProvider', () => ({
     useDataSource: () => ({
         dataSource,
         auditPort: {},
-        isDemoMode: false,
+        isDemoMode: mode.demo,
         setDemoMode: async () => { },
         isLoading: false,
     }),
@@ -101,16 +104,21 @@ vi.mock('../../../infrastructure/sync/BackgroundSyncWorker', () => ({
 
 import { useAppData } from '../useAppData';
 
-async function loadHistory(): Promise<DailyLog[]> {
+async function loadAppData() {
     const { result } = renderHook(() => useAppData());
     await waitFor(() => expect(result.current.dataLoaded).toBe(true));
-    return result.current.history;
+    return result.current;
+}
+
+async function loadHistory(): Promise<DailyLog[]> {
+    return (await loadAppData()).history;
 }
 
 afterEach(() => {
     cleanup();
     vi.clearAllMocks();
     vi.restoreAllMocks();
+    mode.demo = false;
 });
 
 describe('useAppData — an old dateless diary row can never crash a screen (1.0.16)', () => {
@@ -151,5 +159,29 @@ describe('useAppData — an old dateless diary row can never crash a screen (1.0
         expect(historyWarnings).toHaveLength(1);
         expect(String(historyWarnings[0][0])).toMatch(/^\[history\] 1 /);
         expect(JSON.stringify(warn.mock.calls)).not.toContain('legacy-dateless-1');
+    });
+});
+
+// The DEMO load is a second, separate read of the store into `history`
+// (useAppData's `isDemoMode` branch). It carries its own copy of the check,
+// so it needs its own test: removing the check from that one line left every
+// test above green.
+describe('useAppData — the demo-mode load applies the same check (1.0.16)', () => {
+    it('computePreviousLog over the demo-loaded history does not throw and ignores the dateless row', async () => {
+        mode.demo = true;
+
+        const appData = await loadAppData();
+
+        // Proof this went through the DEMO branch: only it fills planned tasks
+        // from the demo generator. The real branch reads them from Dexie,
+        // which is empty in this file.
+        expect(appData.isDemoMode).toBe(true);
+        expect(appData.plannedTasks.length).toBeGreaterThan(0);
+
+        // Without the check on the demo load, the dateless row is in
+        // `history` and this throws the founder's TypeError.
+        expect(() => computePreviousLog(appData.history, 'plot-1', TODAY)).not.toThrow();
+        expect(computePreviousLog(appData.history, 'plot-1', TODAY)).toEqual({ activityMr: 'फवारणी', daysAgo: 3 });
+        expect(appData.history.map(log => log.id)).toEqual(['today-log', 'spray-2026-10-16']);
     });
 });

@@ -15,8 +15,22 @@
  * state, and some twenty readers of `log.date` sit behind it, several with
  * their own private `normalizeDateKey`. Two had already been patched one at a
  * time (`dayState.withUsableDates`, the router's `todayLogs` filter) before the
- * third crashed. Checking once, where stored rows become `history`, makes the
- * type true for every reader downstream, including ones not written yet.
+ * third crashed. This one check covers every row LOADED FROM THE STORE into
+ * `history`: both loads in useAppData.ts (launch and sync reload, demo) and
+ * both re-reads in useTrustLayer.ts (restore, and after a verification).
+ *
+ * WHAT IT DOES NOT COVER. Three in-memory writes put rows into `history`
+ * without passing through here:
+ *   - LogCommandService.ts:222-224, `confirmAndSave`'s
+ *     `updateState(prev => [...logs, ...prev])`, which every new save uses;
+ *   - useLogCommands.ts:514-517, the edit branch, which prepends `result.log`;
+ *   - useIssueCommands.ts:39, which swaps in `result.log`.
+ * Those rows have a date only because every creator gives its record one.
+ * ManualEntry.tsx:326, attendanceDraft.ts:143 and noWorkDay.ts:18 hand the
+ * manual factory a `date`; LogFactory.ts:461 and log-partition-builders.ts:462
+ * stamp one on voice records. An edit or an added issue rewrites a record that
+ * was already in `history`. A new creator that leaves `date` out reaches the
+ * screens unchecked, exactly as 1.0.14's voice-attendance confirm did.
  *
  * WHAT HAPPENS TO SUCH A ROW: it is left out of `history`, and that is all.
  *   - No date is invented for it (P4). A record with no day cannot be put on one.
