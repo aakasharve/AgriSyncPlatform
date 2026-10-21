@@ -16,6 +16,30 @@ Jwt__SigningKey="<min-64-char-random-string>"
 Jwt__AccessTokenMinutes="15"
 ```
 
+## SMS / OTP (MSG91) — REQUIRED
+
+The API refuses to start in Production without these (`SmsGatewayStartupGuard`).
+**Set them on the box BEFORE deploying a build that contains the guard**, or the
+new build will crash on boot.
+
+```bash
+# UseDevStub=false is already in appsettings.Production.json; shown for clarity.
+Msg91__UseDevStub="false"
+Msg91__AuthKey="<MSG91 dashboard -> Settings -> API keys>"
+# The MSG91-generated template ID (OTP -> Templates), NOT the DLT template ID.
+Msg91__TemplateId="<msg91-template-id>"
+# Optional: 6-char DLT-approved header; defaults to the template's bound sender.
+Msg91__SenderId="<SENDER>"
+```
+
+- The DLT template text must use the tagged variable (`{#numeric#}`) and state the
+  same validity as the server enforces (5 minutes; `OtpPolicy:OtpExpiryMinutes`
+  and `Msg91:OtpExpiryMinutes` both default to 5 — change them together).
+- Register the header and template as Service Implicit (SI), not Promotional/SE.
+- A wrong or unapproved template does not fail loudly: MSG91/DLT may accept the
+  request and the SMS is dropped. After setting these, prove delivery with a real
+  `start-otp` to a test number and confirm `"provider":"msg91"` and an SMS arrives.
+
 ## AI Providers
 
 ```bash
