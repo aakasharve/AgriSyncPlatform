@@ -9,6 +9,7 @@
     "preview": "vite preview --host 127.0.0.1 --port 52287",
     "test": "node tests/static-v2.spec.mjs",
     "prerender": "node scripts/prerender.mjs",
+    "deploy": "node scripts/deploy.mjs",
     "perf:load": "node scripts/perf-load.mjs",
     "perf:scroll": "node scripts/perf-scroll.mjs"
   },

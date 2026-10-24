@@ -21,6 +21,15 @@ any Marathi string the English dictionary missed.
 Hosting is S3 `shramsafal-marketing-prod` behind CloudFront `E2M06A2B71ZW1O`
 (the `shramsafal-index-rewrite` function maps `/vision` → `/vision/index.html`).
 
+One command does build, test, upload and cache-clear (needs the AWS CLI signed in):
+
+```bash
+npm run deploy                       # dry run: builds, tests, lists what WOULD change
+npm run deploy -- --confirm PUBLISH  # goes live on shramsafal.in
+```
+
+It never deletes anything from the bucket. The manual equivalent, for reference:
+
 ```bash
 cd dist
 aws s3 sync assets s3://shramsafal-marketing-prod/assets --cache-control "public, max-age=31536000, immutable"
