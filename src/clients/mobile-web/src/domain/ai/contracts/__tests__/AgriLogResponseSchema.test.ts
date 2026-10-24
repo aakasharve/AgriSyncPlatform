@@ -492,6 +492,54 @@ describe('InputEventSchema — Track B Wave-2 deltas (B2.1/B2.2/B2.3/B2.11)', ()
 });
 
 /**
+ * The server's domain-knowledge layer tags an NPK/WSF input row delivered
+ * through drip as `method: "fertigation"` (C5 WaterRoleClassifier,
+ * `WaterRoleClassifier.cs:207`). The wire contract must accept that value.
+ *
+ * WHY THIS MATTERS BEYOND ONE FIELD. `normalizeParsedLog`
+ * (`BackendAiClient.helpers.ts`) does not discard a log whose `safeParse`
+ * fails — it falls back to the RAW, unvalidated payload for the WHOLE log.
+ * So an unknown `method` never rejects a single row; it silently drops every
+ * other guardrail (canonical `categoryId` codes, typed enums, date shapes)
+ * for that entire log. That is the opposite of what the strict boundary was
+ * added for, and it would hit exactly the logs the domain layer touched.
+ *
+ * `fertigation` is already first-class elsewhere in the system — the
+ * irrigation `role` enum here, and `IrrigationRole.Fertigation` in the
+ * backend domain. Only this enum was missing it.
+ */
+describe('InputEventSchema — fertigation delivery method (C5 WaterRoleClassifier)', () => {
+    it('accepts method: "fertigation" on an input event', () => {
+        const result = InputEventSchema.safeParse({
+            id: 'inp-fert',
+            method: 'fertigation',
+            mix: [{ id: 'mi-1', productName: '0-52-34 MKP', unit: 'kg' }],
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.method).toBe('fertigation');
+        }
+    });
+
+    it('keeps the WHOLE log strictly validated when one input row is fertigation', () => {
+        const result = AgriLogResponseSchema.safeParse({
+            ...makeMinimalValidResponse(),
+            inputs: [{ id: 'inp-fert', method: 'fertigation', mix: [] }],
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('still rejects an unknown delivery method', () => {
+        const result = InputEventSchema.safeParse({
+            id: 'inp-bad',
+            method: 'teleportation',
+            mix: [],
+        });
+        expect(result.success).toBe(false);
+    });
+});
+
+/**
  * §3.2g — structured disturbance fields (Track B B2.7).
  * All four new fields are optional and back-compat: legacy disturbance
  * events without them MUST still parse; enum-typed fields MUST reject

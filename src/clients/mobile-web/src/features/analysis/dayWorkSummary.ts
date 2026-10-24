@@ -178,6 +178,11 @@ const generateLabourSummary = (
         return {
             maleCount: 0,
             femaleCount: 0,
+            // Task 29 (spec: 2026-08-28-labour-v2-release-1) — this 0 is
+            // CORRECT and stays. No labour events at all is a real zero: the
+            // day was logged and no hired labour was part of it. Only the
+            // "labour happened but nobody said how many" case is unknown, and
+            // that is decided inside sumLabourHeadcount below, not here.
             headcount: 0,
             maleRate: settings.labour.defaultWage,
             femaleRate: settings.labour.defaultWage,
@@ -210,6 +215,11 @@ const generateLabourSummary = (
         // total was stated ("चार माणसांनी काम केलं"), not just maleCount +
         // femaleCount (which is 0 for a count-only entry — the "0 people,
         // real cost" bug).
+        //
+        // Task 29 (spec: 2026-08-28-labour-v2-release-1) — now `number |
+        // undefined`. `undefined` = labour events exist but NONE stated a
+        // headcount; it must reach the screens as unknown (em-dash), never be
+        // coerced back to 0 here, which is the defect one layer out.
         headcount: sumLabourHeadcount(log.labour),
         maleRate,
         femaleRate,

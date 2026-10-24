@@ -248,8 +248,15 @@ export class MutationQueue {
      * Sub-plan 04 / T-IGH-04-CONFLICT-STATUS-DURABILITY: mark a row as
      * durably rejected. The row will NOT be picked up by markFailedAsPending —
      * the user must explicitly retry or discard via OfflineConflictPage.
+     *
+     * Task 9 (B001, Labour V2 R1): `errorCode` — the server's own code for
+     * the verdict — is persisted beside the message when the caller has one,
+     * so a surface can recognise WHAT parked the row (the labour route reads
+     * `ShramSafal.AttendanceContradiction` parks to render the question)
+     * without matching English prose. Trailing and optional: every existing
+     * caller compiles and keeps meaning what it meant.
      */
-    async markRejectedUserReview(id: number, error: string): Promise<void> {
+    async markRejectedUserReview(id: number, error: string, errorCode?: string): Promise<void> {
         const db = getDatabase();
         const existing = await db.mutationQueue.get(id);
         await db.mutationQueue.update(id, {
@@ -257,6 +264,7 @@ export class MutationQueue {
             updatedAt: systemClock.nowISO(),
             retryCount: (existing?.retryCount ?? 0) + 1,
             lastError: error,
+            ...(errorCode !== undefined ? { errorCode } : {}),
         });
     }
 

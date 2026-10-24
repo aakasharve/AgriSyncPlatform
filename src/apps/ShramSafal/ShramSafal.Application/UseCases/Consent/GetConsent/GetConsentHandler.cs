@@ -31,6 +31,12 @@ public sealed class GetConsentHandler(IShramSafalRepository repository)
         // same way it would render a real row.
         state ??= UserConsentState.Create(userId);
 
+        // Read-side only: when the current continuous grant of the voice
+        // full-history purpose began. Not stored, not mutated.
+        DateTime? grantedSince = state.FullHistoryJournal
+            ? await repository.GetFullHistoryCurrentGrantStartUtcAsync(userId, ct).ConfigureAwait(false)
+            : null;
+
         return Result.Success(new GetConsentResult(
             UserId: state.UserId,
             FullHistoryJournal: state.FullHistoryJournal,
@@ -38,6 +44,7 @@ public sealed class GetConsentHandler(IShramSafalRepository repository)
             ResearchCorpusExport: state.ResearchCorpusExport,
             Version: state.Version,
             GrantedAtUtc: state.GrantedAtUtc,
-            WithdrawnAtUtc: state.WithdrawnAtUtc));
+            WithdrawnAtUtc: state.WithdrawnAtUtc,
+            FullHistoryJournalGrantedSinceUtc: grantedSince));
     }
 }

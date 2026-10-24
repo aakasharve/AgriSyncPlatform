@@ -78,6 +78,16 @@ namespace ShramSafal.Application.Contracts.Dtos;
 /// and value. A <c>Plot</c> log's JSON is byte-identical to yesterday's up to its
 /// closing brace, with the new members after it — pinned by
 /// <c>DailyLogDtoScopeProjectionTests</c>, which fails on a reorder.</para>
+///
+/// <para><b><see cref="DayOutcome"/> (task-0b, spec 2026-08-28-labour-v2-release-1).</b>
+/// The farmer's OWN statement about the day, read back verbatim from
+/// <see cref="ShramSafal.Domain.Logs.DailyLog.DayOutcome"/> — see the doc comment there
+/// (doctrine P4). <c>null</c> is not "the caller made no statement" here the way it is
+/// for <see cref="Labour"/>: <c>ToDto</c> below always reads it straight off the loaded
+/// entity, so every response that returns this record states it, and <c>null</c> IS the
+/// farmer's state on every ordinary work day. Never defaulted to
+/// <c>"WORK_RECORDED"</c> — that is the exact substitution the domain forbids, because
+/// "he did not say" and "he said work happened" are different facts.</para>
 /// </remarks>
 public sealed record DailyLogDto(
     Guid Id,
@@ -116,4 +126,11 @@ public sealed record DailyLogDto(
     /// <c>[]</c> = the server states there is none; non-empty = the engagements.
     /// See the record-level remarks — the three states are not interchangeable.
     /// </summary>
-    IReadOnlyList<LabourEngagementDto>? Labour = null);
+    IReadOnlyList<LabourEngagementDto>? Labour = null,
+
+    /// <summary>
+    /// The farmer's own statement about the day — see the record-level remarks.
+    /// <c>null</c> = no declaration (every ordinary work day); otherwise one of
+    /// <c>WORK_RECORDED | DISTURBANCE_RECORDED | NO_WORK_PLANNED | IRRELEVANT_INPUT</c>.
+    /// </summary>
+    string? DayOutcome = null);

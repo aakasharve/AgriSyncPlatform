@@ -48,14 +48,13 @@
 // Tailwind's `font-sans` stack resolves a mixed line per glyph (Latin → DM Sans,
 // Devanagari → Noto Sans Devanagari), so that line reads correctly in Marathi.
 //
-// ── LEGAL_REVIEW_PENDING ────────────────────────────────────────────────────────────
-// Per DS-015 / the LEGAL_REVIEW_PENDING convention, this copy is derived from the
-// founder's own words (docs/superpowers/specs/2026-08-16-consent-gate-founder-copy.md)
-// and has NOT been through counsel. The marker is carried once, here, as
-// `NOTICE_LEGAL_REVIEW_PENDING` rather than as a `[LEGAL_REVIEW_PENDING] ` prefix on
-// every string: prefixing would put the tag in front of every line a farmer reads, and
-// a notice that is hard to read is a worse consent notice, not a safer one. The CI gate
-// greps for the token, so the prod-deploy block still fires while this constant exists.
+// ── COPY REVIEW STATUS ──────────────────────────────────────────────────────────────
+// This copy is derived from the founder's own words
+// (docs/superpowers/specs/2026-08-16-consent-gate-founder-copy.md) and has NOT been
+// reviewed by counsel. That status is tracked in the private review records; it is
+// deliberately not stamped into the shipped text, because a notice that is hard to read
+// is a worse consent notice, not a safer one. Nothing in this file is a claim of legal
+// validity or compliance.
 //
 // 🛑 WHAT IS STILL UNKNOWN IS OMITTED, NOT PLACEHELD. The data fiduciary's legal name
 // and contact are real and appear on screen verbatim. Omission is honest; a visible
@@ -89,9 +88,6 @@ import {
     type CoreDataCategoryCode,
     type CorePurposeCode,
 } from '../../../domain/consent/CoreConsentScope';
-
-/** The CI gate greps for this token; see the header note. */
-export const NOTICE_LEGAL_REVIEW_PENDING = 'LEGAL_REVIEW_PENDING' as const;
 
 /**
  * Versions carried onto BOTH legal records. Bump the notice version on any change to
@@ -145,9 +141,32 @@ export const NOTICE_LEGAL_REVIEW_PENDING = 'LEGAL_REVIEW_PENDING' as const;
  *
  * Both strings are inside `canonicalNoticeText`, so either one moving is a material
  * change to the hashed notice and the notice version has to move with it.
+ *
+ * `notice-2026-10-13.1` - the CLAIMS-MATCH-CODE pass. The words on this screen did not
+ * change; the Privacy Notice it links to did, so `PRIVACY_POLICY_VERSION` moved to
+ * `privacy-2026-10-13.1` and the version inside `canonicalNoticeText` moved with it.
+ * Two statements in the previous Privacy Notice were not true of the code: that a voice
+ * recording is deleted from the phone 30 days after it is made (the sweep has been a
+ * no-op since founder ruling D9), and that the app encrypts it on the phone before
+ * storage (the live writer stores the audio unsealed). A farmer who accepted
+ * `notice-2026-08-17.5` was shown those two statements, so he is NOT recorded as having
+ * accepted this version: the gate shows again once, and his earlier ledger rows stay
+ * exactly as written.
+ *
+ * `notice-2026-10-13.2` - the FINAL pass of the same unreleased candidate: the gate's
+ * own words now stop short of what the code cannot back. `.1` was never released, but a
+ * build carrying it exists, so `.2` is used instead of re-using `.1` for different text:
+ * one version string must name exactly one text. Removed: "stays under your control";
+ * "trusted" and "only for that assigned purpose" about processors (no signed DPAs, their
+ * terms unverified); the unqualified "we will not train AI" (now "we ourselves");
+ * "access, correct or download" and "nominate" as if each were an in-app action (the
+ * rights are now requests, also reachable by email). The Privacy Notice carries the same
+ * two corrections, so `PRIVACY_POLICY_VERSION` is `privacy-2026-10-13.2` (also never
+ * released at `.1`). `TERMS_VERSION` and `RETENTION_POLICY_VERSION` are unchanged: neither
+ * document changed in this pass.
  */
-export const NOTICE_VERSION = 'notice-2026-08-17.5';
-export const PRIVACY_POLICY_VERSION = 'privacy-2026-08-17.1';
+export const NOTICE_VERSION = 'notice-2026-10-13.2';
+export const PRIVACY_POLICY_VERSION = 'privacy-2026-10-13.2';
 export const TERMS_VERSION = 'terms-2026-08-17.1';
 
 /**
@@ -267,8 +286,8 @@ export interface NoticeCopy {
 // ── मराठी ───────────────────────────────────────────────────────────────────────────
 const mr: NoticeCopy = {
     title: 'सुरू करण्याआधी',
-    intro: 'तुमच्या शेताची माहिती तुमच्याच ताब्यात राहते. ॲप चालण्यासाठी फक्त खालील माहिती वापरतो.',
-    brandLine: 'श्रम सफल हे Agriryot Value Enterprises Private Limited चं ॲप आहे; ते AgriSync प्लॅटफॉर्मवर चालतं.',
+    intro: 'श्रम सफल चालण्यासाठी खालची माहिती वापरली जाते.',
+    brandLine: 'श्रम सफल — Agriryot Value Enterprises Private Limited यांची सेवा. ती AgriSync वर चालते.',
     purposeCardsHeading: 'कोणती माहिती, कशासाठी',
     cards: [
         {
@@ -282,7 +301,7 @@ const mr: NoticeCopy = {
         {
             id: 'farmWork',
             title: 'शेतातलं काम',
-            data: 'शेत, प्लॉट, पीक, कामं, मजूर, खर्च, उत्पन्न, टीम',
+            data: 'शेत, प्लॉट, पीक, कामं, हजेरी, खर्च, उत्पन्न, टीम',
             purpose: 'रोजचं काम समजून हिशोब स्पष्ट दाखवण्यासाठी',
             purposes: ['FARM_OPERATIONS', 'OFFLINE_SYNC'],
             dataCategories: ['FARM_WORK_RECORDS'],
@@ -306,7 +325,7 @@ const mr: NoticeCopy = {
         {
             id: 'technical',
             title: 'तांत्रिक माहिती',
-            data: 'फोन, ॲप, सिंक आणि सुरक्षेची मर्यादित माहिती',
+            data: 'फोन, वापर, माहिती पाठवणं आणि सुरक्षा — यांची मर्यादित माहिती',
             purpose: 'नेटवर्क नसताना काम सुरक्षित ठेवून नंतर सिंक करण्यासाठी आणि गैरवापर शोधण्यासाठी',
             purposes: ['SECURITY', 'OFFLINE_SYNC'],
             dataCategories: ['DEVICE_TECHNICAL'],
@@ -317,17 +336,17 @@ const mr: NoticeCopy = {
         items: [
             'तुमची वैयक्तिक माहिती विकणार नाही.',
             'परवानगीशिवाय जाहिरातींसाठी वापरणार नाही.',
-            'तुमचा आवाज AI मॉडेल शिकवण्यासाठी वापरणार नाही.',
+            'आम्ही स्वतः तुमचा आवाज AI मॉडेल शिकवण्यासाठी वापरणार नाही.',
             'तुमच्या माहितीवरून कर्ज, विमा किंवा बाजाराचे निर्णय घेणार नाही — त्यासाठी वेगळी स्पष्ट परवानगी मागू.',
         ],
     },
-    processors: 'OTP, सुरक्षित क्लाउड, आवाज समजणे, हवामान, फाइल, सूचना आणि तांत्रिक मदत — एवढ्याच कामांसाठी काही विश्वासू सेवा पुरवठादार मर्यादित माहिती हाताळू शकतात, ठरलेल्या कामापुरतीच.',
+    processors: 'OTP, सुरक्षित क्लाउड, आवाज समजणे, हवामान, फाइल, सूचना आणि तांत्रिक मदत — या कामांसाठी काही सेवा पुरवठादार मर्यादित माहिती हाताळू शकतात. आम्ही त्यांना त्या कामासाठी लागणारी माहितीच पाठवतो. त्यांच्याकडे असलेल्या माहितीला त्यांच्या स्वतःच्या अटी लागू होतात.',
     rights: {
         heading: 'तुमचे हक्क',
-        where: 'Settings → Data & Privacy मध्ये:',
+        where: 'Settings → Data & Privacy मध्ये, किंवा arvesystems@gmail.com वर लिहून:',
         items: [
             'दिलेली परवानगी पाहा किंवा मागे घ्या.',
-            'माहिती पाहा, दुरुस्त करा किंवा डाउनलोड करा.',
+            'तुमची माहिती पाहण्याची, दुरुस्त करण्याची किंवा तिची प्रत मिळण्याची विनंती करा.',
             'खातं आणि माहिती हटवायची विनंती करा.',
             'तक्रार करा, किंवा तुमच्या वतीने हक्क वापरायला कुणाला नेमा.',
         ],
@@ -352,7 +371,7 @@ const mr: NoticeCopy = {
 // ── English ─────────────────────────────────────────────────────────────────────────
 const en: NoticeCopy = {
     title: 'Before you begin',
-    intro: 'Your farm data stays under your control. Shram Safal uses only the information below.',
+    intro: 'Shram Safal uses the information below to work for you.',
     brandLine: 'Shram Safal is an app by Agriryot Value Enterprises Private Limited, built on the AgriSync platform.',
     purposeCardsHeading: 'What we use, and why',
     cards: [
@@ -405,17 +424,17 @@ const en: NoticeCopy = {
             // ABSOLUTE, and identical to the Marathi line. The qualifier "without separate
             // permission" was here until notice-2026-08-17.5 and may not come back without
             // the Marathi moving in the same commit — see the NOTICE_VERSION note.
-            'We will not use your voice to train AI models.',
+            'We ourselves will not use your voice to train AI models.',
             'We will not make lending, insurance or market decisions from your data — that needs separate, specific consent.',
         ],
     },
-    processors: 'Trusted service providers may handle limited information only for OTP, secure cloud hosting, speech processing, weather, file storage, notifications and technical support — and only for that assigned purpose.',
+    processors: 'Service providers may handle limited information for OTP, secure cloud hosting, speech processing, weather, file storage, notifications and technical support. We send them only what that task needs. Their own terms apply to what they hold.',
     rights: {
         heading: 'Your rights',
-        where: 'From Settings → Data & Privacy:',
+        where: 'In Settings → Data & Privacy, or by writing to arvesystems@gmail.com:',
         items: [
             'Review or withdraw your consent.',
-            'Access, correct or download your information.',
+            'Ask to see, correct or get a copy of your information.',
             'Request deletion of your account and data.',
             'Raise a grievance, or nominate someone to act for you.',
         ],

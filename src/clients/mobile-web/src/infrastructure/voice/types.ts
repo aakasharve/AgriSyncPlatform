@@ -149,7 +149,36 @@ export const DEFAULT_VOICE_CONFIG: VoicePreprocessorConfig = {
     // log is therefore ALWAYS created regardless of streaming health — the batch
     // path is the guaranteed safety net and its behavior is preserved exactly.
     // Note: SEPARATE flag from streamingPcm.enabled (Phase 2 recording).
-    useStreamingParse: true,
+    // TURNED OFF 2026-08-31 — the streaming path creates no AiJob, and that
+    // silently zeroed DFES scoring for every farmer from June onwards.
+    //
+    // MEASURED IN PROD before the change: 145 daily_logs, 3 richness aggregates,
+    // 91 ai_jobs (none after 13 June), and ZERO of 145 logs carrying a
+    // source_ai_job_id. application_input_items / irrigation_entries /
+    // observation_events all empty. The scorer on 2026-08-30 saw WHAT=0, COST=0,
+    // OBS=0 and returned 0/10 — it could not even tell what work happened.
+    //
+    // WHY. AiOrchestrator.ParseVoiceWithFallbackAsync and ParseVoiceTwoStageAsync
+    // both return (Result, Guid JobId, ...). ParseVoiceStreamAsync returns no job
+    // id and writes no AiJob. With streaming on, useVoiceRecorder builds
+    // provenance as source:'ai' with NO sourceAiJobId (:210-218), so
+    // CreateDailyLogHandler skips the voice derivation branch (it requires
+    // SourceAiJobId) AND the ManualDraft fallback is withheld too, because that
+    // ships only on a positive source:'manual' assertion. Nothing derives, so
+    // DfesLensExtractor scores an empty day.
+    //
+    // OFF restores the whole chain: canRunLiveCaption (useVoiceRecorder.ts:424)
+    // goes false, the batch path runs, /ai/voice-parse returns
+    // sourceAiJobId = job?.Id (AiEndpoints.cs:669), BackendAiClient.ts:121 stamps
+    // it into provenance, and the typed ledger derives again.
+    //
+    // It also removes the live captions the founder asked to be gone — the same
+    // flag gates the Sarvam transcribe-stream stage.
+    //
+    // DO NOT flip this back until ParseVoiceStreamAsync creates an AiJob and emits
+    // its id on the terminal `complete` event. Guarded by
+    // __tests__/streamingParseDisabled.test.ts.
+    useStreamingParse: false,
     limits: {
         softSegmentLimit: 20,
         hardSegmentLimit: 30,

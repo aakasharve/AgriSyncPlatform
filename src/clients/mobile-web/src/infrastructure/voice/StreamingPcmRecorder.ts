@@ -13,6 +13,7 @@
  */
 
 import { StreamingPcmConfig } from './types';
+import { acquireMicStream } from './acquireMicStream';
 
 export interface StreamingPcmRecording {
     pcm: Float32Array;
@@ -58,7 +59,7 @@ export class StreamingPcmRecorder {
             throw new Error('AudioContext is not available in this environment.');
         }
 
-        this.mediaStream = await navigator.mediaDevices.getUserMedia({
+        this.mediaStream = await acquireMicStream({
             audio: {
                 channelCount: 1,
                 sampleRate: 16000,

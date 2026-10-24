@@ -96,15 +96,27 @@ function buildDto(): LabourDataDto {
             plots: [{ name: 'द्राक्ष-२', days: 18, pct: 82 }],
             money: { recorded: 16800.75, paid: 8400.25, advance: 3000, owed: 5400.5 },
         },
+        // Phase 4 (master review D4) — the CLEAN grid wire shape: five-axis
+        // cell objects (null slot = no mark), crew aggregate rows, no totals.
         ledger: {
             weekLabel: '2026-07-06',
-            days: ['सो', 'मं'],
+            days: ['2026-07-06', '2026-07-07'],
             rows: [
-                { personId: 'p1', name: 'रमेश', initial: 'र', tone: 'or', cells: ['present', 'half'], total: 6 },
+                {
+                    personId: 'op:p1', fieldOperatorId: 'p1', name: 'रमेश', initial: 'र', tone: 'or',
+                    cells: [
+                        { day: 'full', night: 'worked', hours: null, extraHours: 2, ukte: true, work: 'द्राक्ष छाटणी' },
+                        null,
+                    ],
+                },
             ],
-            dailyTotals: [3, 4],
-            weekTotal: 28,
+            crewRows: [
+                { throughFieldOperatorId: 'p2', throughName: 'रोकडे', counts: [8, null] },
+            ],
         },
+        view: 'owner',
+        // D6 — the two money truths + आज कामावर, as the new backend serves them.
+        home: { rojandariStated: 1200.5, ukteAgreed: 12000, onFarmToday: 12, rojandariToday: 4, ukteToday: 8 },
         review: [
             {
                 id: 'r1',
@@ -114,6 +126,11 @@ function buildDto(): LabourDataDto {
                 detail: 'द्राक्ष-२ · आज',
                 status: 'Draft',
                 points: { count: 4, shift: 'full', task: 'फवारणी', amount: null, names: ['रमेश'] },
+                // Task 20 (spec: 2026-08-28-labour-v2-release-1) — the approval
+                // card's "which plot", carried as its own pair so a farm-wide log
+                // stays distinguishable from one whose plot we cannot name.
+                plot: 'द्राक्ष-२',
+                plotScope: 'Plot',
             },
         ],
         attendance: { plot: '', headcount: 0, rows: [] },
@@ -178,6 +195,87 @@ describe('labourClient.fetchLabourData', () => {
         expect(data.dashboard.wages).toBe(8400);
         expect(data.dashboard.advances).toBe(3000);
         expect(data.dashboard.owed).toBe(5400);
+    });
+
+    // Task 1 (spec: 2026-08-28-labour-v2-release-1, P4) — a null
+    // recordedWages/owed on the wire is an ABSENCE of job-card evidence, not
+    // a zero. The mapper must pass `null` straight through — never `?? 0`,
+    // which would silently reintroduce the exact fabrication this task fixes.
+    it('passes a null recordedWages/owed straight through — never coerced to 0', async () => {
+        const dto = buildDto();
+        dto.people[0].recordedWages = null;
+        dto.dashboard.owed = null;
+        // `!` — the fixture always builds a money card; only its members go null here.
+        dto.dashboard.money!.recorded = null;
+        dto.dashboard.money!.owed = null;
+        mockGet.mockResolvedValueOnce(mockOkResponse(dto));
+
+        const data = await fetchLabourData('farm-123');
+
+        expect(data.people['p1'].balance.recorded).toBeNull();
+        expect(data.dashboard.owed).toBeNull();
+        expect(data.dashboard.money!.recorded).toBeNull();
+        expect(data.dashboard.money!.owed).toBeNull();
+    });
+
+    // Phase 4 (D-H8) — a WITHHELD money card (`money: null` on the wire, the
+    // मुकादम/worker projection) passes straight through as null; the mapper
+    // must never rebuild the card from fabricated zeros.
+    it('passes a null (withheld-by-view) money card straight through', async () => {
+        const dto = buildDto();
+        dto.dashboard.money = null;
+        dto.dashboard.wages = null;
+        dto.dashboard.advances = null;
+        dto.people[0].paid = null;
+        dto.people[0].advance = null;
+        mockGet.mockResolvedValueOnce(mockOkResponse(dto));
+
+        const data = await fetchLabourData('farm-123');
+
+        expect(data.dashboard.money).toBeNull();
+        expect(data.dashboard.wages).toBeNull();
+        expect(data.dashboard.advances).toBeNull();
+        expect(data.people['p1'].balance.paid).toBeNull();
+        expect(data.people['p1'].balance.advance).toBeNull();
+    });
+
+    // Phase 4 (master review D4) — the CLEAN grid maps cell-by-cell: a null
+    // slot survives as null (silence, not absence), every stated axis passes
+    // through unchanged, and crewRows/view reach the screen.
+    it('maps ledger cells, crew rows and the D-H8 view through unchanged', async () => {
+        mockGet.mockResolvedValueOnce(mockOkResponse(buildDto()));
+
+        const data = await fetchLabourData('farm-123');
+
+        expect(data.view).toBe('owner');
+        const row = data.ledger.rows[0];
+        expect(row.personId).toBe('op:p1');
+        expect(row.fieldOperatorId).toBe('p1');
+        expect(row.cells[0]).toEqual({
+            day: 'full', night: 'worked', hours: null, extraHours: 2, ukte: true, work: 'द्राक्ष छाटणी',
+        });
+        expect(row.cells[1]).toBeNull();
+        expect(data.ledger.crewRows).toEqual([
+            { throughFieldOperatorId: 'p2', throughName: 'रोकडे', counts: [8, null] },
+        ]);
+    });
+
+    // 4.3 review B001 (controller ruling) — FAIL CLOSED on a skewed wire: a
+    // dto with NO view (a pre-projection API) or an unrecognised one maps to
+    // 'own', never 'owner' — 'owner' is the only view allowed to CLAIM (the
+    // register's empty-state card), and a default must not hand a skewed
+    // client the claiming view. The render half (bare grid, no claim card)
+    // is pinned end-to-end in HajeriLedgerTotals.test.tsx.
+    it("a wire with no/unknown view fails closed to 'own' — never the claiming view", async () => {
+        const noView = buildDto() as unknown as Record<string, unknown>;
+        delete noView.view;
+        mockGet.mockResolvedValueOnce(mockOkResponse(noView));
+        expect((await fetchLabourData('farm-123')).view).toBe('own');
+
+        const garbage = buildDto();
+        garbage.view = 'admin';
+        mockGet.mockResolvedValueOnce(mockOkResponse(garbage));
+        expect((await fetchLabourData('farm-123')).view).toBe('own');
     });
 
     it('populates review[].points and review[].status from the DTO', async () => {

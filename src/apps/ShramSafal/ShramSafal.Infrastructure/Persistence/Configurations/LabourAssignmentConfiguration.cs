@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using ShramSafal.Domain.Farms;
+using ShramSafal.Domain.Labour;
 
 namespace ShramSafal.Infrastructure.Persistence.Configurations;
 
@@ -46,6 +47,24 @@ internal sealed class LabourAssignmentConfiguration : IEntityTypeConfiguration<L
         // a length cap here would silently truncate them. NULL = no note (the domain
         // normalises blank to null), never an empty string.
         builder.Property(x => x.Notes).HasColumnName("notes");
+
+        // Final direction §3 — the crew link (Phase 0 UNKNOWN 1). The schema's
+        // FIRST nullable FK: NULL = "nobody said through whom", never "no
+        // mukadam". Real FK + Restrict (NOT the linked_activity_id precedent:
+        // client uuid, no FK, no validation) because FK checks bypass RLS and
+        // the tenant WITH CHECK is (true) — the application farm guard in
+        // CreateDailyLogHandler is the tenant boundary here. No GRANT
+        // (privileges are per-table), no RLS change (policies name tables).
+        builder.Property(x => x.EngagedThroughFieldOperatorId)
+            .HasColumnName("engaged_through_field_operator_id");
+
+        builder.HasIndex(x => x.EngagedThroughFieldOperatorId)
+            .HasDatabaseName("ix_labour_assignments_engaged_through");
+
+        builder.HasOne<FieldOperator>()
+            .WithMany()
+            .HasForeignKey(x => x.EngagedThroughFieldOperatorId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         // Task 2.2 — mirrors DailyLogConfiguration.EvidenceSourcesJson: ships NOT NULL
         // with default '[]'::jsonb so the column never needs NULL handling downstream.

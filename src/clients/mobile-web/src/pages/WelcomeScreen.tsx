@@ -23,7 +23,19 @@ import DawnScene from './onboarding/DawnScene';
 
 interface WelcomeScreenProps {
     onContinue: () => void;
+    /**
+     * The person's role on the active farm, when known. The owner greeting
+     * ("on the way to owning a well-organised farm") is for owners; a Worker or
+     * Mukadam who joined by QR is not on that way and must not be told so.
+     * Unknown (a brand-new account about to create a first farm) keeps it.
+     */
+    farmRole?: string | null;
 }
+
+const isNonOwnerRole = (role: string | null | undefined): boolean => {
+    const r = role?.trim().toLowerCase();
+    return r === 'worker' || r === 'mukadam';
+};
 
 // The three things a farmer speaks into his daily log: did · spent · left.
 const THREAD: { icon: React.ReactNode; mr: string; primary?: boolean }[] = [
@@ -32,7 +44,7 @@ const THREAD: { icon: React.ReactNode; mr: string; primary?: boolean }[] = [
     { icon: <Hourglass size={16} strokeWidth={2} />, mr: 'काय राहिलं' },
 ];
 
-const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onContinue }) => {
+const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onContinue, farmRole }) => {
     const [imgFailed, setImgFailed] = useState(false);
     const [mounted, setMounted] = useState(false);
 
@@ -45,7 +57,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onContinue }) => {
         mounted ? { animation: `${name} ${dur} cubic-bezier(.16,1,.3,1) ${delay} both` } : { opacity: 0 };
 
     return (
-        <div className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#F4FCF8] pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] select-none">
+        <div className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#F4FCF8] pb-[var(--safe-area-inset-bottom,env(safe-area-inset-bottom))] pt-[var(--safe-area-inset-top,env(safe-area-inset-top))] select-none">
             <style>{`
                 @keyframes ws-rise { from{transform:translateY(24px);opacity:0} to{transform:translateY(0);opacity:1} }
                 @keyframes ws-up { from{transform:translateY(14px);opacity:0} to{transform:translateY(0);opacity:1} }
@@ -83,9 +95,11 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onContinue }) => {
                     </span>
                     <Leaf size={13} className="absolute -right-4 -top-1 text-emerald-500" aria-hidden="true" />
                 </div>
-                <p data-ws-anim className="mt-2.5 max-w-[300px] font-sans text-[13px] font-semibold leading-snug text-stone-600" style={anim('ws-up', '.6s', '.72s')}>
-                    सुव्यवस्थित शेतीचा मालक होण्याच्या वाटेवर!
-                </p>
+                {!isNonOwnerRole(farmRole) && (
+                    <p data-ws-anim className="mt-2.5 max-w-[300px] font-sans text-[13px] font-semibold leading-snug text-stone-600" style={anim('ws-up', '.6s', '.72s')}>
+                        सुव्यवस्थित शेतीचा मालक होण्याच्या वाटेवर!
+                    </p>
+                )}
             </div>
 
             {/* 2 — CHARACTER (flex-1, scales to fit; never overlaps greeting or thread) */}

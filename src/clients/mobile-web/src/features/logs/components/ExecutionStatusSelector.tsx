@@ -28,7 +28,7 @@ const chipActive: Record<ExecutionStatus, string> = {
 
 const DEFAULT_DEVIATION_REASONS: DeviationReason[] = [
     { code: 'weather', labelEn: 'Weather issue', labelMr: 'हवामान समस्या' },
-    { code: 'labor', labelEn: 'Labour not available', labelMr: 'मजूर नव्हते' },
+    { code: 'labor', labelEn: 'Labour not available', labelMr: 'माणसं मिळाली नाहीत' },
     { code: 'input', labelEn: 'Input not available', labelMr: 'साहित्य नव्हतं' },
     { code: 'equipment', labelEn: 'Equipment problem', labelMr: 'यंत्र बिघडलं' },
     { code: 'decision', labelEn: 'My decision', labelMr: 'माझा निर्णय' },

@@ -26,20 +26,21 @@ export const OperatorSessionBar: React.FC<OperatorSessionBarProps> = ({
     ownerName
 }) => {
     const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
-    const roleLabel = {
+    // UNKNOWN (role not told to this client) gets a neutral word, never "Worker".
+    const roleLabel = ({
         PRIMARY_OWNER: 'Primary Owner',
         SECONDARY_OWNER: 'Secondary Owner',
         MUKADAM: 'Mukadam',
         WORKER: 'Worker',
-    }[currentOperator.role] ?? 'Worker';
+    } as Record<string, string>)[currentOperator.role] ?? 'Member';
 
     // Color config based on role (Visual hierarchy)
-    const roleConfig = {
+    const roleConfig = ({
         PRIMARY_OWNER: { bg: 'bg-emerald-100', text: 'text-emerald-900', border: 'border-emerald-200' },
         SECONDARY_OWNER: { bg: 'bg-indigo-100', text: 'text-indigo-900', border: 'border-indigo-200' },
         MUKADAM: { bg: 'bg-blue-100', text: 'text-blue-900', border: 'border-blue-200' },
         WORKER: { bg: 'bg-gray-100', text: 'text-gray-900', border: 'border-gray-200' }
-    }[currentOperator.role] || { bg: 'bg-gray-100', text: 'text-gray-900', border: 'border-gray-200' };
+    } as Record<string, { bg: string; text: string; border: string }>)[currentOperator.role] || { bg: 'bg-gray-100', text: 'text-gray-900', border: 'border-gray-200' };
 
     // See AppHeader: `null` means we can prove nothing, so we claim nothing.
     const { claim, lastSyncedAt } = useSyncStatus();

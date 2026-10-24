@@ -7,6 +7,7 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
+using ShramSafal.Application.UseCases.Labour;
 using Xunit;
 
 namespace ShramSafal.Sync.IntegrationTests.Labour;
@@ -369,6 +370,178 @@ public sealed class LabourReadBackPullTests
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // 6. spec: 2026-08-25-prod-cutover-waves — "बरोबर doesn't save the name".
+    //    The names a farmer gives for a crew ride create_daily_log and come back
+    //    on the pull. Identity, never quantity (P7); optional, never a reason to
+    //    refuse a day (P9) — but an abusive list is refused loudly, never trimmed.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task The_names_the_farmer_gave_survive_push_and_pull_trimmed_and_blanks_shed()
+    {
+        await using var harness = await SyncEndpointsTests.TestHarness.CreateAsync();
+        var ids = await PushLogWithLabourAsync(
+            harness, workerCount: 8, workerNames: new[] { " रमेश ", "सीता", "   ", "बाळू", "बाळू" });
+
+        var engagement = (await PullLogAsync(harness, ids.LogId, DateTime.UnixEpoch))
+            .GetProperty("labour").EnumerateArray().Single();
+
+        // Two real people can both be called बाळू — no dedupe (B002).
+        Assert.Equal(
+            new[] { "रमेश", "सीता", "बाळू", "बाळू" },
+            engagement.GetProperty("workerNames").EnumerateArray().Select(n => n.GetString()).ToArray());
+        Assert.Equal(8, engagement.GetProperty("workerCount").GetInt32());
+    }
+
+    /// <summary>P7 at the wire: the names are an overlay, the count is the farmer's statement.</summary>
+    [Fact]
+    public async Task Names_never_change_or_invent_the_headcount_on_the_wire()
+    {
+        await using var harness = await SyncEndpointsTests.TestHarness.CreateAsync();
+        var outnumbered = await PushLogWithLabourAsync(
+            harness, workerCount: 1, workerNames: new[] { "गणेश", "सुनीता", "बाळू" });
+        var unstated = await PushLogWithLabourAsync(
+            harness, workerCount: null, seed: 2, workerNames: new[] { "गणेश", "सुनीता" });
+
+        var one = (await PullLogAsync(harness, outnumbered.LogId, DateTime.UnixEpoch))
+            .GetProperty("labour").EnumerateArray().Single();
+        Assert.Equal(1, one.GetProperty("workerCount").GetInt32());
+        Assert.Equal(3, one.GetProperty("workerNames").GetArrayLength());
+
+        var silent = (await PullLogAsync(harness, unstated.LogId, DateTime.UnixEpoch))
+            .GetProperty("labour").EnumerateArray().Single();
+        Assert.Equal(JsonValueKind.Null, silent.GetProperty("workerCount").ValueKind);
+        Assert.Equal(2, silent.GetProperty("workerNames").GetArrayLength());
+    }
+
+    /// <summary>Every shipped APK omits the key; that must behave exactly as before.</summary>
+    [Fact]
+    public async Task A_push_with_no_workerNames_key_pulls_an_empty_list_as_before()
+    {
+        await using var harness = await SyncEndpointsTests.TestHarness.CreateAsync();
+        var ids = await PushLogWithLabourAsync(harness, workerCount: 8);
+
+        var engagement = (await PullLogAsync(harness, ids.LogId, DateTime.UnixEpoch))
+            .GetProperty("labour").EnumerateArray().Single();
+
+        Assert.Equal(JsonValueKind.Array, engagement.GetProperty("workerNames").ValueKind);
+        Assert.Equal(0, engagement.GetProperty("workerNames").GetArrayLength());
+        Assert.Equal(8, engagement.GetProperty("workerCount").GetInt32());
+    }
+
+    [Theory]
+    [InlineData("too-many-names")]
+    [InlineData("name-too-long")]
+    [InlineData("not-an-array")]
+    [InlineData("non-string-entry")]
+    [InlineData("too-many-names-any-casing")]
+    public async Task An_out_of_contract_name_list_is_refused_whole_and_writes_nothing(string shape)
+    {
+        await using var harness = await SyncEndpointsTests.TestHarness.CreateAsync();
+        var over = LabourAssignmentFactory.MaxWorkerNamesPerEngagement + 1;
+        (object Value, string Key) bad = shape switch
+        {
+            "too-many-names" => (Enumerable.Range(0, over).Select(i => $"n{i}").ToArray(), "workerNames"),
+            "name-too-long" => (new[] { new string('अ', LabourAssignmentFactory.MaxWorkerNameLength + 1) }, "workerNames"),
+            "not-an-array" => ("रमेश", "workerNames"),
+            "non-string-entry" => (new object[] { "रमेश", 7 }, "workerNames"),
+            // The deserializer binds case-insensitively, so the boundary must too.
+            "too-many-names-any-casing" => (Enumerable.Range(0, over).Select(i => $"n{i}").ToArray(), "WORKERNAMES"),
+            _ => throw new ArgumentOutOfRangeException(nameof(shape)),
+        };
+        var (value, key) = bad;
+
+        var (ids, logResult) = await PushLogAndReadResultAsync(
+            harness, workerCount: 8, workerNames: value, workerNamesKey: key);
+
+        Assert.Equal("failed", logResult.GetProperty("status").GetString());
+        Assert.Equal("ShramSafal.SyncInvalidPayload", logResult.GetProperty("errorCode").GetString());
+        Assert.False(await harness.DailyLogExistsAsync(ids.LogId),
+            "a refused list is refused WHOLE — never silently trimmed into a partial record");
+    }
+
+    /// <summary>
+    /// P9 — what is NOT out of contract: null entries, and a name whose padding
+    /// alone takes it past the bound (the length is measured after trimming).
+    /// </summary>
+    [Fact]
+    public async Task Null_entries_and_padding_past_the_bound_are_accepted_and_shed()
+    {
+        await using var harness = await SyncEndpointsTests.TestHarness.CreateAsync();
+        var longest = new string('अ', LabourAssignmentFactory.MaxWorkerNameLength);
+        var ids = await PushLogWithLabourAsync(
+            harness, workerCount: 2, workerNames: new object?[] { null, $"  {longest}  ", "रमेश" });
+
+        var names = (await PullLogAsync(harness, ids.LogId, DateTime.UnixEpoch))
+            .GetProperty("labour").EnumerateArray().Single()
+            .GetProperty("workerNames").EnumerateArray().Select(n => n.GetString()).ToArray();
+
+        Assert.Equal(new[] { longest, "रमेश" }, names);
+    }
+
+    /// <summary>
+    /// The HTTP transport (<c>POST /shramsafal/logs</c>) threads the same generated
+    /// LabourItem, so the same names land — and the same bound applies, enforced by
+    /// <c>CreateDailyLogValidator</c> because that path never reaches the push boundary.
+    /// </summary>
+    [Fact]
+    public async Task The_http_create_path_stores_the_names_and_enforces_the_same_bound()
+    {
+        await using var harness = await SyncEndpointsTests.TestHarness.CreateAsync();
+        var ids = await PushLogWithLabourAsync(harness, workerCount: null, withLabour: false);
+
+        // POST /logs mints the log id itself (CreateDailyLogRequest carries none), so
+        // the created id is read back from the response.
+        object HttpBody(string logDate, string[] names) => new
+        {
+            farmId = ids.FarmId,
+            plotId = ids.PlotId,
+            cropCycleId = ids.CropCycleId,
+            logDate,
+            clientRequestId = $"req-post-names-{Guid.NewGuid():N}",
+            deviceId = DeviceId,
+            labour = new[]
+            {
+                new { labourAssignmentId = Guid.NewGuid(), engagementType = "hired_daily", workerCount = 8, workerNames = names },
+            },
+        };
+
+        var created = await harness.Client.PostAsJsonAsync(
+            "/shramsafal/logs", HttpBody("2026-02-23", new[] { "रमेश", "सीता" }));
+        created.EnsureSuccessStatusCode();
+        Guid namedLogId;
+        using (var createdDoc = JsonDocument.Parse(await created.Content.ReadAsStringAsync()))
+        {
+            namedLogId = createdDoc.RootElement.GetProperty("id").GetGuid();
+        }
+
+        var engagement = (await PullLogAsync(harness, namedLogId, DateTime.UnixEpoch))
+            .GetProperty("labour").EnumerateArray().Single();
+        Assert.Equal(
+            new[] { "रमेश", "सीता" },
+            engagement.GetProperty("workerNames").EnumerateArray().Select(n => n.GetString()).ToArray());
+        Assert.Equal(8, engagement.GetProperty("workerCount").GetInt32());
+
+        var logsBefore = await CountPulledLogsAsync(harness);
+        var refused = await harness.Client.PostAsJsonAsync(
+            "/shramsafal/logs",
+            HttpBody("2026-02-24",
+                Enumerable.Range(0, LabourAssignmentFactory.MaxWorkerNamesPerEngagement + 1).Select(i => $"n{i}").ToArray()));
+
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Equal(logsBefore, await CountPulledLogsAsync(harness));
+    }
+
+    private static async Task<int> CountPulledLogsAsync(SyncEndpointsTests.TestHarness harness)
+    {
+        var response = await harness.Client.GetAsync(
+            $"/sync/pull?since={Uri.EscapeDataString(DateTime.UnixEpoch.ToString("O", CultureInfo.InvariantCulture))}");
+        response.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return doc.RootElement.GetProperty("dailyLogs").GetArrayLength();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Harness helpers.
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -380,7 +553,31 @@ public sealed class LabourReadBackPullTests
         decimal? durationHours = 6m,
         string? notes = null,
         bool withLabour = true,
-        int seed = 1)
+        int seed = 1,
+        object? workerNames = null)
+    {
+        var (ids, logResult) = await PushLogAndReadResultAsync(
+            harness, workerCount, durationHours, notes, withLabour, seed, workerNames);
+
+        Assert.NotEqual("failed", logResult.GetProperty("status").GetString());
+        return ids;
+    }
+
+    /// <summary>
+    /// Same push as <see cref="PushLogWithLabourAsync"/>, returning the
+    /// create_daily_log result instead of asserting it, so a boundary test can
+    /// assert a REFUSAL. <paramref name="workerNames"/> is the raw wire value; when
+    /// <c>null</c> the key is OMITTED — the exact shape every shipped APK sends.
+    /// </summary>
+    private static async Task<(PushedIds Ids, JsonElement LogResult)> PushLogAndReadResultAsync(
+        SyncEndpointsTests.TestHarness harness,
+        int? workerCount,
+        decimal? durationHours = 6m,
+        string? notes = null,
+        bool withLabour = true,
+        int seed = 1,
+        object? workerNames = null,
+        string workerNamesKey = "workerNames")
     {
         var ids = new PushedIds(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         var tag = $"{seed}-{Guid.NewGuid():N}";
@@ -400,16 +597,22 @@ public sealed class LabourReadBackPullTests
         });
         farmResponse.EnsureSuccessStatusCode();
 
-        object labourItem = new
+        // A dictionary (keys spelled exactly as on the wire) so `workerNames` can be
+        // genuinely ABSENT rather than present-and-null.
+        var labourItem = new Dictionary<string, object?>
         {
-            labourAssignmentId = ids.AssignmentId,
-            engagementType = "hired_daily",
-            workerCount,
-            wagePerPerson = 350m,
-            task = "छाटणी",
-            notes,
-            durationHours,
+            ["labourAssignmentId"] = ids.AssignmentId,
+            ["engagementType"] = "hired_daily",
+            ["workerCount"] = workerCount,
+            ["wagePerPerson"] = 350m,
+            ["task"] = "छाटणी",
+            ["notes"] = notes,
+            ["durationHours"] = durationHours,
         };
+        if (workerNames is not null)
+        {
+            labourItem[workerNamesKey] = workerNames;
+        }
 
         var response = await harness.Client.PostAsJsonAsync("/sync/push", new
         {
@@ -464,11 +667,12 @@ public sealed class LabourReadBackPullTests
 
         response.EnsureSuccessStatusCode();
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var results = doc.RootElement.GetProperty("results").EnumerateArray().ToList();
         Assert.DoesNotContain(
-            doc.RootElement.GetProperty("results").EnumerateArray(),
+            results.Where(x => x.GetProperty("clientRequestId").GetString() != $"req-log-{tag}"),
             x => x.GetProperty("status").GetString() == "failed");
 
-        return ids;
+        return (ids, results.Single(x => x.GetProperty("clientRequestId").GetString() == $"req-log-{tag}").Clone());
     }
 
     private static async Task<JsonElement> PullLogAsync(

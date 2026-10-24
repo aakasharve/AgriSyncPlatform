@@ -122,6 +122,9 @@ public sealed class VoiceDiaryEndToEndTests : IAsyncLifetime
 
         // ── 2. Persist a clip ───────────────────────────────────────
         var clipId = Guid.NewGuid();
+        // Recorded AFTER the grant in step 1: the server refuses a clip that says it
+        // was recorded before the current grant began (consent boundary).
+        var recordedAt = DateTime.UtcNow.AddMinutes(1);
         var cipherBytes = Encoding.UTF8.GetBytes("fake-ciphertext-bytes");
         await using (var scope = CreateAdminScope())
         {
@@ -129,7 +132,7 @@ public sealed class VoiceDiaryEndToEndTests : IAsyncLifetime
             var result = await persist.HandleAsync(new PersistVoiceClipRetainedCommand(
                 ClipId: clipId,
                 UserId: _userId,
-                RecordedAtUtc: new DateTime(2026, 5, 17, 10, 0, 0, DateTimeKind.Utc),
+                RecordedAtUtc: recordedAt,
                 CipherBase64: Convert.ToBase64String(cipherBytes),
                 DekId: "dek-test",
                 IvBase64: "AAECAwQFBgcICQoLDA0ODw==",
@@ -147,8 +150,8 @@ public sealed class VoiceDiaryEndToEndTests : IAsyncLifetime
             var range = scope.ServiceProvider.GetRequiredService<GetVoiceDiaryByRangeHandler>();
             var result = await range.HandleAsync(new GetVoiceDiaryByRangeQuery(
                 _userId,
-                From: new DateOnly(2026, 5, 16),
-                To: new DateOnly(2026, 5, 18)));
+                From: DateOnly.FromDateTime(recordedAt.AddDays(-1)),
+                To: DateOnly.FromDateTime(recordedAt.AddDays(1))));
 
             result.IsSuccess.Should().BeTrue();
             result.Value!.Clips.Should().HaveCount(1);

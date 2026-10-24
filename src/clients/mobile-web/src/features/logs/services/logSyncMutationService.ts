@@ -1,28 +1,20 @@
 import { AddLogTaskCommand } from '../../../application/usecases/sync/AddLogTaskCommand';
 import { CreateDailyLogCommand, type LabourItemPayload, type ManualDraftPayload } from '../../../application/usecases/sync/CreateDailyLogCommand';
-import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import { type CropCycleDto, type PlotDto } from '../../../infrastructure/api/AgriSyncClient';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
 import { type DailyLog } from '../../../types';
+import { buildTaskPayloads, ensureUuid, normalizeName } from './logTaskPayloads';
+import {
+    WORKER_NAME_MAX_LENGTH,
+    WORKER_NAMES_MAX_PER_ENGAGEMENT,
+} from '../../../../../../../sync-contract/schemas/payloads/create_daily_log.zod';
 
-// The backend's AddLogTaskMutationPayload deserializes logTaskId as a
-// nullable Guid. Local domain code, however, freely uses non-UUID strings
-// like 'act_global_daily', `irr_${Date.now()}`, or scoped composites like
-// 'act_global_daily::<plotUuid>' for in-memory state keying. If those land
-// on the wire as-is, /sync/push returns 500 and the cycle never produces
-// REJECTED → the conflict-badge / retry UI starves. So at the sync
-// boundary we replace any non-UUID logTaskId with a freshly generated v4
-// UUID. The payload is then memoised inside the mutation queue, so retries
-// reuse the same UUID and stay idempotent.
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function ensureUuid(localId: string | undefined): string {
-    if (localId && UUID_REGEX.test(localId)) {
-        return localId;
-    }
-    return idGenerator.generate();
-}
+// `UUID_REGEX` / `ensureUuid` moved to `logTaskPayloads.ts` and imported
+// back above. They had to travel WITH the task builders: those call
+// `ensureUuid`, and leaving it here would have made the two modules import
+// each other. One direction only — the service depends on the payload
+// builders, never the reverse.
 
 /**
  * LABOUR_PHASE2 B1a — what the farmer asserted about WHERE the work happened,
@@ -50,105 +42,13 @@ type ResolvedLogSyncTarget =
     | { farmId: string; scope: 'MultiPlot'; plotIds: string[] }
     | { farmId: string; scope: 'Farm'; plotIds: [] };
 
-interface LogTaskMutationPayload {
-    logTaskId: string;
-    activityType: string;
-    notes?: string;
-    occurredAtUtc?: string;
-}
+// `LogTaskMutationPayload` moved to `logTaskPayloads.ts` with the builders
+// that are its only consumers.
 
-function normalizeName(value?: string): string {
-    return (value || '').trim().toLowerCase();
-}
-
-function buildTaskNotes(parts: Array<string | undefined>): string | undefined {
-    const filtered = parts
-        .map(part => part?.trim())
-        .filter((part): part is string => Boolean(part && part.length > 0));
-
-    if (filtered.length === 0) {
-        return undefined;
-    }
-
-    return filtered.join(' • ');
-}
-
-function buildTaskPayloads(log: DailyLog): LogTaskMutationPayload[] {
-    const occurredAtUtc = log.meta?.createdAtISO;
-    const payloads: LogTaskMutationPayload[] = [];
-
-    log.cropActivities.forEach(activity => {
-        payloads.push({
-            logTaskId: ensureUuid(activity.id),
-            activityType: activity.workTypes?.[0] || activity.title,
-            notes: activity.notes,
-            occurredAtUtc,
-        });
-    });
-
-    log.irrigation.forEach(event => {
-        payloads.push({
-            logTaskId: ensureUuid(event.id),
-            activityType: 'Irrigation',
-            notes: buildTaskNotes([
-                event.method ? `Method: ${event.method}` : undefined,
-                event.source ? `Source: ${event.source}` : undefined,
-                event.durationHours ? `Duration: ${event.durationHours} hrs` : undefined,
-                event.notes,
-            ]),
-            occurredAtUtc,
-        });
-    });
-
-    // Labour V1 Task 8.1 — labour deliberately does NOT produce a log_task here.
-    // It used to be flattened into a free-text note ("Workers: 6 • Cost: ₹3000")
-    // which discarded every structured field. It now travels as structured
-    // `labour[]` on the create_daily_log payload (see buildLabourPayloads), which
-    // the server stages as canonical Phase-1 rows atomically with the log.
-
-    log.inputs.forEach(event => {
-        const productName = event.productName || event.mix?.[0]?.productName || 'Input';
-        const activityType = event.type === 'fertilizer' || event.reason === 'Growth' || event.reason === 'Deficiency'
-            ? `Fertilizer ${productName}`
-            : `Spray ${productName}`;
-
-        payloads.push({
-            logTaskId: ensureUuid(event.id),
-            activityType,
-            notes: buildTaskNotes([
-                event.quantity ? `Qty: ${event.quantity} ${event.unit || ''}` : undefined,
-                event.cost ? `Cost: ₹${event.cost}` : undefined,
-                event.notes,
-            ]),
-            occurredAtUtc,
-        });
-    });
-
-    log.machinery.forEach(event => {
-        payloads.push({
-            logTaskId: ensureUuid(event.id),
-            activityType: `Machinery ${event.type}`,
-            notes: buildTaskNotes([
-                event.hoursUsed ? `Hours: ${event.hoursUsed}` : undefined,
-                event.rentalCost ? `Rent: ₹${event.rentalCost}` : undefined,
-                event.fuelCost ? `Fuel: ₹${event.fuelCost}` : undefined,
-                event.notes,
-            ]),
-            occurredAtUtc,
-        });
-    });
-
-    log.observations?.forEach(event => {
-        payloads.push({
-            logTaskId: ensureUuid(event.id),
-            activityType: event.noteType === 'reminder' ? 'Reminder' : 'Observation',
-            notes: event.textCleaned || event.textRaw,
-            occurredAtUtc,
-        });
-    });
-
-    return payloads;
-}
+// `normalizeName`, `buildTaskNotes` and `buildTaskPayloads` moved to
+// `logTaskPayloads.ts` to bring this file under the 800-line budget
+// (`npm run check:file-sizes`). Pure code move; imported at the top of this
+// file and called exactly where it always was.
 
 /**
  * spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — carry the farmer's
@@ -256,6 +156,33 @@ export function wholeOrOmitted(value: number | undefined): number | undefined {
 }
 
 /**
+ * spec: 2026-08-25-prod-cutover-waves — the names the farmer gave for one crew, in a
+ * shape the contract can never refuse ("बरोबर doesn't save the name": the payload
+ * carried no names, so the server never stored them and the next pull erased them).
+ *
+ * Same rule as the server's write boundary (`LabourAssignment.Create`, B002): trim
+ * each name, shed blanks, never dedupe (two real people can both be बाळू). Then clamp
+ * to the contract's own bounds, because `MutationQueue.enqueue` safeParses and THROWS
+ * — one over-long dictation must not cost the farmer his whole day (P9). A cut never
+ * ends on half a surrogate pair. `undefined` when nobody was named, so the key is not
+ * sent. Identity only (P7): no count is read from or written to this list.
+ */
+export function workerNamesForWire(names: readonly unknown[] | undefined): string[] | undefined {
+    if (!Array.isArray(names)) return undefined;
+    const kept: string[] = [];
+    for (const raw of names) {
+        if (kept.length === WORKER_NAMES_MAX_PER_ENGAGEMENT) break;
+        const name = typeof raw === 'string' ? raw.trim() : '';
+        if (!name) continue;
+        let cut = name.slice(0, WORKER_NAME_MAX_LENGTH);
+        const last = cut.charCodeAt(cut.length - 1);
+        if (cut.length < name.length && last >= 0xd800 && last <= 0xdbff) cut = cut.slice(0, -1);
+        kept.push(cut.trimEnd());
+    }
+    return kept.length > 0 ? kept : undefined;
+}
+
+/**
  * Labour V1 Task 8.1 — THE STRUCTURED LABOUR PAYLOAD.
  *
  * WHY THIS IS LOAD-BEARING, not a payload tweak: the server routes labour to
@@ -305,6 +232,7 @@ function buildLabourPayloads(log: DailyLog): LabourItemPayload[] {
         // Absent means "the farmer did not state hours"; the server then records
         // Assumed. Zero and negatives are unstated too — not an error (P9).
         const durationHours = finiteOrOmitted(event.durationHours);
+        const workerNames = workerNamesForWire(event.workerNames);
 
         // Conditional spreads, so a value we cannot send is simply NOT SENT: the
         // key is absent rather than present-and-undefined. One uniform rule for
@@ -339,6 +267,7 @@ function buildLabourPayloads(log: DailyLog): LabourItemPayload[] {
             shift: event.shiftId,
             task: event.activity,
             notes: event.notes,
+            ...(workerNames !== undefined && { workerNames }),
         };
     });
 }
@@ -787,6 +716,10 @@ export async function enqueueLogsForSync(
             // payload, including the voice ones — which is what B1a/B1c mean by
             // "byte-identical to what it sent before", and they read Object.keys.
             ...(manualDraft !== undefined && { manualDraft }),
+            // B002 (founder ruling 2026-08-31) — a हजेरी-door save tells the server to
+            // derive labour only. Read HERE, at queue time: the queued payload is what
+            // syncs and replays, and `captureScope` does not survive a pull's rebuild.
+            ...(log.captureScope === 'labour' && { captureScope: 'labour' as const }),
             // B2.8 — carry the weather already captured at confirm-time to the server
             // (persisted into ssf.weather_stamps). Omit the client-only `id` (server generates).
             //
@@ -853,3 +786,7 @@ export async function enqueueLogsForSync(
         skippedLogIds,
     };
 }
+
+
+
+

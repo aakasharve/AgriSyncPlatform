@@ -26,6 +26,32 @@ namespace ShramSafal.Application.UseCases.Labour;
 /// </summary>
 public static class LabourAssignmentFactory
 {
+    // ── worker-name transport bounds (spec: 2026-08-25-prod-cutover-waves) ──
+    // The names a farmer gives for ONE engagement (create_daily_log
+    // labour[].workerNames) are IDENTITY, an overlay on the stated headcount and
+    // never a quantity (doctrine P7): they are stored beside WorkerCount and
+    // nothing ever counts them into it. These two numbers exist only to refuse an
+    // abusive or broken payload — /sync/push accepts a 50 MiB body — so both sit
+    // far above any real dictation and no farmer's real utterance can reach them
+    // (doctrine P9). The transport boundary enforces them; the domain's own
+    // trim + drop-blank normalisation (LabourAssignment.Create, B002) is unchanged.
+
+    /// <summary>
+    /// Most names one labour engagement may carry on the wire. Far above any crew a
+    /// farmer names one by one; a payload above it is refused loudly, never trimmed,
+    /// because silently dropping names is the defect this bound ships with.
+    /// </summary>
+    public const int MaxWorkerNamesPerEngagement = 200;
+
+    /// <summary>
+    /// Longest single name, in UTF-16 code units after trimming (the unit both C#
+    /// <c>string.Length</c> and zod <c>.max()</c> measure). Equal to the identity
+    /// tables' own name columns (<c>field_operators.display_name</c>,
+    /// <c>workers.name_raw</c>, both varchar(200)), so a name recorded here always
+    /// fits wherever it may later seed an identity.
+    /// </summary>
+    public const int MaxWorkerNameLength = 200;
+
     /// <summary>
     /// Builds a <see cref="LabourAssignment"/> from already-mapped values,
     /// resolving the canonical headcount through
@@ -71,7 +97,14 @@ public static class LabourAssignmentFactory
         Guid? linkedActivityId, DateTime createdAtUtc, LabourTime time,
         LabourShift? shift = null, string? task = null, IReadOnlyList<string>? workerNames = null,
         string? notes = null,
-        NumericCertainty? costCertainty = null, string? costSpokenText = null)
+        NumericCertainty? costCertainty = null, string? costSpokenText = null,
+        // Task 3.6 (spec: 2026-08-28-labour-v2-release-1) — Final direction §3, the
+        // crew link: THROUGH WHOM this engagement's crew came (a FieldOperatorId).
+        // Trailing and OPTIONAL like notes/costCertainty above, so every existing
+        // call site compiles and keeps writing NULL = "nobody said through whom".
+        // Pure pass-through: the farm guard lives in CreateDailyLogHandler, and no
+        // worker row is ever minted from this link (the remainder stays arithmetic).
+        Guid? engagedThroughFieldOperatorId = null)
         => LabourAssignment.Create(
             id: id,
             dailyLogId: dailyLogId,
@@ -80,9 +113,11 @@ public static class LabourAssignmentFactory
             femaleCount: femaleCount,
             // P4/P8: nothing stated => NULL means "we were not told", never "zero people
             // worked". An explicitly stated 0 still stores 0 and stays distinguishable.
-            workerCount: (workerCount ?? maleCount ?? femaleCount) is null
-                ? null
-                : LabourHeadcount.Resolve(workerCount, maleCount, femaleCount),
+            // Task 6 (spec: 2026-08-28-labour-v2-release-1) — LabourHeadcount.Resolve
+            // itself now returns null for the all-silent case, so this call needs no
+            // outer null-check anymore; see LabourAssignment.CorrectHeadcount for the
+            // same simplification and why (the check was equivalent, just duplicated).
+            workerCount: LabourHeadcount.Resolve(workerCount, maleCount, femaleCount),
             wagePerPerson: wagePerPerson,
             contractUnit: contractUnit,
             contractQuantity: contractQuantity,
@@ -95,7 +130,8 @@ public static class LabourAssignmentFactory
             workerNames: workerNames,
             notes: notes,
             costCertainty: costCertainty,
-            costSpokenText: costSpokenText);
+            costSpokenText: costSpokenText,
+            engagedThroughFieldOperatorId: engagedThroughFieldOperatorId);
 
     // ── tolerant string → enum maps (safe default; never throw) ────────────────
     // Moved verbatim from LedgerDerivationService so the manual path can map wire

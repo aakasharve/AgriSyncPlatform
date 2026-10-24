@@ -15,7 +15,7 @@
  *
  * The होय/नाही copy is plain UI copy (not agronomy/AI content), so — like
  * the "नंतर" dismiss affordance in MeterDisplay.tsx and the composed line in
- * DailyLoopInsight.tsx — it is hardcoded here rather than routed through the
+ * the saved-screen surfaces — it is hardcoded here rather than routed through the
  * i18n content-gate machinery.
  */
 import React from 'react';

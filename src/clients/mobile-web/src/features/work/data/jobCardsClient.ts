@@ -146,14 +146,24 @@ export async function getFarmJobCards(
     const qs = params.toString();
     const url = `${resolveBaseUrl()}/farms/${farmId}/job-cards${qs ? `?${qs}` : ''}`;
     const res = await fetch(url, { headers: authHeaders() });
-    if (!res.ok) return [];
+    // TASK 8 (spec: 2026-08-28-labour-v2-release-1, P4/P5, Ruling R8) — this
+    // was `return []`, and that one line manufactured the lie the whole task
+    // exists to remove. A 401/403/500 came back as a RESOLVED promise carrying
+    // an empty array, so `useJobCards`'s `try/catch` never fired and the screen
+    // reported an HTTP error as the server's own answer: "कोणते काम कार्ड
+    // नाही". Absence of any record means UNKNOWN — only the server may say
+    // "none", and it says it with a 200 and an empty body (still returned
+    // below, still an honest empty). Every sibling in this file already threw;
+    // this one and `getWorkerJobCards` were the outliers.
+    if (!res.ok) throw new Error(`getFarmJobCards failed: ${res.status}`);
     return res.json() as Promise<JobCard[]>;
 }
 
 export async function getWorkerJobCards(userId: string): Promise<JobCard[]> {
     const url = `${resolveBaseUrl()}/workers/${userId}/job-cards`;
     const res = await fetch(url, { headers: authHeaders() });
-    if (!res.ok) return [];
+    // TASK 8 — same fabrication as `getFarmJobCards` above; see the note there.
+    if (!res.ok) throw new Error(`getWorkerJobCards failed: ${res.status}`);
     return res.json() as Promise<JobCard[]>;
 }
 

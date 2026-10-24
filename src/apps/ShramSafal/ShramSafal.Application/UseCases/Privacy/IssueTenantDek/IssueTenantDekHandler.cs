@@ -10,8 +10,8 @@
 //   - Lives in Application. Domain has no knowledge of KMS.
 //   - Calls only Domain ports + the BuildingBlocks ITenantDekService port.
 //     No Infrastructure types reach this file.
-//   - Reads OwnerAccountId from the per-request TenantContext; the endpoint
-//     short-circuits to 401 when no tenant claim is present.
+//   - Derives OwnerAccountId from the farm named in the command, after
+//     re-checking the caller's Active membership (see D1 note below).
 
 using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.BuildingBlocks.Results;
@@ -24,8 +24,7 @@ namespace ShramSafal.Application.UseCases.Privacy.IssueTenantDek;
 
 public sealed class IssueTenantDekHandler(
     IShramSafalRepository repository,
-    ITenantDekService tenantDekService,
-    TenantContext tenantContext)
+    ITenantDekService tenantDekService)
 {
     public async Task<Result<IssueTenantDekResult>> HandleAsync(
         IssueTenantDekCommand command,
@@ -36,14 +35,24 @@ public sealed class IssueTenantDekHandler(
             return Result.Failure<IssueTenantDekResult>(ShramSafalErrors.JoinUnauthenticated);
         }
 
-        // Owner-account scope is the unit of tenancy for the DEK
-        // EncryptionContext binding — the per-request TenantContext already
-        // holds it (stamped by TenantTransactionMiddleware on every business
-        // request). Reject when missing: no plaintext DEK should ever be
-        // issued without a tenant binding.
-        if (tenantContext.OwnerAccountId is not { } ownerAccountId || ownerAccountId == Guid.Empty)
+        if (command.FarmId == Guid.Empty)
         {
-            return Result.Failure<IssueTenantDekResult>(ShramSafalErrors.JoinUnauthenticated);
+            return Result.Failure<IssueTenantDekResult>(ShramSafalErrors.InvalidCommand);
+        }
+
+        // Owner-account scope is the unit of tenancy for the DEK
+        // EncryptionContext binding. D1 (2026-10-15): it used to be read from
+        // TenantContext.OwnerAccountId, which nothing on this route ever set, so every
+        // call answered 401. It is now derived from the FARM the caller names, and ONLY
+        // after the caller is proven an Active member (or the declared owner) of that
+        // farm. The owner account never comes from the request. No plaintext DEK is
+        // issued without a verified binding.
+        var (isActiveMember, ownerAccountId) = await repository
+            .GetActiveFarmMembershipForTenantAsync(command.FarmId, command.UserId, ct)
+            .ConfigureAwait(false);
+        if (!isActiveMember || ownerAccountId == Guid.Empty)
+        {
+            return Result.Failure<IssueTenantDekResult>(ShramSafalErrors.Forbidden);
         }
 
         var dek = await tenantDekService.IssueAsync(ownerAccountId, ct).ConfigureAwait(false);
@@ -65,7 +74,7 @@ public sealed class IssueTenantDekHandler(
                 ownerAccountId,
                 expiresAtUtc = dek.ExpiresAtUtc,
             },
-            farmId: tenantContext.FarmId,
+            farmId: command.FarmId,
             clientCommandId: null,
             appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
                 ? AppVersionProvider.Current

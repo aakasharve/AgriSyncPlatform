@@ -111,8 +111,13 @@ public sealed class LabourCorrectionGateBRealPostgresTests(Xunit.Abstractions.IT
             await SeedPlotAsync(raw, PlotA, FarmA, "Plot A");
             await SeedCropCycleAsync(raw, CycleA, FarmA, PlotA);
             // status 3 = Active. Role strings match AppRole names.
+            // D5 (2026-09-02): the Mukadam role no longer carries labour
+            // authority, so the acting foreman is seeded GRANTED — on BOTH
+            // farms, exactly as the role used to reach both. That keeps the
+            // cross-farm Forbidden below meaning "farm scope", never "missing
+            // grant".
             await SeedMembershipAsync(raw, FarmA, OwnerUserId, FarmAAccount, "PrimaryOwner");
-            await SeedMembershipAsync(raw, FarmA, MukadamUserId, FarmAAccount, "Mukadam");
+            await SeedMembershipAsync(raw, FarmA, MukadamUserId, FarmAAccount, "Mukadam", canManageLabourRecords: true);
             await SeedMembershipAsync(raw, FarmA, WorkerUserId, FarmAAccount, "Worker");
 
             await SeedFarmAsync(raw, FarmB, FarmBOwnerUserId, FarmBAccount, "Gate B Farm B");
@@ -120,7 +125,7 @@ public sealed class LabourCorrectionGateBRealPostgresTests(Xunit.Abstractions.IT
             await SeedCropCycleAsync(raw, CycleB, FarmB, PlotB);
             await SeedMembershipAsync(raw, FarmB, FarmBOwnerUserId, FarmBAccount, "PrimaryOwner");
             // The Mukadam is ALSO on Farm B — see the FarmB comment above.
-            await SeedMembershipAsync(raw, FarmB, MukadamUserId, FarmBAccount, "Mukadam");
+            await SeedMembershipAsync(raw, FarmB, MukadamUserId, FarmBAccount, "Mukadam", canManageLabourRecords: true);
         }
 
         var services = new ServiceCollection();
@@ -745,19 +750,21 @@ public sealed class LabourCorrectionGateBRealPostgresTests(Xunit.Abstractions.IT
     }
 
     private static async Task SeedMembershipAsync(
-        NpgsqlConnection db, Guid farmId, Guid userId, Guid ownerAccountId, string role)
+        NpgsqlConnection db, Guid farmId, Guid userId, Guid ownerAccountId, string role,
+        bool canManageLabourRecords = false)
     {
         await using var cmd = db.CreateCommand();
         cmd.CommandText = """
             INSERT INTO ssf.farm_memberships
-                ("Id", farm_id, user_id, role, granted_at_utc, modified_at_utc, owner_account_id, status)
-            VALUES (@id, @farm, @user, @role, NOW(), NOW(), @account, 3);
+                ("Id", farm_id, user_id, role, granted_at_utc, modified_at_utc, owner_account_id, status, can_manage_labour_records)
+            VALUES (@id, @farm, @user, @role, NOW(), NOW(), @account, 3, @grant);
             """;
         cmd.Parameters.AddWithValue("id", Guid.NewGuid());
         cmd.Parameters.AddWithValue("farm", farmId);
         cmd.Parameters.AddWithValue("user", userId);
         cmd.Parameters.AddWithValue("role", role);
         cmd.Parameters.AddWithValue("account", ownerAccountId);
+        cmd.Parameters.AddWithValue("grant", canManageLabourRecords);
         await cmd.ExecuteNonQueryAsync();
     }
 

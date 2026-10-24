@@ -88,15 +88,27 @@ const ActionToast: React.FC<ActionToastProps> = ({
                 <div className="flex items-center gap-3 pl-3 border-l border-white/10 ml-2">
                     {actionLabel && onAction && (
                         <button
+                            data-testid="action-toast-action"
                             onClick={onAction}
-                            className="text-xs font-bold uppercase tracking-wide px-3 py-1.5 bg-white/10 rounded-lg hover:bg-white/20 transition-colors active:scale-95"
+                            /* Task 21 (Labour V2 R1) — the audit found this
+                               retry/action affordance at ~34px tall against the
+                               Labour feature's own 56px floor ("no interactive
+                               element below 56px tall", LabourHub.tsx). Padding
+                               unchanged; `min-h-[56px]` plus centering brings the
+                               tappable area up to the standard without changing
+                               the button's visual weight. */
+                            className="flex min-h-[56px] items-center justify-center text-xs font-bold uppercase tracking-wide px-3 py-1.5 bg-white/10 rounded-lg hover:bg-white/20 transition-colors active:scale-95"
                         >
                             {actionLabel}
                         </button>
                     )}
                     <button
+                        data-testid="action-toast-dismiss"
                         onClick={onDismiss}
-                        className="p-1.5 hover:bg-white/10 rounded-full transition-colors active:scale-90"
+                        /* Task 21 — same 56px floor as the action button above,
+                           applied here as a min-height/min-width tap area so the
+                           icon itself stays visually unchanged. */
+                        className="flex min-h-[56px] min-w-[56px] items-center justify-center hover:bg-white/10 rounded-full transition-colors active:scale-90"
                     >
                         <X className="w-4 h-4 opacity-70" strokeWidth={3} />
                     </button>

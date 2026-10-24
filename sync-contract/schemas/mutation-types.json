@@ -1,7 +1,7 @@
 {
   "$schema": "./mutation-types.meta.json",
-  "version": "1.0.0",
-  "lastUpdated": "2026-04-30",
+  "version": "1.1.0",
+  "lastUpdated": "2026-09-02",
   "mutationTypes": [
     { "name": "create_farm",            "ownerAggregate": "Farm",             "sinceVersion": "0.1.0", "payloadSchema": "CreateFarm" },
     { "name": "create_plot",            "ownerAggregate": "Plot",             "sinceVersion": "0.1.0", "payloadSchema": "CreatePlot" },
@@ -34,6 +34,7 @@
     { "name": "jobcard.start",          "ownerAggregate": "JobCard",          "sinceVersion": "1.0.0", "payloadSchema": "JobCardStart" },
     { "name": "jobcard.complete",       "ownerAggregate": "JobCard",          "sinceVersion": "1.0.0", "payloadSchema": "JobCardComplete" },
     { "name": "jobcard.settle",         "ownerAggregate": "JobCard",          "sinceVersion": "1.0.0", "payloadSchema": "JobCardSettle" },
-    { "name": "jobcard.cancel",         "ownerAggregate": "JobCard",          "sinceVersion": "1.0.0", "payloadSchema": "JobCardCancel" }
+    { "name": "jobcard.cancel",         "ownerAggregate": "JobCard",          "sinceVersion": "1.0.0", "payloadSchema": "JobCardCancel" },
+    { "name": "attendance.mark",        "ownerAggregate": "AttendanceMark",   "sinceVersion": "0.9.0", "payloadSchema": "AttendanceMark" }
   ]
 }

@@ -11,6 +11,20 @@
 // /shramsafal group); both short-circuit to 401 when no caller identity
 // can be extracted from the JWT.
 //
+// D1 (2026-10-15) - WHICH TENANT. These routes used to read the owner account
+// from TenantContext, which nothing on this route ever set (the JWT carries no
+// owner-account claim; only ShramSafalAuthorizationEnforcer sets it, and these
+// routes never reach it), so every call answered 401 join.unauthenticated.
+// They now take the farm the caller is working in (query `farmId` on GET, body
+// `farmId` on POST) and establish the tenant the same way the other farm routes
+// do: ICallerFarmTenantScope validates the caller's membership under their own
+// user-scoped RLS and only then sets the farm GUCs. The handler then re-checks
+// the stricter Active-only rule and derives the owner account FROM THE FARM ROW.
+// The owner account is never accepted from the request.
+//   missing/empty farmId        -> 400
+//   not a member / no such farm -> 403 (identical, so existence does not leak)
+//   pending/suspended/revoked   -> 403
+//
 // Route prefix follows the same /shramsafal/* convention sub-phase 05.1
 // established (NOT the bare /api/security/* shown in the plan body) so
 // the admin/main route mounts share a single tenant-context middleware
@@ -19,6 +33,7 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Privacy.IssueTenantDek;
 using ShramSafal.Application.UseCases.Privacy.ResolveTenantDek;
 using ShramSafal.Domain.Common;
@@ -43,6 +58,8 @@ public static class SecurityEndpoints
     private static async Task<IResult> HandleIssueTenantDekAsync(
         HttpContext httpContext,
         IssueTenantDekHandler handler,
+        ICallerFarmTenantScope scope,
+        Guid? farmId,
         CancellationToken ct)
     {
         if (!EndpointActorContext.TryGetUserId(httpContext.User, out var userId))
@@ -50,11 +67,23 @@ public static class SecurityEndpoints
             return Results.Unauthorized();
         }
 
+        if (farmId is not { } requestedFarmId || requestedFarmId == Guid.Empty)
+        {
+            return FarmIdRequired();
+        }
+
+        var scopeResult = await scope.EstablishForCallerAsync(requestedFarmId, userId, ct);
+        if (!scopeResult.IsSuccess)
+        {
+            return ToErrorResult(scopeResult.Error);
+        }
+
         var (deviceId, ipHash) = httpContext.AuditClaims();
         var appVersion = ResolveClientAppVersion(httpContext);
 
         var command = new IssueTenantDekCommand(
             UserId: userId,
+            FarmId: requestedFarmId,
             ClientAppVersion: appVersion,
             ActorRole: EndpointActorContext.GetActorRole(httpContext.User),
             AuditDeviceId: deviceId,
@@ -79,6 +108,7 @@ public static class SecurityEndpoints
         HttpContext httpContext,
         ResolveTenantDekRequest request,
         ResolveTenantDekHandler handler,
+        ICallerFarmTenantScope scope,
         CancellationToken ct)
     {
         if (!EndpointActorContext.TryGetUserId(httpContext.User, out var userId))
@@ -95,11 +125,23 @@ public static class SecurityEndpoints
             });
         }
 
+        if (request.FarmId is not { } requestedFarmId || requestedFarmId == Guid.Empty)
+        {
+            return FarmIdRequired();
+        }
+
+        var scopeResult = await scope.EstablishForCallerAsync(requestedFarmId, userId, ct);
+        if (!scopeResult.IsSuccess)
+        {
+            return ToErrorResult(scopeResult.Error);
+        }
+
         var (deviceId, ipHash) = httpContext.AuditClaims();
         var appVersion = ResolveClientAppVersion(httpContext);
 
         var command = new ResolveTenantDekCommand(
             UserId: userId,
+            FarmId: requestedFarmId,
             DekId: request.DekId,
             ClientAppVersion: appVersion,
             ActorRole: EndpointActorContext.GetActorRole(httpContext.User),
@@ -118,6 +160,12 @@ public static class SecurityEndpoints
             dekBase64 = payload.DekBase64,
         });
     }
+
+    private static IResult FarmIdRequired() => Results.BadRequest(new
+    {
+        error = ShramSafalErrors.InvalidCommand.Code,
+        message = "farmId is required."
+    });
 
     // Mirror of AiEndpoints.ToErrorResult / ResolveClientAppVersion (single
     // source of behaviour per endpoint file — refactor to a shared adapter
@@ -146,4 +194,6 @@ public static class SecurityEndpoints
 // spec: data-principle-spine-2026-05-05/05.2
 //
 // Wire shape for POST /shramsafal/security/tenant-dek/resolve.
-public sealed record ResolveTenantDekRequest(string DekId);
+// FarmId is nullable + optional so an OLD client (which sends only dekId) still
+// deserializes and is answered with a clean 400 instead of a binding failure.
+public sealed record ResolveTenantDekRequest(string DekId, Guid? FarmId = null);

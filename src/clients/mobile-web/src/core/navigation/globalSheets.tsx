@@ -9,6 +9,7 @@ import { TaskCreationSheet, ReviewInboxSheet, QuickLogSheet } from './lazyCompon
 import { AppRouterContext } from './routeContext';
 import { ConflictBadge } from '../../features/sync/conflict/ConflictBadge';
 import { NoWorkReasonSheet } from '../../features/logs/components/NoWorkReasonSheet';
+import { buildNoWorkDayPayload } from './noWorkDay';
 
 export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
     const {
@@ -17,7 +18,7 @@ export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
         showReviewInbox, setShowReviewInbox, history,
         showQuickLog, setShowQuickLog,
         setMode, setStatus, setRecordingSegment,
-        currentRoute, setCurrentRoute, mainView, status, recordingSegment, hasActiveLogContext,
+        currentRoute, setCurrentRoute, mainView, status, recordingSegment, hasActiveLogContext, logIntent,
         showNoWorkReason, setShowNoWorkReason, handleManualSubmit, todayDateKey
     } = ctx;
 
@@ -36,17 +37,7 @@ export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
      */
     const declareNoWorkDay = (cause?: BucketIssueType) => {
         setShowNoWorkReason(false);
-        void handleManualSubmit({
-            date: todayDateKey,
-            dayOutcome: 'NO_WORK_PLANNED',
-            // P9 — absent chip, absent disturbance. DisturbanceEvent.Create requires a
-            // non-empty reason, so an empty one would be dropped server-side rather than
-            // rejecting the record; sending nothing is the honest form of the same thing.
-            disturbance: cause
-                ? { scope: 'FULL_DAY' as const, group: 'no_work', reason: cause, cause, blockedSegments: [] }
-                : undefined,
-            provenance: { source: 'manual' as const, timestamp: new Date().toISOString() },
-        });
+        void handleManualSubmit(buildNoWorkDayPayload(todayDateKey, cause));
     };
 
     return (
@@ -114,9 +105,12 @@ export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
                 onClose={() => setShowNoWorkReason(false)}
             />
 
-            {/* DFES: FAB to open QuickLogSheet (visible on main log view when idle) */}
+            {/* DFES: FAB to open QuickLogSheet (visible on main log view when idle).
+                NOT on the labour (हजेरी) door: there it floated over the बरोबर button
+                and took its taps (APK 1.0.14 founder report), and QuickLog writes the
+                other buckets, which that door must not (founder ruling 2026-08-31). */}
             {
-                currentRoute === 'main' && mainView === 'log' && status === 'idle' && !recordingSegment && hasActiveLogContext && (
+                currentRoute === 'main' && mainView === 'log' && status === 'idle' && !recordingSegment && hasActiveLogContext && logIntent !== 'labour' && (
                     <button
                         onClick={() => setShowQuickLog(true)}
                         data-testid="add-log-fab"

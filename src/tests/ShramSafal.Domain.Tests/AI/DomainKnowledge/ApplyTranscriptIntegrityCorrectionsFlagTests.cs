@@ -13,11 +13,23 @@ namespace ShramSafal.Domain.Tests.AI.DomainKnowledge;
 //
 // These tests prove:
 //   (a) Flag OFF (default): the ORIGINAL unguarded खत safety-net still fires on
-//       an empty-inputs fertilizer transcript → today's behaviour is preserved
-//       and the flag-OFF output is byte-identical to pre-Batch-A.
+//       an absent-inputs fertilizer transcript → the flag-OFF output is
+//       byte-identical to pre-Batch-A.
 //   (b) Flag ON: the original net is SKIPPED.  A raw-product row (27/10-style
 //       "Rally Gold") is NOT overwritten to productName="खत"; an empty-inputs
 //       fertilizer case gets the खत row ONLY via the guarded post-lexicon path.
+//
+// spec: 2026-08-28-labour-v2-release-1 — test (a) below used to hand the net
+// `{ "inputs": [] }` (a real "no inputs" answer from the model) and asserted
+// the खत row got injected anyway. That was the same overwrite-an-answer shape
+// fixed for the labour/gender-split/compound-segment writers: the net was
+// gated only on `inputs.Count == 0`, not on whether the model had answered, so
+// it clobbered a real empty answer. It is now gated on `modelAnsweredInputs`
+// (captured in ParseVoiceInputHandler before any writer touches root["inputs"]),
+// so it may only fill a genuine GAP. Test (a) now hands it `{}` — inputs
+// genuinely absent — which is the case this net is still meant to cover, and
+// is unrelated to what this file is actually testing (the flag mechanism:
+// which net, original vs. guarded, executes for each flag state).
 //
 // ApplyTranscriptIntegrityCorrections is internal static; the Application
 // assembly exposes it via InternalsVisibleTo("ShramSafal.Domain.Tests").
@@ -27,14 +39,15 @@ public sealed class ApplyTranscriptIntegrityCorrectionsFlagTests
     private static readonly DomainKnowledgePipelineAdapter Pipeline = new();
 
     // -------------------------------------------------------------------------
-    // (a) Flag OFF — the original unguarded खत net still fires.
+    // (a) Flag OFF — the original unguarded खत net still fires on a genuine gap.
     // -------------------------------------------------------------------------
 
     [Fact]
-    public void FlagOff_original_khat_net_fires_on_empty_inputs_fertilizer_transcript()
+    public void FlagOff_original_khat_net_fires_on_absent_inputs_fertilizer_transcript()
     {
-        // Empty inputs[]; transcript mentions खत + a past-tense verb.
-        const string normalizedJson = """{ "inputs": [] }""";
+        // inputs[] key genuinely ABSENT (not answered "[]") so the gap-fill
+        // gate permits the write; transcript mentions खत + a past-tense verb.
+        const string normalizedJson = "{}";
         const string transcript = "आज बागेत खत दिले.";
 
         var result = ParseVoiceInputHandler.ApplyTranscriptIntegrityCorrections(
@@ -50,7 +63,7 @@ public sealed class ApplyTranscriptIntegrityCorrectionsFlagTests
         var khatRow = inputs!.OfType<JsonObject>()
             .FirstOrDefault(r => (r["productName"]?.GetValue<string>() ?? "") == "खत");
         khatRow.Should().NotBeNull(
-            "with the flag OFF the ORIGINAL unguarded khat safety-net must still inject the खत row (today's behaviour)");
+            "with the flag OFF the ORIGINAL unguarded khat safety-net must still fill a genuinely absent inputs[]");
     }
 
     // -------------------------------------------------------------------------

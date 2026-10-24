@@ -38,6 +38,11 @@ public static class ShramSafalErrors
     public static readonly Error CropCycleOverlap = Error.Conflict("ShramSafal.CropCycleOverlap", "Crop cycle dates overlap an existing cycle on this plot.");
     public static readonly Error DuplicateLogRequest = Error.Conflict("ShramSafal.DuplicateLogRequest", "A log already exists for this idempotency key.");
     public static readonly Error AttachmentAlreadyFinalized = Error.Conflict("ShramSafal.AttachmentAlreadyFinalized", "Attachment is already finalized and immutable.");
+    // spec: 2026-08-25-prod-cutover-waves (voice archive path). The client mints the retained
+    // clip id, so the id space is shared by every account. An id already held by ANOTHER
+    // account must never be answered with the success a repeat upload by its owner gets:
+    // that would acknowledge a recording the server did not store for the caller.
+    public static readonly Error RetainedClipIdTaken = Error.Conflict("ShramSafal.RetainedClipIdTaken", "This recording id belongs to another account.");
     public static readonly Error ScheduleAlreadyAdopted = Error.Conflict("ShramSafal.ScheduleAlreadyAdopted", "An active schedule subscription already exists for this plot-crop-cycle.");
     public static readonly Error ScheduleTemplateUnpublished = Error.Conflict("ShramSafal.ScheduleTemplateUnpublished", "Schedule template has not been published.");
     public static readonly Error ScheduleNotActive = Error.Conflict("ShramSafal.ScheduleNotActive", "Schedule subscription is not active and cannot transition.");
@@ -68,6 +73,11 @@ public static class ShramSafalErrors
 
     // --- Forbidden (role / ownership / not-allowed) ----------------------------------------
     public static readonly Error Forbidden = Error.Forbidden("ShramSafal.Forbidden", "User is not allowed to modify this farm.");
+    // READ refusal: the caller is a member but their role may not read this
+    // data (e.g. a plain Worker and the farm's crew roster). Distinct from
+    // Forbidden, whose text says "modify" and is a WRITE refusal.
+    public static readonly Error ReadNotAllowed =
+        Error.Forbidden("ShramSafal.ReadNotAllowed", "User is not allowed to view this information.");
     public static readonly Error VerificationTransitionNotAllowedForRole =
         Error.Forbidden("ShramSafal.VerificationTransitionNotAllowedForRole", "Transition not allowed for role.");
 
@@ -75,6 +85,12 @@ public static class ShramSafalErrors
     // ParseVoiceInputHandler + PersistVoiceClipRetainedHandler when the
     // FullHistoryJournal consent toggle is OFF. Frontend renders a
     // consent-required CTA pointing at Settings.
+    // Defence in depth on the voice archive: the clip says it was recorded before
+    // the current continuous grant of cloud-save consent began.
+    public static readonly Error RecordedBeforeConsent = Error.Forbidden(
+        "ShramSafal.RecordedBeforeConsent",
+        "This recording was made before cloud-save consent was granted.");
+
     public static readonly Error ConsentRequired = Error.Forbidden(
         "ShramSafal.ConsentRequired",
         "Full History Journal consent is required to retain voice notes beyond 30 days.");

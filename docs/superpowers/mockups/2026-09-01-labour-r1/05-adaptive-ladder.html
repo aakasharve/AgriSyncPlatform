@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The adaptive ladder — four rungs on one sheet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700;800;900&family=Noto+Sans+Devanagari:wght@400;600;700;800&family=Noto+Serif+Devanagari:wght@600;700&display=swap">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  // Same font stack the built app compiles (mobile-web/tailwind.config.js:10-14):
+  // DM Sans first so every NUMERAL is DM Sans; Devanagari falls through to Noto.
+  tailwind.config = {
+    theme: { extend: { fontFamily: {
+      sans: ['"DM Sans"', '"Noto Sans Devanagari"', 'sans-serif'],
+      serif: ['"Noto Serif Devanagari"', 'serif']
+    } } }
+  };
+</script>
+<style>
+  html { -webkit-text-size-adjust: 100%; }
+  html, body { overflow-x: hidden; }
+  body { font-family: "DM Sans", "Noto Sans Devanagari", sans-serif; background: #eef1f4; }
+  /* The frames stay exactly 390px. This rail scrolls instead of the page,
+     so the page itself never scrolls sideways on a phone. */
+  .rail { overflow-x: auto; }
+  .mrh { font-family: "Noto Serif Devanagari", serif; }
+</style>
+</head>
+<body class="text-slate-800 antialiased">
+
+<!-- ══════════════════ HONESTY BANNER ══════════════════ -->
+<header class="border-b-4 border-yellow-400 bg-yellow-50">
+  <div class="mx-auto max-w-[1180px] px-4 py-4">
+    <div class="flex items-start gap-3">
+      <span class="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-yellow-200 text-yellow-800">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      </span>
+      <div class="min-w-0">
+        <p class="text-[15px] font-extrabold text-yellow-900">This is a MOCKUP. It is not the live app.</p>
+        <p class="mt-1 text-[13px] leading-relaxed text-yellow-900/85">
+          Drawn at a 390&nbsp;px reference width. Nothing here is wired to data — every name, number and
+          mark is a hand-typed illustration, no button does anything, and no screen below exists in the
+          product yet. Judge the behaviour and the words, not the wiring.
+        </p>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="mx-auto max-w-[1180px] px-4 pb-10 pt-8">
+
+  <!-- ══════════════════ TITLE ══════════════════ -->
+  <p class="text-[12px] font-extrabold uppercase tracking-[0.14em] text-stone-400">Labour R1 · mockup 5 of 7</p>
+  <h1 class="mt-1.5 text-[30px] font-black leading-tight tracking-tight text-stone-900">The adaptive ladder — four rungs on one sheet</h1>
+  <p class="mt-3 max-w-[70ch] text-[15px] leading-relaxed text-stone-600">
+    Four rungs of the same screen, side by side, so the whole behaviour reads at a glance:
+    <strong class="font-extrabold text-stone-800">ShramSafal asks only for the smallest missing truth.</strong>
+    The more the Main Log already understood, the less this screen has on it. This is mental load
+    going down, drawn rather than described.
+  </p>
+
+  <div class="mt-5 rounded-[18px] border border-stone-200 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+    <p class="text-[12px] font-extrabold uppercase tracking-[0.12em] text-stone-400">The test every rung must pass</p>
+    <p class="mt-1.5 text-[19px] font-black leading-snug text-stone-900">“Where is ShramSafal asking me for something I already told it?”</p>
+    <p class="mt-2 text-[13px] leading-relaxed text-stone-600">
+      Under every frame there is a line naming exactly what the app already knew and therefore did
+      <em>not</em> ask. That line is the proof — if any rung asks for a plot, a crop, a count or a name
+      the farmer already gave, the rung is wrong no matter how good it looks.
+    </p>
+  </div>
+
+  <!-- ══════════════════ THE SHELL ══════════════════ -->
+  <section class="mt-8">
+    <h2 class="text-[19px] font-black tracking-tight text-stone-900">One shell. It only loses content.</h2>
+    <p class="mt-1.5 max-w-[70ch] text-[14px] leading-relaxed text-stone-600">
+      Every frame below is the same four-slot screen. The reduction is only legible if the shell is
+      visibly the same screen going quieter — so no rung gets a layout of its own.
+    </p>
+    <div class="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="rounded-[14px] border border-stone-200 bg-white p-3.5">
+        <span class="text-[11px] font-black uppercase tracking-[0.1em] text-stone-400">Slot A</span>
+        <p class="mt-1 text-[14px] font-extrabold text-stone-800">What it already understood</p>
+        <p class="mt-1 text-[12.5px] leading-relaxed text-stone-500">Stated back as fact. Never as a question.</p>
+      </div>
+      <div class="rounded-[14px] border border-stone-200 bg-white p-3.5">
+        <span class="text-[11px] font-black uppercase tracking-[0.1em] text-stone-400">Slot B</span>
+        <p class="mt-1 text-[14px] font-extrabold text-stone-800">The one question</p>
+        <p class="mt-1 text-[12.5px] leading-relaxed text-stone-500">At most one. Sometimes none at all.</p>
+      </div>
+      <div class="rounded-[14px] border border-stone-200 bg-white p-3.5">
+        <span class="text-[11px] font-black uppercase tracking-[0.1em] text-stone-400">Slot C</span>
+        <p class="mt-1 text-[14px] font-extrabold text-stone-800">The action</p>
+        <p class="mt-1 text-[12.5px] leading-relaxed text-stone-500">The mic, an unavailable mic, or just confirm.</p>
+      </div>
+      <div class="rounded-[14px] border border-stone-200 bg-white p-3.5">
+        <span class="text-[11px] font-black uppercase tracking-[0.1em] text-stone-400">Slot D</span>
+        <p class="mt-1 text-[14px] font-extrabold text-stone-800">हजेरी वही — always live</p>
+        <p class="mt-1 text-[12.5px] leading-relaxed text-stone-500">Identical on all four rungs. Memory is never gated.</p>
+      </div>
+    </div>
+  </section>
+
+  <p class="mt-8 text-[12.5px] font-bold leading-relaxed text-stone-500">
+    The frames read 1 → 4 left to right on a wide screen, and top to bottom on a narrow one. Each frame
+    stays exactly 390&nbsp;px: on a small phone the row of frames scrolls sideways, the page never does.
+  </p>
+
+</main>
+
+<!-- ══════════════════ THE RAIL OF FRAMES ══════════════════ -->
+<div class="rail pb-6">
+  <div class="mx-auto flex min-w-min flex-wrap justify-center gap-x-7 gap-y-12 px-4">
+
+    <!-- ─────────── RUNG 1 ─────────── -->
+    <section class="w-[390px] flex-none">
+      <div class="mb-3 flex items-start gap-3">
+        <span class="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-stone-800 text-[16px] font-black text-white">1</span>
+        <div class="min-w-0">
+          <p class="text-[15px] font-extrabold leading-tight text-stone-900">Nothing understood</p>
+          <p class="mt-0.5 text-[13px] leading-snug text-stone-600">The work log says nothing about labour today, so Labour asks nothing at all and the mic is visibly unavailable.</p>
+        </div>
+      </div>
+
+      <div class="overflow-hidden rounded-[26px] border border-stone-300 bg-slate-50 shadow-[0_10px_30px_-18px_rgba(20,40,30,0.5)]">
+        <div class="flex items-center justify-between bg-stone-200/80 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-stone-500">
+          <span>Rung 1 · nothing understood</span><span>390 px mockup</span>
+        </div>
+
+        <div class="flex flex-col gap-2.5 bg-slate-50 px-4 pb-6 pt-3">
+
+          <!-- SLOT A — nothing known -->
+          <div class="flex flex-col items-center gap-2 rounded-[20px] border border-dashed border-slate-200 bg-white px-5 py-8 text-center">
+            <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </span>
+            <p class="text-[14px] font-bold text-slate-700"><span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span></p>
+            <span class="block text-[11px] italic text-slate-500">English meaning: “today’s work log has not mentioned any labour yet.”</span>
+          </div>
+
+          <!-- SLOT B — no question at all -->
+          <div class="rounded-md border border-dashed border-yellow-300 bg-yellow-50/70 px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide text-yellow-800">
+            Annotation · no question slot is rendered on this rung. Labour asks nothing.
+          </div>
+
+          <!-- SLOT C — the hero, visibly unavailable -->
+          <div class="relative flex w-full items-center gap-4 overflow-hidden rounded-[24px] border border-dashed border-slate-300 bg-white p-5 text-left">
+            <span class="relative flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" x2="22" y1="2" y2="22"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-[23px] font-black leading-tight text-slate-400">बोलून हजेरी घ्या</span>
+              <span class="mt-1.5 block"><span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span></span>
+              <span class="mt-1 block text-[11px] italic leading-snug text-slate-500">English meaning: “no one has said how many people came, so there is nothing to take हजेरी about yet.”</span>
+            </span>
+          </div>
+
+          <button type="button" class="w-full rounded-[14px] border border-slate-200 bg-white py-3.5 text-[13px] font-extrabold text-slate-700">
+            <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+          </button>
+          <span class="-mt-1 block px-1 text-[11px] italic leading-snug text-slate-500">English meaning: “say on the work log how many people came.”</span>
+
+          <!-- SLOT D — memory, always live -->
+          <div class="flex min-h-[92px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <span class="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[16px] bg-blue-100 text-blue-600">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>
+            </span>
+            <span class="min-w-0">
+              <span class="flex items-center gap-2 text-[19px] font-bold leading-tight text-stone-800">हजेरी वही</span>
+              <span class="mt-0.5 block truncate text-[16px] text-stone-500">सर्व दिवस</span>
+            </span>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="mt-3 rounded-[14px] border border-stone-200 bg-white p-3.5">
+        <p class="text-[12px] font-black uppercase tracking-[0.1em] text-stone-400">Farmer speaks: <span class="text-emerald-700">0 times</span></p>
+        <p class="mt-1.5 text-[13px] leading-relaxed text-stone-700">
+          <strong class="font-extrabold">Already knew: nothing.</strong> So it asks nothing — not who came,
+          not how many. It has no reason to believe anyone came, and it does not go fishing.
+        </p>
+        <p class="mt-2 text-[12px] leading-relaxed text-stone-500">
+          हजेरी वही stays fully live on this rung. Gating capture never gates memory.
+        </p>
+        <a href="02-state-b-no-anchor.html" class="mt-2.5 inline-flex items-center gap-1 rounded-full bg-stone-100 px-3 py-1.5 text-[12px] font-extrabold text-stone-600">
+          Full screen: State B
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a>
+      </div>
+    </section>
+
+    <!-- ─────────── RUNG 2 ─────────── -->
+    <section class="w-[390px] flex-none">
+      <div class="mb-3 flex items-start gap-3">
+        <span class="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-stone-800 text-[16px] font-black text-white">2</span>
+        <div class="min-w-0">
+          <p class="text-[15px] font-extrabold leading-tight text-stone-900">Only the count understood</p>
+          <p class="mt-0.5 text-[13px] leading-snug text-stone-600">The work log gave 12 people and no names, so Labour asks one question: who they were.</p>
+        </div>
+      </div>
+
+      <div class="overflow-hidden rounded-[26px] border border-stone-300 bg-slate-50 shadow-[0_10px_30px_-18px_rgba(20,40,30,0.5)]">
+        <div class="flex items-center justify-between bg-stone-200/80 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-stone-500">
+          <span>Rung 2 · count known</span><span>390 px mockup</span>
+        </div>
+
+        <div class="flex flex-col gap-2.5 bg-slate-50 px-4 pb-6 pt-3">
+
+          <!-- SLOT A -->
+          <div class="rounded-[18px] border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <div class="flex items-center justify-between gap-2 border-b border-slate-100 px-1 pb-2">
+              <span class="text-[13px] font-extrabold text-slate-800">ShramSafalला समजलं</span>
+              <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[10px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+            </div>
+            <span class="mt-1 block px-1 text-[11px] italic leading-snug text-slate-500">English meaning of the small label: “you already said this on today’s work log.”</span>
+            <div class="mt-2 flex items-center gap-3 px-1 pb-1">
+              <span class="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </span>
+              <span class="text-[40px] font-black leading-none tracking-tight text-stone-800 [font-variant-numeric:tabular-nums]">12</span>
+            </div>
+          </div>
+
+          <!-- SLOT B — the one question, founder-supplied -->
+          <div class="rounded-[18px] border border-slate-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <p class="mrh text-[21px] font-bold leading-snug text-stone-800">या 12 जणांमध्ये कोण होते?</p>
+          </div>
+
+          <!-- SLOT C — the mic -->
+          <div class="relative flex w-full items-center gap-4 overflow-hidden rounded-[24px] bg-gradient-to-br from-emerald-500 to-emerald-700 p-5 text-left shadow-[0_16px_32px_-12px_rgba(5,150,105,0.65)]">
+            <span class="relative flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-[23px] font-black leading-tight text-white">बोलून हजेरी घ्या</span>
+            </span>
+            <span class="flex-shrink-0 rounded-full bg-white/25 px-4 py-3 text-[17px] font-extrabold text-white">उघडा</span>
+          </div>
+
+          <!-- SLOT D -->
+          <div class="flex min-h-[92px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <span class="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[16px] bg-blue-100 text-blue-600">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>
+            </span>
+            <span class="min-w-0">
+              <span class="flex items-center gap-2 text-[19px] font-bold leading-tight text-stone-800">हजेरी वही</span>
+              <span class="mt-0.5 block truncate text-[16px] text-stone-500">सर्व दिवस</span>
+            </span>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="mt-3 rounded-[14px] border border-stone-200 bg-white p-3.5">
+        <p class="text-[12px] font-black uppercase tracking-[0.1em] text-stone-400">Farmer speaks: <span class="text-emerald-700">1 time</span></p>
+        <p class="mt-1.5 text-[13px] leading-relaxed text-stone-700">
+          <strong class="font-extrabold">Already knew: the count — 12.</strong> So it never asks how many,
+          and it never asks the plot, the crop or the job: all of that came with the log. It asks WHO. Once.
+        </p>
+        <a href="01-state-a-anchored.html" class="mt-2.5 inline-flex items-center gap-1 rounded-full bg-stone-100 px-3 py-1.5 text-[12px] font-extrabold text-stone-600">
+          Full screen: State A
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a>
+      </div>
+    </section>
+
+    <!-- ─────────── RUNG 2 · VARIANT ─────────── -->
+    <section class="w-[390px] flex-none">
+      <div class="mb-3 flex items-start gap-3">
+        <span class="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-white text-[14px] font-black text-stone-800 ring-2 ring-stone-800">2v</span>
+        <div class="min-w-0">
+          <p class="text-[15px] font-extrabold leading-tight text-stone-900">Count unknown — the variant</p>
+          <p class="mt-0.5 text-[13px] leading-snug text-stone-600">The log said labour happened but never gave a number, so the two missing truths are asked together, in one turn.</p>
+        </div>
+      </div>
+
+      <div class="overflow-hidden rounded-[26px] border border-stone-300 bg-slate-50 shadow-[0_10px_30px_-18px_rgba(20,40,30,0.5)]">
+        <div class="flex items-center justify-between bg-stone-200/80 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-stone-500">
+          <span>Rung 2 variant · count unknown</span><span>390 px mockup</span>
+        </div>
+
+        <div class="flex flex-col gap-2.5 bg-slate-50 px-4 pb-6 pt-3">
+
+          <!-- SLOT A -->
+          <div class="rounded-[18px] border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <div class="flex items-center justify-between gap-2 border-b border-slate-100 px-1 pb-2">
+              <span class="text-[13px] font-extrabold text-slate-800">ShramSafalला समजलं</span>
+              <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[10px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+            </div>
+            <span class="mt-1 block px-1 text-[11px] italic leading-snug text-slate-500">English meaning of the small label: “you already said this on today’s work log.”</span>
+            <div class="mt-2 flex items-center gap-3 px-1">
+              <span class="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </span>
+              <span class="text-[40px] font-black leading-none tracking-tight text-stone-400 [font-variant-numeric:tabular-nums]">—</span>
+            </div>
+            <div class="mx-1 mb-1 mt-2.5 rounded-md border border-dashed border-yellow-300 bg-yellow-50/70 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-yellow-800">
+              Annotation · people came, but no number was ever stated. Unknown renders “—”, never 0.
+            </div>
+          </div>
+
+          <!-- SLOT B -->
+          <div class="rounded-[18px] border border-slate-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <p class="mrh text-[21px] font-bold leading-snug text-stone-800">आज किती जण होते आणि कोण कोण होते?</p>
+          </div>
+
+          <!-- SLOT C -->
+          <div class="relative flex w-full items-center gap-4 overflow-hidden rounded-[24px] bg-gradient-to-br from-emerald-500 to-emerald-700 p-5 text-left shadow-[0_16px_32px_-12px_rgba(5,150,105,0.65)]">
+            <span class="relative flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-[23px] font-black leading-tight text-white">बोलून हजेरी घ्या</span>
+            </span>
+            <span class="flex-shrink-0 rounded-full bg-white/25 px-4 py-3 text-[17px] font-extrabold text-white">उघडा</span>
+          </div>
+
+          <!-- SLOT D -->
+          <div class="flex min-h-[92px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <span class="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[16px] bg-blue-100 text-blue-600">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>
+            </span>
+            <span class="min-w-0">
+              <span class="flex items-center gap-2 text-[19px] font-bold leading-tight text-stone-800">हजेरी वही</span>
+              <span class="mt-0.5 block truncate text-[16px] text-stone-500">सर्व दिवस</span>
+            </span>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="mt-3 rounded-[14px] border border-stone-200 bg-white p-3.5">
+        <p class="text-[12px] font-black uppercase tracking-[0.1em] text-stone-400">Farmer speaks: <span class="text-emerald-700">1 time</span></p>
+        <p class="mt-1.5 text-[13px] leading-relaxed text-stone-700">
+          <strong class="font-extrabold">Already knew: that labour happened today, and on which work.</strong>
+          So it never re-asks the plot, the crop or the job — only the two facts it is actually missing,
+          asked in one breath rather than as two screens.
+        </p>
+        <p class="mt-2 rounded-[10px] border border-amber-200 bg-amber-50 p-2.5 text-[12px] leading-relaxed text-amber-900">
+          <strong class="font-extrabold">Founder decision needed.</strong> This variant and rung 1 both mean
+          “no number”. They are drawn as different states on purpose: rung 1 = the log never mentioned labour
+          at all (nothing to attach हजेरी to); this one = the log did mention labour, but gave no number.
+          Is that the split you want, or should “no number” always land on rung 1’s unavailable screen?
+        </p>
+      </div>
+    </section>
+
+    <!-- ─────────── RUNG 3 ─────────── -->
+    <section class="w-[390px] flex-none">
+      <div class="mb-3 flex items-start gap-3">
+        <span class="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-stone-800 text-[16px] font-black text-white">3</span>
+        <div class="min-w-0">
+          <p class="text-[15px] font-extrabold leading-tight text-stone-900">Count plus some people named</p>
+          <p class="mt-0.5 text-[13px] leading-snug text-stone-600">गणेश and रमेश already came through with the 12, so the question covers only the rest — those two are never asked about again.</p>
+        </div>
+      </div>
+
+      <div class="overflow-hidden rounded-[26px] border border-stone-300 bg-slate-50 shadow-[0_10px_30px_-18px_rgba(20,40,30,0.5)]">
+        <div class="flex items-center justify-between bg-stone-200/80 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-stone-500">
+          <span>Rung 3 · part of the crew known</span><span>390 px mockup</span>
+        </div>
+
+        <div class="flex flex-col gap-2.5 bg-slate-50 px-4 pb-6 pt-3">
+
+          <!-- SLOT A -->
+          <div class="rounded-[18px] border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <div class="flex items-center justify-between gap-2 border-b border-slate-100 px-1 pb-2">
+              <span class="text-[13px] font-extrabold text-slate-800">ShramSafalला समजलं</span>
+              <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[10px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+            </div>
+            <span class="mt-1 block px-1 text-[11px] italic leading-snug text-slate-500">English meaning of the small label: “you already said this on today’s work log.”</span>
+
+            <div class="mt-2 flex items-center gap-3 px-1">
+              <span class="flex h-11 w-11 flex-none items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </span>
+              <span class="text-[40px] font-black leading-none tracking-tight text-stone-800 [font-variant-numeric:tabular-nums]">12</span>
+            </div>
+
+            <div class="mt-2.5 flex flex-col gap-1.5 border-t border-slate-100 px-1 pt-2.5">
+              <span class="flex items-center gap-2 text-[15px] font-bold text-stone-800">
+                <span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-orange-100 text-[12px] font-black text-orange-600">ग</span>
+                गणेश
+                <span class="ml-auto flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                </span>
+              </span>
+              <span class="flex items-center gap-2 text-[15px] font-bold text-stone-800">
+                <span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-blue-100 text-[12px] font-black text-blue-600">र</span>
+                रमेश
+                <span class="ml-auto flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                </span>
+              </span>
+            </div>
+
+            <div class="mt-2.5 border-t border-slate-100 px-1 pt-2.5">
+              <span class="text-[15px] font-extrabold text-stone-600 [font-variant-numeric:tabular-nums]">12 पैकी 2 समजले</span>
+            </div>
+          </div>
+
+          <!-- SLOT B — the remainder question; this copy is NOT approved -->
+          <div class="rounded-[18px] border border-slate-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <p class="text-[21px] font-black leading-snug text-stone-800">
+              <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[13px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+            </p>
+            <span class="mt-2 block text-[11px] italic leading-snug text-slate-500">English meaning: “who else was among them?”</span>
+          </div>
+
+          <!-- SLOT C -->
+          <div class="relative flex w-full items-center gap-4 overflow-hidden rounded-[24px] bg-gradient-to-br from-emerald-500 to-emerald-700 p-5 text-left shadow-[0_16px_32px_-12px_rgba(5,150,105,0.65)]">
+            <span class="relative flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-[23px] font-black leading-tight text-white">बोलून हजेरी घ्या</span>
+            </span>
+            <span class="flex-shrink-0 rounded-full bg-white/25 px-4 py-3 text-[17px] font-extrabold text-white">उघडा</span>
+          </div>
+
+          <!-- SLOT D -->
+          <div class="flex min-h-[92px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <span class="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[16px] bg-blue-100 text-blue-600">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>
+            </span>
+            <span class="min-w-0">
+              <span class="flex items-center gap-2 text-[19px] font-bold leading-tight text-stone-800">हजेरी वही</span>
+              <span class="mt-0.5 block truncate text-[16px] text-stone-500">सर्व दिवस</span>
+            </span>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="mt-3 rounded-[14px] border border-stone-200 bg-white p-3.5">
+        <p class="text-[12px] font-black uppercase tracking-[0.1em] text-stone-400">Farmer speaks: <span class="text-emerald-700">1 time</span></p>
+        <p class="mt-1.5 text-[13px] leading-relaxed text-stone-700">
+          <strong class="font-extrabold">Already knew: 12, and that गणेश and रमेश were two of them.</strong>
+          So it never re-asks the count, and it never asks about गणेश or रमेश again — the question covers
+          only the people still missing.
+        </p>
+        <p class="mt-2 rounded-[10px] border border-amber-200 bg-amber-50 p-2.5 text-[12px] leading-relaxed text-amber-900">
+          <strong class="font-extrabold">Founder decision needed.</strong> Is this genuinely one question?
+          Showing गणेश and रमेश above it is what makes “the rest” mean something — but it is more on the
+          screen, not less. Keep the two known names visible, or drop to the bare line
+          <span class="font-extrabold">12 पैकी 2 समजले</span> and nothing else?
+        </p>
+      </div>
+    </section>
+
+    <!-- ─────────── RUNG 4 ─────────── -->
+    <section class="w-[390px] flex-none">
+      <div class="mb-3 flex items-start gap-3">
+        <span class="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-stone-800 text-[16px] font-black text-white">4</span>
+        <div class="min-w-0">
+          <p class="text-[15px] font-extrabold leading-tight text-stone-900">The whole crew understood</p>
+          <p class="mt-0.5 text-[13px] leading-snug text-stone-600">All 12 are accounted for, so nothing is asked — the screen shows what it heard and waits for one tap.</p>
+        </div>
+      </div>
+
+      <div class="overflow-hidden rounded-[26px] border border-stone-300 bg-slate-50 shadow-[0_10px_30px_-18px_rgba(20,40,30,0.5)]">
+        <div class="flex items-center justify-between bg-stone-200/80 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-stone-500">
+          <span>Rung 4 · nothing missing</span><span>390 px mockup</span>
+        </div>
+
+        <div class="flex flex-col gap-2.5 bg-slate-50 px-4 pb-6 pt-3">
+
+          <!-- SLOT A -->
+          <div class="rounded-[18px] border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <div class="flex items-center justify-between gap-2 border-b border-slate-100 px-1 pb-2">
+              <span class="text-[13px] font-extrabold text-slate-800">ShramSafalला समजलं</span>
+              <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[10px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+            </div>
+            <span class="mt-1 block px-1 text-[11px] italic leading-snug text-slate-500">English meaning of the small label: “you already said this on today’s work log.”</span>
+
+            <div class="mt-2 flex flex-col gap-1.5 px-1">
+              <span class="flex items-center gap-2 text-[15px] font-bold text-stone-800">
+                <span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-orange-100 text-[12px] font-black text-orange-600">ग</span>
+                गणेश
+                <span class="ml-auto flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                </span>
+              </span>
+              <span class="flex items-center gap-2 text-[15px] font-bold text-stone-800">
+                <span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-violet-100 text-[12px] font-black text-violet-600">श</span>
+                शंकर
+                <span class="ml-auto flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                </span>
+              </span>
+              <span class="flex items-center gap-2 rounded-xl border border-violet-100 bg-violet-50 px-2 py-1.5 text-[15px] font-bold text-violet-700">
+                <span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-violet-100 text-violet-600">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </span>
+                Shankarसोबत 8
+              </span>
+              <!-- D9.5 · sourceText + the reading taken, visible inside the confirm — settled by बरोबर / बदल करा, never a separate question -->
+              <span class="block rounded-xl border border-slate-100 bg-slate-50 px-2.5 py-2">
+                <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[10px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+                <span class="mt-1 block text-[11px] italic leading-snug text-slate-500">English meaning of the two labels: “You said”, then “ShramSafal understood it as” — the violet line above.</span>
+                <span class="mt-1 block text-[13px] font-semibold leading-snug text-stone-700">“शंकर आठ जण घेऊन आला”</span>
+                <span class="mt-1 block text-[11px] italic leading-snug text-slate-500">Read as Shankar <b>plus</b> eight others, not eight in total with him inside (spec D9.5). बरोबर accepts that reading; बदल करा corrects it. It is never asked as a separate question.</span>
+              </span>
+              <span class="flex items-center gap-2 text-[15px] font-bold text-stone-800">
+                <span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-blue-100 text-[12px] font-black text-blue-600">र</span>
+                रमेश
+                <span class="ml-auto flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                </span>
+              </span>
+              <span class="flex items-center gap-2 text-[15px] font-bold text-stone-800">
+                <span class="flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-rose-100 text-[12px] font-black text-rose-600">सु</span>
+                सुनीता
+                <span class="ml-auto flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                </span>
+              </span>
+            </div>
+
+            <div class="mt-2.5 border-t border-slate-100 px-1 pt-2.5">
+              <span class="text-[15px] font-extrabold text-stone-600 [font-variant-numeric:tabular-nums]">12 पैकी 12 समजले</span>
+            </div>
+          </div>
+
+          <!-- SLOT B — the only question left -->
+          <div class="rounded-[18px] border border-slate-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <p class="text-[21px] font-black leading-snug text-stone-800"><span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span></p>
+            <span class="mt-2 block text-[11px] italic leading-snug text-slate-500">English meaning: “is this right?” — बरोबर is approved as the confirm BUTTON; “बरोबर?” as a question headline is not approved wording.</span>
+          </div>
+
+          <!-- SLOT C — confirm pair, no mic anywhere -->
+          <div class="grid grid-cols-2 gap-2.5">
+            <button type="button" class="flex min-h-[60px] items-center justify-center gap-2 rounded-[14px] bg-emerald-600 py-4 text-[18px] font-extrabold text-white">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              बरोबर
+            </button>
+            <button type="button" class="flex min-h-[60px] items-center justify-center gap-2 rounded-[14px] border border-slate-200 bg-white py-4 text-[18px] font-extrabold text-slate-700">
+              बदल करा
+            </button>
+          </div>
+          <div class="rounded-md border border-dashed border-yellow-300 bg-yellow-50/70 px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide text-yellow-800">
+            Annotation · no mic on this rung. There is nothing left to say.
+          </div>
+
+          <!-- SLOT D -->
+          <div class="flex min-h-[92px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <span class="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[16px] bg-blue-100 text-blue-600">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>
+            </span>
+            <span class="min-w-0">
+              <span class="flex items-center gap-2 text-[19px] font-bold leading-tight text-stone-800">हजेरी वही</span>
+              <span class="mt-0.5 block truncate text-[16px] text-stone-500">सर्व दिवस</span>
+            </span>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="mt-3 rounded-[14px] border border-stone-200 bg-white p-3.5">
+        <p class="text-[12px] font-black uppercase tracking-[0.1em] text-stone-400">Farmer speaks: <span class="text-emerald-700">0 times</span></p>
+        <p class="mt-1.5 text-[13px] leading-relaxed text-stone-700">
+          <strong class="font-extrabold">Already knew: all 12 — गणेश, शंकर, the 8 with him, रमेश, सुनीता.</strong>
+          So it asks nothing: no count, no names, no per-person checklist. One tap on
+          <span class="font-extrabold">बरोबर</span> is the whole interaction.
+        </p>
+        <p class="mt-2 text-[12px] leading-relaxed text-stone-500">
+          शंकर’s own presence and the 8 who came with him are two separate lines — one man never carries
+          two presence truths in one mark.
+        </p>
+        <a href="03-state-c-already-known.html" class="mt-2.5 inline-flex items-center gap-1 rounded-full bg-stone-100 px-3 py-1.5 text-[12px] font-extrabold text-stone-600">
+          Full screen: State C
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<main class="mx-auto max-w-[1180px] px-4 pb-24">
+
+  <!-- ══════════════════ READ ACROSS ══════════════════ -->
+  <section class="mt-6 rounded-[18px] border border-stone-200 bg-white p-5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+    <h2 class="text-[19px] font-black tracking-tight text-stone-900">Read across: the same screen, quieter each rung</h2>
+    <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="rounded-[14px] border border-stone-200 bg-stone-50 p-3.5">
+        <p class="text-[13px] font-black text-stone-800">Rung 1 — knows nothing</p>
+        <p class="mt-1.5 text-[13px] leading-relaxed text-stone-600">Asks <strong class="font-extrabold">nothing</strong>. Mic unavailable, with a reason.</p>
+        <p class="mt-1.5 text-[12px] font-bold text-emerald-700">Speaks 0×</p>
+      </div>
+      <div class="rounded-[14px] border border-stone-200 bg-stone-50 p-3.5">
+        <p class="text-[13px] font-black text-stone-800">Rung 2 — knows 12</p>
+        <p class="mt-1.5 text-[13px] leading-relaxed text-stone-600">Asks <strong class="font-extrabold">who</strong>, once.</p>
+        <p class="mt-1.5 text-[12px] font-bold text-emerald-700">Speaks 1×</p>
+      </div>
+      <div class="rounded-[14px] border border-stone-200 bg-stone-50 p-3.5">
+        <p class="text-[13px] font-black text-stone-800">Rung 3 — knows 12 + two names</p>
+        <p class="mt-1.5 text-[13px] leading-relaxed text-stone-600">Asks about <strong class="font-extrabold">the rest only</strong>.</p>
+        <p class="mt-1.5 text-[12px] font-bold text-emerald-700">Speaks 1×</p>
+      </div>
+      <div class="rounded-[14px] border border-stone-200 bg-stone-50 p-3.5">
+        <p class="text-[13px] font-black text-stone-800">Rung 4 — knows everyone</p>
+        <p class="mt-1.5 text-[13px] leading-relaxed text-stone-600">Asks only for agreement — the wording is still <strong class="font-extrabold">[FOUNDER COPY REQUIRED]</strong>.</p>
+        <p class="mt-1.5 text-[12px] font-bold text-emerald-700">Speaks 0×</p>
+      </div>
+    </div>
+    <p class="mt-4 text-[13px] leading-relaxed text-stone-600">
+      Every rung asks a <em>different</em> question, and no rung asks a question a lower rung already
+      answered. Notice what never appears on any rung: the plot, the crop, the job, or a headcount box —
+      all four came with the work log before this screen opened.
+    </p>
+  </section>
+
+  <!-- ══════════════════ COPY STATUS ══════════════════ -->
+  <section class="mt-6 rounded-[18px] border border-stone-200 bg-white p-5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+    <h2 class="text-[19px] font-black tracking-tight text-stone-900">Copy status — what is yours, what is still blank</h2>
+    <p class="mt-1.5 text-[13.5px] leading-relaxed text-stone-600">No farmer-facing Marathi was invented here. Copy is a UI gate, not a data-model gate: the layout is ready for your judgement with the blanks left visible.</p>
+    <div class="mt-4 grid gap-4 lg:grid-cols-2">
+      <div>
+        <p class="text-[12px] font-black uppercase tracking-[0.1em] text-emerald-700">Your words, used verbatim</p>
+        <ul class="mt-2 space-y-1.5 text-[14px] text-stone-700">
+          <li class="rounded-lg bg-emerald-50 px-3 py-2 font-bold">या 12 जणांमध्ये कोण होते?</li>
+          <li class="rounded-lg bg-emerald-50 px-3 py-2 font-bold">आज किती जण होते आणि कोण कोण होते?</li>
+          <li class="rounded-lg bg-emerald-50 px-3 py-2 font-bold">बरोबर · बदल करा</li>
+          <li class="rounded-lg bg-emerald-50 px-3 py-2 font-bold">ShramSafalला समजलं · 12 पैकी 12 समजले · Shankarसोबत 8</li>
+          <li class="rounded-lg bg-emerald-50 px-3 py-2 font-bold">बोलून हजेरी घ्या · हजेरी वही · सर्व दिवस · उघडा <span class="font-normal text-stone-500">(already shipped)</span></li>
+        </ul>
+      </div>
+      <div>
+        <p class="text-[12px] font-black uppercase tracking-[0.1em] text-yellow-700">Blank until you write it</p>
+        <ul class="mt-2 space-y-2 text-[13.5px] text-stone-700">
+          <li class="rounded-lg bg-yellow-50 px-3 py-2">Rung 3’s question — meaning: <strong class="font-extrabold">“who else was among them?”</strong></li>
+          <li class="rounded-lg bg-yellow-50 px-3 py-2">Rung 1’s empty card — meaning: <strong class="font-extrabold">“today’s work log has not mentioned any labour yet.”</strong></li>
+          <li class="rounded-lg bg-yellow-50 px-3 py-2">Rung 1’s reason under the unavailable mic — meaning: <strong class="font-extrabold">“no one has said how many people came.”</strong></li>
+          <li class="rounded-lg bg-yellow-50 px-3 py-2">Rung 1’s button — meaning: <strong class="font-extrabold">“say on the work log how many people came.”</strong></li>
+          <li class="rounded-lg bg-yellow-50 px-3 py-2">The small provenance label on every समजलं card — meaning: <strong class="font-extrabold">“you already said this on today’s work log.”</strong></li>
+        </ul>
+        <p class="mt-3 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-[12.5px] leading-relaxed text-stone-600">
+          One inconsistency to settle: your line reads <strong class="font-extrabold">Shankarसोबत 8</strong> in Latin
+          letters, while the people beside it read गणेश, रमेश, शंकर, सुनीता in Devanagari. Kept exactly as you wrote
+          it rather than silently converted.
+        </p>
+        <p class="mt-3 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-[12.5px] leading-relaxed text-stone-600">
+          Rung 4 now prints “<strong class="font-extrabold">शंकर आठ जण घेऊन आला</strong>” beneath
+          <strong class="font-extrabold">Shankarसोबत 8</strong>: his words, and the reading taken. The sentence is two-way in
+          Marathi and spec <strong class="font-extrabold">D9.5</strong> says it may be neither assumed nor asked separately —
+          <strong class="font-extrabold">बरोबर</strong> / <strong class="font-extrabold">बदल करा</strong> is what settles it.
+          Screens 01 and 03 draw the same sentence the same way.
+        </p>
+      </div>
+    </div>
+    <p class="mt-4 text-[12.5px] leading-relaxed text-stone-500">
+      <strong class="font-extrabold text-stone-700">12 पैकी 2 समजले</strong> on rung 3 is your own
+      <span class="font-bold">X पैकी Y समजले</span> pattern carrying this day’s real numbers — not a new sentence.
+    </p>
+  </section>
+
+  <!-- ══════════════════ MUST NOT DO ══════════════════ -->
+  <section class="mt-6 rounded-[18px] border border-rose-100 bg-rose-50 p-5">
+    <h2 class="text-[19px] font-black tracking-tight text-rose-800">What this screen must never do</h2>
+    <p class="mt-1.5 text-[13.5px] leading-relaxed text-rose-700/90">Check the rule as well as the picture. If any of these appear, the ladder is broken even if the screen looks good.</p>
+    <ul class="mt-4 space-y-2.5">
+      <li class="flex gap-3 rounded-[12px] bg-white/70 p-3">
+        <span class="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-full bg-rose-100 text-rose-700">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </span>
+        <span class="text-[13.5px] leading-relaxed text-rose-900"><strong class="font-extrabold">Never the same question at two different rungs.</strong> Each rung asks its own question, or asks nothing.</span>
+      </li>
+      <li class="flex gap-3 rounded-[12px] bg-white/70 p-3">
+        <span class="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-full bg-rose-100 text-rose-700">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </span>
+        <span class="text-[13.5px] leading-relaxed text-rose-900"><strong class="font-extrabold">Never re-ask a fact a lower rung already has.</strong> Rung 3 must not ask about गणेश or रमेश; no rung asks the count, the plot, the crop or the job a second time.</span>
+      </li>
+      <li class="flex gap-3 rounded-[12px] bg-white/70 p-3">
+        <span class="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-full bg-rose-100 text-rose-700">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </span>
+        <span class="text-[13.5px] leading-relaxed text-rose-900"><strong class="font-extrabold">Never a generic “tell me about your day” prompt</strong> at any rung. The mic here only ever collects the one missing truth.</span>
+      </li>
+      <li class="flex gap-3 rounded-[12px] bg-white/70 p-3">
+        <span class="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-full bg-rose-100 text-rose-700">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </span>
+        <span class="text-[13.5px] leading-relaxed text-rose-900"><strong class="font-extrabold">Never four different layouts.</strong> The reduction is only readable if it is visibly the same screen losing content — the same four slots on every rung.</span>
+      </li>
+      <li class="flex gap-3 rounded-[12px] bg-white/70 p-3">
+        <span class="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-full bg-rose-100 text-rose-700">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </span>
+        <span class="text-[13.5px] leading-relaxed text-rose-900"><strong class="font-extrabold">Never a silently dead mic.</strong> Rung 1’s mic is visibly unavailable, with a reason and a way forward — not greyed out in silence, and never the word “permission”: this is a missing fact, not a denied right.</span>
+      </li>
+      <li class="flex gap-3 rounded-[12px] bg-white/70 p-3">
+        <span class="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-full bg-rose-100 text-rose-700">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </span>
+        <span class="text-[13.5px] leading-relaxed text-rose-900"><strong class="font-extrabold">Never gate the हजेरी वही.</strong> It is live and identical on all four rungs. Gating capture must never gate memory.</span>
+      </li>
+      <li class="flex gap-3 rounded-[12px] bg-white/70 p-3">
+        <span class="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-full bg-rose-100 text-rose-700">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </span>
+        <span class="text-[13.5px] leading-relaxed text-rose-900"><strong class="font-extrabold">Never a headcount stepper, plot picker, crop picker, amount, or clock time</strong> on any rung — the count came with the log, money lives in the register, and attendance remembers duration, never a start-to-end time.</span>
+      </li>
+      <li class="flex gap-3 rounded-[12px] bg-white/70 p-3">
+        <span class="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-full bg-rose-100 text-rose-700">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </span>
+        <span class="text-[13.5px] leading-relaxed text-rose-900"><strong class="font-extrabold">Never show an unknown as zero.</strong> The variant’s missing count reads <span class="font-extrabold">—</span>, never <span class="font-extrabold">0</span>.</span>
+      </li>
+    </ul>
+  </section>
+
+  <p class="mt-8 text-center text-[12px] text-stone-400">
+    Mockup only · 390 px reference width · nothing wired to data · Labour R1, screen 5 of 7
+  </p>
+
+</main>
+
+</body>
+</html>

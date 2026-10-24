@@ -1,0 +1,102 @@
+{
+  "_comment": "Copy-review registry. Lists user-facing legal/consent/privacy copy that needs counsel review. reviewStatus stays unreviewed until a sign-off record exists in the PRIVATE review records; signOffRef is only an identifier pointing at that record. audience changes only by an explicit reviewed commit. See ops/release/COPY_REVIEW.md. A passing check is not evidence of legal validity.",
+  "audience": "founder_testing",
+  "coverage": [
+    {
+      "dir": "src/clients/mobile-web/public/legal",
+      "pattern": "\\.md$"
+    },
+    {
+      "dir": "src/clients/mobile-web/public/consent",
+      "pattern": "\\.md$"
+    },
+    {
+      "dir": "src/clients/mobile-web/src/features/consent/gate",
+      "pattern": "^consentNotice\\.ts$"
+    },
+    {
+      "dir": "src/clients/mobile-web/src/i18n",
+      "pattern": "^(consent|dataRights|voiceDiary|piiReview|legal|privacy)\\w*Translations\\.ts$"
+    },
+    {
+      "dir": "src/apps/ShramSafal/ShramSafal.Infrastructure/Privacy",
+      "pattern": "^(ExportWorker|ErasureWorker)\\.cs$"
+    },
+    {
+      "dir": "src/apps/ShramSafal/ShramSafal.Infrastructure/Privacy/Resources",
+      "pattern": "\\.txt$"
+    }
+  ],
+  "files": [
+    {
+      "path": "src/apps/ShramSafal/ShramSafal.Infrastructure/Privacy/ErasureWorker.cs",
+      "reviewStatus": "unreviewed",
+      "sha256": "1f8852d85bcbeea1abb3919580760ef21bb447a292bf991c485c42d292155723"
+    },
+    {
+      "path": "src/apps/ShramSafal/ShramSafal.Infrastructure/Privacy/ExportWorker.cs",
+      "reviewStatus": "unreviewed",
+      "sha256": "e1751966704f9b316ea00029b65836d1bd46573a3b34d083faa9056baa88c834"
+    },
+    {
+      "path": "src/apps/ShramSafal/ShramSafal.Infrastructure/Privacy/Resources/marathi_worker_names.txt",
+      "reviewStatus": "unreviewed",
+      "sha256": "2509a2bcb831de15b3ca3af7a5331726a218e6a83f0a1b1a30234412ac8a5509"
+    },
+    {
+      "path": "src/clients/mobile-web/public/consent/agreement_en.md",
+      "reviewStatus": "unreviewed",
+      "sha256": "2fc074a862e17bda5b80878600828925bbd84ef482da46f3cfbb0e433b527cb7"
+    },
+    {
+      "path": "src/clients/mobile-web/public/consent/agreement_mr.md",
+      "reviewStatus": "unreviewed",
+      "sha256": "d030c1a9764b676a311216afd1e9053fa790623453ffbe1917e50ffff9f20990"
+    },
+    {
+      "path": "src/clients/mobile-web/public/legal/privacy_en.md",
+      "reviewStatus": "unreviewed",
+      "sha256": "5b6d7df396b934e6f0cc5a2924cb2310ef9c24e857e05f21258f18e08e7a1f60"
+    },
+    {
+      "path": "src/clients/mobile-web/public/legal/privacy_mr.md",
+      "reviewStatus": "unreviewed",
+      "sha256": "a6b6ba9f829e36434cccc9b3d1d0d730c0e0cd07178261f0407bbaaf18ef1a47"
+    },
+    {
+      "path": "src/clients/mobile-web/public/legal/terms_en.md",
+      "reviewStatus": "unreviewed",
+      "sha256": "b64dbe57d9733c260c95f4b2c35be6476c43d858c12662dedfcce73fade6568d"
+    },
+    {
+      "path": "src/clients/mobile-web/public/legal/terms_mr.md",
+      "reviewStatus": "unreviewed",
+      "sha256": "929448de09dc0da18cff89f4aa328a39b7f57a680379766f4cf5254b5731f8fc"
+    },
+    {
+      "path": "src/clients/mobile-web/src/features/consent/gate/consentNotice.ts",
+      "reviewStatus": "unreviewed",
+      "sha256": "9757487ea42435a12818175671e1ff6d6b2d078792e6c15d15dd4793f7f35ff0"
+    },
+    {
+      "path": "src/clients/mobile-web/src/i18n/consentTranslations.ts",
+      "reviewStatus": "unreviewed",
+      "sha256": "96753728ac0d3203416b8d7c68b299d87c5ed6f9c5debafe5712389740b36567"
+    },
+    {
+      "path": "src/clients/mobile-web/src/i18n/dataRightsTranslations.ts",
+      "reviewStatus": "unreviewed",
+      "sha256": "fe29ed42b06385aed774f350cfef6636e108de905e36c36187aa273014b4f655"
+    },
+    {
+      "path": "src/clients/mobile-web/src/i18n/piiReviewTranslations.ts",
+      "reviewStatus": "unreviewed",
+      "sha256": "95bcbe22c265adb9f18e28c0494c524d2061bb9c6a8e94d8814d9642b83ce41d"
+    },
+    {
+      "path": "src/clients/mobile-web/src/i18n/voiceDiaryTranslations.ts",
+      "reviewStatus": "unreviewed",
+      "sha256": "158147ba52e125f62a408c9de62ca33fd40bab8235cf84ac6b06ffe32952662a"
+    }
+  ]
+}

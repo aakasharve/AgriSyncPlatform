@@ -10,6 +10,7 @@ import {
     LogTimelineEntry, PlannedTask, DailyLog, DisturbanceEvent
 } from '../../../../types';
 import type { LogProvenance } from '../../../../domain/ai/LogProvenance';
+import type { LogCaptureScope } from '../../../../domain/types/log.types';
 import type { FarmWideDaySummary } from '../../../../app/helpers/appContentDailyCounts';
 
 export const SAFE_DEFAULTS: LedgerDefaults = {
@@ -63,6 +64,19 @@ export interface TargetSelectionGroup {
 }
 
 export interface ManualEntryProps {
+    /**
+     * FOUNDER RULING 2026-08-31 — the farmer reached this confirm screen from
+     * Labour Management (logIntent === 'labour'). He is taking हजेरी, not
+     * recording a day, so the crop-activity ledger and the buckets hanging
+     * off it are not shown: "no mic from labour ui should touch the buckets
+     * of legacy logs".
+     *
+     * The draft is ALSO filtered before it arrives (mainView ->
+     * toAttendanceOnlyDraft), so this flag only decides what is DRAWN. The
+     * guarantee that nothing else is SAVED lives in that filter, not here —
+     * a hidden section that still submitted its data would be the worse bug.
+     */
+    attendanceOnly?: boolean;
     context: FarmContext | null;
     crops: CropProfile[]; // Added dynamic crops
     defaults?: LedgerDefaults;
@@ -89,7 +103,16 @@ export interface ManualEntryProps {
          * log or when the entry is genuinely manual.
          */
         provenance?: LogProvenance | null;
+        /** Present only on a NEW record saved from the labour door (see `captureScope` below). */
+        captureScope?: LogCaptureScope;
     }) => void;
+    /**
+     * The form was opened from the labour (हजेरी) door. A NEW record saved here
+     * carries `captureScope: 'labour'` (see `DailyLog.captureScope`), so the
+     * server takes only labour from the voice job behind it. What the form
+     * submits is unchanged; only the server's derivation from the job is scoped.
+     */
+    captureScope?: LogCaptureScope;
     disabled?: boolean;
     initialData?: AgriLogResponse | null;
     provenance?: LogProvenance | null;

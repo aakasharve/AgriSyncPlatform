@@ -34,7 +34,6 @@ vi.mock('../../../i18n/LanguageContext', () => ({
 
 import ConsentScreen from '../ConsentScreen';
 import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';
-import { LEGAL_REVIEW_PENDING_PREFIX } from '../../../i18n/legalReviewMarker';
 
 const mockedClient = agriSyncClient as unknown as {
     getConsent: ReturnType<typeof vi.fn>;
@@ -75,10 +74,9 @@ describe('ConsentScreen', () => {
         expect(cross).not.toBeChecked();
         expect(research).not.toBeChecked();
 
-        // Per OQ-7 i18n convention: visible strings carry the
-        // [LEGAL_REVIEW_PENDING] runtime prefix until counsel strips it.
-        expect(screen.getByTestId('consent-save-button').textContent ?? '').toContain(
-            LEGAL_REVIEW_PENDING_PREFIX,
+        // No internal review marker is rendered to the user.
+        expect(screen.getByTestId('consent-save-button').textContent ?? '').not.toContain(
+            'LEGAL_REVIEW' + '_PENDING',
         );
     });
 

@@ -131,17 +131,40 @@ export const EMPHASIS_WORD: Record<'en' | 'mr', string> = { en: 'plot', mr: 'प
 // closest semantic lucide-react match to the reference's own circular
 // glyphs (a leaf, a layered/multiple mark, a sprouting plant) — no new
 // dependency, `lucide-react` is already used throughout this card.
-const GUIDE_LINES: ReadonlyArray<{ key: 'guideLine1' | 'guideLine2' | 'guideLine3'; Icon: LucideIcon }> = [
+type GuideLineKey =
+    | 'guideLine1' | 'guideLine2' | 'guideLine3'
+    | 'labourGuideLine1' | 'labourGuideLine2';
+
+const GUIDE_LINES: ReadonlyArray<{ key: GuideLineKey; Icon: LucideIcon }> = [
     { key: 'guideLine1', Icon: Leaf },
     { key: 'guideLine2', Icon: Layers },
     { key: 'guideLine3', Icon: Sprout },
 ];
 
-const SathiGuideCard: React.FC = () => {
+// FOUNDER RULING 2026-08-31 — the LABOUR arrival variant. The default set
+// above is untouched: he asked for the normal log line to stay exactly as it
+// is, and to change ONLY when he comes from Labour Management. guideLine3 is
+// deliberately kept in both — it explains the संपूर्ण शेत button directly
+// below this card, which is just as true on the labour path.
+const LABOUR_GUIDE_LINES: ReadonlyArray<{ key: GuideLineKey; Icon: LucideIcon }> = [
+    { key: 'labourGuideLine1', Icon: Leaf },
+    { key: 'labourGuideLine2', Icon: Layers },
+    { key: 'guideLine3', Icon: Sprout },
+];
+
+/**
+ * forLabour — the farmer reached this log page from Labour Management
+ * (logIntent === labour, threaded from mainView). It swaps the headline and
+ * the first two instruction lines for the हजेरी variant, and changes NOTHING
+ * else. A prop rather than reading navigation state directly, so the card
+ * stays pure and both variants are renderable side by side in one test.
+ */
+const SathiGuideCard: React.FC<{ forLabour?: boolean }> = ({ forLabour = false }) => {
     const { language } = useLanguage();
 
     const greeting = resolveOversightString(language, 'guideGreeting');
-    const headline = resolveOversightString(language, 'guideHeadline');
+    const headline = resolveOversightString(language, forLabour ? 'labourGuideHeadline' : 'guideHeadline');
+    const guideLines = forLabour ? LABOUR_GUIDE_LINES : GUIDE_LINES;
 
     const emphasisWord = EMPHASIS_WORD[language];
     const emphasisIdx = headline.indexOf(emphasisWord);
@@ -238,7 +261,7 @@ const SathiGuideCard: React.FC = () => {
                     14's founder ruling, unchanged); lines 2 and 3 are equal
                     supporting detail, not flattened to line 1's weight. */}
                 <ul className="mt-2.5 space-y-1.5">
-                    {GUIDE_LINES.map(({ key, Icon }) => {
+                    {guideLines.map(({ key, Icon }) => {
                         const text = resolveOversightString(language, key);
                         const isPrimary = key === 'guideLine1';
                         return (

@@ -146,15 +146,55 @@ describe('reconcileLogs — device-only truth survives a pull', () => {
         expect(after!.log.understanding).toEqual({ score: 72, outcome: 'SCORED', dimensions: [] });
     });
 
-    it('preserves an honest no-work declaration, so the farmer is not punished for it', async () => {
+    it('preserves an honest no-work declaration when the server makes no statement about it', async () => {
         // The real DayOutcome union (domain/types/log.types.ts:467) has no
         // NO_WORK_DECLARED; the honest-no-work value is NO_WORK_PLANNED.
+        //
+        // task-0b — `serverLog()` does not set `dayOutcome` at all, so the DTO
+        // key is genuinely ABSENT: this simulates a server build that predates
+        // the field (`serverStatedDayOutcome` reads exactly that absence).
+        // That is the ONLY case where local still wins — see the sibling test
+        // below for what happens when the server DOES state a value.
         await seed(db, deviceLog({ id: 'log-3', dayOutcome: 'NO_WORK_PLANNED' }));
 
         await reconcileLogs(db, pullPayloadWith(serverLog({ id: 'log-3' })), plotLookup, new Set());
 
         const after = await db.logs.get('log-3');
         expect(after!.log.dayOutcome).toBe('NO_WORK_PLANNED');
+    });
+
+    // task-0b (spec 2026-08-28-labour-v2-release-1) — THE BUG THIS RELEASE
+    // EXISTS TO FIX: a farmer declares "no work today" on one device, opens
+    // the app on ANOTHER device (or after a reinstall — no local row at all),
+    // and it must come back as a no-work day, not a fabricated work day.
+    it('a pulled NO_WORK_PLANNED log is not silently converted to WORK_RECORDED on a device with no local row', async () => {
+        await reconcileLogs(
+            db,
+            pullPayloadWith(serverLog({ id: 'log-7', dayOutcome: 'NO_WORK_PLANNED' })),
+            plotLookup,
+            new Set(),
+        );
+
+        const after = await db.logs.get('log-7');
+        expect(after!.log.dayOutcome).toBe('NO_WORK_PLANNED');
+    });
+
+    // The counterweight: once the wire CAN say `dayOutcome`, it must be
+    // believed like `context`/`verification` — a STALE local declaration must
+    // not outlive a genuine server correction (e.g. a late voice confirmation
+    // that re-classified the day after the farmer's first, mistaken tap).
+    it('lets a STATED server dayOutcome overwrite a stale local one', async () => {
+        await seed(db, deviceLog({ id: 'log-8', dayOutcome: 'NO_WORK_PLANNED' }));
+
+        await reconcileLogs(
+            db,
+            pullPayloadWith(serverLog({ id: 'log-8', dayOutcome: 'WORK_RECORDED' })),
+            plotLookup,
+            new Set(),
+        );
+
+        const after = await db.logs.get('log-8');
+        expect(after!.log.dayOutcome).toBe('WORK_RECORDED');
     });
 
     it('preserves a local deletion, so a deleted log does not resurrect', async () => {
@@ -270,7 +310,13 @@ describe('reconcileLogs — device-only truth survives a pull', () => {
         await reconcileLogs(db, pullPayloadWith(serverLog({ id: 'log-6' })), plotLookup, new Set());
 
         const after = (await db.logs.get('log-6'))!;
-        expect(after.log.dayOutcome).toBe('WORK_RECORDED');
+        // task-0b — `serverLog()` does not set `dayOutcome`, simulating a
+        // server response that makes no statement about it (see
+        // `serverStatedDayOutcome`). This USED to assert `'WORK_RECORDED'`,
+        // which was the bug pinned as a passing test: `toDailyLog` fabricated
+        // that literal for EVERY pulled log, including one the farmer declared
+        // NO_WORK_PLANNED. `null` is the honest "we were not told" state.
+        expect(after.log.dayOutcome).toBeNull();
         expect(after.log.understanding).toBeUndefined();
         expect(after.isDeleted).toBe(0);
         expect(after.serverModifiedAtUtc).toBe('2026-08-14T06:00:00.000Z');

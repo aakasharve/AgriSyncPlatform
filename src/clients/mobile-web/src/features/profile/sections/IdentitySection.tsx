@@ -13,7 +13,7 @@
 
 import React from 'react';
 import {
-    MapPin, Plus, Clock,
+    MapPin, Clock,
     ChevronRight, CheckCircle2, ShieldCheck, Check, Users, Phone, AlertTriangle, FileText, Upload, Eye, LogOut,
     Cloud, QrCode, Medal
 } from 'lucide-react';
@@ -21,9 +21,10 @@ import { FarmerProfile, VerificationStatus } from '../../../types';
 import EntitlementBanner, { type SubscriptionSnapshotView } from '../../admin/billing/EntitlementBanner';
 import MembershipsList from '../../people/components/MembershipsList';
 import type { MyFarmDto, FarmDetailsDto } from '../../onboarding/qr/inviteApi';
-import ReliabilityScoreCard from '../../work/components/ReliabilityScoreCard';
 import { TeamMemberCard } from '../components/TeamMemberCard';
 import { useLabourPermissions } from '../hooks/useLabourPermissions';
+import { FarmWorkersCard } from '../components/FarmWorkersCard';
+import { isOwnerTierRole, isPhoneLocalOnlyMember, mergeTeamWithServerRoster } from '../helpers/teamRoster';
 import { useLanguage } from '../../../i18n/LanguageContext';
 
 // Identity verification status for farmer ID
@@ -40,7 +41,6 @@ const getIdentityStatus = (profile: FarmerProfile): IdentityStatus => {
 interface IdentitySectionProps {
     profile: FarmerProfile;
     onUpdateProfile: (p: FarmerProfile) => void;
-    onDeletePerson?: (id: string) => void;
     logout: () => void;
     myFarm: { farmId: string; name: string; role: string; subscription: SubscriptionSnapshotView | null } | null;
     myMemberships: MyFarmDto[];
@@ -51,7 +51,6 @@ interface IdentitySectionProps {
     handleConnectWeather: () => void;
     setShowFarmBoundary: (v: boolean) => void;
     handleOpenInviteQr: () => void;
-    setShowMemberWizard: (v: boolean) => void;
     nonExitableFarmIds: Set<string>;
     handleExitMembership: (farmId: string, farmName: string) => Promise<void>;
     isWorkerOnAnyFarm: boolean;
@@ -62,7 +61,6 @@ interface IdentitySectionProps {
 const IdentitySection: React.FC<IdentitySectionProps> = ({
     profile,
     onUpdateProfile,
-    onDeletePerson,
     logout,
     myFarm,
     myMemberships,
@@ -73,18 +71,33 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
     handleConnectWeather,
     setShowFarmBoundary,
     handleOpenInviteQr,
-    setShowMemberWizard,
     nonExitableFarmIds,
     handleExitMembership,
-    isWorkerOnAnyFarm,
-    workerProfile,
 }) => {
     const { t } = useLanguage();
     // LABOUR_PHASE2 Phase 5. `myFarm.farmId` is the SERVER's farm id. The hook
     // makes no request until it resolves, and on a failed read it stays `null`
     // rather than falling back to the local profile — see its docblock for why
     // that matters (`profile.operators[].id` is not a server userId).
-    const labourPermissions = useLabourPermissions(myFarm?.farmId ?? null);
+    //
+    // Owner-tier ONLY (server-sent `myFarm.role`): the roster route is owner/co-owner-only,
+    // so asking as anyone else is a refused call, and answering it is what lets the owner's
+    // Team list show every member's real role and name (see helpers/teamRoster.ts).
+    const callerIsOwnerTier = isOwnerTierRole(myFarm?.role);
+    // The server told us the caller is NOT owner/co-owner: owner-only actions (share QR,
+    // add/remove member) are refused or meaningless for him, so they are not offered.
+    // Unknown (no farm loaded yet) keeps today's behaviour rather than guessing.
+    const callerIsKnownNonOwner = !!myFarm && !callerIsOwnerTier;
+    const labourPermissions = useLabourPermissions(callerIsOwnerTier ? (myFarm?.farmId ?? null) : null);
+    // Linked app users only. A "member" that exists nowhere but this phone (the old local-only Add
+    // member) is not a team member and is not presented as one; named workers have their own card.
+    const teamOperators = React.useMemo(
+        () => mergeTeamWithServerRoster(
+            (profile.operators ?? []).filter(op => !isPhoneLocalOnlyMember(op)),
+            labourPermissions.rows,
+        ),
+        [profile.operators, labourPermissions.rows],
+    );
     return (
         <div className="bg-transparent animate-in fade-in space-y-6">
 
@@ -144,7 +157,7 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                     </div>
 
                     <div className="flex items-start gap-5 relative z-10">
-                        <div className="relative">
+                        <div className="relative shrink-0">
                             <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-3xl shadow-inner border-4 border-white">
                                 👨‍🌾
                             </div>
@@ -162,22 +175,22 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
 
                         <div className="flex-1 min-w-0">
                             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
-                                <h2 className="text-2xl font-black text-slate-800 break-words">{profile.name || '—'}</h2>
+                                <h2 className="min-w-0 max-w-full text-2xl font-black text-slate-800 [overflow-wrap:anywhere]">{profile.name || '—'}</h2>
                                 <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide border border-emerald-200 whitespace-nowrap">
                                     {t('profile.primaryOwner')}
                                 </span>
                             </div>
 
-                            <div className="flex flex-wrap gap-4 text-sm text-slate-500 mb-3">
-                                <div className="flex items-center gap-1.5">
-                                    <MapPin size={16} className="text-slate-400" />
+                            <div className="flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-sm text-slate-500 mb-3">
+                                <div className="flex min-w-0 max-w-full items-center gap-1.5">
+                                    <MapPin size={16} className="shrink-0 text-slate-400" />
                                     {profile.village || '—'}
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                    <Phone size={16} className="text-slate-400" />
+                                <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-1">
+                                    <Phone size={16} className="shrink-0 text-slate-400" />
                                     {profile.phone || '—'}
                                     {profile.phone && (
-                                        <span className="text-emerald-600 text-xs font-bold flex items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                        <span className="text-emerald-600 text-xs font-bold flex shrink-0 items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded">
                                             <Check size={10} /> {t('profile.verified')}
                                         </span>
                                     )}
@@ -403,20 +416,10 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                 />
             )}
 
-            {/* CEI Phase 4 §4.8 — own reliability score (Worker/Mukadam only) */}
-            {isWorkerOnAnyFarm && workerProfile && (
-                <div>
-                    <p
-                        className="text-[10px] font-bold uppercase tracking-wide text-stone-400 mb-2 px-1"
-                        style={{ fontFamily: "'DM Sans', sans-serif" }}
-                    >
-                        Your reliability
-                    </p>
-                    <ReliabilityScoreCard
-                        score={workerProfile.reliability}
-                    />
-                </div>
-            )}
+            {/* The own-reliability card was REMOVED, not hidden behind a flag:
+                the server computes it from zero metrics, so every worker read
+                100 (ReliabilityScore.cs). Trust score is deferred by founder
+                decision; this returns only with a real metrics read-model. */}
 
             {/* 2. FARM TEAM HIERARCHY (LAYERS 2 & 3) */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
@@ -428,24 +431,20 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                         </h3>
                         <p className="text-xs text-slate-400 mt-1">{t('profile.manageAccess')}</p>
                     </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {!callerIsKnownNonOwner && (
+                    <div className="grid grid-cols-1 gap-2">
                         <button
                             onClick={handleOpenInviteQr}
                             className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-200 active:scale-95 transition-all"
                         >
                             <QrCode size={16} /> Share farm QR
                         </button>
-                        <button
-                            onClick={() => setShowMemberWizard(true)}
-                            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 shadow-sm active:scale-95 transition-all"
-                        >
-                            <Plus size={16} /> {t('profile.addMember')}
-                        </button>
                     </div>
+                    )}
                 </div>
 
                 {/* Prominent invite banner — visible when the team is empty so a first-time farmer knows the QR exists. */}
-                {(!profile.operators || profile.operators.length === 0) && (
+                {!callerIsKnownNonOwner && teamOperators.length === 0 && (
                     <button
                         onClick={handleOpenInviteQr}
                         className="mb-4 w-full text-left rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white px-4 py-4 shadow-sm hover:border-emerald-300 transition-colors"
@@ -456,7 +455,7 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                             </div>
                             <div className="flex-1 min-w-0">
                                 <div className="font-bold text-emerald-800">कामगारांना जोडा · Add your workers</div>
-                                <div className="text-xs text-emerald-700/80">Show them the farm QR. They scan, enter phone, done.</div>
+                                <div className="text-xs text-emerald-700/80">त्यांना शेताचा QR दाखवा. ते स्कॅन करतात, फोन नंबर टाकतात — झालं.</div>
                             </div>
                         </div>
                     </button>
@@ -473,8 +472,8 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
 
                 <div className="space-y-3">
                     {/* Existing People or Dummies if none */}
-                    {(profile.operators && profile.operators.length > 0) ? (
-                        profile.operators.map(person => {
+                    {teamOperators.length > 0 ? (
+                        teamOperators.map(person => {
                             return (
                                 <TeamMemberCard
                                     key={person.id}
@@ -494,8 +493,9 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                             canManage: row.canManageLabourRecords,
                                             isEditable: row.isGrantEditable,
                                             saving: labourPermissions.savingUserId === row.userId,
-                                            onChange: (next: boolean) =>
-                                                void labourPermissions.setPermission(row.userId, next),
+                                            expiresAtUtc: row.labourGrantExpiresAtUtc,
+                                            onChange: (next: boolean, expiresAtUtc: string | null) =>
+                                                void labourPermissions.setPermission(row.userId, next, expiresAtUtc),
                                         };
                                     })()}
                                     onToggleCap={(cap) => {
@@ -507,7 +507,8 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                         const updatedOperators = profile.operators!.map(p => p.id === person.id ? { ...p, capabilities: newCaps } as any : p);
                                         onUpdateProfile({ ...profile, operators: updatedOperators });
                                     }}
-                                    onDelete={() => onDeletePerson && onDeletePerson(person.id)}
+                                    /* No Remove here: a linked app user leaves through the
+                                       membership exit, not through a button on his card. */
                                 />
                             );
                         })
@@ -522,6 +523,11 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                     )}
                 </div>
             </div>
+
+            {/* Named workers (no login): the only part of the Team page where an owner can add or
+                remove a person, and both go to the server. Owner / co-owner only, as told by the
+                server-sent role; before the farm is known there is nothing to send it to. */}
+            {callerIsOwnerTier && myFarm && <FarmWorkersCard farmId={myFarm.farmId} />}
 
         </div>
     );

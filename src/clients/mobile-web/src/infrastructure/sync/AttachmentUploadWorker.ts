@@ -47,6 +47,7 @@ export class AttachmentUploadWorker {
     private timerId: number | null = null;
     private isRunning = false;
     private cycleInProgress = false;
+    private activeCycle: Promise<void> | null = null;
     private readonly filesService: DeviceFilesService;
 
     private constructor(
@@ -80,19 +81,20 @@ export class AttachmentUploadWorker {
         window.addEventListener('online', this.handleOnline);
     }
 
-    stop(): void {
-        if (!this.isRunning) {
-            return;
+    /** Stops scheduling and resolves once a running upload cycle (if any) has finished. */
+    stop(): Promise<void> {
+        if (this.isRunning) {
+            this.isRunning = false;
+
+            if (this.timerId !== null) {
+                window.clearInterval(this.timerId);
+                this.timerId = null;
+            }
+
+            window.removeEventListener('online', this.handleOnline);
         }
 
-        this.isRunning = false;
-
-        if (this.timerId !== null) {
-            window.clearInterval(this.timerId);
-            this.timerId = null;
-        }
-
-        window.removeEventListener('online', this.handleOnline);
+        return this.activeCycle ?? Promise.resolve();
     }
 
     async triggerNow(): Promise<void> {
@@ -113,6 +115,17 @@ export class AttachmentUploadWorker {
         }
 
         this.cycleInProgress = true;
+        const run = this.runUploadCycle();
+        this.activeCycle = run;
+        try {
+            await run;
+        } finally {
+            this.activeCycle = null;
+            this.cycleInProgress = false;
+        }
+    }
+
+    private async runUploadCycle(): Promise<void> {
         try {
             // P0.7 — reclaim rows a killed session left in `uploading`, BEFORE
             // this cycle takes anything in hand. The `cycleInProgress` guard
@@ -127,8 +140,6 @@ export class AttachmentUploadWorker {
             }
         } catch (error) {
             console.error('[AttachmentUploadWorker] Upload cycle failed', error);
-        } finally {
-            this.cycleInProgress = false;
         }
     }
 

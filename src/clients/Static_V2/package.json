@@ -1,0 +1,29 @@
+{
+  "name": "shramsafal-static-v2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 52286",
+    "build": "tsc --noEmit && vite build && node scripts/prerender.mjs",
+    "preview": "vite preview --host 127.0.0.1 --port 52287",
+    "test": "node tests/static-v2.spec.mjs",
+    "prerender": "node scripts/prerender.mjs",
+    "deploy": "node scripts/deploy.mjs",
+    "perf:load": "node scripts/perf-load.mjs",
+    "perf:scroll": "node scripts/perf-scroll.mjs"
+  },
+  "dependencies": {
+    "motion": "^12.40.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "puppeteer": "^25.12.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
+  }
+}

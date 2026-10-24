@@ -1,0 +1,17 @@
+# ShramSafal — https://shramsafal.in
+# Everything here is public marketing content; nothing is gated.
+User-agent: *
+Allow: /
+
+# Answer engines are allowed deliberately: being quotable by an AI assistant
+# is a distribution channel for this site, not a leak.
+User-agent: GPTBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+Sitemap: https://shramsafal.in/sitemap.xml

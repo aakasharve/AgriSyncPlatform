@@ -68,10 +68,10 @@ public sealed class FarmMembership : Entity<Guid>
     /// <para><b>This is not the whole rule and must never be read as if it
     /// were.</b> The effective decision is
     /// <see cref="LabourManagementPermission.IsAllowed"/>: owner-tier is always
-    /// allowed and a <see cref="AppRole.Mukadam"/> is allowed by default, so
-    /// for those roles this flag is IRRELEVANT and stays <c>false</c>. Reading
-    /// this property alone would deny the two roles that are always permitted.
-    /// </para>
+    /// allowed, so for those two roles this flag is irrelevant and stays
+    /// <c>false</c>; for every other role — Mukadam included (D5, 2026-09-02) —
+    /// this flag IS the decision. Reading this property alone would deny the
+    /// two roles that are always permitted.</para>
     ///
     /// <para>Default <c>false</c>: a member gains nothing until an owner says
     /// so. That is also why the column ships <c>NOT NULL DEFAULT false</c> —
@@ -79,6 +79,32 @@ public sealed class FarmMembership : Entity<Guid>
     /// </para>
     /// </summary>
     public bool CanManageLabourRecords { get; private set; }
+
+    /// <summary>
+    /// R1 Task 2.2 (founder master review 2026-09-02, D5) — when the explicit
+    /// labour grant STOPS answering. <c>null</c> = कायम, no end date.
+    ///
+    /// <para><b>Expiry denies forward, never rewrites backward.</b> What the
+    /// person did while responsible keeps its history — "प्रकाशने काल केलेली
+    /// नोंद प्रकाशच केली म्हणून कायम दिसेल." Nothing here touches audit rows,
+    /// corrections or marks; only future answers change.</para>
+    ///
+    /// <para>Meaningless without the grant: <see cref="SetLabourRecordManagement"/>
+    /// clears it on revoke, so an expiry can never outlive the decision it
+    /// bounds.</para>
+    /// </summary>
+    public DateTime? LabourGrantExpiresAtUtc { get; private set; }
+
+    /// <summary>
+    /// The stored decision evaluated at a moment: granted AND not yet expired.
+    /// BOTH readers of the grant answer through this rule — the SQL twin in
+    /// <c>GetLabourManagementGrantAsync</c> for the gate, this method for the
+    /// projection. A roster reading the bare flag while the gate reads
+    /// flag+expiry is a control that lies.
+    /// </summary>
+    public bool HasEffectiveLabourGrant(DateTime nowUtc) =>
+        CanManageLabourRecords
+        && (LabourGrantExpiresAtUtc is null || nowUtc < LabourGrantExpiresAtUtc);
 
     /// <summary>
     /// Legacy surface preserved for pre-Phase 2 callers. Returns <c>true</c>
@@ -301,8 +327,13 @@ public sealed class FarmMembership : Entity<Guid>
     /// decision is redundant is a use-case question, answered by
     /// <see cref="LabourManagementPermission.IsRedundantGrantTarget"/> at the
     /// handler so the caller can be told rather than silently no-op'd.</para>
+    ///
+    /// <para><b>The expiry travels WITH the grant: cleared on revoke, refused
+    /// when already past.</b> (R1 Task 2.2, founder master review 2026-09-02,
+    /// D5 — temporary जबाबदारी is the SAME switch with a duration, never a
+    /// second permission.)</para>
     /// </summary>
-    public bool SetLabourRecordManagement(bool allowed, DateTime utcNow)
+    public bool SetLabourRecordManagement(bool allowed, DateTime? expiresAtUtc, DateTime utcNow)
     {
         if (IsTerminal)
         {
@@ -310,12 +341,22 @@ public sealed class FarmMembership : Entity<Guid>
                 $"Cannot change labour-record management on a {Status} membership.");
         }
 
-        if (CanManageLabourRecords == allowed)
+        var effectiveExpiry = allowed ? expiresAtUtc : null;
+
+        if (allowed && effectiveExpiry is not null && effectiveExpiry <= utcNow)
+        {
+            throw new ArgumentException(
+                "An expiry in the past grants nothing — refusing rather than storing a switch "
+                + "that looks ON and answers OFF.", nameof(expiresAtUtc));
+        }
+
+        if (CanManageLabourRecords == allowed && LabourGrantExpiresAtUtc == effectiveExpiry)
         {
             return false;
         }
 
         CanManageLabourRecords = allowed;
+        LabourGrantExpiresAtUtc = effectiveExpiry;
         ModifiedAtUtc = utcNow;
         return true;
     }

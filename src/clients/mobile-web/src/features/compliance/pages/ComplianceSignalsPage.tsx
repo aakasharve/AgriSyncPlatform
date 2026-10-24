@@ -11,6 +11,8 @@ import { useComplianceSignals } from '../hooks/useComplianceSignals';
 import SignalCard from '../components/SignalCard';
 import type { AppRoute } from '../../../domain/types/farm.types';
 import type { ComplianceSignalDto } from '../data/complianceClient';
+// TASK 8 — reused as-is, no new copy. See the note in `JobCardsPage.tsx`.
+import { LoadErrorBanner } from '../../labour/components/LabourUiKit';
 
 interface ComplianceSignalsPageProps {
     onNavigate?: (route: AppRoute) => void;
@@ -40,7 +42,7 @@ const FILTER_LABELS: Record<Filter, string> = {
 
 const ComplianceSignalsPage: React.FC<ComplianceSignalsPageProps> = ({ onNavigate, onBack, plotId }) => {
     const { currentFarmId } = useFarmContext();
-    const { signals, isLoading, filter, setFilter, refresh } = useComplianceSignals(currentFarmId ?? null);
+    const { signals, isLoading, loadFailed, filter, setFilter, refresh } = useComplianceSignals(currentFarmId ?? null);
     const [expandedBands, setExpandedBands] = React.useState<Record<Severity, boolean>>({
         Critical: true,
         NeedsAttention: true,
@@ -107,7 +109,16 @@ const ComplianceSignalsPage: React.FC<ComplianceSignalsPageProps> = ({ onNavigat
                     </div>
                 )}
 
-                {!isLoading && filteredSignals.length === 0 && (
+                {loadFailed && <LoadErrorBanner onRetry={refresh} compact />}
+
+                {/*
+                 * TASK 8 — keyed on the FETCH HAVING FAILED, never on "the
+                 * list looks empty". A failed load used to reach this branch
+                 * and reassure the farmer that his farms are on track, from
+                 * nothing. A successful 200 with no signals still lands here,
+                 * and there the sentence is TRUE.
+                 */}
+                {!isLoading && !loadFailed && filteredSignals.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-16 text-center">
                         <p style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }} className="text-base font-semibold text-stone-700">
                             कोणत्याही चेतावण्या नाहीत

@@ -72,7 +72,11 @@ export interface ClosureReceipt {
 function asParseResult(log: DailyLog): AgriLogResponse {
     return {
         summary: '',
-        dayOutcome: log.dayOutcome,
+        // task-0b — `log.dayOutcome` is `DayOutcome | null`; `AgriLogResponse
+        // .dayOutcome` is unchanged and still required, so this falls back
+        // exactly as this projection already did for every pulled log before
+        // task-0b.
+        dayOutcome: log.dayOutcome ?? 'WORK_RECORDED',
         cropActivities: log.cropActivities ?? [],
         irrigation: log.irrigation ?? [],
         labour: log.labour ?? [],

@@ -52,7 +52,7 @@ public sealed class RenameFieldOperatorHandler(
         // default, any other role only when explicitly granted (O-4). Still
         // fails closed for a non-member.
         if (!await LabourManagementGate.IsAllowedAsync(
-                repository, command.FarmId.Value, command.CallerUserId.Value, ct))
+                repository, command.FarmId.Value, command.CallerUserId.Value, clock.UtcNow, ct))
         {
             return Result.Failure<FieldOperatorDto>(ShramSafalErrors.Forbidden);
         }

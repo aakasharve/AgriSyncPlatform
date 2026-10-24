@@ -73,11 +73,44 @@ export function useAppRouterDerivations({
         return getDateKey(date);
     }, []);
 
-    const scopeCropIds = selectedCropIds.length > 0 ? [...selectedCropIds] : undefined;
-    const scopePlotIds = selectedPlotIds.length > 0 ? [...selectedPlotIds] : undefined;
+    // Memoised because both are spread into NEW arrays on every render, and
+    // three useMemos below take them as dependencies — so every render
+    // recomputed all three day-state derivations for values that had not
+    // changed. Pre-existing (the lint warnings predate this file being
+    // touched here) and fixed rather than suppressed: the rule is right.
+    const scopeCropIds = React.useMemo(
+        () => (selectedCropIds.length > 0 ? [...selectedCropIds] : undefined),
+        [selectedCropIds],
+    );
+    const scopePlotIds = React.useMemo(
+        () => (selectedPlotIds.length > 0 ? [...selectedPlotIds] : undefined),
+        [selectedPlotIds],
+    );
 
     const todayLogs = React.useMemo(
         () => history
+            // `date` is REQUIRED by the DailyLog type, so this used to read
+            // `log.date.includes(...)` unguarded. A single stored log that
+            // violates that contract — an older shape, a partial write, a
+            // failed save — then threw "Cannot read properties of undefined
+            // (reading 'includes')" from a router derivation, which is above
+            // every screen: the ENTIRE APP became an error boundary because of
+            // one bad row.
+            //
+            // A malformed record must be survivable, not fatal. It is dropped
+            // from today rather than guessed into it — a log with no date
+            // cannot be claimed to be today’s — and it is NAMED in the console
+            // so the bad row is findable instead of silently swallowed.
+            .filter((log) => {
+                if (typeof log?.date !== 'string' || log.date.length === 0) {
+                    console.warn(
+                        '[todayLogs] a stored log has no date and was excluded from today.',
+                        { logId: (log as { id?: unknown })?.id },
+                    );
+                    return false;
+                }
+                return true;
+            })
             .filter(log => (log.date.includes('T') ? log.date.split('T')[0] : log.date) === todayDateKey)
             .sort((a, b) => new Date(b.meta?.createdAtISO || b.date).getTime() - new Date(a.meta?.createdAtISO || a.date).getTime()),
         [history, todayDateKey],

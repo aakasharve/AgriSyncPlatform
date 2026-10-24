@@ -10,6 +10,7 @@ import { getCropTheme } from '../../../shared/utils/colorTheme';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import type { Language } from '../../../i18n/language';
 import { resolveOversightString } from '../../../i18n/oversightTranslations';
+import { toMarathiNumber } from '../../logs/services/disciplineRecognition';
 
 // Same font-selection convention every oversight component uses (root
 // CLAUDE.md Font Rules) — only used below when `hideGlobalCard` opts a
@@ -42,10 +43,6 @@ interface CropSelectorProps {
      *     crops); the SAME selection (`handleGlobalToggle`/`isGlobalSelected`
      *     below — unchanged logic, not re-implemented) instead renders as a
      *     quiet, full-width list row BELOW the crop cards;
-     *   - Task 13, change 4 — the `mode === 'log'` section header/hint swap
-     *     from this component's original English dev copy to the founder's
-     *     own approved Marathi (`oversightTranslations.ts`'s
-     *     `plotSectionHeader` / `plotSectionHint`);
      *   - Task 16, Problem 2 — the founder-directed VIVID selected state on
      *     the crop cards: `strongFill` + `ring-[4px]` instead of the `-50`
      *     tint + `ring-[3px]`, a deeper shadow, a harder dim on unselected
@@ -53,11 +50,25 @@ interface CropSelectorProps {
      *     solid white border. He approved this on the log screen and
      *     re-approved it since; it belongs there and only there.
      *
-     * WHAT `false`/OMITTED GUARANTEES, AND WHAT IT DOES NOT (finding F5).
-     * Every VISIBLE difference listed above is gated, so `Attendance.tsx` —
-     * the one other consumer, which never passes this prop — renders the
-     * same pixels it rendered before this branch. Pinned class-by-class in
-     * `__tests__/CropSelectorDefaultPath.test.tsx`.
+     * TASK 15 (Labour V2 R1) — ONE ITEM GRADUATES OUT OF THIS LIST. The
+     * `mode === 'log'` section header/hint swap (`plotSectionHeader` /
+     * `plotSectionHint`) used to be gated here too, but a gated i18n string
+     * is just a slower way of shipping a permanent English fallback — this
+     * component's OWN carousel card ("Entire Farm" / "Overview") and plot
+     * tray ("Ready to Log", the per-crop count pill) were never gated at
+     * all, and a farmer on `Attendance.tsx` saw all of it in English. Task 15
+     * made every one of those strings route through `resolveOversightString`
+     * UNCONDITIONALLY, on both paths — the flag no longer decides language,
+     * only the visual/layout differences enumerated above still do.
+     *
+     * WHAT `false`/OMITTED GUARANTEES, AND WHAT IT DOES NOT (finding F5,
+     * narrowed by Task 15). Every VISUAL/LAYOUT difference listed above is
+     * still gated, so `Attendance.tsx` — the one other consumer, which never
+     * passes this prop — renders the same pixels it rendered before this
+     * branch, in whatever language `useOptionalLanguage` resolves (its own
+     * `'en'` default when no `LanguageProvider` wraps it, matching the app's
+     * real provider tree at `App.tsx`, which always supplies one). Pinned
+     * class-by-class in `__tests__/CropSelectorDefaultPath.test.tsx`.
      *
      * It is NOT byte-identical, and the earlier version of this comment
      * claiming so was false. Two non-visual additions apply on BOTH paths and
@@ -196,6 +207,21 @@ const CropSelector: React.FC<CropSelectorProps> = ({
     const languageContext = useOptionalLanguage();
     const language: Language = languageContext?.language ?? 'en';
 
+    // Task 15 — the per-crop count pill's two remaining English literals.
+    // Numeral formatting is guarded on `language`, same convention
+    // `DailySummaryCard.tsx` already uses (`count()` there): Devanagari only
+    // in Marathi, plain ASCII in English, never unconditional.
+    const plotCountLabel = (count: number): string => {
+        const numeral = language === 'mr' ? toMarathiNumber(count) : String(count);
+        const unit = resolveOversightString(language, count === 1 ? 'plotCountUnitSingular' : 'plotCountUnitPlural');
+        return `${numeral} ${unit}`;
+    };
+    const selectedCountLabel = (count: number): string => {
+        const numeral = language === 'mr' ? toMarathiNumber(count) : String(count);
+        const unit = resolveOversightString(language, count === 1 ? 'selectedCountUnitSingular' : 'selectedCountUnitPlural');
+        return `${numeral} ${unit}`;
+    };
+
     const handleGlobalToggle = () => {
         if (disabled) return;
         const isSelected = selectedCrops.includes('FARM_GLOBAL');
@@ -290,16 +316,14 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                     <label className="text-xl font-bold text-slate-800 flex items-center">
                         {mode === 'log' ? (
                             <div className="flex flex-col">
-                                <span className="flex items-center" style={hideGlobalCard ? fontStyleFor(resolveOversightString(language, 'plotSectionHeader')) : undefined}>
+                                {/* Task 15 — unconditional; see the
+                                    `hideGlobalCard` JSDoc above. */}
+                                <span className="flex items-center" style={fontStyleFor(resolveOversightString(language, 'plotSectionHeader'))}>
                                     <MapPin className="mr-2 text-emerald-600 animate-bounce" size={24} />
-                                    {hideGlobalCard
-                                        ? resolveOversightString(language, 'plotSectionHeader')
-                                        : 'Select the plots you worked on today'}
+                                    {resolveOversightString(language, 'plotSectionHeader')}
                                 </span>
-                                <span className="text-xs font-normal text-slate-500 mt-1 pl-8" style={hideGlobalCard ? fontStyleFor(resolveOversightString(language, 'plotSectionHint')) : undefined}>
-                                    {hideGlobalCard
-                                        ? resolveOversightString(language, 'plotSectionHint')
-                                        : 'You can select multiple crops or multiple plots where same work was executed'}
+                                <span className="text-xs font-normal text-slate-500 mt-1 pl-8" style={fontStyleFor(resolveOversightString(language, 'plotSectionHint'))}>
+                                    {resolveOversightString(language, 'plotSectionHint')}
                                 </span>
                             </div>
                         ) : (
@@ -352,11 +376,17 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                         </div>
 
                         <div className="flex flex-col items-center gap-1 w-full">
-                            <span className={`font-black ${fontSize} leading-tight text-center text-slate-800`}>
-                                Entire Farm
+                            <span
+                                className={`font-black ${fontSize} leading-tight text-center text-slate-800`}
+                                style={fontStyleFor(resolveOversightString(language, 'entireFarmLabel'))}
+                            >
+                                {resolveOversightString(language, 'entireFarmLabel')}
                             </span>
-                            <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                                Overview
+                            <span
+                                className="text-[10px] font-bold uppercase tracking-wide text-slate-400"
+                                style={fontStyleFor(resolveOversightString(language, 'entireFarmOverviewLabel'))}
+                            >
+                                {resolveOversightString(language, 'entireFarmOverviewLabel')}
                             </span>
                         </div>
 
@@ -372,7 +402,6 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                 {/* 2. Crop Cards */}
                 {crops.map((crop) => {
                     const isSelected = selectedCrops.includes(crop.id);
-                    const hasMultiplePlots = crop.plots.length > 1;
                     const selectedPlotCount = selectedPlots[crop.id]?.length || 0;
 
                     // Use safe theme helper
@@ -465,18 +494,23 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                                     {crop.name}
                                 </span>
 
-                                {!compact && (
-                                    <span
-                                        data-testid={`crop-count-pill-${crop.id}`}
-                                        className={`
+                                {!compact && (() => {
+                                    const countPillText = mode === 'reflect' && selectedPlotCount === 0
+                                        ? plotCountLabel(crop.plots.length)
+                                        : isSelected ? selectedCountLabel(selectedPlotCount) : plotCountLabel(crop.plots.length);
+                                    return (
+                                        <span
+                                            data-testid={`crop-count-pill-${crop.id}`}
+                                            className={`
                                         text-[11px] font-black uppercase tracking-widest transition-colors duration-300
                                         ${isSelected ? countPillClass : 'text-slate-400'}
-                                    `}>
-                                        {mode === 'reflect' && selectedPlotCount === 0
-                                            ? (hasMultiplePlots ? `${crop.plots.length} PLOTS` : '1 PLOT')
-                                            : isSelected ? `${selectedPlotCount} SELECTED` : (hasMultiplePlots ? `${crop.plots.length} PLOTS` : '1 PLOT')}
-                                    </span>
-                                )}
+                                    `}
+                                            style={fontStyleFor(countPillText)}
+                                        >
+                                            {countPillText}
+                                        </span>
+                                    );
+                                })()}
                             </div>
 
                             {/* Hanging Checkmark Badge — see `tickBadgeClass`
@@ -617,8 +651,11 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                                                                     {plot.name}
                                                                 </span>
                                                                 {isPlotSelected && (
-                                                                    <span className="text-[10px] uppercase font-bold text-emerald-400">
-                                                                        Ready to Log
+                                                                    <span
+                                                                        className="text-[10px] uppercase font-bold text-emerald-400"
+                                                                        style={fontStyleFor(resolveOversightString(language, 'readyToLogLabel'))}
+                                                                    >
+                                                                        {resolveOversightString(language, 'readyToLogLabel')}
                                                                     </span>
                                                                 )}
                                                             </div>

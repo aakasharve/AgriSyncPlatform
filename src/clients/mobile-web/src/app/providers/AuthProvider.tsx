@@ -10,13 +10,14 @@
 //   local state (Task 6.1). Callers use `void logout()` or `await logout()`.
 // - mapSession does NOT copy refreshToken from the dto.
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { agriSyncClient, type AuthResponseDto } from '../../infrastructure/api/AgriSyncClient';
 import type { RefreshOutcome } from '../../infrastructure/api/transport';
 import {
     AUTH_SESSION_CHANGED_EVENT,
     clearAuthSession,
     getAuthSession,
+    getPresenceSession,
     setAuthSession,
     type AuthSession
 } from '../../infrastructure/storage/AuthTokenStore';
@@ -38,6 +39,7 @@ import { setRememberDevice, clearRememberDevice } from '../../infrastructure/sto
 // clearNativeRefreshSession is a web no-op but is called unconditionally so
 // the Android implementation (Task 5.2) automatically gets fail-closed
 // behaviour when the web build is ported.
+import { hasPendingLogout } from '../../infrastructure/storage/PendingLogoutStore';
 import { clearNativeRefreshSession } from '../../infrastructure/storage/RefreshSessionStore';
 
 // spec: secure-remembered-device-sessions-2026-06-24
@@ -48,6 +50,12 @@ interface AuthContextValue {
     authStatus: AuthStatus;
     isAuthenticated: boolean;
     isLoading: boolean;
+    /**
+     * True when the app is open on the strength of the stored presence marker
+     * alone (offline cold start): `session.accessToken` is '' and NOTHING has
+     * been verified. Server-bound work must treat this as "no token yet".
+     */
+    isOfflinePresence: boolean;
     authError: string | null;
     login: (phone: string, password: string, rememberDevice?: boolean) => Promise<void>;
     register: (phone: string, password: string, displayName: string) => Promise<void>;
@@ -55,6 +63,9 @@ interface AuthContextValue {
     refresh: () => Promise<void>;
     clearAuthError: () => void;
 }
+
+/** Presence-mode recovery cadence - matches BackgroundSyncWorker's 15 s tick. */
+const PRESENCE_RETRY_INTERVAL_MS = 15_000;
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -79,6 +90,22 @@ function hasJoinDeepLink(): boolean {
     }
 }
 
+// A new sign-in replaces the previous credential (the cookie / Keystore slot),
+// so the previous user's owed revoke must be ATTEMPTED first. A failure does not
+// block the new user from trying, but the pending-logout marker is KEPT: it is
+// cleared only when the revoke completed ('done'/'none', inside
+// completePendingLogout) or when a sign-in actually SUCCEEDS (setAuthSession).
+// Otherwise an offline login attempt that fails would drop the marker while the
+// old HttpOnly cookie is still valid, and the next online boot would silently
+// sign the previous user back in.
+async function settlePendingLogoutBeforeSignIn(): Promise<void> {
+    try {
+        await agriSyncClient.completePendingLogout();
+    } catch {
+        // attempted; the marker stays unless the revoke completed
+    }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     // Warm state from storage (used for rendering, NOT final auth truth).
     const [session, setSession] = useState<AuthSession | null>(() => getAuthSession());
@@ -95,8 +122,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Guard: we do NOT override the initial 'checking' state here — the boot effect
     // always completes and sets the terminal status itself. This handler only fires
     // on EXPLICIT setAuthSession / clearAuthSession calls (not during boot).
+    // Latest presence-mode identity, readable from the stable callback below.
+    const presenceUserRef = useRef<string | null>(null);
     const syncFromStorage = useCallback(() => {
-        const current = getAuthSession();
+        // A tab that is open on a token-less PRESENCE session must not be
+        // dropped to login by a storage/auth-changed event while its marker
+        // survives, is valid, and is still the SAME user. Anything else (marker
+        // gone/invalid, another user's marker, tab not in presence mode) fails
+        // closed exactly as before.
+        const presenceUser = presenceUserRef.current;
+        let current = getAuthSession();
+        if (current === null && presenceUser !== null) {
+            const presence = getPresenceSession();
+            if (presence !== null && presence.userId === presenceUser) {
+                current = presence;
+            }
+        }
         setSession(current);
         setAuthStatus(current !== null ? 'authenticated' : 'anonymous');
     }, []);
@@ -117,9 +158,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     //               An unverified access token grants nothing on its own — the
     //               first real request that meets a live server and gets a 401
     //               routes back through refreshSession() and clears properly.
-    //               With no warm session there is nothing to show, so we land
-    //               on 'anonymous' — but we still clear NOTHING, so the durable
-    //               Keystore token is there for the next launch with signal.
+    //               With no warm session we fall back to the token-less PRESENCE
+    //               session (cold start, marker survives). With neither there is
+    //               nothing to show, so 'anonymous' — still clearing NOTHING, so
+    //               the durable Keystore token is there for the next launch.
     const applyRefreshOutcome = useCallback((outcome: RefreshOutcome) => {
         if (outcome.kind === 'refreshed') {
             setSession(outcome.session);
@@ -135,7 +177,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
         }
 
-        const warm = getAuthSession();
+        // A warm session (live in-memory token) wins. On a COLD start there is
+        // none, but the non-secret presence marker survives: fall back to a
+        // TOKEN-LESS presence session so a farmer relaunching with no signal
+        // lands in the offline app, not on the login screen (locked offline
+        // ruling: attendance capture works offline). It carries no token, so
+        // nothing server-bound can use it; the first reachable refresh mints a
+        // real session or, if the server judges the credential dead, clears it.
+        const warm = getAuthSession() ?? getPresenceSession();
         setSession(warm);
         setAuthStatus(warm !== null ? 'authenticated' : 'anonymous');
     }, []);
@@ -164,6 +213,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
         }
 
+        // Signed out locally but the server revoke is still owed (offline
+        // logout): NEVER silently re-authenticate. Show login, finish the
+        // revoke now (no-op offline; retried on 'online').
+        if (hasPendingLogout()) {
+            setAuthStatus('anonymous');
+            void agriSyncClient.completePendingLogout().catch(() => undefined);
+            return;
+        }
+
         // Even if we have a valid-looking access token in storage, we still
         // attempt a refresh to validate the server-side session. This prevents
         // a stale access token from being treated as truth — but a failure to
@@ -173,6 +231,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .then(applyRefreshOutcome)
             .catch(() => applyRefreshOutcome({ kind: 'unreachable' }));
     }, [applyRefreshOutcome]);
+
+    // Connectivity is back (or the app is foregrounded) while we are open on
+    // presence alone: re-run the refresh so a REAL token replaces the empty one
+    // before authenticated work resumes. A judged rejection clears the session
+    // (revoked/blocked users end here); 'unreachable' changes nothing. Only
+    // armed while in presence mode, so a normal session never refreshes extra.
+    const offlinePresence = authStatus === 'authenticated' && !session?.accessToken;
+    const presenceUserId = offlinePresence ? (session?.userId ?? null) : null;
+    useEffect(() => {
+        presenceUserRef.current = presenceUserId;
+    }, [presenceUserId]);
+    useEffect(() => {
+        if (!offlinePresence) {
+            return;
+        }
+
+        const retry = () => {
+            if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+                return;
+            }
+            void agriSyncClient.refreshSession()
+                .then(applyRefreshOutcome)
+                .catch(() => applyRefreshOutcome({ kind: 'unreachable' }));
+        };
+
+        window.addEventListener('online', retry);
+        document.addEventListener('visibilitychange', retry);
+        // The OS does not always raise 'online' (the API can simply come back
+        // while the radio never dropped), and the sync workers skip while the
+        // token is empty - so nothing else would ever recover the session.
+        // Same cadence as the sync tick. It goes through the very same
+        // single-flight refreshSession + applyRefreshOutcome as the events
+        // above: 'unreachable' changes nothing, 'rejected' signs out, and the
+        // interval exists only while in presence mode (the effect is torn down
+        // the moment a real token arrives or the user logs out).
+        const tick = window.setInterval(retry, PRESENCE_RETRY_INTERVAL_MS);
+        return () => {
+            window.removeEventListener('online', retry);
+            document.removeEventListener('visibilitychange', retry);
+            window.clearInterval(tick);
+        };
+    }, [offlinePresence, applyRefreshOutcome]);
+
+    // Finish an owed server-side revoke on every reachable moment. Never
+    // re-signs anyone in: it only tells the server to revoke, then clears the
+    // pending marker. A no-op when nothing is pending.
+    useEffect(() => {
+        const settle = () => {
+            void agriSyncClient.completePendingLogout().catch(() => undefined);
+        };
+        window.addEventListener('online', settle);
+        return () => window.removeEventListener('online', settle);
+    }, []);
 
     useEffect(() => {
         const onStorage = (event: StorageEvent) => {
@@ -198,6 +309,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsLoading(true);
         setAuthError(null);
         try {
+            await settlePendingLogoutBeforeSignIn();
             const response = await agriSyncClient.login({
                 phone,
                 password,
@@ -226,6 +338,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsLoading(true);
         setAuthError(null);
         try {
+            await settlePendingLogoutBeforeSignIn();
             const response = await agriSyncClient.register({
                 phone,
                 password,
@@ -251,29 +364,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, []);
 
     // spec: secure-remembered-device-sessions-2026-06-24 / Task 6.1
-    // logout is ASYNC: call backend revoke FIRST, then ALWAYS clear local
-    // state even when the backend call fails (fail-closed guarantee).
-    // Order:
-    //   1. POST /user/auth/logout (backend revoke) — wrapped in try/catch;
-    //      error is logged but does NOT abort cleanup.
-    //   2. clearAuthSession() — wipes the access token from localStorage.
-    //   3. clearCachedDek() — drops in-memory tenant DEK.
-    //      (data-principle-spine-2026-05-05/05.3)
-    //   4. clearCachedConsentToken() — drops in-memory consent token.
-    //      (data-principle-spine-2026-05-05/06.5)
-    //   5. clearRememberDevice() — removes the remember-device flag so a
-    //      fresh login is required before the next refresh cycle honours it.
-    //   6. clearNativeRefreshSession() — web no-op; Android Keystore wipe.
-    //   7. Set session null + authStatus 'anonymous'.
+    // logout is ASYNC and signs the farmer out LOCALLY AT ONCE; the server
+    // revoke is attempted last and, if the phone is offline, stays owed
+    // (PendingLogoutStore marker) and is retried on boot / 'online'.
+    // Order: beginLogout (marker; Android token -> pending-revoke slot) ->
+    // clearAuthSession -> clear DEK / consent token / remember-device / native
+    // slot -> state anonymous -> completePendingLogout (network, last).
     const logout = useCallback(async () => {
+        // 1. Record the owed server revoke (non-secret marker; on Android the
+        //    token moves to a separate pending-revoke slot). Local, no network.
         try {
-            await agriSyncClient.logoutCurrentDevice();
+            await agriSyncClient.beginLogout();
         } catch (err) {
-            // Backend revoke failed (network error, 401, etc.).
-            // Record the error but proceed with local cleanup unconditionally.
-            console.error('[AuthProvider] Backend logout failed — clearing local state regardless', err);
+            console.error('[AuthProvider] Could not record pending logout - signing out locally anyway', err);
         }
-        // Always clear — even when the backend call threw.
+        // 2. Sign out locally AT ONCE - never waits for the network.
         clearAuthSession();
         // spec: data-principle-spine-2026-05-05/05.3
         clearCachedDek();
@@ -285,6 +390,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSession(null);
         setAuthStatus('anonymous');
         setAuthError(null);
+        // 3. Now ask the server to revoke. Failure leaves the marker; it is
+        //    retried on every boot / 'online' and boot will not re-sign-in.
+        try {
+            await agriSyncClient.completePendingLogout();
+        } catch (err) {
+            console.error('[AuthProvider] Backend logout failed - will retry when online', err);
+        }
     }, []);
 
     const value = useMemo<AuthContextValue>(() => ({
@@ -292,13 +404,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         authStatus,
         isAuthenticated: authStatus === 'authenticated',
         isLoading,
+        isOfflinePresence: offlinePresence,
         authError,
         login,
         register,
         logout,
         refresh,
         clearAuthError,
-    }), [session, authStatus, isLoading, authError, login, register, logout, refresh, clearAuthError]);
+    }), [session, authStatus, isLoading, offlinePresence, authError, login, register, logout, refresh, clearAuthError]);
 
     return (
         <AuthContext.Provider value={value}>

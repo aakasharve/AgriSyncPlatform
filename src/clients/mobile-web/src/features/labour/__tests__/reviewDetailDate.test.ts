@@ -5,15 +5,19 @@
  *
  * reviewDetailDate tests — Decision 4b (2026-07-19, screen honesty).
  *
- * Locks two behaviours:
- *   - `formatReviewDetail` recognises the backend's bare `yyyy-MM-dd` shape
- *     and reformats it (आज/काल/"१९ जुलै"); anything else passes through
- *     unchanged (never invents content for a non-date `detail`).
- *   - `isReviewDetailWithinDays` bounds only parseable ISO dates; a
- *     non-date `detail` (mock/preview) is always kept.
+ * Locks one behaviour: `formatReviewDetail` recognises the backend's bare
+ * `yyyy-MM-dd` shape and reformats it (आज/काल/"१९ जुलै"); anything else passes
+ * through unchanged (never invents content for a non-date `detail`).
+ *
+ * Task 20 (spec: 2026-08-28-labour-v2-release-1) — the `isReviewDetailWithinDays`
+ * block that stood below is gone with the helper it covered. It proved the
+ * तपासणी queue dropped anything older than 14 days, which is the defect:
+ * the तपासा badge counted the unbounded server total, so badge and list
+ * disagreed and older work became unreachable. `reviewQueueTruth.test.ts`
+ * now pins the opposite property.
  */
 import { describe, it, expect } from 'vitest';
-import { formatReviewDetail, isReviewDetailWithinDays, parseReviewDetailDate } from '../reviewDetailDate';
+import { formatReviewDetail, parseReviewDetailDate } from '../reviewDetailDate';
 
 describe('parseReviewDetailDate', () => {
     it('parses an exact yyyy-MM-dd string', () => {
@@ -52,22 +56,5 @@ describe('formatReviewDetail', () => {
     it('passes a non-date detail string through unchanged (mock/preview)', () => {
         expect(formatReviewDetail('द्राक्ष-२ · आज', today)).toBe('द्राक्ष-२ · आज');
         expect(formatReviewDetail('detail-r1', today)).toBe('detail-r1');
-    });
-});
-
-describe('isReviewDetailWithinDays', () => {
-    const today = new Date(2026, 6, 19);
-
-    it('keeps a date within the bound', () => {
-        expect(isReviewDetailWithinDays('2026-07-10', 14, today)).toBe(true); // 9 days old
-    });
-
-    it('drops a date older than the bound', () => {
-        expect(isReviewDetailWithinDays('2026-06-01', 14, today)).toBe(false); // ~48 days old
-    });
-
-    it('keeps a non-date detail string regardless (mock/preview never bounded)', () => {
-        expect(isReviewDetailWithinDays('द्राक्ष-२ · आज', 14, today)).toBe(true);
-        expect(isReviewDetailWithinDays('detail-anything', 14, today)).toBe(true);
     });
 });

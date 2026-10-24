@@ -1,4 +1,5 @@
-﻿using AgriSync.BuildingBlocks.Application;
+﻿using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
@@ -28,7 +29,7 @@ namespace ShramSafal.Application.UseCases.Memberships.GetLabourPermissions;
 /// has no authority to describe, and listing them would invite an owner to
 /// "revoke" a capability from someone who already has no membership.</para>
 /// </summary>
-public sealed class GetLabourPermissionsHandler(IShramSafalRepository repository)
+public sealed class GetLabourPermissionsHandler(IShramSafalRepository repository, IClock clock)
     : IHandler<GetLabourPermissionsQuery, IReadOnlyList<LabourPermissionDto>>
 {
     public async Task<Result<IReadOnlyList<LabourPermissionDto>>> HandleAsync(
@@ -57,10 +58,35 @@ public sealed class GetLabourPermissionsHandler(IShramSafalRepository repository
         // the CALLER'S OWN membership rows on every farm. Re-asserting the farm
         // here is what stops a foreign-farm row of the caller's own reaching this
         // list.
-        var rows = memberships
+        // R1 Task 2.2 — one instant for the whole roster, from the injected
+        // clock: the projection evaluates expiry through the SAME domain rule
+        // the gate's SQL predicate translates, so the list and the gate cannot
+        // disagree about whether a grant is still live.
+        var now = clock.UtcNow;
+        var members = memberships
             .Where(m => m.FarmId == query.FarmId && !m.IsTerminal)
             .OrderBy(m => m.GrantedAtUtc)
-            .Select(LabourPermissionProjection.From)
+            .ToList();
+
+        // Team completeness (release 1.0.13). The owner's Team page is built from
+        // /sync/pull operators, whose ROLE comes from public.memberships - a table
+        // whose RLS policy hides every row but the caller's own - so a Mukadam read
+        // as a worker and a co-owner was missing. This owner-tier-only roster is
+        // the existing owner-protected source that already carries the real role;
+        // only the NAME was missing. Names come from the public.users directory
+        // (global, no RLS), keyed by the SAME ids this farm-scoped, owner-gated
+        // read already returned - no id outside this farm's members is looked up,
+        // and the role the directory query computes is deliberately NOT used.
+        var directory = members.Count == 0
+            ? []
+            : await repository.GetOperatorsByIdsAsync(members.Select(m => m.UserId.Value), ct);
+        var nameByUser = directory
+            .Where(o => !string.IsNullOrWhiteSpace(o.DisplayName))
+            .ToDictionary(o => o.UserId, o => o.DisplayName);
+
+        var rows = members
+            .Select(m => LabourPermissionProjection.From(
+                m, now, nameByUser.TryGetValue(m.UserId.Value, out var name) ? name : null))
             .ToArray();
 
         return Result.Success<IReadOnlyList<LabourPermissionDto>>(rows);

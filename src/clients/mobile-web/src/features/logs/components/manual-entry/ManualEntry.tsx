@@ -31,7 +31,7 @@ import { isFarmWideSelection } from '../../../../app/helpers/appContentDailyCoun
 import { emitClosureSubmitted } from '../../../../core/telemetry/eventEmitters';
 import { useFarmContext } from '../../../../core/session/FarmContext';
 
-const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, profile, onSubmit, initialData, provenance, onDataConsumed, todayCountsMap, farmWideToday, transcriptEntries = [], todayLogs = [], onLogSelect, recordedDateKey }) => {
+const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, profile, onSubmit, initialData, provenance, onDataConsumed, todayCountsMap, farmWideToday, transcriptEntries = [], todayLogs = [], onLogSelect, recordedDateKey, attendanceOnly = false, captureScope }) => {
 
     // DWC v2 §2.8 — closure.submitted emit context. The downstream
     // logCommandService generates the persisted DailyLog.id, so for
@@ -359,7 +359,10 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                 ? undefined
                 : (provenance ?? (formOriginRef.current === 'blank'
                     ? { source: 'manual' as const, timestamp: new Date().toISOString() }
-                    : undefined))
+                    : undefined)),
+            // Labour door: a NEW record says so (see ManualEntryProps.captureScope).
+            // Never on an edit: that record's scope is its own.
+            ...(captureScope && !selectedLogId ? { captureScope } : {}),
         };
 
         if (initialAiDataRef.current && provenance?.source === 'ai') {
@@ -566,7 +569,13 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                 totalWorkerCount={totalWorkerCount}
             />
 
-            {/* ACTIVITY LEDGER FORM */}
+            {/* ACTIVITY LEDGER FORM — hidden on the हजेरी path. With the draft
+                already filtered to labour only, this would render its
+                "No activities logged today" empty state, which on a screen
+                the farmer opened to name four people reads as a failure
+                rather than the correct answer. The labour review above is
+                the whole record on this path. */}
+            {!attendanceOnly && (
             <ActivityLedger
                 selectedLogId={selectedLogId}
                 cropActivities={cropActivities}
@@ -592,6 +601,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
                 onRefineWorkType={handleRefineWorkType}
                 onUpdateIssue={updateIssue}
             />
+            )}
 
 
             {/* TODO CEI §4.4: Wire ExecutionStatusSelector here for each ActivityCard.

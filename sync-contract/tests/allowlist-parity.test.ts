@@ -49,7 +49,7 @@ const HANDLER_PATH = resolve(
 // fourteenth allow-list exists and its parity now holds; lowering it, or
 // deleting the assertion, would be the exact "green check becomes
 // meaningless" failure the comment below names.
-const EXPECTED_ALLOWLIST_COUNT = 14;
+const EXPECTED_ALLOWLIST_COUNT = 15;
 
 // The mutations that carry a server allow-list today. A mutation dispatched
 // to a handler with no `PayloadHasOnly` guard (jobcard.*, compliance.*) is
@@ -68,6 +68,7 @@ const EXPECTED_GUARDED_MUTATIONS = [
     // it is guarded HERE and not there — hence the count move above.
     'verify_log_v2',
     'add_cost_entry',
+    'attendance.mark',
     'allocate_global_expense',
     'correct_cost_entry',
     'set_price_config',

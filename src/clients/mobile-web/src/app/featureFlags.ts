@@ -86,16 +86,7 @@ export const FEATURE_FLAGS = {
      */
     dailyLoop: isEnabled('VITE_DAILY_LOOP'),
 
-    /**
-     * Task 1B (spec: dfes-companion-2026-07-11) — ONE Task 1A intelligence
-     * fact rendered below the clarity line on the Saved-to-Ledger success
-     * card. SEPARATE from `dailyLoop` on purpose (Decision 3B deferred the
-     * fact/insight fallback): the founder can turn the daily-loop reward on
-     * WITHOUT the facts. Default OFF (env VITE_INTELLIGENCE_INSIGHTS
-     * absent -> false); when OFF this is a byte-equivalent no-op.
-     */
-    intelligenceInsights: isEnabled('VITE_INTELLIGENCE_INSIGHTS'),
-
+    
     /**
      * Task 5 (spec: dfes-companion-2026-07-11) — "राहिलं → झालं" suggest-and-
      * confirm task close. Gates BOTH the `findConfirmableTaskCloses` matcher
@@ -107,18 +98,7 @@ export const FEATURE_FLAGS = {
      */
     taskCloseConfirm: isEnabled('VITE_TASK_CLOSE_CONFIRM'),
 
-    /**
-     * Task 7 (spec: dfes-companion-2026-07-11) — daily 7am "आजची कामे पाहा"
-     * native local notification (Capacitor `@capacitor/local-notifications`)
-     * that opens the app to today's tasks (`/?nudge=open-today`). Gates BOTH
-     * the permission request AND the schedule call — OFF means no permission
-     * prompt and no scheduled notification is ever created. Default OFF (env
-     * VITE_MORNING_NOTIFICATION absent -> false); when OFF this is a
-     * byte-equivalent no-op (native rebuild + real-device verification is a
-     * separate founder gate before this can be flipped on).
-     */
-    morningNotification: isEnabled('VITE_MORNING_NOTIFICATION'),
-
+    
     /**
      * Task 8 (spec: dfes-companion-2026-07-11) — "Sathi talks back": ONE
      * short warm Marathi line, spoken once ever per farm, when the farmer

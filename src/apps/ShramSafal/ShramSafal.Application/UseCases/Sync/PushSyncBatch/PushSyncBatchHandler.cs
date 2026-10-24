@@ -27,6 +27,7 @@ using ShramSafal.Application.UseCases.Finance.AddCostEntry;
 using ShramSafal.Application.UseCases.Finance.AllocateGlobalExpense;
 using ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
 using ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion;
+using ShramSafal.Application.UseCases.Labour;
 using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
@@ -40,6 +41,7 @@ using ShramSafal.Application.UseCases.Work.SettleJobCardPayout;
 using ShramSafal.Application.UseCases.Work.StartJobCard;
 using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Location;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Tests;
@@ -90,6 +92,9 @@ public sealed class PushSyncBatchHandler(
     // on the sync path. The ordering win is endpoint-only.
     IHandler<VerifyLogCommand, DailyLogDto> verifyLogHandler,
     AddCostEntryHandler addCostEntryHandler,
+    // Labour V2 R1 Task 3.5b — the attendance write path rides the existing
+    // sync pipeline; no second offline system, no new REST route.
+    ShramSafal.Application.UseCases.Labour.RecordAttendanceMark.RecordAttendanceMarkHandler recordAttendanceMarkHandler,
     AllocateGlobalExpenseHandler allocateGlobalExpenseHandler,
     CorrectCostEntryHandler correctCostEntryHandler,
     SetPriceConfigVersionHandler setPriceConfigVersionHandler,
@@ -669,6 +674,8 @@ public sealed class PushSyncBatchHandler(
                 return await HandleTestInstanceCollectedAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "testinstance.reported":
                 return await HandleTestInstanceReportedAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+            case "attendance.mark":
+                return await HandleAttendanceMarkAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "compliance.acknowledge":
                 return await HandleComplianceAcknowledgeAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "compliance.resolve":
@@ -823,17 +830,26 @@ public sealed class PushSyncBatchHandler(
         }
 
         var result = await createCropCycleHandler.HandleAsync(
+            // Stage A0 Task 3 — named arguments, deliberately. This call was fully
+            // positional, with ActorRole sitting between two same-typed neighbours.
+            // Removing that parameter would have slid actorRole into ClientCommandId
+            // and clientRequestId into ClientAppVersion — string into string, so the
+            // compiler would have stayed silent while the audit ledger recorded the
+            // role as a command id. Naming them makes any future removal a build error.
+            // Behaviour-neutral: every argument binds exactly as it did before.
             new CreateCropCycleCommand(
-                request.FarmId,
-                request.PlotId,
-                request.CropName,
-                request.Stage,
-                request.StartDate,
-                request.EndDate,
-                actorUserId,
-                request.CropCycleId,
-                actorRole,
-                clientRequestId),
+                FarmId: request.FarmId,
+                PlotId: request.PlotId,
+                CropName: request.CropName,
+                Stage: request.Stage,
+                StartDate: request.StartDate,
+                EndDate: request.EndDate,
+                ActorUserId: actorUserId,
+                CropCycleId: request.CropCycleId,
+                // Stage A0 / A3 — ActorRole no longer travels on the command; the handler
+                // resolves the role on the target farm. This argument's removal was caught
+                // by the compiler ONLY because Task 3 made this call named first.
+                ClientCommandId: clientRequestId),
             ct);
 
         return ToOutcome(result);
@@ -856,7 +872,8 @@ public sealed class PushSyncBatchHandler(
         // LABOUR_PHASE2 P2.2 adds "scope" and "plotIds" here, in lockstep with
         // sync-contract/schemas/payloads/create_daily_log.zod.ts and the
         // generated CreateDailyLogPayload record.
-        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "scope", "plotIds", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId", "labour", "manualDraft"))
+        // B002 adds "captureScope" (which door captured the record), same lockstep.
+        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "scope", "plotIds", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId", "labour", "manualDraft", "captureScope"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -872,6 +889,15 @@ public sealed class PushSyncBatchHandler(
         if (ValidateManualDraft(payload) is { } draftFailure)
         {
             return draftFailure;
+        }
+
+        // spec: 2026-08-25-prod-cutover-waves — the names a farmer gave for each
+        // engagement. Same boundary, same posture as the manual draft above:
+        // shape and size only, loud on violation, ABSENT = skipped, which is what
+        // every shipped APK sends (none has ever carried the field).
+        if (ValidateLabourWorkerNames(payload) is { } namesFailure)
+        {
+            return namesFailure;
         }
 
         var request = DeserializePayload<CreateDailyLogPayload>(payload);
@@ -919,6 +945,27 @@ public sealed class PushSyncBatchHandler(
                 return MutationExecutionOutcome.Failure(
                     "ShramSafal.SyncInvalidPayload",
                     "create_daily_log payload carries an unrecognised scope.");
+        }
+
+        // B002 (PR #82 review), founder ruling 2026-08-31 — which door captured the
+        // record. Absent => the whole parse, which is what every older client means.
+        // "labour" => derive the labour bucket only. Anything else is REFUSED, never
+        // read as absent: an unknown door silently widened to the whole parse would
+        // write exactly the records this field exists to keep out (P1). Exact match,
+        // like the zod enum it mirrors. Checked here, before any write is staged.
+        DailyLogCaptureScope captureScope;
+        switch (request.CaptureScope)
+        {
+            case null:
+                captureScope = DailyLogCaptureScope.WholeDay;
+                break;
+            case "labour":
+                captureScope = DailyLogCaptureScope.Labour;
+                break;
+            default:
+                return MutationExecutionOutcome.Failure(
+                    "ShramSafal.SyncInvalidPayload",
+                    "create_daily_log payload carries an unrecognised captureScope.");
         }
 
         // Fix 1 (ai-intelligence-plan-2026-06-25) — establish the membership-
@@ -980,7 +1027,9 @@ public sealed class PushSyncBatchHandler(
                 PlotIds: request.PlotIds,
                 // task-0b — the farmer's typed day. Null on voice confirms and on every
                 // client older than this contract, which is the pre-task-0b path exactly.
-                ManualDraft: request.ManualDraft),
+                ManualDraft: request.ManualDraft,
+                // B002 — the door, mapped strictly above.
+                CaptureScope: captureScope),
             ct);
 
         return ToOutcome(result);
@@ -1052,6 +1101,101 @@ public sealed class PushSyncBatchHandler(
                 return MutationExecutionOutcome.Failure(
                     "ShramSafal.SyncInvalidPayload",
                     $"create_daily_log manualDraft bucket '{bucket.Name}' must be an array.");
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// spec: 2026-08-25-prod-cutover-waves. Boundary check for the OPTIONAL
+    /// <c>labour[].workerNames</c> on <c>create_daily_log</c>: when present it must be an
+    /// array of strings, at most <see cref="LabourAssignmentFactory.MaxWorkerNamesPerEngagement"/>
+    /// long, each name at most <see cref="LabourAssignmentFactory.MaxWorkerNameLength"/>
+    /// after trimming. Returns <c>null</c> when every engagement is acceptable, or the
+    /// failure outcome to return to the client.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>What it does NOT police, on purpose.</b> A blank or <c>null</c> entry is
+    /// "no name", not malformed: <c>LabourAssignment.Create</c>'s own write boundary
+    /// already sheds it (B002), so rejecting the farmer's whole day over it would let an
+    /// optional field reject a record (P9). Names out-numbering the stated headcount are
+    /// accepted too: the count is the farmer's statement and names are an overlay on it
+    /// (P7), so a mismatch is something to show him, never a reason to refuse him.</para>
+    /// <para><b>Why loud, not trimmed.</b> Silently dropping names is the very defect
+    /// this field was added to close, so an over-bound list is refused whole, exactly as
+    /// an over-sized manual draft is. The bounds sit far above any real dictation.</para>
+    /// <para>Property names are matched case-insensitively because
+    /// <see cref="SerializerOptions"/> deserializes them that way: a check the
+    /// deserializer can be steered around by casing is not a boundary.</para>
+    /// </remarks>
+    private static MutationExecutionOutcome? ValidateLabourWorkerNames(JsonElement payload)
+    {
+        if (payload.ValueKind != JsonValueKind.Object)
+        {
+            return null; // PayloadHasOnly has already refused a non-object payload.
+        }
+
+        foreach (var labour in payload.EnumerateObject())
+        {
+            // Not an array: a shape DeserializePayload owns, exactly as before this check.
+            if (!string.Equals(labour.Name, "labour", StringComparison.OrdinalIgnoreCase)
+                || labour.Value.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var item in labour.Value.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                foreach (var field in item.EnumerateObject())
+                {
+                    if (!string.Equals(field.Name, "workerNames", StringComparison.OrdinalIgnoreCase)
+                        || field.Value.ValueKind == JsonValueKind.Null)
+                    {
+                        continue; // absent and null both mean "no names given".
+                    }
+
+                    if (field.Value.ValueKind != JsonValueKind.Array)
+                    {
+                        return MutationExecutionOutcome.Failure(
+                            "ShramSafal.SyncInvalidPayload",
+                            "create_daily_log labour[].workerNames must be an array of strings.");
+                    }
+
+                    if (field.Value.GetArrayLength() > LabourAssignmentFactory.MaxWorkerNamesPerEngagement)
+                    {
+                        return MutationExecutionOutcome.Failure(
+                            "ShramSafal.SyncInvalidPayload",
+                            $"create_daily_log labour[].workerNames exceeds {LabourAssignmentFactory.MaxWorkerNamesPerEngagement} names.");
+                    }
+
+                    foreach (var name in field.Value.EnumerateArray())
+                    {
+                        if (name.ValueKind == JsonValueKind.Null)
+                        {
+                            continue;
+                        }
+
+                        if (name.ValueKind != JsonValueKind.String)
+                        {
+                            return MutationExecutionOutcome.Failure(
+                                "ShramSafal.SyncInvalidPayload",
+                                "create_daily_log labour[].workerNames must be an array of strings.");
+                        }
+
+                        if (name.GetString()!.Trim().Length > LabourAssignmentFactory.MaxWorkerNameLength)
+                        {
+                            return MutationExecutionOutcome.Failure(
+                                "ShramSafal.SyncInvalidPayload",
+                                $"create_daily_log labour[].workerNames has a name longer than {LabourAssignmentFactory.MaxWorkerNameLength} characters.");
+                        }
+                    }
+                }
             }
         }
 
@@ -1625,6 +1769,98 @@ public sealed class PushSyncBatchHandler(
         return ToOutcome(result);
     }
 
+    private async Task<MutationExecutionOutcome> HandleAttendanceMarkAsync(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken ct)
+    {
+        // Set equality with attendance_mark.zod.ts is enforced by
+        // sync-contract/tests/allowlist-parity.test.ts, which parses THIS line —
+        // so it must stay on one line.
+        if (!PayloadHasOnly(payload, "attendanceMarkId", "farmId", "fieldOperatorId", "workDate", "dayMark", "nightMark", "hoursWorked", "extraHours", "resolvedLabourAssignmentId"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "attendance.mark payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<AttendanceMarkPayload>(payload);
+        if (request is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for attendance.mark.");
+        }
+
+        // Closed vocabularies, mapped TOTALLY like `direction` in
+        // HandleAddCostEntryAsync. Absence = null = "this door said NOTHING
+        // about that half" (B002): every capture door speaks ONE half per
+        // mark, so on a first mark a null half lands as Unmarked ("nobody
+        // said") and on an amend it PRESERVES the stored fact — never a
+        // full-replace that erases a stated half with an unspoken one. An
+        // unrecognised value is a broken producer and is refused, never
+        // demoted to unknown.
+        DayMark? day;
+        switch (request.DayMark)
+        {
+            case null or "": day = null; break;
+            case "Full": day = DayMark.Full; break;
+            case "Half": day = DayMark.Half; break;
+            case "Absent": day = DayMark.Absent; break;
+            default:
+                return MutationExecutionOutcome.Failure(
+                    "ShramSafal.SyncInvalidPayload", "attendance.mark payload carries an unrecognised dayMark.");
+        }
+        NightMark? night;
+        switch (request.NightMark)
+        {
+            case null or "": night = null; break;
+            case "Worked": night = NightMark.Worked; break;
+            case "NotWorked": night = NightMark.NotWorked; break;
+            default:
+                return MutationExecutionOutcome.Failure(
+                    "ShramSafal.SyncInvalidPayload", "attendance.mark payload carries an unrecognised nightMark.");
+        }
+
+        // WorkDate arrives as the generated payload's DateOnly (the zod
+        // YYYY-MM-DD regex maps to DateOnly in generate-csharp-payloads.ts) —
+        // a malformed date fails DESERIALIZATION above and lands, named, in
+        // the batch loop's SyncMutationUnhandled guard, the same posture as
+        // add_cost_entry's entryDate. No second parse here to drift from it.
+
+        // C5 — /sync/ is on TenantTransactionMiddleware's skip list (:225), so no
+        // GUC is set until this call, and p_tenant_attendance_marks' WITH CHECK
+        // (20260831180408:57) would refuse the INSERT with a NULL comparison.
+        // EstablishFarmScopeForDerivationAsync is what makes the mark writable here.
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
+
+        var result = await recordAttendanceMarkHandler.HandleAsync(
+            new UseCases.Labour.RecordAttendanceMark.RecordAttendanceMarkCommand(
+                request.AttendanceMarkId, request.FarmId, request.FieldOperatorId, request.WorkDate,
+                day, night, request.HoursWorked, request.ExtraHours,
+                request.ResolvedLabourAssignmentId, actorUserId),
+            ct);
+
+        if (result.IsSuccess
+            && result.Value.Outcome == UseCases.Labour.RecordAttendanceMark.AttendanceDayOutcome.Contradicted)
+        {
+            // A fact the OWNER must rule on, surfaced to the device as a
+            // PERMANENT rejection (the answer arrives as a NEW mutation carrying
+            // resolvedLabourAssignmentId — re-pushing these bytes can never
+            // succeed). Nothing was staged: the check runs pre-staging, so the
+            // rollback above this frame has nothing to lose.
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.AttendanceContradiction",
+                "Two of today's works claim different attendance for this person. Answer in Labour, then it will sync.");
+        }
+
+        return ToOutcome(result);
+    }
+
     private async Task<MutationExecutionOutcome> HandleAllocateGlobalExpenseAsync(
         string clientRequestId,
         JsonElement payload,
@@ -1841,16 +2077,24 @@ public sealed class PushSyncBatchHandler(
         }
 
         var result = await createAttachmentHandler.HandleAsync(
+            // Stage A0 Task 3 — named arguments; see HandleCreateCropCycleAsync for why.
+            // Note CreatedByUserId, NOT ActorUserId: this record names its actor
+            // differently from CreateCropCycleCommand. It is deliberately the
+            // token-derived actorUserId and never request.CreatedByUserId — trusting
+            // the client's claim of who created an attachment would be an attribution
+            // regression. Behaviour-neutral: every argument binds exactly as before.
             new CreateAttachmentCommand(
-                request.FarmId,
-                request.LinkedEntityId,
-                request.LinkedEntityType,
-                request.FileName,
-                request.MimeType,
-                actorUserId,
-                attachmentId,
-                actorRole,
-                clientRequestId),
+                FarmId: request.FarmId,
+                LinkedEntityId: request.LinkedEntityId,
+                LinkedEntityType: request.LinkedEntityType,
+                FileName: request.FileName,
+                MimeType: request.MimeType,
+                CreatedByUserId: actorUserId,
+                AttachmentId: attachmentId,
+                // Stage A0 / A3 — ActorRole no longer travels on the command; the handler
+                // resolves the role on the target farm. Caught by the compiler ONLY because
+                // Task 3 made this call named first.
+                ClientCommandId: clientRequestId),
             ct);
 
         return ToOutcome(result);

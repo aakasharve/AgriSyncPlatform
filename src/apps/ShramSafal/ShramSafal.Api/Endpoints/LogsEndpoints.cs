@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
@@ -177,6 +178,7 @@ public static class LogsEndpoints
             Guid id,
             ClaimsPrincipal user,
             IShramSafalRepository repository,
+            IClock clock,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var callerUserId))
@@ -213,7 +215,7 @@ public static class LogsEndpoints
             // granted approval authority, and the device would hide a button the server
             // would have honoured. Same stored grant the decision path reads.
             var hasLabourManagementGrant = await LabourManagementGate.HasExplicitGrantAsync(
-                repository, (Guid)log.FarmId, callerUserId, ct);
+                repository, (Guid)log.FarmId, callerUserId, clock.UtcNow, ct);
 
             var currentStatus = log.CurrentVerificationStatus;
             var availableTransitions = VerificationStateMachine

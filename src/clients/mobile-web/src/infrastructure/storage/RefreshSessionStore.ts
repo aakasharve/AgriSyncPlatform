@@ -20,6 +20,7 @@
 
 import { Capacitor } from '@capacitor/core';
 import { SecureStorage } from '@aparajita/capacitor-secure-storage';
+import { SERVER_REFRESH_LIFETIME_MS } from './refreshCredentialLife';
 
 export interface NativeRefreshSession {
     refreshToken: string;
@@ -102,5 +103,68 @@ export async function clearNativeRefreshSession(): Promise<void> {
         await SecureStorage.remove(STORAGE_KEY);
     } catch {
         // Ignore — key may not exist; either way the session is gone.
+    }
+}
+
+// ---------------------------------------------------------------------------
+// PENDING-REVOKE slot (Android only)
+//
+// When a farmer logs out we must tell the server to revoke the refresh token,
+// but the phone may be offline. Deleting the token first (as before) leaves it
+// valid on the server for up to its 30-day life. So the token is MOVED into this
+// separate Keystore slot: same protection as the live slot, but
+//   - it is never read by refresh/boot (only by the revoke call),
+//   - it is deleted the moment the revoke succeeds (or the server judges it),
+//   - it is deleted after PENDING_REVOKE_MAX_AGE_MS regardless: the server credential's
+//     whole life (30 days from the logout is an upper bound on its remaining life), so it
+//     cannot linger past the point it could matter. NOT the 14-day offline reopening
+//     window: founder 2026-10-12, protection lasts until revoked or expired.
+// Web has no equivalent: the HttpOnly cookie IS the credential and the revoke
+// call carries it automatically.
+// ---------------------------------------------------------------------------
+
+const PENDING_REVOKE_KEY = 'agrisync_native_pending_revoke_v1';
+export const PENDING_REVOKE_MAX_AGE_MS = SERVER_REFRESH_LIFETIME_MS;
+
+export async function stashPendingRevoke(refreshToken: string): Promise<void> {
+    if (!isNativeSecureRefreshEnabled()) {
+        return;
+    }
+    await SecureStorage.set(PENDING_REVOKE_KEY, JSON.stringify({
+        refreshToken,
+        stashedAtUtc: new Date().toISOString(),
+    }));
+}
+
+export async function getPendingRevoke(): Promise<string | null> {
+    if (!isNativeSecureRefreshEnabled()) {
+        return null;
+    }
+    try {
+        const raw = await SecureStorage.get(PENDING_REVOKE_KEY);
+        if (typeof raw !== 'string') {
+            return null;
+        }
+        const parsed = JSON.parse(raw) as { refreshToken?: string; stashedAtUtc?: string };
+        const at = Date.parse(parsed.stashedAtUtc ?? '');
+        if (typeof parsed.refreshToken !== 'string' || Number.isNaN(at)
+            || Date.now() - at > PENDING_REVOKE_MAX_AGE_MS) {
+            await clearPendingRevoke();
+            return null;
+        }
+        return parsed.refreshToken;
+    } catch {
+        return null;
+    }
+}
+
+export async function clearPendingRevoke(): Promise<void> {
+    if (!isNativeSecureRefreshEnabled()) {
+        return;
+    }
+    try {
+        await SecureStorage.remove(PENDING_REVOKE_KEY);
+    } catch {
+        // key may not exist
     }
 }

@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="mr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>State B — no headcount, verification cannot start</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700;800;900&family=Noto+Sans+Devanagari:wght@400;600;700;800&family=Noto+Serif+Devanagari:wght@600;700&display=swap">
+<style>
+  html, body { overflow-x: hidden; }
+  /* DM Sans carries no Devanagari — Noto fallback so Marathi in the English
+     annotation prose never lands on a system font. */
+  body { font-family: 'DM Sans', 'Noto Sans Devanagari', sans-serif; background: #eef1f4; }
+  .mr  { font-family: 'Noto Sans Devanagari', sans-serif; }
+  .mrh { font-family: 'Noto Serif Devanagari', serif; }
+  /* <code> would otherwise inherit Tailwind's ui-monospace/system-ui stack,
+     which is a generic fallback on visible text. */
+  body code { font-family: 'DM Sans', 'Noto Sans Devanagari', sans-serif !important; }
+  .num { font-family: 'DM Sans', sans-serif; font-variant-numeric: tabular-nums; }
+  .pulse-ring { animation: pr 2s cubic-bezier(0.4,0,0.6,1) infinite; }
+  @keyframes pr { 0%,100% { transform: scale(1); opacity: .55 } 50% { transform: scale(1.18); opacity: 0 } }
+</style>
+</head>
+<body class="text-slate-800">
+
+<!-- ══════════════════ HONESTY BANNER ══════════════════ -->
+<div class="border-b-4 border-yellow-400 bg-yellow-50 px-4 py-3">
+  <div class="mx-auto max-w-[860px]">
+    <p class="text-[13px] font-extrabold uppercase tracking-wide text-yellow-900">Mockup — not the live app</p>
+    <p class="mt-1 text-[12.5px] leading-relaxed text-yellow-900">
+      Static picture drawn at a <strong>390px reference width</strong>. Nothing here is wired to data, no
+      button does anything, and no number on this page came from a farm. Classes are lifted from the built
+      <code class="rounded bg-yellow-100 px-1 py-0.5">HajeriLedger.tsx</code> /
+      <code class="rounded bg-yellow-100 px-1 py-0.5">LabourUiKit.tsx</code> /
+      <code class="rounded bg-yellow-100 px-1 py-0.5">LabourHub.tsx</code> — the हजेरी baseline is not being redesigned.
+      Marathi is only shown where it is already approved; everywhere else the layout carries a
+      <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+      chip with the English meaning underneath.
+    </p>
+  </div>
+</div>
+
+<div class="mx-auto max-w-[860px] px-4 pb-16 pt-6">
+
+  <header class="mb-8">
+    <p class="text-[12px] font-bold uppercase tracking-wide text-slate-500">Labour R1 · screen 2 of 7</p>
+    <h1 class="mt-1 text-[26px] font-black leading-tight text-slate-900">State B — no headcount, verification cannot start</h1>
+    <p class="mt-2 max-w-[62ch] text-[13.5px] leading-relaxed text-slate-600">
+      The Main Log heard the day but understood no labour count at all. <strong>Main Log discovers. Labour verifies.</strong>
+      With nothing discovered, there is nothing to verify — so the verification mic is inactive. What must survive that:
+      the हजेरी वही stays open, the farmer is given the way forward, and the one real exception
+      (labour came, no work happened) still opens attendance.
+    </p>
+  </header>
+
+  <!-- ══════════════════ FRAME 1 ══════════════════ -->
+  <section class="mb-10">
+    <div class="mb-3 flex items-start gap-3">
+      <span class="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-full bg-slate-800 text-[13px] font-black text-white">1</span>
+      <p class="max-w-[60ch] text-[14px] leading-snug text-slate-700">
+        The Labour hub when today's main log carried no headcount — the verification mic is off, the reason under it
+        says what to do next, and the हजेरी वही sits right below it, fully open.
+      </p>
+    </div>
+
+    <div class="max-w-full overflow-x-auto pb-2">
+      <div class="w-[390px] overflow-hidden rounded-[26px] border border-slate-300 bg-slate-50 shadow-[0_12px_28px_-12px_rgba(15,23,42,0.35)]">
+
+        <!-- app bar -->
+        <div class="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="rotate-180 text-stone-400"><path d="m9 18 6-6-6-6"/></svg>
+          <span class="mr text-[19px] font-bold text-stone-800">कामगार व पैसे</span>
+        </div>
+
+        <div class="flex flex-col gap-2.5 px-4 pb-8 pt-2">
+
+          <!-- HERO — INACTIVE. Same box, same words, no emerald, no “उघडा” pill (a pill would promise a tap that does nothing). -->
+          <div class="relative flex w-full items-center gap-4 overflow-hidden rounded-[24px] border border-slate-200 bg-slate-100 p-5 text-left">
+            <span class="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-white text-slate-300 ring-1 ring-slate-200">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="mr block text-[23px] font-black leading-tight text-slate-400">बोलून हजेरी घ्या</span>
+            </span>
+          </div>
+
+          <!-- THE REASON — plain, actionable, attached under the inactive hero. Not an error card: no rose, no ⚠, no “failed”. -->
+          <div class="rounded-[20px] border border-stone-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <div class="flex items-start gap-3.5">
+              <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[14px] bg-blue-50 text-blue-600">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+                <span class="mt-1.5 block text-[11px] italic leading-relaxed text-slate-500">English meaning: “attendance verification needs a day's work to be recorded first — speak your day in the main log and come back”</span>
+              </span>
+            </div>
+
+            <!-- THE WAY FORWARD — the live route out. This is what stops the screen being a dead end. -->
+            <button type="button" class="mt-3.5 flex min-h-[60px] w-full items-center justify-center gap-2.5 rounded-[16px] bg-emerald-600 px-5 py-4 text-white transition-transform active:scale-[0.98]">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+              <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+            </button>
+            <span class="mt-1.5 block text-center text-[11px] italic text-slate-500">English meaning: “open the main log and speak today's work”</span>
+          </div>
+
+          <!-- THE CRITICAL CONTRAST — हजेरी वही, present and openable, immediately under the disabled hero. -->
+          <button type="button" class="flex min-h-[92px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-transform active:scale-[0.98]">
+            <span class="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[16px] bg-blue-100 text-blue-600">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="mr flex items-center gap-2 text-[19px] font-bold leading-tight text-stone-800">हजेरी वही</span>
+              <span class="mr mt-0.5 block truncate text-[16px] text-stone-500">सर्व दिवस</span>
+            </span>
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 text-stone-400"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+
+          <!-- the rest of the shipped hub grid, untouched -->
+          <div class="grid grid-cols-2 gap-2.5">
+            <button type="button" class="flex min-h-[92px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+              <span class="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[16px] bg-amber-100 text-amber-700">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+              </span>
+              <span class="min-w-0">
+                <span class="mr flex items-center gap-2 text-[19px] font-bold leading-tight text-stone-800">तपासा</span>
+                <span class="mr mt-0.5 block truncate text-[16px] text-stone-500">मंजूर करा</span>
+              </span>
+            </button>
+            <button type="button" class="flex min-h-[92px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+              <span class="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[16px] bg-violet-100 text-violet-600">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+              </span>
+              <span class="min-w-0">
+                <span class="mr flex items-center gap-2 text-[19px] font-bold leading-tight text-stone-800">आढावा</span>
+              </span>
+            </button>
+          </div>
+
+          <!-- THE EXCEPTION ROUTE — labour came, no work happened. Opens attendance (frame 3). -->
+          <button type="button" class="mt-1 flex min-h-[68px] w-full items-center gap-3.5 rounded-[16px] border border-stone-200 bg-white px-4 py-3 text-left transition-transform active:scale-[0.98]">
+            <span class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[14px] bg-orange-100 text-orange-600">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+              <span class="mt-1 block text-[11px] italic leading-relaxed text-slate-500">English meaning: “workers came but no work happened today”</span>
+            </span>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 text-stone-400"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-3 max-w-[62ch] rounded-xl border border-slate-200 bg-white p-3.5 text-[12.5px] leading-relaxed text-slate-600">
+      <strong class="text-slate-800">Why this passes the test.</strong> The screen asks for nothing the farmer already
+      gave — no plot, no crop, no count, no name. It states one fact about the day and hands him two live doors:
+      the main log, and the register.
+    </div>
+  </section>
+
+  <!-- ══════════════════ FRAME 2 ══════════════════ -->
+  <section class="mb-10">
+    <div class="mb-3 flex items-start gap-3">
+      <span class="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-full bg-slate-800 text-[13px] font-black text-white">2</span>
+      <p class="max-w-[60ch] text-[14px] leading-snug text-slate-700">
+        Tapping हजेरी वही from that same inactive-hero screen — the register opens exactly as it always does, with
+        today's column left blank because nobody has said yet.
+      </p>
+    </div>
+
+    <div class="max-w-full overflow-x-auto pb-2">
+      <div class="w-[390px] overflow-hidden rounded-[26px] border border-slate-300 bg-slate-50 shadow-[0_12px_28px_-12px_rgba(15,23,42,0.35)]">
+
+        <div class="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="rotate-180 text-stone-400"><path d="m9 18 6-6-6-6"/></svg>
+          <span class="mr text-[19px] font-bold text-stone-800">हजेरी वही</span>
+        </div>
+
+        <div class="flex flex-col gap-2.5 px-4 pb-8 pt-2">
+
+          <div class="flex items-center justify-center rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <span class="mr text-[13px] font-extrabold text-slate-800">हजेरी वही</span>
+          </div>
+
+          <div class="flex justify-center gap-4 p-1">
+            <span class="mr flex items-center gap-1.5 text-[12px] font-semibold text-slate-600"><span class="flex h-5 w-5 items-center justify-center rounded-md bg-emerald-50 text-emerald-700"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>आला</span>
+            <span class="mr flex items-center gap-1.5 text-[12px] font-semibold text-slate-600"><span class="flex h-5 w-5 items-center justify-center rounded-md bg-amber-100 text-[11px] font-extrabold text-amber-700">½</span>अर्धा</span>
+            <span class="mr flex items-center gap-1.5 text-[12px] font-semibold text-slate-600"><span class="flex h-5 w-5 items-center justify-center rounded-md bg-slate-100 text-[11px] font-extrabold text-slate-300">–</span>नाही</span>
+          </div>
+
+          <!-- the fourth mark has no approved word yet, and without one the blank column cannot be read -->
+          <div class="flex items-center justify-center gap-2 px-1">
+            <span class="h-5 w-5 flex-none rounded-md border border-dashed border-slate-200 bg-white"></span>
+            <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+            <span class="text-[11px] italic text-slate-500">English meaning: “nobody has said yet”</span>
+          </div>
+
+          <div class="overflow-x-auto rounded-[18px] border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <!-- header -->
+            <div class="flex items-center gap-2 border-b border-slate-100 pb-2">
+              <span class="mr w-[82px] flex-none text-[12.5px] font-extrabold text-slate-700">दिवस</span>
+              <span class="flex flex-1 gap-1.5">
+                <span class="mr flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">र</span>
+                <span class="mr flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">सो</span>
+                <span class="mr flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">मं</span>
+                <span class="mr flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">बु</span>
+                <span class="mr flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">गु</span>
+                <span class="mr flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">शु</span>
+                <span class="mr flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">श</span>
+              </span>
+              <span class="mr w-9 flex-none text-center text-[10px] font-bold text-slate-400">दिवस</span>
+            </div>
+
+            <!-- row 1 -->
+            <div class="flex items-center gap-2 py-1.5">
+              <span class="mr flex w-[82px] flex-none items-center gap-2 text-[12.5px] font-extrabold text-slate-700"><span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[9px] bg-violet-100 text-[12px] font-black text-violet-600">श</span>शंकर</span>
+              <span class="flex flex-1 gap-1.5">
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-slate-100 text-[12px] font-extrabold text-slate-300">–</span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-amber-100 text-[12px] font-extrabold text-amber-700">½</span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white text-[12px] font-extrabold text-slate-200"></span>
+              </span>
+              <span class="num w-9 flex-none text-center text-[15px] font-black text-slate-800">4</span>
+            </div>
+
+            <!-- row 2 -->
+            <div class="flex items-center gap-2 py-1.5">
+              <span class="mr flex w-[82px] flex-none items-center gap-2 text-[12.5px] font-extrabold text-slate-700"><span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[9px] bg-orange-100 text-[12px] font-black text-orange-600">ग</span>गणेश</span>
+              <span class="flex flex-1 gap-1.5">
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-slate-100 text-[12px] font-extrabold text-slate-300">–</span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white text-[12px] font-extrabold text-slate-200"></span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-slate-100 text-[12px] font-extrabold text-slate-300">–</span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white text-[12px] font-extrabold text-slate-200"></span>
+              </span>
+              <span class="num w-9 flex-none text-center text-[15px] font-black text-slate-800">3</span>
+            </div>
+
+            <!-- row 3 -->
+            <div class="flex items-center gap-2 py-1.5">
+              <span class="mr flex w-[82px] flex-none items-center gap-2 text-[12.5px] font-extrabold text-slate-700"><span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[9px] bg-emerald-50 text-[12px] font-black text-emerald-700">स</span>सुनीता</span>
+              <span class="flex flex-1 gap-1.5">
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-slate-100 text-[12px] font-extrabold text-slate-300">–</span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white text-[12px] font-extrabold text-slate-200"></span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-emerald-50 text-[12px] font-extrabold text-emerald-700"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white text-[12px] font-extrabold text-slate-200"></span>
+              </span>
+              <span class="num w-9 flex-none text-center text-[15px] font-black text-slate-800">4</span>
+            </div>
+
+            <!-- totals -->
+            <div class="mt-1 flex items-center gap-2 border-t border-slate-100 pt-2">
+              <span class="mr w-[82px] flex-none text-[12.5px] font-extrabold text-slate-700">एकूण</span>
+              <span class="flex flex-1 gap-1.5">
+                <span class="num flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">0</span>
+                <span class="num flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">3</span>
+                <span class="num flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">2</span>
+                <span class="num flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">3</span>
+                <span class="num flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">2</span>
+                <span class="num flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">2</span>
+                <!-- today: nothing was discovered, so no daily total exists. Never 0. -->
+                <span class="num flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">—</span>
+              </span>
+              <span class="num w-9 flex-none text-center text-[15px] font-black text-slate-800">—</span>
+            </div>
+          </div>
+
+          <div class="mr rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[11.5px] leading-relaxed text-slate-600">हिरवा = आला · पिवळा = अर्धा दिवस · राखाडी = नाही. शेवटचा आकडा = किती दिवस काम केलं.</div>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-3 max-w-[62ch] rounded-xl border border-slate-200 bg-white p-3.5 text-[12.5px] leading-relaxed text-slate-600">
+      <strong class="text-slate-800">The register is never gated by capture state.</strong> Today's column is
+      <em>blank</em>, not <code class="rounded bg-slate-100 px-1">–</code>. Blank means nobody said; the dash means he
+      did not come. The week total renders <code class="rounded bg-slate-100 px-1">—</code> rather than a number that
+      would quietly count today as zero.
+    </div>
+  </section>
+
+  <!-- ══════════════════ FRAME 3 ══════════════════ -->
+  <section class="mb-12">
+    <div class="mb-3 flex items-start gap-3">
+      <span class="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-full bg-slate-800 text-[13px] font-black text-white">3</span>
+      <p class="max-w-[60ch] text-[14px] leading-snug text-slate-700">
+        The one exception, reached from frame 1's bottom route — labour came but no work happened, which does open
+        attendance even though the main log discovered no work.
+      </p>
+    </div>
+
+    <div class="max-w-full overflow-x-auto pb-2">
+      <div class="w-[390px] overflow-hidden rounded-[26px] border border-slate-300 bg-slate-50 shadow-[0_12px_28px_-12px_rgba(15,23,42,0.35)]">
+
+        <div class="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" class="rotate-180 text-stone-400"><path d="m9 18 6-6-6-6"/></svg>
+          <span class="mr text-[19px] font-bold text-stone-800">हजेरी घ्या</span>
+        </div>
+
+        <div class="flex flex-col gap-2.5 px-4 pb-8 pt-2">
+
+          <!-- where he came from, stated back to him -->
+          <div class="flex items-center gap-3 rounded-[16px] border border-orange-100 bg-orange-50 px-3.5 py-3">
+            <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[12px] bg-orange-100 text-orange-600">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+              <span class="mt-1 block text-[11px] italic leading-relaxed text-slate-600">English meaning: “workers came but no work happened today”</span>
+            </span>
+          </div>
+
+          <!-- THE APPROVED QUESTION — asked once, whole, and it asks for nothing already told -->
+          <div class="rounded-[20px] border border-stone-100 bg-white px-4 py-6 text-center shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <p class="mrh text-[23px] font-bold leading-snug text-stone-800">आज कोण आले होते आणि काम का झालं नाही?</p>
+
+            <div class="mt-7 flex flex-col items-center gap-3">
+              <span class="relative flex h-24 w-24 items-center justify-center">
+                <span class="pulse-ring absolute inset-0 rounded-full bg-emerald-400"></span>
+                <span class="relative flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-[0_16px_32px_-12px_rgba(5,150,105,0.65)]">
+                  <svg viewBox="0 0 24 24" width="38" height="38" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                </span>
+              </span>
+              <span class="mr text-[19px] font-bold text-stone-700">बोलून हजेरी घ्या</span>
+            </div>
+          </div>
+
+          <!-- no fields. nothing to fill. the only alternative route is typing it, not answering a form. -->
+          <button type="button" class="flex min-h-[60px] w-full items-center justify-center gap-2.5 rounded-[16px] border border-stone-200 bg-white px-5 py-4">
+            <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+          </button>
+          <span class="block text-center text-[11px] italic text-slate-500">English meaning: “write it instead of speaking”</span>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-3 max-w-[62ch] rounded-xl border border-slate-200 bg-white p-3.5 text-[12.5px] leading-relaxed text-slate-600">
+      <strong class="text-slate-800">No plot, no crop, no count, no name list.</strong> The route is opened by the
+      farmer's own statement that people came and work did not happen; the screen asks the one thing he has not yet
+      said, and nothing else. No clock range, no from/to — attendance remembers duration, never a clock.
+    </div>
+  </section>
+
+  <!-- ══════════════════ THE RULE, NOT JUST THE PICTURE ══════════════════ -->
+  <section class="rounded-[18px] border border-rose-100 bg-rose-50 p-5">
+    <h2 class="text-[17px] font-black text-rose-900">What this screen must never do</h2>
+    <p class="mt-1 text-[12.5px] text-rose-800">Check the rule as well as the picture — each line below is a thing the
+      drawing above is deliberately not doing.</p>
+    <ul class="mt-3.5 space-y-2.5 text-[13px] leading-relaxed text-rose-900">
+      <li class="flex gap-2.5"><span class="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-rose-400"></span><span><strong>Never a dead end.</strong> The inactive hero must always sit above at least one live door — here, the main log and the register.</span></li>
+      <li class="flex gap-2.5"><span class="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-rose-400"></span><span><strong>Never a generic error.</strong> No “something went wrong”, no retry banner, no red card, no warning triangle. Nothing failed — the day simply has no headcount yet.</span></li>
+      <li class="flex gap-2.5"><span class="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-rose-400"></span><span><strong>Never a disabled हजेरी वही tile.</strong> The register is not gated by capture state. If the hero is off and the register is off too, the release is wrong.</span></li>
+      <li class="flex gap-2.5"><span class="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-rose-400"></span><span><strong>Never a hidden or greyed register.</strong> Hiding the tile in this state is the same defect as disabling it — the past is always readable.</span></li>
+      <li class="flex gap-2.5"><span class="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-rose-400"></span><span><strong>Never a hint that the farmer did something wrong.</strong> No “you forgot”, no “incomplete”, no scolding tone. The app did not understand a count; that is the app's sentence to carry, not his fault to wear.</span></li>
+      <li class="flex gap-2.5"><span class="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-rose-400"></span><span><strong>Never a full-screen takeover that replaces the ledger.</strong> The reason is a card on the hub, not a modal, not an interstitial, not a screen the farmer has to dismiss before he can reach हजेरी वही.</span></li>
+      <li class="flex gap-2.5"><span class="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-rose-400"></span><span><strong>Never re-ask what he already told it.</strong> No plot picker, no crop picker, no headcount field, no name checklist anywhere in this state — including on the no-work route.</span></li>
+      <li class="flex gap-2.5"><span class="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-rose-400"></span><span><strong>Never draw an unknown day as <code class="rounded bg-rose-100 px-1">–</code>, and never a daily or week total of <code class="rounded bg-rose-100 px-1">0</code> for a day nobody spoke about.</strong> Blank means nobody said; the dash means he did not come.</span></li>
+      <li class="flex gap-2.5"><span class="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-rose-400"></span><span><strong>Never invent the Marathi.</strong> Every yellow chip above is a real gap waiting on the founder's own words — the layout ships for approval, the copy does not.</span></li>
+    </ul>
+    <p class="mt-4 rounded-xl border border-rose-200 bg-white p-3 text-[13px] font-bold leading-relaxed text-rose-900">
+      The test, verbatim: “Where is ShramSafal asking me for something I already told it?”
+    </p>
+  </section>
+
+  <p class="mt-8 text-center text-[11.5px] text-slate-500">
+    Mockup · 390px reference width · not the live app · nothing wired to data
+  </p>
+
+</div>
+</body>
+</html>

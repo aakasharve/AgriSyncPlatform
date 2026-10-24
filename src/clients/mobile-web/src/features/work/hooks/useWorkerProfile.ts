@@ -13,6 +13,16 @@ interface UseWorkerProfileResult {
     profile: WorkerProfileData | null;
     recentCards: JobCard[];
     isLoading: boolean;
+    /**
+     * TASK 8 (spec: 2026-08-28-labour-v2-release-1, P5) — true when the LAST
+     * server read failed. This screen's existing sentence ("प्रोफाइल उपलब्ध
+     * नाही") was already honest; what it lacked was a way out. This flag is
+     * what lets the page offer the retry that already exists in
+     * `LoadErrorBanner`, and only when there is something to retry: with no
+     * `userId`/`farmId` nothing was ever asked, so it stays `false` and the
+     * plain sentence remains.
+     */
+    loadFailed: boolean;
     refresh: () => void;
 }
 
@@ -23,19 +33,25 @@ export function useWorkerProfile(
     const [profile, setProfile] = useState<WorkerProfileData | null>(null);
     const [recentCards, setRecentCards] = useState<JobCard[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadFailed, setLoadFailed] = useState(false);
     const [tick, setTick] = useState(0);
 
     const refresh = useCallback(() => setTick(t => t + 1), []);
 
     useEffect(() => {
         if (!userId || !farmId) {
+            // Nothing was asked of the server, so there is no failure either —
+            // and no retry to offer for a fetch that never happened.
             setProfile(null);
             setRecentCards([]);
             setIsLoading(false);
+            setLoadFailed(false);
             return;
         }
 
         let cancelled = false;
+        // A fresh attempt starts from "we have not failed".
+        setLoadFailed(false);
 
         const loadCached = async () => {
             const db = getDatabase();
@@ -79,8 +95,12 @@ export function useWorkerProfile(
                     .sort((a, b) => b.modifiedAtUtc.localeCompare(a.modifiedAtUtc))
                     .slice(0, 20);
                 setRecentCards(sorted);
+                setLoadFailed(false);
             } catch {
-                // Server unavailable — cached data shown
+                // Server unavailable — cached data stays shown (it is real),
+                // but the failure is no longer silent, so the page can offer
+                // the retry it never had (Task 8).
+                if (!cancelled) setLoadFailed(true);
             }
         };
 
@@ -89,5 +109,5 @@ export function useWorkerProfile(
         return () => { cancelled = true; };
     }, [userId, farmId, tick]);
 
-    return { profile, recentCards, isLoading, refresh };
+    return { profile, recentCards, isLoading, loadFailed, refresh };
 }

@@ -40,6 +40,7 @@ export type EditSurfaceRoute =
     | 'finance-price-book'
     | 'schedule'
     | 'profile'
+    | 'labour'         // Labour V2 R1 — attendance.mark conflicts land in Labour
     | 'escalate';      // sentinel — no surface, pop a dialog instead
 
 export interface EditSurfaceContext {
@@ -159,6 +160,13 @@ function registerDefaultEditSurfaces(): void {
 
     // Finance settings / price book.
     registerEditSurface(SyncMutationName.SetPriceConfig, makeRouteHandler('finance-price-book'));
+
+    // Labour V2 R1 Task 3.5c — the attendance contradiction surfaces HERE on
+    // the offline path: a PERMANENT ShramSafal.AttendanceContradiction parks
+    // the row and this routes the farmer to Labour, where the question is
+    // answered (the answer travels as a NEW attendance.mark carrying
+    // resolvedLabourAssignmentId — never a re-push of these bytes).
+    registerEditSurface(SyncMutationName.AttendanceMark, makeRouteHandler('labour'));
 
     // Profile / farm setup.
     registerEditSurface(SyncMutationName.CreateFarm, makeRouteHandler('profile'));

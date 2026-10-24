@@ -6,7 +6,16 @@
  *     on mount, then refreshes per-cycle from the server in the background.
  *   - Bands: Overdue (rose) → Due (amber) → Collected (stone) → Reported (emerald,
  *     collapsed by default).
- *   - Filter chips: Due / Overdue / Reported / All (default = Overdue).
+ *   - Filter chips: Due / Overdue / Reported / All (default = All).
+ *
+ *     TASK 15 (Labour V2 R1), founder decision D1 — was "Overdue". A farm
+ *     whose tests are all Due (or all Reported, etc.) then showed zero rows
+ *     under that filter and fell through to "आज कोणत्याही चाचण्या नाहीत" over
+ *     a load that had fully succeeded — the same defect commit `4681eb7a`
+ *     fixed for `JobCardsPage`/`ComplianceSignalsPage` and flagged-but-
+ *     deferred for this screen. The founder ruled: default to "All", same
+ *     treatment. The filter chips themselves are unchanged — only which one
+ *     starts active — and `?filter=` still overrides the default.
  *   - Optional URL params:
  *       ?plotId=<guid>        — pre-filter rows to a single plot
  *       ?cropCycleId=<guid>   — pre-filter rows to a single cycle
@@ -61,7 +70,8 @@ const TestQueuePage: React.FC<TestQueuePageProps> = ({ onNavigate }) => {
     const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
 
     const initial = useMemo(parseQuery, []);
-    const [filter, setFilter] = useState<Filter>(initial.filter ?? 'Overdue');
+    // Task 15, D1 — was 'Overdue'. See this file's header for why.
+    const [filter, setFilter] = useState<Filter>(initial.filter ?? 'All');
 
     const [activeAction, setActiveAction] = useState<{
         instance: DexieTestInstance;

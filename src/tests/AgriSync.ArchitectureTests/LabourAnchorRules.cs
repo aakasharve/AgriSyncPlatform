@@ -115,6 +115,35 @@ public sealed class LabourAnchorRules
             $"is joining the two. Offenders: [{string.Join(", ", offenders)}]");
     }
 
+    private const string RecordAttendanceMarkHandlerPath =
+        "apps/ShramSafal/ShramSafal.Application/UseCases/Labour/RecordAttendanceMark/RecordAttendanceMarkHandler.cs";
+
+    /// <summary>
+    /// PIN 3 — Labour V2 R1: exactly one production construction site for the
+    /// attendance ruling, and it is the handler that runs the write-authority
+    /// gate and the pre-persistence contradiction check. A second producer
+    /// would be a path around both, and the SQL unique index would become the
+    /// farmer's error message (23505 → "A database constraint rejected this
+    /// mutation").
+    /// </summary>
+    [Fact]
+    public void AttendanceMark_is_constructed_in_exactly_one_production_file()
+    {
+        var producers = ProductionSourceFiles()
+            .Where(path => StripComments(File.ReadAllText(path))
+                .Contains("AttendanceMark.Create(", StringComparison.Ordinal))
+            .Select(Relative)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        producers.Should().ContainSingle(
+            "every attendance ruling must pass RecordAttendanceMarkHandler's gate and " +
+            $"contradiction check. Found: [{string.Join(", ", producers)}]");
+
+        producers[0].Should().Be(RecordAttendanceMarkHandlerPath,
+            "the single construction site must be the gated handler, not whichever caller got there first");
+    }
+
     // ── copied from RlsIdentityScopeRules (they are private static there;
     //    copy, do not import) ───────────────────────────────────────────────────
 

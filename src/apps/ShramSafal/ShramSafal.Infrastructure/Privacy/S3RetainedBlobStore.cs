@@ -149,6 +149,14 @@ public sealed class S3RetainedBlobStore : IRetainedBlobStore
             .ConfigureAwait(false);
         if (existing is not null)
         {
+            // Idempotent for the OWNER only. Another account's row with this
+            // client-minted id is not "already stored" for this caller - saying
+            // so would acknowledge a recording that was never stored for them.
+            if (existing.UserId != metadata.UserId)
+            {
+                throw new RetainedClipIdConflictException(metadata.ClipId);
+            }
+
             return existing.ClipId;
         }
 

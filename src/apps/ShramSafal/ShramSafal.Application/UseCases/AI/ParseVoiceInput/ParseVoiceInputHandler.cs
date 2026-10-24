@@ -644,6 +644,54 @@ public sealed class ParseVoiceInputHandler(
 
         root["fullTranscript"] = cleanTranscript;
 
+        // spec: 2026-08-28-labour-v2-release-1 — the heuristic below may only
+        // FILL A GAP in labour[]; it may never REPLACE what the model returned.
+        //
+        // Both labour writers underneath used to ASSIGN root["labour"], so a
+        // correct model answer — including a correct EMPTY one — was discarded
+        // and replaced by a transcript guess stamped "type":"HIRED".  On the
+        // record that determines wages, that is the app inventing a hired
+        // worker.  An empty array is an ANSWER ("nobody was hired"), not an
+        // absence: doctrine says absence of a record means unknown, and a model
+        // that answered "none" has answered.  So the ONLY state that counts as
+        // a gap is: the key is missing, or it is present but not an array.
+        //
+        // Captured ONCE, here, before either writer runs — so the two writers
+        // keep their original precedence relative to each other (the gender
+        // split still wins over the compound-segment guess) while neither can
+        // overrule the model.
+        //
+        // KNOWN CONSEQUENCE, stated plainly: AiResponseNormalizer.NormalizeVoiceJson
+        // calls EnsureArray(root, "labour") on every provider response, so on the
+        // live parse path labour[] is ALWAYS an array by the time this method
+        // runs.  The pipeline therefore cannot tell "the model omitted labour"
+        // from "the model answered labour: []" — the distinction is erased
+        // upstream — and under that gap rule these two writers are dormant in
+        // production.  That is the correct outcome: a writer that cannot tell
+        // whether the model answered must not answer over it.  The code is kept
+        // (not deleted) because it still fires for callers that hand this method
+        // un-normalized JSON, and because restoring it is a normalizer change,
+        // not a rewrite here.
+        var modelAnsweredLabour = root["labour"] is JsonArray;
+
+        // spec: 2026-08-28-labour-v2-release-1 — same gap-fill-only rule as
+        // modelAnsweredLabour above, for the fertilizer/irrigation writers a
+        // few lines below that ride on a compound labour segment. inputs: []
+        // and irrigation: [] are real answers too — "no inputs were used" /
+        // "no irrigation happened" — not an absence, and a regex that merely
+        // noticed खत/पाणी in the same sentence that named the workers has no
+        // business overruling a model that read the whole sentence and said
+        // none. Captured here, before either writer below can mutate
+        // root["inputs"]/root["irrigation"], for the same reason
+        // modelAnsweredLabour is captured above the labour writers.
+        //
+        // KNOWN CONSEQUENCE (same as modelAnsweredLabour): AiResponseNormalizer
+        // EnsureArray()s inputs/irrigation too, so on the live parse path these
+        // two writers are dormant in production. That is the correct outcome —
+        // see the note above modelAnsweredLabour.
+        var modelAnsweredInputs = root["inputs"] is JsonArray;
+        var modelAnsweredIrrigation = root["irrigation"] is JsonArray;
+
         var labourSegments = ExtractCompoundLabourSegments(cleanTranscript);
         if (labourSegments.Count > 0)
         {
@@ -660,42 +708,57 @@ public sealed class ParseVoiceInputHandler(
                 });
             }
 
-            root["labour"] = labour;
+            // Gap-fill only — see modelAnsweredLabour above.
+            if (!modelAnsweredLabour)
+            {
+                root["labour"] = labour;
+            }
 
             if (labourSegments.Any(segment => segment.Activity == "fertilizer_application"))
             {
-                var inputs = root["inputs"] as JsonArray ?? new JsonArray();
-                if (inputs.Count == 0)
+                // Gap-fill only — see modelAnsweredInputs above.
+                if (!modelAnsweredInputs)
                 {
-                    inputs.Add(new JsonObject
+                    var inputs = root["inputs"] as JsonArray ?? new JsonArray();
+                    if (inputs.Count == 0)
                     {
-                        ["productName"] = "खत",
-                        ["method"] = "Soil",
-                        ["type"] = "fertilizer",
-                        ["sourceText"] = labourSegments.First(segment => segment.Activity == "fertilizer_application").SourceText,
-                        ["systemInterpretation"] = "खत टाकण्याचे काम नोंदवले"
-                    });
+                        inputs.Add(new JsonObject
+                        {
+                            ["productName"] = "खत",
+                            ["method"] = "Soil",
+                            ["type"] = "fertilizer",
+                            ["sourceText"] = labourSegments.First(segment => segment.Activity == "fertilizer_application").SourceText,
+                            ["systemInterpretation"] = "खत टाकण्याचे काम नोंदवले"
+                        });
+                    }
+                    root["inputs"] = inputs;
                 }
-                root["inputs"] = inputs;
             }
 
             if (labourSegments.Any(segment => segment.Activity == "irrigation"))
             {
-                var irrigation = root["irrigation"] as JsonArray ?? new JsonArray();
-                if (irrigation.Count == 0)
+                // Gap-fill only — see modelAnsweredIrrigation above.
+                if (!modelAnsweredIrrigation)
                 {
-                    irrigation.Add(new JsonObject
+                    var irrigation = root["irrigation"] as JsonArray ?? new JsonArray();
+                    if (irrigation.Count == 0)
                     {
-                        ["method"] = "Flood",
-                        ["sourceText"] = labourSegments.First(segment => segment.Activity == "irrigation").SourceText,
-                        ["systemInterpretation"] = "पाणी सोडण्याचे काम नोंदवले"
-                    });
+                        irrigation.Add(new JsonObject
+                        {
+                            ["method"] = "Flood",
+                            ["sourceText"] = labourSegments.First(segment => segment.Activity == "irrigation").SourceText,
+                            ["systemInterpretation"] = "पाणी सोडण्याचे काम नोंदवले"
+                        });
+                    }
+                    root["irrigation"] = irrigation;
                 }
-                root["irrigation"] = irrigation;
             }
         }
 
-        if (TryExtractGenderSplit(cleanTranscript, out var maleCount, out var femaleCount))
+        // Gap-fill only — see modelAnsweredLabour above.  The gap is measured
+        // against the ORIGINAL root, so this writer still takes precedence over
+        // the compound-segment writer exactly as it did before.
+        if (!modelAnsweredLabour && TryExtractGenderSplit(cleanTranscript, out var maleCount, out var femaleCount))
         {
             root["labour"] = new JsonArray
             {
@@ -726,7 +789,14 @@ public sealed class ParseVoiceInputHandler(
         //     DomainKnowledgePipeline.ApplyGuardedFertilizerSafetyNet (which runs
         //     AFTER GrapeInputLexicon and only when inputs[] is empty AND no row
         //     carries rawProductName) is the ONLY खत injection.
-        if (!domainKnowledgeLayerEnabled && ContainsFertilizerApplication(cleanTranscript))
+        //
+        // spec: 2026-08-28-labour-v2-release-1 — same gap-fill-only rule as
+        // modelAnsweredInputs above: this net used to be gated only on
+        // inputs.Count == 0, so खत + a past-tense verb alone would override a
+        // real "no inputs" answer from the model. Gated on modelAnsweredInputs
+        // (captured before any writer touches root["inputs"]) so it can only
+        // fill a genuine gap, never overrule an answer.
+        if (!domainKnowledgeLayerEnabled && !modelAnsweredInputs && ContainsFertilizerApplication(cleanTranscript))
         {
             var inputs = root["inputs"] as JsonArray ?? new JsonArray();
             if (inputs.Count == 0)
@@ -743,7 +813,31 @@ public sealed class ParseVoiceInputHandler(
             }
         }
 
-        if (ContainsIssueSignal(cleanTranscript))
+        // spec: 2026-08-28-labour-v2-release-1 — same gap-fill-only rule as
+        // modelAnsweredLabour/Inputs/Irrigation above, extended to the last
+        // two writers: the issue-note and reminder-note/planned-task safety
+        // nets below. observations[] and plannedTasks[] are EnsureArray'd by
+        // AiResponseNormalizer just like labour/inputs/irrigation, so a model
+        // that answered "observations: []" — nothing worth flagging — or
+        // "plannedTasks: []" — nothing planned — has answered, not left a
+        // gap. Both writers below used to gate on CONTENT (whether a
+        // matching noteType already existed, or whether plannedTasks was
+        // non-empty) instead of on whether the model answered, so any
+        // transcript containing पिवळी/उद्या/करायचं etc. always got an issue
+        // note or a reminder appended — even over a deliberate empty answer.
+        // Captured here, before either writer below can mutate
+        // root["observations"] / root["plannedTasks"], for the same reason
+        // modelAnsweredInputs is captured above the fertilizer/irrigation
+        // writers.
+        //
+        // KNOWN CONSEQUENCE (same as modelAnsweredLabour/Inputs/Irrigation):
+        // on the live parse path these two writers are dormant once the
+        // normalizer EnsureArray()s observations/plannedTasks. That is the
+        // correct outcome — see the note above modelAnsweredLabour.
+        var modelAnsweredObservations = root["observations"] is JsonArray;
+        var modelAnsweredPlannedTasks = root["plannedTasks"] is JsonArray;
+
+        if (!modelAnsweredObservations && ContainsIssueSignal(cleanTranscript))
         {
             var observations = root["observations"] as JsonArray ?? new JsonArray();
             if (!observations.Any(node => node?["noteType"]?.GetValue<string>() == "issue"))
@@ -753,8 +847,19 @@ public sealed class ParseVoiceInputHandler(
                     ["noteType"] = "issue",
                     ["textRaw"] = cleanTranscript,
                     ["textCleaned"] = cleanTranscript,
-                    ["severity"] = "important",
                     ["sourceText"] = cleanTranscript
+                    // spec: 2026-08-28-labour-v2-release-1 — deliberately NO
+                    // "severity" key here. The farmer named a symptom
+                    // (पिवळी/किडे/रोग/...), not a severity; "important" was a
+                    // hardcoded assertion the transcript never supported.
+                    // Omitting it is not a fabrication risk: severity is
+                    // already optional on both sides — LedgerDerivationService
+                    // .MapObservationSeverity defaults an absent/unmapped
+                    // severity to ObservationSeverity.Normal, and the
+                    // frontend's ObservationSeveritySchema marks severity
+                    // optional — so this path now takes the SAME safe
+                    // default every other unspecified severity already
+                    // takes, instead of asserting a level nobody stated.
                 });
             }
             root["observations"] = observations;
@@ -762,31 +867,50 @@ public sealed class ParseVoiceInputHandler(
 
         if (ContainsFutureIntent(cleanTranscript))
         {
-            var observations = root["observations"] as JsonArray ?? new JsonArray();
-            var plannedTasks = root["plannedTasks"] as JsonArray ?? new JsonArray();
-            if (!plannedTasks.Any())
+            // Gap-fill only — see modelAnsweredPlannedTasks above.
+            if (!modelAnsweredPlannedTasks)
             {
-                plannedTasks.Add(new JsonObject
+                var plannedTasks = root["plannedTasks"] as JsonArray ?? new JsonArray();
+                if (!plannedTasks.Any())
                 {
-                    ["title"] = InferReminderTitle(cleanTranscript),
-                    ["dueHint"] = "उद्या",
-                    ["sourceText"] = cleanTranscript
-                });
+                    plannedTasks.Add(new JsonObject
+                    {
+                        ["title"] = InferReminderTitle(cleanTranscript),
+                        ["sourceText"] = cleanTranscript
+                        // spec: 2026-08-28-labour-v2-release-1 — deliberately
+                        // NO "dueHint" key here. The future-intent words
+                        // (उद्या/करायचं/करणार/आणायचं/द्यायचं/घ्यायचं) do not
+                        // reliably name "tomorrow" — करायचं alone triggers
+                        // this net with no date mentioned at all — so the
+                        // hardcoded "उद्या" was a guessed deadline the farmer
+                        // never stated. dueHint is optional/nullable in the
+                        // frontend's PlannedTaskDraftSchema, and
+                        // dueDateResolver.resolveDueDate already treats a
+                        // missing dueHint as "no due-date guess" (dueDate
+                        // stays unset) — the same honest default an
+                        // unspecified date already gets, instead of
+                        // asserting a day nobody said.
+                    });
+                }
+                root["plannedTasks"] = plannedTasks;
             }
 
-            if (!observations.Any(node => node?["noteType"]?.GetValue<string>() == "reminder"))
+            // Gap-fill only — see modelAnsweredObservations above.
+            if (!modelAnsweredObservations)
             {
-                observations.Add(new JsonObject
+                var observations = root["observations"] as JsonArray ?? new JsonArray();
+                if (!observations.Any(node => node?["noteType"]?.GetValue<string>() == "reminder"))
                 {
-                    ["noteType"] = "reminder",
-                    ["textRaw"] = cleanTranscript,
-                    ["textCleaned"] = cleanTranscript,
-                    ["sourceText"] = cleanTranscript
-                });
+                    observations.Add(new JsonObject
+                    {
+                        ["noteType"] = "reminder",
+                        ["textRaw"] = cleanTranscript,
+                        ["textCleaned"] = cleanTranscript,
+                        ["sourceText"] = cleanTranscript
+                    });
+                }
+                root["observations"] = observations;
             }
-
-            root["observations"] = observations;
-            root["plannedTasks"] = plannedTasks;
         }
 
         // W1.P0 Batch A — flag-guarded domain-knowledge pipeline.
@@ -938,13 +1062,82 @@ public sealed class ParseVoiceInputHandler(
         return results;
     }
 
-    private static int? TryExtractCount(string value)
+    /// <summary>
+    /// Splits <paramref name="value"/> into whole words, breaking on whitespace,
+    /// punctuation and symbols.
+    /// </summary>
+    /// <remarks>
+    /// spec: 2026-08-28-labour-v2-release-1.
+    /// Deliberately NOT a regex word boundary.  In Devanagari the vowel signs,
+    /// the virama and the nukta are Unicode <em>marks</em> (Mn/Mc), and
+    /// <c>char.IsLetter</c> returns false for them — so both <c>\b</c>-style
+    /// reasoning and any "split on non-letter" shortcut tear a Marathi word
+    /// apart at its own matras (छाटणी → छ,ट,ण).  Splitting on
+    /// whitespace/punctuation/symbol keeps every mark attached to the letter it
+    /// belongs to, which is what makes whole-word equality safe here.
+    /// </remarks>
+    private static List<string> SplitIntoWords(string value)
     {
+        var words = new List<string>();
+        var start = -1;
+
+        for (var i = 0; i < value.Length; i++)
+        {
+            var c = value[i];
+            if (char.IsWhiteSpace(c) || char.IsPunctuation(c) || char.IsSymbol(c))
+            {
+                if (start >= 0)
+                {
+                    words.Add(value[start..i]);
+                    start = -1;
+                }
+            }
+            else if (start < 0)
+            {
+                start = i;
+            }
+        }
+
+        if (start >= 0)
+        {
+            words.Add(value[start..]);
+        }
+
+        return words;
+    }
+
+    // internal (not private) so ShramSafal.Domain.Tests can assert the
+    // word-boundary behaviour directly, in BOTH directions — the same
+    // access-widening precedent as ApplyTranscriptIntegrityCorrections above.
+    // Guarded by InternalsVisibleTo in ShramSafal.Application.csproj.
+    internal static int? TryExtractCount(string value)
+    {
+        // spec: 2026-08-28-labour-v2-release-1 — WHOLE WORDS ONLY.
+        //
+        // This used to be value.Contains(token.Key), a substring test with no
+        // word boundary.  एक ("one") is a substring of एकटाच ("by myself"),
+        // एकरभर ("an acre") and एकूण ("total"), so "मी एकटाच छाटणी केली" —
+        // "I pruned by myself" — yielded a count of 1 and the caller wrote down
+        // one HIRED worker the farmer never mentioned.  The digit branch below
+        // was already word-bounded; the Marathi branch simply was not.
+        //
+        // The table intentionally holds inflected and compound forms
+        // (दोघांनी, तिघे, चौघांनी, पाचजण, पाचजणांनी).  Those are whole words a
+        // farmer actually says and they still match: the fix restricts matching
+        // to word boundaries, it does not stem or truncate.  Longest-key-first
+        // ordering is preserved so a compound is considered before its shorter
+        // stem, keeping the original precedence when a segment carries more
+        // than one number word.
+        var words = SplitIntoWords(value);
+
         foreach (var token in MarathiNumberTokens.OrderByDescending(item => item.Key.Length))
         {
-            if (value.Contains(token.Key, StringComparison.OrdinalIgnoreCase))
+            foreach (var word in words)
             {
-                return token.Value;
+                if (string.Equals(word, token.Key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return token.Value;
+                }
             }
         }
 

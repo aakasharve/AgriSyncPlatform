@@ -130,7 +130,7 @@ public sealed class VerifyOtpHandler(
             command.Session.DeviceName,
             command.Session.Platform,
             utcNow,
-            utcNow.AddDays(30));
+            utcNow.Add(RefreshTokenPolicy.Lifetime));
 
         await refreshTokenRepository.AddAsync(refreshToken, ct);
         await refreshTokenRepository.SaveChangesAsync(ct);
@@ -187,7 +187,8 @@ public sealed class VerifyOtpHandler(
             AccessToken: tokens.AccessToken,
             RefreshToken: tokens.RefreshToken,
             ExpiresAtUtc: tokens.ExpiresAtUtc,
-            CreatedNewUser: createdNewUser));
+            CreatedNewUser: createdNewUser,
+            RefreshExpiresAtUtc: refreshToken.ExpiresAtUtc));
     }
 
     private static string HashPhone(string phone)

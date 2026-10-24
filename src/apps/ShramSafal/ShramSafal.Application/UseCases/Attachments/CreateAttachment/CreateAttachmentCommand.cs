@@ -8,7 +8,8 @@ public sealed record CreateAttachmentCommand(
     string MimeType,
     Guid CreatedByUserId,
     Guid? AttachmentId = null,
-    string? ActorRole = null,
+    // Stage A0 / A3 - ActorRole removed. The server resolves the actor role on the
+    // target farm at write time (GetUserRoleForFarmAsync).
     string? ClientCommandId = null,
     // DATA_PRINCIPLE_SPINE sub-phase 04.3b — forensic provenance for the
     // emitted AuditEvent row. Sourced from HttpContext.AuditClaims() at the

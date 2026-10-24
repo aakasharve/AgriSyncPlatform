@@ -8,6 +8,7 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Labour.AttachFieldOperator;
 using ShramSafal.Application.UseCases.Labour.CorrectLabour;
 using ShramSafal.Application.UseCases.Labour.CreateFieldOperator;
+using ShramSafal.Application.UseCases.Labour.DeactivateFieldOperator;
 using ShramSafal.Application.UseCases.Labour.GetFieldOperators;
 using ShramSafal.Application.UseCases.Labour.GetLabourData;
 using ShramSafal.Application.UseCases.Labour.RenameFieldOperator;
@@ -42,8 +43,17 @@ public static class LabourEndpoints
         // extract, /ai/cove-reverify, and /ai/document-sessions/* are ALSO absent
         // from the skip list — every CallerFarmTenantScope consumer needs the
         // ambient transaction, not admin-elevate-without-a-transaction.
+        //
+        // Task 9 (spec: 2026-08-28-labour-v2-release-1) — `window` is an
+        // OPTIONAL plain query parameter (`?window=today|week|month|alltime`),
+        // declared and forwarded exactly the way FinanceEndpoints' /finance/
+        // summary declares `groupBy`/`fromDate`/`toDate`. Omitted means
+        // आजपर्यंत (all time), so a client shipped before this parameter
+        // existed keeps working with no change. An unrecognised value is
+        // rejected by the handler as an invalid command, not silently widened.
         group.MapGet("/farms/{farmId:guid}/labour", async Task<IResult> (
             Guid farmId,
+            string? window,
             ClaimsPrincipal user,
             IHandler<GetLabourDataQuery, LabourDataDto> handler,
             ICallerFarmTenantScope scope,
@@ -61,7 +71,7 @@ public static class LabourEndpoints
             }
 
             var result = await handler.HandleAsync(
-                new GetLabourDataQuery(new FarmId(farmId), new UserId(userId)),
+                new GetLabourDataQuery(new FarmId(farmId), new UserId(userId), window),
                 ct);
 
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -99,7 +109,7 @@ public static class LabourEndpoints
             }
 
             var command = new CreateFieldOperatorCommand(
-                new FarmId(farmId), request.DisplayName, request.FullName, new UserId(userId));
+                new FarmId(farmId), request.DisplayName, request.FullName, new UserId(userId), request.Id);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess
@@ -165,6 +175,35 @@ public static class LabourEndpoints
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("RenameFieldOperator")
+        .RequireAuthorization();
+
+        // Team page "Remove" for a NAMED worker. Retires (is_active=false); never deletes,
+        // never touches marks/attribution/headcount, never an account or subscription action.
+        // Same gate as create/rename (LabourManagementGate inside the handler).
+        group.MapPost("/farms/{farmId:guid}/labour/field-operators/{id:guid}/deactivate", async Task<IResult> (
+            Guid farmId,
+            Guid id,
+            ClaimsPrincipal user,
+            IHandler<DeactivateFieldOperatorCommand, FieldOperatorDto> handler,
+            ICallerFarmTenantScope scope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
+            }
+
+            var result = await handler.HandleAsync(
+                new DeactivateFieldOperatorCommand(new FarmId(farmId), id, new UserId(userId)), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("DeactivateFieldOperator")
         .RequireAuthorization();
 
         // Task 12 (spec: 2026-07-13-labour-attendance-approval-design) — the
@@ -283,7 +322,7 @@ public static class LabourEndpoints
 }
 
 /// <summary>Task 11 — POST /farms/{farmId}/labour/field-operators body.</summary>
-public sealed record CreateFieldOperatorRequest(string DisplayName, string? FullName);
+public sealed record CreateFieldOperatorRequest(string DisplayName, string? FullName, Guid? Id = null);
 
 /// <summary>Task 11 — POST /farms/{farmId}/labour/field-operators/{id}/attach body.</summary>
 public sealed record AttachFieldOperatorRequest(Guid LabourAssignmentId);

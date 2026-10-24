@@ -335,7 +335,7 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
         });
 
         expect(lastToast()?.type).toBe('success');
-        expect(lastToast()?.message).toMatch(/^Logged\. Day closure: \d+% -> \d+%$/);
+        expect(lastToast()?.message).toMatch(/^लक्षात ठेवलं ✓ — दिवसाची नोंद \d+% वरून \d+%$/);
     });
 
     it('an English farmer is told this in English, not in Marathi', async () => {
@@ -361,7 +361,7 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
 
         expect(enqueueLogsForSync).not.toHaveBeenCalled();
         expect(lastToast()?.type).toBe('success');
-        expect(lastToast()?.message).toMatch(/^Logged\. Day closure: /);
+        expect(lastToast()?.message).toMatch(/^लक्षात ठेवलं ✓ — दिवसाची नोंद /);
     });
 
     // ------------------------------------------------- B1: the durable surface
@@ -552,7 +552,7 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
         });
 
         expect(lastToast()?.type).toBe('success');
-        expect(lastToast()?.message).toMatch(/^Logged once\. Saved to 2 plots\. Day closure: /);
+        expect(lastToast()?.message).toMatch(/^लक्षात ठेवलं ✓ — 2 प्लॉटसाठी एकच नोंद\. दिवसाची नोंद /);
     });
 
     // ------------------------------------------------------------ sites 1 & 2
@@ -877,5 +877,52 @@ describe('useLogCommands — the EDIT path may not claim a save it cannot eviden
             expect.objectContaining({ type: 'success' }),
         );
         expect(setStatus).not.toHaveBeenCalledWith('success');
+    });
+
+    it('makes NO phone claim over workers the next sync deletes (V2 R1, Task 23)', async () => {
+        // THE SEAM. `updateLog` knows the day's engagement SET changed and that
+        // nothing in this system can carry that to a server, so the local write
+        // is reverted by the next pull. If the hook does not ask, the farmer is
+        // told "लक्षात ठेवलं ✓" over four workers that are already as good as
+        // gone — a success message for an operation that did not happen.
+        //
+        // Neither `UpdateLog.savedDayWorkerEdit` nor `saveToastMessages` can pin
+        // this: one ends at the use case and the other starts at the string.
+        updateLog.mockResolvedValue({
+            success: true,
+            log: makeLog('1'),
+            persistedLabourCorrections: 0,
+            hasUnsentChanges: true,
+            labourEngagementSetChanged: true,
+        });
+
+        await submitEdit();
+
+        expect(setToast).toHaveBeenCalledWith({
+            message: translate('sync.unsentEditTail', 'mr'),
+            type: 'partial',
+        });
+    });
+
+    it('keeps the phone claim when only the SERVER half is missing', async () => {
+        // The guard against over-correcting. An irrigation-only edit reaches no
+        // server either, but the record genuinely does stand on the handset —
+        // and stripping the reassurance there is what makes a farmer re-record a
+        // day the app already holds (`saveToastMessages` header). The claim is
+        // dropped where it is false, not wherever something is unsent.
+        updateLog.mockResolvedValue({
+            success: true,
+            log: makeLog('1'),
+            persistedLabourCorrections: 0,
+            hasUnsentChanges: true,
+            labourEngagementSetChanged: false,
+        });
+
+        await submitEdit();
+
+        expect(setToast).toHaveBeenCalledWith({
+            message: `${ON_PHONE_MR} — ${translate('sync.unsentEditTail', 'mr')}`,
+            type: 'partial',
+        });
     });
 });

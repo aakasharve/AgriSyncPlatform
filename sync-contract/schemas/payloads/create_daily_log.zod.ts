@@ -52,6 +52,16 @@ const WeatherStampPayloadSchema = z.object({
     alerts: z.array(z.string()).optional(),
 });
 
+// spec: 2026-08-25-prod-cutover-waves — the worker-name transport bounds. Equal
+// to LabourAssignmentFactory.MaxWorkerNamesPerEngagement / .MaxWorkerNameLength
+// on the server, and pinned there by tests/workerNamesBounds.parity.test.ts,
+// which measures THIS schema's accepted boundary with safeParse rather than
+// trusting these two names. Exported so the client clamps to exactly what this
+// schema accepts (its enqueue must never throw because of a name, P9). Not
+// `*Payload` exports, so the C# generator and the payload barrel ignore them.
+export const WORKER_NAMES_MAX_PER_ENGAGEMENT = 200;
+export const WORKER_NAME_MAX_LENGTH = 200;
+
 // Labour V1 Task 5 — manual labour transport. Mirrors the fields
 // `LabourAssignmentFactory.FromParsed` (Task 3) and `LabourTime` (Task 4)
 // need on the WRITE path. `labourAssignmentId` is client-minted so it stays
@@ -74,6 +84,29 @@ const LabourItemSchema = z.object({
     task: z.string().optional(),
     notes: z.string().optional(),
     durationHours: z.number().optional(),
+    // Final direction §3 — THROUGH WHOM this crew came (a FieldOperator id).
+    // Absent/null = nobody said. Engagement-scoped: two crews on one day are
+    // two labour items. Rides the existing create_daily_log mutation — the
+    // engagement id is already client-minted, so no new mutation type exists.
+    engagedThroughFieldOperatorId: ZGuid.optional(),
+    // spec: 2026-08-25-prod-cutover-waves — the names the farmer gave for THIS
+    // engagement ("रमेश आणि सीता"), as stated. IDENTITY, never quantity (doctrine
+    // P7): the server stores them beside workerCount and nothing counts them into
+    // it, so eight workers with two names is still eight. Absent = nobody was
+    // named, which every shipped APK sends.
+    //
+    // The two bounds are the server's own (see WORKER_NAMES_MAX_PER_ENGAGEMENT
+    // above) and sit far above any real dictation; a name is measured in UTF-16
+    // code units, the unit both zod .max() and C# string.Length count.
+    // Deliberately NO .min(1) and NO .trim(): MutationQueue.enqueue
+    // safeParses every payload and THROWS on failure, so a blank or padded name
+    // must never be able to cost the farmer his whole day (P9). The client sheds
+    // blanks and edges before enqueue; LabourAssignment.Create sheds them again
+    // at the write boundary.
+    workerNames: z
+        .array(z.string().max(WORKER_NAME_MAX_LENGTH))
+        .max(WORKER_NAMES_MAX_PER_ENGAGEMENT)
+        .optional(),
 });
 
 // LABOUR_PHASE2 P2.2 — what the farmer actually asserted about WHERE the work
@@ -170,6 +203,18 @@ export const CreateDailyLogPayload = z.object({
     // confirm (whose facts already ride sourceAiJobId's AiJob) and omitted by
     // every older client — an absent draft must behave exactly as before.
     manualDraft: ManualDraftSchema.optional(),
+    // B002 (PR #82 review), FOUNDER RULING 2026-08-31 — "the labour door saves
+    // labour only". WHICH DOOR captured this record. `'labour'` = the हजेरी door:
+    // the server derives ONLY the labour bucket from the linked AI job (its
+    // provenance and job link stay honest), never the spray, irrigation,
+    // machinery, observations, disturbance or day outcome the same utterance
+    // may also have parsed — the farmer never saw those at that door, so
+    // writing them would record what he never confirmed (P1).
+    //
+    // OPTIONAL, absent = the whole parse, exactly as every older client gets.
+    // An UNKNOWN value is refused by the server (SyncInvalidPayload), never read
+    // as absent: guessing the door would decide what gets written.
+    captureScope: z.enum(['labour']).optional(),
 });
 
 export type CreateDailyLogPayloadType = z.infer<typeof CreateDailyLogPayload>;

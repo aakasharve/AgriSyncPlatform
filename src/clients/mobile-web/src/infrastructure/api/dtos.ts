@@ -7,7 +7,7 @@
 import type { VisibleBucketId } from '../../domain/ai/BucketId';
 import type { CostCategoryId, CostCategoryRef } from '../../domain/finance/CostCategory';
 // LABOUR_PHASE2 Phase 3 — see the LABOUR ENGAGEMENT DTOS section below.
-import type { AttributedOperatorDto, LabourEngagementDto } from './labourDtos';
+import type { AttendanceMarkDto, AttributedOperatorDto, DayOutcomeDto, LabourEngagementDto } from './labourDtos';
 
 export type VerificationStatus =
     | 'draft'
@@ -150,8 +150,9 @@ export type DailyLogScope = 'Plot' | 'MultiPlot' | 'Farm';
 // adding them to this file put it over the 800-line cap
 // `scripts/check-file-sizes.mjs` enforces in CI. `DailyLogDto` below references
 // `LabourEngagementDto` directly, so it is imported at the top of this file as
-// well as re-exported here.
-export type { AttributedOperatorDto, LabourEngagementDto };
+// well as re-exported here. Labour V2 R1's `AttendanceMarkDto` and
+// `DayOutcomeDto` followed the same path for the same reason.
+export type { AttendanceMarkDto, AttributedOperatorDto, DayOutcomeDto, LabourEngagementDto };
 
 export interface DailyLogDto {
     id: string;
@@ -255,6 +256,10 @@ export interface DailyLogDto {
      * that way — same shape as `LogTaskDto.deviationReasonCode` above.
      */
     labour?: LabourEngagementDto[] | null;
+
+    /** task-0b (spec 2026-08-28-labour-v2-release-1) — the farmer's OWN statement
+     * about the day. Provenance + null-vs-undefined reading: `DayOutcomeDto`. */
+    dayOutcome?: DayOutcomeDto | null;
 }
 
 export interface CostEntryDto {
@@ -444,6 +449,8 @@ export interface SyncPullResponse {
     costCategories?: CostCategoryRef[];
     referenceDataVersionHash?: string;
     attentionBoard?: AttentionBoardDto | null;
+    // Labour V2 R1 Task 3.5c — additive: absent from an older server = no-op.
+    attendanceMarks?: AttendanceMarkDto[];
 }
 
 export interface AiParseResponse {
@@ -729,6 +736,8 @@ export interface TenantDekResponse {
 
 export interface ResolveDekRequest {
     dekId: string;
+    /** Farm whose owner account the key is unwrapped under; the server checks the caller is an Active member. */
+    farmId: string;
 }
 
 export interface ResolveDekResponse {
@@ -753,12 +762,14 @@ export interface ConsentStateDto {
     version: number;
     acceptedAtUtc: string | null;
     revokedAtUtc: string | null;
+    /** ADDITIVE, GET only: server-derived start of the CURRENT voice grant (null/absent = unknown). */
+    fullHistoryJournalGrantedSinceUtc?: string | null;
 }
 
 /**
  * PUT `/shramsafal/consent/me` body. Any of the three flag fields may
  * be omitted (partial update); the audit row records the new full
- * state regardless. `languageShown` is the locale code (mr-IN, hi-IN,
+ * state regardless. `languageShown` is the locale code (mr-IN,
  * en-IN) the user actually saw when consenting — required for the
  * audit row per plan §6.1.3.
  */

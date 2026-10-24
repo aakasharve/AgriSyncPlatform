@@ -75,9 +75,16 @@ const StripStateRing: React.FC<StripStateRingProps> = ({
     waitingCount,
 }) => (
     <span
-        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full p-1 ${
+        // FOUNDER RULING 2026-08-30 — the ring is 44px ONLY when it carries the
+        // waiting count. In the other three states it holds a glyph, not a
+        // number, and a 44px disc around a 16px tick was the single biggest
+        // contributor to a rest state that occupied banner height while saying
+        // "nothing needs you". Those states get a 24px mark instead.
+        className={`flex shrink-0 items-center justify-center rounded-full p-1 ${
+            isWaiting ? 'h-11 w-11 bg-amber-500' : 'h-6 w-6'
+        } ${
             isWaiting
-                ? 'bg-amber-500'
+                ? ''
                 : (isChecking || isUnknown ? 'bg-stone-200' : 'bg-emerald-600')
         }`}
         // The strip's four original testids, on the same element as before, so
@@ -104,9 +111,9 @@ const StripStateRing: React.FC<StripStateRingProps> = ({
                     {waitingCount}
                 </span>
             )}
-            {!isWaiting && isChecking && <Loader2 size={16} strokeWidth={2.25} className="animate-spin text-stone-400" />}
-            {!isWaiting && isUnknown && <HelpCircle size={17} strokeWidth={2.25} className="text-stone-400" />}
-            {!isWaiting && !isChecking && !isUnknown && <CheckCircle2 size={18} strokeWidth={2.25} className="text-emerald-600" />}
+            {!isWaiting && isChecking && <Loader2 size={11} strokeWidth={2.5} className="animate-spin text-stone-400" />}
+            {!isWaiting && isUnknown && <HelpCircle size={12} strokeWidth={2.5} className="text-stone-400" />}
+            {!isWaiting && !isChecking && !isUnknown && <CheckCircle2 size={13} strokeWidth={2.75} className="text-emerald-600" />}
         </span>
     </span>
 );

@@ -54,7 +54,7 @@ const ReferralsPage: React.FC = () => {
                 setReferralCode(codeData.code);
                 setStats({ total: statsData.referralsTotal, qualified: statsData.referralsQualified, benefits: statsData.benefitsEarned });
                 setEvents(eventsData.map(e => ({ id: e.id, eventType: e.eventType as GrowthEventItem['eventType'], occurredAtUtc: e.occurredAtUtc, metadata: e.metadata })));
-            } catch (e) {
+            } catch {
                 if (!cancelled) setError('Failed to load referral data. Please try again.');
             } finally {
                 if (!cancelled) setLoading(false);
@@ -118,7 +118,7 @@ const ReferralsPage: React.FC = () => {
             </div>
 
             <p className="text-[11px] text-stone-400 text-center leading-relaxed px-2">
-                रेफरल योग्य ठरल्यावर आणि कामगार ३० दिवस सक्रिय राहिल्यावर फायदे दिले जातील.
+                रेफरल योग्य ठरल्यावर आणि तो ३० दिवस कामावर राहिल्यावर फायदे दिले जातील.
                 <br />
                 Benefits will be credited when referrals qualify and workers remain active for 30 days.
             </p>

@@ -814,6 +814,11 @@ public static class DependencyInjection
                 ShramSafal.Application.UseCases.Labour.RenameFieldOperator.RenameFieldOperatorCommand,
                 ShramSafal.Application.Contracts.Dtos.FieldOperatorDto>,
             ShramSafal.Application.UseCases.Labour.RenameFieldOperator.RenameFieldOperatorHandler>();
+        services.AddScoped<
+            AgriSync.BuildingBlocks.Application.IHandler<
+                ShramSafal.Application.UseCases.Labour.DeactivateFieldOperator.DeactivateFieldOperatorCommand,
+                ShramSafal.Application.Contracts.Dtos.FieldOperatorDto>,
+            ShramSafal.Application.UseCases.Labour.DeactivateFieldOperator.DeactivateFieldOperatorHandler>();
 
         // Task 12 (spec: 2026-07-13-labour-attendance-approval-design) — the
         // field-operator LIST read. Same registration shape as the three
@@ -844,6 +849,12 @@ public static class DependencyInjection
                 ShramSafal.Application.UseCases.Labour.CorrectLabour.CorrectLabourCommand,
                 ShramSafal.Application.UseCases.Labour.CorrectLabour.CorrectLabourResult>,
             ShramSafal.Application.UseCases.Labour.CorrectLabour.CorrectLabourHandler>();
+
+        // Labour V2 R1 Task 3.5b — the attendance write path's ONE production
+        // construction site. Raw registration (no pipeline wrapper): it is
+        // invoked only from PushSyncBatchHandler, which owns idempotency and
+        // the transaction.
+        services.AddScoped<ShramSafal.Application.UseCases.Labour.RecordAttendanceMark.RecordAttendanceMarkHandler>();
 
         // T-IGH-03-PIPELINE-ROLLOUT (CompleteJobCard): caller-shape
         // validation + job-card-existence + farm-membership authorization.

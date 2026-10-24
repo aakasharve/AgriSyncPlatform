@@ -10,7 +10,7 @@ import TrustBadge from '../../../../shared/components/ui/TrustBadge';
 import ObservationHubSheet from '../ObservationHubSheet';
 import { BucketIssue } from '../../../../domain/types/log.types';
 import { buildWorkDoneTitles } from '../../services/workDoneProjection';
-import { resolveLabourHeadcount } from '../../../../domain/logs/labourHeadcount';
+import { sumLabourHeadcount, type HeadcountFields } from '../../../../domain/logs/labourHeadcount';
 import { isCompletedIrrigationEvent } from '../../services/irrigationCompletion';
 import { ActivityCardProps } from './ActivityCardProps';
 import BucketItem from './components/BucketItem';
@@ -66,18 +66,20 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
 
     const plotTodayLogs = getPlotTodayLogs();
 
+    // Task 29 (spec: 2026-08-28-labour-v2-release-1) — `totalWorkers` is `number | undefined` via the shared sumLabourHeadcount (real 0 / UNKNOWN / stated sum).
     const getDailyLabourTotal = () => {
-        let totalWorkers = 0;
+        const labourEvents: HeadcountFields[] = [];
         let totalCost = 0;
         plotTodayLogs.forEach(l => {
             l.labour.forEach(lab => {
                 // Decision 3a (2026-07-19): real headcount — count when a bare
                 // total was stated, else maleCount+femaleCount — not just
                 // 'count' alone (which under-counts a gender-split-only entry).
-                totalWorkers += resolveLabourHeadcount(lab);
+                labourEvents.push(lab);
                 totalCost += (lab.totalCost || 0);
             });
         });
+        const totalWorkers = sumLabourHeadcount(labourEvents);
         return { totalWorkers, totalCost };
     };
 
@@ -143,7 +145,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
     const dailyExpenseTotal = getDailyExpenseTotal();
     const dailyIrrigation = getDailyIrrigationTotal();
 
-    const isLabourFilled = !!linkedData.labour || dailyLabour.totalWorkers > 0;
+    const isLabourFilled = !!linkedData.labour || dailyLabour.totalWorkers == null || dailyLabour.totalWorkers > 0; // Task 29 — UNKNOWN (== null) still fills: labour was logged; only a genuine 0 leaves it unfilled
     const isLabourIssue = !!linkedData.labour?.issue;
 
     const isLinkedIrrigationCompleted = linkedData.irrigation
@@ -406,6 +408,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     sublabel={(() => {
                         const daily = getDailyLabourTotal();
                         if (isLabourFilled) return getLabourLabel();
+                        if (daily.totalWorkers == null) return `Today: — Staff (Logged)`; // Task 29 — em-dash when unstated, never a fabricated count
                         if (daily.totalWorkers > 0) return `Today: ${daily.totalWorkers} Staff (Logged)`;
                         return undefined;
                     })()}

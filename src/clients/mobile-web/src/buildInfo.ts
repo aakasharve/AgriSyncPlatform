@@ -9,5 +9,5 @@
  * (index.tsx) so the Chrome DevTools agent can read it, and (Android side) via
  * the OS app-version which the founder can check in Settings → Apps.
  */
-export const APP_VERSION = '1.0.9';
-export const BUILD_TAG = `ShramSafal v${APP_VERSION} · wave-2 dfes-companion 2026-08-27`;
+export const APP_VERSION = '1.0.17';
+export const BUILD_TAG = `ShramSafal v${APP_VERSION} · Google Play readiness: no photo permission, backup off, security library updates 2026-10-21`;

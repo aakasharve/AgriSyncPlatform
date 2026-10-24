@@ -50,7 +50,13 @@ public sealed class FarmMembershipAuthorizationBaselineTests
         // not the tenant publication, so a fresh TenantContext per test is
         // sufficient. Reassignment / elevation invariants are covered by
         // TenantContextTests in this same project.
-        var enforcer = new ShramSafalAuthorizationEnforcer(repo, new AgriSync.BuildingBlocks.Persistence.TenantContext());
+        // R1 Task 2.2 — the enforcer evaluates grant expiry against IClock now.
+        // This suite asserts role outcomes only (no expiring grants), so the
+        // system clock is exact enough and keeps the baseline untouched.
+        var enforcer = new ShramSafalAuthorizationEnforcer(
+            repo,
+            new AgriSync.BuildingBlocks.Persistence.TenantContext(),
+            new AgriSync.BuildingBlocks.Abstractions.SystemClock());
         return (enforcer, repo);
     }
 

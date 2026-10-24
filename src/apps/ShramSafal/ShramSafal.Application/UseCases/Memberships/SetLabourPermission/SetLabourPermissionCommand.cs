@@ -28,6 +28,10 @@ namespace ShramSafal.Application.UseCases.Memberships.SetLabourPermission;
 /// <param name="ClientAppVersion">Forensic provenance for the AuditEvent row.</param>
 /// <param name="AuditDeviceId">Forensic provenance for the AuditEvent row.</param>
 /// <param name="AuditIpHash">Forensic provenance for the AuditEvent row.</param>
+/// <param name="LabourGrantExpiresAtUtc">
+/// End of the responsibility window, UTC; <c>null</c> = कायम. Ignored (cleared)
+/// on a revoke.
+/// </param>
 public sealed record SetLabourPermissionCommand(
     FarmId FarmId,
     UserId TargetUserId,
@@ -35,4 +39,5 @@ public sealed record SetLabourPermissionCommand(
     UserId CallerUserId,
     string ClientAppVersion,
     string AuditDeviceId,
-    string AuditIpHash);
+    string AuditIpHash,
+    DateTime? LabourGrantExpiresAtUtc);

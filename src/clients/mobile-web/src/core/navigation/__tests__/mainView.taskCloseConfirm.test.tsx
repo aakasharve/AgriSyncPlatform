@@ -72,7 +72,7 @@ async function loadRenderLogView(taskCloseConfirm: boolean, findConfirmableTaskC
     }));
 
     vi.doMock('../../../app/featureFlags', () => ({
-        FEATURE_FLAGS: { dailyLoop: false, voiceContinuity: false, intelligenceInsights: false, taskCloseConfirm },
+        FEATURE_FLAGS: { dailyLoop: false, voiceContinuity: false, taskCloseConfirm },
         IS_E2E_HARNESS_ENABLED: false,
         isE2EHarnessEnabled: () => false,
         isFarmGeographyV2Enabled: () => false,

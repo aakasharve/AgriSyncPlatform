@@ -4,11 +4,12 @@
  */
 
 import React, { useState } from 'react';
-import { PlannedTask, CropProfile, Plot, Person } from '../../../types';
-import { X, Calendar, Check, AlertTriangle, Clock, Tag, User } from 'lucide-react';
+import { PlannedTask, CropProfile, Person } from '../../../types';
+import { X, Calendar, Check, AlertTriangle, User } from 'lucide-react';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { emitNextActionCreated } from '../../../core/telemetry/eventEmitters';
 import { useFarmContext } from '../../../core/session/FarmContext';
+import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 
 interface TaskCreationSheetProps {
     isOpen: boolean;
@@ -39,6 +40,7 @@ const TaskCreationSheet: React.FC<TaskCreationSheetProps> = ({
     const [assigneeId, setAssigneeId] = useState<string>('');
     const { currentFarmId } = useFarmContext();
 
+    useBackDismiss(isOpen, onClose);
     if (!isOpen) return null;
 
     const currentCrop = crops.find(c => c.id === selectedCropId);

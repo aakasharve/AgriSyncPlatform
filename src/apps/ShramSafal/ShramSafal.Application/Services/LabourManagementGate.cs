@@ -1,5 +1,4 @@
-﻿using AgriSync.SharedKernel.Contracts.Roles;
-using ShramSafal.Application.Ports;
+﻿using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.Services;
@@ -37,10 +36,10 @@ namespace ShramSafal.Application.Services;
 /// pure and lives in the Domain; this is only the two-read resolution of it.</para>
 ///
 /// <para><b>Ordering is deliberate.</b> The role is read first and answers the
-/// question on its own for owner-tier and Mukadam, so the grant read never
-/// happens for the roles that dominate real traffic. It also means a caller with
-/// NO membership is denied before the grant is consulted at all — a grant cannot
-/// outlive the membership that carries it.</para>
+/// question on its own for owner-tier, so the grant read never happens for the
+/// roles that dominate real traffic. It also means a caller with NO membership
+/// is denied before the grant is consulted at all — a grant cannot outlive the
+/// membership that carries it.</para>
 /// </summary>
 public static class LabourManagementGate
 {
@@ -51,11 +50,17 @@ public static class LabourManagementGate
     /// <c>ShramSafalErrors.Forbidden</c> — never <c>NotFound</c> — so a forged
     /// farm id cannot be used to probe existence, which is the posture every
     /// labour handler already takes.</para>
+    ///
+    /// <para><c>nowUtc</c> comes from the caller's <c>IClock</c> — expiry is
+    /// evaluated HERE and in the projection, never on
+    /// <see cref="LabourManagementPermission.IsCarriedByRole"/> (a role is not
+    /// a grant and has no end date).</para>
     /// </summary>
     public static async Task<bool> IsAllowedAsync(
         IShramSafalRepository repository,
         Guid farmId,
         Guid userId,
+        DateTime nowUtc,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(repository);
@@ -76,7 +81,7 @@ public static class LabourManagementGate
             return true;
         }
 
-        return await repository.GetLabourManagementGrantAsync(farmId, userId, ct);
+        return await repository.GetLabourManagementGrantAsync(farmId, userId, nowUtc, ct);
     }
 
     /// <summary>
@@ -90,24 +95,28 @@ public static class LabourManagementGate
     /// <para><b>Why the raw flag and not <see cref="IsAllowedAsync"/>.</b> Its consumer
     /// is <c>VerificationStateMachine</c>, which is a Domain type and cannot read a
     /// database (doctrine E2), so the resolved answer has to be passed in. And it must
-    /// be the GRANT, not the decision: <see cref="IsAllowedAsync"/> returns <c>true</c>
-    /// for a Mukadam on role alone (<see cref="LabourManagementPermission.IsCarriedByRole"/>,
-    /// founder decision O-4), so feeding IT to the FSM would let EVERY Mukadam approve —
-    /// role-gated, which is precisely the reading the 2026-08-27 ruling corrected.</para>
+    /// be the GRANT, not the decision: the FSM enumerates roles itself and takes the
+    /// stored grant as its second input — feeding it the resolved decision would
+    /// double-count the role and collapse the FSM's role/grant split into one
+    /// pre-mixed answer it can no longer reason about.</para>
     ///
-    /// <para><b>Why not <see cref="ResolveAsync"/> either.</b> That method deliberately
-    /// reports <c>HasExplicitGrant: false</c> for role-carried roles so the access UI
-    /// cannot render a switch that does nothing. Correct for that surface, wrong here:
-    /// it would hide a genuine grant held by a Mukadam, which is the exact caller this
-    /// ruling is about.</para>
+    /// <para><c>ResolveAsync</c> and <c>LabourManagementDecision</c> were deleted
+    /// 2026-09-02: zero callers, and a third copy of the rule. The read surface
+    /// projects via <c>LabourPermissionProjection.From</c>.</para>
     ///
     /// <para>Returns <c>false</c> for empty ids — fail-closed, same posture as
     /// <see cref="IsAllowedAsync"/>.</para>
+    ///
+    /// <para><c>nowUtc</c> comes from the caller's <c>IClock</c> — expiry is
+    /// evaluated HERE and in the projection, never on
+    /// <see cref="LabourManagementPermission.IsCarriedByRole"/> (a role is not
+    /// a grant and has no end date).</para>
     /// </summary>
     public static async Task<bool> HasExplicitGrantAsync(
         IShramSafalRepository repository,
         Guid farmId,
         Guid userId,
+        DateTime nowUtc,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(repository);
@@ -117,55 +126,6 @@ public static class LabourManagementGate
             return false;
         }
 
-        return await repository.GetLabourManagementGrantAsync(farmId, userId, ct);
-    }
-
-    /// <summary>
-    /// The same decision, plus the role that produced it and the raw grant
-    /// flag — for the access-management surface, which has to SHOW an owner why
-    /// a member is allowed (role-carried vs explicitly granted) rather than just
-    /// whether they are. Never used for a gate; <see cref="IsAllowedAsync"/> is.
-    /// </summary>
-    public static async Task<LabourManagementDecision> ResolveAsync(
-        IShramSafalRepository repository,
-        Guid farmId,
-        Guid userId,
-        CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(repository);
-
-        var role = await repository.GetUserRoleForFarmAsync(farmId, userId, ct);
-        if (role is null)
-        {
-            return new LabourManagementDecision(null, HasExplicitGrant: false, IsAllowed: false);
-        }
-
-        if (LabourManagementPermission.IsCarriedByRole(role.Value))
-        {
-            return new LabourManagementDecision(role, HasExplicitGrant: false, IsAllowed: true);
-        }
-
-        var granted = await repository.GetLabourManagementGrantAsync(farmId, userId, ct);
-        return new LabourManagementDecision(role, granted, granted);
+        return await repository.GetLabourManagementGrantAsync(farmId, userId, nowUtc, ct);
     }
 }
-
-/// <summary>
-/// Why a caller is (or is not) allowed to manage labour records — the shape the
-/// access-management read renders from.
-/// </summary>
-/// <param name="Role">
-/// The caller's role on the farm, or <c>null</c> when they have no non-terminal
-/// membership at all.
-/// </param>
-/// <param name="HasExplicitGrant">
-/// The stored <c>can_manage_labour_records</c> flag. Reported as <c>false</c>
-/// for roles that carry the capability anyway, because for those roles the flag
-/// is not consulted and showing a stored value would invite a UI that pretends
-/// it can be switched off.
-/// </param>
-/// <param name="IsAllowed">The effective decision.</param>
-public sealed record LabourManagementDecision(
-    AppRole? Role,
-    bool HasExplicitGrant,
-    bool IsAllowed);

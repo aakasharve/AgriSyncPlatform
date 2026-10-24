@@ -127,7 +127,7 @@ const DFES_APPROVED_COPY = {
         graspTarget: 'Aim for {target}',
         graspTargetHit: 'You reached the mark',
         askRaisesScore: 'Tell me this and the number goes up',
-        noWorkDayAcknowledged: 'No work today — you said so, and I recorded it.',
+        noWorkDayAcknowledged: 'No work today — noted on this phone.',
         consistencyKept: 'You have told me without fail for {days} days running.',
         meterArrivalProgress: 'Understood days: {count}/{target}',
         meterArrivalArrived: ' — now I have come to know your farm',
@@ -137,7 +137,6 @@ const DFES_APPROVED_COPY = {
         dailyLoopCarriedOne: 'From yesterday: {title}',
         dailyLoopCarriedMany: '({count} of these carried over)',
         dailyLoopClarity: '{done} done, {left} left',
-        morningNotificationTitle: 'See today\'s tasks',
         unlockSpokenLine: 'Well done! Now I have truly come to know your farm.',
     },
     mr: {
@@ -213,7 +212,7 @@ const DFES_APPROVED_COPY = {
         graspTarget: '{target} पर्यंत पोहोचायचंय',
         graspTargetHit: 'तुम्ही खूण गाठली!',
         askRaisesScore: 'हे सांगितलं तर आकडा वाढेल',
-        noWorkDayAcknowledged: 'आज काम नाही — तुम्ही सांगितलं, मी नोंदवलं.',
+        noWorkDayAcknowledged: 'आज काम नाही — लक्षात ठेवलं.',
         consistencyKept: 'सलग {days} दिवस तुम्ही न चुकता सांगताय.',
         meterArrivalProgress: '{count}/{target} दिवसांची कामे समजली',
         meterArrivalArrived: ' — आता मी तुमचं शेत ओळखू लागलो',
@@ -223,7 +222,6 @@ const DFES_APPROVED_COPY = {
         dailyLoopCarriedOne: 'काल पासून: {title}',
         dailyLoopCarriedMany: '(यातील {count} काल पासून)',
         dailyLoopClarity: '{done} पूर्ण, {left} बाकी',
-        morningNotificationTitle: 'आजची कामे पाहा',
         unlockSpokenLine: 'शाब्बास !!! आता मला तुमचं शेत आणि तुमची काम करण्याची पद्धत सविस्तर समजू लागली आहे',
     },
 } as const;

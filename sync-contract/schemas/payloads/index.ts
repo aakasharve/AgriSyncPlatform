@@ -1,4 +1,4 @@
-// Barrel export for all 32 payload schemas. Imported by the frontend
+// Barrel export for all 33 payload schemas. Imported by the frontend
 // PayloadValidator and any future backend C# code-gen.
 //
 // All 32 are concrete Zod objects after T-IGH-02-PAYLOADS. Wired
@@ -42,3 +42,8 @@ export { JobCardStartPayload } from './jobcard_start.zod';
 export { JobCardCompletePayload } from './jobcard_complete.zod';
 export { JobCardSettlePayload } from './jobcard_settle.zod';
 export { JobCardCancelPayload } from './jobcard_cancel.zod';
+// Labour V2 R1 Task 3.5a — attendance.mark. The parity gate resolves
+// '<payloadSchema>Payload' against this barrel and fails OPEN on a miss
+// (PayloadValidator.ts), so the export name must stay exactly
+// 'AttendanceMarkPayload'.
+export * from './attendance_mark.zod';

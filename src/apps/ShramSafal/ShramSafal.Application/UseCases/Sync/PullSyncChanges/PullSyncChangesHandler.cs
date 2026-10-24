@@ -120,6 +120,12 @@ public sealed class PullSyncChangesHandler(
         var dayLedgers = (await repository.GetDayLedgersChangedSinceAsync(farmIds, sinceUtc, ct))
             .Where(l => farmIdSet.Contains((Guid)l.FarmId))
             .ToList();
+        // Labour V2 R1 Task 3.5c — attendance rulings changed since the cursor.
+        // P10's server half: once pulled here, a mark is reconstructable
+        // without the device that made it.
+        var attendanceMarks = (await repository.GetAttendanceMarksChangedSinceAsync(farmIds, sinceUtc, ct))
+            .Where(m => farmIdSet.Contains((Guid)m.FarmId))
+            .ToList();
         var priceConfigs = (await repository.GetPriceConfigsChangedSinceAsync(sinceUtc, ct))
             .Where(p => (Guid)p.CreatedByUserId == query.UserId)
             .ToList();
@@ -185,6 +191,7 @@ public sealed class PullSyncChangesHandler(
             costEntries,
             financeCorrections,
             dayLedgers,
+            attendanceMarks,
             priceConfigs,
             plannedActivities,
             auditEvents);
@@ -429,6 +436,7 @@ public sealed class PullSyncChangesHandler(
             testRecommendationDtos,
             complianceSignalDtos,
             jobCardDtos,
+            attendanceMarks.Select(m => m.ToDto()).ToList(),
             // Sub-plan 03 Task 10: empty list when healthy; non-empty
             // signals partial data AND triggers the NextCursorUtc
             // rewind handled in the if-block above.
@@ -469,6 +477,7 @@ public sealed class PullSyncChangesHandler(
         IReadOnlyList<Domain.Finance.CostEntry> costEntries,
         IReadOnlyList<Domain.Finance.FinanceCorrection> financeCorrections,
         IReadOnlyList<Domain.Finance.DayLedger> dayLedgers,
+        IReadOnlyList<Domain.Labour.AttendanceMark> attendanceMarks,
         IReadOnlyList<Domain.Finance.PriceConfig> priceConfigs,
         IReadOnlyList<Domain.Planning.PlannedActivity> plannedActivities,
         IReadOnlyList<Domain.Audit.AuditEvent> auditEvents)
@@ -513,6 +522,11 @@ public sealed class PullSyncChangesHandler(
         if (dayLedgers.Count > 0)
         {
             maxTimestamp = Max(maxTimestamp, dayLedgers.Max(c => c.ModifiedAtUtc));
+        }
+
+        if (attendanceMarks.Count > 0)
+        {
+            maxTimestamp = Max(maxTimestamp, attendanceMarks.Max(m => m.ModifiedAtUtc));
         }
 
         if (priceConfigs.Count > 0)

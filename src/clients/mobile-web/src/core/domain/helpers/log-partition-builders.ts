@@ -20,7 +20,7 @@ import {
     ActivityExpenseEvent, ObservationNote,
     PlannedTask, AgriLogResponse, DisturbanceEvent
 } from '../../../types';
-import type { DayOutcome, ObservationNoteDraft } from '../../../domain/types/log.types';
+import type { DayOutcome, LogCaptureScope, ObservationNoteDraft } from '../../../domain/types/log.types';
 import { getPhaseAndDay } from '../../../shared/utils/timelineUtils';
 import { getDateKey } from '../services/DateKeyService';
 import { resolveDueDate } from '../dueDateResolver';
@@ -94,6 +94,12 @@ export interface ManualEntryData {
      * so every partition of one voice-drafted save is equally AI-derived.
      */
     provenance?: LogProvenance;
+    /**
+     * B002 — `'labour'` when the हजेरी door saved this (set by the labour-door
+     * submission; see `DailyLog.captureScope`). Like `provenance` it describes the
+     * WHOLE save, so every partition carries it. Absent everywhere else.
+     */
+    captureScope?: LogCaptureScope;
 }
 
 /** Inline type for a single element of AgriLogResponse.plannedTasks. */
@@ -320,6 +326,8 @@ export function buildManualPartitionLog(
             // BUGFIX_2026-07-19 - see ManualEntryData.provenance doc comment.
             provenance: data.provenance
         },
+        // B002 - present only for a हजेरी-door save, so every other log is unchanged.
+        ...(data.captureScope === 'labour' && { captureScope: 'labour' as const }),
         verification: {
             status: verificationStatus,
             required: !isOwner,

@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, Search, Plus } from 'lucide-react';
+import { useBackDismiss } from '../../../../core/navigation/useBackDismiss';
 
 interface ActivityItem {
     id: string;
@@ -32,6 +33,7 @@ const ALL_ACTIVITIES: ActivityItem[] = [
 ];
 
 const ActivitySelectionModal: React.FC<ActivitySelectionModalProps> = ({ isOpen, onClose, onSelect, title = "Select Activity", filterType }) => {
+    useBackDismiss(isOpen, onClose);
     if (!isOpen) return null;
 
     const filteredItems = filterType

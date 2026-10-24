@@ -6,6 +6,8 @@ using Accounts.Infrastructure.Persistence;
 using AgriSync.Bootstrapper.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Npgsql;
 using ShramSafal.Infrastructure.Persistence;
 using User.Application.Ports;
@@ -246,7 +248,20 @@ public sealed class PurveshDemoSeederFieldOperatorTeardownRealPostgresTests : IA
             new DbContextOptionsBuilder<AccountsDbContext>().UseNpgsql(_superuserConn).Options);
 
         disposables = [ssf, user, accounts];
-        return new PurveshDemoSeeder(ssf, user, accounts, new NoOpPasswordHasher());
+
+        // The startup clear runs only outside Production (it refuses there by construction), so
+        // this direct construction NAMES its environment instead of leaning on the constructor's
+        // optional default or on whatever ASPNETCORE_ENVIRONMENT the test process happens to carry.
+        return new PurveshDemoSeeder(ssf, user, accounts, new NoOpPasswordHasher(), new DevelopmentHostEnvironment());
+    }
+
+    /// <summary>A Development host — what a developer's CLEAR_PURVESH_DEMO=true startup runs in.</summary>
+    private sealed class DevelopmentHostEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = Environments.Development;
+        public string ApplicationName { get; set; } = "AgriSync.Bootstrapper";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 
     private static async Task DisposeAllAsync(IAsyncDisposable[] disposables)

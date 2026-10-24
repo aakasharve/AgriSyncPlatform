@@ -104,6 +104,33 @@ export function buildSkippedSyncToast(
 }
 
 /**
+ * The toast for a save whose records ALL reached the sync queue.
+ *
+ * Founder decision 2026-10-12 (Marathi corrections): "Logged." / "Saved to N
+ * plots" were English and claimed a finished save at the moment the record was
+ * only queued on the phone. The server has not accepted anything yet, so the
+ * only claim made is the approved `sync.onPhone` one ("लक्षात ठेवलं ✓"), in the
+ * farmer's own language. The day-completeness figure is local arithmetic over
+ * the history and is named as such, not as a server result.
+ */
+export function buildQueuedLogToast(
+    language: Language,
+    beforePercent: number,
+    afterPercent: number,
+    plotCount?: number,
+): SaveToastMessage {
+    const claim = onPhoneClaim(language);
+    const mr = language === 'mr';
+    const plots = plotCount === undefined
+        ? ''
+        : mr ? ` ${plotCount} प्लॉटसाठी एकच नोंद.` : ` One entry for ${plotCount} plots.`;
+    const closure = mr
+        ? `दिवसाची नोंद ${beforePercent}% वरून ${afterPercent}%`
+        : `Day record ${beforePercent}% to ${afterPercent}%`;
+    return { message: `${claim} —${plots} ${closure}`, type: 'success' };
+}
+
+/**
  * The toast for a successful EDIT.
  *
  * Two true things and no more:
@@ -146,15 +173,45 @@ export function buildSkippedSyncToast(
  * be the nag `P9` forbids, and the zero branch above already refuses to do it.
  *
  * ORDER: phone claim, then what DID reach the server, then what did not. The
- * reassurance still comes first (`startsWith(onPhoneClaim)` holds in every
- * branch), and the news the farmer can do nothing about comes last.
+ * reassurance comes first, and the news the farmer can do nothing about comes
+ * last.
+ *
+ * ── AND THE ONE CASE WHERE THE PHONE CLAIM ITSELF IS FALSE (V2 R1, Task 23) ──
+ *
+ * `startsWith(onPhoneClaim)` used to hold in EVERY branch, because the claim
+ * was made on one thing: `repo.save` resolved. For an edit that ADDED or
+ * REMOVED a labour engagement on an already-saved day that is not enough.
+ * Nothing in this system can carry an add or a remove to a server — there is no
+ * such correction, no such sync mutation and no such route — so `resolveLabour`
+ * replaces the handset's engagement list with the server's on the next delta
+ * pull, and the addition is deleted (a removal restored) within the sync
+ * interval. "लक्षात ठेवलं ✓" over that is a success message for an operation
+ * that did not happen, which is the one thing this module exists to prevent.
+ *
+ * SO THE CLAIM IS DROPPED, NOT REPLACED. `phoneClaimHolds: false` removes the
+ * reassurance and leaves the tails, which are already-approved copy —
+ * `sync.unsentEditTail` already renders on exactly this branch. No new sentence
+ * is invented here; the farmer-facing wording is the founder's to approve.
+ *
+ * WHY DROPPING IT IS NOT A REVERSAL OF THE RULE AT THE TOP OF THIS FILE. That
+ * rule rests on a premise — "the record genuinely IS safe on the handset" —
+ * and this is the one branch where the premise is false. It is deliberately
+ * NARROW: `unsentChanges` alone never removes the claim, because an irrigation
+ * figure the server was never told about does still sit in `db.logs` and does
+ * still show on every screen. Widening it would trade a lie for a different
+ * one, and would invite the duplicate re-recording the rule was written to stop.
+ *
+ * `phoneClaimHolds` DEFAULTS TO TRUE, and that default is not safe — it
+ * suppresses the correction, exactly like the `?? false` its caller documents.
+ * It defaults that way so the happy path stays byte-identical; any new producer
+ * of `UpdateLogResponse` must pass this rather than lean on the default.
  */
 export function buildEditSavedMessage(
     persistedCorrections: number,
     language: Language,
     unsentChanges = false,
+    phoneClaimHolds = true,
 ): string {
-    const onPhone = onPhoneClaim(language);
     const tails: string[] = [];
 
     if (persistedCorrections > 0) {
@@ -164,9 +221,19 @@ export function buildEditSavedMessage(
         tails.push(translateFormat(tailKey, language, { count: persistedCorrections }));
     }
 
-    if (unsentChanges) {
+    // `|| !phoneClaimHolds` rather than a separate branch: a phone claim that
+    // does not hold IS an unsent change, and stating it here is what guarantees
+    // the message below can never come out empty once the reassurance is gone.
+    // A silent confirmation is its own dishonesty — the farmer taps जतन and
+    // learns nothing.
+    if (unsentChanges || !phoneClaimHolds) {
         tails.push(translate('sync.unsentEditTail', language));
     }
 
+    if (!phoneClaimHolds) {
+        return tails.join(' ');
+    }
+
+    const onPhone = onPhoneClaim(language);
     return tails.length === 0 ? onPhone : `${onPhone} — ${tails.join(' ')}`;
 }

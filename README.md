@@ -24,8 +24,7 @@ AgriSyncPlatform/
 │   │       ├── ShramSafal.Infrastructure/
 │   │       └── ShramSafal.Api/     # Library (not runnable)
 │   ├── clients/
-│   │   ├── mobile-web/             # React 19 + Vite PWA (offline-first)
-│   │   └── marketing-web/          # Astro 4 + React islands
+│   │   └── mobile-web/             # React 19 + Vite PWA (offline-first)
 │   └── tests/
 │       ├── AgriSync.ArchitectureTests/
 │       ├── ShramSafal.Domain.Tests/

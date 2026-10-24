@@ -113,6 +113,30 @@ describe('MutationQueue — T-IGH-04-CONFLICT-STATUS-DURABILITY', () => {
         expect(row?.retryCount).toBe(3);
     });
 
+    it('markRejectedUserReview persists the server error CODE beside the message (Task 9 / B001)', async () => {
+        // The code is what lets a surface recognise WHAT parked the row —
+        // the labour route reads ShramSafal.AttendanceContradiction parks to
+        // render the answerable question — without matching English prose.
+        const queue = MutationQueue.getInstance();
+        const id = await seedRow('SENDING');
+
+        await queue.markRejectedUserReview(id, 'human message', 'ShramSafal.AttendanceContradiction');
+
+        const row = await getDatabase().mutationQueue.get(id);
+        expect(row?.status).toBe('REJECTED_USER_REVIEW');
+        expect(row?.errorCode).toBe('ShramSafal.AttendanceContradiction');
+    });
+
+    it('markRejectedUserReview without a code leaves errorCode absent — never a fabricated one', async () => {
+        const queue = MutationQueue.getInstance();
+        const id = await seedRow('SENDING');
+
+        await queue.markRejectedUserReview(id, 'human message');
+
+        const row = await getDatabase().mutationQueue.get(id);
+        expect(row?.errorCode).toBeUndefined();
+    });
+
     it('markRejectedDropped flips REJECTED_USER_REVIEW → REJECTED_DROPPED', async () => {
         const queue = MutationQueue.getInstance();
         const id = await seedRow('REJECTED_USER_REVIEW');

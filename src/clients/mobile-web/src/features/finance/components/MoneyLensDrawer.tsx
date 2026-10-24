@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { FinanceFilters, EffectiveMoneyEvent } from '../finance.types';
 import { financeSelectors } from '../financeSelectors';
 import { financeCommandService } from '../financeCommandService';
+import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 
 interface MoneyLensDrawerProps {
     isOpen: boolean;
@@ -30,6 +31,7 @@ export const MoneyLensDrawer: React.FC<MoneyLensDrawerProps> = ({
 
     const breakdown = financeSelectors.getBreakdown(filters);
 
+    useBackDismiss(isOpen, onClose);
     if (!isOpen) return null;
 
     const openFix = (line: EffectiveMoneyEvent) => {

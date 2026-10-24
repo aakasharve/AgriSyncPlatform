@@ -73,11 +73,11 @@ public sealed class LoginHandler(
             command.Session.DeviceName,
             command.Session.Platform,
             utcNow,
-            utcNow.AddDays(30));
+            utcNow.Add(RefreshTokenPolicy.Lifetime));
 
         await refreshTokenRepository.AddAsync(refreshToken, ct);
         await refreshTokenRepository.SaveChangesAsync(ct);
 
-        return Result.Success(new AuthResponse(user.Id, tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAtUtc));
+        return Result.Success(new AuthResponse(user.Id, tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAtUtc, refreshToken.ExpiresAtUtc));
     }
 }

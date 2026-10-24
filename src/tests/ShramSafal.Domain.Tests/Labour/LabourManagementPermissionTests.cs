@@ -20,9 +20,10 @@ namespace ShramSafal.Domain.Tests.Labour;
 /// </summary>
 public sealed class LabourManagementPermissionTests
 {
-    /// <summary>The three roles founder decision O-4 says carry the capability outright.</summary>
+    /// <summary>The two roles that carry the capability outright — owner-tier ONLY
+    /// (founder master review 2026-09-02, D5; supersedes O-4's Mukadam entry).</summary>
     private static readonly AppRole[] CarriedByRole =
-        [AppRole.PrimaryOwner, AppRole.SecondaryOwner, AppRole.Mukadam];
+        [AppRole.PrimaryOwner, AppRole.SecondaryOwner];
 
     public static TheoryData<AppRole> AllRoles()
     {
@@ -48,16 +49,17 @@ public sealed class LabourManagementPermissionTests
 
     [Theory]
     [MemberData(nameof(AllRoles))]
-    public void Role_alone_carries_the_capability_for_owner_tier_and_Mukadam_and_nobody_else(AppRole role)
+    public void Role_alone_carries_the_capability_for_owner_tier_and_nobody_else(AppRole role)
     {
         LabourManagementPermission.IsCarriedByRole(role)
             .Should().Be(CarriedByRole.Contains(role),
-                "O-4: owner always, Mukadam by default, everyone else only when explicitly granted");
+                "D5 (2026-09-02): owner-tier always; everyone else — Mukadam included — only when "
+                + "explicitly granted");
     }
 
     [Theory]
     [MemberData(nameof(AllRoles))]
-    public void Without_a_grant_only_the_three_carrying_roles_are_allowed(AppRole role)
+    public void Without_a_grant_only_the_two_carrying_roles_are_allowed(AppRole role)
     {
         LabourManagementPermission.IsAllowed(role, hasExplicitGrant: false)
             .Should().Be(CarriedByRole.Contains(role));
@@ -69,23 +71,27 @@ public sealed class LabourManagementPermissionTests
     {
         LabourManagementPermission.IsAllowed(role, hasExplicitGrant: true)
             .Should().BeTrue(
-                "an explicit grant is what O-4 gives the owner to extend the capability to any member; "
-                + "for the three carrying roles it is simply redundant, never contradictory");
+                "an explicit grant is what the owner uses to extend the capability to any member; "
+                + "for the two carrying roles it is simply redundant, never contradictory");
     }
 
     /// <summary>
-    /// THE regression this phase exists for. Before Phase 5,
-    /// <c>ShramSafalAuthorizationEnforcer</c> approved/verified on
-    /// <c>[PrimaryOwner, SecondaryOwner]</c> only — so the Mukadam could correct
-    /// a headcount but could not verify the log carrying it.
+    /// THE 2026-09-02 inversion, and the only test stating the rule in prose.
+    /// O-4 put the Mukadam in the carried set; the founder's master review (D5)
+    /// takes him out: ONE switch, owner-controlled, and existing Mukadams start
+    /// OFF. "The owner may keep him as mukadam with the authority OFF" — which
+    /// the shipped code made impossible — is now the rule.
     /// </summary>
     [Fact]
-    public void A_Mukadam_is_allowed_with_no_grant_at_all()
+    public void A_Mukadam_without_a_grant_is_denied_and_only_the_owners_switch_changes_that()
     {
         LabourManagementPermission.IsAllowed(AppRole.Mukadam, hasExplicitGrant: false)
-            .Should().BeTrue(
-                "the Mukadam is exactly the person doing field verification; excluding them from "
-                + "approve/verify while allowing them to correct labour was the contradiction O-4 closed");
+            .Should().BeFalse(
+                "D5: the owner decides once whether a person may manage labour on this farm — "
+                + "the Mukadam ROLE no longer smuggles that authority in");
+
+        LabourManagementPermission.IsAllowed(AppRole.Mukadam, hasExplicitGrant: true)
+            .Should().BeTrue("the same one switch that admits any other member admits him");
     }
 
     [Theory]
@@ -105,8 +111,8 @@ public sealed class LabourManagementPermissionTests
     {
         LabourManagementPermission.CanGrantOrRevoke(role)
             .Should().Be(role is AppRole.PrimaryOwner or AppRole.SecondaryOwner,
-                "O-4: 'the owner decides who is trusted'. A Mukadam HOLDS the capability but may not "
-                + "spread it, or the owner's decision stops being the owner's");
+                "O-4: 'the owner decides who is trusted'. Even a member the owner GRANTED may not "
+                + "spread the capability, or the owner's decision stops being the owner's");
     }
 
     [Fact]

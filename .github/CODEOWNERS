@@ -14,7 +14,6 @@ src/AgriSync.Bootstrapper/**                         @agrisync-bot
 src/clients/mobile-web/src/infrastructure/ai/**      @agrisync-bot
 src/clients/mobile-web/src/domain/schemas/**         @agrisync-bot
 src/clients/mobile-web/**                            @agrisync-bot
-src/clients/marketing-web/**                         @agrisync-bot
 
 # Infrastructure (ops-engineer + founder)
 .github/**                                           @agrisync-bot

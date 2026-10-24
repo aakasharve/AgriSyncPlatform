@@ -16,7 +16,7 @@
  *     that pull in further provider trees (PlotMap, EntitlementBanner,
  *     FarmInviteQrSheet, VocabManager, PeopleDirectory, AddMemberWizard,
  *     MembershipsList, SoilHealthReportsManager, ElectricityTimingConfigurator,
- *     ReliabilityScoreCard, VarietySelector).
+ *     VarietySelector).
  *
  * The snapshot's signal is "ProfilePage mounts and the structure tab surface is
  * present." It is NOT a per-tab regression suite — the original Task 1 plan
@@ -109,9 +109,6 @@ vi.mock('../../../features/profile/components/SoilHealthReportsManager', () => (
 vi.mock('../../../features/profile/components/ElectricityTimingConfigurator', () => ({
     default: () => <div data-testid="mock-electricity-timing">[mock ElectricityTimingConfigurator]</div>,
 }));
-vi.mock('../../../features/work/components/ReliabilityScoreCard', () => ({
-    default: () => <div data-testid="mock-reliability-score">[mock ReliabilityScoreCard]</div>,
-}));
 vi.mock('../../../features/context/components/VarietySelector', () => ({
     VarietySelector: () => <div data-testid="mock-variety-selector">[mock VarietySelector]</div>,
 }));
@@ -154,8 +151,6 @@ describe('ProfilePage (Sub-plan 04 Task 1 baseline smoke)', () => {
                     crops={baselineCrops}
                     onUpdateProfile={noop}
                     onUpdateCrops={noop}
-                    onAddPerson={noop}
-                    onDeletePerson={noop}
                     onOpenScheduleLibrary={noop}
                     onOpenFinanceManager={noop}
                     onOpenReferrals={noop}

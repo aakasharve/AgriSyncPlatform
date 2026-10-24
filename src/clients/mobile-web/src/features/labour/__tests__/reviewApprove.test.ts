@@ -310,11 +310,21 @@ describe('ReviewSheet — screen honesty (Decision 4b)', () => {
         expect(screen.queryByText(/टीमच्या/)).toBeNull();
     });
 
-    it('bounds the queue to the last 14 days — an older item (a real backend ISO-date detail) never appears', () => {
+    /**
+     * Task 20 (spec: 2026-08-28-labour-v2-release-1) — this test used to assert
+     * the OPPOSITE: that an item older than 14 days "never appears", and that
+     * the header showed the bounded count. That bound was Decision 4b's, and it
+     * was applied on this screen alone — the तपासा badge went on counting the
+     * server's unbounded total, so the tile said 60 while the sheet listed 12,
+     * the badge could never reach zero, and a log older than a fortnight was
+     * unreachable from every screen in the app. Hiding a farmer's record is the
+     * worse of the two failures, so the queue shows everything and the header
+     * counts what it shows. `reviewQueueTruth.test.ts` carries the rest.
+     */
+    it('shows work older than 14 days — nothing recorded may be unreachable', () => {
         const today = new Date();
         const recentIso = toLocalIsoDate(today);
-        const oldDate = new Date(today.getTime() - 30 * 86_400_000);
-        const oldIso = toLocalIsoDate(oldDate);
+        const oldIso = toLocalIsoDate(new Date(today.getTime() - 30 * 86_400_000));
 
         const recent: ReviewItem = { id: 'recent-1', who: 'रमेश', initial: 'र', tone: 'or', detail: recentIso, status: 'Confirmed', points: {} };
         const old: ReviewItem = { id: 'old-1', who: 'सुनीता', initial: 'सु', tone: 'em', detail: oldIso, status: 'Confirmed', points: {} };
@@ -324,9 +334,8 @@ describe('ReviewSheet — screen honesty (Decision 4b)', () => {
         }));
 
         expect(screen.getByTestId('review-card-recent-1')).toBeInTheDocument();
-        expect(screen.queryByTestId('review-card-old-1')).toBeNull();
-        // The header count reflects the BOUNDED list, not the raw total (would say "2" if unbounded).
-        expect(screen.getByText('1 नोंदी — मंजूर करा')).toBeInTheDocument();
+        expect(screen.getByTestId('review-card-old-1')).toBeInTheDocument();
+        expect(screen.getByText('2 नोंदी — मंजूर करा')).toBeInTheDocument();
     });
 
     it('reformats a real backend ISO-date detail (आज) instead of leaking the raw yyyy-MM-dd string', () => {

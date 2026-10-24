@@ -4,6 +4,7 @@ using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Memberships.ClaimJoin;
 using ShramSafal.Application.UseCases.Memberships.ExitMembership;
 using ShramSafal.Application.UseCases.Memberships.GetLabourPermissions;
@@ -30,16 +31,30 @@ public static class MembershipEndpoints
         // so the legacy `catch (UnauthorizedAccessException)` defense-in-
         // depth seam is GONE. The pipeline's authorizer routes auth
         // failures as typed Result.Failure → ToErrorResult → 403.
-        group.MapPost("/farms/{farmId:guid}/invite-qr", async (
+        group.MapPost("/farms/{farmId:guid}/invite-qr", async Task<IResult> (
             Guid farmId,
             HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<IssueFarmInviteCommand, IssueFarmInviteResult> handler,
+            ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var userId))
             {
                 return Results.Unauthorized();
+            }
+
+            // Establish the membership-validated farm scope BEFORE the pipeline
+            // runs. The owner check (EnsureIsOwner) issues its first DbCommand
+            // before it publishes any tenant claim, so without this the
+            // TenantConnectionInterceptor fail-closes ("no tenant claim set and
+            // not in admin scope") and the owner got 500. A non-member is refused
+            // here (403); a non-owner member still reaches EnsureIsOwner and is
+            // refused there. Same fix as labour-permissions; mirrors LabourEndpoints.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — forensic provenance for
@@ -72,15 +87,23 @@ public static class MembershipEndpoints
         // enforcer returns Result, so no catch (UnauthorizedAccessException)
         // seam is needed — auth failures route as typed Result.Failure
         // → ToErrorResult → 403.
-        group.MapPost("/farms/{farmId:guid}/invite-qr/rotate", async (
+        group.MapPost("/farms/{farmId:guid}/invite-qr/rotate", async Task<IResult> (
             Guid farmId,
             ClaimsPrincipal user,
             IHandler<RotateFarmInviteCommand, RotateFarmInviteResult> handler,
+            ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var userId))
             {
                 return Results.Unauthorized();
+            }
+
+            // Same as issue above: scope first, then the owner-only pipeline.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
             }
 
             var result = await handler.HandleAsync(
@@ -235,15 +258,29 @@ public static class MembershipEndpoints
         // verb: a farmer on a rural connection re-sending the same request must
         // land on the same state. That is what makes it idempotent without an
         // Idempotency-Key (ADR 0004 exists for requests that are NOT).
-        group.MapGet("/farms/{farmId:guid}/labour-permissions", async (
+        group.MapGet("/farms/{farmId:guid}/labour-permissions", async Task<IResult> (
             Guid farmId,
             ClaimsPrincipal user,
             IHandler<GetLabourPermissionsQuery, IReadOnlyList<LabourPermissionDto>> handler,
+            ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var userId))
             {
                 return Results.Unauthorized();
+            }
+
+            // Establish the membership-validated farm scope BEFORE the pipeline
+            // runs. The pipeline's owner check (EnsureIsOwner) issues its first
+            // DbCommand before it publishes any tenant claim, so without this the
+            // TenantConnectionInterceptor fail-closes ("no tenant claim set and
+            // not in admin scope") and EVERY caller — owner included — got 500.
+            // A non-member is refused here (403); a non-owner member still reaches
+            // EnsureIsOwner and is refused there. Mirrors LabourEndpoints.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
             }
 
             var result = await handler.HandleAsync(
@@ -253,18 +290,26 @@ public static class MembershipEndpoints
         })
         .WithName("GetFarmLabourPermissions");
 
-        group.MapPut("/farms/{farmId:guid}/labour-permissions/{targetUserId:guid}", async (
+        group.MapPut("/farms/{farmId:guid}/labour-permissions/{targetUserId:guid}", async Task<IResult> (
             Guid farmId,
             Guid targetUserId,
             SetLabourPermissionRequest request,
             HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<SetLabourPermissionCommand, LabourPermissionDto> handler,
+            ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var userId))
             {
                 return Results.Unauthorized();
+            }
+
+            // Same as the GET above: scope first, then the owner-only pipeline.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
             }
 
             // The acting owner comes from the validated JWT subject, never from
@@ -281,7 +326,8 @@ public static class MembershipEndpoints
                     new UserId(userId),
                     clientAppVersion,
                     auditDeviceId,
-                    auditIpHash),
+                    auditIpHash,
+                    request?.LabourGrantExpiresAtUtc),
                 ct);
 
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -377,10 +423,16 @@ public sealed record ClaimJoinRequest(string? Token, string? FarmCode);
 /// LABOUR_PHASE2 Phase 5 — body of
 /// <c>PUT /shramsafal/farms/{farmId}/labour-permissions/{targetUserId}</c>.
 ///
-/// <para>One field, and it is the DESIRED STATE, not a toggle: the caller says
-/// what it wants to be true, so a retry on a bad connection converges instead of
-/// oscillating. An absent/`null` body is read as <c>false</c> (revoke) — the
-/// fail-closed direction, since the alternative would let a malformed request
-/// hand out a capability.</para>
+/// <para>The DESIRED STATE, not a toggle: the caller says what it wants to be
+/// true, so a retry on a bad connection converges instead of oscillating. An
+/// absent/`null` body is read as <c>false</c> (revoke) — the fail-closed
+/// direction, since the alternative would let a malformed request hand out a
+/// capability.</para>
+///
+/// <para><c>LabourGrantExpiresAtUtc</c> (R1 Task 2.2, D5): the UTC instant the
+/// responsibility ends; absent/<c>null</c> = कायम, no end date. Ignored
+/// (cleared) on a revoke, refused when already past.</para>
 /// </summary>
-public sealed record SetLabourPermissionRequest(bool CanManageLabourRecords);
+public sealed record SetLabourPermissionRequest(
+    bool CanManageLabourRecords,
+    DateTime? LabourGrantExpiresAtUtc = null);

@@ -65,6 +65,21 @@ public sealed class UpdateFarmBoundaryHandler(
             return Result.Failure<FarmDto>(ShramSafalErrors.InvalidCommand);
         }
 
+        // Stage A0 / A3 — the ledger records the actor's role ON THIS FARM.
+        //
+        // The role was never client-spoofable: it arrived server-derived from the signed
+        // JWT membership claim (EndpointActorContext.cs:26-43). The defect is that the
+        // claim carries ONE role per account, so an owner of another farm acting here was
+        // recorded as an owner here.
+        //
+        // This is the same resolver IsUserOwnerOfFarmAsync just used above
+        // (ShramSafalRepository.cs:92-96 delegates straight to it), so the audit trail and
+        // the access decision cannot disagree. Null is therefore unreachable here by
+        // construction; "unknown" exists to prevent a fabricated role, never as a normal
+        // outcome, and a real one in the ledger means a broken tenant scope worth chasing.
+        var resolvedActorRole = await repository.GetUserRoleForFarmAsync(
+            command.FarmId, command.ActorUserId, ct);
+
         var nowUtc = clock.UtcNow;
         farm.SetCanonicalCentre(
             command.CentreLat,
@@ -99,7 +114,7 @@ public sealed class UpdateFarmBoundaryHandler(
                 entityId: farm.Id,
                 action: "BoundaryUpdated",
                 actorUserId: command.ActorUserId,
-                actorRole: command.ActorRole ?? "unknown",
+                actorRole: resolvedActorRole?.ToString().ToLowerInvariant() ?? "unknown",
                 payload: new
                 {
                     farmId = farm.Id,

@@ -274,8 +274,6 @@ export interface DfesTranslations {
     // notification title ("see today's tasks"). Static text only, no
     // dynamic count (pendingCount isn't persisted; a stale number in a
     // scheduled notification would be worse than none). Flag-gated by
-    // VITE_MORNING_NOTIFICATION, default OFF.
-    morningNotificationTitle: string;
 
     // Task 8 (spec: dfes-companion-2026-07-11) — "Sathi talks back":
     // the one warm celebration line spoken (web speechSynthesis) once
@@ -407,7 +405,7 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
         // Declared no-work day (founder ruling 2, 2026-08-14). The Marathi is
         // the founder's own register and ships verbatim; these two English
         // lines are a working translation of it and are NOT founder-reviewed.
-        noWorkDayAcknowledged: 'No work today — you said so, and I recorded it.',
+        noWorkDayAcknowledged: 'No work today — noted on this phone.',
 
         consistencyKept: 'You have told me without fail for {days} days running.',
 
@@ -431,7 +429,6 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
         dailyLoopClarity: '{done} done, {left} left',
 
         // Task 7 (spec: dfes-companion-2026-07-11) — morning notification title
-        morningNotificationTitle: 'See today\'s tasks',
 
         // Task 8 (spec: dfes-companion-2026-07-11) — reference translation
         // only; the spoken utterance always uses the `mr` value below.
@@ -589,7 +586,7 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
         // A day he honestly said had no work. FOUNDER-SUPPLIED register, used
         // verbatim — do not paraphrase. No number appears beside these lines:
         // his honesty is acknowledged and his consistency named instead.
-        noWorkDayAcknowledged: 'आज काम नाही — तुम्ही सांगितलं, मी नोंदवलं.',
+        noWorkDayAcknowledged: 'आज काम नाही — लक्षात ठेवलं.',
 
         consistencyKept: 'सलग {days} दिवस तुम्ही न चुकता सांगताय.',
 
@@ -622,7 +619,6 @@ export const dfesTranslations: Record<Language, DfesTranslations> = {
 
         // Task 7 (spec: dfes-companion-2026-07-11) — morning notification title.
         // Static Marathi copy: "see today's tasks".
-        morningNotificationTitle: 'आजची कामे पाहा',
 
         // Task 8 (spec: dfes-companion-2026-07-11) — the line Sathi
         // actually SPEAKS (web speechSynthesis, lang='mr-IN') once ever

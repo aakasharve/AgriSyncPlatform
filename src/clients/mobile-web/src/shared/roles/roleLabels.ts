@@ -156,6 +156,31 @@ export const getRoleLabel = (code: string | null | undefined): RoleLabel => {
 };
 
 /**
+ * Resolve the role strings the app actually carries to a label.
+ *
+ * Two spellings of the same four membership roles circulate: the server's
+ * PascalCase (`SecondaryOwner`, from /my-farms and the QR claim) and the
+ * local operator profile's SCREAMING_SNAKE (`SECONDARY_OWNER`, from
+ * `FarmOperator.role`). Before this helper the Team page tested only
+ * `=== 'SECONDARY_OWNER'` and labelled EVERYONE else - the owner and any
+ * Mukadam included - as a worker (founder decision 2026-10-12: role labels
+ * must be accurate). Unknown values fall back to the neutral "सदस्य" via
+ * `getRoleLabel`, never to "worker".
+ */
+export const getOperatorRoleLabel = (role: string | null | undefined): RoleLabel => {
+    const canonical = (role ?? '')
+        .toLowerCase()
+        .replace(/[^a-z]/g, '');
+    const code: FarmRole | null =
+        canonical === 'primaryowner' ? 'PrimaryOwner'
+            : canonical === 'secondaryowner' ? 'SecondaryOwner'
+                : canonical === 'mukadam' ? 'Mukadam'
+                    : canonical === 'worker' ? 'Worker'
+                        : null;
+    return getRoleLabel(code ?? role);
+};
+
+/**
  * Ordered list used by role pickers / QR generation sheets so the
  * options show up in a stable sequence (owner roles first, then
  * professional advisors, then operational roles).

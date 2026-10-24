@@ -19,6 +19,26 @@ public sealed record SyncOperatorDto(
     string DisplayName,
     string Role);
 
+/// <summary>
+/// Labour V2 R1 Task 3.5c — one attendance ruling on the pull wire.
+/// <c>DayMark</c>/<c>NightMark</c> are enum NAMES; <c>null</c> means
+/// Unmarked — "nobody said" survives the wire, never as a zero.
+/// <c>WorkDate</c> is the farmer's day as <c>yyyy-MM-dd</c>, not a timestamp.
+/// </summary>
+public sealed record AttendanceMarkDto(
+    Guid Id,
+    Guid FarmId,
+    Guid FieldOperatorId,
+    string WorkDate,
+    string? DayMark,
+    string? NightMark,
+    decimal? HoursWorked,
+    decimal? ExtraHours,
+    string? HoursBasis,
+    Guid RecordedByUserId,
+    DateTime RecordedAtUtc,
+    DateTime ModifiedAtUtc);
+
 public sealed record SyncPullResponseDto(
     DateTime ServerTimeUtc,
     DateTime NextCursorUtc,
@@ -50,6 +70,9 @@ public sealed record SyncPullResponseDto(
     IReadOnlyList<ComplianceSignalDto> ComplianceSignals,
     // CEI Phase 4 §4.8 — Work Trust Ledger
     IReadOnlyList<JobCardDto> JobCards,
+    // Labour V2 R1 — server-acknowledged attendance rulings. Enum names as
+    // strings, NULL for Unmarked ("nobody said" survives the wire — never 0).
+    IReadOnlyList<AttendanceMarkDto> AttendanceMarks,
     // Sub-plan 03 Task 10 — partial-failure surface. When non-empty,
     // the response carries PARTIAL data: at least one component fetch
     // failed and the named components should display a degraded state

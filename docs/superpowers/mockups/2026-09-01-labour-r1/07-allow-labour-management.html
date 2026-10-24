@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One control — Allow Labour Management (mockup 7 of 7)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700;800;900&family=Noto+Sans+Devanagari:wght@400;600;700;800&family=Noto+Serif+Devanagari:wght@600;700&display=swap">
+<style>
+  html { -webkit-text-size-adjust: 100%; }
+  html, body { overflow-x: hidden; }
+  body { font-family: 'DM Sans', 'Noto Sans Devanagari', sans-serif; background: #eef1f4; }
+  .mr  { font-family: 'Noto Sans Devanagari', sans-serif; }
+  .mrh { font-family: 'Noto Serif Devanagari', serif; }
+  .num { font-family: 'DM Sans', sans-serif; font-variant-numeric: tabular-nums; }
+  .scroller { overflow-x: auto; overflow-y: hidden; }
+</style>
+</head>
+<body class="text-stone-800">
+
+<!-- ============ ICON SPRITE (lucide shapes, inline — no icon library) ============ -->
+<svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="6" height="11" x="9" y="2" rx="3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+  <symbol id="i-check-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+</svg>
+
+<!-- ============ HONESTY BANNER ============ -->
+<div class="border-b-4 border-yellow-400 bg-yellow-50">
+  <div class="mx-auto max-w-[860px] px-4 py-4">
+    <p class="text-[15px] font-black leading-snug text-yellow-900">
+      THIS IS A MOCKUP. IT IS NOT THE LIVE APP.
+    </p>
+    <p class="mt-1.5 text-[12.5px] leading-relaxed text-yellow-900/85">
+      Drawn at a 390&nbsp;px reference width. Nothing here is wired to data — no server, no database,
+      no real farm. Every name, date and number below is illustrative and made up for this drawing.
+      No switch on this page does anything when tapped. Marathi that has not been approved is shown
+      as a <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+      placeholder with its English meaning underneath — the layout is up for approval, the words are not written yet.
+    </p>
+  </div>
+</div>
+
+<!-- ============ TITLE + THE RULE ============ -->
+<header class="mx-auto max-w-[860px] px-4 pt-8">
+  <p class="text-[11px] font-bold uppercase tracking-widest text-stone-500">Screen 7 of 7 · Labour R1</p>
+  <h1 class="mt-1 text-[26px] font-black leading-tight text-stone-900">One control — Allow Labour Management</h1>
+
+  <div class="mt-4 rounded-xl border border-stone-300 bg-white p-4">
+    <p class="text-[11px] font-bold uppercase tracking-widest text-stone-500">The rule this screen exists to hold</p>
+    <div class="mt-2.5 space-y-1.5 text-[13.5px] leading-relaxed">
+      <p><span class="mr font-bold">मुकादम</span> <span class="text-stone-400">=</span> <span class="font-bold">who this person is on the farm.</span></p>
+      <p><span class="font-bold">Allow Labour Management</span> <span class="text-stone-400">=</span> <span class="font-bold">whether the owner trusts him with this responsibility.</span></p>
+    </div>
+    <p class="mt-3 border-t border-stone-200 pt-3 text-[12.5px] leading-relaxed text-stone-600">
+      Two different facts. They are never the same switch, and turning one off never touches the other.
+      The owner's three answers are <span class="font-bold">ON</span>, <span class="font-bold">ON until a date</span>, and
+      <span class="font-bold">OFF</span> — and once it is ON the Mukadam acts on his own. The owner is not asked again.
+    </p>
+    <p class="mt-3 rounded-lg bg-stone-100 p-3 text-[12.5px] font-bold italic leading-relaxed text-stone-700">
+      The test every screen must pass: “Where is ShramSafal asking me for something I already told it?”
+      This screen asks for exactly one thing the owner has never said — whether he trusts this man, and until when.
+      It asks for no plot, no crop, no count, no name.
+    </p>
+  </div>
+</header>
+
+<!-- ============ FRAME 1 ============ -->
+<section class="pt-10">
+  <div class="mx-auto max-w-[860px] px-4">
+    <div class="flex items-baseline gap-2.5">
+      <span class="flex-none rounded-md bg-stone-800 px-2 py-0.5 text-[11px] font-black text-white">1</span>
+      <h2 class="text-[15px] font-bold leading-snug text-stone-800">The team as it stands — four men, one control, four different answers, all readable without opening anything.</h2>
+    </div>
+  </div>
+  <div class="scroller mt-3 w-full px-4">
+    <div class="mx-auto w-[390px] overflow-hidden rounded-[26px] border border-stone-300 bg-slate-50 shadow-sm">
+      <div class="flex flex-col gap-2.5 px-4 pb-6 pt-3">
+
+        <!-- header pill -->
+        <div class="flex items-center justify-center rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+          <span class="mr text-[13px] font-extrabold text-slate-800">टीम</span>
+        </div>
+
+        <!-- state-word copy gate -->
+        <div class="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[11.5px] leading-relaxed text-slate-600">
+          <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+          <span class="mt-1 block text-[11px] italic text-slate-500">English meaning: the three state words on this screen — “ON”, “OFF”, “Allow Labour Management” — ship in English today because no Marathi for them was ever approved. Real open item, not a design choice.</span>
+        </div>
+
+        <!-- ROW 1 — ON, expanded -->
+        <div class="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+          <div class="flex w-full items-start gap-3 p-3.5 text-left">
+            <div class="mr mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-base font-black text-violet-600 shadow-inner">रो</div>
+            <div class="min-w-0 flex-1">
+              <h4 class="mr truncate text-[20px] font-bold leading-tight text-stone-800">रोकडे</h4>
+              <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span class="mr rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-1 text-[15px] font-bold text-violet-700">मुकादम</span>
+                <span class="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[15px] font-bold text-emerald-700">ON</span>
+              </div>
+            </div>
+            <div class="flex flex-shrink-0 flex-col items-center gap-1 pl-1">
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white"><svg class="h-[18px] w-[18px] rotate-180"><use href="#i-chevron-down"/></svg></span>
+              <span class="mr whitespace-nowrap text-[9.5px] font-bold leading-none text-emerald-700">बंद करा</span>
+            </div>
+          </div>
+          <div class="border-t border-slate-100 bg-slate-50/50 px-3 py-3">
+            <p class="mr mb-2 px-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">हा सदस्य काय करू शकतो? · What can they do?</p>
+            <div class="w-full rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 shadow-sm shadow-emerald-100">
+              <div class="flex items-center gap-3 text-left">
+                <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white"><svg class="h-[18px] w-[18px]"><use href="#i-clipboard"/></svg></span>
+                <span class="min-w-0 flex-1">
+                  <span class="block text-sm font-bold text-slate-800">Allow Labour Management</span>
+                  <span class="block text-[11px] leading-snug text-slate-400">Can change attendance, hours and names</span>
+                </span>
+                <span class="relative h-6 w-11 flex-shrink-0 rounded-full bg-emerald-500"><span class="absolute left-0.5 top-0.5 h-5 w-5 translate-x-5 rounded-full bg-white shadow-sm"></span></span>
+              </div>
+              <div class="mt-2.5 border-t border-emerald-100 pt-2.5">
+                <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+                <span class="mt-1 block text-[11px] italic text-slate-500">English meaning: “He takes and fixes हजेरी for his own crew. You are not asked each time.”</span>
+              </div>
+            </div>
+            <button type="button" class="mr mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-red-100 bg-white py-2.5 text-sm font-bold text-red-500">
+              <svg class="h-4 w-4"><use href="#i-trash"/></svg> टीममधून काढा · Remove
+            </button>
+          </div>
+        </div>
+
+        <!-- ROW 2 — OFF, and still a Mukadam -->
+        <div class="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+          <div class="flex w-full items-start gap-3 p-3.5 text-left">
+            <div class="mr mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-base font-black text-blue-600 shadow-inner">ध</div>
+            <div class="min-w-0 flex-1">
+              <h4 class="mr truncate text-[20px] font-bold leading-tight text-stone-800">धनाजी</h4>
+              <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span class="mr rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-1 text-[15px] font-bold text-violet-700">मुकादम</span>
+                <span class="rounded-lg border border-stone-200 bg-stone-100 px-2.5 py-1 text-[15px] font-bold text-stone-500">OFF</span>
+              </div>
+            </div>
+            <div class="flex flex-shrink-0 flex-col items-center gap-1 pl-1">
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400"><svg class="h-[18px] w-[18px]"><use href="#i-chevron-down"/></svg></span>
+              <span class="mr whitespace-nowrap text-[9.5px] font-bold leading-none text-emerald-700">प्रवेश ठरवा</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROW 3 — ON with an end date -->
+        <div class="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+          <div class="flex w-full items-start gap-3 p-3.5 text-left">
+            <div class="mr mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-base font-black text-orange-600 shadow-inner">र</div>
+            <div class="min-w-0 flex-1">
+              <h4 class="mr truncate text-[20px] font-bold leading-tight text-stone-800">रमेश</h4>
+              <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span class="mr rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-1 text-[15px] font-bold text-violet-700">मुकादम</span>
+                <span class="flex items-center gap-1.5 rounded-lg bg-orange-100 px-2.5 py-1 text-[15px] font-bold text-orange-700">
+                  <svg class="h-[15px] w-[15px]"><use href="#i-clock"/></svg> ON · <span class="mr">६ सप्टें</span>
+                </span>
+              </div>
+            </div>
+            <div class="flex flex-shrink-0 flex-col items-center gap-1 pl-1">
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400"><svg class="h-[18px] w-[18px]"><use href="#i-chevron-down"/></svg></span>
+              <span class="mr whitespace-nowrap text-[9.5px] font-bold leading-none text-emerald-700">प्रवेश ठरवा</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROW 4 — lapsed -->
+        <div class="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+          <div class="flex w-full items-start gap-3 p-3.5 text-left">
+            <div class="mr mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-rose-100 text-base font-black text-rose-600 shadow-inner">प्र</div>
+            <div class="min-w-0 flex-1">
+              <h4 class="mr truncate text-[20px] font-bold leading-tight text-stone-800">प्रकाश</h4>
+              <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span class="mr rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-1 text-[15px] font-bold text-violet-700">मुकादम</span>
+                <span class="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-stone-100 px-2.5 py-1 text-[15px] font-bold text-stone-500">
+                  <svg class="h-[15px] w-[15px]"><use href="#i-clock"/></svg> OFF · <span class="mr">२४ ऑग</span>
+                </span>
+              </div>
+            </div>
+            <div class="flex flex-shrink-0 flex-col items-center gap-1 pl-1">
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400"><svg class="h-[18px] w-[18px]"><use href="#i-chevron-down"/></svg></span>
+              <span class="mr whitespace-nowrap text-[9.5px] font-bold leading-none text-emerald-700">प्रवेश ठरवा</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[11.5px] leading-relaxed text-slate-600">
+          <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+          <span class="mt-1 block text-[11px] italic text-slate-500">English meaning: “All four are Mukadam. The badge says who they are. The word beside it says what you have allowed — and only you can change that.”</span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FRAME 2 ============ -->
+<section class="pt-10">
+  <div class="mx-auto max-w-[860px] px-4">
+    <div class="flex items-baseline gap-2.5">
+      <span class="flex-none rounded-md bg-stone-800 px-2 py-0.5 text-[11px] font-black text-white">2</span>
+      <h2 class="text-[15px] font-bold leading-snug text-stone-800">Step 1 of 2 — रमेश's own row, opened: switching it on offers one extra thing <em>inside the same control</em>, a day it ends.</h2>
+    </div>
+    <p class="mt-1.5 pl-8 text-[12.5px] leading-relaxed text-stone-600">No new screen opened. No wizard started. This is the row from the list above, expanded in place.</p>
+  </div>
+  <div class="scroller mt-3 w-full px-4">
+    <div class="mx-auto w-[390px] overflow-hidden rounded-[26px] border border-stone-300 bg-slate-50 shadow-sm">
+      <div class="flex flex-col gap-2.5 px-4 pb-6 pt-3">
+
+        <div class="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+          <div class="flex w-full items-start gap-3 p-3.5 text-left">
+            <div class="mr mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-base font-black text-orange-600 shadow-inner">र</div>
+            <div class="min-w-0 flex-1">
+              <h4 class="mr truncate text-[20px] font-bold leading-tight text-stone-800">रमेश</h4>
+              <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span class="mr rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-1 text-[15px] font-bold text-violet-700">मुकादम</span>
+                <span class="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[15px] font-bold text-emerald-700">ON</span>
+              </div>
+            </div>
+            <div class="flex flex-shrink-0 flex-col items-center gap-1 pl-1">
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white"><svg class="h-[18px] w-[18px] rotate-180"><use href="#i-chevron-down"/></svg></span>
+              <span class="mr whitespace-nowrap text-[9.5px] font-bold leading-none text-emerald-700">बंद करा</span>
+            </div>
+          </div>
+
+          <div class="border-t border-slate-100 bg-slate-50/50 px-3 py-3">
+            <p class="mr mb-2 px-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">हा सदस्य काय करू शकतो? · What can they do?</p>
+
+            <div class="w-full rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 shadow-sm shadow-emerald-100">
+              <div class="flex items-center gap-3 text-left">
+                <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white"><svg class="h-[18px] w-[18px]"><use href="#i-clipboard"/></svg></span>
+                <span class="min-w-0 flex-1">
+                  <span class="block text-sm font-bold text-slate-800">Allow Labour Management</span>
+                  <span class="block text-[11px] leading-snug text-slate-400">Can change attendance, hours and names</span>
+                </span>
+                <span class="relative h-6 w-11 flex-shrink-0 rounded-full bg-emerald-500"><span class="absolute left-0.5 top-0.5 h-5 w-5 translate-x-5 rounded-full bg-white shadow-sm"></span></span>
+              </div>
+
+              <!-- the duration, attached INSIDE the same control -->
+              <div class="mt-3 border-t border-emerald-100 pt-3">
+                <div class="flex items-center gap-2 text-emerald-800">
+                  <svg class="h-[15px] w-[15px]"><use href="#i-clock"/></svg>
+                  <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+                </div>
+                <span class="mt-1 block text-[11px] italic text-slate-500">English meaning: “How long? Leave it on, or pick the day it ends.”</span>
+                <div class="mt-2 flex flex-wrap gap-1.5">
+                  <span class="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-2.5 py-1.5 text-[13px] font-bold text-emerald-700">
+                    <svg class="h-3.5 w-3.5"><use href="#i-check"/></svg> ON
+                  </span>
+                  <span class="mr rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[13px] font-bold text-slate-600">२ सप्टें</span>
+                  <span class="mr rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[13px] font-bold text-slate-600">६ सप्टें</span>
+                  <span class="mr rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[13px] font-bold text-slate-600">३० सप्टें</span>
+                </div>
+              </div>
+            </div>
+
+            <button type="button" class="mr mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-red-100 bg-white py-2.5 text-sm font-bold text-red-500">
+              <svg class="h-4 w-4"><use href="#i-trash"/></svg> टीममधून काढा · Remove
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FRAME 3 ============ -->
+<section class="pt-10">
+  <div class="mx-auto max-w-[860px] px-4">
+    <div class="flex items-baseline gap-2.5">
+      <span class="flex-none rounded-md bg-stone-800 px-2 py-0.5 text-[11px] font-black text-white">3</span>
+      <h2 class="text-[15px] font-bold leading-snug text-stone-800">Step 2 of 2 — a day is picked. Same row, same switch, now carrying an end date; the badge above updates in place.</h2>
+    </div>
+  </div>
+  <div class="scroller mt-3 w-full px-4">
+    <div class="mx-auto w-[390px] overflow-hidden rounded-[26px] border border-stone-300 bg-slate-50 shadow-sm">
+      <div class="flex flex-col gap-2.5 px-4 pb-6 pt-3">
+
+        <div class="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+          <div class="flex w-full items-start gap-3 p-3.5 text-left">
+            <div class="mr mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-base font-black text-orange-600 shadow-inner">र</div>
+            <div class="min-w-0 flex-1">
+              <h4 class="mr truncate text-[20px] font-bold leading-tight text-stone-800">रमेश</h4>
+              <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span class="mr rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-1 text-[15px] font-bold text-violet-700">मुकादम</span>
+                <span class="flex items-center gap-1.5 rounded-lg bg-orange-100 px-2.5 py-1 text-[15px] font-bold text-orange-700">
+                  <svg class="h-[15px] w-[15px]"><use href="#i-clock"/></svg> ON · <span class="mr">६ सप्टें</span>
+                </span>
+              </div>
+            </div>
+            <div class="flex flex-shrink-0 flex-col items-center gap-1 pl-1">
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white"><svg class="h-[18px] w-[18px] rotate-180"><use href="#i-chevron-down"/></svg></span>
+              <span class="mr whitespace-nowrap text-[9.5px] font-bold leading-none text-emerald-700">बंद करा</span>
+            </div>
+          </div>
+
+          <div class="border-t border-slate-100 bg-slate-50/50 px-3 py-3">
+            <p class="mr mb-2 px-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">हा सदस्य काय करू शकतो? · What can they do?</p>
+
+            <div class="w-full rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 shadow-sm shadow-emerald-100">
+              <div class="flex items-center gap-3 text-left">
+                <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white"><svg class="h-[18px] w-[18px]"><use href="#i-clipboard"/></svg></span>
+                <span class="min-w-0 flex-1">
+                  <span class="block text-sm font-bold text-slate-800">Allow Labour Management</span>
+                  <span class="block text-[11px] leading-snug text-slate-400">Can change attendance, hours and names</span>
+                </span>
+                <span class="relative h-6 w-11 flex-shrink-0 rounded-full bg-emerald-500"><span class="absolute left-0.5 top-0.5 h-5 w-5 translate-x-5 rounded-full bg-white shadow-sm"></span></span>
+              </div>
+
+              <div class="mt-3 border-t border-emerald-100 pt-3">
+                <div class="flex items-center gap-2 text-emerald-800">
+                  <svg class="h-[15px] w-[15px]"><use href="#i-clock"/></svg>
+                  <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+                </div>
+                <span class="mt-1 block text-[11px] italic text-slate-500">English meaning: “How long? Leave it on, or pick the day it ends.”</span>
+                <div class="mt-2 flex flex-wrap gap-1.5">
+                  <span class="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[13px] font-bold text-slate-600">ON</span>
+                  <span class="mr rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[13px] font-bold text-slate-600">२ सप्टें</span>
+                  <span class="mr flex items-center gap-1.5 rounded-lg border border-orange-300 bg-orange-100 px-2.5 py-1.5 text-[13px] font-bold text-orange-700">
+                    <svg class="h-3.5 w-3.5"><use href="#i-check"/></svg> ६ सप्टें
+                  </span>
+                  <span class="mr rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[13px] font-bold text-slate-600">३० सप्टें</span>
+                </div>
+                <div class="mt-2.5 rounded-lg bg-white/70 p-2.5">
+                  <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+                  <span class="mt-1 block text-[11px] italic text-slate-500">English meaning: “Allowed until Sunday, 6 Sept. After that day it turns itself off. You do not have to remember.”</span>
+                </div>
+              </div>
+            </div>
+
+            <button type="button" class="mr mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-red-100 bg-white py-2.5 text-sm font-bold text-red-500">
+              <svg class="h-4 w-4"><use href="#i-trash"/></svg> टीममधून काढा · Remove
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FRAME 4 ============ -->
+<section class="pt-10">
+  <div class="mx-auto max-w-[860px] px-4">
+    <div class="flex items-baseline gap-2.5">
+      <span class="flex-none rounded-md bg-stone-800 px-2 py-0.5 text-[11px] font-black text-white">4</span>
+      <h2 class="text-[15px] font-bold leading-snug text-stone-800">After the day passes — प्रकाश's authority has ended on its own. He is still मुकादम, and what he recorded is still his.</h2>
+    </div>
+  </div>
+  <div class="scroller mt-3 w-full px-4">
+    <div class="mx-auto w-[390px] overflow-hidden rounded-[26px] border border-stone-300 bg-slate-50 shadow-sm">
+      <div class="flex flex-col gap-2.5 px-4 pb-6 pt-3">
+
+        <div class="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+          <div class="flex w-full items-start gap-3 p-3.5 text-left">
+            <div class="mr mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-rose-100 text-base font-black text-rose-600 shadow-inner">प्र</div>
+            <div class="min-w-0 flex-1">
+              <h4 class="mr truncate text-[20px] font-bold leading-tight text-stone-800">प्रकाश</h4>
+              <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span class="mr rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-1 text-[15px] font-bold text-violet-700">मुकादम</span>
+                <span class="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-stone-100 px-2.5 py-1 text-[15px] font-bold text-stone-500">
+                  <svg class="h-[15px] w-[15px]"><use href="#i-clock"/></svg> OFF · <span class="mr">२४ ऑग</span>
+                </span>
+              </div>
+            </div>
+            <div class="flex flex-shrink-0 flex-col items-center gap-1 pl-1">
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white"><svg class="h-[18px] w-[18px] rotate-180"><use href="#i-chevron-down"/></svg></span>
+              <span class="mr whitespace-nowrap text-[9.5px] font-bold leading-none text-emerald-700">बंद करा</span>
+            </div>
+          </div>
+
+          <div class="border-t border-slate-100 bg-slate-50/50 px-3 py-3">
+            <p class="mr mb-2 px-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">हा सदस्य काय करू शकतो? · What can they do?</p>
+
+            <div class="w-full rounded-xl border border-slate-200 bg-white p-3">
+              <div class="flex items-center gap-3 text-left">
+                <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-400"><svg class="h-[18px] w-[18px]"><use href="#i-clipboard"/></svg></span>
+                <span class="min-w-0 flex-1">
+                  <span class="block text-sm font-bold text-slate-800">Allow Labour Management</span>
+                  <span class="block text-[11px] leading-snug text-slate-400">Can change attendance, hours and names</span>
+                </span>
+                <span class="relative h-6 w-11 flex-shrink-0 rounded-full bg-slate-300"><span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm"></span></span>
+              </div>
+
+              <div class="mt-3 border-t border-slate-100 pt-3">
+                <div class="flex items-center gap-2 text-slate-600">
+                  <svg class="h-[15px] w-[15px]"><use href="#i-clock"/></svg>
+                  <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+                </div>
+                <span class="mt-1 block text-[11px] italic text-slate-500">English meaning: “This ended by itself on 24 Aug, the day you chose. Turn it on again whenever you want.”</span>
+              </div>
+            </div>
+
+            <!-- history stays reachable, from the same row -->
+            <div class="mt-3 flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left">
+              <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-600"><svg class="h-[18px] w-[18px]"><use href="#i-book"/></svg></span>
+              <span class="min-w-0 flex-1">
+                <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+                <span class="mt-1 block text-[11px] italic text-slate-500">English meaning: “The days he wrote down — still there, still in his name.”</span>
+              </span>
+              <svg class="h-[22px] w-[22px] flex-shrink-0 text-slate-400"><use href="#i-chevron-right"/></svg>
+            </div>
+
+            <button type="button" class="mr mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-red-100 bg-white py-2.5 text-sm font-bold text-red-500">
+              <svg class="h-4 w-4"><use href="#i-trash"/></svg> टीममधून काढा · Remove
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FRAME 5 ============ -->
+<section class="pt-10">
+  <div class="mx-auto max-w-[860px] px-4">
+    <div class="flex items-baseline gap-2.5">
+      <span class="flex-none rounded-md bg-stone-800 px-2 py-0.5 text-[11px] font-black text-white">5</span>
+      <h2 class="text-[15px] font-bold leading-snug text-stone-800">Who recorded what, after the ending — the activity record, <em>not</em> the हजेरी वही. Every day प्रकाश recorded still says प्रकाश. Ending what he may do stops the next entry; it never rewrites the last one.</h2>
+    </div>
+    <p class="mt-1.5 pl-8 text-[12.5px] leading-relaxed text-stone-600">One row per recording, each naming the person who made it — a provenance list, so accountability outlives authority. The <span class="mr font-bold">हजेरी वही</span> is the week grid of आला / अर्धा / नाही cells and is a different screen; no grid is drawn here, because the point of this frame is <em>who</em>, not <em>which days</em>.</p>
+  </div>
+  <div class="scroller mt-3 w-full px-4">
+    <div class="mx-auto w-[390px] overflow-hidden rounded-[26px] border border-stone-300 bg-slate-50 shadow-sm">
+      <div class="flex flex-col gap-2.5 px-4 pb-6 pt-3">
+
+        <div class="flex flex-col items-center justify-center rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+          <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+          <span class="mt-1 block text-center text-[10.5px] italic leading-snug text-slate-500">English meaning: “who recorded what” — the name of this record. It is <b>not</b> हजेरी वही; that name belongs to the week grid.</span>
+        </div>
+
+        <div class="rounded-[18px] border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+          <div class="flex items-center gap-2 border-b border-slate-100 pb-2">
+            <span class="mr w-[62px] flex-none text-[12.5px] font-extrabold text-slate-700">दिवस</span>
+            <span class="flex-1">
+              <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+              <span class="mt-0.5 block text-[10.5px] italic text-slate-500">English meaning: “who wrote it down”</span>
+            </span>
+            <span class="w-14 flex-none text-right"><span class="rounded bg-yellow-100 px-1 py-0.5 text-[9px] font-bold text-yellow-800">[COPY]</span></span>
+          </div>
+
+          <!-- his entries -->
+          <div class="flex items-center gap-2 border-b border-slate-100 py-2">
+            <span class="mr w-[62px] flex-none text-[12.5px] font-extrabold text-slate-700">२० ऑग</span>
+            <span class="flex min-w-0 flex-1 items-center gap-2">
+              <span class="mr flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-rose-100 text-[12px] font-black text-rose-600">प्र</span>
+              <span class="mr truncate text-[12.5px] font-extrabold text-slate-700">प्रकाश</span>
+              <svg class="h-3.5 w-3.5 flex-none text-slate-400"><use href="#i-mic"/></svg>
+            </span>
+            <span class="mr w-14 flex-none text-right text-[15px] font-black text-slate-800">८ जण</span>
+          </div>
+          <div class="flex items-center gap-2 border-b border-slate-100 py-2">
+            <span class="mr w-[62px] flex-none text-[12.5px] font-extrabold text-slate-700">२२ ऑग</span>
+            <span class="flex min-w-0 flex-1 items-center gap-2">
+              <span class="mr flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-rose-100 text-[12px] font-black text-rose-600">प्र</span>
+              <span class="mr truncate text-[12.5px] font-extrabold text-slate-700">प्रकाश</span>
+              <svg class="h-3.5 w-3.5 flex-none text-slate-400"><use href="#i-mic"/></svg>
+            </span>
+            <span class="mr w-14 flex-none text-right text-[15px] font-black text-slate-800">६ जण</span>
+          </div>
+          <div class="flex items-center gap-2 border-b border-slate-100 py-2">
+            <span class="mr w-[62px] flex-none text-[12.5px] font-extrabold text-slate-700">२४ ऑग</span>
+            <span class="flex min-w-0 flex-1 items-center gap-2">
+              <span class="mr flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-rose-100 text-[12px] font-black text-rose-600">प्र</span>
+              <span class="mr truncate text-[12.5px] font-extrabold text-slate-700">प्रकाश</span>
+              <svg class="h-3.5 w-3.5 flex-none text-slate-400"><use href="#i-mic"/></svg>
+            </span>
+            <span class="mr w-14 flex-none text-right text-[15px] font-black text-slate-800">९ जण</span>
+          </div>
+
+          <!-- the line where his authority ended -->
+          <div class="my-1 flex items-center gap-2 rounded-lg border border-dashed border-stone-300 bg-stone-50 px-2.5 py-2">
+            <svg class="h-[15px] w-[15px] flex-none text-stone-500"><use href="#i-clock"/></svg>
+            <span class="min-w-0 flex-1">
+              <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+              <span class="mt-0.5 block text-[10.5px] italic text-slate-500">English meaning: “What प्रकाश was allowed to do ended here — 24 Aug.”</span>
+            </span>
+          </div>
+
+          <!-- after it: someone else records; his rows above are untouched -->
+          <div class="flex items-center gap-2 py-2">
+            <span class="mr w-[62px] flex-none text-[12.5px] font-extrabold text-slate-700">२५ ऑग</span>
+            <span class="flex min-w-0 flex-1 items-center gap-2">
+              <span class="mr flex h-7 w-7 flex-none items-center justify-center rounded-[9px] bg-violet-100 text-[12px] font-black text-violet-600">रो</span>
+              <span class="mr truncate text-[12.5px] font-extrabold text-slate-700">रोकडे</span>
+              <svg class="h-3.5 w-3.5 flex-none text-slate-400"><use href="#i-mic"/></svg>
+            </span>
+            <span class="mr w-14 flex-none text-right text-[15px] font-black text-slate-800">७ जण</span>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[11.5px] leading-relaxed text-slate-600">
+          <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+          <span class="mt-1 block text-[11px] italic text-slate-500">English meaning: “प्रकाश wrote these three days down. That stays true. Ending what he may do from now on does not un-write them.”</span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FRAME 6 ============ -->
+<section class="pt-10">
+  <div class="mx-auto max-w-[860px] px-4">
+    <div class="flex items-baseline gap-2.5">
+      <span class="flex-none rounded-md bg-stone-800 px-2 py-0.5 text-[11px] font-black text-white">6</span>
+      <h2 class="text-[15px] font-bold leading-snug text-stone-800">Day one of the change — every existing मुकादम starts OFF. Nothing was switched on for anybody, and this is the first thing the owner sees.</h2>
+    </div>
+    <p class="mt-1.5 pl-8 text-[12.5px] leading-relaxed text-stone-600">Chronologically this comes <em>before</em> frames 1–5. Read it and judge one thing: does it land as “my app took something away”, or as “this is now mine to say yes to”?</p>
+  </div>
+  <div class="scroller mt-3 w-full px-4">
+    <div class="mx-auto w-[390px] overflow-hidden rounded-[26px] border border-stone-300 bg-slate-50 shadow-sm">
+      <div class="flex flex-col gap-2.5 px-4 pb-6 pt-3">
+
+        <div class="flex items-center justify-center rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+          <span class="mr text-[13px] font-extrabold text-slate-800">टीम</span>
+        </div>
+
+        <div class="rounded-[13px] border border-emerald-100 bg-emerald-50 p-4">
+          <div class="flex items-center gap-2.5">
+            <span class="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-emerald-600 text-white"><svg class="h-[18px] w-[18px]"><use href="#i-users"/></svg></span>
+            <span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+          </div>
+          <span class="mt-2 block text-[11.5px] italic leading-relaxed text-slate-600">English meaning: “Nothing has changed about who works for you. Rokade is still your Mukadam. One thing is now yours to say out loud: who you trust to run हजेरी. Nobody has it until you say so.”</span>
+        </div>
+
+        <div class="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+          <div class="flex w-full items-start gap-3 p-3.5 text-left">
+            <div class="mr mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-base font-black text-violet-600 shadow-inner">रो</div>
+            <div class="min-w-0 flex-1">
+              <h4 class="mr truncate text-[20px] font-bold leading-tight text-stone-800">रोकडे</h4>
+              <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span class="mr rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-1 text-[15px] font-bold text-violet-700">मुकादम</span>
+                <span class="rounded-lg border border-stone-200 bg-stone-100 px-2.5 py-1 text-[15px] font-bold text-stone-500">OFF</span>
+              </div>
+            </div>
+            <div class="flex flex-shrink-0 flex-col items-center gap-1 pl-1">
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400"><svg class="h-[18px] w-[18px]"><use href="#i-chevron-down"/></svg></span>
+              <span class="mr whitespace-nowrap text-[9.5px] font-bold leading-none text-emerald-700">प्रवेश ठरवा</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+          <div class="flex w-full items-start gap-3 p-3.5 text-left">
+            <div class="mr mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-base font-black text-blue-600 shadow-inner">ध</div>
+            <div class="min-w-0 flex-1">
+              <h4 class="mr truncate text-[20px] font-bold leading-tight text-stone-800">धनाजी</h4>
+              <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span class="mr rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-1 text-[15px] font-bold text-violet-700">मुकादम</span>
+                <span class="rounded-lg border border-stone-200 bg-stone-100 px-2.5 py-1 text-[15px] font-bold text-stone-500">OFF</span>
+              </div>
+            </div>
+            <div class="flex flex-shrink-0 flex-col items-center gap-1 pl-1">
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400"><svg class="h-[18px] w-[18px]"><use href="#i-chevron-down"/></svg></span>
+              <span class="mr whitespace-nowrap text-[9.5px] font-bold leading-none text-emerald-700">प्रवेश ठरवा</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+          <div class="flex w-full items-start gap-3 p-3.5 text-left">
+            <div class="mr mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-orange-100 text-base font-black text-orange-600 shadow-inner">र</div>
+            <div class="min-w-0 flex-1">
+              <h4 class="mr truncate text-[20px] font-bold leading-tight text-stone-800">रमेश</h4>
+              <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span class="mr rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-1 text-[15px] font-bold text-violet-700">मुकादम</span>
+                <span class="rounded-lg border border-stone-200 bg-stone-100 px-2.5 py-1 text-[15px] font-bold text-stone-500">OFF</span>
+              </div>
+            </div>
+            <div class="flex flex-shrink-0 flex-col items-center gap-1 pl-1">
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400"><svg class="h-[18px] w-[18px]"><use href="#i-chevron-down"/></svg></span>
+              <span class="mr whitespace-nowrap text-[9.5px] font-bold leading-none text-emerald-700">प्रवेश ठरवा</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+          <div class="flex w-full items-start gap-3 p-3.5 text-left">
+            <div class="mr mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-rose-100 text-base font-black text-rose-600 shadow-inner">प्र</div>
+            <div class="min-w-0 flex-1">
+              <h4 class="mr truncate text-[20px] font-bold leading-tight text-stone-800">प्रकाश</h4>
+              <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span class="mr rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-1 text-[15px] font-bold text-violet-700">मुकादम</span>
+                <span class="rounded-lg border border-stone-200 bg-stone-100 px-2.5 py-1 text-[15px] font-bold text-stone-500">OFF</span>
+              </div>
+            </div>
+            <div class="flex flex-shrink-0 flex-col items-center gap-1 pl-1">
+              <span class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400"><svg class="h-[18px] w-[18px]"><use href="#i-chevron-down"/></svg></span>
+              <span class="mr whitespace-nowrap text-[9.5px] font-bold leading-none text-emerald-700">प्रवेश ठरवा</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHAT THIS SCREEN MUST NEVER DO ============ -->
+<section class="mx-auto max-w-[860px] px-4 pb-16 pt-12">
+  <h2 class="text-[18px] font-black text-stone-900">What this screen must never do</h2>
+  <p class="mt-1 text-[12.5px] text-stone-600">The rule, so it can be checked as well as the picture.</p>
+
+  <ol class="mt-4 space-y-2.5">
+    <li class="rounded-xl border border-stone-300 bg-white p-3.5 text-[13px] leading-relaxed text-stone-700">
+      <span class="font-bold">Never a matrix.</span> No grid of people against things they may do. One man, one line, one switch.
+    </li>
+    <li class="rounded-xl border border-stone-300 bg-white p-3.5 text-[13px] leading-relaxed text-stone-700">
+      <span class="font-bold">Never separate switches for attendance, expenses and approvals.</span> There is one thing to allow, not three. Splitting it invents a system the farm does not have.
+    </li>
+    <li class="rounded-xl border border-stone-300 bg-white p-3.5 text-[13px] leading-relaxed text-stone-700">
+      <span class="font-bold">Never the system's vocabulary.</span> Not <em>role</em>, <em>claim</em>, <em>policy</em>, <em>grant</em>, <em>ACL</em>, <em>permission model</em>, <em>membership</em>, or <em>RBAC</em> — in any language, anywhere on the screen. It says who he is on the farm, and what the owner has allowed.
+    </li>
+    <li class="rounded-xl border border-stone-300 bg-white p-3.5 text-[13px] leading-relaxed text-stone-700">
+      <span class="font-bold">Never a second screen for “until Sunday”.</span> No wizard, no dialog, no separate temporary flow. The duration attaches inside the same row, to the same switch — frames 2 and 3.
+    </li>
+    <li class="rounded-xl border border-stone-300 bg-white p-3.5 text-[13px] leading-relaxed text-stone-700">
+      <span class="font-bold">Never per-action owner approval.</span> Once it is ON the Mukadam acts on his own. An owner who has to approve each attendance entry was never given this control — he was given more work.
+    </li>
+    <li class="rounded-xl border border-stone-300 bg-white p-3.5 text-[13px] leading-relaxed text-stone-700">
+      <span class="font-bold">Never confuse who he is with what he may do.</span> Turning this OFF must never remove the <span class="mr font-bold">मुकादम</span> badge, and being <span class="mr font-bold">मुकादम</span> must never turn it ON by itself. Frame 1, row 2 is the whole point of the screen.
+    </li>
+    <li class="rounded-xl border border-stone-300 bg-white p-3.5 text-[13px] leading-relaxed text-stone-700">
+      <span class="font-bold">Never rewrite the past when authority ends.</span> An ending denies the <em>next</em> action. It must never blank, re-attribute or hide a day already recorded — प्रकाश's three days keep his name and his face forever.
+    </li>
+    <li class="rounded-xl border border-stone-300 bg-white p-3.5 text-[13px] leading-relaxed text-stone-700">
+      <span class="font-bold">Never backfill anyone to ON.</span> Existing Mukadams start OFF at migration and stay OFF until the owner says otherwise. No “we kept it as it was for you”.
+    </li>
+    <li class="rounded-xl border border-stone-300 bg-white p-3.5 text-[13px] leading-relaxed text-stone-700">
+      <span class="font-bold">Never ask for something already told.</span> No plot, no crop, no headcount, no name is requested here. The only inputs are the trust decision and, optionally, the day it ends — the two things only the owner knows.
+    </li>
+    <li class="rounded-xl border border-stone-300 bg-white p-3.5 text-[13px] leading-relaxed text-stone-700">
+      <span class="font-bold">Never pretend the Marathi exists.</span> “Allow Labour Management”, “ON” and “OFF” ship in English today because no Marathi was ever approved. Until it is, they stay marked as an open copy item — they are not quietly translated by an agent.
+    </li>
+  </ol>
+
+  <p class="mt-6 text-[11.5px] leading-relaxed text-stone-500">
+    Mockup 7 of 7 · Labour R1 · drawn against <span class="font-bold">_TOKENS.md</span> and the shipped
+    <span class="font-bold">TeamMemberCard.tsx</span>, <span class="font-bold">LabourUiKit.tsx</span> and
+    <span class="font-bold">HajeriLedger.tsx</span>. Not the live app; nothing is wired to data.
+  </p>
+</section>
+
+</body>
+</html>

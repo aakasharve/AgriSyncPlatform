@@ -16,7 +16,6 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
 import RetentionBanner from '../components/RetentionBanner';
-import { LEGAL_REVIEW_PENDING_PREFIX } from '../../../i18n/legalReviewMarker';
 
 describe('RetentionBanner', () => {
     afterEach(() => {
@@ -29,8 +28,8 @@ describe('RetentionBanner', () => {
         expect(banner).toBeInTheDocument();
         // No CTA in the granted state.
         expect(screen.queryByTestId('voice-diary-retention-banner-cta')).toBeNull();
-        // LEGAL_REVIEW_PENDING marker surfaces in every visible string.
-        expect(banner.textContent ?? '').toContain(LEGAL_REVIEW_PENDING_PREFIX);
+        // No internal review marker in any visible string.
+        expect(banner.textContent ?? '').not.toContain('LEGAL_REVIEW' + '_PENDING');
     });
 
     it('renders the denied-state banner with a CTA when consent is off', () => {
@@ -39,7 +38,7 @@ describe('RetentionBanner', () => {
 
         const banner = screen.getByTestId('voice-diary-retention-banner-denied');
         expect(banner).toBeInTheDocument();
-        expect(banner.textContent ?? '').toContain(LEGAL_REVIEW_PENDING_PREFIX);
+        expect(banner.textContent ?? '').not.toContain('LEGAL_REVIEW' + '_PENDING');
 
         const cta = screen.getByTestId('voice-diary-retention-banner-cta');
         expect(cta).toBeInTheDocument();

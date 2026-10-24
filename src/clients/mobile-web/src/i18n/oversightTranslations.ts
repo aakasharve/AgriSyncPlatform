@@ -364,10 +364,15 @@
  * `false` renders the founder's exact tail unmodified, for the day a real
  * server-received timestamp makes the boundary exact. Giving that flag its
  * first consumer is the whole point of this change.
+ *
+ * TASK 15 (Labour V2 R1) and the labour guide-card variant live in
+ * `labourOversightTranslations.ts` — split out VERBATIM when their nine keys
+ * put this file over the 800-line CI cap. The same Hard Rule binds them.
  */
 import type { Language } from './language';
+import { labourOversightTranslations, type LabourOversightTranslations } from './labourOversightTranslations';
 
-export interface OversightTranslations {
+export interface OversightTranslations extends LabourOversightTranslations {
     // ── Reused verbatim (spec §6.1) ─────────────────────────────────────
     /** Briefing headline. dfesTranslations.welcomeBack. */
     welcomeBack: string;
@@ -582,6 +587,9 @@ export interface OversightTranslations {
 
 export const oversightTranslations: Record<Language, OversightTranslations> = {
     en: {
+        // Labour V2 R1's nine keys (labour guide card + Task 15) spread in
+        // from `labourOversightTranslations.ts` — MOVED there, not changed.
+        ...labourOversightTranslations.en,
         welcomeBack: 'Welcome back! What\'s been happening?',
         weeklyReviewPrompt: 'Your farm book has new entries to review.',
         farmBookOpen: 'This week\'s farm book is open.',
@@ -647,6 +655,8 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         helpButtonLabel: 'Talk to Shram Sathi',
     },
     mr: {
+        // Labour V2 R1's nine keys — spread from `labourOversightTranslations.ts`.
+        ...labourOversightTranslations.mr,
         welcomeBack: 'पुन्हा स्वागत! शेतात काय चाललं?',
         weeklyReviewPrompt: 'तुमच्या शेतीत नवीन कामे आहेत. तपासा.',
         farmBookOpen: 'या आठवड्याची शेतनोंद उघडी आहे.',

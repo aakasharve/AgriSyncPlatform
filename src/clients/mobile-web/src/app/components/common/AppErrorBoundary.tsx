@@ -51,7 +51,19 @@ export class AppErrorBoundary extends Component<Props, State> {
     };
 
     private handleCopyError = () => {
-        const report = `Error ID: ${this.state.errorId}\nMessage: ${this.state.error?.message}\nTime: ${new Date().toISOString()}`;
+        // The report used to carry the message and nothing else. A founder
+        // pasting "Cannot read properties of undefined" gives no way to find
+        // the line — and the stack was right here, unused. Withholding it made
+        // every crash report cost a reproduction attempt that often failed,
+        // because these crashes are state-dependent and do not reproduce on a
+        // clean device.
+        //
+        // Trimmed to the top frames: enough to locate it, short enough to paste.
+        const stack = (this.state.error?.stack ?? "")
+            .split("\n")
+            .slice(0, 8)
+            .join("\n");
+        const report = `Error ID: ${this.state.errorId}\nMessage: ${this.state.error?.message}\nTime: ${new Date().toISOString()}\n\n${stack}`;
         navigator.clipboard.writeText(report);
         alert('Error report copied to clipboard');
     };

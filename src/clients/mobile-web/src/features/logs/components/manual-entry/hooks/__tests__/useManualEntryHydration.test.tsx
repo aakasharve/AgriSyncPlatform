@@ -565,3 +565,32 @@ describe('useManualEntryHydration — form origin (spec: dfes-farmer-facing-depl
         expect(formOrigin.current).toBe('blank');
     });
 });
+
+/**
+ * Task 27 (spec: 2026-08-28-labour-v2-release-1) — `count: aiLabour.count || 0`
+ * (line ~244) sits ONE LINE below this hook's own doctrine comment: "an
+ * unnamed engagement is not 'HIRED' ... left blank for the farmer to fill."
+ * `count` is optional on both `LabourEvent` and the AI response Zod schema,
+ * so an unstated headcount was being coerced into a fabricated 0 here,
+ * before `LabourReview.tsx` ever renders it. A genuinely stated 0 must
+ * survive unchanged — undefined and 0 are different facts.
+ */
+describe('useManualEntryHydration — labour count is not fabricated to 0 (Task 27, spec: 2026-08-28-labour-v2-release-1)', () => {
+    it('leaves count undefined when the parse stated no headcount at all', () => {
+        const { captured } = runHydration({
+            initialData: makeBareParse({ labour: [{ type: 'HIRED', activity: 'Pruning' }] }),
+            activePlot: makePlotWithoutInfrastructure(),
+        });
+
+        expect(captured.labourMap['act_global_daily'].count).toBeUndefined();
+    });
+
+    it('keeps a genuinely stated 0 as 0, not coerced away', () => {
+        const { captured } = runHydration({
+            initialData: makeBareParse({ labour: [{ type: 'HIRED', count: 0, activity: 'Pruning' }] }),
+            activePlot: makePlotWithoutInfrastructure(),
+        });
+
+        expect(captured.labourMap['act_global_daily'].count).toBe(0);
+    });
+});

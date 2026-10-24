@@ -1112,6 +1112,32 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         "20260816153300_AddDailyLogDayOutcome",
         "20260816155627_AddNumericCertainty",
         "20260816170524_AddConsentGateLedgers",
+        // SetTranscriberProviderToSarvam — reviewed 2026-08-31, added because this
+        // guard correctly refused to revert it unreviewed. (The migration itself is
+        // a recovery: it was written 2026-08-25 on a commit that ended up attached
+        // to no branch, and existed nowhere in the tree until it was restored.)
+        //
+        // Relevance to THIS proof: none. It names neither ssf.audit_events nor
+        // TRUNCATE in either direction. It touches exactly one table,
+        // ssf.ai_provider_configs, and within it one meaningful column,
+        // transcriber_provider, plus modified_at_utc. The fact this test asserts —
+        // the app role cannot truncate the audit ledger but can still append and
+        // read — is untouched by it going down and coming back up.
+        //
+        // Down() safety. Unlike the widen/narrow pair below, this one is symmetric
+        // and cheap in BOTH directions: each way is a single UPDATE over a config
+        // table that holds one row, with no schema change, no table rewrite, and no
+        // constraint that could reject a value. Nothing can fail on the way back up.
+        //
+        // Both directions are also guarded rather than blind. Up() only rewrites the
+        // row when transcriber IS NOT DISTINCT FROM structurer — the exact condition
+        // that collapses the pipeline — so an operator who has already split the pair
+        // keeps their choice. Down() only rewinds rows it would itself have moved
+        // (transcriber='Sarvam' AND structurer='Gemini'), so a transcriber chosen
+        // deliberately after this migration is not silently reverted. Within this
+        // scratch database the round trip is therefore exactly Gemini -> Sarvam ->
+        // Gemini, and it is idempotent in both directions.
+        "20260825130000_SetTranscriberProviderToSarvam",
         // WidenCorrectionEventPromptVersion — reviewed 2026-08-28, added because
         // this guard correctly refused to revert it unreviewed.
         //
@@ -1137,6 +1163,63 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // change at all because a wider column accepts every value an older binary
         // can send.
         "20260828061500_WidenCorrectionEventPromptVersion",
+        // ── The five Labour V2 R1 migrations — reviewed 2026-09-03, final
+        // whole-branch review (branch feat/labour-v2-r1): the chain was walked
+        // end to end, Down() paths included, and each shape is pinned by a
+        // RealPostgres task-review fact. Relevance to THIS proof: none of the
+        // five names ssf.audit_events or TRUNCATE in either direction.
+        //
+        // GrantFieldOperatorWorkRowsToAppRole — pure privilege DDL. Up() GRANTs
+        // on ssf.field_operator_work_rows, Down() REVOKEs the same set; in this
+        // scratch database the revoke/regrant round trip is symmetric and
+        // rewrites nothing.
+        "20260831155124_GrantFieldOperatorWorkRowsToAppRole",
+        // AddAttendanceMarks — CreateTable + RLS (ENABLE+FORCE) + grants in the
+        // creating migration; Down() drops the table. Safe HERE because the
+        // scratch table is empty by construction — the drop loses nothing and
+        // the re-create is byte-identical. In PRODUCTION a populated drop is a
+        // data loss and rollback is redeploying the previous API instead.
+        "20260831180408_AddAttendanceMarks",
+        // AddAttendanceMarkCorrections — same shape as the marks table
+        // (create/drop; append-only enforced by GRANT SELECT, INSERT). Same
+        // scratch-empty argument, same production caveat.
+        "20260831185516_AddAttendanceMarkCorrections",
+        // AddLabourGrantExpiry — one NULLABLE timestamptz AddColumn on
+        // ssf.farm_memberships; Down() drops the column. Nullable + empty in
+        // this scratch database: nothing to reject going up, nothing to lose
+        // coming down.
+        "20260902103708_AddLabourGrantExpiry",
+        // AddEngagedThroughToLabourAssignments — one NULLABLE uuid AddColumn +
+        // index + FK (Restrict) on ssf.labour_assignments; Down() mirror-drops
+        // all three. Nullable and scratch-empty: the FK has no row to block and
+        // the drop rewrites nothing.
+        "20260902154713_AddEngagedThroughToLabourAssignments",
+        // WidenVoiceClipRetainedDekId — REVIEWED 2026-10-15 (voice-archive persist
+        // fix). Up() is one AlterColumn on ssf.voice_clips_retained.dek_id,
+        // varchar(128) -> varchar(512): a widening, expand-only. Neither Up() nor
+        // Down() names ssf.audit_events or any GRANT/REVOKE/TRUNCATE, so it cannot
+        // change the fact this proof asserts. Down() NARROWS 512 -> 128 and would
+        // FAIL on any row whose dek_id is longer than 128 (real KMS dek ids are
+        // ~248 chars): Postgres refuses the ALTER rather than truncating. In this
+        // scratch database the table is empty, so both directions succeed. In
+        // PRODUCTION a populated table means Down() is refused; the preferred
+        // rollback is the previous binary on the already-expanded schema.
+        "20261015060121_WidenVoiceClipRetainedDekId",
+        // EnforceAppendOnlyLedgerGrants — REVIEWED 2026-10-17 (append-only ledger
+        // grants). Pure privilege DDL, no data, no schema change. Up() REVOKEs
+        // UPDATE, DELETE, TRUNCATE from agrisync_app on nine append-only ledgers,
+        // ssf.audit_events among them, then RAISES if the app role can still
+        // update, delete or truncate any of them. Relevance to THIS proof: on the
+        // roll-forward it re-revokes TRUNCATE on ssf.audit_events, which
+        // RevokeTruncateOnAuditEvents has already removed by then — a no-op that
+        // agrees with the assertion here, never against it; INSERT and SELECT are
+        // untouched. Down() GRANTs UPDATE, DELETE on ssf.attendance_mark_corrections
+        // and TRUNCATE on five ledgers ONLY where agrisync_app owns the table; in
+        // this scratch database the superuser owns them, so Down() grants nothing
+        // on ssf.audit_events and cannot pre-empt the TRUNCATE loadability step
+        // above. Safe mid-proof in both directions. Its own proof is
+        // Security/AppendOnlyLedgerGrantsRealPostgresTests.
+        "20261017080742_EnforceAppendOnlyLedgerGrants",
     ];
 
     /// <summary>

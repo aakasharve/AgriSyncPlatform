@@ -54,6 +54,16 @@ public sealed class PersistVoiceClipRetainedHandler(
             return Result.Failure<PersistVoiceClipRetainedResult>(ShramSafalErrors.InvalidCommand);
         }
 
+        // Column widths: an over-long value is a client contract error (400), not
+        // a Postgres 22001 surfacing as a bare 500 after the S3 object was written.
+        if (command.DekId.Trim().Length > VoiceClipRetained.MaxDekIdLength
+            || command.IvBase64.Trim().Length > VoiceClipRetained.MaxIvBase64Length
+            || command.AuthTagBase64.Trim().Length > VoiceClipRetained.MaxAuthTagBase64Length
+            || command.Language.Trim().Length > VoiceClipRetained.MaxLanguageLength)
+        {
+            return Result.Failure<PersistVoiceClipRetainedResult>(ShramSafalErrors.InvalidCommand);
+        }
+
         // RecordedAtUtc must arrive as UTC; the domain factory rejects
         // otherwise. Normalise here so wire-shaped DateTime kinds
         // (Unspecified from JSON deserialisation) don't trip the
@@ -66,6 +76,20 @@ public sealed class PersistVoiceClipRetainedHandler(
         if (!decision.IsAllowed)
         {
             return Result.Failure<PersistVoiceClipRetainedResult>(ShramSafalErrors.ConsentRequired);
+        }
+
+        // Defence in depth (consent boundary): consent covers recordings made
+        // WHILE it was granted. If the ledger shows when the CURRENT continuous
+        // grant began and the client says this clip was recorded before that,
+        // refuse. recordedAt is client-declared, so this is not the primary
+        // control (the phone filters first); when the ledger cannot show the
+        // start (null) the consent gate above stands alone.
+        var grantStart = await repository
+            .GetFullHistoryCurrentGrantStartUtcAsync(command.UserId, ct)
+            .ConfigureAwait(false);
+        if (grantStart is { } start && recordedAtUtc < DateTime.SpecifyKind(start, DateTimeKind.Utc))
+        {
+            return Result.Failure<PersistVoiceClipRetainedResult>(ShramSafalErrors.RecordedBeforeConsent);
         }
 
         byte[] cipher;
@@ -101,9 +125,17 @@ public sealed class PersistVoiceClipRetainedHandler(
             consentAuditId: null,
             nowUtc: clock.UtcNow);
 
-        var persistedId = await retainedBlobStore
-            .PersistAsync(metadata, cipher, ct)
-            .ConfigureAwait(false);
+        Guid persistedId;
+        try
+        {
+            persistedId = await retainedBlobStore
+                .PersistAsync(metadata, cipher, ct)
+                .ConfigureAwait(false);
+        }
+        catch (RetainedClipIdConflictException)
+        {
+            return Result.Failure<PersistVoiceClipRetainedResult>(ShramSafalErrors.RetainedClipIdTaken);
+        }
 
         // ADR-DS-009 audit-payload kid stamp (Phase 07 spine-hardening).
         // Re-read consent state to source CurrentTokenKid; the

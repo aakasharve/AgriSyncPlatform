@@ -110,3 +110,49 @@ export interface LabourEngagementDto {
     attributedOperators: AttributedOperatorDto[];
 }
 
+
+/**
+ * task-0b (spec 2026-08-28-labour-v2-release-1) — `DailyLogDto.dayOutcome`'s
+ * value set: the farmer's OWN statement about the day, read back verbatim
+ * from `ShramSafal.Application/Contracts/Dtos/DailyLogDto.cs` (`string?
+ * DayOutcome = null`). See the doctrine-P4 comment on `DailyLog.DayOutcome`
+ * (`ShramSafal.Domain/Logs/DailyLog.cs:792-811`): NULL on every ordinary
+ * work day, never inferred, never defaulted to `"WORK_RECORDED"` — "he did
+ * not say" and "he said work happened" are different facts.
+ *
+ * UNLIKE `DailyLogDto.labour`, a present-but-`null` value on that field is
+ * NOT "the caller made no statement" — `DtoMappingExtensions.ToDto` reads it
+ * straight off the loaded entity on every endpoint that returns a
+ * `DailyLogDto`, so `null` IS the farmer's state whenever the field is
+ * present. Absence of the KEY (`undefined`) is the one genuinely silent
+ * case, reachable only from a server build that predates the member — the
+ * twin is hand-maintained and a device can outlive the server build it
+ * talks to. `logsReconciler.serverStatedDayOutcome` reads exactly that
+ * presence, mirroring `serverStatedContext`.
+ */
+export type DayOutcomeDto =
+    | 'WORK_RECORDED'
+    | 'DISTURBANCE_RECORDED'
+    | 'NO_WORK_PLANNED'
+    | 'IRRELEVANT_INPUT';
+
+/**
+ * Labour V2 R1 Task 3.5c — one server-acknowledged attendance ruling on the
+ * pull wire. dayMark/nightMark are enum NAMES; null = Unmarked ("nobody
+ * said" survives the wire — never a zero). workDate is the farmer's day
+ * (YYYY-MM-DD), not a timestamp.
+ */
+export interface AttendanceMarkDto {
+    id: string;
+    farmId: string;
+    fieldOperatorId: string;
+    workDate: string;
+    dayMark: string | null;
+    nightMark: string | null;
+    hoursWorked: number | null;
+    extraHours: number | null;
+    hoursBasis: string | null;
+    recordedByUserId: string;
+    recordedAtUtc: string;
+    modifiedAtUtc: string;
+}

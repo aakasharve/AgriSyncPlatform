@@ -167,10 +167,10 @@ public sealed class CreateDailyLogManualDraftTests
         var log = MakeManualLog();
         var wireJson = NormalizeOrThrow(FullDraft());
 
-        await sut.DeriveFromManualDraftAsync(log, wireJson, "1.2.3", ids, new FixedClock(FixedNow));
+        await sut.DeriveFromManualDraftAsync(log, wireJson, "1.2.3", ids, new FixedClock(FixedNow), deriveLabour: true);
         var firstOp = repo.CapturedOperations.Single();
 
-        await sut.DeriveFromManualDraftAsync(log, wireJson, "1.2.3", ids, new FixedClock(FixedNow.AddMinutes(1)));
+        await sut.DeriveFromManualDraftAsync(log, wireJson, "1.2.3", ids, new FixedClock(FixedNow.AddMinutes(1)), deriveLabour: true);
 
         repo.CapturedOperations.Should().HaveCount(2, "supersession is append-only — the old row is kept, not mutated away");
         var secondOp = repo.CapturedOperations[1];
@@ -197,8 +197,8 @@ public sealed class CreateDailyLogManualDraftTests
             Guid.Parse("77777777-7777-7777-7777-777777777777"),
             Guid.Parse("88888888-8888-8888-8888-888888888888"));
 
-        await sut.DeriveFromManualDraftAsync(logA, wireJson, "1.2.3", ids, new FixedClock(FixedNow));
-        await sut.DeriveFromManualDraftAsync(logB, wireJson, "1.2.3", ids, new FixedClock(FixedNow));
+        await sut.DeriveFromManualDraftAsync(logA, wireJson, "1.2.3", ids, new FixedClock(FixedNow), deriveLabour: true);
+        await sut.DeriveFromManualDraftAsync(logB, wireJson, "1.2.3", ids, new FixedClock(FixedNow), deriveLabour: true);
 
         repo.CapturedOperations.Should().HaveCount(2);
         repo.CapturedOperations.Should().OnlyContain(o => o.IsCurrentVersion,

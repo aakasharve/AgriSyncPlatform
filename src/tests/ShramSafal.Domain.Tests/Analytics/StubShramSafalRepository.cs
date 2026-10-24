@@ -92,6 +92,22 @@ internal sealed class StubShramSafalRepository : IShramSafalRepository
 
     public Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
     {
+        // Stage A0 / A3 — the declared-owner shortcut, added to match production.
+        //
+        // ShramSafalRepository.GetUserRoleForFarmAsync (:69-90) checks farms.owner_user_id
+        // FIRST and returns PrimaryOwner before it ever looks at memberships; its
+        // IsUserOwnerOfFarmAsync (:92-96) then simply delegates to it. This stub had two
+        // divergent implementations instead: IsUserOwnerOfFarmAsync below carried the
+        // shortcut, this method did not. So a farm's declared owner resolved to null here
+        // while resolving to "owner" one method away.
+        //
+        // That divergence hid exactly the class of bug A3 exists to fix. Modelled properly,
+        // not worked around.
+        if (_farms.TryGetValue(farmId, out var farm) && farm.OwnerUserId.Value == userId)
+        {
+            return Task.FromResult<AppRole?>(AppRole.PrimaryOwner);
+        }
+
         var m = _memberships.FirstOrDefault(x => x.FarmId.Value == farmId && x.UserId.Value == userId);
         return Task.FromResult<AppRole?>(m?.Role);
     }

@@ -15,11 +15,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Clock, AlertCircle, Loader2, Mic, Play, Pause, Cloud, CloudOff, HardDrive } from 'lucide-react';
 import type { VoiceClipCacheRecord, VoiceClipStatus } from '../../../infrastructure/storage/DexieDatabase';
-import { readVoiceClipPlaintext, resolveVoiceClipBinding } from '../../../infrastructure/voice/VoiceClipRetention';
-import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
-import { openVoiceClip } from '../../../infrastructure/security/voiceEnvelope';
-import { resolveDek } from '../../../infrastructure/security/tenantDekClient';
-import { getVoiceDiaryById } from '../../../infrastructure/voiceDiary/voiceDiaryApiClient';
+import { readVoiceClipPlaintext } from '../../../infrastructure/voice/VoiceClipRetention';
+import { openRetainedClip } from '../../../infrastructure/voice/retainedClipReader';
+import type { CloudArchiveState } from '../../../infrastructure/voice/voiceArchiveState';
 import {
     type VoiceDiaryLocale,
     tVoiceDiary,
@@ -53,6 +51,18 @@ export interface UnifiedClip {
      * acknowledgement arrives the phone holds the only copy.
      */
     pendingCloudSave?: boolean;
+    /**
+     * spec: 2026-08-25-prod-cutover-waves (voice archive path).
+     * Where this clip is in the cloud-save state machine. `acknowledged` is the
+     * ONLY value that may be shown as saved to the cloud, and it means the
+     * SERVER echoed this clip's id. Absent = unknown, rendered as not saved.
+     */
+    cloudState?: CloudArchiveState;
+    /**
+     * Why the last upload failed: `network` earns the connectivity message
+     * (which promises a retry); anything else gets the plain "could not save".
+     */
+    cloudFailure?: 'network' | 'other';
 }
 
 interface Props {
@@ -106,7 +116,7 @@ const getStatusPresentation = (
             };
         case 'failed':
             return {
-                label: tVoiceDiary(locale, 'clipBadge.failed'),
+                label: tVoiceDiary(locale, 'clipBadge.failed'), // speech understanding failed (NOT playback)
                 icon: AlertCircle,
                 className: 'bg-rose-50 text-rose-700 border-rose-100',
             };
@@ -173,66 +183,54 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
         };
     }, [clip]);
 
-    // Cloud clips: lazy-fetch on first play to avoid hauling audio
-    // bytes for every calendar paint.
-    const ensureCloudAudioUrl = useCallback(async () => {
-        if (audioUrl || fetchingCloud) return;
+    // Cloud clips: lazy-fetch on first play to avoid hauling audio bytes for
+    // every calendar paint. Also the fallback for a clip the server holds but
+    // this phone no longer does (fresh install, new phone).
+    // Returns the playable URL, or null when the recording could not be opened. The URL is returned (not just
+    // stored in state) because the caller must put it on the <audio> element itself: React has not re-rendered yet.
+    const ensureCloudAudioUrl = useCallback(async (): Promise<string | null> => {
+        if (audioUrl) return audioUrl;
+        if (fetchingCloud) return null;
         setFetchingCloud(true);
         setFetchError(null);
         try {
-            const result = await getVoiceDiaryById(clip.id);
-            if (!result) {
-                setFetchError('clip_not_found');
-                return;
+            const result = await openRetainedClip(clip.id);
+            if (!result.ok) {
+                setFetchError(result.error);
+                return null;
             }
-            // The retained tier keeps the 16-byte AES-GCM auth tag in its own
-            // column (the archive path split it off before upload). WebCrypto
-            // expects it appended to the ciphertext, so rejoin it here —
-            // `authTagBase64` was fetched and then dropped, which meant this
-            // path could never have decrypted anything.
-            const cipherBody = Uint8Array.from(atob(result.cipherBase64), c => c.charCodeAt(0));
-            const authTag = Uint8Array.from(atob(result.authTagBase64), c => c.charCodeAt(0));
-            const cipher = new Uint8Array(cipherBody.byteLength + authTag.byteLength);
-            cipher.set(cipherBody);
-            cipher.set(authTag, cipherBody.byteLength);
-            const iv = Uint8Array.from(atob(result.ivBase64), c => c.charCodeAt(0));
-            // The seal is bound to (clipId, ownerAccountId). The retained-tier
-            // DTO carries no owner account, so the binding is rebuilt from the
-            // local row this clip was archived from — the archive path reuses
-            // the local Dexie id as the server PK, so the ids match.
-            const localRow = await getDatabase().voiceClips.get(result.clipId);
-            const binding = localRow
-                ? await resolveVoiceClipBinding(result.clipId, localRow.farmId)
-                : null;
-            if (!binding) {
-                setFetchError('clip_binding_unavailable');
-                return;
-            }
-            const dek = await resolveDek(result.dekId);
-            if (!dek) {
-                setFetchError('dek_unavailable');
-                return;
-            }
-            const plaintext = await openVoiceClip(
-                { ciphertext: cipher, iv, wrappedDekId: result.dekId },
-                dek,
-                binding,
-            );
-            // Voice clips are persisted as the recording's original mime type
-            // (typically audio/webm). Cloud projection doesn't echo it back —
-            // the browser sniff is reliable for the common cases.
-            const blob = new Blob([plaintext], { type: 'audio/webm' });
-            setAudioUrl(URL.createObjectURL(blob));
+            const blob = new Blob([result.bytes], { type: result.mimeType });
+            const url = URL.createObjectURL(blob);
+            setAudioUrl(url);
+            return url;
         } catch (err) {
             setFetchError(err instanceof Error ? err.message : 'cloud_fetch_failed');
+            return null;
         } finally {
             setFetchingCloud(false);
         }
     }, [audioUrl, clip.id, fetchingCloud]);
 
+    // First tap on a recording that only the server holds: the audio is fetched and opened, then React puts its URL
+    // on the <audio> element. Calling play() before that (or setting src by hand and letting React set it again a
+    // millisecond later) restarts the media load and aborts the play, so playing waits for the committed src.
+    const playWhenReadyRef = React.useRef(false);
+    useEffect(() => {
+        if (!audioUrl || !playWhenReadyRef.current) return;
+        playWhenReadyRef.current = false;
+        const el = audioRef.current;
+        if (!el) return;
+        void el.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+    }, [audioUrl]);
+
     const handlePlayPause = useCallback(async () => {
-        if (clip.source === 'cloud' && !audioUrl) {
-            await ensureCloudAudioUrl();
+        if (!audioUrl && (clip.source === 'cloud' || clip.localRecord?.s3RetainedKey)) {
+            if (fetchingCloud) return; // taps while the recording is being opened are ignored
+            playWhenReadyRef.current = true;
+            const opened = await ensureCloudAudioUrl();
+            // Could not open the recording: the error is already shown; there is nothing to play.
+            if (!opened) playWhenReadyRef.current = false;
+            return;
         }
         const el = audioRef.current;
         if (!el) return;
@@ -243,15 +241,28 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
             el.pause();
             setIsPlaying(false);
         }
-    }, [audioUrl, clip.source, ensureCloudAudioUrl]);
+    }, [audioUrl, clip.source, clip.localRecord?.s3RetainedKey, ensureCloudAudioUrl, fetchingCloud]);
 
     const status = getStatusPresentation(locale, clip.status);
     const StatusIcon = status?.icon ?? CheckCircle2;
-    const SourceIcon = clip.source === 'cloud' ? Cloud : HardDrive;
-    const sourceBadgeKey = clip.source === 'cloud' ? 'clipBadge.cloud' : 'clipBadge.local';
-    const sourceBadgeCls = clip.source === 'cloud'
+    // The cloud badge is earned by the server's acknowledgement (or by the
+    // server listing the clip) and by nothing else.
+    const inCloud = clip.source === 'cloud' || clip.cloudState === 'acknowledged';
+    const SourceIcon = inCloud ? Cloud : HardDrive;
+    const sourceBadgeKey = inCloud ? 'clipBadge.cloud' : 'clipBadge.local';
+    const sourceBadgeCls = inCloud
         ? 'bg-sky-50 text-sky-700'
         : 'bg-stone-100 text-stone-700';
+    // One honest not-yet-saved badge per state. `queued` keeps the original
+    // wording; `uploading` and `failed` say what is happening without claiming
+    // the clip is safe.
+    const unsavedKey = clip.cloudState === 'uploading'
+        ? 'clipBadge.uploading'
+        : clip.cloudState === 'failed'
+            ? (clip.cloudFailure === 'network' ? 'clipBadge.uploadFailed' : 'clipBadge.uploadRefused')
+            : clip.cloudState === 'queued' || clip.pendingCloudSave
+                ? 'clipBadge.pendingCloudSave'
+                : null;
 
     return (
         <article
@@ -286,36 +297,38 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
                 </div>
                 <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                     <span
-                        className={`inline-flex items-center gap-1 ${sourceBadgeCls} text-[10px] font-['DM_Sans'] font-bold uppercase tracking-wider rounded-full px-2 py-0.5`}
+                        data-testid={`voice-diary-clip-source-${clip.id}`}
+                        className={`inline-flex max-w-full items-start gap-1 ${sourceBadgeCls} text-xs font-['DM_Sans'] font-bold leading-snug whitespace-normal break-words text-left rounded-2xl px-2 py-1`}
                     >
-                        <SourceIcon size={10} />
-                        {tVoiceDiary(locale, sourceBadgeKey)}
+                        <SourceIcon size={12} className="mt-0.5 shrink-0" />
+                        <span className="min-w-0 break-words">{tVoiceDiary(locale, sourceBadgeKey)}</span>
                     </span>
-                    {clip.pendingCloudSave && (
+                    {unsavedKey && !inCloud && (
                         <span
                             data-testid={`voice-diary-clip-pending-cloud-${clip.id}`}
-                            className="inline-flex items-center gap-1 border bg-amber-50 text-amber-800 border-amber-200 text-[10px] font-['DM_Sans'] font-bold uppercase tracking-wider rounded-full px-2 py-0.5"
+                            data-cloud-state={clip.cloudState ?? 'queued'}
+                            className="inline-flex max-w-full items-start gap-1 border bg-amber-50 text-amber-800 border-amber-200 text-xs font-['DM_Sans'] font-bold leading-snug whitespace-normal break-words text-left rounded-2xl px-2 py-1"
                         >
-                            <CloudOff size={10} />
-                            {tVoiceDiary(locale, 'clipBadge.pendingCloudSave')}
+                            <CloudOff size={12} className="mt-0.5 shrink-0" />
+                            <span className="min-w-0 break-words">{tVoiceDiary(locale, unsavedKey)}</span>
                         </span>
                     )}
                     {status && (
                         <span
-                            className={`inline-flex items-center gap-1 border ${status.className} text-[10px] font-['DM_Sans'] font-bold uppercase tracking-wider rounded-full px-2 py-0.5`}
+                            className={`inline-flex max-w-full items-start gap-1 border ${status.className} text-xs font-['DM_Sans'] font-bold leading-snug whitespace-normal break-words text-left rounded-2xl px-2 py-1`}
                         >
-                            <StatusIcon size={10} className={status.spin ? 'animate-spin' : ''} />
-                            {status.label}
+                            <StatusIcon size={12} className={`mt-0.5 shrink-0 ${status.spin ? 'animate-spin' : ''}`} />
+                            <span className="min-w-0 break-words">{status.label}</span>
                         </span>
                     )}
                 </div>
                 {fetchError && (
-                    <p className="mt-1 text-[11px] font-['DM_Sans'] text-rose-600">
-                        {fetchError}
+                    <p data-testid={`voice-diary-clip-play-error-${clip.id}`} data-error={fetchError} className="mt-1 text-xs font-['DM_Sans'] text-rose-600 whitespace-normal break-words">
+                        {tVoiceDiary(locale, 'clipBadge.playbackUnavailable')}
                     </p>
                 )}
                 {clip.lastError && !fetchError && (
-                    <p className="mt-1 text-[11px] font-['DM_Sans'] text-rose-600">
+                    <p className="mt-1 text-xs font-['DM_Sans'] text-rose-600 whitespace-normal break-words">
                         {clip.lastError}
                     </p>
                 )}

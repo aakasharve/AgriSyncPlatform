@@ -4,6 +4,7 @@
 // `import { X } from '.../DexieDatabase'` call sites keep working unchanged.
 
 import type { DailyLog } from '../../types';
+import type { AttendanceMarkDto } from '../api/dtos';
 import type { JobCard } from '../../domain/work/JobCard';
 import type { WorkerProfileData } from '../../domain/work/ReliabilityScore';
 import type {
@@ -90,6 +91,19 @@ export interface MutationQueueItem {
      */
     retryCount: number;
     lastError?: string;
+    /**
+     * Task 9 (B001, Labour V2 R1) — the SERVER'S error code for the verdict
+     * that parked this row (e.g. `ShramSafal.AttendanceContradiction`).
+     * `lastError` carries the human message; without the code no surface
+     * could tell one park from another except by matching English prose.
+     * Written by `markRejectedUserReview` when the worker has one.
+     *
+     * NOT INDEXED, deliberately — same rule and precedent as
+     * `nextRetryAfterMs` below: Dexie needs schema declarations only for
+     * indexed fields, so this needed no version bump, and a bump is one-way
+     * for APK users.
+     */
+    errorCode?: string;
     /**
      * §P0.7 box 2c — epoch ms before which `getPending` will not offer this row.
      *
@@ -405,6 +419,22 @@ export interface VoiceClipCacheRecord {
     retainedArchiveAttempts?: number;
     /** When the last archive attempt ran, successful or not. */
     retainedArchiveLastAttemptAtUtc?: string;
+    /**
+     * Where this clip is in the cloud-save state machine, ONLY while an upload
+     * is in flight or has failed. `uploading` is written before the POST and
+     * `failed` after a POST that was not acknowledged. Absence means "not
+     * started" (queued if the farmer keeps his voice, else local-only).
+     * Acknowledged is NEVER stored here: it is `s3RetainedKey`, the id the
+     * SERVER echoed back. See `voiceArchiveState.ts`.
+     * NON-INDEXED - no Dexie version bump.
+     */
+    archiveState?: 'uploading' | 'failed';
+    /** Consecutive unacknowledged uploads; drives retry backoff. Reset on ack. */
+    archiveFailCount?: number;
+    /** Earliest time the next upload may run after a failure. */
+    archiveNextAttemptAtUtc?: string;
+    /** When the server acknowledged the upload (same moment `s3RetainedKey` was set). */
+    archiveAckedAtUtc?: string;
     status: VoiceClipStatus;
     retentionPolicy: VoiceClipRetentionPolicy;
     expiresAtUtc: string;
@@ -544,6 +574,22 @@ export interface FinanceCorrectionCacheRecord {
     updatedAt: string;
 }
 
+/**
+ * Labour V2 R1 Task 3.5c — one server-acknowledged attendance ruling, as
+ * pulled. Grain matches ux_attendance_marks_farm_operator_day. This store is
+ * the ACKNOWLEDGED half only; unsynced intent lives in `mutationQueue`, and
+ * `features/labour/data/attendanceLocal.ts` is the one read that merges the
+ * two with a `source` label (P10: intent is never rendered as saved).
+ */
+export interface AttendanceMarkCacheRecord {
+    id: string;
+    farmId: string;
+    fieldOperatorId: string;
+    workDate: string;
+    payload: AttendanceMarkDto;
+    updatedAt: string;
+}
+
 // =============================================================================
 // SCHEDULE TEMPLATE — shape inside referenceData.data array
 // =============================================================================
@@ -612,6 +658,14 @@ export interface DexieLogRecord {
     isDeleted: 0 | 1;
     /** Server-reported modification timestamp; used to skip stale-pull overwrites */
     serverModifiedAtUtc?: string;
+    /**
+     * 7-day Labour cache (founder 2026-10-12): when the worker names carried by this
+     * log's labour events (`attributedOperators`, `workerNames`) were last DOWNLOADED
+     * from the server. Written only by the pull reconciler. Absent = unknown age
+     * (legacy copy, or a log only ever written on this device).
+     * See infrastructure/storage/downloadedLabourCache.ts.
+     */
+    labourNamesDownloadedAtUtc?: string;
 }
 
 // =============================================================================

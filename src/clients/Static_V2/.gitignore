@@ -1,0 +1,26 @@
+# Dependencies, build output, local material
+/node_modules/
+/dist/
+/_reference/
+*.log
+
+# assets/ holds ~46 MB of design drafts (source PNGs, prompt variants).
+# Commit only what the shipped site imports from src/App.tsx; add a line
+# here when a new image is imported, or the build will fail on a fresh clone.
+/assets/**
+!/assets/**/
+!/assets/brand/arve-logo.png
+!/assets/brand/ss-mark.webp
+!/assets/brand/ss-wordmark.webp
+!/assets/generated/scene-01-hero-farm-operator.webp
+!/assets/generated/scene-02-daily-work-memory.webp
+!/assets/generated/scene-02-work-dispersing.webp
+!/assets/generated/scene-04-belief-field-reflection.webp
+!/assets/review/visual-prompts-v1-20260617/01-home-hero-farmer-card.webp
+!/assets/review/visual-prompts-v1-20260617/05-home-soil-wisdom.webp
+!/assets/review/visual-prompts-v1-20260617/06-home-land-vs-business.webp
+!/assets/review/visual-prompts-v1-20260617/08-home-audience-group.webp
+!/assets/review/visual-prompts-v1-20260617/09-home-cta-seed.webp
+!/assets/review/visual-prompts-v1-20260617/farmers-hero-operator-square.webp
+!/assets/review/visual-prompts-v1-20260617/join-first-responsible-group.webp
+!/assets/review/visual-prompts-v1-20260617/privacy-trust-seedling.webp

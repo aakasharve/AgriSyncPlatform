@@ -20,7 +20,9 @@ export function mapOperatorRole(rawRole?: string): FarmOperator['role'] {
         case 'MUKADAM':
             return 'MUKADAM';
         default:
-            return 'WORKER';
+            // The server sends a literal "WORKER" placeholder when it cannot see
+            // the member's membership, so a synced WORKER is not a known role.
+            return 'UNKNOWN';
     }
 }
 
@@ -41,6 +43,7 @@ export function capabilitiesForRole(role: FarmOperator['role']): OperatorCapabil
                 OperatorCapability.LOG_DATA,
             ];
         case 'WORKER':
+        case 'UNKNOWN':
         default:
             return [
                 OperatorCapability.VIEW_ALL,

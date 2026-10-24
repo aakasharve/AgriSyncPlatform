@@ -6,17 +6,25 @@ import { storageNamespace } from '../../infrastructure/storage/StorageNamespace'
 import { MigrationService } from '../../infrastructure/storage/MigrationService';
 import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
 import { attachmentUploadWorker } from '../../infrastructure/sync/AttachmentUploadWorker';
+import { voiceArchiveUploader } from '../../infrastructure/sync/VoiceArchiveUploader';
 import { generateRollingDemoData, generateDemoHarvestSessions, generateDemoProcurementExpenses, DEMO_SEED_VERSION } from '../../features/demo/DemoDataService';
 import { LocalStorageLogsRepository } from '../../infrastructure/storage/LocalStorageLogsRepository';
 import { seedHarvestSessions } from '../../services/harvestService'; // To be refactored later
 import { procurementRepository } from '../../services/procurementRepository'; // To be refactored later
 import { legacyAuditPort } from '../../infrastructure/audit/LegacyAuditPort';
 import { useAuth } from './AuthProvider';
+import { getRootStore } from '../state/RootStore';
+import { clearLabourReadoutsExcept } from '../../infrastructure/storage/LabourReadoutCache';
+import { purgeExpiredLabourCaches } from '../../infrastructure/storage/labourFarmAccess';
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 import { runLegacyLocalStorageMigration } from '../../infrastructure/storage/LegacyLocalStorageMigrator';
 import { DemoModeStore } from '../../infrastructure/storage/DemoModeStore';
 import { activateDatabaseForUser } from '../../infrastructure/storage/activateUserDatabase';
+import { setActiveDatabaseName } from '../../infrastructure/storage/activeDatabaseName';
+import { UNIDENTIFIED_DATABASE_NAME } from '../../infrastructure/storage/userDatabaseName';
 import { recoverLegacyOwnershipClaim, settleOwnershipClaims } from '../../infrastructure/storage/databaseOwnership';
+import { getActiveDatabaseName } from '../../infrastructure/storage/activeDatabaseName';
+import { sweepExpiredDownloadedLabour, sweepOtherLocalDatabases } from '../../infrastructure/storage/downloadedLabourCache';
 import { purgeExpiredProcessingVoiceClips } from '../../infrastructure/voice/VoiceClipRetention';
 
 // --- CONTEXT ---
@@ -112,12 +120,24 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     // Handle Mode Switching & Initialization
     useEffect(() => {
+        // A newer run supersedes this one (user/mode changed while it was still
+        // awaiting): a superseded run must not activate a database, start
+        // workers or clear the loading flag after the newer run has taken over.
+        let cancelled = false;
         const init = async () => {
             setIsLoading(true);
             try {
                 console.log(`[DataSource] Initializing ${isDemoMode ? 'DEMO' : 'REAL'} mode`);
-                backgroundSyncWorker.stop();
-                attachmentUploadWorker.stop();
+                // Drain, don't just stop: the PREVIOUS user's in-flight cycle must
+                // finish before the sync badge is reset and the database address
+                // changes, or it could emit a stale rejection / touch B's rows.
+                await Promise.all([backgroundSyncWorker.stop(), attachmentUploadWorker.stop(), voiceArchiveUploader.stop()]);
+                if (cancelled) return;
+                // The signed-in user changed (or signed out): the sync badge's
+                // in-memory rejected list belongs to the PREVIOUS user. Forget
+                // it; the new user's own parked rows are re-announced from THEIR
+                // database when the worker starts. Nothing is deleted.
+                getRootStore().sync.send({ type: 'RESET' });
                 storageNamespace.setNamespace(isDemoMode ? 'demo' : 'user');
                 // A farmer's records live in a database of their own, so that a
                 // second farmer signing in on this handset is a change of
@@ -139,8 +159,25 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 // another farmer's database while that check is still in flight.
                 if (!isDemoMode && session?.userId) {
                     await recoverLegacyOwnershipClaim();
+                    if (cancelled) return;
                     activateDatabaseForUser(session.userId);
+                    // Offline Labour read-outs are per user: erase any other user's.
+                    clearLabourReadoutsExcept(session.userId);
+                    // 7-day cap on cached Labour names: purge expired copies at boot.
+                    purgeExpiredLabourCaches();
                     await settleOwnershipClaims();
+                    // Same 7-day cap in the IndexedDB stores (marks, names in logs, team list,
+                    // last-pull snapshot) and in every OTHER farmer's database on this handset.
+                    // Awaited so no screen reads before the sweep; best-effort, never blocks boot.
+                    await sweepExpiredDownloadedLabour().catch((e) => console.warn('[DataSource] labour cache sweep failed', e));
+                    await sweepOtherLocalDatabases(getActiveDatabaseName()).catch(() => undefined);
+                } else if (!isDemoMode) {
+                    // Signed out / not yet identified: no farmer's database may stay
+                    // open (same invariant as endFarmerSessionLocally). Without this
+                    // the worker's rehydrate would re-announce the PREVIOUS user's
+                    // parked rows from the database still pointed at.
+                    setActiveDatabaseName(UNIDENTIFIED_DATABASE_NAME);
+                    await sweepOtherLocalDatabases(UNIDENTIFIED_DATABASE_NAME).catch(() => undefined);
                 }
                 await dataSource.initialize();
                 await MigrationService.migrate();
@@ -155,21 +192,25 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                     await seedDemoDataIfNeeded();
                 } else {
                     await purgeExpiredProcessingVoiceClips();
+                    if (cancelled) return;
                     backgroundSyncWorker.start();
                     attachmentUploadWorker.start();
+                    voiceArchiveUploader.start();
                 }
             } catch (error) {
                 console.error("[DataSource] Init failed", error);
             } finally {
-                setIsLoading(false);
+                if (!cancelled) setIsLoading(false);
             }
         };
 
         init();
 
         return () => {
+            cancelled = true;
             backgroundSyncWorker.stop();
             attachmentUploadWorker.stop();
+            voiceArchiveUploader.stop();
         };
         // `seedDemoDataIfNeeded` is deliberately absent: it is re-created on
         // every render, so listing it would re-run this effect in a loop — a

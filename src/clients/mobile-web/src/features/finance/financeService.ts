@@ -278,25 +278,47 @@ async function hydrateFromDexie(force = false): Promise<void> {
     }
 
     cache.hydrating = (async () => {
-        const db = getDatabase();
-        const [costEntryRows, correctionRows, priceConfigsMeta] = await Promise.all([
-            db.costEntries.toArray(),
-            db.financeCorrections.toArray(),
-            db.appMeta.get('shramsafal_finance_price_configs_v1'),
-        ]);
+        // A farmer signing in on this handset swaps the active database and
+        // CLOSES the handle this read was using (`getDatabase()`); Dexie then
+        // rejects the in-flight read with DatabaseClosedError. That is the
+        // switch working, not a fault, and the rows read from the database the
+        // app has left must never be published to the farmer who is now
+        // signed in (cross-user leak). So a read is only trusted if the active
+        // handle is still the one it started on; otherwise start again on the
+        // database the app is on now. Any other failure is a real error and
+        // propagates to the caller.
+        for (;;) {
+            const db = getDatabase();
+            try {
+                const [costEntryRows, correctionRows, priceConfigsMeta] = await Promise.all([
+                    db.costEntries.toArray(),
+                    db.financeCorrections.toArray(),
+                    db.appMeta.get('shramsafal_finance_price_configs_v1'),
+                ]);
+                if (getDatabase() !== db) {
+                    continue;
+                }
 
-        const costEntries = costEntryRows
-            .map(row => row.payload as ServerCostEntry)
-            .filter(Boolean);
-        const corrections = correctionRows
-            .map(row => row.payload as ServerFinanceCorrection)
-            .filter(Boolean);
-        const priceConfigs = asArray<ServerPriceConfig>(priceConfigsMeta?.value);
-        applyFinanceSnapshot({
-            costEntries,
-            corrections,
-            priceConfigs,
-        });
+                const costEntries = costEntryRows
+                    .map(row => row.payload as ServerCostEntry)
+                    .filter(Boolean);
+                const corrections = correctionRows
+                    .map(row => row.payload as ServerFinanceCorrection)
+                    .filter(Boolean);
+                const priceConfigs = asArray<ServerPriceConfig>(priceConfigsMeta?.value);
+                applyFinanceSnapshot({
+                    costEntries,
+                    corrections,
+                    priceConfigs,
+                });
+                return;
+            } catch (err) {
+                if (getDatabase() !== db) {
+                    continue;
+                }
+                throw err;
+            }
+        }
     })().finally(() => {
         cache.hydrating = null;
     });
@@ -304,13 +326,24 @@ async function hydrateFromDexie(force = false): Promise<void> {
     return cache.hydrating;
 }
 
+/**
+ * Fire-and-forget entry point for hydration. The returned promise is never
+ * awaited by these callers, so a genuine failure must be reported here or it
+ * surfaces as an unhandled rejection with no owner.
+ */
+function hydrateInBackground(force: boolean): void {
+    hydrateFromDexie(force).catch(err => {
+        console.error('[financeService] could not hydrate the finance cache from Dexie', err);
+    });
+}
+
 function refreshInBackground(): void {
-    void hydrateFromDexie(true);
+    hydrateInBackground(true);
 }
 
 // ── Auto-hydrate on load ───────────────────────────────────────────────
 
-void hydrateFromDexie();
+hydrateInBackground(false);
 
 if (typeof window !== 'undefined') {
     window.addEventListener('agrisync:finance-sync-payload', event => {

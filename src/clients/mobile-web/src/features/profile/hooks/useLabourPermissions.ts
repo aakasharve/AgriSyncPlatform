@@ -50,10 +50,10 @@ import {
  */
 export const LABOUR_PERMISSION_MESSAGES = {
     /** 409 — the member's ROLE already carries the capability. */
-    carriedByRole: 'This member already has it through their role — it cannot be switched off.',
+    carriedByRole: 'ही जबाबदारी यांच्याकडे आधीपासूनच आहे — ती बंद करता येत नाही.',
     /** Anything else: 403, network down, server error. */
-    changeFailed: 'Could not change this. Try again.',
-    loadFailed: 'Could not load who may fix labour records.',
+    changeFailed: 'हा बदल करता आला नाही. पुन्हा प्रयत्न करा.',
+    loadFailed: 'कामगारांच्या नोंदी कोण सुधारू शकतात ते आत्ता दिसलं नाही.',
 } as const;
 
 export interface UseLabourPermissionsResult {
@@ -64,11 +64,18 @@ export interface UseLabourPermissionsResult {
     loadFailed: boolean;
     /** The member whose write is in flight, if any. */
     savingUserId: string | null;
-    /** English, from `LABOUR_PERMISSION_MESSAGES`. `null` when nothing is wrong. */
+    /** Marathi, from `LABOUR_PERMISSION_MESSAGES`. `null` when nothing is wrong. */
     error: string | null;
     reload: () => Promise<void>;
-    /** Desired state, not a toggle. */
-    setPermission: (targetUserId: string, canManageLabourRecords: boolean) => Promise<void>;
+    /**
+     * Desired state, not a toggle. `labourGrantExpiresAtUtc` is the ISO instant
+     * the responsibility ends (R1 Task 2.2); omitted/null = कायम, no end date.
+     */
+    setPermission: (
+        targetUserId: string,
+        canManageLabourRecords: boolean,
+        labourGrantExpiresAtUtc?: string | null,
+    ) => Promise<void>;
     dismissError: () => void;
 }
 
@@ -122,13 +129,15 @@ export function useLabourPermissions(farmId: string | null | undefined): UseLabo
     const setPermission = useCallback(async (
         targetUserId: string,
         canManageLabourRecords: boolean,
+        labourGrantExpiresAtUtc?: string | null,
     ) => {
         if (!farmId) return;
 
         setSavingUserId(targetUserId);
         setError(null);
         try {
-            const updated = await setLabourPermission(farmId, targetUserId, canManageLabourRecords);
+            const updated = await setLabourPermission(
+                farmId, targetUserId, canManageLabourRecords, labourGrantExpiresAtUtc ?? null);
             if (!mountedRef.current) return;
             // Adopt the SERVER's row, whole. Not the boolean we asked for.
             setRows(current => (current ?? []).map(

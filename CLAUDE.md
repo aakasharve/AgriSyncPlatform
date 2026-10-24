@@ -52,27 +52,29 @@ All decisions, plans, ADRs, specs, and agent memory live under `_COFOUNDER/` (pr
 
 ---
 
-## Branching Model (hard) — trunk-based
+## Branching Model (hard) — trunk-based, weekly review
 
-*(Founder decision 2026-08-28, replacing the era of many long-lived feature
-branches. Enacted the same day: 66 local / 65 remote branches and 14 worktrees
-were reduced to `main` plus one active task branch. Every deleted branch is
-preserved on origin as `archive/2026-08-28/<branch-name>`.)*
+*(Founder decision 2026-08-28; lifetime rule changed 2026-10-24: no fixed time
+limit, weekly review instead.)*
 
-**One product truth (`main`) + disposable short-lived branches around it.**
+**One product truth (`main`) plus branches around it.**
 
-- `main` is the latest integrated working ShramSafal. Everything starts from it:
+- `main` is the latest integrated, working ShramSafal. Everything starts from it:
   **cut every branch from `origin/main`, never from a local working tree.**
-- A branch is a **temporary workspace, not a parallel version of the product**.
-  Target lifetime: **hours to 2 days.** A branch older than ~3 days is a defect —
-  merge it or delete it.
-- Name branches `task/<short-thing>`. Merge as soon as the capability is coherent,
-  then **delete the branch**. Rebase on `origin/main` before final verification.
-- Never let more than a couple of branches exist at once. Parallel agents each get
-  their own short branch off the same `main` — never their own long-lived fork.
-- **Worktrees are for isolation only.** Remove one the moment its branch merges;
-  a worktree must never outlive its branch. Kill its dev servers when you remove it
-  (an orphaned Vite/Bootstrapper process locks the directory).
+- A branch is a workspace, not a second version of the product. Name new ones
+  `task/<short-thing>`. Merge as soon as the work is coherent, then delete the
+  branch. Rebase on `origin/main` before final verification.
+- **There is no fixed time limit on a branch.**
+- **Once a week, review the full branch list** (`git branch -a`, open PRs and
+  worktrees). The founder decides for each branch: **keep** (active work),
+  **park** (deliberately held; labelled and written down with what unblocks it)
+  or **delete**. Deleted branches are backed up first. A parked branch is a
+  decision, not a defect.
+- Nothing is deleted, merged, pushed or deployed without the founder's explicit
+  yes for that specific item.
+- **Worktrees are for isolation only.** Remove one when its branch is merged,
+  deleted or parked. Stop its dev servers first: a leftover Vite/Bootstrapper
+  process locks the directory.
 
 ### Two classes of change — different speed, same safety floor
 
@@ -80,8 +82,8 @@ Pre-pilot (no real farmers yet), optimize for learning speed, not ceremony:
 
 | Class | Examples | Process |
 |---|---|---|
-| **Normal product change** | screens, onboarding, Marathi copy, navigation, small features, workflow experiments | short branch → build → targeted tests → merge → deploy → delete branch. No heavy test ceremony unless the area demands it. |
-| **Trust-critical change** | DB schema/migrations, auth, cross-farm access, RLS, sync, financial calculations, deletion/retention, permissions, server authority, consent/privacy, offline data safety | short branch **and** the full stronger test set before merge. Non-negotiable regardless of stage. |
+| **Normal product change** | screens, onboarding, Marathi copy, navigation, small features, workflow experiments | branch → build → targeted tests → merge → deploy. No heavy test ceremony unless the area demands it. |
+| **Trust-critical change** | DB schema/migrations, auth, cross-farm access, RLS, sync, financial calculations, deletion/retention, permissions, server authority, consent/privacy, offline data safety | branch **and** the full stronger test set before merge. Non-negotiable regardless of stage. |
 
 The speed relaxation applies **only** to reversible product decisions. The
 irreversible trust/data invariants stay strict. When unsure which class a change

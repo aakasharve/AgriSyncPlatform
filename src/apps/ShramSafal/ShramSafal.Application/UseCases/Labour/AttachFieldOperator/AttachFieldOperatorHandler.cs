@@ -91,7 +91,7 @@ public sealed class AttachFieldOperatorHandler(
         // this block was originally added for — see the class remarks on
         // PushSyncBatchHandler as a future non-HTTP entry point.
         if (!await LabourManagementGate.IsAllowedAsync(
-                repository, command.FarmId.Value, command.CallerUserId.Value, ct))
+                repository, command.FarmId.Value, command.CallerUserId.Value, clock.UtcNow, ct))
         {
             return Result.Failure<AttachFieldOperatorResult>(ShramSafalErrors.Forbidden);
         }

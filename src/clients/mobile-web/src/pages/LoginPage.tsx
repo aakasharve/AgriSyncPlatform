@@ -128,7 +128,7 @@ const LoginPage: React.FC = () => {
                             <div className="space-y-2 pt-1">
                                 <div className="flex items-center gap-2">
                                     <div className="h-px flex-1 bg-stone-200" />
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">कामगार आहे?</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">कामाला येता?</span>
                                     <div className="h-px flex-1 bg-stone-200" />
                                 </div>
                                 <button
@@ -271,7 +271,7 @@ const LoginPage: React.FC = () => {
                     <div className="flex items-center gap-2">
                         <div className="flex-1 h-px bg-stone-200"></div>
                         <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
-                            मी कामगार आहे · I am a worker
+                            मी कामाला येतो · I am a worker
                         </span>
                         <div className="flex-1 h-px bg-stone-200"></div>
                     </div>

@@ -3,7 +3,7 @@
 **Prepared by:** Founder's office (Cofounder OS), AgriSync
 **Audience:** Marketing / creative agency
 **Product:** ShramSafal (श्रमसफल) — the consumer-facing app
-**Platform / company:** AgriSync
+**Company:** Agriryot Value Enterprises Private Limited · **Platform (internal):** AgriSync
 **Status:** Live on production · Android APK + mobile web · Bilingual (मराठी / English)
 **Date:** 2026-06-10
 
@@ -283,7 +283,7 @@ When the agency needs to answer "is this real / can we trust it," here is the su
 
 ## 10. Brand & voice guidelines (must-follow)
 
-**Product name:** **ShramSafal** (श्रमसफल). The company/platform is **AgriSync** — lead with ShramSafal in all farmer-facing work.
+**Product name:** **ShramSafal** (श्रमसफल). The company is **Agriryot Value Enterprises Private Limited**; **AgriSync** is the internal technology platform it runs on, not a brand and not the company — lead with ShramSafal in all farmer-facing work, and never put AgriSync in front of a farmer. The canonical sentence, as used in the app's own consent notice: *"Shram Safal is an app by Agriryot Value Enterprises Private Limited, built on the AgriSync platform."*
 
 **Tagline (canonical):** *Your farm runs on your effort. Your records should too.*
 **Sticky CTA:** *1 minute. That's it.*
@@ -357,11 +357,11 @@ When the agency needs to answer "is this real / can we trust it," here is the su
 
 ## Appendix — Asset & reference index
 
-- **Live marketing site** (canonical narrative, bilingual): `src/clients/marketing-web/` — 9-chapter scroll story, EN + MR, plus a "future scope" page.
+- **Archived marketing site** (canonical narrative, bilingual): `G:\Site_Redesign\OLD_Site\` — 9-chapter scroll story, EN + MR, plus a "future scope" page. Moved out of the repo on 2026-09-30 and superseded by the Static_V2 redesign. It was never deployed. The site live at https://shramsafal.in since 2026-10-03 is `src/clients/Static_V2/`.
 - **The app:** `src/clients/mobile-web/` — React 19 + Vite; Android APK packaged via Capacitor.
-- **Canonical positioning copy:** `src/clients/marketing-web/src/i18n/translations.ts` (EN + MR — the source of truth for approved lines).
+- **Canonical positioning copy:** `G:\Site_Redesign\OLD_Site\src\i18n	ranslations.ts` (EN + MR — the source of truth for approved lines).
 - **Brand assets:** `src/clients/mobile-web/public/brand/` (logo lockups, WebP).
-- **Product name lockup:** ShramSafal / श्रमसफल; company: AgriSync.
+- **Product name lockup:** ShramSafal / श्रमसफल; company: Agriryot Value Enterprises Private Limited; internal platform: AgriSync.
 
 > **For the agency's first deliverable**, we recommend: (1) a 30-second hero film built on the Home voice-loop, (2) a 3-card value-ladder ad set, and (3) a Marathi-first launch landing variant. Everything needed for all three is in this document and the references above.
 

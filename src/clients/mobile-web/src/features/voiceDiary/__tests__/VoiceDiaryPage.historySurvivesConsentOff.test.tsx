@@ -39,6 +39,14 @@ vi.mock('../../../infrastructure/voiceDiary/voiceDiaryApiClient', () => ({
     getVoiceDiaryById: vi.fn(),
 }));
 
+vi.mock('../../../infrastructure/sync/VoiceArchiveUploader', () => ({
+    voiceArchiveUploader: { triggerNow: vi.fn().mockResolvedValue(undefined), subscribe: vi.fn(() => () => undefined) },
+}));
+
+vi.mock('../../../infrastructure/voice/retainedClipReader', () => ({
+    openRetainedClip: vi.fn(),
+}));
+
 vi.mock('../../../infrastructure/voice/VoiceClipRetention', () => ({
     purgeExpiredProcessingVoiceClips: vi.fn().mockResolvedValue(undefined),
     readVoiceClipPlaintext: vi.fn(),
@@ -57,7 +65,7 @@ vi.mock('../../../infrastructure/security/tenantDekClient', () => ({
 vi.mock('../../../infrastructure/storage/DexieDatabase', () => ({
     getDatabase: () => ({
         voiceClips: {
-            where: () => ({ above: () => ({ toArray: async () => [] }) }),
+            toArray: async () => [],
         },
     }),
 }));

@@ -11,8 +11,7 @@
 // reserves layout so a follow-up PR can drop the narration script in
 // without re-flowing the screen.
 //
-// Per OQ-7 verdict every legal string surfaces through `tConsent` /
-// the LEGAL_REVIEW_PENDING-tagged markdown files.
+// Every legal string surfaces through `tConsent` / the served markdown files.
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { agriSyncClient } from '../../infrastructure/api/AgriSyncClient';
@@ -133,8 +132,8 @@ const ConsentScreen: React.FC<Props> = ({ onBack, forceLocale }) => {
         <div
             className="space-y-4 pb-24 px-4"
             data-testid="consent-screen"
-            // The locale attribute makes the runtime LEGAL_REVIEW_PENDING
-            // surface easier to grep in a Sentry/Replay snapshot too.
+            // The locale attribute makes the rendered language easy to read off a
+            // Sentry/Replay snapshot.
             data-consent-locale={locale}
         >
             <div className="pt-4">

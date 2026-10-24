@@ -35,7 +35,7 @@ const Chip: React.FC<{ icon: React.ReactNode; label: string; tone: Tone }> = ({ 
 
 const LabourDataPoints: React.FC<{ entry: Partial<LabourEntry> }> = ({ entry }) => {
     const chips: React.ReactNode[] = [];
-    if (entry.count != null) chips.push(<Chip key="c" icon={<Users size={13} />} label={`${toMr(entry.count)} मजूर`} tone="em" />);
+    if (entry.count != null) chips.push(<Chip key="c" icon={<Users size={13} />} label={`${toMr(entry.count)} जण`} tone="em" />);
     if (entry.shift) chips.push(<Chip key="s" icon={<Clock size={13} />} label={SHIFT_LABEL[entry.shift]} tone={entry.shift === 'half' ? 'am' : entry.shift === 'night' ? 'or' : 'em'} />);
     if (entry.task) chips.push(<Chip key="t" icon={<Sprout size={13} />} label={entry.task} tone="bl" />);
     if (entry.amount != null) chips.push(<Chip key="a" icon={<Wallet size={13} />} label={inr(entry.amount)} tone="am" />);

@@ -209,7 +209,9 @@ export type { AttributedOperator, LabourEvent };
 // INPUT EVENTS (Fertilizers, Pesticides, etc.)
 // =============================================================================
 
-export type InputMethod = 'Spray' | 'Drip' | 'Drenching' | 'Soil' | 'paste_manual';
+// `fertigation` — see the InputMethodSchema note in AgriLogResponseSchema.ts.
+// Kept in lockstep with that enum by the header invariant on that file.
+export type InputMethod = 'Spray' | 'Drip' | 'Drenching' | 'Soil' | 'paste_manual' | 'fertigation';
 export type InputReason = 'Preventive' | 'Disease' | 'Pest' | 'Growth' | 'Deficiency' | 'Seller Advice' | 'Other' | 'defoliation' | 'root_growth' | 'nutrient_correction' | 'fruit_sizing' | 'disease_control';
 
 export interface InputMixItem {
@@ -397,102 +399,16 @@ export interface ResourceItem {
 // =============================================================================
 // OBSERVATIONS & NOTES (Facts - immutable)
 // =============================================================================
-
-export type ObservationNoteType = 'observation' | 'issue' | 'tip' | 'reminder' | 'unknown';
-export type ObservationSeverity = 'normal' | 'important' | 'urgent';
-export type ObservationSource = 'voice' | 'manual';
-
-export interface TaskCandidate {
-    id: string;
-    title: string;
-    dueDate?: string;         // YYYY-MM-DD or null
-    dueWindow?: { start: string; end: string };
-    plotId: string;
-    priority: 'normal' | 'high';
-    status: 'suggested' | 'pending' | 'done';
-    confidence: number;      // 0-100
-    sourceNoteId: string;
-    rawText?: string;       // Original text that triggered this
-}
-
-export interface ObservationNote {
-    id: string;
-    plotId: string;           // Required - always linked to a plot
-    cropId?: string;          // Optional - crop if available
-    dateKey: string;          // Required (YYYY-MM-DD)
-    timestamp: string;        // ISO string
-
-    // Content (IMMUTABLE - observations are facts, not mutable tasks)
-    textRaw: string;          // Required - original voice/manual text (never lost)
-    textCleaned?: string;     // Optional - AI cleaned/completed sentence with context
-
-    // Classification
-    noteType: ObservationNoteType;
-    severity: ObservationSeverity;
-    tags?: string[];          // e.g., ['leaf curl', 'wind', 'pump', 'weather']
-
-    // Metadata
-    source: ObservationSource;
-    aiConfidence?: number;    // 0-100 (how confident AI was in classification)
-
-    // @deprecated TASK TRACKING (TO BE REMOVED - use PlannedTask instead)
-    status?: 'open' | 'resolved';
-    resolvedAt?: string;
-    extractedTasks?: TaskCandidate[];
-
-    // Transparency
-    sourceText?: string;
-    systemInterpretation?: string;
-
-    // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11) — see
-    // CropActivityEvent.provenanceVerified for the contract. Missing = verified.
-    provenanceVerified?: boolean;
-}
-
-// =============================================================================
-// PLANNED TASKS (Intent - mutable)
-// =============================================================================
-
-export interface PlannedTask {
-    id: string;
-    title: string;
-    description?: string;
-
-    // Temporal bounds (future)
-    dueHint?: string | null;   // Raw spoken/typed temporal cue ('उद्या', '३ दिवसांनी') — provenance for dueDate
-    dueDate?: string;          // YYYY-MM-DD (resolved from dueHint via dueDateResolver for CLEAR cues)
-    dueWindow?: { start: string; end: string };
-
-    // Context binding
-    plotId: string;
-    cropId?: string;
-
-    // Task lifecycle (mutable - tasks can change status)
-    priority: 'normal' | 'high' | 'urgent';
-    status: 'suggested' | 'pending' | 'in_progress' | 'done' | 'cancelled';
-
-    // Assignment (Layer 3)
-    assigneeId?: string; // Link to Person.id
-
-    // Source attribution (CRITICAL for event-driven model)
-    sourceType: 'ai_extracted' | 'observation_derived' | 'manual' | 'schedule';
-    sourceObservationId?: string;  // Link back to ObservationNote IF derived from observation
-    aiConfidence?: number;         // 0-100 if AI-extracted
-
-    // Metadata
-    createdAt: string;
-    updatedAt?: string;
-    completedAt?: string;
-    tags?: string[];
-
-    // Transparency
-    sourceText?: string;
-    systemInterpretation?: string;
-
-    // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11) — see
-    // CropActivityEvent.provenanceVerified for the contract. Missing = verified.
-    provenanceVerified?: boolean;
-}
+//
+// MOVED to `observation.types.ts` so this file clears the 800-line budget
+// (`npm run check:file-sizes`). Re-exported immediately below, so this module
+// still presents exactly the same surface it always did — nothing that
+// imported these from here has to change.
+export type * from './observation.types';
+// ...and imported as well, because this file still USES two of them further
+// down (`DailyLog.observations` / `.plannedTasks`). A re-export puts a name on
+// the module surface; it does not put it in local scope.
+import type { ObservationNote, PlannedTask } from './observation.types';
 
 // =============================================================================
 // DISTURBANCE EVENTS (Work Blockers)
@@ -716,6 +632,9 @@ export type { ProvenanceTag, ScoreContext, VlogScoreDimension, VlogScore } from 
 // DAILY LOG (The Aggregate Root)
 // =============================================================================
 
+/** Which door captured a record — `create_daily_log.zod.ts` `captureScope` (B002). */
+export type LogCaptureScope = 'labour';
+
 /**
  * DailyLog - The immutable execution record for a single day.
  * This is the "truth" of what happened on the farm.
@@ -724,7 +643,16 @@ export interface DailyLog {
     id: string;
     date: string;
     context: FarmContext;
-    dayOutcome: DayOutcome;
+    /**
+     * task-0b (spec 2026-08-28-labour-v2-release-1) — widened from `DayOutcome`
+     * (required) to `DayOutcome | null`. A LOCALLY-created log (LogFactory)
+     * always supplies a concrete value, exactly as before. A log rebuilt from
+     * `/sync/pull` (`logsReconciler.toDailyLog`) may now genuinely hold `null`
+     * — the honest "he did not say" state the server itself carries
+     * (`DailyLog.DayOutcome`, doctrine P4) — instead of the fabricated
+     * `'WORK_RECORDED'` this field used to be hardcoded to on every pulled log.
+     */
+    dayOutcome: DayOutcome | null;
     phaseAtLogTime?: CropPhase;
     dayNumberAtLogTime?: number | null;
     weatherSnapshot?: WeatherSnapshot; // @deprecated - use weatherStamp
@@ -757,6 +685,9 @@ export interface DailyLog {
         totalActivityExpenses?: number;
         grandTotal: number;
     };
+
+    /** B002 — `'labour'` for a हजेरी-door save (server derives labour only); read at queue time, never pulled back. */
+    captureScope?: LogCaptureScope;
 
     /**
      * Understanding Meter score — stamped at save time (W1.P3.T1, task 1c).
@@ -857,3 +788,4 @@ export interface SelectedCropContext {
 export interface FarmContext {
     selection: SelectedCropContext[];
 }
+

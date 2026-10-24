@@ -149,7 +149,7 @@ describe('VoiceRetainedConsentToggle', () => {
         // to tell "stop saving" from "delete everything" as the bare
         // checkbox did.
         const keptNote = screen.getByTestId('voice-retained-stop-future-kept-note');
-        expect(keptNote).toHaveTextContent(/already saved stays/i);
+        expect(keptNote).toHaveTextContent(/already saved stay/i);
         expect(keptNote).toHaveTextContent(/separate action/i);
     });
 

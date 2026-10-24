@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="mr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>हजेरी वही — mockup 06 of 07</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700;800;900&family=Noto+Sans+Devanagari:wght@400;600;700;800&family=Noto+Serif+Devanagari:wght@600;700&display=swap">
+<style>
+  /* Marathi body -> Noto Sans Devanagari · English + ALL numbers -> DM Sans.
+     DM Sans carries no Devanagari, so this one stack resolves both correctly. */
+  body { font-family: 'DM Sans', 'Noto Sans Devanagari', sans-serif; background: #eef1f4; }
+  .head { font-family: 'DM Sans', 'Noto Serif Devanagari', serif; }
+  html, body { max-width: 100%; overflow-x: hidden; }
+  .frwrap { overflow-x: auto; }
+  /* <code> would otherwise inherit Tailwind's ui-monospace/system-ui stack,
+     which is a generic fallback on visible text. */
+  body code { font-family: 'DM Sans', 'Noto Sans Devanagari', sans-serif !important; }
+  .strike { position: relative; }
+</style>
+</head>
+<body class="text-slate-800">
+
+<!-- ══════════════════ HONESTY BANNER ══════════════════ -->
+<div class="w-full border-b-4 border-amber-400 bg-amber-50">
+  <div class="mx-auto max-w-[900px] px-4 py-4">
+    <p class="head text-[15px] font-black tracking-tight text-amber-900">THIS IS A MOCKUP. IT IS NOT THE LIVE APP.</p>
+    <p class="mt-1 text-[13px] leading-relaxed text-amber-900">
+      Drawn at a <b>390px reference width</b>. Nothing on this page is wired to data — every name, tick,
+      count and rupee figure below is <b>hand-drawn for review</b>, not read from a farm. No button works.
+      Do not read any number here as a fact about any farm.
+    </p>
+  </div>
+</div>
+
+<div class="mx-auto max-w-[900px] px-4 pb-24 pt-6">
+
+  <!-- ══════════════════ TITLE ══════════════════ -->
+  <p class="text-[12px] font-extrabold uppercase tracking-widest text-slate-400">Screen 6 of 7 · labour r1</p>
+  <h1 class="head mt-1 text-[26px] font-black leading-tight tracking-tight text-slate-900">
+    The हजेरी वही — five realities, Mukadam-wise, three views
+  </h1>
+  <p class="mt-2 max-w-[640px] text-[13.5px] leading-relaxed text-slate-600">
+    The built ledger is the baseline, not a starting point. Every cell, colour, size and column below is
+    lifted verbatim from <code class="rounded bg-slate-200 px-1 text-[12px]">HajeriLedger.tsx</code> /
+    <code class="rounded bg-slate-200 px-1 text-[12px]">LabourUiKit.tsx</code>. This screen <b>extends</b> the
+    grid — it does not restyle it.
+  </p>
+
+  <div class="mt-4 rounded-[18px] border border-slate-900 bg-slate-900 p-4 text-white">
+    <p class="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">The test every frame here must pass</p>
+    <p class="head mt-1 text-[18px] font-black leading-snug">“Where is ShramSafal asking me for something I already told it?”</p>
+    <p class="mt-2 text-[12.5px] leading-relaxed text-slate-300">
+      Answer for this screen: the वही only <i>reads back</i>. It asks for exactly two things, and only where a
+      fact is genuinely missing — <b>who</b> the stated headcount was (he gave a count, never the names), and
+      <b>what happened</b> on a day he himself declared no work. It never re-asks a plot, a crop, a count or a
+      name he already said.
+    </p>
+  </div>
+
+  <div class="mt-3 rounded-[14px] border border-slate-200 bg-white p-3 text-[12px] leading-relaxed text-slate-600">
+    <b class="text-slate-800">Two fidelity notes, so nothing here is oversold.</b>
+    (1) At exactly 390px the shipped grid is ~14px wider than its card, so the last day column sits under the
+    card's own <code class="rounded bg-slate-100 px-1">overflow-x-auto</code> — that is the built behaviour at
+    this width, reproduced, not a mockup bug (it fits a 412px phone). Where money adds a column, the same card
+    is repeated <i>unrolled</i> below the phone so you can see it without scrolling.
+    (2) The shipped body padding is <code class="rounded bg-slate-100 px-1">pb-24</code> (tab-bar space);
+    trimmed here only so 13 frames stack readably.
+  </div>
+
+  <!-- ══════════════════ PANEL 1 ══════════════════ -->
+  <section class="mt-10">
+    <h2 class="head text-[20px] font-black tracking-tight text-slate-900">Panel 1 · The वही is always there</h2>
+    <p class="mt-1.5 max-w-[640px] text-[13px] leading-relaxed text-slate-600">
+      Four conditions in which a farmer can open हजेरी वही. In every one the grid is present — day columns and a
+      name column — because a register with nothing written in it is still a register. An unknown day is
+      <b>blank</b>; <span class="font-black">–</span> is reserved for “he did not come”.
+    </p>
+
+    <figure class="mt-6">
+      <figcaption class="mb-2 flex items-start gap-2">
+        <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">1a</span>
+        <span class="text-[13.5px] font-bold leading-snug text-slate-700">The farm has people but nobody has logged any work this week — the week is drawn, every cell blank, and no total is invented.</span>
+      </figcaption>
+      <div class="frwrap"><div class="phone" id="f1a"></div></div>
+    </figure>
+
+    <figure class="mt-6">
+      <figcaption class="mb-2 flex items-start gap-2">
+        <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">1b</span>
+        <span class="text-[13.5px] font-bold leading-snug text-slate-700">On Wednesday he said “12 people came” and named nobody — the 12 stands in the day's total while every person cell stays blank.</span>
+      </figcaption>
+      <div class="frwrap"><div class="phone" id="f1b"></div></div>
+    </figure>
+
+    <figure class="mt-6">
+      <figcaption class="mb-2 flex items-start gap-2">
+        <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">1c</span>
+        <span class="text-[13.5px] font-bold leading-snug text-slate-700">Friday is a day he himself declared no work happened — the column head is boxed, and who came that day is still unknown, so it stays blank.</span>
+      </figcaption>
+      <div class="frwrap"><div class="phone" id="f1c"></div></div>
+    </figure>
+
+    <figure class="mt-6">
+      <figcaption class="mb-2 flex items-start gap-2">
+        <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">1d</span>
+        <span class="text-[13.5px] font-bold leading-snug text-slate-700">The ordinary case — three days marked, the rest of the week not yet spoken, and the totals count only what was actually said.</span>
+      </figcaption>
+      <div class="frwrap"><div class="phone" id="f1d"></div></div>
+    </figure>
+
+    <figure class="mt-6">
+      <figcaption class="mb-2 flex items-start gap-2">
+        <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">1e</span>
+        <span class="text-[13.5px] font-bold leading-snug text-slate-700">Exactly zero rows — the empty week is still drawn and the shipped empty-state card sits <b>below</b> it, never as a takeover that replaces the grid.</span>
+      </figcaption>
+      <div class="frwrap"><div class="phone" id="f1e"></div></div>
+    </figure>
+  </section>
+
+  <!-- ══════════════════ PANEL 2 ══════════════════ -->
+  <section class="mt-12">
+    <h2 class="head text-[20px] font-black tracking-tight text-slate-900">Panel 2 · All five realities, inside the 26px cell</h2>
+    <p class="mt-1.5 max-w-[640px] text-[13px] leading-relaxed text-slate-600">
+      This is the new part and it needs your eye. Hours are a <b>duration</b>, never a clock — there is no
+      7:00–11:00 anywhere, no start/end field, no time picker. The cell splits: the day fact on top, the second
+      fact below.
+    </p>
+
+    <div class="mt-4 rounded-[18px] border border-slate-200 bg-white p-4">
+      <p class="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">Cell anatomy, magnified 3× (the real cell is 26px)</p>
+      <div id="anatomy" class="mt-3"></div>
+    </div>
+
+    <figure class="mt-6">
+      <figcaption class="mb-2 flex items-start gap-2">
+        <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">2a</span>
+        <span class="text-[13.5px] font-bold leading-snug text-slate-700">The same five realities at real size — Ganesh's week carries full days, a half day, two nights and three extra hours, and it is never collapsed into one number.</span>
+      </figcaption>
+      <div class="frwrap"><div class="phone" id="f2a"></div></div>
+      <div id="a2a" class="mt-3 grid gap-3 sm:grid-cols-2"></div>
+    </figure>
+  </section>
+
+  <!-- ══════════════════ PANEL 3 ══════════════════ -->
+  <section class="mt-12">
+    <h2 class="head text-[20px] font-black tracking-tight text-slate-900">Panel 3 · Mukadam-wise — your exact day</h2>
+    <p class="mt-1.5 max-w-[640px] text-[13px] leading-relaxed text-slate-600">
+      Ganesh runs your farm. Shankar brings a crew. Ramesh and Sunita you hired yourself. Every one of them owns
+      <b>his own presence</b>; the crew is a separate line under Shankar, never folded into his cell.
+    </p>
+
+    <figure class="mt-6">
+      <figcaption class="mb-2 flex items-start gap-2">
+        <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">3a</span>
+        <span class="text-[13.5px] font-bold leading-snug text-slate-700">Today: four people each marked on their own row, and one aggregate line under Shankar for the eight he brought.</span>
+      </figcaption>
+      <div class="frwrap"><div class="phone" id="f3a"></div></div>
+      <div id="a3a" class="mt-3"></div>
+    </figure>
+
+    <figure class="mt-6">
+      <figcaption class="mb-2 flex items-start gap-2">
+        <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">3b</span>
+        <span class="text-[13.5px] font-bold leading-snug text-slate-700">Tomorrow, the eight are gone — Shankar's own tick is untouched and the crew line simply has nothing for that day.</span>
+      </figcaption>
+      <div class="frwrap"><div class="phone" id="f3b"></div></div>
+    </figure>
+
+    <figure class="mt-6">
+      <figcaption class="mb-2 flex items-start gap-2">
+        <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">3c</span>
+        <span class="text-[13.5px] font-bold leading-snug text-slate-700">Shankar puts eight on the grapes and four on the banana plot the same day — two lines, two facts, and the number 12 is never printed anywhere.</span>
+      </figcaption>
+      <div class="frwrap"><div class="phone" id="f3c"></div></div>
+      <div id="a3c" class="mt-3"></div>
+    </figure>
+  </section>
+
+  <!-- ══════════════════ PANEL 4 ══════════════════ -->
+  <section class="mt-12">
+    <h2 class="head text-[20px] font-black tracking-tight text-slate-900">Panel 4 · Money, only where money was spoken</h2>
+    <p class="mt-1.5 max-w-[640px] text-[13px] leading-relaxed text-slate-600">
+      Normal days carry attendance marks and nothing else. A day paid off the standard rate carries that amount
+      in that day's cell. A row ends in an amount only where that single amount was stated for that person, and
+      the bottom line stays a dash unless he stated a week figure himself. Every ₹ here is a
+      number the farmer <b>said</b> — the वही never multiplies days by a rate and never adds two amounts together.
+    </p>
+
+    <figure class="mt-6">
+      <figcaption class="mb-2 flex items-start gap-2">
+        <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">4a</span>
+        <span class="text-[13.5px] font-bold leading-snug text-slate-700">Two off-rate days carry their amount in the cell; the rows where he stated no money end in a dash, never ₹0 — and so does the एकूण line, because he never stated a week total.</span>
+      </figcaption>
+      <div class="frwrap"><div class="phone" id="f4a"></div></div>
+      <p class="mt-3 text-[12px] font-bold text-slate-500">Same card, unrolled — so the ₹ column is visible without scrolling sideways:</p>
+      <div class="frwrap mt-1.5 rounded-[18px] border border-dashed border-slate-300 bg-slate-50 p-3"><div id="f4flat" class="w-[436px] flex-none"></div></div>
+    </figure>
+
+    <div class="mt-5 rounded-[18px] border border-rose-200 bg-rose-50 p-4">
+      <p class="text-[12px] font-extrabold uppercase tracking-widest text-rose-700">Already rejected — kept here so it stays rejected</p>
+      <p class="mt-1 text-[12.5px] leading-relaxed text-rose-800">An amount in <b>every</b> cell. At 26px an amount can only be drawn at ~8.5px, which is smaller than the text telling him which money it is:</p>
+      <div id="rejectedmoney" class="mt-3"></div>
+    </div>
+
+    <div class="mt-5 rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[11.5px] leading-relaxed text-slate-600">
+      <b>Why the एकूण money reads — and not ₹750.</b> A week total is drawn only when the farmer stated a week
+      total himself. Here he stated ₹450 on one day and ₹300 on another and never stated a week figure, so the
+      bottom line is the house mark for a fact nobody supplied. Adding two stated amounts together would be
+      ShramSafal calculating money, and ShramSafal never calculates money — it only shows back what he said.
+      The domain holds the same line in code: <code class="rounded bg-white px-1 py-0.5 text-[11px] font-bold text-slate-700">LabourAssignment.cs:46</code>,
+      the NO-MULTIPLY honesty rule, keeps <code class="rounded bg-white px-1 py-0.5 text-[11px] font-bold text-slate-700">TotalCost</code> stored as-given, never computed.
+    </div>
+  </section>
+
+  <!-- ══════════════════ PANEL 5 ══════════════════ -->
+  <section class="mt-12">
+    <h2 class="head text-[20px] font-black tracking-tight text-slate-900">Panel 5 · The same week, three views</h2>
+    <p class="mt-1.5 max-w-[640px] text-[13px] leading-relaxed text-slate-600">
+      Owner, authorised Mukadam, worker. There is no fourth. A suspended or not-yet-approved member is not a
+      view — this surface is never drawn for them at all.
+    </p>
+
+    <figure class="mt-6">
+      <figcaption class="mb-2 flex items-start gap-2">
+        <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">5a</span>
+        <span class="text-[13.5px] font-bold leading-snug text-slate-700">Owner — every name, every day, every rupee, including the crew line and the money he stated to Shankar.</span>
+      </figcaption>
+      <div class="frwrap"><div class="phone" id="f5a"></div></div>
+    </figure>
+
+    <figure class="mt-6">
+      <figcaption class="mb-2 flex items-start gap-2">
+        <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">5b</span>
+        <span class="text-[13.5px] font-bold leading-snug text-slate-700">Authorised Mukadam Shankar — his own row and his crew's attendance, and no money column exists on the screen at all.</span>
+      </figcaption>
+      <div class="frwrap"><div class="phone" id="f5b"></div></div>
+    </figure>
+
+    <figure class="mt-6">
+      <figcaption class="mb-2 flex items-start gap-2">
+        <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">5c</span>
+        <span class="text-[13.5px] font-bold leading-snug text-slate-700">Worker Ramesh — his own row and nothing else; no other worker's name is reachable from here.</span>
+      </figcaption>
+      <div class="frwrap"><div class="phone" id="f5c"></div></div>
+      <div id="a5c" class="mt-3"></div>
+    </figure>
+  </section>
+
+  <!-- ══════════════════ PANEL 6 ══════════════════ -->
+  <section class="mt-12">
+    <div class="rounded-t-[18px] border-x-4 border-t-4 border-amber-400 bg-amber-400 px-4 py-2">
+      <p class="head text-[14px] font-black tracking-tight text-amber-950">PANEL 6 — AWAITING FOUNDER APPROVAL. This is a question, not a decision.</p>
+    </div>
+    <div class="rounded-b-[18px] border-x-4 border-b-4 border-amber-400 bg-amber-50 p-4">
+      <h2 class="head text-[20px] font-black tracking-tight text-slate-900">The fourth axis — where does worker confirmation live?</h2>
+      <p class="mt-1.5 max-w-[640px] text-[13px] leading-relaxed text-slate-700">
+        The cell already carries three things: how much (full / half / hours), day-or-night, and money on an
+        off-rate day. Worker confirmation would be a fourth. The spec's warning is the whole reason this is a
+        question: <b>adding a fourth axis after the grid ships means rebuilding the grid.</b>
+      </p>
+      <p class="mt-2 max-w-[640px] text-[13px] leading-relaxed text-slate-700">
+        <b>The proposed resolution, drawn below for you to rule on:</b> confirmation lives on the <b>row</b> —
+        one line per person for the whole week — and a <b>disputed day</b> is the single exception that is
+        allowed to touch a cell. Nothing else ever enters the cell.
+      </p>
+      <div id="fouraxis" class="mt-4"></div>
+      <figure class="mt-6">
+        <figcaption class="mb-2 flex items-start gap-2">
+          <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-amber-500 text-[11px] font-black text-white">6a</span>
+          <span class="text-[13.5px] font-bold leading-snug text-slate-700">Confirmation as a row line — Ramesh confirmed, Sunita has not yet, and Vilas disputes one single day, which is the only mark that reaches into a cell.</span>
+        </figcaption>
+        <div class="frwrap"><div class="phone" id="f6a"></div></div>
+      </figure>
+      <div class="mt-4 rounded-[14px] border border-amber-300 bg-white p-3.5">
+        <p class="text-[12px] font-extrabold uppercase tracking-widest text-amber-700">Your ruling needed on three things</p>
+        <ol class="mt-2 list-decimal space-y-1.5 pl-5 text-[13px] leading-relaxed text-slate-700">
+          <li>Confirmation on the <b>row</b>, not the cell — yes or no. If it must be per-day, the grid has to be rebuilt before it ships, not after.</li>
+          <li>A <b>disputed day</b> being the one cell-level exception — yes or no.</li>
+          <li>Whether an unconfirmed week is allowed to look identical to a confirmed one until the worker acts (drawn here as a plain grey line, so silence never reads as agreement).</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════ WHAT IT MUST NEVER DO ══════════════════ -->
+  <section class="mt-12">
+    <h2 class="head text-[20px] font-black tracking-tight text-slate-900">What this screen must never do</h2>
+    <p class="mt-1.5 text-[13px] text-slate-600">Check the rule, not only the picture. Every line below is a thing that is absent from every frame above, on purpose.</p>
+    <ul id="neverlist" class="mt-4 space-y-2"></ul>
+  </section>
+
+  <!-- ══════════════════ COPY + TOKEN STATUS ══════════════════ -->
+  <section class="mt-12 grid gap-4 md:grid-cols-2">
+    <div class="rounded-[18px] border border-slate-200 bg-white p-4">
+      <p class="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">Marathi used above — approved, verbatim, nothing invented</p>
+      <ul class="mt-2 space-y-1 text-[13px] leading-relaxed text-slate-700">
+        <li><b>हजेरी वही</b> · <b>आला</b> · <b>अर्धा</b> · <b>नाही</b> · <b>दिवस</b> · <b>एकूण</b> — shipped ledger</li>
+        <li><b>अजून हजेरी नोंदवली नाही</b> + its shipped subtitle — shipped empty state</li>
+        <li><b>या 12 जणांमध्ये कोण होते?</b> — count known, names not (D9.6)</li>
+        <li><b>आज कोण आले होते आणि काम का झालं नाही?</b> — no work, labour present (D9.6)</li>
+        <li><b>Shankarसोबत 8</b> — your own words</li>
+        <li><b>पूर्ण · अर्धा · रात्र · जादा 2 तास · 4 तास</b> and <b>5 पूर्ण · 1 अर्धा · 2 रात्री · 3 तास जादा</b> — your 2026-09-01 ruling</li>
+        <li><b>रात्र = होता · तास = 3</b> — your ruling, verbatim</li>
+        <li><b>मुकादम</b> — the shipped violet badge, used <u>only</u> for Shankar the labour contractor</li>
+        <li>Plot names <b>द्राक्ष-२</b> / <b>केळी-१</b> are farm <i>data</i> from the shipped fixture, not copy</li>
+      </ul>
+    </div>
+    <div class="rounded-[18px] border border-yellow-300 bg-yellow-50 p-4">
+      <p class="text-[11px] font-extrabold uppercase tracking-widest text-yellow-800">Copy you still owe — layout is drawn, words are blocked</p>
+      <ul class="mt-2 space-y-1 text-[13px] leading-relaxed text-slate-700">
+        <li>The blank cell's legend word — “nobody has said yet”, distinct from नाही</li>
+        <li>Ganesh's farm role — a word that is <b>not</b> मुकादम</li>
+        <li>The no-work day flag on a column head</li>
+        <li>The money column head (drawn as a bare ₹)</li>
+        <li>“You are seeing only your crew” / “only your own row” for the two narrow views</li>
+        <li>The three worker-confirmation states (confirmed / not yet / disputes this day)</li>
+      </ul>
+      <p class="mt-3 border-t border-yellow-300 pt-2 text-[12px] leading-relaxed text-slate-600"><b>New tones introduced here, needing your nod:</b> night = dark slate, hours = blue, an in-cell amount = emerald fill, a crew count = violet, a dispute = rose ring. Everything else is a shipped token.</p>
+    </div>
+  </section>
+
+  <p class="mt-10 text-center text-[12px] text-slate-400">Mockup 06 of 07 · labour r1 · 390px reference width · not the live app</p>
+</div>
+
+<script>
+/* ────────────────────────────────────────────────────────────────────────────
+   Everything below draws the mockup. Class strings are copied verbatim from
+   HajeriLedger.tsx / LabourUiKit.tsx so no cell can drift from the built one.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+const SVG = (s, sw, body) =>
+  `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+const I = {
+  check:  (s = 13, sw = 3.2) => SVG(s, sw, '<path d="M20 6 9 17l-5-5"/>'),
+  moon:   (s = 12, sw = 2.6) => SVG(s, sw, '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>'),
+  users:  (s = 13, sw = 2.2) => SVG(s, sw, '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'),
+  book:   (s = 22, sw = 2)   => SVG(s, sw, '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/>'),
+  alert:  (s = 12, sw = 2.4) => SVG(s, sw, '<path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>'),
+  back:   (s = 22, sw = 2.4) => SVG(s, sw, '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>'),
+  chev:   (s = 20, sw = 2.4) => SVG(s, sw, '<path d="m9 18 6-6-6-6"/>'),
+  eye:    (s = 14, sw = 2.2) => SVG(s, sw, '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>'),
+  x:      (s = 14, sw = 3)   => SVG(s, sw, '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
+};
+
+/* ── tokens, verbatim ───────────────────────────────────────────────────── */
+const CELL_BOX = 'flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg text-[12px] font-extrabold';
+const CELL = {
+  p: 'bg-emerald-50 text-emerald-700',
+  h: 'bg-amber-100 text-amber-700',
+  a: 'bg-slate-100 text-slate-300',
+  u: 'border border-dashed border-slate-200 bg-white text-slate-200',
+};
+const TONE = {
+  or: 'bg-orange-100 text-orange-600', em: 'bg-emerald-50 text-emerald-700',
+  bl: 'bg-blue-100 text-blue-600',     vi: 'bg-violet-100 text-violet-600',
+  rs: 'bg-rose-100 text-rose-600',     am: 'bg-amber-100 text-amber-700',
+};
+const CARD = 'overflow-x-auto rounded-[18px] border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]';
+const FOOT = 'rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-[11.5px] leading-relaxed text-slate-600';
+const COPY = (en) =>
+  `<span class="rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] font-bold text-yellow-800">[FOUNDER COPY REQUIRED]</span>
+   <span class="mt-0.5 block text-[11px] italic leading-snug text-slate-500">English meaning: “${en}”</span>`;
+
+const avatar = (tone, initial) =>
+  `<span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[9px] text-[12px] font-black ${TONE[tone]}">${initial}</span>`;
+
+/* ── one cell ───────────────────────────────────────────────────────────────
+   'p' present · 'h' half · 'a' absent · '' unknown (BLANK, never '–')
+   {t, night} {t, extra} {t, hours} {t, money} {n, crew} {t, dispute}          */
+function cell(c, scale) {
+  const k = scale || 1;
+  const box = k === 1 ? CELL_BOX
+    : `flex h-[78px] w-[78px] flex-none items-center justify-center rounded-[16px] text-[34px] font-extrabold`;
+  const splitBox = k === 1
+    ? 'relative flex h-[26px] w-[26px] flex-none flex-col overflow-hidden rounded-lg'
+    : 'relative flex h-[78px] w-[78px] flex-none flex-col overflow-hidden rounded-[16px]';
+  const half = k === 1 ? 'h-[13px] text-[9px]' : 'h-[39px] text-[26px]';
+  const glyph = { p: I.check(k === 1 ? 13 : 38), h: '½', a: '–', '': '' };
+
+  if (typeof c === 'string' || c == null) {
+    const s = c || '';
+    return `<span class="${box} ${CELL[s || 'u']}">${glyph[s] || ''}</span>`;
+  }
+  if (c.n != null) { // crew aggregate count — violet, never a person
+    return `<span class="${box} bg-violet-50 text-violet-700">${c.n}</span>`;
+  }
+  const topState = c.t == null ? '' : c.t;
+  const topCls = topState ? CELL[topState] : 'border border-dashed border-slate-200 bg-white text-slate-200';
+  const topGlyph = topState === 'p' ? I.check(k === 1 ? 11 : 32, 3.2) : (glyph[topState] || '');
+  let bottom = '';
+  if (c.night)        bottom = `<span class="flex ${half} flex-none items-center justify-center bg-slate-700 text-white">${I.moon(k === 1 ? 9 : 24)}</span>`;
+  else if (c.extra != null) bottom = `<span class="flex ${half} flex-none items-center justify-center bg-blue-50 font-extrabold text-blue-700">+${c.extra}</span>`;
+  else if (c.hours != null) bottom = `<span class="flex ${half} flex-none items-center justify-center bg-blue-50 font-extrabold text-blue-700">${c.hours}</span>`;
+  else if (c.money != null) bottom = `<span class="flex ${half} flex-none items-center justify-center bg-emerald-600 font-extrabold text-white">${c.money}</span>`;
+  if (!bottom) { // dispute / plain object
+    const ring = c.dispute ? ' ring-2 ring-rose-400' : '';
+    const flag = c.dispute ? `<span class="absolute -right-1 -top-1 flex h-[13px] w-[13px] items-center justify-center rounded-full bg-white text-rose-600">${I.alert(11)}</span>` : '';
+    return `<span class="relative flex-none"><span class="${box} ${topCls}${ring}">${topGlyph}</span>${flag}</span>`;
+  }
+  const ring = c.dispute ? ' ring-2 ring-rose-400' : '';
+  return `<span class="${splitBox}${ring}">
+      <span class="flex ${half} flex-none items-center justify-center font-extrabold ${topCls}">${topGlyph}</span>
+      ${bottom}
+    </span>`;
+}
+
+const headCell = (d, flag) => flag
+  ? `<span class="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-slate-200 text-[11px] font-bold text-slate-600">${d}</span>`
+  : `<span class="flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">${d}</span>`;
+
+const totCell = (v) =>
+  `<span class="flex h-[26px] w-[26px] flex-none items-center justify-center text-[11px] font-bold text-slate-400">${v}</span>`;
+
+/* ── one row ────────────────────────────────────────────────────────────── */
+function row(r, money) {
+  const name = r.crew
+    ? `<span class="flex w-[82px] flex-none items-start gap-1 pl-1">
+         <span class="mt-[3px] flex-none text-violet-500">${I.users(12)}</span>
+         <span class="min-w-0">
+           <span class="block text-[10.5px] font-extrabold leading-tight text-violet-700">${r.crew}</span>
+           ${r.plot ? `<span class="mt-0.5 block text-[9.5px] font-bold leading-tight text-stone-500">${r.plot}</span>` : ''}
+         </span>
+       </span>`
+    : `<span class="flex w-[82px] flex-none items-center gap-2 text-[12.5px] font-extrabold text-slate-700">${avatar(r.tone, r.initial)}${r.name}</span>`;
+  const cells = r.cells.map((c) => cell(c)).join('');
+  const tot = `<span class="w-9 flex-none text-center text-[15px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">${r.total}</span>`;
+  const mon = money
+    ? `<span class="w-14 flex-none pr-0.5 text-right text-[12px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">${r.money == null ? '—' : r.money}</span>`
+    : '';
+  const sub = [];
+  if (r.dim) sub.push(`<div class="pb-1.5 pl-[90px] text-[10.5px] font-bold text-slate-500">${r.dim}</div>`);
+  if (r.confirm) {
+    const c = r.confirm;
+    const chip = { ok: 'bg-emerald-50 text-emerald-700', wait: 'bg-slate-100 text-slate-500', bad: 'bg-rose-50 text-rose-700' }[c.k];
+    sub.push(`<div class="pb-2 pl-[90px]">
+        <span class="inline-flex items-center gap-1 rounded-lg ${chip} px-2 py-0.5 text-[10px] font-extrabold">
+          ${c.k === 'ok' ? I.check(10) : c.k === 'bad' ? I.alert(10) : ''}<span class="rounded bg-yellow-100 px-1 text-[9.5px] font-bold text-yellow-800">[COPY]</span>
+        </span>
+        <span class="mt-0.5 block text-[10px] italic leading-snug text-slate-500">English meaning: “${c.en}”</span>
+      </div>`);
+  }
+  return `<div class="flex items-center gap-2 py-1.5">${name}<span class="flex flex-1 gap-1.5">${cells}</span>${tot}${mon}</div>${sub.join('')}`;
+}
+
+/* ── the card ───────────────────────────────────────────────────────────── */
+function ledger(cfg) {
+  const days = cfg.days || ['सो', 'मं', 'बु', 'गु', 'शु', 'श', 'र'];
+  const money = !!cfg.money;
+  const head = `<div class="flex items-center gap-2 border-b border-slate-100 pb-2">
+      <span class="w-[82px] flex-none text-[12.5px] font-extrabold text-slate-700">दिवस</span>
+      <span class="flex flex-1 gap-1.5">${days.map((d, i) => headCell(d, (cfg.flagDay || []).includes(i))).join('')}</span>
+      <span class="w-9 flex-none text-center text-[10px] font-bold text-slate-400">दिवस</span>
+      ${money ? '<span class="w-14 flex-none pr-0.5 text-right text-[13px] font-black text-slate-500">₹</span>' : ''}
+    </div>`;
+  const body = (cfg.rows || []).map((r) => row(r, money)).join('');
+  const totals = `<div class="mt-1 flex items-center gap-2 border-t border-slate-100 pt-2">
+      <span class="w-[82px] flex-none text-[12.5px] font-extrabold text-slate-700">एकूण</span>
+      <span class="flex flex-1 gap-1.5">${(cfg.totals || []).map(totCell).join('')}</span>
+      <span class="w-9 flex-none text-center text-[15px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">${cfg.weekTotal}</span>
+      ${money ? `<span class="w-14 flex-none pr-0.5 text-right text-[12px] font-black text-slate-800 [font-variant-numeric:tabular-nums]">${cfg.weekMoney}</span>` : ''}
+    </div>`;
+  return `<div class="${CARD}">${head}${body}${totals}</div>`;
+}
+
+/* ── screen chrome ──────────────────────────────────────────────────────── */
+const backHeader = (title) => `
+  <div class="flex items-center gap-3 bg-[#f6f7f5] px-4 pb-3 pt-3 shadow-[0_8px_14px_-12px_rgba(20,40,30,0.35)]">
+    <span class="flex min-h-[56px] items-center gap-2 rounded-full bg-white py-3 pl-4 pr-5 text-[18px] font-bold text-stone-700 shadow-sm ring-1 ring-stone-100">${I.back()} मागे</span>
+    <div class="flex-1 truncate pr-16 text-center text-[18px] font-bold text-stone-500">${title}</div>
+  </div>`;
+
+const weekPill = (label) => `
+  <div class="flex items-center justify-center rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+    <span class="text-[13px] font-extrabold text-slate-800">${label ? label + ' · ' : ''}हजेरी वही</span>
+  </div>`;
+
+const legend = (withBlank) => `
+  <div class="flex justify-center gap-4 p-1">
+    <span class="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600"><span class="flex h-5 w-5 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">${I.check(12, 3)}</span>आला</span>
+    <span class="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600"><span class="flex h-5 w-5 items-center justify-center rounded-md bg-amber-100 text-[11px] font-extrabold text-amber-700">½</span>अर्धा</span>
+    <span class="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600"><span class="flex h-5 w-5 items-center justify-center rounded-md bg-slate-100 text-[11px] font-extrabold text-slate-300">–</span>नाही</span>
+    ${withBlank ? `<span class="flex items-center gap-1.5 text-[12px] font-semibold text-slate-600"><span class="flex h-5 w-5 items-center justify-center rounded-md border border-dashed border-slate-200 bg-white"></span><span class="rounded bg-yellow-100 px-1 text-[10px] font-bold text-yellow-800">[COPY]</span></span>` : ''}
+  </div>`;
+
+const SHIPPED_FOOT = `<div class="${FOOT}">हिरवा = आला · पिवळा = अर्धा दिवस · राखाडी = नाही. शेवटचा आकडा = किती दिवस काम केलं.</div>`;
+
+const screen = (inner) => backHeader('हजेरी वही') + `<div class="flex flex-col gap-2.5 bg-slate-50 px-4 pb-6 pt-2">${inner}</div>`;
+const mount = (id, html) => { const el = document.getElementById(id); if (el) { el.className = 'w-[390px] flex-none overflow-hidden rounded-[26px] border border-slate-300 bg-slate-50 shadow-[0_10px_30px_-12px_rgba(20,40,30,0.35)]'; el.innerHTML = html; } };
+
+/* ── cast (names + tones from the shipped fixture) ──────────────────────── */
+const RA = ['रमेश', 'र', 'or'], SU = ['सुनीता', 'सु', 'em'], VI = ['विलास', 'वि', 'rs'],
+      SA = ['संदीप', 'सं', 'am'], GA = ['गणेश', 'ग', 'bl'], SH = ['शंकर', 'शं', 'vi'];
+const P = (p, cells, total, extra) => Object.assign({ name: p[0], initial: p[1], tone: p[2], cells, total }, extra || {});
+const WEEK = '२४–३० ऑग';
+const U7 = ['', '', '', '', '', '', ''];
+
+/* ══════════════ PANEL 1 ══════════════ */
+mount('f1a', screen(
+  weekPill(WEEK) + legend(true) +
+  ledger({
+    rows: [P(RA, U7, '—'), P(SU, U7, '—'), P(VI, U7, '—'), P(SA, U7, '—')],
+    totals: ['—', '—', '—', '—', '—', '—', '—'], weekTotal: '—',
+  }) +
+  `<div class="${FOOT}">${COPY('Nothing has been said about this week yet. An empty box is not an absence.')}</div>`
+));
+
+mount('f1b', screen(
+  weekPill(WEEK) +
+  ledger({
+    rows: [
+      P(RA, ['p', 'p', '', 'p', 'p', 'a', ''], 4),
+      P(SU, ['p', 'p', '', 'p', 'h', '', ''], 4),
+      P(VI, ['a', 'h', '', 'p', 'p', '', ''], 3),
+      P(SA, ['p', 'p', '', 'p', 'p', 'p', ''], 5),
+    ],
+    totals: [3, 4, 12, 4, 4, 1, '—'], weekTotal: '—',
+  }) +
+  `<div class="${FOOT}">${COPY('On Wednesday 12 came. Nobody has been named yet, so no week total can be stated.')}</div>` +
+  `<button class="flex w-full items-center justify-between gap-2 rounded-[14px] border border-slate-200 bg-white px-4 py-3.5 text-left text-[13px] font-extrabold text-slate-700">
+      या 12 जणांमध्ये कोण होते?<span class="text-slate-400">${I.chev(18)}</span></button>`
+));
+
+mount('f1c', screen(
+  weekPill(WEEK) +
+  ledger({
+    flagDay: [4],
+    rows: [
+      P(RA, ['p', 'p', 'p', 'p', '', 'p', ''], 5),
+      P(SU, ['p', 'p', 'h', 'p', '', 'p', ''], 5),
+      P(VI, ['a', 'h', 'p', 'p', '', '', ''], 3),
+      P(SA, ['p', 'p', 'p', 'p', '', 'p', ''], 5),
+    ],
+    totals: [3, 4, 4, 4, '—', 3, '—'], weekTotal: 18,
+  }) +
+  `<div class="${FOOT}">${COPY('You said no work happened on Friday. That is why its column head is boxed.')}</div>` +
+  `<button class="flex w-full items-center justify-between gap-2 rounded-[14px] border border-slate-200 bg-white px-4 py-3.5 text-left text-[13px] font-extrabold leading-snug text-slate-700">
+      आज कोण आले होते आणि काम का झालं नाही?<span class="flex-none text-slate-400">${I.chev(18)}</span></button>`
+));
+
+mount('f1d', screen(
+  weekPill(WEEK) +
+  ledger({
+    rows: [
+      P(RA, ['p', 'p', 'h', '', '', '', ''], 3),
+      P(SU, ['p', 'p', 'p', '', '', '', ''], 3),
+      P(VI, ['a', 'h', 'p', '', '', '', ''], 2),
+      P(SA, ['p', 'p', 'p', '', '', '', ''], 3),
+    ],
+    totals: [3, 4, 4, '—', '—', '—', '—'], weekTotal: 11,
+  }) + SHIPPED_FOOT
+));
+
+mount('f1e', screen(
+  weekPill(WEEK) +
+  ledger({ rows: [], totals: ['—', '—', '—', '—', '—', '—', '—'], weekTotal: '—' }) +
+  `<div class="flex flex-col items-center gap-2 rounded-[20px] border border-dashed border-slate-200 bg-white px-5 py-8 text-center">
+      <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400">${I.book(22)}</span>
+      <p class="text-[14px] font-bold text-slate-700">अजून हजेरी नोंदवली नाही</p>
+      <p class="text-[12px] leading-relaxed text-slate-500">बोलून किंवा नोंद करून हजेरी घेतल्यावर ती इथे दिवसागणिक दिसेल.</p>
+    </div>`
+));
+
+/* ══════════════ PANEL 2 ══════════════ */
+(() => {
+  const items = [
+    [{ t: null }, 'पूर्ण', 'a full day'],
+    [{ t: null }, 'अर्धा', 'a half day'],
+    [{ t: 'p', night: true }, 'रात्र', 'he was there at night'],
+    [{ t: 'p', extra: 2 }, 'जादा 2 तास', '2 extra hours on top of the day'],
+    [{ t: null, hours: 4 }, '4 तास', '4 hours worked — no day-shape was stated'],
+  ];
+  const big = [cell('p', 3), cell('h', 3), cell({ t: 'p', night: true }, 3), cell({ t: 'p', extra: 2 }, 3), cell({ t: null, hours: 4 }, 3)];
+  document.getElementById('anatomy').innerHTML =
+    `<div class="flex flex-wrap gap-5">${big.map((b, i) => `
+      <div class="w-[92px]">
+        ${b}
+        <p class="mt-2 text-[13px] font-extrabold leading-tight text-slate-800">${items[i][1]}</p>
+        <p class="mt-0.5 text-[11px] italic leading-snug text-slate-500">${items[i][2]}</p>
+      </div>`).join('')}
+    </div>
+    <p class="mt-4 border-t border-slate-100 pt-3 text-[12px] leading-relaxed text-slate-600">
+      One device, not four: the cell splits, the <b>day fact sits on top</b> and the second fact sits under it.
+      The number in the lower strip is the smallest text on the grid — you rejected 8.5px money in every cell,
+      so this needs your eye at real size in frame 2a below. There is no clock, no start time, no end time:
+      <b>3 तास means three hours long, never three o'clock.</b>
+    </p>`;
+})();
+
+mount('f2a', screen(
+  weekPill(WEEK) + legend(true) +
+  ledger({
+    rows: [
+      P(GA, ['p', { t: 'p', night: true }, 'p', 'h', { t: 'p', night: true }, { t: 'p', extra: 3 }, ''], 6,
+        { dim: '5 पूर्ण · 1 अर्धा · 2 रात्री · 3 तास जादा' }),
+      P(SU, ['p', 'p', { t: null, hours: 4 }, 'p', '', 'p', ''], 5, { dim: '4 पूर्ण · 4 तास' }),
+      P(RA, ['p', 'p', 'p', 'p', 'p', 'a', ''], 5),
+    ],
+    totals: [3, 3, 3, 3, 2, 2, '—'], weekTotal: 16,
+  }) + SHIPPED_FOOT
+));
+
+document.getElementById('a2a').innerHTML = `
+  <div class="rounded-[16px] border border-slate-200 bg-white p-4">
+    <p class="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">Review note — not part of the screen</p>
+    <p class="mt-1 text-[13px] leading-relaxed text-slate-700">He said <b>“गणेश रात्री 3 तास होता”</b>. Two facts were spoken, so two facts are kept side by side — neither swallows the other:</p>
+    <div class="mt-2.5 grid max-w-[320px] grid-cols-2 gap-2.5">
+      <div class="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
+        <div class="text-[13px] font-bold text-stone-500">रात्र</div>
+        <div class="mt-1 text-[20px] font-black text-slate-800">होता</div>
+      </div>
+      <div class="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
+        <div class="text-[13px] font-bold text-stone-500">तास</div>
+        <div class="mt-1 text-[20px] font-black text-slate-800">3</div>
+      </div>
+    </div>
+    <p class="mt-2 text-[12px] leading-relaxed text-slate-600">In the grid above that is Ganesh's <b>मं</b> and <b>शु</b> cells: tick on top, night below. The hours ride the same split — never a clock.</p>
+  </div>
+  <div class="rounded-[16px] border border-rose-200 bg-rose-50 p-4">
+    <p class="flex items-center gap-2 text-[12.5px] font-extrabold text-rose-700">${I.x(14)} the week is never one number</p>
+    <p class="mt-2 text-[13px] leading-relaxed text-rose-800">
+      <s class="text-[18px] font-black">6.5</s> &nbsp;·&nbsp; <s class="font-bold">1.5 दिवस</s> &nbsp;·&nbsp; <s class="font-bold">0.5 दिवस</s>
+    </p>
+    <p class="mt-2 text-[12.5px] leading-relaxed text-rose-800">Ganesh's row reads <b>5 पूर्ण · 1 अर्धा · 2 रात्री · 3 तास जादा</b>. The trailing <b>6</b> is a count of the days he came — not 5 + a half.</p>
+  </div>`;
+
+/* ══════════════ PANEL 3 ══════════════ */
+const roster = `
+  <div class="rounded-[18px] border border-slate-100 bg-white p-3 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+    <div class="flex items-start gap-2.5">
+      ${avatar('bl', 'ग')}
+      <div class="min-w-0 flex-1">
+        <p class="text-[14px] font-bold text-stone-800">गणेश</p>
+        ${COPY('runs this farm for you and has app access — this word must NOT be मुकादम')}
+      </div>
+    </div>
+    <div class="mt-3 flex items-start gap-2.5 border-t border-slate-100 pt-3">
+      ${avatar('vi', 'शं')}
+      <div class="min-w-0 flex-1">
+        <p class="flex flex-wrap items-center gap-2 text-[14px] font-bold text-stone-800">शंकर
+          <span class="rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-1 text-[13px] font-bold text-violet-700">मुकादम</span>
+        </p>
+        <p class="mt-0.5 text-[11px] italic leading-snug text-slate-500">English meaning: the labour contractor who brings his own crew. This is the only person the word मुकादम is used for.</p>
+      </div>
+    </div>
+    <div class="mt-3 flex items-start gap-2.5 border-t border-slate-100 pt-3">
+      <span class="flex -space-x-2">${avatar('or', 'र')}${avatar('em', 'सु')}</span>
+      <div class="min-w-0 flex-1">
+        <p class="text-[14px] font-bold text-stone-800">रमेश · सुनीता</p>
+        <p class="mt-0.5 text-[11px] italic leading-snug text-slate-500">English meaning: hired by you directly. They sit outside both of the men above.</p>
+      </div>
+    </div>
+  </div>`;
+
+const crewRule = (extra) => `<div class="${FOOT}">${COPY('The एकूण line counts named people only. A crew’s number never joins it.' + (extra || ''))}</div>`;
+
+mount('f3a', screen(
+  weekPill(WEEK) + roster +
+  ledger({
+    rows: [
+      P(GA, ['p', 'p', 'p', 'p', '', '', ''], 4),
+      P(SH, ['p', '', 'p', 'p', '', '', ''], 3),
+      { crew: 'Shankarसोबत 8', cells: [{ n: 8 }, '', { n: 6 }, { n: 8 }, '', '', ''], total: 3 },
+      P(RA, ['p', 'p', 'h', 'p', '', '', ''], 4),
+      P(SU, ['p', 'p', 'p', 'p', '', '', ''], 4),
+    ],
+    totals: [4, 3, 4, 4, '—', '—', '—'], weekTotal: '—',
+  }) + crewRule(' Eight nameless people are never drawn as eight rows either.')
+));
+
+document.getElementById('a3a').innerHTML = `
+  <div class="rounded-[16px] border border-rose-200 bg-rose-50 p-4">
+    <p class="flex items-center gap-2 text-[12.5px] font-extrabold text-rose-700">${I.x(14)} the 8 never goes inside Shankar's own cell</p>
+    <div class="mt-3 flex flex-wrap items-start gap-6">
+      <div class="w-[132px] text-center">
+        ${cell('p')}
+        <p class="mt-1.5 text-[11.5px] font-bold leading-snug text-slate-700">Shankar's own tick</p>
+        <p class="text-[11px] italic leading-snug text-slate-500">one man, one presence</p>
+      </div>
+      <div class="w-[132px] text-center opacity-80">
+        <span class="relative inline-block">
+          <span class="${CELL_BOX} bg-slate-100 text-slate-500">9</span>
+          <span class="absolute -right-2 -top-2 text-rose-600">${I.x(15)}</span>
+        </span>
+        <p class="mt-1.5 text-[11.5px] font-bold leading-snug text-rose-700">1 + 8 = 9</p>
+        <p class="text-[11px] italic leading-snug text-rose-600">two presence truths for one man</p>
+      </div>
+      <div class="w-[132px] text-center">
+        ${cell({ n: 8 })}
+        <p class="mt-1.5 text-[11.5px] font-bold leading-snug text-slate-700">the crew, on its own line</p>
+        <p class="text-[11px] italic leading-snug text-slate-500">Shankarसोबत 8 — one line, not eight rows</p>
+      </div>
+    </div>
+  </div>`;
+
+mount('f3b', screen(
+  weekPill(WEEK) +
+  ledger({
+    flagDay: [], days: ['सो', 'मं', 'बु', 'गु', 'शु', 'श', 'र'],
+    rows: [
+      P(GA, ['p', 'p', 'p', 'p', 'p', '', ''], 5),
+      P(SH, ['p', '', 'p', 'p', 'p', '', ''], 4),
+      { crew: 'Shankarसोबत 8', cells: [{ n: 8 }, '', { n: 6 }, { n: 8 }, '', '', ''], total: 3 },
+      P(RA, ['p', 'p', 'h', 'p', 'p', '', ''], 5),
+      P(SU, ['p', 'p', 'p', 'p', '', '', ''], 4),
+    ],
+    totals: [4, 3, 4, 4, 3, '—', '—'], weekTotal: '—',
+  }) +
+  `<div class="${FOOT}">${COPY('Friday: Shankar came alone. His own tick did not change, and nobody said a crew came, so that box stays empty — it does not say zero.')}</div>`
+));
+
+mount('f3c', screen(
+  weekPill(WEEK) +
+  ledger({
+    rows: [
+      P(SH, ['p', 'p', 'p', 'p', '', '', ''], 4),
+      { crew: 'Shankarसोबत 8', plot: 'द्राक्ष-२', cells: ['', '', '', { n: 8 }, '', '', ''], total: 1 },
+      { crew: 'Shankarसोबत 4', plot: 'केळी-१', cells: ['', '', '', { n: 4 }, '', '', ''], total: 1 },
+      P(RA, ['p', 'p', 'h', 'p', '', '', ''], 4),
+    ],
+    totals: [2, 2, 2, 2, '—', '—', '—'], weekTotal: '—',
+  }) + crewRule()
+));
+
+document.getElementById('a3c').innerHTML = `
+  <div class="rounded-[16px] border border-rose-200 bg-rose-50 p-4">
+    <p class="flex items-center gap-2 text-[12.5px] font-extrabold text-rose-700">${I.x(14)} <span>the same day, two plots — and <s class="text-[16px] font-black">12</s> is printed nowhere</span></p>
+    <p class="mt-2 text-[12.5px] leading-relaxed text-rose-800">
+      8 went to द्राक्ष-२ and 4 to केळी-१. Both are true, both are drawn, and the एकूण line under them counts only
+      the named people (Shankar and Ramesh) — so the crew numbers have nothing to be added into. The plot names
+      are farm data already on the record, not something this screen asks him for again.
+    </p>
+  </div>`;
+
+/* ══════════════ PANEL 4 ══════════════ */
+const MONEY_CFG = {
+  money: true,
+  rows: [
+    P(RA, ['p', 'p', 'h', 'p', { t: 'p', money: 450 }, 'a', ''], 5, { money: '₹450' }),
+    P(SU, ['p', 'p', 'p', 'p', 'p', '', ''], 5, { money: null }),
+    P(VI, ['a', { t: 'h', money: 300 }, 'p', 'p', 'p', '', ''], 4, { money: '₹300' }),
+    P(SA, ['p', 'p', 'p', 'p', 'p', 'p', ''], 6, { money: null }),
+  ],
+  totals: [3, 4, 4, 4, 4, 1, '—'], weekTotal: 20, weekMoney: '—',
+};
+mount('f4a', screen(
+  weekPill(WEEK) + ledger(MONEY_CFG) +
+  `<div class="${FOOT}">${COPY('Only the two days you paid differently carry an amount. The other days carry attendance and nothing else, and a person you said no money for shows a dash — never ₹0.')}</div>`
+));
+document.getElementById('f4flat').innerHTML = ledger(MONEY_CFG);
+
+document.getElementById('rejectedmoney').innerHTML =
+  `<div class="flex items-center gap-1.5">
+     ${[450, 450, 225, 450, 450, 300, 450].map((v) => `<span class="${CELL_BOX} bg-emerald-50 text-emerald-700" style="font-size:8.5px">${v}</span>`).join('')}
+   </div>
+   <p class="mt-2 text-[12px] font-bold text-rose-800">Rejected at mockup stage. Not drawn in any frame above.</p>`;
+
+/* ══════════════ PANEL 5 ══════════════ */
+const viewStrip = (en, tone) => `
+  <div class="flex items-start gap-2 rounded-2xl border ${tone} p-2.5">
+    <span class="mt-0.5 flex-none">${I.eye(14)}</span>
+    <span class="min-w-0 flex-1">${COPY(en)}</span>
+  </div>`;
+
+mount('f5a', screen(
+  weekPill(WEEK) +
+  ledger({
+    money: true,
+    rows: [
+      P(GA, ['p', 'p', 'p', 'p', 'p', '', ''], 5, { money: null }),
+      P(SH, ['p', '', 'p', 'p', 'p', '', ''], 4, { money: '₹4,650' }),
+      { crew: 'Shankarसोबत 8', cells: [{ n: 8 }, '', { n: 6 }, { n: 8 }, '', '', ''], total: 3, money: null },
+      P(RA, ['p', 'p', 'h', 'p', { t: 'p', money: 450 }, '', ''], 5, { money: '₹450' }),
+      P(SU, ['p', 'p', 'p', 'p', '', '', ''], 4, { money: null }),
+    ],
+    totals: [4, 3, 4, 4, 3, '—', '—'], weekTotal: '—', weekMoney: '—',
+  }) +
+  `<div class="${FOOT}">${COPY('You see everyone on this farm, every day, and every rupee you said you paid.')}</div>`
+));
+
+mount('f5b', screen(
+  weekPill(WEEK) +
+  viewStrip('You are seeing your own crew only.', 'border-violet-100 bg-violet-50 text-violet-700') +
+  ledger({
+    rows: [
+      P(SH, ['p', '', 'p', 'p', 'p', '', ''], 4),
+      { crew: 'Shankarसोबत 8', cells: [{ n: 8 }, '', { n: 6 }, { n: 8 }, '', '', ''], total: 3 },
+    ],
+    totals: [1, '—', 1, 1, 1, '—', '—'], weekTotal: '—',
+  }) +
+  `<div class="${FOOT}">${COPY('Wages are not shown here. This screen carries attendance only.')}</div>` + SHIPPED_FOOT
+));
+
+mount('f5c', screen(
+  weekPill(WEEK) +
+  viewStrip('You are seeing your own row only.', 'border-slate-200 bg-white text-slate-500') +
+  ledger({
+    rows: [P(RA, ['p', 'p', 'h', 'p', 'p', 'a', ''], 5)],
+    totals: [1, 1, 1, 1, 1, '—', '—'], weekTotal: 5,
+  }) + SHIPPED_FOOT
+));
+
+document.getElementById('a5c').innerHTML = `
+  <div class="rounded-[16px] border border-slate-300 bg-white p-4">
+    <p class="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">Open question — deliberately not answered by this drawing</p>
+    <p class="mt-1 text-[13px] leading-relaxed text-slate-700">
+      Whether a worker sees <b>his own</b> money on his own row. The three-views ruling grants him his own row and
+      is silent on money, so no ₹ column is drawn here — the absence is the honest render until you rule, not a
+      decision taken on your behalf.
+    </p>
+  </div>`;
+
+/* ══════════════ PANEL 6 ══════════════ */
+document.getElementById('fouraxis').innerHTML = `
+  <div class="grid gap-4 sm:grid-cols-2">
+    <div class="rounded-[16px] border border-rose-200 bg-white p-4">
+      <p class="flex items-center gap-2 text-[12.5px] font-extrabold text-rose-700">${I.x(14)} confirmation inside the cell</p>
+      <div class="mt-3 flex items-center gap-4">
+        <div class="relative inline-block opacity-90">
+          <span class="relative flex h-[78px] w-[78px] flex-none flex-col overflow-hidden rounded-[16px] ring-2 ring-rose-300">
+            <span class="flex h-[26px] flex-none items-center justify-center bg-emerald-50 text-emerald-700">${I.check(20)}</span>
+            <span class="flex h-[26px] flex-none items-center justify-center bg-slate-700 text-white">${I.moon(16)}</span>
+            <span class="flex h-[26px] flex-none items-center justify-center bg-emerald-600 text-[14px] font-extrabold text-white">450 ✓</span>
+          </span>
+          <span class="absolute -right-2 -top-2 text-rose-600">${I.x(18)}</span>
+        </div>
+        <p class="flex-1 text-[12px] leading-relaxed text-slate-600">Four facts in a 26px box means a third strip at ~6px. Unreadable, and it is the change that forces the grid to be rebuilt.</p>
+      </div>
+    </div>
+    <div class="rounded-[16px] border border-emerald-200 bg-white p-4">
+      <p class="flex items-center gap-2 text-[12.5px] font-extrabold text-emerald-700">${I.check(14)} confirmation on the row</p>
+      <p class="mt-3 text-[12px] leading-relaxed text-slate-600">
+        One line under the person, for the whole week. The grid geometry does not change, so this can ship after
+        the grid without rebuilding it. The <b>one</b> exception that touches a cell is a day the worker actively
+        disputes — drawn as a rose ring with a warning corner in frame 6a.
+      </p>
+    </div>
+  </div>`;
+
+mount('f6a', screen(
+  weekPill(WEEK) +
+  ledger({
+    rows: [
+      P(RA, ['p', 'p', 'h', 'p', 'p', 'a', ''], 5, { confirm: { k: 'ok', en: 'Ramesh has agreed this week is right.' } }),
+      P(SU, ['p', 'p', 'p', 'p', '', '', ''], 4, { confirm: { k: 'wait', en: 'Sunita has not looked at this week yet.' } }),
+      P(VI, ['a', 'h', { t: 'p', dispute: true }, 'p', 'p', '', ''], 4, { confirm: { k: 'bad', en: 'Vilas says Wednesday is wrong.' } }),
+    ],
+    totals: [2, 3, 3, 3, 2, '—', '—'], weekTotal: 13,
+  }) +
+  `<div class="${FOOT}">${COPY('A week nobody has confirmed still shows exactly what was said. Silence is never drawn as agreement.')}</div>`
+));
+
+/* ══════════════ NEVER LIST ══════════════ */
+const NEVER = [
+  ['A summed <b>6.5</b> anywhere', 'not in a cell, not in a row total, not in the एकूण line. The shipped fixture already carries 5.5 / 3.5 / 20.5 — that is exactly what this replaces. Every number drawn above is a <i>count of marks</i>, never a sum of day-fractions.'],
+  ['A <b>–</b> in a cell nobody spoke about', 'the dash means “he did not come”. An unsaid day is a blank dashed box, and an unsaid total is <b>—</b>, never 0.'],
+  ['A takeover that replaces the grid', 'even at zero rows the week is drawn and the empty-state card sits below it (frame 1e).'],
+  ['A microphone', 'there is no mic on this screen. The वही reads back; it does not listen.'],
+  ['Eight invented names', 'the crew is one aggregate line reading <b>Shankarसोबत 8</b>. Never eight rows, never eight made-up people.'],
+  ['Ganesh and Shankar under one heading', 'they are two different things, listed separately and labelled separately.'],
+  ['The word <b>मुकादम</b> for the farm app role', 'मुकादम is Shankar the labour contractor. Ganesh’s farm role is a blocked copy slot, not a reused word.'],
+  ['The 8 folded into Shankar’s own cell', 'that would give one man two presence truths. His tick is his; the crew’s number is the crew’s.'],
+  ['The number 12', 'when 8 go to the grapes and 4 to the banana plot, both are printed and neither is added.'],
+  ['A browsable wage roster for the Mukadam', 'his view carries attendance only — no money column, no rupee anywhere on the screen.'],
+  ['A clock range, a start/end time, or a time picker', '3 तास means three hours long. Operational timing belongs to the Work Log, not to हजेरी.'],
+  ['An amount in every cell', 'only a day paid off the standard rate carries money, because at 26px the amount can only be drawn at 8.5px.'],
+  ['Asking again for what he already said', 'no plot, no crop, no count, no name is ever re-asked. The two questions drawn above ask only for facts that were genuinely never given.'],
+];
+document.getElementById('neverlist').innerHTML = NEVER.map(([t, w]) => `
+  <li class="flex items-start gap-3 rounded-[14px] border border-slate-200 bg-white p-3">
+    <span class="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full bg-rose-50 text-rose-600">${I.x(13)}</span>
+    <span class="min-w-0"><span class="block text-[13.5px] font-extrabold text-slate-800">${t}</span>
+    <span class="mt-0.5 block text-[12.5px] leading-relaxed text-slate-600">${w}</span></span>
+  </li>`).join('');
+</script>
+</body>
+</html>

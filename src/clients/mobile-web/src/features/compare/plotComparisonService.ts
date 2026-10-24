@@ -283,7 +283,13 @@ function buildSprayBucket(
     };
 }
 
-function buildFertigationBucket(
+// Access widened from private → exported so the fertigation-classification rules
+// can be tested against the REAL shipping function. `generatePlotComparison`
+// reaches it through `buildStageComparison`, whose stage window is resolved
+// against `new Date()`, so a test driven from the public entry point would pass
+// or fail depending on the day it runs. Nothing is injected or substituted here:
+// the production call site is unchanged and tests exercise this exact body.
+export function buildFertigationBucket(
     derivedPlan: PlannedTaskDerived[],
     logs: DailyLog[],
     referenceDate: string
@@ -298,8 +304,12 @@ function buildFertigationBucket(
             if (input.method === 'Spray' || input.type === 'pesticide' || input.type === 'fungicide') {
                 return;
             }
-            // Everything else is nutrition/fertigation
+            // Everything else is nutrition/fertigation. `fertigation` is the value
+            // the server's C5 WaterRoleClassifier stamps on an NPK/WSF row delivered
+            // through drip; because the legacy `type` is optional on the wire, such a
+            // row matched neither limb before and was dropped from its own bucket.
             if (input.method === 'Drip' || input.method === 'Drenching' || input.method === 'Soil'
+                || input.method === 'fertigation'
                 || input.type === 'fertilizer' || input.type === 'bio' || input.type === 'other' || input.type === 'unknown') {
                 executedFertigation.push({
                     id: `exec_${input.id}`,
@@ -540,7 +550,9 @@ function determineOverallHealth(
     return 'NEEDS_ATTENTION';
 }
 
-function determineBucketHealth(planned: number, matched: number, missed: number): 'ON_TRACK' | 'SLIGHT_LAG' | 'SIGNIFICANT_LAG' | 'CRITICAL' {
+// `_missed` is unused: health is derived from the matched/planned ratio alone.
+// Kept in the signature because all four bucket builders pass it positionally.
+function determineBucketHealth(planned: number, matched: number, _missed: number): 'ON_TRACK' | 'SLIGHT_LAG' | 'SIGNIFICANT_LAG' | 'CRITICAL' {
     if (planned === 0) return 'ON_TRACK';
     const ratio = matched / planned;
     if (ratio >= 0.8) return 'ON_TRACK';

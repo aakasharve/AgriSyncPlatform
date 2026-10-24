@@ -231,6 +231,90 @@ public sealed class LedgerDerivationServiceTests
         outcome.ChildrenWritten.Should().Be(0);
     }
 
+    // ── B002 (PR #82 review), founder ruling 2026-08-31 — the हजेरी door ─────────
+    // "The labour door saves labour only." The same SampleNormalizedJson that derives
+    // all six families above must, under labourOnly, derive ONLY the labour row.
+
+    [Fact]
+    public async Task labour_only_derives_the_labour_bucket_and_nothing_else_from_the_same_parse()
+    {
+        var repo = new InMemoryShramSafalRepository();
+        var job = MakeVoiceJob(SampleNormalizedJson);
+        var log = MakeVoiceLog(job);
+
+        var outcome = await new LedgerDerivationService(repo).DeriveAsync(
+            log, job, new SequentialIdGenerator(), new FixedClock(FixedNow), labourOnly: true);
+
+        repo.CapturedLabour.Should().ContainSingle().Which.WorkerCount.Should().Be(12);
+        repo.CapturedOperations.Should().BeEmpty("the fertigation was parsed but never confirmed at this door");
+        repo.CapturedInputItems.Should().BeEmpty();
+        repo.CapturedIrrigations.Should().BeEmpty();
+        repo.CapturedRoutinePatterns.Should().BeEmpty("no irrigation derived, so no routine is seeded from one");
+        repo.CapturedMachinery.Should().BeEmpty();
+        repo.CapturedObservations.Should().BeEmpty();
+        repo.CapturedDisturbances.Should().BeEmpty();
+        outcome.Should().Be(new DerivationOutcome(OperationsWritten: 0, ChildrenWritten: 1));
+    }
+
+    [Fact]
+    public async Task labour_only_with_structured_labour_already_staged_derives_nothing_at_all()
+    {
+        // The real हजेरी confirm: its labour[] rides the payload as canonical Phase-1
+        // rows (deriveLabour: false), so with labourOnly there is nothing left to derive.
+        var repo = new InMemoryShramSafalRepository();
+        var job = MakeVoiceJob(SampleNormalizedJson);
+        var log = MakeVoiceLog(job);
+
+        var outcome = await new LedgerDerivationService(repo).DeriveAsync(
+            log, job, new SequentialIdGenerator(), new FixedClock(FixedNow),
+            deriveLabour: false, labourOnly: true);
+
+        outcome.Should().Be(default(DerivationOutcome));
+        repo.CapturedLabour.Should().BeEmpty();
+        repo.CapturedOperations.Should().BeEmpty();
+        repo.CapturedIrrigations.Should().BeEmpty();
+        repo.CapturedDisturbances.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task labour_only_holds_on_the_manual_draft_path_too()
+    {
+        // The बदल करा edit surface at the हजेरी door saves through the manual path.
+        var repo = new InMemoryShramSafalRepository();
+        var job = MakeVoiceJob(null);
+        var log = MakeVoiceLog(job);
+
+        await new LedgerDerivationService(repo).DeriveFromManualDraftAsync(
+            log, SampleNormalizedJson, "1.0.15", new SequentialIdGenerator(), new FixedClock(FixedNow),
+            deriveLabour: true, labourOnly: true);
+
+        repo.CapturedLabour.Should().ContainSingle();
+        repo.CapturedOperations.Should().BeEmpty();
+        repo.CapturedIrrigations.Should().BeEmpty();
+        repo.CapturedMachinery.Should().BeEmpty();
+        repo.CapturedObservations.Should().BeEmpty();
+        repo.CapturedDisturbances.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task without_labour_only_the_whole_parse_still_derives_exactly_as_before()
+    {
+        // The control: an unscoped (old-client) confirm is untouched by the gate.
+        var repo = new InMemoryShramSafalRepository();
+        var job = MakeVoiceJob(SampleNormalizedJson);
+        var log = MakeVoiceLog(job);
+
+        await new LedgerDerivationService(repo).DeriveAsync(
+            log, job, new SequentialIdGenerator(), new FixedClock(FixedNow), labourOnly: false);
+
+        repo.CapturedOperations.Should().ContainSingle();
+        repo.CapturedIrrigations.Should().ContainSingle();
+        repo.CapturedLabour.Should().ContainSingle();
+        repo.CapturedMachinery.Should().ContainSingle();
+        repo.CapturedObservations.Should().ContainSingle();
+        repo.CapturedDisturbances.Should().ContainSingle();
+    }
+
     // ── FIX A (multi-plot DerivedEventKey collision) ──────────────────────────
 
     [Fact]

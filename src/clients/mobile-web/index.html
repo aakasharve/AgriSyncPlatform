@@ -7,7 +7,15 @@
   <title>ShramSafal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Noto+Sans+Devanagari:wght@400;500;700&family=Noto+Serif+Devanagari:wght@400;700&display=swap" />
+  <!-- spec: 2026-08-25-prod-cutover-waves. This stylesheet used to be render-blocking:
+       on an offline or black-holed network the first paint waited on a host that would
+       never answer. It is now fetched with media="print" (never blocks rendering) and
+       switched on when it arrives; display=swap shows text immediately in the fallback
+       faces named in tailwind.config.js / global-theme.css (the phone's own Devanagari
+       font) and swaps to DM Sans / Noto when they load. Offline, text simply stays in
+       the fallback. The DM Sans / Noto family stacks are unchanged. -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Noto+Sans+Devanagari:wght@400;500;700&family=Noto+Serif+Devanagari:wght@400;700&display=swap" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Noto+Sans+Devanagari:wght@400;500;700&family=Noto+Serif+Devanagari:wght@400;700&display=swap" /></noscript>
 </head>
 
 <body class="bg-surface-100 text-stone-900 antialiased font-sans">

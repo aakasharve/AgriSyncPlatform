@@ -5,16 +5,16 @@
 /// the farm access-management surface needs to RENDER it (founder decision O-4).
 ///
 /// <para><b>Why <see cref="Source"/> exists and why the UI must honour it.</b>
-/// An owner-tier member and a Mukadam are allowed <i>by role</i>; their stored
-/// grant flag is <c>false</c> and switching it has no effect. A toggle rendered
-/// as interactive for those members would be a control that looks functional and
-/// does nothing (doctrine P5) — the same defect the existing
-/// <c>TeamMemberCard</c> toggles have today by being local state that reaches no
-/// server. So the read tells the client WHICH of the two reasons applies, and
-/// <see cref="IsGrantEditable"/> says plainly whether the switch may be
-/// interactive at all. The write endpoint independently REFUSES a request that
-/// would toggle a role-carried capability, so a client that ignores this cannot
-/// fake it either.</para>
+/// An owner-tier member is allowed <i>by role</i> (D5, 2026-09-02: owner-tier
+/// ONLY — a Mukadam no longer is); their stored grant flag is <c>false</c> and
+/// switching it has no effect. A toggle rendered as interactive for those
+/// members would be a control that looks functional and does nothing (doctrine
+/// P5) — the same defect the existing <c>TeamMemberCard</c> toggles have today
+/// by being local state that reaches no server. So the read tells the client
+/// WHICH reason applies, and <see cref="IsGrantEditable"/> says plainly whether
+/// the switch may be interactive at all. The write endpoint independently
+/// REFUSES a request that would toggle a role-carried capability, so a client
+/// that ignores this cannot fake it either.</para>
 /// </summary>
 /// <param name="UserId">The member.</param>
 /// <param name="Role">
@@ -38,12 +38,24 @@
 /// decision. Always <c>false</c> for roles that carry the capability anyway.
 /// </param>
 /// <param name="Source">
-/// Why: <c>"OwnerTier"</c> · <c>"MukadamDefault"</c> · <c>"ExplicitGrant"</c> ·
-/// <c>"NotGranted"</c>.
+/// Why: <c>"OwnerTier"</c> · <c>"ExplicitGrant"</c> · <c>"NotGranted"</c>.
+/// (<c>"MukadamDefault"</c> was deleted 2026-09-02 — D5 removed the role carry.)
 /// </param>
 /// <param name="IsGrantEditable">
-/// <c>false</c> for owner-tier and Mukadam — the switch must render as
-/// permanently on and non-interactive. <c>true</c> for every other role.
+/// <c>false</c> for owner-tier — the switch renders permanently on and
+/// non-interactive. <c>true</c> for every other role, a Mukadam included.
+/// </param>
+/// <param name="LabourGrantExpiresAtUtc">
+/// The instant the responsibility ends, <c>null</c> for कायम — and <c>null</c>
+/// once lapsed: an expired grant reports as NotGranted with no ghost date.
+/// </param>
+/// <param name="DisplayName">
+/// The member's name from the user directory, so the owner's Team page can list
+/// and label a member the sync pull never sent (its operator role comes from a
+/// table whose RLS hides every other member). Present ONLY on the owner-tier
+/// roster read - this route is owner/co-owner-only - and <c>null</c> on the
+/// grant-write response and whenever the directory has no name; the client must
+/// then show NO name rather than invent one. Additive: older clients ignore it.
 /// </param>
 public sealed record LabourPermissionDto(
     Guid UserId,
@@ -52,4 +64,6 @@ public sealed record LabourPermissionDto(
     bool CanManageLabourRecords,
     bool HasExplicitGrant,
     string Source,
-    bool IsGrantEditable);
+    bool IsGrantEditable,
+    DateTime? LabourGrantExpiresAtUtc,
+    string? DisplayName = null);

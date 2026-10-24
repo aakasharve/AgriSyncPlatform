@@ -11,7 +11,7 @@
 // of them) — the "renders nothing, doesn't crash" cases guard that.
 import React from 'react';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import LabourHub from '../LabourHub';
 import { EMPTY_LABOUR_DATA, LABOUR_MOCK } from '../../labourMock';
@@ -52,7 +52,7 @@ const labourLog = (): DailyLog => ({
     financialSummary: { totalLabourCost: 1600, totalInputCost: 0, totalMachineryCost: 0, grandTotal: 1600 },
 } as unknown as DailyLog);
 
-// BUG 2 (2026-08-10): a COUNT-ONLY entry — the farmer said "सहा मजूर", no
+// BUG 2 (2026-08-10): a COUNT-ONLY entry — the farmer said "सहा जण", no
 // names, no gender split. The parser sets `count` and leaves
 // maleCount/femaleCount unset, which is exactly the shape
 // domain/logs/labourHeadcount.ts exists to resolve.
@@ -69,6 +69,38 @@ const countOnlyLabourLog = (): DailyLog => ({
     financialSummary: { totalLabourCost: 1800, totalInputCost: 0, totalMachineryCost: 0, grandTotal: 1800 },
 } as unknown as DailyLog);
 
+// Task 29 (spec: 2026-08-28-labour-v2-release-1): the farmer said
+// "मजुरांनी छाटणी केली" ("the workers did the pruning") and never stated a
+// number. The parser leaves count/maleCount/femaleCount ALL unset — the
+// shape `sumLabourHeadcount` used to fold into a fabricated `0`.
+const unstatedHeadcountLabourLog = (): DailyLog => ({
+    id: 'log-4',
+    date: '2026-07-19',
+    context: { selection: [{ cropId: 'c1', selectedPlotIds: ['p1'] }] },
+    dayOutcome: 'WORK_RECORDED',
+    cropActivities: [],
+    irrigation: [],
+    labour: [{ id: 'l4', type: 'HIRED', activity: 'छाटणी', totalCost: 1800 }],
+    inputs: [],
+    machinery: [],
+    financialSummary: { totalLabourCost: 1800, totalInputCost: 0, totalMachineryCost: 0, grandTotal: 1800 },
+} as unknown as DailyLog);
+
+// A record that EXISTS and states zero — "nobody came". A real fact, and the
+// opposite failure mode: the fix must not sweep this into the em-dash.
+const statedZeroLabourLog = (): DailyLog => ({
+    id: 'log-5',
+    date: '2026-07-19',
+    context: { selection: [{ cropId: 'c1', selectedPlotIds: ['p1'] }] },
+    dayOutcome: 'WORK_RECORDED',
+    cropActivities: [],
+    irrigation: [],
+    labour: [{ id: 'l5', type: 'HIRED', count: 0, activity: 'छाटणी', totalCost: 0 }],
+    inputs: [],
+    machinery: [],
+    financialSummary: { totalLabourCost: 0, totalInputCost: 0, totalMachineryCost: 0, grandTotal: 0 },
+} as unknown as DailyLog);
+
 const nonLabourLog = (): DailyLog => ({
     id: 'log-2',
     date: '2026-07-19',
@@ -81,6 +113,8 @@ const nonLabourLog = (): DailyLog => ({
     machinery: [],
     financialSummary: { totalLabourCost: 0, totalInputCost: 0, totalMachineryCost: 0, grandTotal: 0 },
 } as unknown as DailyLog);
+
+
 
 describe('LabourHub — "just logged" labour summary (Task 3.5)', () => {
     afterEach(() => cleanup());
@@ -122,8 +156,8 @@ describe('LabourHub — "just logged" labour summary (Task 3.5)', () => {
         );
 
         expect(screen.getByTestId('labour-just-logged-card')).toBeInTheDocument();
-        // Devanagari digits, matching LabourDataPoints' `N मजूर` chip.
-        const people = screen.getByText('६ मजूर');
+        // Devanagari digits, matching LabourDataPoints' `N जण` chip.
+        const people = screen.getByText('६ जण');
         expect(people).toBeInTheDocument();
         // Farmer-readable sizing rule for this card: body text is 16px+.
         expect(people.className).toContain('text-[16px]');
@@ -158,11 +192,53 @@ describe('LabourHub — "just logged" labour summary (Task 3.5)', () => {
         );
         expect(screen.queryByTestId('labour-just-logged-card')).toBeNull();
     });
+
+    /**
+     * Task 29 (spec: 2026-08-28-labour-v2-release-1) — `sumLabourHeadcount`
+     * returned `0` for a labour event that stated no headcount at all, so
+     * this card rendered "० जण": zero workers, with ₹1,800 paid to them.
+     * Same defect BUG 2 fixed for the count-only shape, one shape further
+     * out. Unknown renders as the em-dash — the existing "we were not told"
+     * mark this codebase already uses (ReviewSheet's ReviewFacts,
+     * LabourReview.tsx @ 0a401294) — reusing the SAME `N जण` line, no new
+     * Marathi string.
+     */
+    it('renders "— जण", never "० जण", when the log states no headcount at all', () => {
+        render(
+            <LabourHub
+                {...baseProps()}
+                history={[unstatedHeadcountLabourLog()]}
+                ledgerDefaults={ledgerDefaults}
+                lastLabourLogIds={['log-4']}
+            />
+        );
+
+        expect(screen.getByTestId('labour-just-logged-card')).toBeInTheDocument();
+        expect(screen.queryByText('० जण')).toBeNull();
+        expect(screen.getByText('— जण')).toBeInTheDocument();
+        // The money is real and still shown — the headcount is what we lack.
+        expect(screen.getByText('₹1,800')).toBeInTheDocument();
+    });
+
+    it('does NOT turn a genuinely stated 0 into the em-dash (the opposite failure mode)', () => {
+        render(
+            <LabourHub
+                {...baseProps()}
+                history={[statedZeroLabourLog()]}
+                ledgerDefaults={ledgerDefaults}
+                lastLabourLogIds={['log-5']}
+            />
+        );
+
+        expect(screen.getByTestId('labour-just-logged-card')).toBeInTheDocument();
+        expect(screen.queryByText('— जण')).toBeNull();
+    });
 });
 
 // ---------------------------------------------------------------------------
 // Decision 4b (2026-07-19, screen honesty) — honest empty people-state with a
-// real QR "add a worker" CTA, and the हजेरी घ्या / हजेरी वही tiles hidden.
+// real QR "add a worker" CTA, and the हजेरी घ्या capture tile hidden. (The
+// हजेरी वही tile is UNGATED since Correction 5 — the register is finished.)
 // ---------------------------------------------------------------------------
 
 describe('LabourHub — screen honesty (Decision 4b)', () => {
@@ -171,7 +247,7 @@ describe('LabourHub — screen honesty (Decision 4b)', () => {
     it('shows an honest empty state (not a heading over nothing) when topLevelIds is empty', () => {
         render(<LabourHub {...baseProps()} />);
 
-        expect(screen.getByText('अजून कोणी कामगार जोडलेला नाही')).toBeInTheDocument();
+        expect(screen.getByText('अजून कोणाचंही नाव जोडलेलं नाही')).toBeInTheDocument();
         // Farmer-readability pass (2026-08-10): the subtitle used to name QR,
         // phone number and OTP in one 12px sentence — three unfamiliar ideas
         // before any action. It now states only the next physical step.
@@ -197,14 +273,255 @@ describe('LabourHub — screen honesty (Decision 4b)', () => {
 
     it('does NOT show the empty state once real people exist', () => {
         render(<LabourHub {...baseProps()} data={LABOUR_MOCK} />);
-        expect(screen.queryByText('अजून कोणी कामगार जोडलेला नाही')).toBeNull();
+        expect(screen.queryByText('अजून कोणाचंही नाव जोडलेलं नाही')).toBeNull();
     });
 
-    it('hides हजेरी घ्या and हजेरी वही — both wired to nothing real for a production farm', () => {
-        render(<LabourHub {...baseProps()} data={LABOUR_MOCK} />);
-        expect(screen.queryByText('हजेरी घ्या')).toBeNull();
-        expect(screen.queryByText('हजेरी वही')).toBeNull();
-        // The tile that DOES work stays reachable.
+    it('shows हजेरी घ्या (the capture screen is finished) and the हजेरी वही (never gated, Correction 5)', () => {
+        render(<LabourHub {...baseProps()} data={{ ...LABOUR_MOCK, canManageLabour: true }} />);
+        expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
+        expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
+        // The tiles that DO work stay reachable.
         expect(screen.getByText('आढावा')).toBeInTheDocument();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Task 7 (labour-v2-release-1) — the two REACHABLE false attendance claims on
+// this hub. Neither is behind a SHOW_* flag (the हजेरी घ्या door is decided
+// by attendanceDoor.ts alone; the हजेरी वही tile is ungated since Correction 5).
+// The hub hero is the ONE way in to speaking; the duplicate mic that used to
+// sit on the Attendance screen (LabourMic) was deleted 2026-08-31.
+// ---------------------------------------------------------------------------
+describe('LabourHub — no attendance-capture claims (Task 7)', () => {
+    afterEach(() => cleanup());
+
+    // FOUNDER RULING 2026-08-31 — reinstated as the hub's hero headline,
+    // overriding Task 7 fix round 1. हजेरी घेणे is the act of recording who
+    // came; speaking here does record the crew onto LabourAssignment, which
+    // is what the हजेरी वही reads back. See the component comment.
+    it('the hero voice CTA is headed "बोलून हजेरी घ्या" (founder ruling)', () => {
+        render(<LabourHub {...baseProps()} />);
+        expect(screen.getByText('बोलून हजेरी घ्या')).toBeInTheDocument();
+    });
+
+    it('keeps the honest example line under the voice CTA — it is truthful (the generic mic really does parse it)', () => {
+        render(<LabourHub {...baseProps()} />);
+        expect(screen.getByText(/रोकडेचे दहा लोक आले/)).toBeInTheDocument();
+    });
+
+    // The hero must never be a headless control — that was fix round 1/5's
+    // finding, and it still binds. Only the wording changed.
+    it('the hero CTA has a headline at all — never a bare mic with an example line', () => {
+        render(<LabourHub {...baseProps()} />);
+        const cta = screen.getByText('बोलून हजेरी घ्या');
+        expect(cta).toBeInTheDocument();
+        expect(cta.textContent?.trim().length ?? 0).toBeGreaterThan(0);
+    });
+
+    // FOUNDER RULING 2026-08-31 — restored. The card carries the headcount
+    // and cost of what was just spoken; that is the हजेरी just taken. Task 7
+    // had left this card with NO heading, which was its own defect.
+    it('the "just logged" card is labelled बोलून नोंदवलेली हजेरी (founder ruling)', () => {
+        render(
+            <LabourHub
+                {...baseProps()}
+                history={[labourLog()]}
+                ledgerDefaults={ledgerDefaults}
+                lastLabourLogIds={['log-1']}
+            />
+        );
+        expect(screen.getByTestId('labour-just-logged-card')).toBeInTheDocument();
+        expect(screen.getByText('बोलून नोंदवलेली हजेरी')).toBeInTheDocument();
+        // The real data (cost, breakdown) is untouched by this fix.
+        expect(screen.getByText('₹1,600')).toBeInTheDocument();
+    });
+
+    // SUPERSEDED by the founder ruling of 2026-08-31, twice over. This first
+    // asserted across the whole hub — passing only because nothing on the hub
+    // said हजेरी at all — and was then scoped to the note. The ruling now says
+    // हजेरी घेणे IS what speaking does, so the note may name it. What the note
+    // must never claim are the two things that genuinely do not exist, and
+    // those are guarded by Tasks 7b and 22 below. This keeps the third half of
+    // the original finding: the note may not promise a SEPARATE attendance
+    // capture screen, only the speaking that really records the crew.
+    it('the help note names हजेरी as something you SPEAK, never a separate capture screen', () => {
+        render(<LabourHub {...baseProps()} />);
+        fireEvent.click(screen.getByText('हे कसं वापरायचं?'));
+        const body = screen.getByTestId('help-note-body').textContent ?? '';
+        expect(body).toContain('बोलून हजेरी घ्या');
+        // the capture screen the app does not have
+        expect(body).not.toMatch(/हजेरीs*(स्क्रीन|पान)/);
+    });
+
+    it('the help note keeps its true neighbouring words after the surgical deletion (मजुरी / नोंदी तपासा)', () => {
+        render(<LabourHub {...baseProps()} />);
+        fireEvent.click(screen.getByText('हे कसं वापरायचं?'));
+        expect(screen.getByText(/मजुरी/)).toBeInTheDocument();
+        expect(screen.getByText(/नोंदी तपासा/)).toBeInTheDocument();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Task 7b (labour-v2-release-1) — उचल (advance) does not exist as a system:
+// no table, no write path, no engine (GetLabourDataHandler.cs:205 hardcodes
+// `advance = 0m` server-side). Task 7 above deleted a different false claim
+// (हजेरी) from this exact `what=` string and left उचल standing beside it —
+// this closes that gap.
+// ---------------------------------------------------------------------------
+describe('LabourHub — no उचल (advance) capability claim (Task 7b)', () => {
+    afterEach(() => cleanup());
+
+    it('the "how to use" help note no longer claims उचल (advance) anywhere in its text', () => {
+        render(<LabourHub {...baseProps()} />);
+        fireEvent.click(screen.getByText('हे कसं वापरायचं?'));
+        expect(screen.queryByText(/उचल/)).toBeNull();
+    });
+
+    it('keeps its true neighbouring words after the surgical deletion (मजुरी / नोंदींची तपासणी)', () => {
+        render(<LabourHub {...baseProps()} />);
+        fireEvent.click(screen.getByText('हे कसं वापरायचं?'));
+        expect(screen.getByText(/मजुरी/)).toBeInTheDocument();
+        expect(screen.getByText(/नोंदींची तपासणी/)).toBeInTheDocument();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// TASK 22 (spec: 2026-08-28-labour-v2-release-1) — the help note's `act`
+// field promised "विश्वासू कामगाराच्या नोंदी आपोआप मंजूर करा" (auto-approve a
+// trusted worker's entries). No auto-approval mechanism exists anywhere:
+// `GetLabourDataHandler.cs` hardcodes `Access: "review"` for every worker
+// ("trust-graduation not yet built — every worker defaults to owner-review"),
+// and `PersonDetail.tsx`'s own विश्वास-graduation UI that would grant this is
+// itself hidden behind `SHOW_TRUST_GRADUATION = false` because granting it
+// there is local `useState` only and never changes server behaviour. The
+// clause is DELETED, not reworded — the surviving "नोंदी तपासा." was already
+// present in the same string.
+// ---------------------------------------------------------------------------
+describe('LabourHub — no auto-approve capability claim (Task 22)', () => {
+    afterEach(() => cleanup());
+
+    it('the "how to use" help note no longer claims a trusted worker\'s entries auto-approve', () => {
+        render(<LabourHub {...baseProps()} />);
+        fireEvent.click(screen.getByText('हे कसं वापरायचं?'));
+        expect(screen.queryByText(/आपोआप मंजूर/)).toBeNull();
+    });
+
+    it('keeps its true neighbouring words after the surgical deletion (नोंदी तपासा)', () => {
+        render(<LabourHub {...baseProps()} />);
+        fireEvent.click(screen.getByText('हे कसं वापरायचं?'));
+        expect(screen.getByText(/नोंदी तपासा/)).toBeInTheDocument();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// The attendance door (replaces the Task 18 preview-exception block). The old
+// hard-`false` SHOW_ATTENDANCE_TILE and its `isPreview` escape are DELETED;
+// the tile is shown by `canTakeManualAttendance(data.canManageLabour)` for every caller, with no
+// prop. The full flow is pinned by LabourFeature.attendanceDoor.test.tsx.
+// ---------------------------------------------------------------------------
+
+describe('LabourHub - the attendance door (हजेरी घ्या)', () => {
+    afterEach(() => cleanup());
+
+    it('shows हजेरी घ्या and हजेरी वही when the server allows it, with no preview prop involved', () => {
+        render(<LabourHub {...baseProps()} data={{ ...LABOUR_MOCK, canManageLabour: true }} />);
+        expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
+        expect(screen.getByText('आज कोण आलं')).toBeInTheDocument();
+        expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
+        expect(screen.getByText('सर्व दिवस')).toBeInTheDocument();
+    });
+
+    it('the tile opens the screen through onAttendance', () => {
+        const onAttendance = vi.fn();
+        render(<LabourHub {...baseProps()} data={{ ...LABOUR_MOCK, canManageLabour: true }} onAttendance={onAttendance} />);
+        fireEvent.click(screen.getByText('हजेरी घ्या'));
+        expect(onAttendance).toHaveBeenCalledTimes(1);
+    });
+
+    it('the no-work door (काम झालं नाही, पण मजूर आले) shows only while the hero is grey AND a handler exists', () => {
+        const onNoWorkAttendance = vi.fn();
+        const noWork = 'काम झालं नाही, पण मजूर आले';
+
+        render(<LabourHub {...baseProps()} data={{ ...EMPTY_LABOUR_DATA, canManageLabour: true }} anchor={{ state: 'no-anchor' }} onNoWorkAttendance={onNoWorkAttendance} />);
+        fireEvent.click(screen.getByText(noWork));
+        expect(onNoWorkAttendance).toHaveBeenCalledTimes(1);
+        cleanup();
+
+        render(<LabourHub {...baseProps()} data={{ ...EMPTY_LABOUR_DATA, canManageLabour: true }} anchor={{ state: 'no-anchor' }} />);          // no handler
+        expect(screen.queryByText(noWork)).toBeNull();
+        cleanup();
+
+        render(<LabourHub {...baseProps()} data={{ ...EMPTY_LABOUR_DATA, canManageLabour: true }} anchor={{ state: 'anchored', headcount: 4, logId: 'l1' }} onNoWorkAttendance={onNoWorkAttendance} />);
+        expect(screen.queryByText(noWork)).toBeNull();                                    // hero active
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Task 3.1 (Labour V2 R1) — the labour mic is a verification instrument. No
+// explicit labour anchor → no mic. The anchor gates ONLY the recorder (the
+// hero behind which the mic lives): the route, hub, हजेरी वही tile and
+// HajeriLedger are untouched (Correction 11). A missing `anchor` prop (the
+// bare `?preview=labour` mount) keeps today's behaviour: hero active.
+// ---------------------------------------------------------------------------
+describe('Task 3.1 — anchor gates ONLY the recorder', () => {
+    afterEach(() => cleanup());
+
+    const renderHub = (extra: Partial<React.ComponentProps<typeof LabourHub>>) =>
+        render(<LabourHub {...baseProps()} {...extra} />);
+
+    it('no anchor: hero inactive, approved reason rendered, ledger tile untouched', () => {
+        renderHub({ anchor: { state: 'no-anchor' } });          // via the file's render helper
+        const hero = screen.getByRole('button', { name: /बोलून हजेरी घ्या/ });
+        expect(hero).toBeDisabled();
+        expect(screen.getByTestId('labour-no-anchor-reason').textContent)
+            .toContain('आजच्या कामात किती जण होते ते अजून समजलं नाही');
+        // Correction 11: the reason never gates the register door.
+        expect(screen.getByText('तपासा')).toBeInTheDocument();
+    });
+    it('anchored: hero active, no reason card', () => {
+        renderHub({ anchor: { state: 'anchored', headcount: 12, logId: 'x' } });
+        expect(screen.getByRole('button', { name: /बोलून हजेरी घ्या/ })).toBeEnabled();
+        expect(screen.queryByTestId('labour-no-anchor-reason')).toBeNull();
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// Android tile layout (founder, 2026-10-16). On a phone a half-width tile is
+// ~170px: titles broke mid-phrase, sub-lines were cut to "आज …" and the तपासा
+// count spilled outside the tile. These pin the layout CONTRACT in jsdom (class
+// names and DOM placement); jsdom cannot measure overflow, so the real proof is
+// a phone / emulator screenshot.
+// ---------------------------------------------------------------------------
+
+describe('LabourHub - Android tile layout', () => {
+    afterEach(() => cleanup());
+
+    const data = { ...LABOUR_MOCK, canManageLabour: true, dashboard: { ...LABOUR_MOCK.dashboard, pending: 75 } };
+
+    it('pins the तपासा count INSIDE its own tile, not inline after the title', () => {
+        render(<LabourHub {...baseProps()} data={data} />);
+        const title = screen.getByText('तपासा');
+        const tile = title.closest('button') as HTMLButtonElement;
+        const badge = within(tile).getByTestId('quick-tile-badge');
+        expect(badge).toHaveTextContent('75');
+        expect(badge.className).toMatch(/\babsolute\b/);
+        expect(tile.className).toMatch(/\brelative\b/);
+        expect(title.contains(badge)).toBe(false);
+    });
+
+    it('lets sub-lines wrap instead of truncating them', () => {
+        render(<LabourHub {...baseProps()} data={data} />);
+        for (const sub of ['आज कोण आलं', 'सर्व दिवस', 'मंजूर करा']) {
+            expect(screen.getByText(sub).className).not.toMatch(/\btruncate\b/);
+        }
+    });
+
+    it('stacks the grid tiles (icon above the title) so a half-width tile does not break its title', () => {
+        render(<LabourHub {...baseProps()} data={data} />);
+        for (const label of ['हजेरी घ्या', 'हजेरी वही', 'तपासा', 'आढावा']) {
+            const tile = screen.getByText(label).closest('button') as HTMLButtonElement;
+            expect(tile.className).toMatch(/\bflex-col\b/);
+        }
     });
 });

@@ -76,7 +76,13 @@ const DailyWorkSummaryView: React.FC<DailyWorkSummaryViewProps> = ({ summary }) 
                     {!summary.labour.isEmpty && (
                         <div className="flex items-center gap-1.5 bg-orange-100 text-orange-800 px-3 py-1.5 rounded-lg border border-orange-200">
                             <Users size={14} strokeWidth={2.5} />
-                            <span className="text-xs font-bold">{summary.labour.headcount} Workers</span>
+                            {/* Task 29 (spec: 2026-08-28-labour-v2-release-1) —
+                                `headcount` is undefined when labour was logged
+                                but no headcount was ever stated. It used to be
+                                0, printing "0 Workers" on a day workers worked.
+                                Em-dash = "we were not told"; the chip itself
+                                still shows, because the labour IS real. */}
+                            <span className="text-xs font-bold">{summary.labour.headcount ?? '—'} Workers</span>
                         </div>
                     )}
                     {!summary.inputs.isEmpty && (

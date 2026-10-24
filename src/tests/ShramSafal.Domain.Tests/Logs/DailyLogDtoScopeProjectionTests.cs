@@ -163,6 +163,11 @@ public sealed class DailyLogDtoScopeProjectionTests
     /// real statement. If this assertion ever reads <c>"labour":[]</c>, a caller
     /// that did not look has started claiming a log has no labour, which is the
     /// V1 data-loss bug rebuilt.</para>
+    ///
+    /// <para><b>Updated again for task-0b, which appends a FOURTH member.</b>
+    /// <c>dayOutcome</c> serialises as <c>null</c> here because <c>MakeLog</c> never
+    /// calls <c>SetDayOutcome</c> — this is what an ordinary work day looks like on
+    /// the wire, and it must stay <c>null</c>, never <c>"WORK_RECORDED"</c> (P4).</para>
     /// </summary>
     [Fact]
     public void A_plot_logs_wire_shape_is_yesterdays_bytes_plus_the_new_members()
@@ -189,7 +194,7 @@ public sealed class DailyLogDtoScopeProjectionTests
         var actualJson = JsonSerializer.Serialize(dto, WireOptions);
 
         actualJson.Should().Be(
-            $"{legacyJson[..^1]},\"scope\":\"Plot\",\"plotIds\":[\"{PlotA}\"],\"labour\":null}}",
+            $"{legacyJson[..^1]},\"scope\":\"Plot\",\"plotIds\":[\"{PlotA}\"],\"labour\":null,\"dayOutcome\":null}}",
             "additive and inert: every field that shipped before A2a keeps its exact position, name and value, and " +
             "the only difference a shipped client can observe is members it does not yet read");
     }

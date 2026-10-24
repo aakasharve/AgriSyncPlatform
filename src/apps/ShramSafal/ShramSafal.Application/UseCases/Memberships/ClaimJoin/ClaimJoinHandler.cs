@@ -47,7 +47,8 @@ public sealed class ClaimJoinHandler(
     IIdGenerator idGenerator,
     IClock clock,
     ILogger<ClaimJoinHandler> logger,
-    IAnalyticsWriter analytics)
+    IAnalyticsWriter analytics,
+    IJoinClaimTenantScope? tenantScope = null)
     : IHandler<ClaimJoinCommand, ClaimJoinResult>
 {
     public async Task<Result<ClaimJoinResult>> HandleAsync(ClaimJoinCommand command, CancellationToken ct = default)
@@ -57,6 +58,14 @@ public sealed class ClaimJoinHandler(
         // runs as a pipeline stage. The body trusts those gates have
         // already passed when reached through IHandler<,>; direct callers
         // must enforce the same invariants themselves.
+
+        // The claimant is not a member yet, so there is no farm claim to publish for the first
+        // read. Stage 1 only silences the tenant interceptor (no GUC, no RLS-table visibility);
+        // the lookup below touches ssf.farm_join_tokens alone. See IJoinClaimTenantScope.
+        // Null only for legacy direct-construction unit tests (no interceptor exists there);
+        // production DI always supplies it, and an absent scope fails CLOSED (the interceptor
+        // throws), never open.
+        tenantScope?.BeginTokenLookup();
 
         var tokenHash = IssueFarmInviteHandler.ComputeTokenHash(command.Token);
         var tokenRow = await invitationRepository.GetTokenByHashAsync(tokenHash, ct);
@@ -68,6 +77,15 @@ public sealed class ClaimJoinHandler(
             return Result.Failure<ClaimJoinResult>(Error.Unauthenticated(
                 "join.token_invalid",
                 "This QR is no longer valid. Ask the farmer for a new one."));
+        }
+
+        // Stage 2: the token is valid, so the farm it is bound to - and only that farm - becomes
+        // the tenant scope for the farm read, the membership read and the membership + audit
+        // INSERTs below. The farm id comes from the token row, never from the request.
+        if (tenantScope is not null)
+        {
+            await tenantScope.PublishTokenFarmScopeAsync(
+                tokenRow.FarmId.Value, command.CallerUserId.Value, ct);
         }
 
         var farm = await farmRepository.GetFarmByIdAsync(tokenRow.FarmId.Value, ct);
@@ -148,7 +166,28 @@ public sealed class ClaimJoinHandler(
                 deviceId: command.AuditDeviceId,
                 ipHash: command.AuditIpHash,
                 sourceAiJobId: null), ct);
-        await farmRepository.SaveChangesAsync(ct);
+        if (!await farmRepository.TrySaveNewMembershipAsync(ct))
+        {
+            // A concurrent claim by the SAME user (QR double-tap) won the insert. Same outcome as
+            // the already-member path above: re-read the winner's row (farm scope is still the
+            // token's farm) and return it idempotently. No second audit row, no analytics event.
+            var winner = await farmRepository.GetFarmMembershipAsync(farm.Id.Value, command.CallerUserId.Value, ct);
+            if (winner is null || winner.IsTerminal)
+            {
+                // The index only fires for a non-terminal row; if it is gone again, surface it
+                // rather than invent a success.
+                return Result.Failure<ClaimJoinResult>(Error.Conflict(
+                    "join.concurrent_claim_unresolved",
+                    "Could not complete joining. Please scan the QR again."));
+            }
+
+            return Result.Success(new ClaimJoinResult(
+                MembershipId: winner.Id,
+                FarmId: farm.Id,
+                FarmName: farm.Name,
+                Role: winner.Role.ToString(),
+                WasAlreadyMember: true));
+        }
 
         await analytics.EmitAsync(new AnalyticsEvent(
             EventId: Guid.NewGuid(),

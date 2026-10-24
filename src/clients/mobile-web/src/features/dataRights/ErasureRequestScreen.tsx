@@ -6,6 +6,7 @@
 
 import React, { useCallback, useState } from 'react';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { apiFetch } from '../../infrastructure/api/apiFetch';
 import {
     toDataRightsLocale,
     tDataRights,
@@ -22,8 +23,13 @@ interface Props {
 
 type SubmitStatus = 'idle' | 'confirming' | 'submitting' | 'success' | 'error';
 
+// `apiFetch`, not `fetch`. This used to be a bare relative fetch, which in the
+// APK asked the WebView (https://localhost) instead of the API, and carried no
+// Authorization header for an endpoint declared .RequireAuthorization(). So
+// self-serve erasure was inert on every phone — the one DPDP right the screen
+// exists to deliver, and something Google Play requires to work.
 async function defaultSubmit(): Promise<{ requestId: string }> {
-    const res = await fetch('/shramsafal/me/erasure/request', {
+    const res = await apiFetch('/shramsafal/me/erasure/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
     });

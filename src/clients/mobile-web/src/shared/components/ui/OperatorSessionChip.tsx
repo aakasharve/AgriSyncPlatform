@@ -12,6 +12,7 @@
 
 import React, { useState } from 'react';
 import { FarmOperator } from '../../../types';
+import { getOperatorRoleLabel } from '../../roles/roleLabels';
 
 interface OperatorSessionChipProps {
     currentOperator: FarmOperator | null;
@@ -19,11 +20,12 @@ interface OperatorSessionChipProps {
     onSwitchOperator: (operatorId: string) => void;
 }
 
-const roleLabels: Record<string, { label: string; labelMr: string }> = {
-    'PRIMARY_OWNER': { label: 'Owner', labelMr: 'मालक' },
-    'SECONDARY_OWNER': { label: 'Co-Owner', labelMr: 'सह-मालक' },
-    'WORKER': { label: 'Worker', labelMr: 'कामगार' }
-};
+const roleLabels: Record<string, { label: string; labelMr: string }> = Object.fromEntries(
+    ['PRIMARY_OWNER', 'SECONDARY_OWNER', 'MUKADAM', 'WORKER'].map((code) => {
+        const l = getOperatorRoleLabel(code);
+        return [code, { label: l.en, labelMr: l.mr }];
+    }),
+);
 
 export const OperatorSessionChip: React.FC<OperatorSessionChipProps> = ({
     currentOperator,
@@ -100,7 +102,7 @@ export const OperatorSessionChip: React.FC<OperatorSessionChipProps> = ({
                             ) : (
                                 allOperators.map((operator) => {
                                     const isActive = currentOperator?.id === operator.id;
-                                    const opRoleInfo = roleLabels[operator.role] || { label: operator.role, labelMr: '' };
+                                    const opRoleInfo = roleLabels[operator.role] || { label: '', labelMr: '' };
 
                                     return (
                                         <button
