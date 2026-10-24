@@ -52,9 +52,49 @@ All decisions, plans, ADRs, specs, and agent memory live under `_COFOUNDER/` (pr
 
 ---
 
+## Branching Model (hard) — trunk-based, weekly review
+
+*(Founder decision 2026-08-28; lifetime rule changed 2026-10-24: no fixed time
+limit, weekly review instead.)*
+
+**One product truth (`main`) plus branches around it.**
+
+- `main` is the latest integrated, working ShramSafal. Everything starts from it:
+  **cut every branch from `origin/main`, never from a local working tree.**
+- A branch is a workspace, not a second version of the product. Name new ones
+  `task/<short-thing>`. Merge as soon as the work is coherent, then delete the
+  branch. Rebase on `origin/main` before final verification.
+- **There is no fixed time limit on a branch.**
+- **Once a week, review the full branch list** (`git branch -a`, open PRs and
+  worktrees). The founder decides for each branch: **keep** (active work),
+  **park** (deliberately held; labelled and written down with what unblocks it)
+  or **delete**. Deleted branches are backed up first. A parked branch is a
+  decision, not a defect.
+- Nothing is deleted, merged, pushed or deployed without the founder's explicit
+  yes for that specific item.
+- **Worktrees are for isolation only.** Remove one when its branch is merged,
+  deleted or parked. Stop its dev servers first: a leftover Vite/Bootstrapper
+  process locks the directory.
+
+### Two classes of change — different speed, same safety floor
+
+Pre-pilot (no real farmers yet), optimize for learning speed, not ceremony:
+
+| Class | Examples | Process |
+|---|---|---|
+| **Normal product change** | screens, onboarding, Marathi copy, navigation, small features, workflow experiments | branch → build → targeted tests → merge → deploy. No heavy test ceremony unless the area demands it. |
+| **Trust-critical change** | DB schema/migrations, auth, cross-farm access, RLS, sync, financial calculations, deletion/retention, permissions, server authority, consent/privacy, offline data safety | branch **and** the full stronger test set before merge. Non-negotiable regardless of stage. |
+
+The speed relaxation applies **only** to reversible product decisions. The
+irreversible trust/data invariants stay strict. When unsure which class a change
+is in, treat it as trust-critical.
+
+---
+
 ## Commit & PR Conventions
 
 - Conventional Commits format (`feat:`, `fix:`, `chore:`, etc.)
+- Subject line **max 72 chars** (`commit-msg` hook enforces it)
 - PR body must reference spec ID from `_COFOUNDER/specs/_active/`
 - Never amend after push
 - Branch: `main` for all app code
