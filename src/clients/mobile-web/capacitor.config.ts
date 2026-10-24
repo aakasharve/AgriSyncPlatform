@@ -1,6 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
-const ANDROID_BRAND_ICON = '../marketing-web/public/brand-assets/android-logo.png';
+// Source art for the Android launcher icon (moved here when marketing-web was
+// retired, 2026-10-03). The generated icons live in android/app/src/main/res.
+const ANDROID_BRAND_ICON = './resources/android-logo.png';
 
 const config: CapacitorConfig & {
   android: NonNullable<CapacitorConfig['android']> & { iconPath: string };
