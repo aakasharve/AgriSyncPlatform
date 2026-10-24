@@ -12,6 +12,8 @@ import IssueFormSheet from '../../IssueFormSheet';
 import { BucketIssue } from '../../../../../domain/types/log.types';
 import InventorySuggestions from '../components/InventorySuggestions';
 
+type CarrierType = NonNullable<InputEvent['carrierType']>;
+
 const InputDetailSheet = ({
     inputs,
     onSave,
@@ -28,7 +30,7 @@ const InputDetailSheet = ({
     // We treat the "editing" state as a single object for the UI, but it might result in multiple InputEvents (e.g. Both)
     // For simplicity, we edit one "Main" application logic. If multiple exist, we take the first.
     const [method, setMethod] = useState<InputMethod | 'Both'>(inputs[0]?.method || 'Spray');
-    const [carrierType, setCarrierType] = useState<'Blower' | 'Tank' | 'Hours' | 'Pati'>(inputs[0]?.carrierType as any || 'Blower');
+    const [carrierType, setCarrierType] = useState<CarrierType>(inputs[0]?.carrierType || 'Blower');
     const [carrierCount, setCarrierCount] = useState<number>(inputs[0]?.carrierCount || 0);
     const [mix, setMix] = useState<InputMixItem[]>(inputs[0]?.mix || []);
     const [reason, setReason] = useState<InputReason | undefined>(inputs[0]?.reason);
@@ -58,6 +60,8 @@ const InputDetailSheet = ({
         if (method === 'Drip') setCarrierType('Hours');
         if (method === 'Soil') setCarrierType('Pati');
         if (method === 'Drenching') setCarrierType('Tank');
+        // Fertigation is dosed through the drip line, so it carries like Drip.
+        if (method === 'fertigation') setCarrierType('Hours');
         if (method === 'Both') setCarrierType('Blower'); // Default to show spray first
     }, [method]);
 
@@ -65,7 +69,7 @@ const InputDetailSheet = ({
         setMix([...mix, { id: Date.now().toString(), productName: '', dose: 0, unit: 'ml/L' }]);
     };
 
-    const updateMixItem = (id: string, field: keyof InputMixItem, value: any) => {
+    const updateMixItem = (id: string, field: keyof InputMixItem, value: InputMixItem[keyof InputMixItem]) => {
         setMix(mix.map(item => item.id === id ? { ...item, [field]: value } : item));
     };
 
@@ -119,7 +123,7 @@ const InputDetailSheet = ({
             newEvents.push({
                 ...baseEvent,
                 method: method as InputMethod,
-                carrierType: carrierType as any,
+                carrierType,
                 carrierCount,
                 computedWaterVolume: calculatedVolume > 0 ? calculatedVolume : undefined
             });
@@ -160,8 +164,12 @@ const InputDetailSheet = ({
                     <div>
                         <label className="text-xs font-bold text-slate-400 uppercase">Method</label>
                         <div className="flex gap-2 mt-1 overflow-x-auto pb-1 scrollbar-hide">
-                            {['Spray', 'Both', 'Drip', 'Soil', 'Drenching'].map(m => {
+                            {['Spray', 'Both', 'Drip', 'Soil', 'Drenching', 'fertigation'].map(m => {
                                 const isThisSpray = m === 'Spray' || m === 'Both';
+                                // `fertigation` is the canonical wire value the server's
+                                // C5 WaterRoleClassifier stamps; every other option is
+                                // already capitalised, so only this one needs a label.
+                                const label = m === 'fertigation' ? 'Fertigation' : m;
                                 const activeClass = isThisSpray
                                     ? 'bg-purple-50 border-purple-200 text-purple-700 ring-2 ring-purple-100'
                                     : 'bg-emerald-50 border-emerald-200 text-emerald-700 ring-2 ring-emerald-100';
@@ -169,10 +177,10 @@ const InputDetailSheet = ({
                                 return (
                                     <button
                                         key={m}
-                                        onClick={() => setMethod(m as any)}
+                                        onClick={() => setMethod(m as InputMethod | 'Both')}
                                         className={`px-4 py-2.5 rounded-xl text-sm font-bold border transition-all whitespace-nowrap ${method === m ? activeClass : 'bg-white border-slate-200 text-slate-500'}`}
                                     >
-                                        {m}
+                                        {label}
                                     </button>
                                 );
                             })}
@@ -233,7 +241,7 @@ const InputDetailSheet = ({
                                     <select
                                         className="w-full p-3 rounded-xl border border-slate-200 text-sm font-bold outline-none bg-white"
                                         value={carrierType}
-                                        onChange={e => setCarrierType(e.target.value as any)}
+                                        onChange={e => setCarrierType(e.target.value as CarrierType)}
                                     >
                                         <option value="Pati">Pati</option>
                                         <option value="Bag">Bag</option>
@@ -254,7 +262,7 @@ const InputDetailSheet = ({
                         </div>
 
                         <div className="space-y-2">
-                            {mix.map((item, idx) => (
+                            {mix.map((item) => (
                                 <div key={item.id} className="gap-2 items-center animate-in slide-in-from-left-2 rounded-xl border border-slate-100 p-2 bg-slate-50/50">
                                     {/* Top Row: Product Name & Linkage */}
                                     <div className="flex gap-2 mb-2 items-start">
