@@ -71,6 +71,18 @@ console.log(`serving dist/ on ${origin}`);
 const browser = await puppeteer.launch({ headless: "new", args: ["--no-sandbox"] });
 let failed = 0;
 
+// Match on the parsed hostname, not the raw URL text, so a look-alike host or a
+// query string that merely mentions these domains is not mistaken for analytics.
+const ANALYTICS_HOSTS = ["googletagmanager.com", "google-analytics.com"];
+function isAnalyticsHost(url) {
+  try {
+    const host = new URL(url).hostname;
+    return ANALYTICS_HOSTS.some((h) => host === h || host.endsWith("." + h));
+  } catch {
+    return false;
+  }
+}
+
 for (const route of ROUTES) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 1800 });
@@ -79,7 +91,7 @@ for (const route of ROUTES) {
   // The gtag <script> tags are static in index.html, so they still ship.
   await page.setRequestInterception(true);
   page.on("request", (req) => {
-    if (/googletagmanager\.com|google-analytics\.com/.test(req.url())) req.abort();
+    if (isAnalyticsHost(req.url())) req.abort();
     else req.continue();
   });
   // English is the default (search engines index this copy). Set it before any

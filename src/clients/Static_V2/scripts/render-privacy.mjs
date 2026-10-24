@@ -5,7 +5,13 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 const [, , src, out, lang, title, lede] = process.argv;
-let md = readFileSync(src, "utf8").replace(/\r\n/g, "\n").replace(/<!--[\s\S]*?-->/g, "");
+let md = readFileSync(src, "utf8").replace(/\r\n/g, "\n");
+// Strip comments until none are left: one pass can leave a new "<!--" behind when
+// comments are nested or split ("<!<!-- x -->-- y -->").
+for (let prev; prev !== md; ) {
+  prev = md;
+  md = md.replace(/<!--[\s\S]*?-->/g, "");
+}
 
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const inline = (s) =>
