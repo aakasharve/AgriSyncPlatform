@@ -1,49 +1,72 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
-*/
-
-import React, { useState, useEffect, useMemo } from 'react';
-import { DailyLog } from '../logs/logs.types';
-import { CropProfile, Plot, LedgerDefaults } from '../../types';
-import {
-    Calendar, ChevronRight, ArrowRight,
-    BarChart3, TrendingUp, LayoutGrid, PieChart, FileText,
-} from 'lucide-react';
-import ObservationsPanel from '../analysis/components/ObservationsPanel';
-import ToDoTasksBlock from '../scheduler/components/ToDoTasksBlock';
-import CollapsibleBlock from '../../shared/components/ui/CollapsibleBlock';
-// import PlotChipSelector from '../../shared/components/PlotChipSelector';
-import SlidingCropSelector from '../context/components/SlidingCropSelector';
-import '../analysis/components/DailyWorkSummary.css';
+ *
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I6, WP-3) — "पूर्ण शेतीचा आढावा" on real data.
+ *
+ * The founder-approved redesign (PLR-D9 preview), fed from the stores this page has always read: `history`
+ * (the logs), `crops` (crops and plots), `tasks` (the planned-task store), the harvest + other-income stores,
+ * and the farm's operators. Founder, 2026-10-25: keep every real part, fix their order, make reminders the
+ * to-do list. So, top to bottom, in FIXED places (a section folds shut; it never moves):
+ *
+ *   आजचा आढावा button (today's records) · review inbox (verifiers, when something waits) · the whole-farm
+ *   panel (today) → शेताची स्थिती (crop + plots: narrows every section below) → करायची कामे (tasks +
+ *   reminders) → प्लॉटनिहाय काम (in-hand income, the day bar, one card per plot with the 8 colour-coded
+ *   counts) → निरीक्षणं व नोंदी → कामाचं कॅलेंडर (week / month) → उत्पन्न आणि खर्च (+ the finance ledger).
+ *
+ * Gone on purpose: the ↑↓ block re-ordering (and its saved order). Where nothing was recorded the page says
+ * so ("—", "नोंद नाही"); no number is invented (P4). The pure adapters live in `./overview/*Model.ts`.
+ */
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { CalendarDays, CalendarRange, LayoutGrid, ListChecks, PieChart, StickyNote } from 'lucide-react';
+import type { CropProfile, DailyLog, LedgerDefaults, Plot } from '../../types';
+import { LogVerificationStatus } from '../../types';
+import ReviewInbox from '../analysis/components/ReviewInbox';
+import { isWholeFarmSelection } from '../analysis/components/costAnalysisHelpers';
+import { getHarvestSessions, getOtherIncomeEntries } from '../../services/harvestService';
+import { MoneyLensDrawer } from '../finance/components/MoneyLensDrawer';
+import type { FinanceFilters } from '../finance/finance.types';
+import { useAttachmentRetry } from '../attachments';
 import { getPhaseAndDay } from '../../shared/utils/timelineUtils';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
-import ReviewInbox from '../analysis/components/ReviewInbox';
-import { getHarvestSessions, getOtherIncomeEntries } from '../../services/harvestService';
-import { LogVerificationStatus } from '../../types';
-import CostAnalysisSection from '../analysis/components/CostAnalysisSection';
-import { MoneyLensDrawer } from '../finance/components/MoneyLensDrawer';
-import { FinanceFilters } from '../finance/finance.types';
-import OfflineEmptyState from '../../shared/components/ui/OfflineEmptyState';
-import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
-import { useAttachmentRetry } from '../attachments';
-import { useUiPref } from '../../shared/hooks/useUiPref';
-
-import { ReflectPageProps } from './ReflectPageProps';
-import { getLogForDate, getLogForSpecificPlot } from './helpers';
-import DateControlBar from './components/DateControlBar';
-import AccordionBlock from './components/AccordionBlock';
-import CompactCropCard from './components/CompactCropCard';
-import ActivityCalendarSection from './sections/ActivityCalendarSection';
-import LogDetailDrawer from './sections/LogDetailDrawer';
 import { useFarmContext } from '../../core/session/FarmContext';
 import { emitClosureSummaryViewed } from '../../core/telemetry/eventEmitters';
-import DwcReminderChip from './components/DwcReminderChip';
 import FarmWideTodayPanel from '../logs/components/FarmWideTodayPanel';
 import { TodayActivityButton, TodayActivitySheet } from '../logs/components/TodayActivityFeed';
 import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
+// The ONLY import of this stylesheet in the app: the event cards inside the log drawer (and the cost
+// summary card) are styled by it. It stays with the page that always loaded it.
+import '../analysis/components/DailyWorkSummary.css';
 
-// --- MAIN PAGE ---
+import type { ReflectPageProps } from './ReflectPageProps';
+import { getLogForDate, getLogForSpecificPlot } from './helpers';
+import LogDetailDrawer from './sections/LogDetailDrawer';
+import DwcReminderChip from './components/DwcReminderChip';
+import { ActivityCalendar, type CalendarMode } from './overview/ActivityCalendar';
+import { buildCalendarDay } from './overview/calendarModel';
+import { CostSection, InHandCard } from './overview/CostSection';
+import { DayBar } from './overview/DayBar';
+import { FarmStatus } from './overview/FarmStatus';
+import { buildInHand, buildSeasonTotals, buildSpend, spendRange, type IncomeSources } from './overview/moneyModel';
+import { buildDayNotes } from './overview/notesModel';
+import { NotesList } from './overview/NotesList';
+import { buildPlotDayCard } from './overview/plotDayModel';
+import { BucketKey, PlotDayCards } from './overview/PlotDayCards';
+import { atNoon, fromDateKey, relLabel } from './overview/reflectDates';
+import { isLogInScope, plotRefsInScope, selectAll, toViewScope, type PlotRef, type ReflectSelection } from './overview/reflectSelection';
+import { buildTodoList, mergeTasks, toggledTask, type TodoItem } from './overview/todoModel';
+import { TodoCount, TodoSection } from './overview/TodoSection';
+import { Num, SANS, SectionBlock } from './overview/ui';
+import { useLogAttachmentCount } from './overview/useLogAttachmentCount';
+
+// Used only when the caller passes no ledger defaults (the log drawer needs some). Unchanged.
+const FALLBACK_DEFAULTS: LedgerDefaults = {
+    irrigation: { method: 'drip', source: 'Well', defaultDuration: 2 },
+    labour: { defaultWage: 300, defaultHours: 8, shifts: [{ id: 's1', name: 'Full Day', defaultRateMale: 400, defaultRateFemale: 250 }] },
+    machinery: { defaultRentalCost: 1000, defaultFuelCost: 200 },
+};
+
+interface EmptySelection { date: Date; crop: CropProfile; plot?: Plot; plotName?: string }
 
 const ReflectPage: React.FC<ReflectPageProps> = ({
     history,
@@ -53,503 +76,143 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     tasks,
     onUpdateTask,
     onAddTask,
-    // `onVerifyLog` IS still declared on `ReflectPageProps` and IS still
-    // passed by `core/navigation/mainView.tsx` — it is deliberately not
-    // destructured here, because nothing on this page calls it any more.
-    //
-    // Its only consumer was `ReviewInbox`'s Approve button, removed because
-    // it enqueued `verify_log_v2`, a mutation `PushSyncBatchHandler.cs`
-    // answers with `MUTATION_TYPE_UNIMPLEMENTED` (see `ReviewInbox.tsx`'s
-    // header for the trail, and for why the working v1 mutation is NOT the
-    // fix — it switches on a job-card payout path).
-    //
-    // The prop stays declared so `mainView.tsx`'s `onVerifyLog={ctx.
-    // handleVerifyLog}` keeps compiling; that file is out of this change's
-    // scope. Delete both together when approval is genuinely re-enabled or
-    // genuinely retired. spec: owner-oversight-loop
+    // `onVerifyLog` is still declared on `ReflectPageProps` and still passed by `core/navigation/mainView.tsx`,
+    // but nothing on this page calls it: its only consumer was `ReviewInbox`'s Approve button, removed because it
+    // enqueued `verify_log_v2`, which the server answers with MUTATION_TYPE_UNIMPLEMENTED (see `ReviewInbox.tsx`).
+    // Delete both together when approval is re-enabled or retired. spec: owner-oversight-loop
     currentOperator,
     operators = [],
     navigate,
     activityFeed,
 }) => {
-    // Fallback defaults if not provided
-    const defaults: LedgerDefaults = ledgerDefaults || {
-        irrigation: { method: 'drip', source: 'Well', defaultDuration: 2 },
-        labour: {
-            defaultWage: 300,
-            defaultHours: 8,
-            shifts: [
-                { id: 's1', name: 'Full Day', defaultRateMale: 400, defaultRateFemale: 250 }
-            ]
-        },
-        machinery: { defaultRentalCost: 1000, defaultFuelCost: 200 }
-    };
-
-    // Filter Pending Logs for Inbox
-    const pendingLogs = history.filter(log => log.verification?.status === LogVerificationStatus.PENDING);
-    // The `onVerifyLog &&` term that used to open this condition is gone
-    // with the Approve button it gated (spec: owner-oversight-loop). The
-    // inbox is now a READ surface, so its visibility depends only on there
-    // being something to read and on this operator being allowed to see it.
-    const showInbox = pendingLogs.length > 0 && currentOperator?.isVerifier;
+    const defaults = ledgerDefaults || FALLBACK_DEFAULTS;
     const { currentFarmId } = useFarmContext();
-    const [currentDate, setCurrentDate] = useState(new Date());
-    const [calendarViewDate, setCalendarViewDate] = useState(new Date());
-    const [calendarMode, setCalendarMode] = useState<'week' | 'month'>('week');
-    const [viewCrops, setViewCrops] = useState<string[]>([]);
-    const [viewPlots, setViewPlots] = useState<Record<string, string[]>>({});
-    const [openSection, setOpenSection] = useState<'status' | 'history' | 'analysis' | 'heatmap'>('status');
 
-    // Detail Drawer
-    const [selectedLog, setSelectedLog] = useState<DailyLog | null>(null);
-
-    // The Activity Feed sheet (opened from the button at the top of this page)
+    // ── page state ──────────────────────────────────────────────────────────────────────────────
+    const [sel, setSel] = useState<ReflectSelection | null>(null); // null = every crop, every plot
+    const [date, setDate] = useState<Date>(() => atNoon(new Date()));
+    const [calView, setCalView] = useState<Date>(() => atNoon(new Date()));
+    const [calMode, setCalMode] = useState<CalendarMode>('week');
     const [feedOpen, setFeedOpen] = useState(false);
-
-    // Empty selection (for "Add Missing Entry" scenario)
-    const [emptySelection, setEmptySelection] = useState<{
-        date: Date,
-        crop: CropProfile,
-        plot?: Plot,
-        plotName?: string
-    } | null>(null);
-
-    // Harvest Income Summary State
-    const [seasonalIncome, setSeasonalIncome] = useState<number>(0);
+    const [selectedLog, setSelectedLog] = useState<DailyLog | null>(null);
+    const [emptySelection, setEmptySelection] = useState<EmptySelection | null>(null);
+    const [showSelectedLogAttachments, setShowSelectedLogAttachments] = useState(false);
     const [moneyLensOpen, setMoneyLensOpen] = useState(false);
     const [moneyLensFilters, setMoneyLensFilters] = useState<FinanceFilters>({});
-    const [selectedLogAttachmentCount, setSelectedLogAttachmentCount] = useState(0);
-    const [showSelectedLogAttachments, setShowSelectedLogAttachments] = useState(false);
     const { retryUpload } = useAttachmentRetry();
+    const selectedLogAttachmentCount = useLogAttachmentCount(selectedLog?.id);
+    useEffect(() => { setShowSelectedLogAttachments(false); }, [selectedLog?.id]);
 
-    // Update income summary when context changes
-    useEffect(() => {
-        // Calculate total in-hand income for current crop/plot filtering
-        let total = 0;
-
-        // If specific crops are selected, sum their sessions
-        if (viewCrops.length > 0) {
-            viewCrops.forEach(cid => {
-                const plots = viewPlots[cid] || [];
-                if (plots.length > 0) {
-                    plots.forEach(pid => {
-                        const sess = getHarvestSessions(pid, cid);
-                        total += sess.reduce((sum, s) => sum + s.totalIncome, 0);
-                    });
-                }
-            });
-        }
-
-        // Add Other Income (Total for now for simplicity)
-        const other = getOtherIncomeEntries();
-        total += other.reduce((sum, o) => sum + o.amount, 0);
-
-        setSeasonalIncome(total);
-    }, [viewCrops, viewPlots, history]);
-
-    // Block Ordering State
-    // Sub-plan 04 Task 3 — block order persists through useUiPref (Dexie's
-    // uiPrefs). Initial render returns the default order; the persisted
-    // value swaps in once Dexie load resolves. Previously the useEffect
-    // below read 'reflect-block-order' from localStorage on mount.
-    const DEFAULT_BLOCK_ORDER: string[] = ['farm-status', 'notes', 'daily-logs'];
-    const [blockOrder, setBlockOrder] = useUiPref<string[]>('reflect-block-order', DEFAULT_BLOCK_ORDER);
-
-    useEffect(() => {
-        let cancelled = false;
-        const selectedLogId = selectedLog?.id;
-        setShowSelectedLogAttachments(false);
-
-        const loadSelectedLogAttachmentCount = async () => {
-            if (!selectedLogId) {
-                if (!cancelled) {
-                    setSelectedLogAttachmentCount(0);
-                }
-                return;
-            }
-
-            try {
-                const db = getDatabase();
-                const count = await db.attachments
-                    .where('linkedEntityId')
-                    .equals(selectedLogId)
-                    .count();
-
-                if (!cancelled) {
-                    setSelectedLogAttachmentCount(count);
-                }
-            } catch {
-                if (!cancelled) {
-                    setSelectedLogAttachmentCount(0);
-                }
-            }
-        };
-
-        void loadSelectedLogAttachmentCount();
-        return () => {
-            cancelled = true;
-        };
-    }, [selectedLog?.id]);
-
-    const openLogMoneyLens = (log: DailyLog) => {
-        const selection = log.context.selection?.[0];
-        setMoneyLensFilters({
-            fromDate: log.date,
-            toDate: log.date,
-            cropId: selection?.cropId === 'FARM_GLOBAL' ? undefined : selection?.cropId,
-            plotId: selection?.selectedPlotIds?.[0]
-        });
-        setMoneyLensOpen(true);
-    };
-
-    // Initialize selection to ALL plots on mount (if empty)
-    useEffect(() => {
-        if (viewCrops.length === 0 && crops.length > 0) {
-            const allPlots: Record<string, string[]> = {};
-            const allCrops: string[] = [];
-
-            crops.forEach(crop => {
-                if (crop.plots && crop.plots.length > 0) {
-                    allPlots[crop.id] = crop.plots.map(p => p.id);
-                    allCrops.push(crop.id);
-                } else {
-                    allCrops.push(crop.id); // Even crops without plots
-                }
-            });
-
-            setViewCrops(allCrops);
-            setViewPlots(allPlots);
-        }
-    // `viewCrops.length` is read but deliberately NOT a dependency: this
-    // effect exists to SEED the selection once from `crops`, and its own
-    // guard makes it idempotent. Adding the dep would re-run it on every
-    // selection change — a behavioural change this wave has no mandate
-    // for. Pre-existing; surfaced only because the file is staged now.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [crops]);
-
-    // Block reordering handlers — persistence is handled inside useUiPref's
-    // setter (writes to Dexie's uiPrefs).
-    const moveBlock = (blockId: string, direction: 'up' | 'down') => {
-        const currentIndex = blockOrder.indexOf(blockId);
-        if (currentIndex === -1) return;
-
-        const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-        if (newIndex < 0 || newIndex >= blockOrder.length) return;
-
-        const newOrder = [...blockOrder];
-        [newOrder[currentIndex], newOrder[newIndex]] = [newOrder[newIndex], newOrder[currentIndex]];
-        setBlockOrder(newOrder);
-    };
-    const currentDateStr = getDateKey(currentDate);
-
-    const isLogVisibleInCurrentSelection = (log: DailyLog): boolean => {
-        const context = log.context.selection[0];
-        const cropId = context.cropId;
-
-        if (!viewCrops.includes(cropId)) {
-            return false;
-        }
-
-        const selectedPlots = viewPlots[cropId] || [];
-        if (selectedPlots.length === 0) {
-            return true;
-        }
-
-        return context.selectedPlotIds?.some(plotId => selectedPlots.includes(plotId)) ?? false;
-    };
-
-    const observationsForDate = useMemo(
-        () => history
-            .filter(log => log.date === currentDateStr && isLogVisibleInCurrentSelection(log))
-            .flatMap(log => log.observations ?? []),
-        // `isLogVisibleInCurrentSelection` is re-created every render, so listing
-        // it would defeat the memo entirely. The deps below already cover
-        // everything it closes over (`viewCrops`, `viewPlots`).
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [history, currentDateStr, viewCrops, viewPlots]
+    // ── what the page shows (pure adapters over the real stores) ───────────────────────────────
+    // a picked crop that is no longer on the farm falls back to everything, never to an empty page
+    const selection = useMemo(
+        () => (sel && (sel.crop === 'all' || crops.some(c => c.id === sel.crop)) ? sel : selectAll(crops)),
+        [sel, crops],
     );
+    const scope = useMemo(() => toViewScope(crops, selection), [crops, selection]);
+    const wholeFarm = isWholeFarmSelection(crops, scope.viewCrops, scope.viewPlots);
+    const dateKey = getDateKey(date);
+    const todayKey = getDateKey();
+    const isToday = dateKey === todayKey;
 
-    const tasksFromTodaysLogs = useMemo(
-        () => history
-            .filter(log => log.date === currentDateStr && isLogVisibleInCurrentSelection(log))
-            .flatMap(log => log.plannedTasks ?? []),
-        // `isLogVisibleInCurrentSelection` is re-created every render, so listing
-        // it would defeat the memo entirely. The deps below already cover
-        // everything it closes over (`viewCrops`, `viewPlots`).
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [history, currentDateStr, viewCrops, viewPlots]
+    const cards = useMemo(
+        () => plotRefsInScope(crops, scope).map(ref => buildPlotDayCard(ref, history, scope, dateKey, date)),
+        [crops, scope, history, dateKey, date],
     );
+    const operatorNameById = useMemo(() => Object.fromEntries(operators.map(o => [o.id, o.name])), [operators]);
+    const notes = useMemo(() => buildDayNotes({ history, dateKey, scope, crops, operatorNameById }), [history, dateKey, scope, crops, operatorNameById]);
 
-    const mergedVisibleTasks = useMemo(() => {
-        // Mirrors `ReflectPageProps.tasks?: any[]`. Narrowing here without
-        // narrowing the prop would just move the cast. Pre-existing.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const deduped = new Map<string, any>();
-        [...(tasks || []), ...tasksFromTodaysLogs].forEach(task => {
-            deduped.set(task.id, task);
-        });
-        return Array.from(deduped.values());
-    }, [tasks, tasksFromTodaysLogs]);
+    const todoList = useMemo(() => {
+        const store = tasks ?? [];
+        const fromLogs = history.filter(l => l.date === dateKey && isLogInScope(l, scope)).flatMap(l => l.plannedTasks ?? []);
+        return buildTodoList({ tasks: mergeTasks(store, fromLogs), storeIds: new Set(store.map(t => t.id)), crops, scope, wholeFarm, todayKey });
+    }, [tasks, history, dateKey, scope, crops, wholeFarm, todayKey]);
+    const openTasks = useMemo(() => [...todoList.late, ...todoList.today, ...todoList.later].map(i => i.task), [todoList]);
+    const dayOf = useCallback((d: Date) => buildCalendarDay({ date: d, history, crops, scope, dueTasks: openTasks }), [history, crops, scope, openTasks]);
 
-    useEffect(() => {
-        if (viewCrops.length === 0 && crops.length > 0) {
-            setViewCrops(crops.map(c => c.id));
-        }
-    // `viewCrops.length` is read but deliberately NOT a dependency: this
-    // effect exists to SEED the selection once from `crops`, and its own
-    // guard makes it idempotent. Adding the dep would re-run it on every
-    // selection change — a behavioural change this wave has no mandate
-    // for. Pre-existing; surfaced only because the file is staged now.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [crops]);
+    const money = useMemo(() => {
+        const sources: IncomeSources = { sessionsFor: getHarvestSessions, otherIncome: getOtherIncomeEntries() };
+        const range = spendRange(calMode, date, calView);
+        return {
+            inHand: buildInHand(scope, sources),
+            totals: buildSeasonTotals(history, crops, scope, sources),
+            range,
+            spend: buildSpend(history, crops, scope, range),
+        };
+    }, [scope, history, crops, calMode, date, calView]);
 
-    // DWC v2 §2.8 #6 — emit closure_summary.viewed on ReflectPage mount.
-    // Source = "reflect_mount" per the eventSchema enum. logsCount counts
-    // the visible logs for the currently-selected date so we have a
-    // first-render proxy for "summary density"; downstream session-replay
-    // can correlate per-date drilldowns against drawer-open events.
+    // ── trust inbox (verifiers only, when something waits) ─────────────────────────────────────
+    const pendingLogs = history.filter(log => log.verification?.status === LogVerificationStatus.PENDING);
+    const showInbox = pendingLogs.length > 0 && currentOperator?.isVerifier;
+
+    // DWC v2 §2.8 #6 — closure_summary.viewed once on mount (+ farm resolution); date scrubbing does not re-emit.
     useEffect(() => {
         if (!currentFarmId) return;
-        const dateKey = getDateKey(currentDate);
-        const logsCount = history.filter(log => log.date === dateKey).length;
-        emitClosureSummaryViewed({
-            farmId: currentFarmId,
-            dateKey,
-            logsCount,
-            source: 'reflect_mount',
-        });
-        // Intentionally fire only on mount + farmId resolution; date scrubbing
-        // does NOT re-emit (would balloon event volume on calendar swiping).
+        const key = getDateKey(date);
+        emitClosureSummaryViewed({ farmId: currentFarmId, dateKey: key, logsCount: history.filter(l => l.date === key).length, source: 'reflect_mount' });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentFarmId]);
 
-    const filteredCrops = crops.filter(c => viewCrops.includes(c.id));
-
-    const handleCardClick = (crop: CropProfile, plot?: Plot) => {
-        let log;
-        if (plot) {
-            log = getLogForSpecificPlot(history, currentDateStr, crop.id, plot.id);
-        } else {
-            log = getLogForDate(history, currentDateStr, crop.id, viewPlots);
-        }
-
-        if (log) {
-            setSelectedLog(log);
-            setEmptySelection(null);
-        } else {
-            setSelectedLog(null);
-            setEmptySelection({ crop, date: new Date(currentDateStr), plotName: plot?.name, plot: plot });
-        }
+    // ── actions ────────────────────────────────────────────────────────────────────────────────
+    const pickDay = (d: Date) => { setDate(atNoon(d)); setCalView(atNoon(d)); };
+    const toggleTask = (t: TodoItem) => { if (t.canToggle) onUpdateTask?.(toggledTask(t.task)); };
+    const openLogMoneyLens = (log: DailyLog) => {
+        const first = log.context.selection?.[0];
+        setMoneyLensFilters({
+            fromDate: log.date,
+            toDate: log.date,
+            cropId: first?.cropId === 'FARM_GLOBAL' ? undefined : first?.cropId,
+            plotId: first?.selectedPlotIds?.[0],
+        });
+        setMoneyLensOpen(true);
+    };
+    const openCard = (ref: PlotRef) => {
+        const log = ref.plotId
+            ? getLogForSpecificPlot(history, dateKey, ref.cropId, ref.plotId)
+            : getLogForDate(history, dateKey, ref.cropId, scope.viewPlots);
+        if (log) { setSelectedLog(log); setEmptySelection(null); return; }
+        setSelectedLog(null);
+        setEmptySelection({ crop: ref.crop, date: fromDateKey(dateKey), plotName: ref.plotName, plot: ref.plot });
     };
 
-    const getDetailHeaderInfo = () => {
+    const detailInfo = (() => {
         if (selectedLog) {
             const context = selectedLog.context.selection[0];
-            const crop = crops.find(c => c.id === context.cropId);
-            const plot = crop?.plots.find(p => p.id === context.selectedPlotIds[0]) || crop?.plots[0];
-            const timeline = getPhaseAndDay(plot, selectedLog.date);
-            const plotName = context.selectedPlotNames.length > 0 ? context.selectedPlotNames.join(', ') : 'All Plots';
-
+            const c = crops.find(x => x.id === context.cropId);
+            const p = c?.plots.find(x => x.id === context.selectedPlotIds[0]) || c?.plots[0];
             return {
                 cropName: context.cropName,
-                plotName: plotName,
-                icon: crop?.iconName || 'Sprout',
-                timeline: timeline,
-                date: new Date(selectedLog.date),
-                cropColor: crop?.color || 'bg-slate-500'
+                plotName: context.selectedPlotNames.length > 0 ? context.selectedPlotNames.join(', ') : 'सर्व प्लॉट',
+                icon: c?.iconName || 'Sprout',
+                timeline: getPhaseAndDay(p, selectedLog.date),
+                date: fromDateKey(selectedLog.date),
+                cropColor: c?.color || 'bg-slate-500',
             };
         }
         if (emptySelection) {
-            const crop = emptySelection.crop;
-            const plot = emptySelection.plot || crop.plots[0];
-            const timeline = getPhaseAndDay(plot, emptySelection.date);
-
+            const c = emptySelection.crop;
             return {
-                cropName: crop.name,
-                plotName: emptySelection.plotName || 'Main Field',
-                icon: crop.iconName,
-                timeline: timeline,
-                date: new Date(emptySelection.date),
-                cropColor: crop.color
+                cropName: c.name,
+                plotName: emptySelection.plotName || 'मुख्य शेत',
+                icon: c.iconName,
+                timeline: getPhaseAndDay(emptySelection.plot || c.plots[0], emptySelection.date),
+                date: emptySelection.date,
+                cropColor: c.color,
             };
         }
         return null;
-    };
+    })();
 
-    const detailInfo = getDetailHeaderInfo();
-
-    // Define block content
-    const renderFarmStatusBlock = () => (
-        <div className="space-y-4">
-            <SlidingCropSelector
-                crops={crops}
-                selectedCropId={viewCrops[0] || null}
-                onSelect={(id) => {
-                    setViewCrops([id]);
-                    // Clear plots when switching crop to default "All Plots" for that crop?
-                    // Or keep previous behavior?
-                    // ReflectPage logic defaults to "All Plots" if empty.
-                    // We'll reset plots for the new crop.
-                    const crop = crops.find(c => c.id === id);
-                    if (crop) {
-                        setViewPlots({ [id]: crop.plots.map(p => p.id) });
-                    }
-                }}
-                selectedPlotIds={viewPlots[viewCrops[0]] || []}
-                onPlotSelect={(plotId) => {
-                    const currentCropId = viewCrops[0];
-                    const currentPlots = viewPlots[currentCropId] || [];
-                    let newPlots;
-                    if (currentPlots.includes(plotId)) {
-                        newPlots = currentPlots.filter(p => p !== plotId);
-                    } else {
-                        newPlots = [...currentPlots, plotId];
-                    }
-                    setViewPlots({ ...viewPlots, [currentCropId]: newPlots });
-                }}
-            />
-        </div>
-    );
-
-    const renderNotesBlock = () => (
-        <div className="space-y-4">
-            <ObservationsPanel
-                observations={observationsForDate}
-                dateStr={currentDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-            />
-            <ToDoTasksBlock
-                tasks={mergedVisibleTasks}
-                crops={crops}
-                selectedCropId={viewCrops.length === 1 ? viewCrops[0] : undefined}
-                onUpdateTask={onUpdateTask || (() => { })}
-                onAddTask={onAddTask}
-            />
-        </div>
-    );
-
-    const renderDailyLogsBlock = () => (
-        <div className="space-y-4">
-            {/* Dashboard Hero Section (Replaced old header spacing) */}
-            <div className="pt-2 px-1 mb-6">
-                <div
-                    onClick={() => navigate && navigate({ route: 'income', view: 'main' })}
-                    className="glass-panel p-5 rounded-[2rem] border-emerald-100/50 shadow-xl shadow-emerald-500/5 bg-gradient-to-br from-white to-emerald-50/30 flex items-center justify-between cursor-pointer active:scale-[0.98] transition-all overflow-hidden relative group"
-                >
-                    {/* Background Decor */}
-                    <div className="absolute -right-4 -top-4 opacity-[0.03] text-emerald-600 rotate-12 group-hover:rotate-0 transition-transform duration-700">
-                        <BarChart3 size={100} />
-                    </div>
-
-                    <div className="flex items-center gap-4 relative z-10">
-                        <div className="w-14 h-14 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-200 group-hover:rotate-6 transition-transform">
-                            <TrendingUp size={28} />
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em] mb-0.5">In Hand Income</p>
-                            <div className="flex items-baseline gap-1">
-                                <span className="text-2xl font-black text-slate-800 tracking-tight">₹{seasonalIncome.toLocaleString()}</span>
-                                <span className="text-xs font-bold text-slate-400">Seasonal</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="p-2 bg-emerald-100/50 rounded-full text-emerald-600 relative z-10">
-                        <ChevronRight size={20} />
-                    </div>
-                </div>
-            </div>
-
-            {/* DWC v2 §2.9 — DwcReminderChip mounted next to DateControlBar.
-                Reads from local Dexie state via the `history` prop already
-                held by ReflectPage; renders nothing if FEATURE_FLAGS.DwcChip
-                is OFF (default in prod). */}
-            {currentFarmId && (
-                <div className="px-1 mb-2">
-                    <DwcReminderChip farmId={currentFarmId} history={history} />
-                </div>
-            )}
-            <DateControlBar selectedDate={currentDate} onDateChange={(d) => { setCurrentDate(d); setCalendarViewDate(d); }} />
-
-            <div className="grid grid-cols-2 gap-3">
-                {filteredCrops.length > 0 ? filteredCrops.flatMap(crop => {
-                    const selectedPlotsForCrop = viewPlots[crop.id] || [];
-                    const hasPlots = crop.plots && crop.plots.length > 0;
-
-                    if (hasPlots) {
-                        const plotsToShow = selectedPlotsForCrop.length > 0
-                            ? crop.plots.filter(p => selectedPlotsForCrop.includes(p.id))
-                            : crop.plots;
-
-                        return plotsToShow.map((plot) => {
-                            const originalIndex = crop.plots.findIndex(p => p.id === plot.id);
-                            return (
-                                <CompactCropCard
-                                    key={`${crop.id}-${plot.id}`}
-                                    crop={crop}
-                                    plot={plot}
-                                    plotIndex={originalIndex}
-                                    date={currentDate}
-                                    log={getLogForSpecificPlot(history, currentDateStr, crop.id, plot.id)}
-                                    onClick={() => handleCardClick(crop, plot)}
-                                    onCostClick={openLogMoneyLens}
-                                />
-                            );
-                        });
-                    } else {
-                        // No plots case
-                        const log = getLogForDate(history, currentDateStr, crop.id, viewPlots);
-                        return (
-                            <CompactCropCard
-                                key={crop.id}
-                                crop={crop}
-                                plot={crop.plots?.[0] || { id: 'default', name: 'Main Field' } as Plot}
-                                plotIndex={0}
-                                date={currentDate}
-                                log={log}
-                                onClick={() => handleCardClick(crop, crop.plots?.[0])}
-                                onCostClick={openLogMoneyLens}
-                            />
-                        );
-                    }
-                }) : (
-                    <div className="col-span-2">
-                        <OfflineEmptyState
-                            icon={<Calendar size={40} className="text-slate-300" />}
-                            title="No Activity Today"
-                            message="Select crops and plots above, or add your first daily entry."
-                        />
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-
-    // Block metadata
-    const blocks = {
-        'farm-status': {
-            id: 'farm-status',
-            title: 'Farm Status',
-            icon: <LayoutGrid size={24} />,
-            render: renderFarmStatusBlock
-        },
-        'notes': {
-            title: `Observations & Notes (${observationsForDate.length})`,
-            icon: <FileText size={24} />,
-            render: renderNotesBlock
-        },
-        'daily-logs': {
-            title: `Today's Plot wise activity - ${currentDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`,
-            icon: <Calendar size={24} />,
-            render: renderDailyLogsBlock
-        }
-    };
+    const legendCrops = crops.filter(c => scope.viewCrops.includes(c.id)).map(c => ({ id: c.id, name: c.name, color: c.color }));
+    const countBadge = (n: number, tone: string, testId: string) => (n > 0
+        ? <span className={`shrink-0 rounded-full px-2.5 py-1 text-[13px] font-extrabold ${tone}`} data-testid={testId}><Num>{n}</Num></span>
+        : null);
 
     return (
-        <div className="pb-20 space-y-4 animate-in fade-in duration-500">
-
-            {/* ACTIVITY FEED — moved here from the log page (founder 2026-10-24): one button, one tap away. */}
+        <div className="space-y-3 pb-20" style={{ fontFamily: SANS }} data-testid="reflect-page">
+            {/* ACTIVITY FEED — today's records, one button (founder 2026-10-24). */}
             {activityFeed && (
-                <div className="px-4 pt-4">
+                <div className="px-3 pt-4">
                     <TodayActivityButton count={activityFeed.entries.length} onClick={() => setFeedOpen(true)} />
                 </div>
             )}
@@ -557,116 +220,57 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                 <TodayActivitySheet entries={activityFeed.entries} dateLabel={activityFeed.dateLabel} onClose={() => setFeedOpen(false)} />
             )}
 
-            {/* REVIEW INBOX (Trust Layer 2) */}
-            {showInbox && operators && (
-                <div className="px-4 pt-4">
-                    <ReviewInbox
-                        pendingLogs={pendingLogs}
-                        operators={operators}
-                        onViewLog={(log) => {
-                            setCurrentDate(new Date(log.date));
-                        }}
-                    />
+            {/* REVIEW INBOX (Trust Layer 2) — a read surface; visible only to a verifier when something waits. */}
+            {showInbox && (
+                <div className="px-3">
+                    <ReviewInbox pendingLogs={pendingLogs} operators={operators} onViewLog={log => pickDay(fromDateKey(log.date))} />
                 </div>
             )}
 
-            {/* LABOUR_PHASE2 P2.4 — the farm-level day, on Reflect too (founder
-                ask: "show it on reflect page as well, only when anything for
-                entire farm is being logged").
-
-                Gated on the viewed date BEING today, because the line it
-                renders is `dfes.todaySummary` — "आज: …" — and printing "today"
-                over a past date would be false. A date-neutral approved Marathi
-                line would lift that limit; there is none, and no agent may
-                invent one. Renders nothing when no farm-wide record exists. */}
-            {currentDateStr === getDateKey() && (
-                <div className="px-4 pt-4">
-                    <FarmWideTodayPanel summary={getFarmWideDaySummary(history, currentDateStr)} />
+            {/* LABOUR_PHASE2 P2.4 — the whole-farm day. Only when the chosen day IS today: its line reads "आज: …". */}
+            {isToday && (
+                <div className="px-3">
+                    <FarmWideTodayPanel summary={getFarmWideDaySummary(history, dateKey)} />
                 </div>
             )}
 
-            {/* Farm Status - Fixed at Top (Non-Reorderable) */}
-            <CollapsibleBlock
-                id="farm-status"
-                title="Farm Status"
-                icon={<LayoutGrid size={24} />}
-                defaultOpen={true}
-                showReorder={false}
-                collapsible={false}
-            >
-                <div className="space-y-4">
-                    {renderFarmStatusBlock()}
-                </div>
-            </CollapsibleBlock>
+            <div className="space-y-3 px-3">
+                <SectionBlock id="status" title="शेताची स्थिती" icon={<LayoutGrid size={22} aria-hidden="true" />} tone="green" hint="कोणत्या पिकाचं, कोणत्या प्लॉटचं पाहायचं ते निवडा">
+                    <FarmStatus crops={crops} sel={selection} onSel={setSel} />
+                </SectionBlock>
 
-            {/* Other Blocks - Reorderable */}
-            {blockOrder.filter(id => id !== 'farm-status').map((blockId, index, arr) => {
-                const block = blocks[blockId as keyof typeof blocks];
-                if (!block) return null;
+                <SectionBlock id="todo" title="करायची कामे" icon={<ListChecks size={22} aria-hidden="true" />} tone="amber"
+                    hint="कामं आणि आठवणी — वेळ उलटली की लाल" count={<TodoCount list={todoList} />}>
+                    <TodoSection list={todoList} onToggle={toggleTask} onAdd={onAddTask} />
+                </SectionBlock>
 
-                return (
-                    <CollapsibleBlock
-                        key={blockId}
-                        id={blockId}
-                        title={block.title}
-                        icon={block.icon}
-                        defaultOpen={blockId === 'notes' ? observationsForDate.length > 0 : true}
-                        showReorder={true}
-                        canMoveUp={index > 0}
-                        canMoveDown={index < arr.length - 1}
-                        onMoveUp={() => moveBlock(blockId, 'up')}
-                        onMoveDown={() => moveBlock(blockId, 'down')}
-                    >
-                        {blockId === 'notes' ? (
-                            block.render()
-                        ) : (
-                            <div className="space-y-4">
-                                {block.render()}
-                            </div>
-                        )}
-                    </CollapsibleBlock>
-                );
-            })}
-
-            {/* --- BLOCK 2: CALENDAR --- */}
-            <ActivityCalendarSection
-                history={history}
-                crops={crops}
-                viewPlots={viewPlots}
-                currentDate={currentDate}
-                setCurrentDate={setCurrentDate}
-                calendarViewDate={calendarViewDate}
-                setCalendarViewDate={setCalendarViewDate}
-                calendarMode={calendarMode}
-                setCalendarMode={setCalendarMode}
-                isOpen={openSection === 'heatmap'}
-                onToggle={() => setOpenSection(openSection === 'heatmap' ? 'status' : 'heatmap')}
-            />
-
-            {/* --- BLOCK 3: ANALYSIS --- */}
-            <AccordionBlock title="Yield & Cost Analysis" icon={<PieChart size={20} />} isOpen={openSection === 'analysis'} onToggle={() => setOpenSection(openSection === 'analysis' ? 'status' : 'analysis')}>
-                <CostAnalysisSection
-                    logs={history}
-                    crops={crops}
-                    selectedCropIds={viewCrops}
-                    selectedPlotsByCrop={viewPlots}
-                    selectedDate={calendarViewDate}
-                    calendarMode={calendarMode}
-                />
-
-                {navigate && (
-                    <div className="mt-4 pt-4 border-t border-slate-200">
-                        <button
-                            onClick={() => navigate('finance-ledger')}
-                            className="w-full py-3 bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 active:scale-95 transition-all rounded-xl text-blue-700 font-bold text-sm flex items-center justify-center gap-2 shadow-sm"
-                        >
-                            Open Finance Ledger <ArrowRight size={16} />
-                        </button>
+                <SectionBlock id="day" title="प्लॉटनिहाय काम" icon={<CalendarDays size={22} aria-hidden="true" />} tone="blue" hint={`${relLabel(date)} — प्रत्येक प्लॉटवर काय झालं`}>
+                    <div className="space-y-3">
+                        <InHandCard amount={money.inHand} onOpen={navigate ? () => navigate('income') : undefined} />
+                        {/* DWC v2 §2.9 — renders nothing unless FEATURE_FLAGS.DwcChip is on. */}
+                        {currentFarmId && <DwcReminderChip farmId={currentFarmId} history={history} />}
+                        <DayBar date={date} onDate={pickDay} />
+                        {cards.length > 0
+                            ? <PlotDayCards cards={cards} isToday={isToday} onOpen={openCard} onCost={openLogMoneyLens} />
+                            : <p className="m-0 rounded-2xl bg-stone-50 p-3 text-center text-[14.5px] font-bold text-stone-600" data-testid="plot-cards-empty">पीक आणि प्लॉट जोडले की इथे रोजचं काम दिसेल.</p>}
                     </div>
-                )}
-            </AccordionBlock>
+                    <BucketKey />
+                </SectionBlock>
 
-            {/* Detail Drawer - REDESIGNED FOR SIMPLE SCROLLING */}
+                <SectionBlock id="notes" title="निरीक्षणं व नोंदी" icon={<StickyNote size={22} aria-hidden="true" />} tone="violet" hint={relLabel(date)}
+                    count={countBadge(notes.length, 'bg-violet-100 text-violet-800', 'notes-count')}>
+                    <NotesList notes={notes} />
+                </SectionBlock>
+
+                <SectionBlock id="calendar" title="कामाचं कॅलेंडर" icon={<CalendarRange size={22} aria-hidden="true" />} tone="green" hint="आठवडा किंवा महिना — रंग म्हणजे पीक">
+                    <ActivityCalendar date={date} onDate={d => setDate(atNoon(d))} mode={calMode} onMode={setCalMode} view={calView} onView={setCalView} dayOf={dayOf} legendCrops={legendCrops} />
+                </SectionBlock>
+
+                <SectionBlock id="cost" title="उत्पन्न आणि खर्च" icon={<PieChart size={22} aria-hidden="true" />} tone="rose" hint="आतापर्यंतचा हिशोब आणि खर्चाचा आलेख">
+                    <CostSection totals={money.totals} spend={money.spend} range={money.range} onOpenFinance={navigate ? () => navigate('finance-ledger') : undefined} />
+                </SectionBlock>
+            </div>
+
             {(selectedLog || emptySelection) && detailInfo && (
                 <LogDetailDrawer
                     selectedLog={selectedLog}
@@ -682,11 +286,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                 />
             )}
 
-            <MoneyLensDrawer
-                isOpen={moneyLensOpen}
-                onClose={() => setMoneyLensOpen(false)}
-                filters={moneyLensFilters}
-            />
+            <MoneyLensDrawer isOpen={moneyLensOpen} onClose={() => setMoneyLensOpen(false)} filters={moneyLensFilters} />
         </div>
     );
 };

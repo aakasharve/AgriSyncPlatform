@@ -1,0 +1,161 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I6, WP-3)
+ *
+ * करायची कामे — the page's to-do list, from the REAL planned tasks. Pure.
+ *
+ * Source: the task store (`plannedTasks`, persisted by `useAppData`) plus the tasks carried by the chosen
+ * day's logs — the same union the old "To Do Tasks" block read. A reminder the farmer spoke or wrote
+ * reaches this list as an `observation_derived` task (`LogFactory` mirrors every reminder note into one),
+ * so "reminders are the to-do list" is true of the real data, not a second store.
+ *
+ * Read by time, as the founder asked: वेळ उलटली (due before today, still open) → आज → पुढचे दिवस → तारीख
+ * नाही (the old block's "No Due Date" group) → झालेली. Late tasks keep feeding what they fed before (the
+ * day-closure count in `shared/utils/dayState.ts`); this page adds no second path.
+ *
+ * Two fixes ride along, both found while moving the block:
+ *   - `mergeTasks`: the store's copy WINS over a log's copy. The old merge let the log's stale copy win,
+ *     so a task ticked done in the store could still read as open here.
+ *   - `canToggle`: only a task the store holds can be ticked from here — the store is what the tick
+ *     updates, so a tick on any other task would look like it worked and change nothing (P5).
+ * Every Marathi string is PROPOSED.
+ */
+import type { CropProfile, PlannedTask } from '../../../types';
+import { dateLabel, fromDateKey, offsetOf, weekdayOf } from './reflectDates';
+import type { ViewScope } from './reflectSelection';
+
+const FARM_GLOBAL = 'FARM_GLOBAL';
+
+export type TodoGroup = 'late' | 'today' | 'later' | 'nodate' | 'done';
+
+export interface TodoItem {
+    id: string;
+    title: string;
+    task: PlannedTask;
+    group: TodoGroup;
+    done: boolean;
+    dueText: string;
+    kindLabel: 'आठवण' | 'काम';
+    fromLabel: string;
+    priorityLabel?: 'तातडीचं' | 'महत्त्वाचं';
+    /** Plot · crop (with the crop's colour), the whole farm, or nothing when the place is not known. */
+    place?: { label: string; color?: string };
+    canToggle: boolean;
+}
+
+export interface TodoList {
+    late: TodoItem[];
+    today: TodoItem[];
+    later: TodoItem[];
+    noDate: TodoItem[];
+    done: TodoItem[];
+    openCount: number;
+    total: number;
+}
+
+const FROM_LABEL: Record<PlannedTask['sourceType'], string> = {
+    schedule: 'शेड्यूलमधून',
+    manual: 'हाताने जोडलं',
+    ai_extracted: 'बोलण्यातून',
+    observation_derived: 'नोंदीतून',
+};
+
+const PRIORITY_RANK: Record<PlannedTask['priority'], number> = { urgent: 3, high: 2, normal: 1 };
+
+const isClosed = (t: PlannedTask) => t.status === 'done' || t.status === 'cancelled';
+const isFarmWide = (t: PlannedTask) => (!t.plotId || t.plotId === FARM_GLOBAL) && (!t.cropId || t.cropId === FARM_GLOBAL);
+
+/** Store first, then the logs' tasks it does not already hold: the store's copy wins. */
+export function mergeTasks(store: readonly PlannedTask[], fromLogs: readonly PlannedTask[]): PlannedTask[] {
+    const byId = new Map<string, PlannedTask>();
+    for (const t of fromLogs) byId.set(t.id, t);
+    for (const t of store) byId.set(t.id, t);
+    const order = [...store.map(t => t.id), ...fromLogs.map(t => t.id)];
+    return [...new Set(order)].map(id => byId.get(id)!);
+}
+
+/** The tick: open → done (stamped now), done → open again. The whole task, as the page's `onUpdateTask` expects. */
+export function toggledTask(t: PlannedTask, now: Date = new Date()): PlannedTask {
+    const status = t.status === 'done' ? 'pending' : 'done';
+    return { ...t, status, completedAt: status === 'done' ? now.toISOString() : undefined };
+}
+
+interface BuildArgs {
+    tasks: readonly PlannedTask[];
+    /** Ids the task store holds (the only ones a tick can change). */
+    storeIds: ReadonlySet<string>;
+    crops: readonly CropProfile[];
+    scope: ViewScope;
+    /** Nothing narrowed: every task shows, as the old block showed every task. */
+    wholeFarm: boolean;
+    todayKey: string;
+}
+
+export function buildTodoList({ tasks, storeIds, crops, scope, wholeFarm, todayKey }: BuildArgs): TodoList {
+    const plotOwner = new Map<string, CropProfile>();
+    for (const c of crops) for (const p of c.plots ?? []) plotOwner.set(p.id, c);
+
+    const inScope = (t: PlannedTask): boolean => {
+        if (wholeFarm || isFarmWide(t)) return true;
+        const owner = t.plotId ? plotOwner.get(t.plotId) : undefined;
+        if (owner) {
+            if (!scope.viewCrops.includes(owner.id)) return false;
+            const picked = scope.viewPlots[owner.id] ?? [];
+            return picked.length === 0 || picked.includes(t.plotId);
+        }
+        if (t.cropId && crops.some(c => c.id === t.cropId)) return scope.viewCrops.includes(t.cropId);
+        return true;
+    };
+
+    const placeOf = (t: PlannedTask): TodoItem['place'] => {
+        if (isFarmWide(t)) return { label: 'पूर्ण शेत' };
+        const owner = t.plotId ? plotOwner.get(t.plotId) : undefined;
+        if (owner) return { label: `${owner.plots.find(p => p.id === t.plotId)!.name} · ${owner.name}`, color: owner.color };
+        const cropOf = crops.find(c => c.id === t.cropId);
+        return cropOf ? { label: cropOf.name, color: cropOf.color } : undefined;
+    };
+
+    const today = fromDateKey(todayKey);
+    const toItem = (t: PlannedTask): TodoItem => {
+        const due = t.dueDate ? t.dueDate.slice(0, 10) : undefined;
+        const o = due ? offsetOf(fromDateKey(due), today) : undefined;
+        const group: TodoGroup = isClosed(t) ? 'done' : o === undefined ? 'nodate' : o < 0 ? 'late' : o === 0 ? 'today' : 'later';
+        const dueText = t.status === 'cancelled' ? 'रद्द'
+            : t.status === 'done' ? 'झालं'
+                : o === undefined ? 'तारीख नाही'
+                    : o < 0 ? `${-o} दिवस उशीर`
+                        : o === 0 ? 'आज'
+                            : o === 1 ? 'उद्या'
+                                : `${weekdayOf(fromDateKey(due!))}, ${dateLabel(fromDateKey(due!))}`;
+        return {
+            id: t.id,
+            title: t.title,
+            task: t,
+            group,
+            done: isClosed(t),
+            dueText,
+            kindLabel: t.sourceType === 'observation_derived' ? 'आठवण' : 'काम',
+            fromLabel: FROM_LABEL[t.sourceType] ?? '',
+            priorityLabel: t.priority === 'urgent' ? 'तातडीचं' : t.priority === 'high' ? 'महत्त्वाचं' : undefined,
+            place: placeOf(t),
+            canToggle: storeIds.has(t.id),
+        };
+    };
+
+    const items = tasks.filter(inScope).map(toItem);
+    const byPriority = (a: TodoItem, b: TodoItem) => PRIORITY_RANK[b.task.priority] - PRIORITY_RANK[a.task.priority];
+    const byDue = (a: TodoItem, b: TodoItem) => (a.task.dueDate ?? '').localeCompare(b.task.dueDate ?? '');
+    const of = (g: TodoGroup) => items.filter(i => i.group === g);
+
+    return {
+        late: of('late').sort((a, b) => byPriority(a, b) || byDue(a, b)),
+        today: of('today').sort(byPriority),
+        later: of('later').sort((a, b) => byDue(a, b) || byPriority(a, b)),
+        noDate: of('nodate').sort(byPriority),
+        done: of('done'),
+        openCount: items.filter(i => !i.done).length,
+        total: items.length,
+    };
+}

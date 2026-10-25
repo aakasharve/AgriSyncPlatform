@@ -1,0 +1,249 @@
+// @vitest-environment jsdom
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I6)
+ *
+ * One render test per section of the redesigned "पूर्ण शेतीचा आढावा", fed by the real adapters over real-shaped
+ * records (no preview sample data). Each pins what the farmer reads — above all, "—" / an honest empty line
+ * where nothing was recorded, never a 0 (P4).
+ */
+import React from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import '@testing-library/jest-dom/vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+
+vi.mock('../overview/useLogAttachmentCount', () => ({ useLogAttachmentCount: () => 0 }));
+
+import { ActivityCalendar } from '../overview/ActivityCalendar';
+import { buildCalendarDay } from '../overview/calendarModel';
+import { CostSection, InHandCard } from '../overview/CostSection';
+import { DayBar } from '../overview/DayBar';
+import { FarmStatus } from '../overview/FarmStatus';
+import { buildSeasonTotals, buildSpend, spendRange } from '../overview/moneyModel';
+import { buildDayNotes } from '../overview/notesModel';
+import { NotesList } from '../overview/NotesList';
+import { buildPlotDayCard } from '../overview/plotDayModel';
+import { BucketKey, PlotDayCards } from '../overview/PlotDayCards';
+import { plotRefsInScope, selectAll, toViewScope } from '../overview/reflectSelection';
+import { buildTodoList } from '../overview/todoModel';
+import { TodoCount, TodoSection } from '../overview/TodoSection';
+import { CROPS, TODAY, TODAY_KEY, log, money, task } from './reflectFixtures';
+
+afterEach(cleanup);
+const all = toViewScope(CROPS, selectAll(CROPS));
+
+describe('शेताची स्थिती (FarmStatus)', () => {
+    it('shows "सर्व पिकं" and each real crop; picking a crop narrows the plot chips to it', () => {
+        const onSel = vi.fn();
+        const { rerender } = render(<FarmStatus crops={CROPS} sel={selectAll(CROPS)} onSel={onSel} />);
+        expect(screen.getByTestId('farm-crop-all')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId('farm-crop-grape')).toHaveTextContent('द्राक्ष');
+        expect(screen.getAllByTestId(/^farm-plot-/)).toHaveLength(3);
+        fireEvent.click(screen.getByTestId('farm-crop-grape'));
+        expect(onSel).toHaveBeenCalledWith({ crop: 'grape', plotIds: ['g1', 'g2'] });
+        rerender(<FarmStatus crops={CROPS} sel={{ crop: 'grape', plotIds: ['g1'] }} onSel={onSel} />);
+        expect(screen.getAllByTestId(/^farm-plot-/)).toHaveLength(2);
+        expect(screen.getByTestId('farm-plot-g1')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId('farm-plot-g2')).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByTestId('farm-crop-grape')).toHaveTextContent('1 पैकी 2 प्लॉट');
+    });
+
+    it('no crop yet: says so plainly', () => {
+        render(<FarmStatus crops={[]} sel={{ crop: 'all', plotIds: [] }} onSel={vi.fn()} />);
+        expect(screen.getByTestId('farm-status-empty')).toBeInTheDocument();
+    });
+});
+
+describe('करायची कामे (TodoSection)', () => {
+    const list = buildTodoList({
+        tasks: [task('late', 'पाणी द्यायचं', { dueDate: '2026-10-23', priority: 'urgent' }), task('log', 'फवारणी', { dueDate: TODAY_KEY }), task('done', 'बांधणी', { status: 'done' })],
+        storeIds: new Set(['late', 'done']), crops: CROPS, scope: all, wholeFarm: true, todayKey: TODAY_KEY,
+    });
+
+    it('reads late → today, ticks a stored task, and cannot tick one the store does not hold', () => {
+        const onToggle = vi.fn();
+        render(<TodoSection list={list} onToggle={onToggle} />);
+        expect(within(screen.getByTestId('todo-group-late')).getByText('पाणी द्यायचं')).toBeInTheDocument();
+        expect(within(screen.getByTestId('todo-group-late')).getByText('2 दिवस उशीर')).toBeInTheDocument();
+        expect(screen.getByText('तातडीचं')).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('todo-tick-late'));
+        expect(onToggle).toHaveBeenCalledWith(expect.objectContaining({ id: 'late' }));
+        expect(screen.getByTestId('todo-tick-log')).toBeDisabled();
+        // nothing due "later": the tile says "—", not 0
+        expect(screen.getByTestId('todo-tile-later')).toHaveTextContent('—');
+        // done ones are folded
+        expect(screen.queryByTestId('todo-group-done')).toBeNull();
+        fireEvent.click(screen.getByTestId('todo-done-toggle'));
+        expect(screen.getByTestId('todo-group-done')).toBeInTheDocument();
+    });
+
+    it('the header count is what is still open, red when something is late', () => {
+        render(<TodoCount list={list} />);
+        expect(screen.getByTestId('todo-count')).toHaveTextContent('2 बाकी');
+        expect(screen.getByTestId('todo-count').className).toContain('bg-rose-600');
+    });
+
+    it('no task at all: an honest empty line, the real "add" opens the task sheet, no count badge', () => {
+        const empty = buildTodoList({ tasks: [], storeIds: new Set(), crops: CROPS, scope: all, wholeFarm: true, todayKey: TODAY_KEY });
+        const onAdd = vi.fn();
+        render(<><TodoCount list={empty} /><TodoSection list={empty} onToggle={vi.fn()} onAdd={onAdd} /></>);
+        expect(screen.getByTestId('todo-empty')).toBeInTheDocument();
+        expect(screen.queryByTestId('todo-count')).toBeNull();
+        fireEvent.click(screen.getByTestId('todo-add'));
+        expect(onAdd).toHaveBeenCalled();
+    });
+});
+
+describe('प्लॉटनिहाय काम (PlotDayCards)', () => {
+    const refs = plotRefsInScope(CROPS, all);
+    const worked = log({ id: 'w', plotIds: ['g1'], cropActivities: [{ id: 'a', title: 'छाटणी' }], labour: [{ id: 'l', type: 'HIRED' }], financialSummary: money(1500) });
+    const stopped = log({ id: 's', cropId: 'cane', plotIds: ['c1'], disturbance: { scope: 'FULL_DAY', group: 'WEATHER', reason: 'पाऊस', blockedSegments: [] } });
+    const cards = refs.map(r => buildPlotDayCard(r, [worked, stopped], all, TODAY_KEY, TODAY));
+
+    it('eight colour-coded counts; "—" where nothing was recorded; unknown labour is "—" in its colour, never 0', () => {
+        render(<PlotDayCards cards={cards} isToday onOpen={vi.fn()} onCost={vi.fn()} />);
+        const card = screen.getByTestId('plot-card-grape:g1');
+        const cells = card.querySelectorAll('[data-bucket]');
+        expect(cells).toHaveLength(8);
+        expect(card.querySelector('[data-bucket="work"]')).toHaveTextContent('1');
+        const labour = card.querySelector('[data-bucket="labour"]')!;
+        expect(labour).toHaveAttribute('data-count', 'unknown');
+        expect(labour).toHaveTextContent('—');
+        expect(labour.className).toContain('bg-orange-50');
+        expect(card.querySelector('[data-bucket="water"]')).toHaveTextContent('—');
+        expect(card).toHaveTextContent('दिवस 25');
+    });
+
+    it('no record: the card says so instead of eight zeros; a stopped day shows the reason', () => {
+        render(<PlotDayCards cards={cards} isToday onOpen={vi.fn()} onCost={vi.fn()} />);
+        expect(screen.getByTestId('plot-empty-grape:g2')).toHaveTextContent('आज अजून काही सांगितलं नाही');
+        expect(screen.getByTestId('plot-card-cane:c1')).toHaveTextContent('काम थांबलं: पाऊस');
+    });
+
+    it('tapping the card opens the day; tapping the money opens the money lens only', () => {
+        const onOpen = vi.fn();
+        const onCost = vi.fn();
+        render(<PlotDayCards cards={cards} isToday onOpen={onOpen} onCost={onCost} />);
+        fireEvent.click(screen.getByTestId('plot-money-grape:g1'));
+        expect(onCost).toHaveBeenCalledWith(worked);
+        expect(onOpen).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByTestId('plot-card-grape:g2'));
+        expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ key: 'grape:g2' }));
+    });
+
+    it('the key under the cards names every colour', () => {
+        render(<BucketKey />);
+        for (const word of ['काम', 'पाणी', 'मजूर', 'खत-औषध', 'यंत्र', 'खर्च', 'नोंद', 'आठवण']) {
+            expect(within(screen.getByTestId('bucket-key')).getByText(word)).toBeInTheDocument();
+        }
+    });
+});
+
+describe('DayBar', () => {
+    it('one tap for आज / काल / परवा; no step into the future; any past day from the picker', () => {
+        const onDate = vi.fn();
+        render(<DayBar date={new Date()} onDate={onDate} />);
+        expect(screen.getByTestId('day-next')).toBeDisabled();
+        expect(screen.getByTestId('day-quick-0')).toHaveAttribute('aria-pressed', 'true');
+        fireEvent.click(screen.getByTestId('day-quick-1'));
+        expect(onDate).toHaveBeenCalledTimes(1);
+        fireEvent.change(screen.getByTestId('day-picker'), { target: { value: '2026-09-14' } });
+        const picked = onDate.mock.calls[1][0] as Date;
+        expect([picked.getFullYear(), picked.getMonth(), picked.getDate()]).toEqual([2026, 8, 14]);
+    });
+});
+
+describe('निरीक्षणं व नोंदी (NotesList)', () => {
+    it('nothing that day: one plain line', () => {
+        render(<NotesList notes={[]} />);
+        expect(screen.getByTestId('notes-empty')).toHaveTextContent('या दिवशी कोणतीही नोंद नाही');
+    });
+
+    it('each note: its kind, time, plot, who — and a long one opens on a tap', () => {
+        const notes = buildDayNotes({
+            history: [log({ id: 'a', plotIds: ['g1'], meta: { createdAtISO: '', createdByOperatorId: 'op' }, observations: [{ id: 'o', plotId: 'g1', dateKey: TODAY_KEY, timestamp: '2026-10-25T03:40:00.000Z', textRaw: 'कीड दिसली', noteType: 'issue', severity: 'normal', source: 'voice' }] })],
+            dateKey: TODAY_KEY, scope: all, crops: CROPS, operatorNameById: { op: 'रमेश' },
+        });
+        render(<NotesList notes={notes} />);
+        const note = screen.getByTestId('note-o');
+        expect(note).toHaveTextContent('अडचण');
+        expect(note).toHaveTextContent('सकाळी 9:10 · सोनाका · रमेश');
+        fireEvent.click(note);
+        expect(note).toHaveAttribute('aria-expanded', 'true');
+    });
+});
+
+describe('कामाचं कॅलेंडर (ActivityCalendar)', () => {
+    const history = [log({ id: 'w', plotIds: ['g1'], cropActivities: [{ id: 'a', title: 'छाटणी' }] })];
+    const dayOf = (d: Date) => buildCalendarDay({ date: d, history, crops: CROPS, scope: all, dueTasks: [task('t', 'फवारणी', { dueDate: '2026-10-21' })], today: TODAY });
+    const legend = CROPS.map(c => ({ id: c.id, name: c.name, color: c.color }));
+
+    it('week: seven days, the record in its crop colour, a due to-do on its day, "नोंद नाही" on an empty day', () => {
+        const onDate = vi.fn();
+        render(<ActivityCalendar date={TODAY} onDate={onDate} mode="week" onMode={vi.fn()} view={TODAY} onView={vi.fn()} dayOf={dayOf} legendCrops={legend} />);
+        expect(screen.getAllByTestId(/^cal-day-/)).toHaveLength(7);
+        expect(screen.getByTestId('cal-title')).toHaveTextContent('25–31 ऑक्टो');
+        const chip = screen.getByTestId('cal-chip-w');
+        expect(chip.className).toContain('bg-purple-500');
+        expect(chip).toHaveTextContent('छाटणी');
+        expect(within(screen.getByTestId('cal-day-2026-10-26')).getByText('नोंद नाही')).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('cal-day-2026-10-26'));
+        expect(onDate).toHaveBeenCalled();
+        expect(within(screen.getByTestId('cal-key')).getByText('द्राक्ष')).toBeInTheDocument();
+    });
+
+    it('month: the month grid with crop strips; ‹ › move by a month; the switch changes the mode', () => {
+        const onView = vi.fn();
+        const onMode = vi.fn();
+        render(<ActivityCalendar date={TODAY} onDate={vi.fn()} mode="month" onMode={onMode} view={TODAY} onView={onView} dayOf={dayOf} legendCrops={legend} />);
+        expect(screen.getAllByTestId(/^cal-cell-/)).toHaveLength(31);
+        expect(screen.getByTestId('cal-title')).toHaveTextContent('ऑक्टोबर 2026');
+        expect(screen.getByTestId('cal-cell-2026-10-25').querySelector('.bg-purple-500')).not.toBeNull();
+        expect(screen.getByTestId('cal-cell-2026-10-21').querySelector('.border-dashed')).not.toBeNull();
+        fireEvent.click(screen.getByTestId('cal-next'));
+        expect((onView.mock.calls[0][0] as Date).getMonth()).toBe(10);
+        fireEvent.click(screen.getByTestId('cal-mode-week'));
+        expect(onMode).toHaveBeenCalledWith('week');
+    });
+});
+
+describe('उत्पन्न आणि खर्च (CostSection + InHandCard)', () => {
+    const range = spendRange('week', TODAY, TODAY);
+
+    it('nothing recorded: "—" everywhere and a line saying why; no ₹ 0', () => {
+        const totals = buildSeasonTotals([], CROPS, all, { sessionsFor: () => [], otherIncome: [] });
+        render(<><InHandCard amount={null} /><CostSection totals={totals} spend={buildSpend([], CROPS, all, range)} range={range} /></>);
+        expect(screen.getByTestId('in-hand-amount')).toHaveTextContent('—');
+        expect(screen.getByTestId('season-cost')).toHaveTextContent('—');
+        expect(screen.getByTestId('season-income')).toHaveTextContent('—');
+        expect(screen.getByTestId('season-net')).toHaveTextContent('—');
+        expect(screen.getByTestId('season-net-why')).toHaveTextContent('उत्पन्न अजून नोंदलेलं नाही');
+        expect(screen.getByTestId('cost-empty')).toBeInTheDocument();
+        expect(screen.queryByTestId('cost-mix')).toBeNull();
+        expect(document.body.textContent).not.toContain('₹ 0');
+        expect(screen.queryByTestId('open-finance')).toBeNull();
+    });
+
+    it('recorded money: totals, the 7-day chart, by crop with shares, the mix, the finance ledger link', () => {
+        const logs = [log({ id: 'a', plotIds: ['g1'], financialSummary: money(2000, 1000) }), log({ id: 'b', cropId: 'cane', plotIds: ['c1'], financialSummary: money(0, 0, 1000) })];
+        const totals = buildSeasonTotals(logs, CROPS, all, { sessionsFor: () => [], otherIncome: [] });
+        const onOpenFinance = vi.fn();
+        const onOpenIncome = vi.fn();
+        render(<><InHandCard amount={42500} onOpen={onOpenIncome} /><CostSection totals={totals} spend={buildSpend(logs, CROPS, all, range)} range={range} onOpenFinance={onOpenFinance} /></>);
+        expect(screen.getByTestId('in-hand-amount')).toHaveTextContent('₹ 42,500');
+        fireEvent.click(screen.getByTestId('overview-money'));
+        expect(onOpenIncome).toHaveBeenCalled();
+        expect(screen.getByTestId('season-cost')).toHaveTextContent('₹ 4,000');
+        expect(screen.getByTestId('week-total')).toHaveTextContent('₹ 4,000');
+        expect(screen.getByTestId('cost-bars-day')).toBeInTheDocument();
+        expect(screen.getByTestId('cost-top')).toHaveTextContent('रवि');
+        fireEvent.click(screen.getByTestId('cost-view-crop'));
+        expect(screen.getByTestId('cost-bars-crop')).toHaveTextContent('₹ 3,000 · 75%');
+        expect(screen.getByTestId('cost-mix')).toHaveTextContent('मजुरी ₹ 2,000');
+        expect(screen.getByTestId('cost-mix')).toHaveTextContent('इतर —');
+        fireEvent.click(screen.getByTestId('open-finance'));
+        expect(onOpenFinance).toHaveBeenCalled();
+    });
+});
