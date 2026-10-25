@@ -1,8 +1,14 @@
-
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — every word the farmer sees here is now Marathi
+ * (it was English: "New Expense", "Take Photo", "Convert to Expense"…). Words only: the photo capture, the
+ * reading of the bill, the checks, where the bill goes, and the save — the receipt and its money entries —
+ * are exactly as before. The offline line no longer shows the reader's English message; it says the same
+ * thing in Marathi. `AllocationSelector` (finance) is not this file's and is unchanged.
+ */
 import React, { useState, useRef } from 'react';
-import { Camera, Upload, X, Check, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Camera, X, Check, Loader2, AlertTriangle } from 'lucide-react';
 import { extractReceiptWithSession, VerificationStatus } from '../receipt/receiptExtractionClient';
-import { ReceiptExtractionResponse, ProcurementExpense, ExpenseScope, CropProfile, Plot } from '../../../types';
+import { ReceiptExtractionResponse, ProcurementExpense, ExpenseScope, CropProfile } from '../../../types';
 import { ScopeSelectorRadio } from './ScopeSelectorRadio';
 import { procurementRepository } from '../../../services/procurementRepository';
 import { v4 as uuidv4 } from 'uuid';
@@ -13,6 +19,10 @@ import { captureAttachment } from '../../../application/use-cases/CaptureAttachm
 import { resolveFarmIdFromSyncState } from '../../../infrastructure/sync/SyncContext';
 import { attachmentUploadWorker } from '../../../infrastructure/sync/AttachmentUploadWorker';
 import AllocationSelector from '../../finance/components/AllocationSelector';
+import { SANS } from '../../../shared/components/ui/placeUi';
+
+/** Shown while a photo taken offline waits to be read (the reader's own message is English). */
+const QUEUED_OFFLINE_MR = 'बिलाचा फोटो फोनवर ठेवला आहे. इंटरनेट आल्यावर वाचला जाईल.';
 
 const mapExpenseCategoryToMoneyCategory = (category: string): MoneyCategory => {
     if (category === 'LABOUR') return 'Labour';
@@ -57,9 +67,10 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
     // Suggestions for fields the user has already edited — never auto-overwrite, just hint
     const [suggestedTotal, setSuggestedTotal] = useState<number | null>(null);
     const [suggestedVendor, setSuggestedVendor] = useState<string | null>(null);
-    // Whether the user has manually changed each field (guard against auto-overwrite)
-    const [userEditedTotal, setUserEditedTotal] = useState(false);
-    const [userEditedVendor, setUserEditedVendor] = useState(false);
+    // Whether the user has manually changed each field (guard against auto-overwrite). Read only through the
+    // functional setters below (`prev`), hence the `_` names.
+    const [_userEditedTotal, setUserEditedTotal] = useState(false);
+    const [_userEditedVendor, setUserEditedVendor] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -150,7 +161,7 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
 
             if (result.queued) {
                 setExtraction(null);
-                setQueuedExtractionMessage(result.message || 'Saved locally. Will process when online.');
+                setQueuedExtractionMessage(QUEUED_OFFLINE_MR);
                 return;
             }
 
@@ -170,7 +181,7 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
             setVerificationStatus('pending');
         } catch (e) {
             console.error(e);
-            alert("Failed to process image. Please try manual entry.");
+            alert('बिलाचा फोटो वाचता आला नाही. पुन्हा फोटो काढा.');
         } finally {
             setIsExtracting(false);
         }
@@ -236,14 +247,21 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
 
     // --- RENDER ---
 
+    // The "where does it go" choice names the plot and crop chosen in THIS sheet's dropdowns — the ones the
+    // save uses — never the page's pick, which the dropdowns may have moved away from (I8 review B006). It
+    // used to say "Selected" / "This Crop".
+    const chosenPlotName = crops.flatMap(c => c.plots).find(p => p.id === selectedPlotId)?.name;
+    const chosenCropName = crops.find(c => c.id === selectedCropId)?.name;
+
     return (
-        <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in">
+        <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in"
+            style={{ fontFamily: SANS }} data-testid="receipt-capture-sheet">
             <div className="bg-white w-full max-w-lg h-[90vh] sm:h-auto sm:max-h-[90vh] rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden">
 
                 {/* HEAD */}
                 <div className="flex-none p-4 border-b border-gray-100 flex items-center justify-between bg-white">
-                    <h2 className="text-lg font-black text-gray-800">New Expense</h2>
-                    <button onClick={onClose} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={20} /></button>
+                    <h2 className="text-lg font-black text-gray-800">नवं बिल</h2>
+                    <button onClick={onClose} aria-label="बंद करा" className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={20} /></button>
                 </div>
 
                 {/* BODY */}
@@ -257,8 +275,8 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                                 className="bg-emerald-600 text-white p-8 rounded-3xl shadow-xl flex flex-col items-center gap-4 active:scale-95 transition-all"
                             >
                                 <div className="p-4 bg-white/20 rounded-full"><Camera size={48} /></div>
-                                <div className="text-xl font-bold">Take Photo</div>
-                                <span className="text-emerald-100 text-sm">Scan a receipt or bill</span>
+                                <div className="text-xl font-bold">फोटो काढा</div>
+                                <span className="text-emerald-100 text-sm">बिलाचा किंवा पावतीचा</span>
                             </button>
                             <input
                                 data-testid="attachment-input"
@@ -269,8 +287,8 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                                 ref={fileInputRef}
                                 onChange={handleFileChange}
                             />
-                            <div className="text-center text-gray-400 text-sm font-medium p-4">
-                                Smart Scan will extract items and prices automatically
+                            <div className="text-center text-stone-500 text-sm font-medium p-4">
+                                फोटोतून वस्तू आणि किंमती आपोआप वाचायचा प्रयत्न होईल. नंतर तुम्ही तपासून बदलू शकता.
                             </div>
                         </div>
                     )}
@@ -285,7 +303,7 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                             )}
                             {!attachmentCaptureError && attachmentIds.length > 0 && (
                                 <div data-testid="attachment-queued-banner" className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
-                                    Attachment queued for background upload.
+                                    फोटो पाठवण्यासाठी रांगेत ठेवला आहे.
                                 </div>
                             )}
                             {queuedExtractionMessage && (
@@ -296,9 +314,9 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
 
                             {/* Image Thumbnail */}
                             <div className="relative w-full h-48 bg-black rounded-xl overflow-hidden shadow-sm shrink-0">
-                                <img src={image} className="w-full h-full object-contain opacity-80" />
+                                <img src={image} alt="बिलाचा फोटो" className="w-full h-full object-contain opacity-80" />
                                 <button onClick={() => setImage(null)} className="absolute bottom-2 right-2 px-3 py-1 bg-black/60 text-white text-xs rounded-lg font-bold backdrop-blur-md border border-white/20">
-                                    Retake
+                                    पुन्हा काढा
                                 </button>
                             </div>
 
@@ -306,8 +324,8 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                             {isExtracting && (
                                 <div className="py-12 flex flex-col items-center justify-center text-emerald-600">
                                     <Loader2 size={40} className="animate-spin mb-4" />
-                                    <p className="font-bold">Analyzing Receipt...</p>
-                                    <p className="text-xs opacity-70">Detecting items & prices</p>
+                                    <p className="font-bold">बिल वाचत आहे…</p>
+                                    <p className="text-xs opacity-70">वस्तू आणि किंमती शोधत आहे</p>
                                 </div>
                             )}
 
@@ -320,8 +338,8 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                                         <div className="bg-amber-50 border border-amber-100 p-3 rounded-lg flex items-start gap-3">
                                             <AlertTriangle className="text-amber-500 shrink-0" size={18} />
                                             <div>
-                                                <p className="text-amber-800 text-xs font-bold">Review Needed</p>
-                                                <p className="text-amber-600 text-[10px]">Scan confidence is low. Please verify amounts.</p>
+                                                <p className="text-amber-800 text-xs font-bold">एकदा तपासा</p>
+                                                <p className="text-amber-700 text-[12px]">फोटो नीट वाचता आला नाही. रक्कम बरोबर आहे का ते पाहा.</p>
                                             </div>
                                         </div>
                                     )}
@@ -330,40 +348,40 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                                     {verificationStatus === 'pending' || verificationStatus === 'verifying' ? (
                                         <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg text-blue-700 text-xs font-semibold">
                                             <Loader2 size={13} className="animate-spin shrink-0" />
-                                            Verifying bill with high-accuracy OCR...
+                                            बिल पुन्हा बारकाईने वाचत आहे…
                                         </div>
                                     ) : verificationStatus === 'verified' ? (
                                         <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-lg text-emerald-700 text-xs font-semibold">
                                             <Check size={13} className="shrink-0" />
-                                            Verified ✓ — high-accuracy scan complete
+                                            बिल बारकाईने वाचून झालं
                                         </div>
                                     ) : verificationStatus === 'needs_review' ? (
                                         <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-100 rounded-lg text-amber-700 text-xs font-semibold">
                                             <AlertTriangle size={13} className="shrink-0" />
-                                            Verification flagged — please double-check amounts
+                                            दुसऱ्या वाचनात फरक दिसला — रक्कम पुन्हा पाहा
                                         </div>
                                     ) : null}
 
                                     {/* Extracted Fields */}
                                     <div className="bg-white p-4 rounded-xl border border-gray-200 space-y-4 shadow-sm">
                                         <div>
-                                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Vendor/Shop</label>
+                                            <label className="text-[13px] font-bold text-stone-600 block mb-1">दुकान</label>
                                             <input
                                                 value={editedVendor}
                                                 onChange={(e) => { setEditedVendor(e.target.value); setUserEditedVendor(true); }}
                                                 className="w-full text-base font-bold text-gray-900 border-b border-gray-200 outline-none focus:border-emerald-500 py-1"
-                                                placeholder="Enter vendor name"
+                                                placeholder="दुकानाचं नाव"
                                             />
                                             {suggestedVendor && suggestedVendor !== editedVendor && (
-                                                <p className="text-[10px] text-amber-600 mt-1">
-                                                    AI suggests: <button className="font-bold underline" onClick={() => { setEditedVendor(suggestedVendor); setSuggestedVendor(null); }}>{suggestedVendor}</button>
+                                                <p className="text-[12px] text-amber-700 mt-1">
+                                                    दुसऱ्या वाचनात: <button className="font-bold underline" onClick={() => { setEditedVendor(suggestedVendor); setSuggestedVendor(null); }}>{suggestedVendor}</button>
                                                 </p>
                                             )}
                                         </div>
 
                                         {/* Items List (Simplified for prototype) */}
                                         <div className="space-y-2">
-                                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Items Found</label>
+                                            <label className="text-[13px] font-bold text-stone-600 block">बिलातल्या वस्तू</label>
                                             {extraction.lineItems.map((item, idx) => (
                                                 <div key={idx} className="flex justify-between items-center text-sm py-1 border-b border-dotted border-gray-100 last:border-0">
                                                     <span className="text-gray-700 font-medium">{item.name} <span className="text-gray-400 text-xs">({item.quantity} {item.unit})</span></span>
@@ -373,7 +391,7 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                                         </div>
 
                                         <div>
-                                            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Total Amount</label>
+                                            <label className="text-[13px] font-bold text-stone-600 block mb-1">एकूण रक्कम</label>
                                             <div className="flex items-center gap-2">
                                                 <span className="text-xl font-black text-gray-900">₹</span>
                                                 <input
@@ -384,8 +402,8 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                                                 />
                                             </div>
                                             {suggestedTotal !== null && suggestedTotal !== editedTotal && (
-                                                <p className="text-[10px] text-amber-600 mt-1">
-                                                    AI suggests: <button className="font-bold underline" onClick={() => { setEditedTotal(suggestedTotal!); setSuggestedTotal(null); }}>₹{suggestedTotal}</button>
+                                                <p className="text-[12px] text-amber-700 mt-1">
+                                                    दुसऱ्या वाचनात: <button className="font-bold underline" onClick={() => { setEditedTotal(suggestedTotal!); setSuggestedTotal(null); }}>₹{suggestedTotal}</button>
                                                 </p>
                                             )}
                                         </div>
@@ -396,20 +414,20 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                                         <ScopeSelectorRadio
                                             value={scope}
                                             onChange={setScope}
-                                            plotName={activePlotId ? "Selected" : undefined}
-                                            cropName="This Crop" // Could enhance context mapping
+                                            plotName={chosenPlotName}
+                                            cropName={chosenCropName}
                                         />
 
                                         {/* Conditional Context Selectors */}
                                         {scope === 'PLOT' && (
                                             <div className="mt-4 animate-in fade-in">
-                                                <label className="text-xs font-bold text-gray-500">Select which plot:</label>
+                                                <label className="text-[13px] font-bold text-stone-600">कोणता प्लॉट?</label>
                                                 <select
                                                     value={selectedPlotId}
                                                     onChange={(e) => setSelectedPlotId(e.target.value)}
                                                     className="w-full mt-1 p-3 bg-gray-50 rounded-lg font-bold text-gray-700 outline-none border border-gray-200 focus:border-emerald-500"
                                                 >
-                                                    <option value="">-- Choose Plot --</option>
+                                                    <option value="">— प्लॉट निवडा —</option>
                                                     {crops.flatMap(c => c.plots).map(p => (
                                                         <option key={p.id} value={p.id}>{p.name}</option>
                                                     ))}
@@ -419,13 +437,13 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
 
                                         {scope === 'CROP' && (
                                             <div className="mt-4 animate-in fade-in">
-                                                <label className="text-xs font-bold text-gray-500">Select crop:</label>
+                                                <label className="text-[13px] font-bold text-stone-600">कोणतं पीक?</label>
                                                 <select
                                                     value={selectedCropId}
                                                     onChange={(e) => setSelectedCropId(e.target.value)}
                                                     className="w-full mt-1 p-3 bg-gray-50 rounded-lg font-bold text-gray-700 outline-none border border-gray-200 focus:border-emerald-500"
                                                 >
-                                                    <option value="">-- Choose Crop --</option>
+                                                    <option value="">— पीक निवडा —</option>
                                                     {crops.map(c => (
                                                         <option key={c.id} value={c.id}>{c.name}</option>
                                                     ))}
@@ -456,13 +474,13 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                 {/* FOOTER */}
                 {!showAllocation && image && !isExtracting && extraction && (
                     <div className="flex-none p-4 bg-white border-t border-gray-100 flex gap-3">
-                        <button onClick={onClose} className="flex-1 py-4 text-gray-500 font-bold hover:bg-gray-50 rounded-xl">Cancel</button>
+                        <button onClick={onClose} className="flex-1 py-4 text-stone-600 font-bold hover:bg-gray-50 rounded-xl">रद्द करा</button>
                         <button
                             onClick={handleConfirm}
                             disabled={!editedTotal || (scope === 'PLOT' && !selectedPlotId) || (scope === 'CROP' && !selectedCropId)}
                             className="flex-[2] py-4 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-200 disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-2"
                         >
-                            <Check size={20} /> Convert to Expense
+                            <Check size={20} /> खर्च म्हणून जतन करा
                         </button>
                     </div>
                 )}

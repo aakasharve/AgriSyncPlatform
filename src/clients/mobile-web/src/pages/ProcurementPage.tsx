@@ -1,187 +1,169 @@
-
-import React, { useState, useEffect } from 'react';
-import { Package, Search, Camera, Plus } from 'lucide-react';
-import SlidingCropSelector from '../features/context/components/SlidingCropSelector';
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — खरेदी, route 'procurement', in the founder-approved
+ * look (PLR-D9 preview `PlacePages.ProcurementPage`) over the REAL bills (`procurementRepository`). It was
+ * English ("Procurement", "Scan Receipt", "No Receipts Found"). Every real part is kept:
+ *   - pick a crop, then a plot (the farm's own crops and plots; "सर्व" = everything);
+ *   - the list for what is picked — a plot shows its own bills + its crop's shared bills + the farm-wide
+ *     bills (`billView.billsInView`, the rule this page always had), with search by shop or item;
+ *   - the three totals, now of what is picked (they were the whole farm's whatever was picked);
+ *   - "बिलाचा फोटो काढा" → the same `ReceiptCaptureSheet` (its save is unchanged);
+ *   - tapping a bill → that day's money: on the bill's plot when it has one, else across the farm (`MoneyLensDrawer`).
+ *     NOT "this bill's": a money
+ *     entry read back from the server comes back as `Manual` (financeService `mapCostEntryToMoneyEvent`), so a
+ *     `Procurement` filter matched nothing and the drawer said there was no entry (I8 review B002);
+ *   - "बोलून सांगा" / "हाताने लिहा" → the log flow, and the row to पैसे व हिशोब.
+ * A button whose handler the route did not give is not drawn (P5). Nothing recorded → said in words, never ₹ 0.
+ */
+import React, { useState } from 'react';
+import { BookOpen, Camera, Keyboard, Mic, Search } from 'lucide-react';
 import { CropProfile, ProcurementExpense } from '../types';
 import { procurementRepository } from '../services/procurementRepository';
 import { ExpenseSummaryCards } from '../features/procurement/components/ExpenseSummaryCards';
 import { ExpenseCard } from '../features/procurement/components/ExpenseCard';
 import { ReceiptCaptureSheet } from '../features/procurement/components/ReceiptCaptureSheet';
+import { ALL, billsInView, matchesSearch, pickLabel, placeOf, totalsOf } from '../features/procurement/components/billView';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
 import { FinanceFilters } from '../features/finance/finance.types';
+import { BigButton, Chip, ChoiceChips, GlassCard, PageBar, RowLink, SANS, SectionHead } from '../shared/components/ui/placeUi';
 
 interface Props {
     crops: CropProfile[];
+    onBack?: () => void;
+    /** Opens the voice / typed log flow. */
+    onTell?: () => void;
+    onGo?: (route: 'finance-manager') => void;
 }
 
-const ProcurementPage: React.FC<Props> = ({ crops = [] }) => {
-    // 1. Selection State
-    const [selectedCropId, setSelectedCropId] = useState<string>(crops[0]?.id || '');
-    const [selectedPlotIds, setSelectedPlotIds] = useState<string[]>([]);
-
-    // 2. Data State
-    const [expenses, setExpenses] = useState<ProcurementExpense[]>([]);
+const ProcurementPage: React.FC<Props> = ({ crops = [], onBack, onTell, onGo }) => {
+    const [cropPick, setCropPick] = useState<string>(ALL);
+    const [plotPick, setPlotPick] = useState<string>(ALL);
     const [showCaptureSheet, setShowCaptureSheet] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [lensOpen, setLensOpen] = useState(false);
     const [lensFilters, setLensFilters] = useState<FinanceFilters>({});
 
-    // Load initial context
-    useEffect(() => {
-        const crop = crops.find(c => c.id === selectedCropId);
-        if (crop && crop.plots.length > 0) {
-            setSelectedPlotIds([crop.plots[0].id]);
-        } else {
-            setSelectedPlotIds([]);
-        }
-    }, [selectedCropId, crops]);
-
-    const activePlotId = selectedPlotIds[0];
-    const activeCrop = crops.find(c => c.id === selectedCropId);
-
-    // Load Expenses
-    //
     // spec: plr-d10-redesign-real-integration-2026-10-25 (I4). This used to create a money
     // entry for EVERY stored receipt line on every visit. The receipt is already turned
     // into money entries once, when it is saved (ReceiptCaptureSheet), and the "already
     // created" check cannot see entries after the money cache reloads from the server — so
     // each visit to this tab sent another copy of every bill. Reading is all this does now.
-    const refreshData = () => {
-        setExpenses(procurementRepository.getExpenses());
-    };
+    const [expenses, setExpenses] = useState<ProcurementExpense[]>(() => procurementRepository.getExpenses());
+    const refreshData = () => setExpenses(procurementRepository.getExpenses());
 
-    useEffect(() => {
-        refreshData();
-    }, []);
+    // A crop or plot that has since gone falls back to "सर्व".
+    const activeCrop = crops.find(c => c.id === cropPick);
+    const activePlot = activeCrop?.plots.find(p => p.id === plotPick);
+    const pick = { cropId: activeCrop?.id ?? ALL, plotId: activePlot?.id ?? ALL };
+    const pickCrop = (id: string) => { setCropPick(id); setPlotPick(ALL); };
 
-    // Filter Logic
-    const filteredExpenses = expenses.filter(e => {
-        // Search
-        if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            const matchVendor = e.vendorName?.toLowerCase().includes(q);
-            const matchItems = e.lineItems.some(i => i.name.toLowerCase().includes(q));
-            if (!matchVendor && !matchItems) return false;
-        }
+    const inView = billsInView(expenses, crops, pick);
+    const totals = totalsOf(inView);
+    const shown = inView.filter(e => matchesSearch(e, searchQuery));
+    const searching = searchQuery.trim().length > 0;
 
-        // Scope Filter:
-        // - If Scope is FARM: Show always? Or only if no plot selected? 
-        //   -> Decision: Show everything relevant to context + global.
-
-        // Simpler for now: Show ALL, but highlighting context.
-        // OR: Filter by standard logic:
-        // if user selects Plot A -> Show Plot A + Crop Common + Farm Global
-
-        if (activePlotId) {
-            if (e.scope === 'FARM') return true;
-            if (e.scope === 'CROP' && e.cropId === activeCrop?.id) return true;
-            if (e.scope === 'PLOT' && e.plotId === activePlotId) return true;
-            return false;
-        }
-
-        return true;
-    });
-
-    const summary = procurementRepository.getExpenseSummary();
-
-    // --- RENDER ---
     return (
-        <div className="pb-24 animate-in fade-in max-w-4xl mx-auto px-4 sm:px-6 py-6 font-sans">
+        <div className="pb-24 animate-in fade-in max-w-4xl mx-auto px-4 sm:px-6" style={{ fontFamily: SANS }} data-testid="procurement-page">
+            <PageBar title="खरेदी" onBack={onBack} />
+            <div className="space-y-3">
+                <p className="m-0 px-1 text-[14px] font-semibold leading-snug text-stone-700">
+                    खत, औषध, अवजारं, दुरुस्ती — जे विकत घेतलं ते इथे.{crops.length > 0 && ' आधी पीक निवडा, मग प्लॉट.'}
+                </p>
 
-            {/* 1. HEADER */}
-            <div className="mb-6 flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-black text-stone-800 tracking-tight">Procurement</h1>
-                    <p className="text-sm text-stone-500 font-medium">Expenses & Store Management</p>
-                </div>
-                <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 shadow-md border border-orange-200">
-                    <Package size={24} />
-                </div>
-            </div>
+                {crops.length > 0 && (
+                    <GlassCard testId="buy-pick">
+                        <p className="m-0 mb-2 text-[13.5px] font-extrabold text-stone-700">पीक</p>
+                        <ChoiceChips items={[[ALL, 'सर्व'] as const, ...crops.map(c => [c.id, c.name] as const)]} value={pick.cropId} onPick={pickCrop} testId="buy-crop" />
+                        {activeCrop && activeCrop.plots.length > 0 && (
+                            <>
+                                <p className="m-0 mb-2 mt-3 text-[13.5px] font-extrabold text-stone-700">प्लॉट</p>
+                                <ChoiceChips items={[[ALL, `सर्व ${activeCrop.name}`] as const, ...activeCrop.plots.map(p => [p.id, p.name] as const)]}
+                                    value={pick.plotId} onPick={setPlotPick} testId="buy-plot" />
+                            </>
+                        )}
+                    </GlassCard>
+                )}
 
-            {/* 2. SELECTOR */}
-            <div className="mb-8">
-                <SlidingCropSelector
-                    crops={crops}
-                    selectedCropId={selectedCropId}
-                    selectedPlotIds={selectedPlotIds}
-                    onCropSelect={setSelectedCropId}
-                    onPlotSelect={(id) => setSelectedPlotIds([id])}
-                    mode="single"
-                />
-            </div>
+                {/* The totals say what they cover: the picked place, and only the bills added here. */}
+                <p className="m-0 px-1 text-[13px] font-bold text-stone-600" data-testid="buy-totals-cover">
+                    {pickLabel(crops, pick)} — इथे जोडलेल्या बिलांची बेरीज
+                </p>
+                <ExpenseSummaryCards totals={totals} plotName={activePlot?.name} />
 
-            {/* 3. SUMMARY CARDS */}
-            <ExpenseSummaryCards summary={summary} />
-
-            {/* 4. ACTIONS BAR */}
-            <div className="flex gap-3 mb-6">
-                <div className="flex-1 bg-white p-2 rounded-xl shadow-sm border border-stone-100 flex items-center gap-3 px-4">
-                    <Search size={20} className="text-stone-300" />
-                    <input
-                        placeholder="Search receipts..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="flex-1 bg-transparent outline-none text-sm font-bold text-stone-700 placeholder-stone-300"
-                    />
-                </div>
-                <button
-                    data-testid="scan-receipt-btn"
-                    onClick={() => setShowCaptureSheet(true)}
-                    className="flex-none bg-stone-800 text-white px-5 rounded-xl font-bold text-sm shadow-lg shadow-stone-200 flex items-center gap-2 active:scale-95 transition-all"
-                >
-                    <Camera size={18} /> Scan Receipt
-                </button>
-            </div>
-
-            {/* 5. EXPENSE LIST */}
-            <div className="space-y-4">
-                {filteredExpenses.length === 0 ? (
-                    <div className="bg-white border-2 border-dashed border-stone-200 rounded-3xl p-10 flex flex-col items-center justify-center text-center">
-                        <div className="w-20 h-20 bg-stone-50 rounded-full flex items-center justify-center mb-6">
-                            <Package size={40} className="text-stone-300" />
+                <BigButton onClick={() => setShowCaptureSheet(true)} testId="scan-receipt-btn"><Camera size={20} aria-hidden="true" />बिलाचा फोटो काढा</BigButton>
+                {onTell && (
+                    <>
+                        <div className="grid grid-cols-2 gap-2">
+                            <BigButton onClick={onTell} tone="white" testId="buy-tell"><Mic size={20} aria-hidden="true" />बोलून सांगा</BigButton>
+                            <BigButton onClick={onTell} tone="white" testId="buy-write"><Keyboard size={20} aria-hidden="true" />हाताने लिहा</BigButton>
                         </div>
-                        <h3 className="text-xl font-bold text-stone-400 mb-2">No Receipts Found</h3>
-                        <p className="text-sm text-stone-400 max-w-[240px] mb-8 leading-relaxed">
-                            Upload a bill or receipt to start tracking expenses for {activeCrop?.name || "your farm"}.
+                        {/* A told purchase becomes part of that day's record (and its money), not a bill in this list. */}
+                        <p className="m-0 px-1 text-[12.5px] font-semibold leading-snug text-stone-500" data-testid="buy-tell-note">
+                            बोलून किंवा लिहून सांगितलेली खरेदी त्या दिवसाच्या नोंदीत जाते — खालच्या बिलांत दिसत नाही.
                         </p>
-                        <button
-                            onClick={() => setShowCaptureSheet(true)}
-                            className="bg-orange-500 text-white px-8 py-3 rounded-xl font-bold text-sm shadow-xl shadow-orange-200 flex items-center gap-2 active:scale-95 transition-all hover:bg-orange-600"
-                        >
-                            <Plus size={18} /> Add First Record
-                        </button>
-                    </div>
-                ) : (
-                    filteredExpenses.map(expense => (
-                        <ExpenseCard
-                            key={expense.id}
-                            expense={expense}
-                            onClick={(e) => console.log('View', e)}
-                            onMoneyClick={(expense) => {
-                                setLensFilters({
-                                    sourceType: 'Procurement',
-                                    fromDate: expense.date,
-                                    toDate: expense.date,
-                                    plotId: expense.plotId,
-                                    cropId: expense.cropId
-                                });
-                                setLensOpen(true);
-                            }}
+                    </>
+                )}
+
+                <div className="flex items-end justify-between gap-2">
+                    <SectionHead title="बिलं आणि खरेदी" hint="कोणतं दुकान, काय घेतलं, कुठे लावलं" />
+                    {inView.length > 0 && <span data-testid="buy-count"><Chip tone="stone">{shown.length}</Chip></span>}
+                </div>
+
+                {expenses.length > 0 && (
+                    <label className="flex min-h-[52px] items-center gap-2 rounded-2xl bg-white px-3 ring-1 ring-stone-300 focus-within:ring-2 focus-within:ring-emerald-500">
+                        <Search size={20} className="shrink-0 text-stone-400" aria-hidden="true" />
+                        <input
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="बिल शोधा — दुकान किंवा वस्तू"
+                            aria-label="बिल शोधा"
+                            data-testid="buy-search"
+                            className="min-w-0 flex-1 bg-transparent text-[16px] font-bold text-stone-900 outline-none placeholder:text-stone-400"
                         />
-                    ))
+                    </label>
+                )}
+
+                {shown.length > 0 ? (
+                    <div className="space-y-2" data-testid="buy-list">
+                        {shown.map(expense => (
+                            <ExpenseCard
+                                key={expense.id}
+                                expense={expense}
+                                place={placeOf(expense, crops)}
+                                onMoneyClick={(e) => {
+                                    setLensFilters({
+                                        fromDate: e.date,
+                                        toDate: e.date,
+                                        // No crop filter either: an entry read back carries the crop CYCLE id
+                                        // (`cropId: entry.cropCycleId`), a bill the crop's own id — they never match.
+                                        plotId: e.plotId,
+                                    });
+                                    setLensOpen(true);
+                                }}
+                            />
+                        ))}
+                    </div>
+                ) : searching && inView.length > 0 ? (
+                    <p className="m-0 rounded-2xl bg-white/70 p-4 text-center text-[14px] font-bold text-stone-500" data-testid="buy-no-match">
+                        “{searchQuery.trim()}” — असं बिल सापडलं नाही.
+                    </p>
+                ) : (
+                    <p className="m-0 rounded-2xl bg-white/70 p-4 text-center text-[14px] font-bold text-stone-500" data-testid="buy-empty">
+                        इथे अजून काही खरेदी नाही. बिलाचा फोटो काढा{onTell ? ' किंवा बोलून सांगा' : ''}.
+                    </p>
+                )}
+
+                {onGo && (
+                    <RowLink icon={<BookOpen size={22} aria-hidden="true" />} tone="blue" title="पैसे व हिशोब" line="सगळा जमा-खर्च, दर, तपासणी आणि अहवाल"
+                        onClick={() => onGo('finance-manager')} testId="buy-finance" />
                 )}
             </div>
 
-            {/* 6. MODALS */}
             {showCaptureSheet && (
                 <ReceiptCaptureSheet
                     onClose={() => setShowCaptureSheet(false)}
-                    onSave={() => {
-                        refreshData();
-                    }}
+                    onSave={refreshData}
                     crops={crops}
-                    activePlotId={activePlotId}
+                    activePlotId={activePlot?.id}
                 />
             )}
 
@@ -190,7 +172,6 @@ const ProcurementPage: React.FC<Props> = ({ crops = [] }) => {
                 onClose={() => setLensOpen(false)}
                 filters={lensFilters}
             />
-
         </div>
     );
 };

@@ -183,6 +183,8 @@ describe('HarvestIncomePage — route "income" (Task 6, spec D4)', () => {
         expect(readHarvestSessionsRaw('plot-1', 'crop-1')).toBe(rawSessionsBefore);
     });
 
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — the page is Marathi now ("+ Add Custom" became
+    // the kind tiles under "+ जोडा"; amounts read "₹ 500"). The two properties below are unchanged.
     it('keeps "Other Income" reachable and rendering its existing entries', () => {
         mockGetOtherIncomeEntries.mockReturnValue([{
             id: 'inc-1',
@@ -194,15 +196,16 @@ describe('HarvestIncomePage — route "income" (Task 6, spec D4)', () => {
 
         render(<HarvestIncomePage context={null} crops={CROPS} onBack={() => undefined} />);
 
-        expect(screen.getByText('Sold scrap drip pipe')).toBeInTheDocument();
-        expect(screen.getByText(/\+₹500/)).toBeInTheDocument();
+        const row = screen.getByTestId('other-income-inc-1');
+        expect(row).toHaveTextContent('Sold scrap drip pipe');
+        expect(row).toHaveTextContent('₹ 500');
     });
 
-    it('"+ Add Custom" still opens the Other Income entry surface', () => {
+    it('the "इतर उत्पन्न" kinds still open the Other Income entry surface', () => {
         render(<HarvestIncomePage context={null} crops={CROPS} onBack={() => undefined} />);
 
         expect(screen.queryByTestId('other-income-sheet-stub')).not.toBeInTheDocument();
-        fireEvent.click(screen.getByText('+ Add Custom'));
+        fireEvent.click(screen.getByTestId('income-kind-other'));
         expect(screen.getByTestId('other-income-sheet-stub')).toBeInTheDocument();
     });
 });

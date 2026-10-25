@@ -54,8 +54,8 @@ test.describe('Attachment upload state machine', () => {
         await expect(procurementNavBtn).toBeVisible({ timeout: 10_000 });
         await procurementNavBtn.click();
 
-        // Assert Procurement page content is visible
-        const procurementHeading = page.getByRole('heading', { name: /procurement/i }).first();
+        // Assert Procurement page content is visible (the redesigned खरेदी page, PLR-D10 I8)
+        const procurementHeading = page.getByRole('heading', { name: 'खरेदी' }).first();
         await expect(procurementHeading).toBeVisible({ timeout: 10_000 });
 
         // --- Open the receipt capture sheet ---
@@ -81,7 +81,7 @@ test.describe('Attachment upload state machine', () => {
         // attachmentIds state is set. It is independent of OCR results.
         const queuedBanner = page.getByTestId('attachment-queued-banner');
         await expect(queuedBanner).toBeVisible({ timeout: 15_000 });
-        await expect(queuedBanner).toContainText(/attachment queued/i);
+        await expect(queuedBanner).toContainText('फोटो पाठवण्यासाठी रांगेत ठेवला आहे'); // Marathi since PLR-D10 I8
 
         // --- Assert: Dexie attachment record is queued ---
         // Read the attachment directly from IndexedDB to confirm the DB state.

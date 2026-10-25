@@ -1,79 +1,58 @@
-
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — one bill in "बिलं आणि खरेदी", in the approved look:
+ * the shop, what was on the bill, the amount, where it goes (plot / shared by the crop / whole farm), the day,
+ * and the two marks it always had — उधार (on credit) and नोंदीशी जोडलेलं (linked to a day's record).
+ * The bill photo, when there is one, stays as the thumbnail. Tapping the bill opens THAT DAY's money — on the
+ * bill's plot when it has one, else across the farm (`MoneyLensDrawer`, via `onMoneyClick`); the bill's own
+ * lines are among them (once synced), and the label
+ * says "day", not "this bill"; without that handler the card is plain, never a dead button (P5).
+ */
 import React from 'react';
-import { ProcurementExpense } from '../../../types';
-import { Calendar, Tag, ChevronRight, AlertCircle, Link as LinkIcon } from 'lucide-react';
-import { MoneyChip } from '../../finance/components/MoneyChip';
+import { ChevronRight, Link as LinkIcon, ShoppingBag } from 'lucide-react';
+import type { ProcurementExpense } from '../../../types';
+import { Chip, IconDot, Tap, type Tone } from '../../../shared/components/ui/placeUi';
+import { fromDateKey, relLabel, rupees } from '../../reflect/overview/reflectDates';
+import { NUM, SCOPE_LABEL } from './billView';
 
 interface Props {
     expense: ProcurementExpense;
-    onClick: (expense: ProcurementExpense) => void;
+    /** The named place the bill goes to (its plot, or "सर्व <crop>"), or ''. */
+    place: string;
     onMoneyClick?: (expense: ProcurementExpense) => void;
 }
 
-export const ExpenseCard: React.FC<Props> = ({ expense, onClick, onMoneyClick }) => {
-    const isLinked = expense.linkedLogIds && expense.linkedLogIds.length > 0;
+const SCOPE_TONE: Record<ProcurementExpense['scope'], Tone> = { PLOT: 'green', CROP: 'violet', FARM: 'blue', UNKNOWN: 'stone' };
 
-    return (
-        <div
-            onClick={() => onClick(expense)}
-            className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all active:scale-[0.99] cursor-pointer flex items-center justify-between"
-        >
-            <div className="flex items-start gap-4">
-                {/* Thumbnail or Icon */}
-                <div className="w-12 h-12 flex-none bg-stone-100 rounded-xl flex items-center justify-center overflow-hidden border border-stone-200">
-                    {expense.receiptImageUrl ? (
-                        <img src={expense.receiptImageUrl} alt="Receipt" className="w-full h-full object-cover" />
-                    ) : (
-                        <Tag size={20} className="text-stone-400" />
-                    )}
-                </div>
+const dayOf = (key: string): string => (/^\d{4}-\d{2}-\d{2}/.test(key) ? relLabel(fromDateKey(key)) : '');
 
-                <div>
-                    <div className="text-sm font-bold text-gray-900 line-clamp-1">
-                        {expense.vendorName || "Unknown Vendor"}
-                    </div>
-                    <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5">
-                        <span className="flex items-center gap-1">
-                            <Calendar size={10} /> {expense.date}
-                        </span>
-
-                        {/* Scope Badge */}
-                        <span className={`
-                            px-1.5 py-0.5 rounded text-[10px] font-bold uppercase
-                            ${expense.scope === 'PLOT' ? 'bg-emerald-100 text-emerald-700' : ''}
-                            ${expense.scope === 'CROP' ? 'bg-blue-100 text-blue-700' : ''}
-                            ${expense.scope === 'FARM' ? 'bg-amber-100 text-amber-700' : ''}
-                        `}>
-                            {expense.scope}
-                        </span>
-                    </div>
-
-                    {/* Items Preview */}
-                    <div className="mt-1.5 text-xs text-stone-400 line-clamp-1">
-                        {expense.lineItems.map(i => i.name).join(', ')}
-                    </div>
-                </div>
-            </div>
-
-            <div className="text-right">
-                {onMoneyClick ? (
-                    <MoneyChip amount={expense.grandTotal} onClick={(e) => { e.stopPropagation?.(); onMoneyClick(expense); }} />
-                ) : (
-                    <div className="text-base font-black text-gray-900">₹{expense.grandTotal.toLocaleString()}</div>
-                )}
-                <div className="flex items-center justify-end gap-1 mt-1">
-                    {expense.paymentStatus === 'CREDIT' && (
-                        <span className="text-[10px] font-bold text-red-500 bg-red-50 px-1.5 rounded-md flex items-center gap-1">
-                            <AlertCircle size={8} /> CREDIT
-                        </span>
-                    )}
-                    {isLinked && (
-                        <span className="text-[10px] font-bold text-blue-500 bg-blue-50 px-1.5 rounded-md flex items-center gap-1">
-                            <LinkIcon size={8} /> LINKED
-                        </span>
-                    )}
-                </div>
-            </div>
-        </div>
+export const ExpenseCard: React.FC<Props> = ({ expense, place, onMoneyClick }) => {
+    const items = expense.lineItems.map(i => i.name).filter(Boolean).join(', ');
+    const where = [place, SCOPE_LABEL[expense.scope]].filter(Boolean).join(' · ');
+    const day = dayOf(expense.date);
+    const linked = (expense.linkedLogIds?.length ?? 0) > 0;
+    const body = (
+        <span className="flex items-start gap-3">
+            {expense.receiptImageUrl
+                ? <img src={expense.receiptImageUrl} alt="बिलाचा फोटो" className="h-11 w-11 shrink-0 rounded-2xl object-cover ring-1 ring-stone-200" />
+                : <IconDot tone={SCOPE_TONE[expense.scope]}><ShoppingBag size={22} aria-hidden="true" /></IconDot>}
+            <span className="min-w-0 flex-1">
+                <span className="flex items-baseline justify-between gap-2">
+                    <span className="min-w-0 truncate text-[16px] font-extrabold text-stone-900">{expense.vendorName?.trim() || 'दुकानाचं नाव नाही'}</span>
+                    <span className="shrink-0 text-[16px] font-extrabold text-stone-900" style={{ fontFamily: NUM }}>{rupees(expense.grandTotal)}</span>
+                </span>
+                {items && <span className="block truncate text-[13.5px] font-semibold text-stone-600">{items}</span>}
+                <span className="block text-[13.5px] font-semibold text-stone-600" data-testid={`bill-where-${expense.id}`}>{where}</span>
+                <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[12.5px] font-bold text-stone-500">
+                    {day && <span>{day}</span>}
+                    {expense.paymentStatus === 'CREDIT' && <Chip tone="rose">उधार</Chip>}
+                    {linked && <Chip tone="blue"><LinkIcon size={12} aria-hidden="true" />नोंदीशी जोडलेलं</Chip>}
+                    {onMoneyClick && <span className="ml-auto inline-flex items-center gap-0.5 text-emerald-800">त्या दिवसाचा हिशोब<ChevronRight size={16} aria-hidden="true" /></span>}
+                </span>
+            </span>
+        </span>
     );
+    const look = 'block w-full rounded-3xl border border-white/60 bg-white/80 p-3.5 text-left shadow-[0_4px_18px_-8px_rgba(28,25,23,0.18)] backdrop-blur-md';
+    return onMoneyClick
+        ? <Tap onClick={() => onMoneyClick(expense)} data-testid={`bill-${expense.id}`} className={look}>{body}</Tap>
+        : <div data-testid={`bill-${expense.id}`} className={look}>{body}</div>;
 };

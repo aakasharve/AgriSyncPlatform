@@ -2,6 +2,12 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — RE-SKIN ONLY. The same two strings, the same
+ * per-string fonts and the same no-controls rule, drawn as a compact notice in the redesign's look (a
+ * dashed card, dark readable text) instead of `OfflineEmptyState`'s large pale empty state: its body line
+ * — a sale recorded here is not saved — was light grey on white. It still never says "लवकरच": no date
+ * is promised (see COPY below). Used by उत्पन्न and by `SettingsPage`.
+ *
  * The one honest "coming soon" surface for harvest (spec D4).
  *
  * WHY THIS EXISTS
@@ -77,11 +83,11 @@
  * from `syncTranslations.ts:239`, pinned against it in the test.
  *
  * FONTS: set explicitly per string, chosen from the text itself, for the
- * reason `ApprovalUnavailableNotice` records — `OfflineEmptyState` declares
- * no `font-family` of its own, so its `h3`/`p` inherit whatever the cascade
- * hands them, and Devanagari must never be left to a generic fallback. That
- * is also why `OfflineEmptyState`'s `title`/`message` now accept a
- * `ReactNode`: the font has to be attached to the string, not to the box.
+ * reason `ApprovalUnavailableNotice` records — the box around them declares
+ * no `font-family` of its own (it was `OfflineEmptyState`, whose `title`/
+ * `message` were widened to `ReactNode` for exactly this), so the font has to
+ * be attached to the string, not to the box: Devanagari must never be left to
+ * a generic fallback.
  *
  * `fontStyleFor` below is a second copy of `ApprovalUnavailableNotice`'s
  * three-line helper rather than a shared import. Deliberate, per the Rule of
@@ -95,7 +101,6 @@ import { Clock } from 'lucide-react';
 
 import type { Language } from '../../../../i18n/language';
 import { resolveHarvestAvailabilityString } from '../../../../i18n/harvestAvailabilityTranslations';
-import OfflineEmptyState from '../../../../shared/components/ui/OfflineEmptyState';
 
 const DEVANAGARI_PATTERN = /[\u0900-\u097F]/;
 const MARATHI_BODY_FONT = { fontFamily: "'Noto Sans Devanagari', sans-serif" } as const;
@@ -115,12 +120,13 @@ const HarvestComingSoon: React.FC<HarvestComingSoonProps> = ({ language }) => {
     const message = resolveHarvestAvailabilityString(language, 'harvestUnavailableBody');
 
     return (
-        <div data-testid="harvest-coming-soon">
-            <OfflineEmptyState
-                icon={<Clock size={40} className="text-slate-300" />}
-                title={<span style={fontStyleFor(title)}>{title}</span>}
-                message={<span style={fontStyleFor(message)}>{message}</span>}
-            />
+        <div data-testid="harvest-coming-soon"
+            className="flex items-start gap-3 rounded-2xl border border-dashed border-stone-300 bg-stone-50 p-3.5">
+            <Clock size={22} className="mt-0.5 shrink-0 text-stone-500" aria-hidden="true" />
+            <div className="min-w-0">
+                <h3 className="m-0 text-[15.5px] font-extrabold leading-snug text-stone-800"><span style={fontStyleFor(title)}>{title}</span></h3>
+                <p className="m-0 mt-1 text-[14px] font-semibold leading-snug text-stone-700"><span style={fontStyleFor(message)}>{message}</span></p>
+            </div>
         </div>
     );
 };

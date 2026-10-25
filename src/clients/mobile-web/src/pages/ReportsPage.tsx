@@ -1,202 +1,146 @@
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — "अहवाल", the real Reports page in the
+ * founder-approved look (PLR-D9 `FinanceTools.tsx`). Everything it had stays: the four periods (हा महिना ·
+ * मागचा महिना · हे वर्ष · सगळं), नफा/तोटा with its share of जमा, जमा, खर्च, where the money went by kind,
+ * "सेवेचा पुरावा" for the same three roles, and the warning when खर्च is more than जमा.
+ *
+ * Changed, each for a stated reason:
+ *  - a period with no entry SAYS so; it does not show ₹ 0 figures and a 0% margin (P4);
+ *  - the margin line appears only when there was income to take a share of;
+ *  - the loss warning names the period's real biggest cost, not a fixed "Machinery & Labour";
+ *  - "View Details" did nothing; it is now "वहीत सगळ्या नोंदी पाहा", which opens the वही (P5);
+ *  - the period bounds are worked out on the farm's calendar day (`getDateKey`, IST). They were built
+ *    from local midnight through `toISOString()`, which in India is the previous day in UTC — so "हा
+ *    महिना" took in the last day of the month before, and "मागचा महिना" lost its own last day.
+ */
 import React, { useMemo, useState } from 'react';
+import { BookOpen, FileCheck2, Info } from 'lucide-react';
 import { AppRoute } from '../types';
 import { financeSelectors } from '../features/finance/financeSelectors';
-import { FinanceManagerNav } from '../features/finance/components/FinanceManagerNav';
-import { FinanceFilters } from '../features/finance/finance.types';
-import { TrendingUp, TrendingDown, Calendar, Filter, PieChart, Info } from 'lucide-react';
-import OfflineEmptyState from '../shared/components/ui/OfflineEmptyState';
+import { MoneyCategory } from '../features/finance/finance.types';
 import { useFarmContext } from '../core/session/FarmContext';
+import { MoneyPage } from '../features/finance/components/MoneyPage';
+import { CATEGORY_LABEL, FINANCE_TITLE, PERIOD_LABEL, entriesCount, periodFilters, rupees, type ReportPeriod } from '../features/finance/moneyLabels';
+import { ChoiceChips, GlassCard, RowLink, SectionHead, Tap } from '../shared/components/ui/placeUi';
 
 interface ReportsPageProps {
     currentRoute: AppRoute;
     onNavigate: (route: AppRoute) => void;
+    onBack?: () => void;
 }
 
-type TimeRange = 'THIS_MONTH' | 'LAST_MONTH' | 'THIS_YEAR' | 'ALL_TIME';
+const PERIODS = (Object.keys(PERIOD_LABEL) as ReportPeriod[]).map(p => [p, PERIOD_LABEL[p]] as const);
 
-const ReportsPage: React.FC<ReportsPageProps> = ({ currentRoute, onNavigate }) => {
-    const [timeRange, setTimeRange] = useState<TimeRange>('THIS_MONTH');
+const CAT_BAR: Record<MoneyCategory, string> = {
+    Labour: 'bg-orange-500', Input: 'bg-violet-500', Machinery: 'bg-indigo-500', Transport: 'bg-sky-500',
+    Repair: 'bg-stone-500', Fuel: 'bg-amber-500', Electricity: 'bg-yellow-500', Other: 'bg-stone-400',
+};
+
+const ReportsPage: React.FC<ReportsPageProps> = ({ currentRoute, onNavigate, onBack }) => {
+    const [timeRange, setTimeRange] = useState<ReportPeriod>('THIS_MONTH');
     const { currentFarm } = useFarmContext();
     const canSeeServiceProof = currentFarm?.role === 'Agronomist' ||
         currentFarm?.role === 'Consultant' ||
         currentFarm?.role === 'PrimaryOwner';
 
-    // Filter Logic
-    const filters = useMemo((): FinanceFilters => {
-        const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-        const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
-        const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0).toISOString();
-        const startOfYear = new Date(now.getFullYear(), 0, 1).toISOString();
-
-        switch (timeRange) {
-            case 'THIS_MONTH': return { fromDate: startOfMonth };
-            case 'LAST_MONTH': return { fromDate: startOfLastMonth, toDate: endOfLastMonth };
-            case 'THIS_YEAR': return { fromDate: startOfYear };
-            default: return {};
-        }
-    }, [timeRange]);
+    const filters = useMemo(() => periodFilters(timeRange), [timeRange]);
 
     const events = useMemo(() => {
         return financeSelectors.getEffectiveMoneyEvents(filters);
     }, [filters]);
 
-    // Financials
     const income = events.filter(e => e.type === 'Income').reduce((sum, e) => sum + e.effectiveAmount, 0);
     const expense = events.filter(e => e.type === 'Expense').reduce((sum, e) => sum + e.effectiveAmount, 0);
+    const noDirection = events.filter(e => e.type === 'Unknown').length;
     const profit = income - expense;
-    const margin = income > 0 ? (profit / income) * 100 : 0;
+    const margin = income > 0 ? Math.round((profit / income) * 1000) / 10 : null;
 
-    // Category Breakdown
     const expenseByCategory = useMemo(() => {
-        const map = new Map<string, number>();
+        const map = new Map<MoneyCategory, number>();
         events.filter(e => e.type === 'Expense').forEach(e => {
             map.set(e.category, (map.get(e.category) || 0) + e.effectiveAmount);
         });
-        return [...map.entries()].sort((a, b) => b[1] - a[1]);
+        // A category whose only entry was marked duplicate (corrected to ₹ 0) spent nothing: no row, and no
+        // "₹ 0 (NaN%)" (I8 review B004).
+        return [...map.entries()].filter(([, amount]) => amount > 0).sort((a, b) => b[1] - a[1]);
     }, [events]);
 
-    const maxCategoryAmount = expenseByCategory.length > 0 ? expenseByCategory[0][1] : 1;
+    const period = PERIOD_LABEL[timeRange];
 
     return (
-        <div className="max-w-4xl mx-auto px-4 py-6 pb-24 min-h-screen bg-slate-50">
-            <div className="mb-6">
-                <h1 className="text-3xl font-black text-slate-800 tracking-tight">Reports</h1>
-                <p className="text-slate-500 font-medium">Financial health & profitability</p>
-            </div>
+        <MoneyPage title={FINANCE_TITLE['finance-reports']} testId="fin-reports" currentRoute={currentRoute} onNavigate={onNavigate} onBack={onBack}>
+            <ChoiceChips items={PERIODS} value={timeRange} onPick={setTimeRange} testId="report-period" />
 
-            <FinanceManagerNav currentRoute={currentRoute} onNavigate={onNavigate} />
-
-            {/* Filters */}
-            <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-none">
-                {(['THIS_MONTH', 'LAST_MONTH', 'THIS_YEAR', 'ALL_TIME'] as TimeRange[]).map(r => (
-                    <button
-                        key={r}
-                        onClick={() => setTimeRange(r)}
-                        className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${timeRange === r
-                            ? 'bg-slate-800 text-white'
-                            : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
-                            }`}
-                    >
-                        {r.replace('_', ' ')}
-                    </button>
-                ))}
-            </div>
-
-            {/* P&L Cards */}
-            <div className="grid grid-cols-2 gap-4 mb-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="glass-panel text-white p-5 rounded-3xl relative overflow-hidden group bg-slate-900 border-none shadow-xl shadow-slate-300">
-                    <div className="absolute right-0 top-0 opacity-10 p-4">
-                        <TrendingUp size={80} />
-                    </div>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-wider relative z-10">Net Profit</p>
-                    <h2 className={`text-3xl font-black mt-1 relative z-10 ${profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {profit >= 0 ? '+' : '-'}Rs {Math.abs(Math.round(profit)).toLocaleString('en-IN')}
-                    </h2>
-                    <p className={`text-xs font-bold mt-2 relative z-10 ${profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                        {margin.toFixed(1)}% Margin
-                    </p>
-                </div>
-
-                <div className="flex flex-col gap-4">
-                    <div className="glass-panel p-4 rounded-2xl bg-emerald-50 border-emerald-100 flex-1">
-                        <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-bold text-emerald-700 uppercase">Income</span>
-                            <TrendingUp size={16} className="text-emerald-400" />
+            {events.length === 0 ? (
+                <GlassCard testId="report-empty">
+                    <p className="m-0 py-2 text-center text-[15px] font-extrabold text-stone-700">{period} — एकही नोंद नाही.</p>
+                </GlassCard>
+            ) : (
+                <>
+                    <GlassCard testId="report-profit">
+                        <p className="m-0 text-[14px] font-bold text-stone-600">{profit >= 0 ? 'नफा' : 'तोटा'} · {period}</p>
+                        <p className={`m-0 text-[32px] font-extrabold leading-tight ${profit >= 0 ? 'text-emerald-800' : 'text-rose-700'}`}>
+                            {profit >= 0 ? '+ ' : '− '}{rupees(Math.abs(profit))}
+                        </p>
+                        {margin !== null && (
+                            <p className="m-0 text-[13.5px] font-bold text-stone-600" data-testid="report-margin">
+                                {margin >= 0 ? `जमेच्या ${margin}% हातात राहिले` : `तोटा जमेच्या ${Math.abs(margin)}% इतका`}
+                            </p>
+                        )}
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                            <div className="rounded-2xl bg-emerald-50 p-2.5" data-testid="report-income"><p className="m-0 text-[13px] font-bold text-emerald-800">जमा</p><p className="m-0 text-[19px] font-extrabold text-stone-900">{rupees(income)}</p></div>
+                            <div className="rounded-2xl bg-stone-100 p-2.5" data-testid="report-spend"><p className="m-0 text-[13px] font-bold text-stone-600">खर्च</p><p className="m-0 text-[19px] font-extrabold text-stone-900">{rupees(expense)}</p></div>
                         </div>
-                        <p className="text-xl font-black text-emerald-900">Rs {Math.round(income).toLocaleString('en-IN')}</p>
-                    </div>
-                    <div className="glass-panel p-4 rounded-2xl bg-rose-50 border-rose-100 flex-1">
-                        <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-bold text-rose-700 uppercase">Expense</span>
-                            <TrendingDown size={16} className="text-rose-400" />
-                        </div>
-                        <p className="text-xl font-black text-rose-900">Rs {Math.round(expense).toLocaleString('en-IN')}</p>
-                    </div>
-                </div>
-            </div>
+                        {noDirection > 0 && (
+                            <p className="m-0 mt-2 text-[12.5px] font-bold leading-snug text-stone-500" data-testid="report-no-direction">
+                                {entriesCount(noDirection)} — जमा की खर्च ते नोंदलेलं नाही, म्हणून यात धरलेलं नाही.
+                            </p>
+                        )}
+                    </GlassCard>
 
-            {/* Expense Breakdown */}
-            <div className="glass-panel bg-white p-6 rounded-3xl mb-6 shadow-sm border border-slate-100 animate-in fade-in slide-in-from-bottom-8 duration-700">
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                        <PieChart size={18} className="text-slate-400" />
-                        Expense Breakdown
-                    </h3>
-                    <button className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">View Details</button>
-                </div>
-
-                <div className="space-y-4">
-                    {expenseByCategory.map(([cat, amount], idx) => (
-                        <div key={cat} className="group">
-                            <div className="flex items-center justify-between text-sm mb-1.5">
-                                <span className="font-bold text-slate-700">{cat}</span>
-                                <span className="font-bold text-slate-900">Rs {Math.round(amount).toLocaleString('en-IN')}</span>
-                            </div>
-                            <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                                <div
-                                    className={`h-full rounded-full ${['bg-blue-500', 'bg-purple-500', 'bg-emerald-500', 'bg-amber-500'][idx % 4]} transition-all duration-1000 ease-out`}
-                                    style={{ width: `${(amount / (income + expense || 1)) * 100}%` }} // Relative to turnover for visual scale, or just max?
-                                ></div>
-                                {/* Better visual: relative to TOTAL EXPENSE */}
-                                <div
-                                    className={`h-full rounded-full ${['bg-blue-500', 'bg-purple-500', 'bg-emerald-500', 'bg-amber-500'][idx % 4]} transition-all duration-1000 ease-out`}
-                                    style={{ width: `${(amount / maxCategoryAmount) * 100}%`, display: 'none' }} // Hidden logic fix
-                                ></div>
-                            </div>
-                            {/* Re-rendering the bar with correct logic for display */}
-                            <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden mt-[-8px]">
-                                <div
-                                    className={`h-full rounded-full ${['bg-blue-500', 'bg-purple-500', 'bg-emerald-500', 'bg-amber-500'][idx % 4]} transition-all duration-1000 ease-out`}
-                                    style={{ width: `${(amount / expense) * 100}%` }}
-                                ></div>
-                            </div>
-                        </div>
-                    ))}
-                    {expenseByCategory.length === 0 && (
-                        <OfflineEmptyState
-                            icon={<PieChart size={32} className="text-slate-300" />}
-                            title="Reports Need Data"
-                            message="Add expenses or income records to see financial breakdown here."
-                        />
+                    {profit < 0 && (
+                        <p className="m-0 flex items-start gap-2 rounded-2xl bg-amber-50 p-3 text-[13.5px] font-bold leading-snug text-amber-900 ring-1 ring-amber-200" data-testid="report-loss-tip">
+                            <Info size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+                            <span>
+                                या काळात खर्च जमेपेक्षा जास्त झाला.
+                                {expenseByCategory.length > 0 && ` सर्वात मोठा खर्च: ${CATEGORY_LABEL[expenseByCategory[0][0]]} — ${rupees(expenseByCategory[0][1])}.`}
+                            </span>
+                        </p>
                     )}
-                </div>
-            </div>
 
-            {/* Service Proof — CEI Phase 3 §23.2 */}
+                    <SectionHead title="खर्चाची विभागणी" hint="पैसे कुठे गेले — मोठा खर्च वर" />
+                    <GlassCard testId="report-split">
+                        {expenseByCategory.length > 0 ? (
+                            <div className="space-y-3">
+                                {expenseByCategory.map(([cat, amount]) => (
+                                    <div key={cat} data-testid={`report-cat-${cat}`}>
+                                        <div className="flex items-baseline justify-between gap-2 text-[14.5px] font-extrabold text-stone-800">
+                                            <span>{CATEGORY_LABEL[cat]}</span>
+                                            <span>{rupees(amount)} {expense > 0 && <span className="text-[12.5px] font-bold text-stone-500">({Math.round((amount / expense) * 100)}%)</span>}</span>
+                                        </div>
+                                        <div className="mt-1 h-3 overflow-hidden rounded-full bg-stone-100">
+                                            <div className={`h-full rounded-full ${CAT_BAR[cat]}`} style={{ width: `${expense > 0 ? (amount / expense) * 100 : 0}%` }} />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="m-0 py-2 text-center text-[14px] font-bold text-stone-600" data-testid="report-no-spend">या काळात खर्चाची नोंद नाही.</p>
+                        )}
+                        <Tap onClick={() => onNavigate('finance-ledger')} data-testid="report-open-ledger"
+                            className="mt-3 flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-full bg-white text-[14.5px] font-extrabold text-blue-800 ring-1 ring-blue-200">
+                            <BookOpen size={17} aria-hidden="true" />वहीत सगळ्या नोंदी पाहा
+                        </Tap>
+                    </GlassCard>
+                </>
+            )}
+
+            {/* Service Proof — CEI Phase 3 §23.2, for the same three roles as before. */}
             {canSeeServiceProof && (
-                <button
-                    onClick={() => onNavigate('service-proof')}
-                    className="w-full rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-left flex items-center gap-3"
-                >
-                    <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                        <PieChart size={20} className="text-emerald-700" />
-                    </div>
-                    <div>
-                        <p style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }} className="text-sm font-bold text-emerald-900">
-                            सेवेचा पुरावा
-                        </p>
-                        <p style={{ fontFamily: "'DM Sans', sans-serif" }} className="text-xs text-emerald-700">
-                            Service Proof — advisory delivery export
-                        </p>
-                    </div>
-                    <svg className="ml-auto text-emerald-500" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6" /></svg>
-                </button>
+                <RowLink icon={<FileCheck2 size={22} aria-hidden="true" />} tone="green" title="सेवेचा पुरावा" line="नियोजन, अंमलबजावणी आणि पडताळणी — सल्लागार नोंदीसाठी"
+                    onClick={() => onNavigate('service-proof')} testId="report-service-proof" />
             )}
-
-            {/* Insight Tip */}
-            {profit < 0 && (
-                <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 flex gap-3 items-start animate-in zoom-in duration-300">
-                    <Info size={20} className="text-amber-600 shrink-0 mt-0.5" />
-                    <div>
-                        <p className="text-sm font-bold text-amber-800">Review Expenses</p>
-                        <p className="text-xs text-amber-700 mt-1">
-                            Your expenses exceed income for this period. Check the "Machinery" & "Labour" categories for cost saving opportunities.
-                        </p>
-                    </div>
-                </div>
-            )}
-        </div>
+        </MoneyPage>
     );
 };
 

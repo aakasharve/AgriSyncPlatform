@@ -3,8 +3,13 @@ import { Divide, AreaChart, Edit3, Check, AlertCircle, X } from 'lucide-react';
 import { Plot } from '../../../types';
 import { AllocateGlobalExpenseCommand, AllocationDetailPayload } from '../../../application/usecases/sync/AllocateGlobalExpenseCommand';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
+import { SANS } from '../../../shared/components/ui/placeUi';
 
 type AllocationBasis = 'equal' | 'by_acreage' | 'custom';
+
+/** How a plot's area unit reads (`LandUnit`); one this list does not know is shown as stored. */
+const AREA_UNIT_LABEL: Record<string, string> = { acre: 'एकर', acres: 'एकर', guntha: 'गुंठे', are: 'आर' };
+const areaUnitLabel = (unit?: string) => (unit ? AREA_UNIT_LABEL[unit.toLowerCase()] ?? unit : 'एकर');
 
 interface Props {
      costEntryId: string;
@@ -15,6 +20,9 @@ interface Props {
 }
 
 /**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — words in Marathi (area units too); the three
+ * ways to split, their arithmetic and what "वाटप पक्कं करा" queues are unchanged.
+ *
  * AllocationSelector — 3-strategy cost allocation for farm-scoped expenses
  *
  * When a cost entry is farm-scoped (no specific plot), this component lets the user
@@ -88,20 +96,20 @@ const AllocationSelector: React.FC<Props> = ({ costEntryId, totalAmount, plots, 
      };
 
      const strategies: { key: AllocationBasis; label: string; icon: React.ReactNode; disabled?: boolean }[] = [
-          { key: 'equal', label: 'Split Equally', icon: <Divide size={16} /> },
-          { key: 'by_acreage', label: 'By Plot Size', icon: <AreaChart size={16} />, disabled: !allHaveArea },
-          { key: 'custom', label: 'Custom Amounts', icon: <Edit3 size={16} /> },
+          { key: 'equal', label: 'सारखं वाटा', icon: <Divide size={16} /> },
+          { key: 'by_acreage', label: 'क्षेत्रानुसार', icon: <AreaChart size={16} />, disabled: !allHaveArea },
+          { key: 'custom', label: 'आपल्या रकमा', icon: <Edit3 size={16} /> },
      ];
 
      return (
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-xl p-5 animate-in fade-in slide-in-from-bottom-4">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-xl p-5 animate-in fade-in slide-in-from-bottom-4" style={{ fontFamily: SANS }}>
                {/* Header */}
                <div className="flex items-center justify-between mb-4">
                     <div>
-                         <h3 className="text-lg font-black text-slate-800">Allocate Expense</h3>
-                         <p className="text-xs text-slate-400 font-medium">₹{totalAmount.toLocaleString('en-IN')} across {plots.length} plots</p>
+                         <h3 className="text-lg font-black text-slate-800">खर्च प्लॉटमध्ये वाटा</h3>
+                         <p className="text-xs text-slate-400 font-medium">₹{totalAmount.toLocaleString('en-IN')} — {plots.length} प्लॉटमध्ये</p>
                     </div>
-                    <button onClick={onCancel} className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors">
+                    <button onClick={onCancel} aria-label="बंद करा" className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors">
                          <X size={16} className="text-slate-500" />
                     </button>
                </div>
@@ -130,7 +138,7 @@ const AllocationSelector: React.FC<Props> = ({ costEntryId, totalAmount, plots, 
                {basis === 'by_acreage' && !allHaveArea && (
                     <div className="mb-4 flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
                          <AlertCircle size={14} className="text-amber-500 mt-0.5 flex-shrink-0" />
-                         <p className="text-xs text-amber-700 font-medium">Some plots are missing area data. Please set plot acreage in Profile first.</p>
+                         <p className="text-xs text-amber-700 font-medium">काही प्लॉटचं क्षेत्र लिहिलेलं नाही. आधी सेट-अप केंद्रात प्लॉटचं क्षेत्र लिहा.</p>
                     </div>
                )}
 
@@ -139,7 +147,7 @@ const AllocationSelector: React.FC<Props> = ({ costEntryId, totalAmount, plots, 
                     {plots.map(p => {
                          const alloc = activeAllocations.find(a => a.plotId === p.id);
                          const area = p.baseline?.totalArea;
-                         const areaUnit = p.baseline?.unit || 'acres';
+                         const areaUnit = areaUnitLabel(p.baseline?.unit);
 
                          return (
                               <div key={p.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
@@ -179,9 +187,9 @@ const AllocationSelector: React.FC<Props> = ({ costEntryId, totalAmount, plots, 
                               ? 'bg-red-50 border-red-200 text-red-700'
                               : 'bg-amber-50 border-amber-200 text-amber-700'
                          }`}>
-                         <span>Total: ₹{customTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                         <span>एकूण: ₹{customTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                          <span>
-                              {customValid ? '✓ Matches' : customDiff > 0 ? `₹${customDiff.toFixed(2)} over` : `₹${Math.abs(customDiff).toFixed(2)} remaining`}
+                              {customValid ? '✓ बरोबर जुळलं' : customDiff > 0 ? `₹${customDiff.toFixed(2)} जास्त` : `₹${Math.abs(customDiff).toFixed(2)} बाकी`}
                          </span>
                     </div>
                )}
@@ -193,7 +201,7 @@ const AllocationSelector: React.FC<Props> = ({ costEntryId, totalAmount, plots, 
                     className="w-full py-3.5 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:shadow-none transition-all active:scale-[0.98]"
                >
                     <Check size={18} />
-                    {isSubmitting ? 'Allocating...' : 'Confirm Allocation'}
+                    {isSubmitting ? 'वाटप होत आहे…' : 'वाटप पक्कं करा'}
                </button>
           </div>
      );

@@ -1,106 +1,105 @@
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — "पैसे व हिशोब", the real Finance Manager home
+ * in the founder-approved look (PLR-D9 `FinancePages.tsx`). Everything it had stays: the four piles from
+ * `financeSelectors.getPipelineBuckets` (count + total, the तपासायचे pile opening the review page, the
+ * others the वही), the two quick figures and this month's cost report. The English six-tab row becomes five
+ * plain rows, one per page.
+ *
+ * One figure changed meaning, on purpose: "Total Input" showed the APPROVED pile's total, and nothing can
+ * approve a money entry yet (PENDING D-12), so it was ₹ 0 for every farmer. It is now the real total spent,
+ * named as such. The मंजूर pile shows no figure at all, only why: nothing can produce a मंजूर entry, so its
+ * "0 / ₹ 0" was a constant dressed as a measurement (I8 review B003, P4). A pile with no entry says नोंद नाही.
+ */
 import React, { useMemo } from 'react';
+import { BarChart3, BookOpen, CheckCircle2, ClipboardCheck, RefreshCw, Settings2, Tags, TriangleAlert, TrendingUp } from 'lucide-react';
 import { AppRoute } from '../types';
 import { financeSelectors } from '../features/finance/financeSelectors';
-import { FinanceManagerNav } from '../features/finance/components/FinanceManagerNav';
-import { ChevronRight, TrendingUp, AlertCircle, CheckCircle, RefreshCcw } from 'lucide-react';
-import { ExportButton } from '../features/export';
+import type { FinancePipelineBucket } from '../features/finance/finance.types';
+import { MoneyPage } from '../features/finance/components/MoneyPage';
+import { MonthlyCostPdfButton } from '../features/finance/components/MonthlyCostPdfButton';
+import { BUCKET_LABEL, FINANCE_TITLE, rupees } from '../features/finance/moneyLabels';
+import { Chip, GlassCard, IconDot, RowLink, SectionHead, Tap, type Tone } from '../shared/components/ui/placeUi';
 
 interface FinanceManagerHomeProps {
     currentRoute: AppRoute;
     onNavigate: (route: AppRoute) => void;
+    onBack?: () => void;
 }
 
-const FinanceManagerHome: React.FC<FinanceManagerHomeProps> = ({ currentRoute, onNavigate }) => {
+const BUCKET_LOOK: Record<FinancePipelineBucket['key'], { tone: Tone; icon: React.ReactNode }> = {
+    Captured: { tone: 'blue', icon: <RefreshCw size={20} aria-hidden="true" /> },
+    NeedsReview: { tone: 'amber', icon: <TriangleAlert size={20} aria-hidden="true" /> },
+    Approved: { tone: 'green', icon: <CheckCircle2 size={20} aria-hidden="true" /> },
+    Adjusted: { tone: 'violet', icon: <TrendingUp size={20} aria-hidden="true" /> },
+};
+
+const FinanceManagerHome: React.FC<FinanceManagerHomeProps> = ({ currentRoute, onNavigate, onBack }) => {
+    // `currentRoute` is a re-read trigger: the selectors read a mutable store.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const buckets = useMemo(() => financeSelectors.getPipelineBuckets(), [currentRoute]);
-    const currentFarmId = useMemo(() => financeSelectors.getEffectiveMoneyEvents()[0]?.farmId || 'default', []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const totalSpent = useMemo(() => financeSelectors.getTotalCost(), [currentRoute]);
+    // Same farm the English "Report" button used: the latest entry's. With no entry there is no report to make.
+    const reportFarmId = useMemo(() => financeSelectors.getEffectiveMoneyEvents()[0]?.farmId, []);
 
-    const getIcon = (key: string) => {
-        switch (key) {
-            case 'Captured': return <RefreshCcw size={20} className="text-blue-500" />;
-            case 'NeedsReview': return <AlertCircle size={20} className="text-amber-500" />;
-            case 'Approved': return <CheckCircle size={20} className="text-emerald-500" />;
-            case 'Adjusted': return <TrendingUp size={20} className="text-purple-500" />;
-            default: return <div />;
-        }
-    };
-
-    const getColor = (key: string) => {
-        switch (key) {
-            case 'Captured': return 'bg-blue-50 border-blue-100 hover:border-blue-300';
-            case 'NeedsReview': return 'bg-amber-50 border-amber-100 hover:border-amber-300';
-            case 'Approved': return 'bg-emerald-50 border-emerald-100 hover:border-emerald-300';
-            case 'Adjusted': return 'bg-purple-50 border-purple-100 hover:border-purple-300';
-            default: return 'bg-white border-slate-200';
-        }
-    }
+    const bucket = (key: FinancePipelineBucket['key']) => buckets.find(b => b.key === key);
+    const waiting = bucket('NeedsReview');
+    const recorded = bucket('Captured')?.count ?? 0;
 
     return (
-        <div className="max-w-4xl mx-auto px-4 py-6 pb-24 min-h-screen bg-slate-50">
-            <div className="mb-6">
-                <h1 className="text-3xl font-black text-slate-800 tracking-tight">Finance Manager</h1>
-                <p className="text-slate-500 font-medium">Daily money control room</p>
-            </div>
+        <MoneyPage title={FINANCE_TITLE['finance-manager']} testId="finance-home" currentRoute={currentRoute} onNavigate={onNavigate} onBack={onBack} withNav={false}>
+            <p className="m-0 px-1 text-[14px] font-semibold leading-snug text-stone-700">रोजच्या पैशांचं नियंत्रण — काय नोंदलं आणि काय एकदा तपासायचं.</p>
 
-            <FinanceManagerNav currentRoute={currentRoute} onNavigate={onNavigate} />
-
-            <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                {buckets.map((bucket, index) => (
-                    <button
-                        key={bucket.key}
-                        onClick={() => {
-                            if (bucket.key === 'NeedsReview') onNavigate('finance-review-inbox');
-                            else onNavigate('finance-ledger');
-                        }}
-                        className={`rounded-2xl border p-5 text-left transition-all duration-300 group hover:shadow-md active:scale-[0.98] ${getColor(bucket.key)}`}
-                        style={{ animationDelay: `${index * 100}ms` }}
-                    >
-                        <div className="flex items-center justify-between mb-3">
-                            <div className="p-2 rounded-xl bg-white shadow-sm border border-slate-100">
-                                {getIcon(bucket.key)}
-                            </div>
-                            <ChevronRight size={18} className="text-slate-300 group-hover:text-slate-500 transition-colors" />
-                        </div>
-
-                        <p className="text-xs font-black uppercase text-slate-400 tracking-wider mb-0.5">{bucket.key}</p>
-                        <p className="text-2xl font-black text-slate-800 tracking-tight">{bucket.count}</p>
-                        <p className="text-sm font-bold text-slate-600 mt-1">Rs {Math.round(bucket.total).toLocaleString('en-IN')}</p>
-
-                        {bucket.key === 'NeedsReview' && bucket.count > 0 && (
-                            <div className="mt-3 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-red-100 text-red-700 text-[10px] font-bold">
-                                <AlertCircle size={10} />
-                                {bucket.count} items pending
-                            </div>
+            <div className="grid grid-cols-2 gap-2">
+                {buckets.map(b => (
+                    <Tap key={b.key} onClick={() => onNavigate(b.key === 'NeedsReview' ? 'finance-review-inbox' : 'finance-ledger')} data-testid={`fin-tile-${b.key}`}
+                        className={`rounded-3xl border p-3 text-left shadow-[0_4px_18px_-8px_rgba(28,25,23,0.18)] ${b.key === 'NeedsReview' && b.count > 0 ? 'border-amber-300 bg-amber-50/90' : 'border-white/60 bg-white/80'}`}>
+                        <IconDot tone={BUCKET_LOOK[b.key].tone} size={38}>{BUCKET_LOOK[b.key].icon}</IconDot>
+                        <span className="mt-2 block text-[13.5px] font-extrabold text-stone-700">{BUCKET_LABEL[b.key]}</span>
+                        {b.key === 'Approved' ? (
+                            <span className="mt-1 block text-[13px] font-bold leading-snug text-stone-500" data-testid="fin-tile-Approved-unavailable">मंजुरी अजून उपलब्ध नाही</span>
+                        ) : b.count === 0 ? (
+                            <span className="mt-1 block text-[15px] font-extrabold text-stone-500">नोंद नाही</span>
+                        ) : (
+                            <>
+                                <span className="block text-[26px] font-extrabold leading-tight text-stone-900">{b.count}</span>
+                                <span className="block text-[13.5px] font-bold text-stone-600">{rupees(b.total)}</span>
+                            </>
                         )}
-                    </button>
+                        {b.key === 'NeedsReview' && b.count > 0 && <span className="mt-1.5 block"><Chip tone="amber">पाहायचं बाकी</Chip></span>}
+                    </Tap>
                 ))}
             </div>
 
-            <div className="mt-8 rounded-3xl bg-slate-800 p-6 text-white relative overflow-hidden group">
-                <div className="absolute -right-10 -top-10 text-white/5 rotate-12 group-hover:rotate-0 transition-transform duration-700">
-                    <TrendingUp size={150} />
-                </div>
-                <div className="flex items-center justify-between relative z-10">
-                    <h3 className="text-lg font-black">Quick Stats</h3>
-                    <ExportButton
-                        reportType="monthly-cost"
-                        options={{ farmId: currentFarmId, year: new Date().getFullYear(), month: new Date().getMonth() + 1, fileName: `monthly-cost-${new Date().getFullYear()}-${new Date().getMonth() + 1}.pdf` }}
-                        variant="secondary"
-                        label="Report"
-                        className="bg-white/10 text-white hover:bg-white hover:text-slate-900 border-0"
-                    />
-                </div>
-                <div className="grid grid-cols-2 gap-4 mt-4 relative z-10">
-                    <div>
-                        <p className="text-slate-400 text-xs font-bold uppercase">Total Input</p>
-                        <p className="text-xl font-bold">Rs {Math.round(buckets.find(b => b.key === 'Approved')?.total || 0).toLocaleString('en-IN')}</p>
+            {recorded > 0 ? (
+                <GlassCard testId="fin-quick">
+                    <div className="grid grid-cols-2 gap-3">
+                        <div><p className="m-0 text-[13px] font-bold text-stone-600">एकूण खर्च</p><p className="m-0 text-[21px] font-extrabold text-stone-900" data-testid="fin-quick-spent">{rupees(totalSpent)}</p></div>
+                        <div><p className="m-0 text-[13px] font-bold text-stone-600">तपासणी बाकी</p><p className="m-0 text-[21px] font-extrabold text-amber-700" data-testid="fin-quick-waiting">{rupees(waiting?.total ?? 0)}</p></div>
                     </div>
-                    <div>
-                        <p className="text-slate-400 text-xs font-bold uppercase">Pending Review</p>
-                        <p className="text-xl font-bold text-amber-400">Rs {Math.round(buckets.find(b => b.key === 'NeedsReview')?.total || 0).toLocaleString('en-IN')}</p>
-                    </div>
-                </div>
+                    {reportFarmId && <div className="mt-3"><MonthlyCostPdfButton farmId={reportFarmId} testId="fin-home-report" /></div>}
+                </GlassCard>
+            ) : (
+                <p className="m-0 rounded-2xl bg-white/70 p-4 text-center text-[14px] font-bold text-stone-600" data-testid="fin-home-empty">
+                    अजून एकही नोंद नाही. खर्च किंवा जमा सांगितल्यावर इथे दिसेल.
+                </p>
+            )}
+
+            <SectionHead title="हिशोबाचे भाग" />
+            <div className="space-y-2">
+                <RowLink icon={<BookOpen size={22} aria-hidden="true" />} tone="blue" title={FINANCE_TITLE['finance-ledger']} line="प्रत्येक रुपया — जमा आणि खर्च"
+                    onClick={() => onNavigate('finance-ledger')} testId="fin-open-ledger" />
+                <RowLink icon={<Tags size={22} aria-hidden="true" />} tone="violet" title={FINANCE_TITLE['finance-price-book']} line="मजुरी, खत-औषध, यंत्र, इंधन — ठरलेले दर"
+                    onClick={() => onNavigate('finance-price-book')} testId="fin-open-prices" />
+                <RowLink icon={<ClipboardCheck size={22} aria-hidden="true" />} tone="amber" title={FINANCE_TITLE['finance-review-inbox']} line="मोठी रक्कम, दुहेरी नोंद — एकदा पाहा"
+                    onClick={() => onNavigate('finance-review-inbox')} testId="fin-open-review"
+                    badge={waiting && waiting.count > 0 ? <Chip tone="amber">{waiting.count}</Chip> : undefined} />
+                <RowLink icon={<BarChart3 size={22} aria-hidden="true" />} tone="green" title={FINANCE_TITLE['finance-reports']} line="नफा-तोटा आणि खर्च कुठे गेला"
+                    onClick={() => onNavigate('finance-reports')} testId="fin-open-reports" />
+                <RowLink icon={<Settings2 size={22} aria-hidden="true" />} tone="stone" title={FINANCE_TITLE['finance-settings']} line="मोठ्या रकमेची मर्यादा, दुहेरी नोंद"
+                    onClick={() => onNavigate('finance-settings')} testId="fin-open-settings" />
             </div>
-        </div>
+        </MoneyPage>
     );
 };
 

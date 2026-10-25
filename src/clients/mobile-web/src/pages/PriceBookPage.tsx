@@ -1,31 +1,69 @@
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — "दरपत्रक", the real Price Book in the
+ * founder-approved look (PLR-D9 `FinanceTools.tsx`). Everything it had stays: every rate with its kind,
+ * price, unit and from-date, and "नवीन दर" (kind, item, unit, price, from-date) saved through the SAME
+ * `financeCommandService.createPriceBookItem` with the same fields — a blank unit is still stored as
+ * `unit`. Added from the approved look: show one kind at a time, and "दर बदला" on a rate, which fills the
+ * form so a NEW rate can be written from a new date. There is no in-place edit (the service has none);
+ * the older rate stays listed, as a price book should.
+ *
+ * Said plainly, because it is true today (founder ruling D2 pending): a written rate is not kept. The
+ * `set_price_config` payload is refused before it reaches the outbox, and the next read of the price book
+ * replaces the list with the server's copy. So the page never says "saved" — it says the rate was written
+ * and that keeping it is still to come. A price is required: a blank one used to be stored as ₹ 0.
+ */
 import React, { useMemo, useState } from 'react';
+import { Pencil, Plus } from 'lucide-react';
 import { AppRoute } from '../types';
 import { financeService } from '../features/finance/financeService';
 import { financeCommandService } from '../features/finance/financeCommandService';
-import { MoneyCategory } from '../features/finance/finance.types';
-import { FinanceManagerNav } from '../features/finance/components/FinanceManagerNav';
+import { MoneyCategory, PriceBookItem } from '../features/finance/finance.types';
 import { getDateKey } from '../core/domain/services/DateKeyService';
-
-const CATEGORIES: MoneyCategory[] = ['Labour', 'Input', 'Machinery', 'Transport', 'Repair', 'Fuel', 'Electricity', 'Other'];
+import { MoneyPage } from '../features/finance/components/MoneyPage';
+import { CATEGORY_LABEL, FINANCE_TITLE, MONEY_CATEGORIES, formatMoneyDate, rupees } from '../features/finance/moneyLabels';
+import { BigButton, Chip, ChoiceChips, GlassCard, SectionHead, Soon, Tap, TextField } from '../shared/components/ui/placeUi';
 
 interface PriceBookPageProps {
     currentRoute: AppRoute;
     onNavigate: (route: AppRoute) => void;
+    onBack?: () => void;
 }
 
-const PriceBookPage: React.FC<PriceBookPageProps> = ({ currentRoute, onNavigate }) => {
+const CATEGORY_CHIPS = MONEY_CATEGORIES.map(c => [c, CATEGORY_LABEL[c]] as const);
+const SHOW_CHIPS = [['all', 'सर्व'] as const, ...CATEGORY_CHIPS];
+
+/** What a stored placeholder means on screen: `unit` is "no unit given", `Price Config` is "no name sent". */
+const unitShown = (unit: string) => (unit && unit !== 'unit' ? unit : '');
+const nameShown = (name: string) => (name && name !== 'Price Config' ? name : 'नाव लिहिलेलं नाही');
+
+const PriceBookPage: React.FC<PriceBookPageProps> = ({ currentRoute, onNavigate, onBack }) => {
     const [name, setName] = useState('');
-    const [unit, setUnit] = useState('unit');
+    const [unit, setUnit] = useState('');
     const [price, setPrice] = useState('');
     const [category, setCategory] = useState<MoneyCategory>('Input');
     const [effectiveFrom, setEffectiveFrom] = useState(getDateKey());
     const [refresh, setRefresh] = useState(0);
+    const [show, setShow] = useState<MoneyCategory | 'all'>('all');
+    const [changing, setChanging] = useState<PriceBookItem | null>(null);
+    const [written, setWritten] = useState(false);
 
+    // `refresh` and `currentRoute` are re-read triggers: the service reads a mutable store.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const items = useMemo(() => financeService.getPriceBook(), [refresh, currentRoute]);
+    const list = items.filter(item => show === 'all' || item.category === show);
+
+    const parsedPrice = Number(price);
+    const canSave = name.trim() !== '' && price.trim() !== '' && Number.isFinite(parsedPrice) && parsedPrice > 0;
+
+    const resetForm = () => {
+        setName('');
+        setPrice('');
+        setUnit('');
+        setChanging(null);
+    };
 
     const addItem = () => {
-        const parsedPrice = Number(price);
-        if (!name.trim() || Number.isNaN(parsedPrice)) return;
+        if (!canSave) return;
         financeCommandService.createPriceBookItem({
             name: name.trim(),
             category,
@@ -34,91 +72,91 @@ const PriceBookPage: React.FC<PriceBookPageProps> = ({ currentRoute, onNavigate 
             effectiveFrom,
             isActive: true
         });
-        setName('');
-        setPrice('');
+        resetForm();
+        setWritten(true);
+        setShow('all');
         setRefresh(v => v + 1);
     };
 
+    const startChange = (item: PriceBookItem) => {
+        setChanging(item);
+        setName(item.name === 'Price Config' ? '' : item.name);
+        setCategory(item.category);
+        setUnit(unitShown(item.defaultUnit));
+        setPrice(String(item.defaultUnitPrice));
+        setEffectiveFrom(getDateKey());
+        setWritten(false);
+        if (typeof document !== 'undefined') {
+            document.getElementById('price-form')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+        }
+    };
+
     return (
-        <div className="max-w-4xl mx-auto px-4 py-6 pb-24">
-            <h1 className="text-2xl font-black font-display text-stone-800">Price Book</h1>
-            <p className="text-sm text-stone-500 mb-6">Prices moved out of Settings</p>
-            <FinanceManagerNav currentRoute={currentRoute} onNavigate={onNavigate} />
+        <MoneyPage title={FINANCE_TITLE['finance-price-book']} testId="fin-prices" currentRoute={currentRoute} onNavigate={onNavigate} onBack={onBack}>
+            <p className="m-0 px-1 text-[14px] font-semibold leading-snug text-stone-700">ठरलेले दर इथे एकदा लिहून ठेवा — मजुरी, खत-औषध, यंत्र, इंधन.</p>
 
-            <div className="glass-panel p-5 mb-6">
-                <h3 className="text-sm font-bold text-stone-800 uppercase tracking-wide mb-3">Add New Price</h3>
-                <div className="grid grid-cols-2 gap-3">
-                    <input
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className="rounded-xl border-transparent bg-surface-100 px-3 py-2.5 text-sm font-medium focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all placeholder:text-stone-400"
-                        placeholder="Item name"
-                    />
-                    <select
-                        value={category}
-                        onChange={(e) => setCategory(e.target.value as MoneyCategory)}
-                        className="rounded-xl border-transparent bg-surface-100 px-3 py-2.5 text-sm font-medium focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-stone-700"
-                    >
-                        {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                    </select>
-                    <input
-                        value={unit}
-                        onChange={(e) => setUnit(e.target.value)}
-                        className="rounded-xl border-transparent bg-surface-100 px-3 py-2.5 text-sm font-medium focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all placeholder:text-stone-400"
-                        placeholder="Unit (e.g., hr, kg)"
-                    />
-                    <input
-                        value={price}
-                        onChange={(e) => setPrice(e.target.value)}
-                        className="rounded-xl border-transparent bg-surface-100 px-3 py-2.5 text-sm font-medium focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all placeholder:text-stone-400"
-                        placeholder="Price"
-                        type="number"
-                    />
-                    <div className="col-span-2">
-                        <label className="text-xs text-stone-400 font-bold ml-1 mb-1 block">Effective Date</label>
-                        <input
-                            value={effectiveFrom}
-                            onChange={(e) => setEffectiveFrom(e.target.value)}
-                            className="w-full rounded-xl border-transparent bg-surface-100 px-3 py-2.5 text-sm font-medium focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-stone-700"
-                            type="date"
-                        />
-                    </div>
-                </div>
-                <button
-                    onClick={addItem}
-                    className="mt-4 w-full rounded-xl bg-stone-900 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-stone-900/20 active:scale-[0.98] transition-all hover:bg-stone-800"
-                >
-                    Save Price
-                </button>
-            </div>
+            <ChoiceChips items={SHOW_CHIPS} value={show} onPick={setShow} testId="price-show" />
 
-            <div className="space-y-3">
-                {items.map(item => (
-                    <div key={item.id} className="glass-panel p-4 flex items-center justify-between group hover:border-emerald-200 transition-colors">
-                        <div>
-                            <p className="font-bold text-stone-800 text-lg">{item.name}</p>
-                            <span className="inline-block mt-1 px-2 py-0.5 rounded-md bg-stone-100 text-[10px] font-bold text-stone-500 uppercase tracking-wide">
-                                {item.category}
-                            </span>
-                        </div>
-                        <div className="text-right">
-                            <p className="font-mono font-bold text-emerald-700 text-lg">
-                                ₹{item.defaultUnitPrice.toLocaleString('en-IN')}
-                            </p>
-                            <p className="text-xs text-stone-400 font-medium">
-                                per {item.defaultUnit}
-                            </p>
-                        </div>
+            {list.map(item => (
+                <GlassCard key={item.id} testId={`price-row-${item.id}`}>
+                    <div className="flex items-baseline justify-between gap-2">
+                        <p className="m-0 min-w-0 text-[15.5px] font-extrabold text-stone-900 [overflow-wrap:anywhere]">{nameShown(item.name)}</p>
+                        <p className="m-0 shrink-0 text-[16px] font-extrabold text-stone-900">
+                            {rupees(item.defaultUnitPrice)}
+                            {unitShown(item.defaultUnit) && <span className="text-[13px] font-bold text-stone-500"> / {unitShown(item.defaultUnit)}</span>}
+                        </p>
                     </div>
-                ))}
-                {items.length === 0 && (
-                    <div className="rounded-2xl border-2 border-dashed border-stone-200 p-8 text-center">
-                        <p className="text-stone-400 font-medium">No prices configured yet.</p>
-                        <p className="text-xs text-stone-300 mt-1">Add items above to track costs accurately.</p>
+                    <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+                        <Chip tone="violet">{CATEGORY_LABEL[item.category]}</Chip>
+                        {formatMoneyDate(item.effectiveFrom) && <span className="text-[12.5px] font-bold text-stone-500">{formatMoneyDate(item.effectiveFrom)} पासून</span>}
+                        <Tap onClick={() => startChange(item)} data-testid={`price-change-${item.id}`}
+                            className="flex min-h-[40px] items-center gap-1 rounded-full bg-white px-3 text-[13.5px] font-extrabold text-emerald-800 ring-1 ring-emerald-300">
+                            <Pencil size={14} aria-hidden="true" />दर बदला
+                        </Tap>
                     </div>
-                )}
+                </GlassCard>
+            ))}
+            {list.length === 0 && (
+                <p className="m-0 rounded-2xl bg-white/70 p-4 text-center text-[14px] font-bold text-stone-500" data-testid="price-empty">
+                    {items.length === 0 ? 'अजून एकही दर लिहिलेला नाही.' : 'या प्रकारचा दर अजून लिहिलेला नाही.'}
+                </p>
+            )}
+
+            <div id="price-form" className="space-y-3">
+                <SectionHead
+                    title={changing ? `दर बदला — ${nameShown(changing.name)}` : 'नवीन दर'}
+                    hint={changing ? 'नवा दर आणि तो कधीपासून ते लिहा. आधीचा दर यादीत तसाच राहील.' : 'प्रकार निवडा, मग नाव, दर आणि कधीपासून'}
+                />
+                <GlassCard testId="price-form">
+                    <ChoiceChips items={CATEGORY_CHIPS} value={category} onPick={setCategory} testId="price-cat" />
+                    <div className="mt-3 space-y-2">
+                        <TextField label="कशाचा दर?" value={name} onChange={v => { setName(v); setWritten(false); }} placeholder="उदा. फवारणी मजूर" testId="price-item" />
+                        <div className="grid grid-cols-2 gap-2">
+                            <TextField label="दर (₹)" type="number" value={price} onChange={v => { setPrice(v); setWritten(false); }} testId="price-rate" />
+                            <TextField label="कशामागे?" value={unit} onChange={setUnit} placeholder="दिवस, किलो" testId="price-unit" />
+                        </div>
+                        <label className="block">
+                            <span className="text-[13.5px] font-extrabold text-stone-700">कधीपासून</span>
+                            <input type="date" value={effectiveFrom} onChange={e => setEffectiveFrom(e.target.value)} data-testid="price-date"
+                                className="mt-1 min-h-[52px] w-full rounded-xl bg-white px-3 text-[17px] font-bold text-stone-900 outline-none ring-1 ring-stone-300 focus:ring-2 focus:ring-emerald-500" />
+                        </label>
+                        <BigButton onClick={addItem} disabled={!canSave} testId="price-save"><Plus size={20} aria-hidden="true" />दर यादीत लिहा</BigButton>
+                        {changing && (
+                            <Tap onClick={resetForm} data-testid="price-change-cancel"
+                                className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-white text-[15px] font-extrabold text-stone-700 ring-1 ring-stone-300">
+                                रद्द करा
+                            </Tap>
+                        )}
+                        {written && (
+                            <p className="m-0 text-center text-[14px] font-extrabold text-emerald-800" role="status" data-testid="price-written">
+                                दर यादीत लिहिला ✓ — पण अजून कायम जतन होत नाही.
+                            </p>
+                        )}
+                    </div>
+                </GlassCard>
+                <Soon what="लिहिलेला दर कायम जतन होणं आणि शेतातल्या इतर फोनवर दिसणं" />
             </div>
-        </div>
+        </MoneyPage>
     );
 };
 

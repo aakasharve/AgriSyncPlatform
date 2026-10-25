@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { X, CornerDownRight, AlertCircle } from 'lucide-react';
 import { financeCommandService } from '../financeCommandService';
+import { categoryLabel } from '../moneyLabels';
+import { SANS } from '../../../shared/components/ui/placeUi';
 
 interface Props {
      costEntryId: string;
@@ -11,6 +13,9 @@ interface Props {
 }
 
 /**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — words in Marathi (the kind of cost too); what
+ * "दुरुस्ती जतन करा" writes, and when it may be pressed, are unchanged.
+ *
  * CostCorrectionSheet — Bottom sheet for correcting a cost entry amount.
  *
  * Creates a correction record (not an edit) — the original remains in the ledger
@@ -44,15 +49,15 @@ const CostCorrectionSheet: React.FC<Props> = ({ costEntryId, originalAmount, cat
      };
 
      return (
-          <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in">
+          <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in" style={{ fontFamily: SANS }}>
                <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl animate-in slide-in-from-bottom-8">
                     {/* Header */}
                     <div className="flex items-center justify-between p-4 border-b border-slate-100">
                          <div>
-                              <h3 className="text-lg font-black text-slate-800">Correct Amount</h3>
-                              <p className="text-xs text-slate-400 font-medium">{category}</p>
+                              <h3 className="text-lg font-black text-slate-800">रक्कम दुरुस्त करा</h3>
+                              <p className="text-xs text-slate-400 font-medium">{categoryLabel(category)}</p>
                          </div>
-                         <button onClick={onClose} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200">
+                         <button onClick={onClose} aria-label="बंद करा" className="p-2 bg-slate-100 rounded-full hover:bg-slate-200">
                               <X size={18} className="text-slate-500" />
                          </button>
                     </div>
@@ -60,7 +65,7 @@ const CostCorrectionSheet: React.FC<Props> = ({ costEntryId, originalAmount, cat
                     <div className="p-5 space-y-5">
                          {/* Original amount */}
                          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Original Amount</p>
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">आधीची रक्कम</p>
                               <p className="text-xl font-black text-slate-400 line-through">
                                    ₹{originalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                               </p>
@@ -68,7 +73,7 @@ const CostCorrectionSheet: React.FC<Props> = ({ costEntryId, originalAmount, cat
 
                          {/* Corrected amount */}
                          <div>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Corrected Amount</p>
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">बरोबर रक्कम</p>
                               <div className="flex items-center gap-2 p-3 bg-white border border-slate-200 rounded-xl focus-within:border-emerald-400 transition-colors">
                                    <span className="text-xl font-black text-slate-600">₹</span>
                                    <input
@@ -91,19 +96,19 @@ const CostCorrectionSheet: React.FC<Props> = ({ costEntryId, originalAmount, cat
 
                          {/* Reason */}
                          <div>
-                              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Reason for Correction *</p>
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">दुरुस्तीचं कारण *</p>
                               <textarea
                                    value={reason}
                                    onChange={(e) => setReason(e.target.value)}
                                    maxLength={500}
                                    rows={3}
-                                   placeholder="Why does this amount need correction?"
+                                   placeholder="ही रक्कम का बदलायची?"
                                    className="w-full p-3 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none focus:border-emerald-400 resize-none transition-colors bg-slate-50"
                               />
                               <div className="flex justify-between mt-1">
                                    {reason.length === 0 && (
                                         <span className="text-[10px] text-red-400 font-medium flex items-center gap-1">
-                                             <AlertCircle size={10} /> Required
+                                             <AlertCircle size={10} /> कारण लिहायला हवं
                                         </span>
                                    )}
                                    <span className="text-[10px] text-slate-300 font-medium ml-auto">{reason.length}/500</span>
@@ -114,14 +119,14 @@ const CostCorrectionSheet: React.FC<Props> = ({ costEntryId, originalAmount, cat
                     {/* Footer */}
                     <div className="p-4 border-t border-slate-100 flex gap-3">
                          <button onClick={onClose} className="flex-1 py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl transition-colors">
-                              Cancel
+                              रद्द करा
                          </button>
                          <button
                               onClick={handleSubmit}
                               disabled={!canSubmit || isSubmitting}
                               className="flex-[2] py-3 bg-amber-500 text-white font-bold rounded-xl shadow-lg shadow-amber-200 disabled:opacity-50 disabled:shadow-none transition-all active:scale-[0.98]"
                          >
-                              {isSubmitting ? 'Correcting...' : 'Apply Correction'}
+                              {isSubmitting ? 'दुरुस्ती होत आहे…' : 'दुरुस्ती जतन करा'}
                          </button>
                     </div>
                </div>

@@ -231,7 +231,16 @@ export const renderScheduleRoute = (ctx: AppRouterContext): React.ReactNode => {
 
 export const renderProcurementRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'procurement') return null;
-    return <ProcurementPage crops={ctx.crops} />;
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — the redesigned खरेदी: one मागे,
+    // "बोलून सांगा / हाताने लिहा" open the day's log, and a row into पैसे व हिशोब.
+    return (
+        <ProcurementPage
+            crops={ctx.crops}
+            onBack={() => ctx.goBackOr('main')}
+            onTell={() => { ctx.setMainView('log'); ctx.setCurrentRoute('main'); }}
+            onGo={(route) => ctx.setCurrentRoute(route)}
+        />
+    );
 };
 
 export const renderTestE2ERoute = (ctx: AppRouterContext): React.ReactNode => {
@@ -250,6 +259,7 @@ export const renderIncomeRoute = (ctx: AppRouterContext): React.ReactNode => {
             context={ctx.currentLogContext}
             crops={ctx.crops}
             onBack={() => ctx.goBackOr('main')}
+            onGo={(route) => ctx.setCurrentRoute(route)}
         />
     );
 };
@@ -260,6 +270,7 @@ export const renderFinanceManagerRoute = (ctx: AppRouterContext): React.ReactNod
         <FinanceManagerHome
             currentRoute={ctx.currentRoute}
             onNavigate={ctx.setCurrentRoute}
+            onBack={() => ctx.goBackOr('main')}
         />
     );
 };
@@ -270,6 +281,7 @@ export const renderFinanceLedgerRoute = (ctx: AppRouterContext): React.ReactNode
         <LedgerPage
             currentRoute={ctx.currentRoute}
             onNavigate={ctx.setCurrentRoute}
+            onBack={() => ctx.goBackOr('finance-manager')}
         />
     );
 };
@@ -280,6 +292,7 @@ export const renderFinancePriceBookRoute = (ctx: AppRouterContext): React.ReactN
         <PriceBookPage
             currentRoute={ctx.currentRoute}
             onNavigate={ctx.setCurrentRoute}
+            onBack={() => ctx.goBackOr('finance-manager')}
         />
     );
 };
@@ -290,6 +303,7 @@ export const renderFinanceReviewInboxRoute = (ctx: AppRouterContext): React.Reac
         <ReviewInboxPage
             currentRoute={ctx.currentRoute}
             onNavigate={ctx.setCurrentRoute}
+            onBack={() => ctx.goBackOr('finance-manager')}
         />
     );
 };
@@ -300,6 +314,7 @@ export const renderFinanceReportsRoute = (ctx: AppRouterContext): React.ReactNod
         <ReportsPage
             currentRoute={ctx.currentRoute}
             onNavigate={ctx.setCurrentRoute}
+            onBack={() => ctx.goBackOr('finance-manager')}
         />
     );
 };
@@ -310,6 +325,7 @@ export const renderFinanceSettingsRoute = (ctx: AppRouterContext): React.ReactNo
         <FinanceSettingsPage
             currentRoute={ctx.currentRoute}
             onNavigate={ctx.setCurrentRoute}
+            onBack={() => ctx.goBackOr('finance-manager')}
         />
     );
 };

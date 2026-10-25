@@ -1,6 +1,12 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — "इतर उत्पन्न जोडा", in Marathi and in the redesign's
+ * look (`placeUi`). It was English ("Add Other Income", "RESIDUE", "Save Income"). The same fields — amount,
+ * source, what, crop (optional), date — the same "amount and what are both needed", and the same save:
+ * `addOtherIncomeEntry`, which stores the entry and sends its money entry. One addition: `initialDescription`,
+ * so a kind tile on उत्पन्न (भंगार, अनुदान…) opens the sheet with that word already in "काय?", in plain view.
  */
 
 import React, { useState } from 'react';
@@ -8,21 +14,27 @@ import {
     OtherIncomeEntry,
     CropProfile
 } from '../../../../types';
-import Button from '../../../../shared/components/ui/Button';
-import { X, Save, IndianRupee, FileText } from 'lucide-react';
+import { X, Save } from 'lucide-react';
 import { addOtherIncomeEntry } from '../../../../services/harvestService';
 import { getDateKey } from '../../../../core/domain/services/DateKeyService';
+import { BigButton, ChoiceChips, SANS, TextField } from '../../../../shared/components/ui/placeUi';
+import { OTHER_INCOME_SOURCE_LABEL } from './otherIncomeLabels';
 
 interface OtherIncomeSheetProps {
     crops: CropProfile[]; // For linking to crop
     onClose: () => void;
     onSave: () => void;
+    /** Pre-written "काय?" (the kind tile the farmer tapped); he can change it. */
+    initialDescription?: string;
 }
 
-const OtherIncomeSheet: React.FC<OtherIncomeSheetProps> = ({ crops, onClose, onSave }) => {
+const SOURCES = (Object.keys(OTHER_INCOME_SOURCE_LABEL) as OtherIncomeEntry['source'][])
+    .map(s => [s, OTHER_INCOME_SOURCE_LABEL[s]] as const);
+
+const OtherIncomeSheet: React.FC<OtherIncomeSheetProps> = ({ crops, onClose, onSave, initialDescription = '' }) => {
     const [amount, setAmount] = useState<string>('');
     const [source, setSource] = useState<OtherIncomeEntry['source']>('OTHER');
-    const [description, setDescription] = useState('');
+    const [description, setDescription] = useState(initialDescription);
     const [date, setDate] = useState(getDateKey());
     const [selectedCropId, setSelectedCropId] = useState<string>('');
 
@@ -43,14 +55,15 @@ const OtherIncomeSheet: React.FC<OtherIncomeSheetProps> = ({ crops, onClose, onS
     };
 
     return (
-        <div className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4">
+        <div className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4"
+            style={{ fontFamily: SANS }} data-testid="other-income-sheet">
             <div className="bg-white w-full max-w-md sm:rounded-2xl rounded-t-3xl shadow-xl flex flex-col max-h-[90vh]">
 
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-slate-100">
-                    <h2 className="text-lg font-bold text-slate-800">Add Other Income</h2>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
-                        <X size={20} />
+                <div className="flex items-center justify-between p-4 border-b border-stone-100">
+                    <h2 className="m-0 text-[19px] font-extrabold text-stone-900">इतर उत्पन्न जोडा</h2>
+                    <button type="button" onClick={onClose} aria-label="बंद करा" className="grid h-11 w-11 place-items-center rounded-full text-stone-600 hover:bg-stone-100">
+                        <X size={22} />
                     </button>
                 </div>
 
@@ -58,88 +71,51 @@ const OtherIncomeSheet: React.FC<OtherIncomeSheetProps> = ({ crops, onClose, onS
                 <div className="p-4 space-y-4 overflow-y-auto">
 
                     {/* Amount */}
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Amount Received</label>
-                        <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
-                            <input
-                                type="number"
-                                value={amount}
-                                onChange={(e) => setAmount(e.target.value)}
-                                className="w-full pl-8 p-3 rounded-xl border border-slate-200 text-lg font-bold text-slate-900 focus:border-emerald-500 outline-none"
-                                placeholder="0.00"
-                            />
-                        </div>
-                    </div>
+                    <TextField label="मिळालेली रक्कम (₹)" type="number" value={amount} onChange={setAmount} placeholder="रक्कम" testId="other-income-amount" />
 
                     {/* Source Type */}
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Source</label>
-                        <div className="flex flex-wrap gap-2">
-                            {['RESIDUE', 'BYPRODUCT', 'PLANT_SALE', 'OTHER'].map((s) => (
-                                <button
-                                    key={s}
-                                    onClick={() => setSource(s as any)}
-                                    className={`px-3 py-2 rounded-lg text-sm border font-medium ${source === s
-                                        ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
-                                        : 'bg-white border-slate-200 text-slate-600'
-                                        }`}
-                                >
-                                    {s.replace('_', ' ')}
-                                </button>
-                            ))}
-                        </div>
+                        <span className="mb-1 block text-[13.5px] font-extrabold text-stone-700">कशातून आले?</span>
+                        <ChoiceChips items={SOURCES} value={source} onPick={setSource} testId="other-income-source" />
                     </div>
 
                     {/* Description */}
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Description</label>
-                        <input
-                            type="text"
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            className="w-full p-3 rounded-xl border border-slate-200 focus:border-emerald-500 outline-none"
-                            placeholder="e.g. Sold scrap drip pipes"
-                        />
-                    </div>
+                    <TextField label="काय?" value={description} onChange={setDescription} placeholder="उदा. जुनी ठिबक नळी भंगारात विकली" testId="other-income-what" />
 
                     {/* Crop Context (Optional) */}
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Related Crop (Optional)</label>
+                    <label className="block">
+                        <span className="text-[13.5px] font-extrabold text-stone-700">कोणत्या पिकाचं? (हवं तर)</span>
                         <select
                             value={selectedCropId}
                             onChange={(e) => setSelectedCropId(e.target.value)}
-                            className="w-full p-3 rounded-xl border border-slate-200 bg-white"
+                            data-testid="other-income-crop"
+                            className="mt-1 min-h-[52px] w-full rounded-xl bg-white px-3 text-[16px] font-bold text-stone-900 ring-1 ring-stone-300"
                         >
-                            <option value="">-- General Farm Income --</option>
+                            <option value="">सर्व शेताचं उत्पन्न</option>
                             {crops.map(c => (
                                 <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
                         </select>
-                    </div>
+                    </label>
 
                     {/* Date */}
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Date</label>
+                    <label className="block">
+                        <span className="text-[13.5px] font-extrabold text-stone-700">तारीख</span>
                         <input
                             type="date"
                             value={date}
                             onChange={(e) => setDate(e.target.value)}
-                            className="w-full p-3 rounded-xl border border-slate-200 bg-white"
+                            data-testid="other-income-date"
+                            className="mt-1 min-h-[52px] w-full rounded-xl bg-white px-3 text-[16px] font-bold text-stone-900 ring-1 ring-stone-300"
                         />
-                    </div>
+                    </label>
                 </div>
 
                 {/* Footer */}
-                <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-3xl sm:rounded-b-2xl">
-                    <button
-                        onClick={handleSubmit}
-                        disabled={!amount || !description}
-                        className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                        <Save size={18} />
-                        Save Income
-                    </button>
+                <div className="p-4 border-t border-stone-100 bg-stone-50 rounded-b-3xl sm:rounded-b-2xl">
+                    <BigButton onClick={handleSubmit} disabled={!amount || !description} testId="other-income-save">
+                        <Save size={20} aria-hidden="true" />जतन करा
+                    </BigButton>
                 </div>
 
             </div>

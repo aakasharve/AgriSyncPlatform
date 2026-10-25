@@ -1,18 +1,30 @@
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — "तपासायचे", the real Review Inbox in the
+ * founder-approved look (PLR-D9 `FinancePages.tsx`). Everything it had stays: each entry the server set
+ * aside, with its kind, date, note and why it was set aside, and its amount opening the money drawer, where
+ * it can be corrected. The server's English reasons ("High amount: >= 25000 INR") are said in Marathi.
+ *
+ * NO approve and NO "बरोबर आहे" — the approved preview had both, but there is no server path for approving
+ * a money entry (PENDING D-12), so the page keeps its one honest line instead (see below).
+ */
 import React, { useMemo, useState } from 'react';
+import { Sparkles, TriangleAlert } from 'lucide-react';
 import { AppRoute } from '../types';
 import { financeSelectors } from '../features/finance/financeSelectors';
-import { FinanceManagerNav } from '../features/finance/components/FinanceManagerNav';
 import { MoneyChip } from '../features/finance/components/MoneyChip';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
 import { FinanceFilters } from '../features/finance/finance.types';
-import { AlertTriangle, CheckCircle } from 'lucide-react';
+import { MoneyPage } from '../features/finance/components/MoneyPage';
+import { CATEGORY_LABEL, FINANCE_TITLE, SOURCE_LABEL, formatMoneyDate, reviewReasonLabel } from '../features/finance/moneyLabels';
+import { Chip, GlassCard, IconDot } from '../shared/components/ui/placeUi';
 
 interface ReviewInboxPageProps {
     currentRoute: AppRoute;
     onNavigate: (route: AppRoute) => void;
+    onBack?: () => void;
 }
 
-const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavigate }) => {
+const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavigate, onBack }) => {
     const [refresh, setRefresh] = useState(0);
     const [drawerFilter, setDrawerFilter] = useState<FinanceFilters | null>(null);
 
@@ -27,72 +39,57 @@ const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavig
     const entries = useMemo(() => financeSelectors.getReviewInbox(), [currentRoute, refresh]);
 
     return (
-        <div className="max-w-4xl mx-auto px-4 py-6 pb-24 min-h-screen bg-slate-50">
-            <div className="mb-6">
-                <h1 className="text-3xl font-black text-slate-800 tracking-tight">Review Inbox</h1>
-                <p className="text-slate-500 font-medium">Approve and fix suspicious money events</p>
-            </div>
-
-            <FinanceManagerNav currentRoute={currentRoute} onNavigate={onNavigate} />
+        <MoneyPage title={FINANCE_TITLE['finance-review-inbox']} testId="fin-review" currentRoute={currentRoute} onNavigate={onNavigate} onBack={onBack}>
+            {/* Only when there is something to look at (I8 review B005): over an empty inbox it contradicted the line below. */}
+            {entries.length > 0 && (
+                <p className="m-0 px-1 text-[14px] font-semibold leading-snug text-stone-700">या नोंदी वेगळ्या दिसल्या — मोठी रक्कम किंवा दुहेरी नोंद. एकदा पाहा.</p>
+            )}
 
             {entries.length > 0 && (
-                <p data-testid="review-approve-unavailable" className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-                    मंजुरी अजून उपलब्ध नाही — खर्च दुरुस्त करायचा असेल तर रकमेवर दाबा. · Approving is not available yet; tap an amount to correct it.
+                <p data-testid="review-approve-unavailable" className="m-0 rounded-2xl bg-amber-50 p-3 text-[14px] font-extrabold leading-snug text-amber-900 ring-1 ring-amber-200">
+                    मंजुरी अजून उपलब्ध नाही — खर्च दुरुस्त करायचा असेल तर रकमेवर दाबा.
                 </p>
             )}
 
-            <div className="space-y-3">
-                {entries.map((item, index) => (
-                    <div
-                        key={item.id}
-                        className="glass-panel p-4 rounded-2xl flex items-center justify-between group hover:border-emerald-200 transition-all duration-300 animate-in fade-in slide-in-from-bottom-2"
-                        style={{ animationDelay: `${index * 50}ms` }}
-                    >
-                        <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center border border-amber-100 shrink-0">
-                                <AlertTriangle size={20} />
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h3 className="font-bold text-slate-800">{item.category}</h3>
-                                    <span className="text-xs font-medium text-slate-400">• {new Date(item.dateTime).toLocaleDateString()}</span>
+            {entries.map(item => {
+                const reasons = item.reviewReasons ?? [];
+                const what = item.notes || item.vendorName || SOURCE_LABEL[item.sourceType] || 'नोंद';
+                const when = formatMoneyDate(item.dateTime);
+                return (
+                    <GlassCard key={item.id} className="border-l-4 border-l-amber-500" testId={`review-${item.id}`}>
+                        <div className="flex items-start gap-3">
+                            <IconDot tone="amber"><TriangleAlert size={22} aria-hidden="true" /></IconDot>
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-baseline justify-between gap-2">
+                                    <p className="m-0 text-[15.5px] font-extrabold text-stone-900">{CATEGORY_LABEL[item.category]}</p>
+                                    <MoneyChip
+                                        amount={item.effectiveAmount}
+                                        onClick={() => setDrawerFilter({ sourceType: item.sourceType, sourceId: item.sourceId })}
+                                        className="shrink-0 border-amber-300 bg-amber-50 px-3 py-1.5 text-[15px] text-amber-900"
+                                    />
                                 </div>
-                                <p className="text-sm text-slate-500">{item.notes || item.vendorName || `${item.sourceType} Entry`}</p>
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                    {(item.reviewReasons || []).map(reason => (
-                                        <span key={reason} className="px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-600 text-[10px] font-bold border border-rose-100">
-                                            {reason}
-                                        </span>
-                                    ))}
-                                    {(!item.reviewReasons || item.reviewReasons.length === 0) && (
-                                        <span className="px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-600 text-[10px] font-bold border border-amber-100">
-                                            Needs Review
-                                        </span>
-                                    )}
+                                <p className="m-0 text-[13px] font-semibold text-stone-600 [overflow-wrap:anywhere]">{when ? `${when} · ` : ''}{what}</p>
+                                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                    {reasons.length > 0
+                                        ? reasons.map(reason => <Chip key={reason} tone="rose">{reviewReasonLabel(reason)}</Chip>)
+                                        : <Chip tone="amber">एकदा पाहायचं</Chip>}
                                 </div>
                             </div>
                         </div>
+                    </GlassCard>
+                );
+            })}
 
-                        <div className="flex flex-col items-end gap-2">
-                            <MoneyChip
-                                amount={item.effectiveAmount}
-                                onClick={() => setDrawerFilter({ sourceType: item.sourceType, sourceId: item.sourceId })}
-                                className="bg-amber-50 text-amber-700 border-amber-200 group-hover:bg-amber-100 transition-colors"
-                            />
-                        </div>
+            {entries.length === 0 && (
+                <GlassCard testId="review-empty">
+                    <div className="flex flex-col items-center gap-2 py-4 text-center">
+                        <IconDot tone="green" size={56}><Sparkles size={28} aria-hidden="true" /></IconDot>
+                        {/* Not "everything has been checked": there is no checking step yet (PENDING D-12). */}
+                        <p className="m-0 text-[17px] font-extrabold text-stone-900">पाहण्यासारखी कोणतीही नोंद नाही</p>
+                        <p className="m-0 text-[13.5px] font-semibold text-stone-600">मोठी रक्कम किंवा दुहेरी नोंद दिसली, तर ती इथे येईल.</p>
                     </div>
-                ))}
-
-                {entries.length === 0 && (
-                    <div className="rounded-3xl border border-dashed border-slate-200 p-12 text-center bg-white/50">
-                        <div className="w-16 h-16 bg-emerald-50 text-emerald-300 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <CheckCircle size={32} />
-                        </div>
-                        <h3 className="font-bold text-slate-400 text-lg">All caught up!</h3>
-                        <p className="text-sm text-slate-300 mt-1">No suspicious money events found.</p>
-                    </div>
-                )}
-            </div>
+                </GlassCard>
+            )}
 
             <MoneyLensDrawer
                 isOpen={!!drawerFilter}
@@ -100,7 +97,7 @@ const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavig
                 filters={drawerFilter || {}}
                 canAdjust={true}
             />
-        </div>
+        </MoneyPage>
     );
 };
 

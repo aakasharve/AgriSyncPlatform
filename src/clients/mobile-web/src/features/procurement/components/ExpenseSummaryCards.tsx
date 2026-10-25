@@ -1,51 +1,37 @@
-
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — the three totals of खरेदी, in the approved look:
+ * प्लॉटचा खर्च / पिकाचा सामायिक खर्च / शेताचा सामान्य खर्च. They are handed the totals of what is picked
+ * (`billView.totalsOf`), not the whole farm's summary. A total with no bill behind it says "नोंद नाही" —
+ * never ₹ 0 (P4).
+ */
 import React from 'react';
-import { ExpenseSummaryByScope } from '../../../types';
-import { TrendingUp, Sprout, Warehouse } from 'lucide-react';
+import { Home, Layers, MapPin } from 'lucide-react';
+import { IconDot, type Tone } from '../../../shared/components/ui/placeUi';
+import { rupees } from '../../reflect/overview/reflectDates';
+import { NUM, type BillTotals, type ScopeTotal } from './billView';
 
 interface Props {
-    summary: ExpenseSummaryByScope;
+    totals: BillTotals;
+    /** The picked plot's name, when one plot is picked. */
+    plotName?: string;
 }
 
-export const ExpenseSummaryCards: React.FC<Props> = ({ summary }) => {
-    const totalFarm = summary.farmExpenses.total;
-    const totalCrop = summary.cropExpenses.reduce((sum, c) => sum + c.total, 0);
-    const totalPlot = summary.plotExpenses.reduce((sum, p) => sum + p.total, 0);
+const Tile: React.FC<{ id: string; icon: React.ReactNode; tone: Tone; label: string; total: ScopeTotal; line: string }> = ({ id, icon, tone, label, total, line }) => (
+    <div className="rounded-3xl border border-white/60 bg-white/80 p-2.5 shadow-[0_4px_18px_-8px_rgba(28,25,23,0.18)]" data-testid={`buy-total-${id}`}>
+        <IconDot tone={tone} size={34}>{icon}</IconDot>
+        <p className="m-0 mt-1.5 text-[12.5px] font-bold leading-tight text-stone-600">{label}</p>
+        {total.count > 0
+            ? <p className="m-0 text-[17px] font-extrabold leading-tight text-stone-900" style={{ fontFamily: NUM }} data-testid={`buy-total-${id}-amount`}>{rupees(total.amount)}</p>
+            : <p className="m-0 text-[14px] font-extrabold leading-tight text-stone-500" data-testid={`buy-total-${id}-none`}>नोंद नाही</p>}
+        <p className="m-0 text-[11.5px] font-semibold leading-tight text-stone-500">{line}</p>
+    </div>
+);
 
-    return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col">
-                <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Plot Expenses</span>
-                    <div className="p-1.5 bg-emerald-50 rounded-lg text-emerald-600">
-                        <TrendingUp size={16} />
-                    </div>
-                </div>
-                <div className="text-2xl font-black text-gray-900">₹{totalPlot.toLocaleString()}</div>
-                <div className="text-xs text-gray-400 mt-1">{summary.plotExpenses.length} plots tracked</div>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col">
-                <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Crop Common</span>
-                    <div className="p-1.5 bg-blue-50 rounded-lg text-blue-600">
-                        <Sprout size={16} />
-                    </div>
-                </div>
-                <div className="text-2xl font-black text-gray-900">₹{totalCrop.toLocaleString()}</div>
-                <div className="text-xs text-gray-400 mt-1">Shared crop inputs</div>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col">
-                <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-amber-600 uppercase tracking-wider">Farm General</span>
-                    <div className="p-1.5 bg-amber-50 rounded-lg text-amber-600">
-                        <Warehouse size={16} />
-                    </div>
-                </div>
-                <div className="text-2xl font-black text-gray-900">₹{totalFarm.toLocaleString()}</div>
-                <div className="text-xs text-gray-400 mt-1">Overhead & Misc</div>
-            </div>
-        </div>
-    );
-};
+export const ExpenseSummaryCards: React.FC<Props> = ({ totals, plotName }) => (
+    <div className="grid grid-cols-3 gap-2" data-testid="buy-totals">
+        <Tile id="plot" icon={<MapPin size={18} aria-hidden="true" />} tone="green" label="प्लॉटचा खर्च" total={totals.plot}
+            line={plotName ?? (totals.plotCount > 0 ? `${totals.plotCount} प्लॉटचा हिशोब` : 'प्लॉटवर लावलेली बिलं')} />
+        <Tile id="crop" icon={<Layers size={18} aria-hidden="true" />} tone="violet" label="पिकाचा सामायिक खर्च" total={totals.crop} line="सगळ्या प्लॉटला लागणारं" />
+        <Tile id="farm" icon={<Home size={18} aria-hidden="true" />} tone="blue" label="शेताचा सामान्य खर्च" total={totals.farm} line="वीज, इंधन, इतर" />
+    </div>
+);

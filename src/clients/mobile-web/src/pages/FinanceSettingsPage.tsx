@@ -1,69 +1,66 @@
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — "हिशोबाची सेटिंग", the real Finance Settings
+ * in the founder-approved look (PLR-D9 `FinanceTools.tsx`). It keeps both numbers — the big-amount limit
+ * and the double-entry window — saved through the SAME `financeService.saveSettings`, with the same
+ * fallback to the stored value when a field is left blank or zero.
+ *
+ * Said plainly, because it is true today: nothing reads these two numbers yet. The server sets an entry
+ * aside on its own fixed rule, so the page does not promise that a changed limit changes the तपासायचे list
+ * — it says using them is still to come (P5). GST was a checkbox marked "(later)" that nothing read; it is
+ * "लवकरच" now (जीएसटी, in Devanagari), as in the approved look, and the stored value is kept as it was.
+ */
 import React, { useState } from 'react';
+import { CheckCircle2 } from 'lucide-react';
 import { AppRoute } from '../types';
 import { financeService } from '../features/finance/financeService';
-import { FinanceManagerNav } from '../features/finance/components/FinanceManagerNav';
+import { MoneyPage } from '../features/finance/components/MoneyPage';
+import { FINANCE_TITLE } from '../features/finance/moneyLabels';
+import { BigButton, GlassCard, Soon, TextField, ThisPhoneOnly } from '../shared/components/ui/placeUi';
 
 interface FinanceSettingsPageProps {
     currentRoute: AppRoute;
     onNavigate: (route: AppRoute) => void;
+    onBack?: () => void;
 }
 
-const FinanceSettingsPage: React.FC<FinanceSettingsPageProps> = ({ currentRoute, onNavigate }) => {
+const FinanceSettingsPage: React.FC<FinanceSettingsPageProps> = ({ currentRoute, onNavigate, onBack }) => {
     const current = financeService.getSettings();
     const [threshold, setThreshold] = useState(String(current.highAmountThreshold));
     const [windowMinutes, setWindowMinutes] = useState(String(current.duplicateWindowMinutes));
-    const [gstEnabled, setGstEnabled] = useState(current.gstEnabled);
+    const [saved, setSaved] = useState(false);
 
     const save = () => {
         financeService.saveSettings({
             highAmountThreshold: Number(threshold) || current.highAmountThreshold,
             duplicateWindowMinutes: Number(windowMinutes) || current.duplicateWindowMinutes,
-            gstEnabled
+            gstEnabled: current.gstEnabled
         });
+        setSaved(true);
     };
 
     return (
-        <div className="max-w-4xl mx-auto px-4 py-6 pb-24">
-            <h1 className="text-2xl font-black font-display text-stone-800">Finance Settings</h1>
-            <p className="text-sm text-stone-500 mb-6">Switches only. Prices live in Price Book.</p>
-            <FinanceManagerNav currentRoute={currentRoute} onNavigate={onNavigate} />
+        <MoneyPage title={FINANCE_TITLE['finance-settings']} testId="fin-settings" currentRoute={currentRoute} onNavigate={onNavigate} onBack={onBack}>
+            <p className="m-0 px-1 text-[14px] font-semibold leading-snug text-stone-700">फक्त नियम इथे. दर "{FINANCE_TITLE['finance-price-book']}" मध्ये आहेत.</p>
+            <ThisPhoneOnly />
 
-            <div className="glass-panel p-6">
-                <label className="block text-xs font-bold uppercase tracking-wide text-stone-400 mb-1.5">High amount review threshold</label>
-                <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 font-bold">₹</span>
-                    <input
-                        value={threshold}
-                        onChange={(e) => setThreshold(e.target.value)}
-                        type="number"
-                        className="w-full rounded-xl border-transparent bg-surface-100 pl-7 pr-3 py-3 text-sm font-bold text-stone-800 focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
-                    />
-                </div>
+            <GlassCard>
+                <TextField label="मोठ्या रकमेची तपासणी मर्यादा (₹)" type="number" value={threshold}
+                    onChange={v => { setThreshold(v); setSaved(false); }} testId="fin-threshold" />
+            </GlassCard>
+            <GlassCard>
+                <TextField label="दुहेरी नोंद ओळखण्याचा वेळ (मिनिटे)" type="number" value={windowMinutes}
+                    onChange={v => { setWindowMinutes(v); setSaved(false); }} testId="fin-dup-window" />
+            </GlassCard>
+            <Soon what="इथं लिहिलेली मर्यादा आणि वेळ नोंदी तपासताना वापरणं" />
 
-                <label className="mt-5 block text-xs font-bold uppercase tracking-wide text-stone-400 mb-1.5">Duplicate time window (minutes)</label>
-                <input
-                    value={windowMinutes}
-                    onChange={(e) => setWindowMinutes(e.target.value)}
-                    type="number"
-                    className="w-full rounded-xl border-transparent bg-surface-100 px-3 py-3 text-sm font-bold text-stone-800 focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
-                />
+            <GlassCard testId="fin-gst">
+                <p className="m-0 mb-2 text-[15px] font-extrabold text-stone-900">जीएसटी हिशोब</p>
+                <Soon what="बिलावरचा जीएसटी वेगळा दाखवणं" />
+            </GlassCard>
 
-                <label className="mt-6 flex items-center gap-3 p-3 rounded-xl hover:bg-stone-50 transition-colors cursor-pointer select-none">
-                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${gstEnabled ? 'bg-emerald-500 border-emerald-500' : 'border-stone-300 bg-white'}`}>
-                        {gstEnabled && <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
-                    </div>
-                    <input type="checkbox" checked={gstEnabled} onChange={(e) => setGstEnabled(e.target.checked)} className="hidden" />
-                    <span className="text-sm font-semibold text-stone-700">Enable GST (later)</span>
-                </label>
-
-                <button
-                    onClick={save}
-                    className="mt-6 w-full rounded-xl bg-stone-900 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-stone-900/20 active:scale-[0.98] transition-all hover:bg-stone-800"
-                >
-                    Save Finance Settings
-                </button>
-            </div>
-        </div>
+            <BigButton onClick={save} testId="fin-settings-save"><CheckCircle2 size={20} aria-hidden="true" />सेटिंग जतन करा</BigButton>
+            {saved && <p className="m-0 text-center text-[14px] font-extrabold text-emerald-800" role="status" data-testid="fin-settings-saved">जतन झालं ✓</p>}
+        </MoneyPage>
     );
 };
 
