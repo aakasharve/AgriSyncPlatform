@@ -13,11 +13,24 @@
  *
  * Responses use string enums ("Due", "Reported"...); we map them to the
  * numeric form that `DexieTestInstance.status` stores.
+ *
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (WP-5 places), review B001 / B003:
+ *   - The report response's recommendations are typed EXACTLY as the server's
+ *     `TestRecommendationDto` (camelCase JSON) — `recommendationId`, not `id` —
+ *     and mapped to the phone's shape (`DexieTestRecommendation`, keyed `id`)
+ *     in ONE place, `mapApiRecommendationToDexie`. The old type claimed `id`,
+ *     so every row written to `testRecommendations` had no key and IndexedDB
+ *     rejected it. The server's `createdAtUtc` is kept as sent.
+ *   - A failed call throws `TestsApiError`, carrying the HTTP status and the
+ *     server's error code (`{ error: "ShramSafal.TestInvalidState" }` on a 400;
+ *     a 403 `Forbid()` has no body). The message keeps its old
+ *     "<op> failed (<status>)" form for logs.
  */
 
 import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
 import type {
     DexieTestInstance,
+    DexieTestRecommendation,
     DexieTestResult,
 } from '../../../infrastructure/storage/DexieDatabase';
 import { parseTestInstanceStatus } from '../../../domain/tests/TestInstance';
@@ -84,19 +97,59 @@ export interface ResultInput {
     referenceRangeHigh?: number;
 }
 
+/**
+ * Raw shape of one recommendation (`TestRecommendationDto.cs`), field for field.
+ * Guids arrive as strings and `DateTime` as an ISO string.
+ */
+export interface ApiTestRecommendation {
+    recommendationId: string;
+    testInstanceId: string;
+    ruleCode: string;
+    titleEn: string;
+    titleMr: string;
+    suggestedActivityName: string;
+    suggestedOffsetDays: number;
+    createdAtUtc: string;
+}
+
+/** Raw shape of `POST /test-instances/{id}/report` (`TestEndpoints.cs` → `{ testInstanceId, status, recommendations }`). */
+export interface ApiRecordTestResultResponse {
+    testInstanceId: string;
+    status: string;
+    recommendations: ApiTestRecommendation[];
+}
+
+/** What `recordResult` returns: the same, with each recommendation already in the phone's shape. */
 export interface RecordTestResultResponse {
     testInstanceId: string;
     status: string;
-    recommendations: Array<{
-        id: string;
-        testInstanceId: string;
-        ruleCode: string;
-        titleEn: string;
-        titleMr: string;
-        suggestedActivityName: string;
-        suggestedOffsetDays: number;
-    }>;
+    recommendations: DexieTestRecommendation[];
 }
+
+/** A failed tests-API call: the HTTP status and, when the server sent one, its error code. */
+export class TestsApiError extends Error {
+    readonly status: number;
+    readonly code?: string;
+
+    constructor(operation: string, status: number, code?: string) {
+        super(`${operation} failed (${status})${code ? ` ${code}` : ''}`);
+        this.name = 'TestsApiError';
+        this.status = status;
+        this.code = code;
+    }
+}
+
+/** Build the error for a non-OK response, reading `{ error }` from the body when there is one. */
+const failure = async (operation: string, response: Response): Promise<TestsApiError> => {
+    let code: string | undefined;
+    try {
+        const body = (await response.json()) as { error?: unknown } | null;
+        if (body && typeof body.error === 'string') code = body.error;
+    } catch {
+        /* no JSON body (a 403 Forbid sends none) */
+    }
+    return new TestsApiError(operation, response.status, code);
+};
 
 const mapKindString = (k: string): number => {
     switch (k) {
@@ -135,6 +188,20 @@ export function mapApiInstanceToDexie(dto: ApiTestInstance): DexieTestInstance {
     };
 }
 
+/** The ONE place a server recommendation becomes the phone's row: `recommendationId` → `id`, the rest as sent. */
+export function mapApiRecommendationToDexie(dto: ApiTestRecommendation): DexieTestRecommendation {
+    return {
+        id: dto.recommendationId,
+        testInstanceId: dto.testInstanceId,
+        ruleCode: dto.ruleCode,
+        titleEn: dto.titleEn,
+        titleMr: dto.titleMr,
+        suggestedActivityName: dto.suggestedActivityName,
+        suggestedOffsetDays: dto.suggestedOffsetDays,
+        createdAtUtc: dto.createdAtUtc,
+    };
+}
+
 // ---------------------------------------------------------------- client ops
 
 export const getTestQueue = async (
@@ -144,7 +211,7 @@ export const getTestQueue = async (
     void _includeReported; // server always includes reported today; flag reserved
     const url = `${resolveBaseUrl()}/shramsafal/test-instances?cropCycleId=${encodeURIComponent(cropCycleId)}`;
     const response = await fetch(url, { method: 'GET', headers: authHeaders() });
-    if (!response.ok) throw new Error(`getTestQueue failed (${response.status})`);
+    if (!response.ok) throw await failure('getTestQueue', response);
     const payload = (await response.json()) as ApiTestInstance[];
     return payload.map(mapApiInstanceToDexie);
 };
@@ -152,14 +219,14 @@ export const getTestQueue = async (
 export const getMissingTests = async (farmId: string): Promise<MissingTestSummary[]> => {
     const url = `${resolveBaseUrl()}/shramsafal/farms/${encodeURIComponent(farmId)}/missing-tests`;
     const response = await fetch(url, { method: 'GET', headers: authHeaders() });
-    if (!response.ok) throw new Error(`getMissingTests failed (${response.status})`);
+    if (!response.ok) throw await failure('getMissingTests', response);
     return (await response.json()) as MissingTestSummary[];
 };
 
 export const getTestInstanceById = async (id: string): Promise<DexieTestInstance> => {
     const url = `${resolveBaseUrl()}/shramsafal/test-instances/${encodeURIComponent(id)}`;
     const response = await fetch(url, { method: 'GET', headers: authHeaders() });
-    if (!response.ok) throw new Error(`getTestInstanceById failed (${response.status})`);
+    if (!response.ok) throw await failure('getTestInstanceById', response);
     const dto = (await response.json()) as ApiTestInstance;
     return mapApiInstanceToDexie(dto);
 };
@@ -167,7 +234,7 @@ export const getTestInstanceById = async (id: string): Promise<DexieTestInstance
 export const markCollected = async (testInstanceId: string): Promise<DexieTestInstance> => {
     const url = `${resolveBaseUrl()}/shramsafal/test-instances/${encodeURIComponent(testInstanceId)}/collect`;
     const response = await fetch(url, { method: 'POST', headers: authHeaders() });
-    if (!response.ok) throw new Error(`markCollected failed (${response.status})`);
+    if (!response.ok) throw await failure('markCollected', response);
     const dto = (await response.json()) as ApiTestInstance;
     return mapApiInstanceToDexie(dto);
 };
@@ -185,15 +252,20 @@ export const recordResult = async (
         clientCommandId: clientCommandId ?? null,
     });
     const response = await fetch(url, { method: 'POST', headers: authHeaders(), body });
-    if (!response.ok) throw new Error(`recordResult failed (${response.status})`);
-    return (await response.json()) as RecordTestResultResponse;
+    if (!response.ok) throw await failure('recordResult', response);
+    const payload = (await response.json()) as ApiRecordTestResultResponse;
+    return {
+        testInstanceId: payload.testInstanceId,
+        status: payload.status,
+        recommendations: (payload.recommendations ?? []).map(mapApiRecommendationToDexie),
+    };
 };
 
 export const waiveTest = async (testInstanceId: string, reason: string): Promise<void> => {
     const url = `${resolveBaseUrl()}/shramsafal/test-instances/${encodeURIComponent(testInstanceId)}/waive`;
     const body = JSON.stringify({ reason });
     const response = await fetch(url, { method: 'POST', headers: authHeaders(), body });
-    if (!response.ok) throw new Error(`waiveTest failed (${response.status})`);
+    if (!response.ok) throw await failure('waiveTest', response);
 };
 
 /** Add a recommendation to the farmer's plan (reuses the existing endpoint). */
@@ -217,5 +289,5 @@ export const addRecommendationToPlan = async (params: {
         clientCommandId: params.clientCommandId ?? null,
     });
     const response = await fetch(url, { method: 'POST', headers: authHeaders(), body });
-    if (!response.ok) throw new Error(`addRecommendationToPlan failed (${response.status})`);
+    if (!response.ok) throw await failure('addRecommendationToPlan', response);
 };

@@ -353,7 +353,12 @@ export const renderTestsRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'tests') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <TestQueuePage onNavigate={ctx.setCurrentRoute} />
+            {/* spec: plr-d10-redesign-real-integration-2026-10-25 (WP-5 places) — one मागे, and "सांगा" opens the day's log. */}
+            <TestQueuePage
+                onNavigate={ctx.setCurrentRoute}
+                onBack={() => ctx.goBackOr('main')}
+                onTell={() => { ctx.setMainView('log'); ctx.setCurrentRoute('main'); }}
+            />
         </div>
     );
 };

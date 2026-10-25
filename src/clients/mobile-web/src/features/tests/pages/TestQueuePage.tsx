@@ -1,31 +1,34 @@
 /**
- * TestQueuePage — CEI Phase 2 §4.5.
- *
- * Design intent:
- *   - Offline-first. Reads all `testInstances` Dexie rows for the active farm
- *     on mount, then refreshes per-cycle from the server in the background.
- *   - Bands: Overdue (rose) → Due (amber) → Collected (stone) → Reported (emerald,
- *     collapsed by default).
- *   - Filter chips: Due / Overdue / Reported / All (default = All).
- *
- *     TASK 15 (Labour V2 R1), founder decision D1 — was "Overdue". A farm
- *     whose tests are all Due (or all Reported, etc.) then showed zero rows
- *     under that filter and fell through to "आज कोणत्याही चाचण्या नाहीत" over
- *     a load that had fully succeeded — the same defect commit `4681eb7a`
- *     fixed for `JobCardsPage`/`ComplianceSignalsPage` and flagged-but-
- *     deferred for this screen. The founder ruled: default to "All", same
- *     treatment. The filter chips themselves are unchanged — only which one
- *     starts active — and `?filter=` still overrides the default.
- *   - Optional URL params:
- *       ?plotId=<guid>        — pre-filter rows to a single plot
- *       ?cropCycleId=<guid>   — pre-filter rows to a single cycle
- *       ?filter=Due|Overdue|Reported|All
- *       ?action=collect|record — auto-open the appropriate sheet for the
- *                                first row matching that action bucket
- *   - FAB: "+ New protocol" visible only for Agronomist / Consultant.
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (WP-5 places) — चाचण्या, route 'tests', in the
+ * founder-approved look (PLR-D9 `PlacePages.TestsPage`) over the REAL tests. It was English ("Tests", "Overdue /
+ * Due / Reported / All", "No tests pending today", "+ New protocol", "as of …", "Label · मराठी" bands). Every
+ * real part is kept (CEI Phase 2 §4.5):
+ *   - offline-first: the farm's `testInstances` from this phone first, then a per-crop-cycle refresh from the
+ *     server in the background (one cycle's failure does not sink the page);
+ *   - groups by state, in `testView.ts` words: वेळ उलटून गेली → करायची आहे → नमुना घेतला → निकाल आला (the
+ *     last folded by default, as the "Reported" band was — open when that filter is picked);
+ *   - the filters सर्व / वेळ उलटून गेली / करायची आहे / निकाल आला, default सर्व (TASK 15 D1, founder: a farm
+ *     with only Due tests must not open on an empty Overdue list and a false "no tests" line);
+ *   - each card's one button: नमुना घेतला (confirm sheet → `markCollected`), निकाल नोंदवा (result sheet →
+ *     `recordResult`), निकाल पहा (the test's own page, `/tests/{id}` + 'test-detail');
+ *   - URL params, unchanged: ?plotId= ?cropCycleId= (scope to one plot / cycle, now said in words),
+ *     ?filter=All|Due|Overdue|Reported, ?action=collect|record (+ ?instanceId=) to open a sheet at once
+ *     (once — closing it used to reopen it straight away; and with ?instanceId= only THAT test, never a
+ *     stand-in — see the effect below);
+ *   - when the list was last refreshed — stamped ONLY when at least one server call answered (review B002).
+ *     No crop cycle on the phone → nothing was asked, and the page says why; some cycles failed → the time
+ *     AND a line that some plots are this phone's older copy; all failed → this phone's copy, said so.
+ *     "आज कोणत्याही चाचण्या नाहीत" is said only when every cycle's list came back empty from the server;
+ *     an empty phone that could not ask says "या फोनवर एकही चाचणी नाही." instead;
+ *   - "+ New protocol" (Agronomist / Consultant only) was a button that did nothing: it is now a plain
+ *     "लवकरच" line for those roles (P5).
+ * `onBack` (the bar's मागे) and `onTell` (the "सांगा" button) are drawn only when the route passes them.
+ * Plot names come from this phone's copy of the farm's plots; test, stage and parameter names come from the
+ * server as they are.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Mic } from 'lucide-react';
 import { getDatabase, type DexieTestInstance, type DexieTestProtocol } from '../../../infrastructure/storage/DexieDatabase';
 import { TestInstanceStatus } from '../../../domain/tests/TestInstance';
 import { useFarmContext } from '../../../core/session/FarmContext';
@@ -34,48 +37,69 @@ import MarkCollectedSheet from '../components/MarkCollectedSheet';
 import RecordResultSheet from '../components/RecordResultSheet';
 import { getTestQueue } from '../data/testsClient';
 import type { AppRoute } from '../../../domain/types/farm.types';
-import { formatDisplayTime } from '../../../shared/utils/displayTime';
+import { formatFarmerTime } from '../../../shared/utils/displayTime';
+import { BigButton, Chip, ChoiceChips, PageBar, SANS, SectionHead, Soon, Tap } from '../../../shared/components/ui/placeUi';
+import {
+    FILTER_ITEMS, GROUP_ORDER, STATE_VIEW, TESTS_EMPTY, TESTS_EXPLAINER, TESTS_TITLE,
+    groupTests, isTestFilter, plotNamesFrom, type GroupKey, type TestFilter,
+} from '../components/testView';
 
 interface TestQueuePageProps {
     onNavigate?: (route: AppRoute) => void;
+    /** The title bar's मागे. Not drawn when absent. */
+    onBack?: () => void;
+    /** Opens the voice / typed log flow ("नमुना घेतला / निकाल आला — सांगा"). Not drawn when absent. */
+    onTell?: () => void;
 }
 
-type Filter = 'All' | 'Due' | 'Overdue' | 'Reported';
+/**
+ * What the last refresh managed (review B002). 'pending' until the first one settles;
+ * 'reached' = every crop cycle answered; 'partial' = some did; 'failed' = none did;
+ * 'no-cycles' = the phone has no crop cycle for this farm, so nothing could be asked.
+ */
+type RefreshOutcome = 'pending' | 'reached' | 'partial' | 'failed' | 'no-cycles';
 
-const parseQuery = (): { plotId?: string; cropCycleId?: string; filter?: Filter; action?: 'collect' | 'record'; instanceId?: string } => {
+const REFRESH_NOTE: Record<Exclude<RefreshOutcome, 'pending' | 'reached'>, string> = {
+    partial: 'काही प्लॉटची माहिती आणता आली नाही — त्यांची या फोनवरची जुनी माहिती दाखवत आहोत.',
+    failed: 'आत्ता ताजी माहिती आणता आली नाही — या फोनवर साठवलेली दाखवत आहोत.',
+    'no-cycles': 'या फोनवर अजून या शेतातल्या पिकांची माहिती आलेली नाही, म्हणून सर्व्हरवरून चाचण्या आणता आल्या नाहीत.',
+};
+
+const parseQuery = (): { plotId?: string; cropCycleId?: string; filter?: TestFilter; action?: 'collect' | 'record'; instanceId?: string } => {
     if (typeof window === 'undefined') return {};
     const p = new URLSearchParams(window.location.search);
     const filterRaw = p.get('filter');
-    const filter: Filter | undefined =
-        filterRaw === 'All' || filterRaw === 'Due' || filterRaw === 'Overdue' || filterRaw === 'Reported'
-            ? filterRaw
-            : undefined;
     const actionRaw = p.get('action');
     const action: 'collect' | 'record' | undefined =
         actionRaw === 'collect' || actionRaw === 'record' ? actionRaw : undefined;
     return {
         plotId: p.get('plotId') || undefined,
         cropCycleId: p.get('cropCycleId') || undefined,
-        filter,
+        filter: isTestFilter(filterRaw) ? filterRaw : undefined,
         action,
         instanceId: p.get('instanceId') || undefined,
     };
 };
 
-const TestQueuePage: React.FC<TestQueuePageProps> = ({ onNavigate }) => {
+const TestQueuePage: React.FC<TestQueuePageProps> = ({ onNavigate, onBack, onTell }) => {
     const { currentFarmId, currentFarm } = useFarmContext();
     const [instances, setInstances] = useState<DexieTestInstance[]>([]);
     const [protocols, setProtocols] = useState<Record<string, DexieTestProtocol>>({});
+    const [plotNames, setPlotNames] = useState<Record<string, string>>({});
     const [isLoading, setIsLoading] = useState(true);
+    /** Set ONLY when at least one server call answered (review B002). */
     const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
+    const [refreshOutcome, setRefreshOutcome] = useState<RefreshOutcome>('pending');
+    const [actionNote, setActionNote] = useState<'missing' | 'moved-on' | null>(null);
 
     const initial = useMemo(parseQuery, []);
     // Task 15, D1 — was 'Overdue'. See this file's header for why.
-    const [filter, setFilter] = useState<Filter>(initial.filter ?? 'All');
+    const [filter, setFilter] = useState<TestFilter>(initial.filter ?? 'All');
+    const [reportedOpen, setReportedOpen] = useState(false);
 
     const [activeAction, setActiveAction] = useState<{
         instance: DexieTestInstance;
-        kind: 'collect' | 'record' | 'view';
+        kind: 'collect' | 'record';
     } | null>(null);
 
     const hydrateFromDexie = useCallback(async () => {
@@ -87,33 +111,48 @@ const TestQueuePage: React.FC<TestQueuePageProps> = ({ onNavigate }) => {
         const protoMap: Record<string, DexieTestProtocol> = {};
         for (const p of protoList) protoMap[p.id] = p;
         setProtocols(protoMap);
+        try {
+            setPlotNames(plotNamesFrom(await db.plots.where('farmId').equals(currentFarmId).toArray()));
+        } catch {
+            /* no plot names: the cards say the stage and the date without one */
+        }
     }, [currentFarmId]);
 
     const refreshFromServer = useCallback(async () => {
         if (!currentFarmId) return;
-        const db = getDatabase();
-        // Fan out per cached crop cycle on this farm.
-        const cycles = await db.cropCycles.where('farmId').equals(currentFarmId).toArray();
-        if (cycles.length === 0) {
-            setLastRefreshedAt(new Date().toISOString());
-            return;
+        try {
+            const db = getDatabase();
+            // Fan out per cached crop cycle on this farm. Tests are asked for per cycle, so with no cycle on
+            // the phone nothing is asked at all — and nothing may claim a refresh happened (review B002).
+            const cycles = await db.cropCycles.where('farmId').equals(currentFarmId).toArray();
+            if (cycles.length === 0) {
+                setRefreshOutcome('no-cycles');
+                return;
+            }
+            const fetched: DexieTestInstance[] = [];
+            let reached = 0;
+            await Promise.allSettled(
+                cycles.map(async c => {
+                    try {
+                        const list = await getTestQueue(c.id);
+                        fetched.push(...list);
+                        reached += 1;
+                    } catch {
+                        /* one cycle's failure doesn't sink the page */
+                    }
+                }),
+            );
+            if (fetched.length > 0) {
+                await db.testInstances.bulkPut(fetched);
+            }
+            await hydrateFromDexie();
+            // Only a refresh that reached the server may say when the list was refreshed.
+            if (reached > 0) setLastRefreshedAt(new Date().toISOString());
+            setRefreshOutcome(reached === 0 ? 'failed' : reached < cycles.length ? 'partial' : 'reached');
+        } catch (error) {
+            console.error('[tests] could not refresh the test list', { farmId: currentFarmId, error });
+            setRefreshOutcome('failed');
         }
-        const fetched: DexieTestInstance[] = [];
-        await Promise.allSettled(
-            cycles.map(async c => {
-                try {
-                    const list = await getTestQueue(c.id);
-                    fetched.push(...list);
-                } catch {
-                    /* one cycle's failure doesn't sink the page */
-                }
-            }),
-        );
-        if (fetched.length > 0) {
-            await db.testInstances.bulkPut(fetched);
-        }
-        await hydrateFromDexie();
-        setLastRefreshedAt(new Date().toISOString());
     }, [currentFarmId, hydrateFromDexie]);
 
     useEffect(() => {
@@ -127,25 +166,42 @@ const TestQueuePage: React.FC<TestQueuePageProps> = ({ onNavigate }) => {
         return () => { cancelled = true; };
     }, [hydrateFromDexie, refreshFromServer]);
 
-    // Auto-open sheet if ?action= was provided.
+    // Auto-open sheet if ?action= was provided — ONCE. Without the latch, closing that sheet set
+    // `activeAction` back to null, this effect ran again and opened it again: it could not be closed.
+    //
+    // With ?instanceId= it opens THAT test or nothing. It used to fall back to the first Due/Overdue
+    // (or Collected) test on the phone, so confirming would have recorded the wrong test. A named test
+    // that is not here once the server refresh has settled is said so; one whose state no longer fits
+    // the action (e.g. `collect` on a test already collected) is not opened — the server would refuse it.
+    const autoOpened = useRef(false);
     useEffect(() => {
-        if (!initial.action || instances.length === 0) return;
-        if (activeAction) return;
-        let target: DexieTestInstance | undefined;
+        const action = initial.action;
+        if (!action || activeAction || autoOpened.current) return;
+        const fits = (i: DexieTestInstance) => (action === 'collect'
+            ? i.status === TestInstanceStatus.Due || i.status === TestInstanceStatus.Overdue
+            : i.status === TestInstanceStatus.Collected);
         if (initial.instanceId) {
-            target = instances.find(i => i.id === initial.instanceId);
-        }
-        if (!target) {
-            if (initial.action === 'collect') {
-                target = instances.find(i => i.status === TestInstanceStatus.Due || i.status === TestInstanceStatus.Overdue);
-            } else if (initial.action === 'record') {
-                target = instances.find(i => i.status === TestInstanceStatus.Collected);
+            const target = instances.find(i => i.id === initial.instanceId);
+            if (!target) {
+                if (refreshOutcome !== 'pending') {
+                    autoOpened.current = true;
+                    setActionNote('missing');
+                }
+                return;
             }
+            autoOpened.current = true;
+            if (fits(target)) setActiveAction({ instance: target, kind: action });
+            else setActionNote('moved-on');
+            return;
         }
-        if (target) setActiveAction({ instance: target, kind: initial.action });
-    }, [initial.action, initial.instanceId, instances, activeAction]);
+        const target = instances.find(fits);
+        if (target) {
+            autoOpened.current = true;
+            setActiveAction({ instance: target, kind: action });
+        }
+    }, [initial.action, initial.instanceId, instances, activeAction, refreshOutcome]);
 
-    // Apply plot / cycle URL filters first, then the status-band filter.
+    // Apply plot / cycle URL filters first, then the state filter.
     const scoped = useMemo(() => {
         let rows = instances;
         if (initial.plotId) rows = rows.filter(i => i.plotId === initial.plotId);
@@ -153,20 +209,11 @@ const TestQueuePage: React.FC<TestQueuePageProps> = ({ onNavigate }) => {
         return rows;
     }, [instances, initial.plotId, initial.cropCycleId]);
 
-    const buckets = useMemo(() => {
-        const due = scoped.filter(i => i.status === TestInstanceStatus.Due);
-        const overdue = scoped.filter(i => i.status === TestInstanceStatus.Overdue);
-        const collected = scoped.filter(i => i.status === TestInstanceStatus.Collected);
-        const reported = scoped.filter(i => i.status === TestInstanceStatus.Reported);
-        return { due, overdue, collected, reported };
-    }, [scoped]);
-
-    const visibleByFilter = useMemo(() => {
-        if (filter === 'Due') return { ...buckets, overdue: [], collected: [], reported: [] };
-        if (filter === 'Overdue') return { ...buckets, due: [], collected: [], reported: [] };
-        if (filter === 'Reported') return { due: [], overdue: [], collected: [], reported: buckets.reported };
-        return buckets;
-    }, [buckets, filter]);
+    const groups = useMemo(() => groupTests(scoped, filter), [scoped, filter]);
+    const allGroups = useMemo(() => groupTests(scoped, 'All'), [scoped]);
+    const totalVisible = GROUP_ORDER.reduce((n, k) => n + groups[k].length, 0);
+    // Nothing at all → the true "no tests" sentence; something hidden by the filter → say so instead.
+    const totalScoped = GROUP_ORDER.reduce((n, k) => n + allGroups[k].length, 0);
 
     const openSheetForInstance = (instance: DexieTestInstance) => {
         if (instance.status === TestInstanceStatus.Due || instance.status === TestInstanceStatus.Overdue) {
@@ -185,182 +232,144 @@ const TestQueuePage: React.FC<TestQueuePageProps> = ({ onNavigate }) => {
         }
     };
 
+    const afterSave = async () => {
+        setActiveAction(null);
+        await hydrateFromDexie();
+        await refreshFromServer();
+    };
+
+    // Closing a sheet without saving also re-asks the server, in the background. A sheet that was refused
+    // because the test had already moved on tells the farmer "हे बंद करा — यादी ताजी होईल": this is what
+    // makes that true.
+    const closeSheet = () => {
+        setActiveAction(null);
+        void refreshFromServer();
+    };
+
     const canCreateProtocol = (() => {
         const role = currentFarm?.role ?? '';
         return role === 'Agronomist' || role === 'Consultant';
     })();
 
-    const asOfLabel = lastRefreshedAt
-        ? formatDisplayTime(lastRefreshedAt)
-        : '';
+    const asOfLabel = lastRefreshedAt ? formatFarmerTime(lastRefreshedAt) : '';
+    const scopedPlotName = initial.plotId ? plotNames[initial.plotId] : undefined;
 
-    if (isLoading && instances.length === 0) {
+    const renderGroup = (key: GroupKey) => {
+        const list = groups[key];
+        if (list.length === 0) return null;
+        const view = STATE_VIEW[key];
+        const cards = list.map(instance => (
+            <TestInstanceCard
+                key={instance.id}
+                instance={instance}
+                protocol={protocols[instance.testProtocolId]}
+                plotName={plotNames[instance.plotId]}
+                onAction={openSheetForInstance}
+            />
+        ));
+        // Results fold away under "सर्व" (they were a collapsed band); picking "निकाल आला" shows them open.
+        if (key === 'reported' && filter !== 'Reported') {
+            return (
+                <div key={key} className="space-y-2" data-testid="tests-reported">
+                    <Tap onClick={() => setReportedOpen(o => !o)} aria-expanded={reportedOpen} data-testid="tests-reported-toggle"
+                        className="flex min-h-[52px] w-full items-center justify-between gap-2 rounded-2xl bg-white px-3 text-left ring-1 ring-emerald-200">
+                        <span className="text-[17px] font-extrabold text-stone-900">{view.label}</span>
+                        <span className="flex items-center gap-2 text-[14px] font-extrabold text-emerald-800">
+                            <Chip tone="green">{list.length}</Chip>{reportedOpen ? 'लपवा' : 'दाखवा'}
+                        </span>
+                    </Tap>
+                    {reportedOpen && cards}
+                </div>
+            );
+        }
         return (
-            <div className="flex h-full items-center justify-center">
-                <p style={{ fontFamily: "'DM Sans', sans-serif" }} className="text-stone-400 text-sm">
-                    Loading...
-                </p>
+            <div key={key} className="space-y-2" data-testid={`tests-${key}`}>
+                <SectionHead title={view.label} hint={view.hint} />
+                {cards}
             </div>
         );
-    }
-
-    const totalVisible =
-        visibleByFilter.due.length +
-        visibleByFilter.overdue.length +
-        visibleByFilter.collected.length +
-        visibleByFilter.reported.length;
+    };
 
     return (
-        <div className="flex flex-col min-h-full bg-stone-50 pb-28">
-            {/* Header */}
-            <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-md border-b border-stone-100 px-4 py-3">
-                <div className="flex items-baseline justify-between">
-                    <h1
-                        style={{ fontFamily: "'DM Sans', sans-serif" }}
-                        className="text-xl font-bold text-stone-800"
-                    >
-                        Tests
-                    </h1>
-                    {asOfLabel && (
-                        <span
-                            style={{ fontFamily: "'DM Sans', sans-serif" }}
-                            className="text-xs text-stone-400"
-                        >
-                            as of {asOfLabel}
-                        </span>
-                    )}
-                </div>
-                <p
-                    style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
-                    className="text-sm text-stone-500 mt-0.5"
-                >
-                    चाचण्या
-                </p>
-                {(initial.plotId || initial.cropCycleId) && (
-                    <p
-                        style={{ fontFamily: "'DM Sans', sans-serif" }}
-                        className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700"
-                    >
-                        Filtered {initial.plotId ? '· plot' : ''}{initial.cropCycleId ? '· cycle' : ''}
-                    </p>
-                )}
-            </div>
+        <div className="pb-24 animate-in fade-in max-w-4xl mx-auto px-4 sm:px-6" style={{ fontFamily: SANS }} data-testid="tests-page">
+            <PageBar title={TESTS_TITLE} onBack={onBack} />
 
-            {/* Filter chips */}
-            <div className="px-4 py-3 flex gap-2 overflow-x-auto">
-                {(['Overdue', 'Due', 'Reported', 'All'] as Filter[]).map(f => {
-                    const active = filter === f;
-                    return (
-                        <button
-                            key={f}
-                            type="button"
-                            onClick={() => setFilter(f)}
-                            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold border transition-colors ${
-                                active
-                                    ? 'bg-stone-900 text-white border-stone-900'
-                                    : 'bg-white text-stone-600 border-stone-200 active:bg-stone-100'
-                            }`}
-                            style={{ fontFamily: "'DM Sans', sans-serif" }}
-                        >
-                            {f}
-                        </button>
-                    );
-                })}
-            </div>
-
-            {totalVisible === 0 ? (
-                <div className="flex h-full flex-col items-center justify-center gap-3 px-8 py-16">
-                    <div className="text-4xl">🧪</div>
-                    <p
-                        style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
-                        className="text-center text-base font-medium text-stone-600"
-                    >
-                        आज कोणत्याही चाचण्या नाहीत
-                    </p>
-                    <p
-                        style={{ fontFamily: "'DM Sans', sans-serif" }}
-                        className="text-center text-sm text-stone-400"
-                    >
-                        No tests pending today
-                    </p>
-                </div>
+            {isLoading && instances.length === 0 ? (
+                <p className="m-0 p-6 text-center text-[15px] font-bold text-stone-500" data-testid="tests-loading">चाचण्या आणत आहे…</p>
             ) : (
-                <div className="flex flex-col gap-4 px-4 py-2">
-                    {/* Overdue band (rose) */}
-                    {visibleByFilter.overdue.length > 0 && (
-                        <Band
-                            label="Overdue"
-                            labelMr="उशीर"
-                            tone="rose"
-                            items={visibleByFilter.overdue}
-                            protocols={protocols}
-                            onCardAction={openSheetForInstance}
-                        />
+                <div className="space-y-3">
+                    <p className="m-0 px-1 text-[14px] font-semibold leading-snug text-stone-700">{TESTS_EXPLAINER}</p>
+
+                    {(initial.plotId || initial.cropCycleId) && (
+                        <div className="flex flex-wrap gap-1.5 px-1" data-testid="tests-scope">
+                            {initial.plotId && <Chip tone="green">फक्त या प्लॉटच्या चाचण्या{scopedPlotName ? ` — ${scopedPlotName}` : ''}</Chip>}
+                            {initial.cropCycleId && <Chip tone="green">फक्त या पीक-हंगामाच्या चाचण्या</Chip>}
+                        </div>
                     )}
 
-                    {/* Due band (amber) */}
-                    {visibleByFilter.due.length > 0 && (
-                        <Band
-                            label="Due"
-                            labelMr="बाकी"
-                            tone="amber"
-                            items={visibleByFilter.due}
-                            protocols={protocols}
-                            onCardAction={openSheetForInstance}
-                        />
+                    {asOfLabel && (
+                        <p className="m-0 px-1 text-[12.5px] font-semibold text-stone-500" data-testid="tests-refreshed">माहिती ताजी केली: {asOfLabel}</p>
+                    )}
+                    {refreshOutcome !== 'pending' && refreshOutcome !== 'reached' && (
+                        <p className="m-0 rounded-xl bg-amber-50 px-3 py-2 text-[13px] font-bold leading-snug text-amber-900 ring-1 ring-amber-200" data-testid={`tests-refresh-${refreshOutcome}`}>
+                            {REFRESH_NOTE[refreshOutcome]}
+                        </p>
+                    )}
+                    {actionNote && (
+                        <p className="m-0 rounded-xl bg-amber-50 px-3 py-2 text-[13px] font-bold leading-snug text-amber-900 ring-1 ring-amber-200" data-testid="tests-action-note">
+                            {actionNote === 'missing'
+                                ? 'उघडायला सांगितलेली चाचणी या फोनवर सापडली नाही.'
+                                : 'उघडायला सांगितलेली चाचणी आधीच पुढच्या टप्प्यावर गेली आहे — खालच्या यादीत पाहा.'}
+                        </p>
                     )}
 
-                    {/* Collected band (stone) */}
-                    {visibleByFilter.collected.length > 0 && (
-                        <Band
-                            label="Collected"
-                            labelMr="घेतले"
-                            tone="stone"
-                            items={visibleByFilter.collected}
-                            protocols={protocols}
-                            onCardAction={openSheetForInstance}
-                        />
+                    <ChoiceChips items={FILTER_ITEMS} value={filter} onPick={setFilter} testId="tests-filter" />
+
+                    {totalVisible === 0 ? (
+                        totalScoped === 0 ? (
+                            // "No tests" is said only when every crop cycle's list came back from the server.
+                            refreshOutcome === 'reached' ? (
+                                <p className="m-0 rounded-2xl bg-white/70 p-4 text-center text-[15px] font-bold text-stone-600" data-testid="tests-empty">{TESTS_EMPTY}</p>
+                            ) : refreshOutcome === 'pending' ? (
+                                <p className="m-0 rounded-2xl bg-white/70 p-4 text-center text-[15px] font-bold text-stone-500" data-testid="tests-empty-pending">सर्व्हरवरून चाचण्या आणत आहे…</p>
+                            ) : (
+                                <p className="m-0 rounded-2xl bg-white/70 p-4 text-center text-[15px] font-bold text-stone-600" data-testid="tests-empty-phone">या फोनवर एकही चाचणी नाही.</p>
+                            )
+                        ) : (
+                            <p className="m-0 rounded-2xl bg-white/70 p-4 text-center text-[15px] font-bold text-stone-600" data-testid="tests-empty-filter">
+                                या निवडीत एकही चाचणी नाही — “सर्व” निवडून पाहा.
+                            </p>
+                        )
+                    ) : (
+                        <div className="space-y-4">{GROUP_ORDER.map(renderGroup)}</div>
                     )}
 
-                    {/* Reported band (emerald, collapsed by default) */}
-                    {visibleByFilter.reported.length > 0 && (
-                        <CollapsibleBand
-                            label="Reported"
-                            labelMr="अहवाल दिला"
-                            tone="emerald"
-                            items={visibleByFilter.reported}
-                            protocols={protocols}
-                            onCardAction={openSheetForInstance}
-                        />
+                    {onTell && (
+                        <>
+                            <BigButton onClick={onTell} tone="white" testId="test-tell"><Mic size={20} aria-hidden="true" />नमुना घेतला / निकाल आला — सांगा</BigButton>
+                            {/* Telling it becomes part of that day's record; it does not move a test here. */}
+                            <p className="m-0 px-1 text-[12.5px] font-semibold leading-snug text-stone-500" data-testid="test-tell-note">
+                                बोलून सांगितलेलं त्या दिवसाच्या नोंदीत जातं — इथली चाचणी आपोआप बदलत नाही. ती पुढे सरकवायला कार्डवरचं बटण दाबा.
+                            </p>
+                        </>
                     )}
+
+                    {canCreateProtocol && <Soon what="नवीन चाचणी-पद्धत बनवणे" />}
                 </div>
             )}
 
-            {/* FAB — new protocol (Agronomist / Consultant only) */}
-            {canCreateProtocol && (
-                <button
-                    type="button"
-                    onClick={() => { /* routed to protocol-authoring in a follow-up task */ }}
-                    className="fixed z-40 flex items-center gap-2 rounded-full bg-emerald-600 text-white font-bold text-sm shadow-lg shadow-emerald-900/20 px-4 py-3 active:bg-emerald-700"
-                    style={{
-                        bottom: 'calc(6rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))',
-                        right: '1rem',
-                        fontFamily: "'DM Sans', sans-serif",
-                    }}
-                >
-                    <span>+ New protocol</span>
-                </button>
-            )}
-
-            {/* Sheets */}
             {activeAction?.kind === 'collect' && (
                 <MarkCollectedSheet
                     instance={activeAction.instance}
-                    onClose={() => setActiveAction(null)}
-                    onSuccess={async () => {
-                        setActiveAction(null);
-                        await hydrateFromDexie();
-                        await refreshFromServer();
+                    onClose={closeSheet}
+                    onSuccess={async (updated) => {
+                        // Keep the server's answer at once, so the card moves even if the refresh below cannot reach it.
+                        try {
+                            await getDatabase().testInstances.put(updated);
+                        } catch (error) {
+                            console.error('[tests] collected on the server, but this phone could not keep the answer', { testInstanceId: updated.id, error });
+                        }
+                        await afterSave();
                     }}
                 />
             )}
@@ -368,86 +377,9 @@ const TestQueuePage: React.FC<TestQueuePageProps> = ({ onNavigate }) => {
                 <RecordResultSheet
                     instance={activeAction.instance}
                     protocol={protocols[activeAction.instance.testProtocolId]}
-                    onClose={() => setActiveAction(null)}
-                    onSuccess={async () => {
-                        setActiveAction(null);
-                        await hydrateFromDexie();
-                        await refreshFromServer();
-                    }}
+                    onClose={closeSheet}
+                    onSuccess={afterSave}
                 />
-            )}
-        </div>
-    );
-};
-
-interface BandProps {
-    label: string;
-    labelMr: string;
-    tone: 'rose' | 'amber' | 'stone' | 'emerald';
-    items: DexieTestInstance[];
-    protocols: Record<string, DexieTestProtocol>;
-    onCardAction: (instance: DexieTestInstance) => void;
-}
-
-const toneTextColor: Record<BandProps['tone'], string> = {
-    rose: 'text-rose-600',
-    amber: 'text-amber-600',
-    stone: 'text-stone-500',
-    emerald: 'text-emerald-600',
-};
-
-const Band: React.FC<BandProps> = ({ label, labelMr, tone, items, protocols, onCardAction }) => (
-    <div>
-        <h2
-            style={{ fontFamily: "'DM Sans', sans-serif" }}
-            className={`text-xs font-bold uppercase tracking-wide mb-2 ${toneTextColor[tone]}`}
-        >
-            {label} <span className="font-normal opacity-60" style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}>· {labelMr}</span>
-        </h2>
-        <div className="flex flex-col gap-3">
-            {items.map(instance => (
-                <TestInstanceCard
-                    key={instance.id}
-                    instance={instance}
-                    protocol={protocols[instance.testProtocolId]}
-                    onAction={onCardAction}
-                    onOpen={onCardAction}
-                />
-            ))}
-        </div>
-    </div>
-);
-
-const CollapsibleBand: React.FC<BandProps> = (props) => {
-    const [open, setOpen] = useState(false);
-    return (
-        <div>
-            <button
-                type="button"
-                onClick={() => setOpen(o => !o)}
-                className="w-full flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50/50 px-3 py-2 text-left"
-            >
-                <h2
-                    style={{ fontFamily: "'DM Sans', sans-serif" }}
-                    className={`text-xs font-bold uppercase tracking-wide ${toneTextColor[props.tone]}`}
-                >
-                    {props.label} <span className="font-normal opacity-60" style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}>· {props.labelMr}</span>
-                </h2>
-                <span className="text-[11px] text-emerald-700 font-bold">
-                    {props.items.length} · {open ? 'Hide' : 'Show'}
-                </span>
-            </button>
-            {open && (
-                <div className="mt-2 flex flex-col gap-3">
-                    {props.items.map(instance => (
-                        <TestInstanceCard
-                            key={instance.id}
-                            instance={instance}
-                            protocol={props.protocols[instance.testProtocolId]}
-                            onOpen={props.onCardAction}
-                        />
-                    ))}
-                </div>
             )}
         </div>
     );

@@ -1,24 +1,49 @@
 /**
- * RecordResultSheet — CEI Phase 2 §4.5 task 4.2.2.
- *
- * Flow:
- *   1. Render one row per parameter code from the attached protocol.
- *   2. Allow the lab operator to attach a PDF (reuses captureAttachment).
- *   3. Inline warning is shown until ≥1 attachment is present.
- *   4. Save button is disabled until every parameter has a numeric value
- *      AND there is at least one attachment.
- *   5. On success, the server returns a list of recommendations; surface
- *      them as a success toast with an "Add to plan" action handled by
- *      the parent (TestQueuePage refetches, TestDetailPage offers per-rec
- *      plan buttons).
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (WP-5 places) — "लॅबचा निकाल नोंदवा" in Marathi, on the
+ * shared sheet frame. It was "Record lab result / Parameters / Attach lab PDF / Save result". The flow is
+ * unchanged (CEI Phase 2 §4.5 task 4.2.2):
+ *   1. one row per parameter code of the attached protocol (or one free row when the phone has no protocol);
+ *   2. the lab report is attached through the real `captureAttachment` (file picker), linked to this test;
+ *   3. a warning stays until at least one report is attached;
+ *   4. "निकाल जतन करा" is off until every row has a code and a value AND a report is attached;
+ *   5. on success the server's recommendations are listed.
+ * One addition: those recommendations are also kept on this phone (`testRecommendations`, the table the test's
+ * own page already reads), so the page's "योजनेत घाला" has something to show — before, the panel sent the
+ * farmer to that page and the page could never list them. They are stored exactly as the server sent them
+ * (`testsClient` maps the server's `recommendationId` to the row's `id` and keeps the server's `createdAtUtc`;
+ * review B001 — the rows used to have no key and were all rejected, silently). A failed local save does not
+ * undo the server save: it is logged with the test and the suggestion ids, and the panel says they were not
+ * kept instead of pointing at a page that will not have them.
+ * Failures are said in Marathi (`failureWords`: no permission / already moved on / report not uploaded yet /
+ * try again); the server's English messages are not shown to the farmer.
  */
-
-import React, { useMemo, useState } from 'react';
-import { X, ClipboardList, Paperclip, CheckCircle } from 'lucide-react';
-import type { DexieTestInstance, DexieTestProtocol } from '../../../infrastructure/storage/DexieDatabase';
+import React, { useMemo, useRef, useState } from 'react';
+import { CheckCircle2, ClipboardList, Paperclip } from 'lucide-react';
+import {
+    getDatabase, type DexieTestInstance, type DexieTestProtocol, type DexieTestRecommendation,
+} from '../../../infrastructure/storage/DexieDatabase';
 import { useFarmContext } from '../../../core/session/FarmContext';
 import { captureAttachment } from '../../../application/use-cases/CaptureAttachment';
 import { recordResult, type ResultInput, type RecordTestResultResponse } from '../data/testsClient';
+import { BigButton } from '../../../shared/components/ui/placeUi';
+import { SheetTestSummary, TestSheetFrame } from './TestSheetFrame';
+import { failureWords, testName } from './testView';
+
+/** Keep the server's suggestions on this phone. True when they were stored; a failure is logged, never swallowed. */
+async function keepRecommendations(testInstanceId: string, recs: readonly DexieTestRecommendation[]): Promise<boolean> {
+    if (recs.length === 0) return false;
+    try {
+        await getDatabase().testRecommendations.bulkPut([...recs]);
+        return true;
+    } catch (error) {
+        console.error('[tests] result saved on the server, but its suggestions could not be kept on this phone', {
+            testInstanceId,
+            recommendationIds: recs.map(r => r.id),
+            error,
+        });
+        return false;
+    }
+}
 
 interface RecordResultSheetProps {
     instance: DexieTestInstance;
@@ -32,6 +57,8 @@ interface Row {
     value: string;
     unit: string;
 }
+
+const INPUT = 'min-h-[48px] min-w-0 rounded-xl bg-white px-3 text-[16px] font-bold text-stone-900 outline-none ring-1 ring-stone-300 placeholder:text-stone-400 focus:ring-2 focus:ring-emerald-500';
 
 const RecordResultSheet: React.FC<RecordResultSheetProps> = ({ instance, protocol, onClose, onSuccess }) => {
     const { currentFarmId } = useFarmContext();
@@ -47,6 +74,7 @@ const RecordResultSheet: React.FC<RecordResultSheetProps> = ({ instance, protoco
     const [isAttaching, setIsAttaching] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successRecs, setSuccessRecs] = useState<RecordTestResultResponse | null>(null);
+    const [recsKept, setRecsKept] = useState(false);
 
     const allFilled = rows.length > 0 && rows.every(r => r.value.trim() !== '' && r.parameterCode.trim() !== '');
     const canSave = allFilled && attachmentIds.length > 0 && !isSaving;
@@ -67,261 +95,139 @@ const RecordResultSheet: React.FC<RecordResultSheetProps> = ({ instance, protoco
                 linkedEntityType: 'TestInstance',
             });
             setAttachmentIds(prev => (prev.includes(record.id) ? prev : [...prev, record.id]));
-        } catch (e) {
-            setError(e instanceof Error ? e.message : 'Could not attach file.');
+        } catch {
+            setError('फाइल जोडता आली नाही. पुन्हा प्रयत्न करा.');
         } finally {
             setIsAttaching(false);
         }
     };
 
+    // A second tap can land before React has re-rendered the button as disabled.
+    const inFlight = useRef(false);
+    const dismissed = useRef(false);
+
     const handleSave = async () => {
-        if (!canSave) return;
+        if (!canSave || inFlight.current) return;
+        inFlight.current = true;
         setIsSaving(true);
         setError(null);
+        const results: ResultInput[] = rows.map(r => ({
+            parameterCode: r.parameterCode.trim(),
+            parameterValue: r.value.trim(),
+            unit: r.unit.trim(),
+        }));
+        let response: RecordTestResultResponse;
         try {
-            const results: ResultInput[] = rows.map(r => ({
-                parameterCode: r.parameterCode.trim(),
-                parameterValue: r.value.trim(),
-                unit: r.unit.trim(),
-            }));
-            const response = await recordResult(instance.id, results, attachmentIds);
-            setSuccessRecs(response);
+            response = await recordResult(instance.id, results, attachmentIds);
         } catch (e) {
-            setError(e instanceof Error ? e.message : 'Could not save results. Try again.');
+            setError(failureWords(e, 'निकाल जतन झाला नाही. पुन्हा प्रयत्न करा.'));
+            inFlight.current = false;
             setIsSaving(false);
+            return;
         }
+        // Saved on the server: from here the sheet only shows the outcome (the save button never comes back).
+        setRecsKept(await keepRecommendations(instance.id, response.recommendations));
+        setSuccessRecs(response);
     };
 
     const handleDismissSuccess = () => {
-        if (successRecs) onSuccess(successRecs);
+        if (!successRecs || dismissed.current) return;
+        dismissed.current = true;
+        onSuccess(successRecs);
     };
 
     return (
-        <div
-            className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/50 backdrop-blur-sm sm:items-center"
-            onClick={isSaving ? undefined : onClose}
-        >
-            <div
-                className="w-full max-w-lg rounded-t-[2rem] bg-white px-6 pb-6 pt-6 shadow-2xl sm:rounded-3xl max-h-[92vh] overflow-y-auto"
-                onClick={e => e.stopPropagation()}
-            >
-                {/* Header */}
-                <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
-                        <ClipboardList size={20} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <h3
-                            style={{ fontFamily: "'DM Sans', sans-serif" }}
-                            className="text-lg font-bold text-stone-900"
-                        >
-                            Record lab result
-                        </h3>
-                        <p
-                            style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
-                            className="text-sm font-semibold text-stone-500"
-                        >
-                            लॅब निकाल नोंदवा
-                        </p>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        disabled={isSaving}
-                        className="rounded-full p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-600 disabled:opacity-50"
-                        aria-label="Close"
-                    >
-                        <X size={18} />
-                    </button>
-                </div>
+        <TestSheetFrame title="लॅबचा निकाल नोंदवा" icon={<ClipboardList size={22} aria-hidden="true" />} tone="green"
+            onClose={onClose} busy={isSaving} testId="record-sheet">
+            {successRecs ? (
+                <SuccessPanel response={successRecs} recsKept={recsKept} onDismiss={handleDismissSuccess} />
+            ) : (
+                <>
+                    <SheetTestSummary instance={instance} name={testName(instance, protocol)} />
 
-                {successRecs ? (
-                    <SuccessPanel response={successRecs} onDismiss={handleDismissSuccess} />
-                ) : (
-                    <>
-                        {/* Instance summary */}
-                        <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50 p-3">
-                            <p
-                                style={{ fontFamily: "'DM Sans', sans-serif" }}
-                                className="text-base font-bold text-stone-900 truncate"
-                            >
-                                {instance.testProtocolName ?? protocol?.name ?? 'Test'}
-                            </p>
-                            <p
-                                style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
-                                className="text-xs text-stone-500"
-                            >
-                                {instance.stageName} · {instance.plannedDueDate}
-                            </p>
-                        </div>
-
-                        {/* Parameter rows */}
-                        <div className="mt-4 space-y-2">
-                            <p
-                                style={{ fontFamily: "'DM Sans', sans-serif" }}
-                                className="text-[10px] font-bold uppercase tracking-widest text-stone-400"
-                            >
-                                Parameters
-                            </p>
-                            {rows.map((row, i) => (
-                                <div key={`${row.parameterCode}-${i}`} className="flex items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 py-2">
-                                    <input
-                                        type="text"
-                                        value={row.parameterCode}
-                                        onChange={e => updateRow(i, { parameterCode: e.target.value })}
-                                        placeholder="Code"
-                                        className="w-20 text-sm font-semibold text-stone-800 bg-transparent outline-none placeholder:text-stone-300"
-                                        style={{ fontFamily: "'DM Sans', sans-serif" }}
-                                        readOnly={paramCodes.length > 0}
-                                    />
-                                    <input
-                                        type="text"
-                                        inputMode="decimal"
-                                        value={row.value}
-                                        onChange={e => updateRow(i, { value: e.target.value })}
-                                        placeholder="Value"
-                                        className="flex-1 text-sm font-semibold text-stone-800 bg-transparent outline-none placeholder:text-stone-300"
-                                        style={{ fontFamily: "'DM Sans', sans-serif" }}
-                                    />
-                                    <input
-                                        type="text"
-                                        value={row.unit}
-                                        onChange={e => updateRow(i, { unit: e.target.value })}
-                                        placeholder="Unit"
-                                        className="w-20 text-xs text-stone-500 bg-transparent outline-none placeholder:text-stone-300"
-                                        style={{ fontFamily: "'DM Sans', sans-serif" }}
-                                    />
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Attach button + warning */}
-                        <div className="mt-4">
-                            <button
-                                type="button"
-                                onClick={handleAttach}
-                                disabled={isAttaching || !currentFarmId}
-                                className="w-full flex items-center justify-center gap-2 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-bold text-stone-700 hover:border-stone-300 disabled:opacity-50"
-                                style={{ fontFamily: "'DM Sans', sans-serif" }}
-                            >
-                                <Paperclip size={16} />
-                                {isAttaching ? 'Attaching…' : `Attach lab PDF${attachmentIds.length > 0 ? ` (${attachmentIds.length})` : ''}`}
-                            </button>
-
-                            {attachmentIds.length === 0 && (
-                                <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
-                                    <p
-                                        style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
-                                        className="text-xs font-semibold text-amber-900"
-                                    >
-                                        निकाल जतन करण्यासाठी लॅब रिपोर्ट PDF जोडा.
-                                    </p>
-                                    <p
-                                        style={{ fontFamily: "'DM Sans', sans-serif" }}
-                                        className="text-[11px] text-amber-800 mt-0.5"
-                                    >
-                                        Attach the lab report PDF to save the result.
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-
-                        {error && (
-                            <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
-                                {error}
+                    <div className="mt-4 space-y-2">
+                        <p className="m-0 text-[13.5px] font-extrabold text-stone-700">घटक आणि आकडे</p>
+                        {rows.map((row, i) => (
+                            <div key={`${paramCodes[i] ?? 'row'}-${i}`} className="grid grid-cols-[1fr_1fr_0.8fr] gap-2" data-testid={`record-row-${i}`}>
+                                <input type="text" value={row.parameterCode} readOnly={paramCodes.length > 0}
+                                    onChange={e => updateRow(i, { parameterCode: e.target.value })}
+                                    placeholder="घटक" aria-label="घटक" data-testid={`record-code-${i}`}
+                                    className={`${INPUT} ${paramCodes.length > 0 ? 'bg-stone-50' : ''}`} />
+                                <input type="text" inputMode="decimal" value={row.value}
+                                    onChange={e => updateRow(i, { value: e.target.value })}
+                                    placeholder="आकडा" aria-label="आकडा" data-testid={`record-value-${i}`} className={INPUT} />
+                                <input type="text" value={row.unit}
+                                    onChange={e => updateRow(i, { unit: e.target.value })}
+                                    placeholder="एकक" aria-label="एकक" data-testid={`record-unit-${i}`} className={INPUT} />
                             </div>
-                        )}
+                        ))}
+                    </div>
 
-                        {/* Actions */}
-                        <div className="mt-5 grid grid-cols-2 gap-2">
-                            <button
-                                type="button"
-                                onClick={onClose}
-                                disabled={isSaving}
-                                className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm font-bold text-stone-700 hover:border-stone-300 disabled:opacity-50"
-                                style={{ fontFamily: "'DM Sans', sans-serif" }}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleSave}
-                                disabled={!canSave}
-                                className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-sm active:bg-emerald-700 disabled:bg-stone-200 disabled:text-stone-400"
-                                style={{ fontFamily: "'DM Sans', sans-serif" }}
-                            >
-                                {isSaving ? 'Saving…' : 'Save result'}
-                            </button>
-                        </div>
-                    </>
-                )}
-            </div>
-        </div>
+                    <div className="mt-4 space-y-2">
+                        <BigButton onClick={handleAttach} tone="white" disabled={isAttaching || !currentFarmId} testId="record-attach">
+                            <Paperclip size={20} aria-hidden="true" />
+                            {isAttaching
+                                ? 'जोडत आहे…'
+                                : attachmentIds.length > 0
+                                    ? `रिपोर्ट जोडला (${attachmentIds.length}) — आणखी जोडा`
+                                    : 'लॅबच्या रिपोर्टची फाइल जोडा'}
+                        </BigButton>
+                        {attachmentIds.length === 0 && (
+                            <p className="m-0 rounded-xl bg-amber-50 px-3 py-2 text-[13.5px] font-bold leading-snug text-amber-900 ring-1 ring-amber-200" data-testid="record-needs-report">
+                                निकाल जतन करायला लॅबच्या रिपोर्टची फाइल जोडा.
+                            </p>
+                        )}
+                    </div>
+
+                    {error && (
+                        <p className="m-0 mt-3 rounded-xl bg-rose-50 px-3 py-2 text-[13.5px] font-extrabold text-rose-700 ring-1 ring-rose-200" data-testid="record-error">
+                            {error}
+                        </p>
+                    )}
+
+                    <div className="mt-5 grid grid-cols-2 gap-2">
+                        <BigButton onClick={onClose} tone="white" disabled={isSaving} testId="record-cancel">रद्द करा</BigButton>
+                        <BigButton onClick={handleSave} disabled={!canSave} testId="record-save">
+                            {isSaving ? 'जतन करत आहे…' : 'निकाल जतन करा'}
+                        </BigButton>
+                    </div>
+                </>
+            )}
+        </TestSheetFrame>
     );
 };
 
-const SuccessPanel: React.FC<{ response: RecordTestResultResponse; onDismiss: () => void }> = ({ response, onDismiss }) => (
-    <div className="mt-4">
-        <div className="flex items-center gap-2 rounded-2xl bg-emerald-50 border border-emerald-200 px-3 py-2.5">
-            <CheckCircle size={18} className="text-emerald-600" />
-            <p
-                style={{ fontFamily: "'DM Sans', sans-serif" }}
-                className="text-sm font-bold text-emerald-800"
-            >
-                Result saved
-            </p>
-        </div>
+const SuccessPanel: React.FC<{ response: RecordTestResultResponse; recsKept: boolean; onDismiss: () => void }> = ({ response, recsKept, onDismiss }) => (
+    <div className="mt-4 space-y-3" data-testid="record-success">
+        <p className="m-0 flex items-center gap-2 rounded-2xl bg-emerald-50 px-3 py-2.5 text-[15px] font-extrabold text-emerald-800 ring-1 ring-emerald-200">
+            <CheckCircle2 size={20} aria-hidden="true" />निकाल जतन झाला
+        </p>
 
         {response.recommendations.length > 0 ? (
-            <div className="mt-3">
-                <p
-                    style={{ fontFamily: "'DM Sans', sans-serif" }}
-                    className="text-[10px] font-bold uppercase tracking-widest text-stone-400 mb-2"
-                >
-                    Recommendations ({response.recommendations.length})
-                </p>
-                <ul className="space-y-2">
+            <>
+                <p className="m-0 text-[13.5px] font-extrabold text-stone-700">सल्ला ({response.recommendations.length})</p>
+                <ul className="m-0 list-none space-y-2 p-0">
                     {response.recommendations.map(rec => (
-                        <li key={rec.id} className="rounded-2xl border border-stone-200 bg-white p-3">
-                            <p
-                                style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
-                                className="text-sm font-semibold text-stone-800"
-                            >
-                                {rec.titleMr}
-                            </p>
-                            <p
-                                style={{ fontFamily: "'DM Sans', sans-serif" }}
-                                className="text-xs text-stone-500 mt-0.5"
-                            >
-                                {rec.titleEn}
-                            </p>
+                        <li key={rec.id} className="rounded-2xl bg-white p-3 text-[15px] font-bold text-stone-900 ring-1 ring-stone-200">
+                            {rec.titleMr?.trim() || rec.titleEn}
                         </li>
                     ))}
                 </ul>
-                <p
-                    style={{ fontFamily: "'DM Sans', sans-serif" }}
-                    className="text-[11px] text-stone-400 mt-2"
-                >
-                    Open the test detail page to add these to your plan.
-                </p>
-            </div>
+                {recsKept ? (
+                    <p className="m-0 text-[13px] font-semibold leading-snug text-stone-600" data-testid="record-recs-where">
+                        हे सल्ले योजनेत घालायचे असतील तर “निकाल आला” मधली ही चाचणी उघडा.
+                    </p>
+                ) : (
+                    <p className="m-0 rounded-xl bg-amber-50 px-3 py-2 text-[13px] font-bold leading-snug text-amber-900 ring-1 ring-amber-200" data-testid="record-recs-not-kept">
+                        हे सल्ले या फोनवर ठेवता आले नाहीत — आत्ताच लिहून घ्या.
+                    </p>
+                )}
+            </>
         ) : (
-            <p
-                style={{ fontFamily: "'DM Sans', sans-serif" }}
-                className="text-xs text-stone-500 mt-3"
-            >
-                No new recommendations for this result.
-            </p>
+            <p className="m-0 text-[14px] font-semibold text-stone-600">या निकालावर नवीन सल्ला नाही.</p>
         )}
 
-        <button
-            type="button"
-            onClick={onDismiss}
-            className="mt-5 w-full rounded-2xl bg-stone-900 px-4 py-3 text-sm font-bold text-white shadow-sm active:bg-stone-800"
-            style={{ fontFamily: "'DM Sans', sans-serif" }}
-        >
-            Done
-        </button>
+        <BigButton onClick={onDismiss} testId="record-done">ठीक आहे</BigButton>
     </div>
 );
 

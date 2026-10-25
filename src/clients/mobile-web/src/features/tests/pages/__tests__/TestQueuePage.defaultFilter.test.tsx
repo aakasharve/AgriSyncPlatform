@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
 /**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (WP-5 places) — the redesign (चाचण्या) changed the
+ * page's words, not this rule: the assertions below now read the Marathi group and the card instead of the
+ * English "Due" chip. What the suite proves is unchanged. One sharpening (review B002): "genuinely empty"
+ * now means the SERVER answered with no tests — the companion gives the farm one crop cycle and the
+ * server's empty answer, because a phone that could not ask no longer claims "no tests".
+ *
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -10,18 +16,18 @@
  * tests are all Due (or all Reported, etc.) showed zero rows under it and
  * fell through to
  *
- *     आज कोणत्याही चाचण्या नाहीत  /  No tests pending today
+ *     आज कोणत्याही चाचण्या नाहीत
  *
  * even though the farm plainly has tests pending — just not, right now,
- * overdue ones. The founder ruled: default to "All", same treatment as the
- * other two screens. The filter chip itself is untouched — "Overdue" is
- * still one tap away — and the empty-state sentence itself is untouched: it
- * is correct when the list is genuinely empty, which the companion test
- * below proves is still reachable.
+ * overdue ones. The founder ruled: default to "All" (now "सर्व"), same
+ * treatment as the other two screens. The filter chip itself is untouched —
+ * "Overdue" ("वेळ उलटून गेली") is still one tap away — and the empty-state
+ * sentence itself is untouched: it is correct when the list is genuinely
+ * empty, which the companion test below proves is still reachable.
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 
 vi.mock('../../../../core/session/FarmContext', () => ({
@@ -41,7 +47,12 @@ vi.mock('../../../../core/session/FarmContext', () => ({
 vi.mock('../../components/MarkCollectedSheet', () => ({ default: () => null }));
 vi.mock('../../components/RecordResultSheet', () => ({ default: () => null }));
 
+// The server's answer for a crop cycle: no tests.
+const getTestQueue = vi.hoisted(() => vi.fn(async () => [] as unknown[]));
+vi.mock('../../data/testsClient', () => ({ getTestQueue }));
+
 let dexieRows: Array<Record<string, unknown>> = [];
+let dexieCycles: Array<Record<string, unknown>> = [];
 
 vi.mock('../../../../infrastructure/storage/DexieDatabase', () => ({
     getDatabase: () => ({
@@ -50,8 +61,11 @@ vi.mock('../../../../infrastructure/storage/DexieDatabase', () => ({
             bulkPut: async () => undefined,
         },
         testProtocols: { toArray: async () => [] },
-        cropCycles: {
+        plots: {
             where: () => ({ equals: () => ({ toArray: async () => [] }) }),
+        },
+        cropCycles: {
+            where: () => ({ equals: () => ({ toArray: async () => dexieCycles }) }),
         },
     }),
 }));
@@ -80,6 +94,7 @@ const dueInstance = {
 describe('TestQueuePage — the default filter must not hide real tests behind a false "no tests" claim (Task 15, D1)', () => {
     beforeEach(() => {
         dexieRows = [];
+        dexieCycles = [];
     });
 
     afterEach(() => {
@@ -91,15 +106,20 @@ describe('TestQueuePage — the default filter must not hide real tests behind a
 
         render(<TestQueuePage />);
 
-        await waitFor(() => expect(screen.getAllByText('Due').length).toBeGreaterThan(0));
+        // The row itself, under its own group — not merely the filter chip of the same name.
+        const card = await screen.findByTestId('test-card-ti-1');
+        expect(within(screen.getByTestId('tests-due')).getByTestId('test-card-ti-1')).toBe(card);
+        expect(screen.getByTestId('tests-filter-All')).toHaveAttribute('aria-pressed', 'true');
         expect(screen.queryByText(FALSE_SENTENCE)).toBeNull();
     });
 
     it('companion — a farm with genuinely zero tests still sees the true empty state (the sentence itself is correct, unchanged)', async () => {
         dexieRows = [];
+        dexieCycles = [{ id: 'cycle-1', farmId: 'farm-1', plotId: 'plot-1' }];
 
         render(<TestQueuePage />);
 
         await waitFor(() => expect(screen.getByText(FALSE_SENTENCE)).toBeInTheDocument());
+        expect(getTestQueue).toHaveBeenCalledWith('cycle-1');
     });
 });
