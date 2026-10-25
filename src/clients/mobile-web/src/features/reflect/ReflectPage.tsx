@@ -40,6 +40,7 @@ import { useFarmContext } from '../../core/session/FarmContext';
 import { emitClosureSummaryViewed } from '../../core/telemetry/eventEmitters';
 import DwcReminderChip from './components/DwcReminderChip';
 import FarmWideTodayPanel from '../logs/components/FarmWideTodayPanel';
+import { TodayActivityButton, TodayActivitySheet } from '../logs/components/TodayActivityFeed';
 import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
 
 // --- MAIN PAGE ---
@@ -68,7 +69,8 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     // genuinely retired. spec: owner-oversight-loop
     currentOperator,
     operators = [],
-    navigate
+    navigate,
+    activityFeed,
 }) => {
     // Fallback defaults if not provided
     const defaults: LedgerDefaults = ledgerDefaults || {
@@ -100,6 +102,9 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
 
     // Detail Drawer
     const [selectedLog, setSelectedLog] = useState<DailyLog | null>(null);
+
+    // The Activity Feed sheet (opened from the button at the top of this page)
+    const [feedOpen, setFeedOpen] = useState(false);
 
     // Empty selection (for "Add Missing Entry" scenario)
     const [emptySelection, setEmptySelection] = useState<{
@@ -541,6 +546,16 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
 
     return (
         <div className="pb-20 space-y-4 animate-in fade-in duration-500">
+
+            {/* ACTIVITY FEED — moved here from the log page (founder 2026-10-24): one button, one tap away. */}
+            {activityFeed && (
+                <div className="px-4 pt-4">
+                    <TodayActivityButton count={activityFeed.entries.length} onClick={() => setFeedOpen(true)} />
+                </div>
+            )}
+            {activityFeed && feedOpen && (
+                <TodayActivitySheet entries={activityFeed.entries} dateLabel={activityFeed.dateLabel} onClose={() => setFeedOpen(false)} />
+            )}
 
             {/* REVIEW INBOX (Trust Layer 2) */}
             {showInbox && operators && (

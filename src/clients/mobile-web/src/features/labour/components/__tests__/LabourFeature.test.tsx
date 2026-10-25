@@ -189,13 +189,13 @@ describe('LabourFeature - हजेरी घ्या is normal Labour navigati
 
     it.each([true, false])('server says canManageLabour=true (isPreview: %s): हजेरी घ्या and हजेरी वही both show', (isPreview) => {
         mount(true, isPreview);
-        expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
+        expect(screen.getByText('नावं दाबून हजेरी')).toBeInTheDocument();
         expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
     });
 
     it.each([[false], [undefined]])('canManageLabour=%s: no हजेरी घ्या, no no-work tile; हजेरी वही still there', (flag) => {
         mount(flag);
-        expect(screen.queryByText('हजेरी घ्या')).not.toBeInTheDocument();
+        expect(screen.queryByText('नावं दाबून हजेरी')).not.toBeInTheDocument();
         expect(screen.queryByText('काम झालं नाही, पण मजूर आले')).not.toBeInTheDocument();
         expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
     });
@@ -203,14 +203,14 @@ describe('LabourFeature - हजेरी घ्या is normal Labour navigati
     it('the old hidden gesture is gone: 7 (or 20) taps on the title neither toast nor open the door', () => {
         mount(false);
         tapTitle(20);
-        expect(screen.queryByText('हजेरी घ्या')).not.toBeInTheDocument();
+        expect(screen.queryByText('नावं दाबून हजेरी')).not.toBeInTheDocument();
         expect(screen.queryByText(/हजेरीचं नवं दार/)).not.toBeInTheDocument();
     });
 
     it('a stored legacy device flag changes nothing', () => {
         window.localStorage.setItem('agrisync.early.attendanceDoor', '1');
         mount(false);
-        expect(screen.queryByText('हजेरी घ्या')).not.toBeInTheDocument();
+        expect(screen.queryByText('नावं दाबून हजेरी')).not.toBeInTheDocument();
     });
 });
 

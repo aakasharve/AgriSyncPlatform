@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { User2 } from 'lucide-react';
+import SetupHubIcon from './SetupHubIcon';
 import { AppRoute, PageView, DetailedWeather } from '../../../types';
 import { useLanguage } from '../../../i18n/LanguageContext';
 
@@ -60,7 +61,12 @@ interface AppHeaderProps {
   onNavigate: (route: AppRoute) => void;
   onViewChange: (view: PageView) => void;
   disabled?: boolean;
+  /** No longer drawn here (2026-10-25): its colour ring on the Setup Hub clashed with the nameboard's brass and green. Kept so callers need not change. */
   activeOperator?: FarmOperator;
+  /** Design preview (PLR-D9): show the page switcher ONLY on the three main tabs, never on a place like खरेदी or the Setup Hub. Default: the existing route list. */
+  navCardsOnlyOnMain?: boolean;
+  /** Pages the page switcher leaves out for this person (preview: a worker gets no तुलना). Default: none. */
+  hiddenViews?: readonly PageView[];
   onVoiceTrigger?: () => void;
   /** Phase 6 — farm context strip below the main bar. Omit to hide. */
   farmContext?: {
@@ -164,7 +170,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   onNavigate,
   onViewChange,
   disabled,
-  activeOperator,
+  navCardsOnlyOnMain = false,
+  hiddenViews,
   onVoiceTrigger,
   farmContext,
   oversightData,
@@ -196,7 +203,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   // path to this component's local `isWaitingDrawerOpen` — hence the event.
   useOpenSurfaceRequest(OPEN_WAITING_DRAWER_EVENT, () => setIsWaitingDrawerOpen(true));
 
-  const userColorClass = activeOperator ? getUserColor(activeOperator.name) : 'border-stone-200 text-stone-500 bg-stone-50';
+  const [hubTap, setHubTap] = React.useState(0);
 
   // OVERSIGHT LOOP (spec §2/§3) — the awareness checkpoint is read/written
   // through the local adapter directly, unconditionally, the same way
@@ -363,7 +370,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   // Task 13 — same condition `PageToggle` used to gate row 1's centre on;
   // now decides whether the `OversightNavCards` row renders at all (its own
   // row below row 1, not inside it — see `PAGE_TOGGLE_ROUTES`'s comment).
-  const showNavCards = PAGE_TOGGLE_ROUTES.includes(currentRoute);
+  const showNavCards = navCardsOnlyOnMain ? currentRoute === 'main' : PAGE_TOGGLE_ROUTES.includes(currentRoute);
 
   // FOUNDER RULING 2026-08-31 — the oversight tray is a LOG-DESK instrument,
   // not a global banner. It rode on `farmContext` alone, so it followed the
@@ -414,22 +421,19 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             surface it actually opens (`profile.setupHub`), and the plot count
             that used to ride beside it is gone from this row entirely: it
             lives in the farm switcher the board itself opens. */}
-        <div className="flex shrink-0 items-center gap-2">
+        {/* self-stretch + justify-center: the round button and its label sit as one group on the nameboard's centre line. */}
+        <div className="flex shrink-0 items-stretch gap-2 self-stretch">
           <button
-            onClick={() => onNavigate('profile')}
+            onClick={() => { setHubTap(n => n + 1); onNavigate('profile'); }}
             disabled={disabled}
             data-testid="header-setup-hub"
-            className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center rounded-2xl px-1 py-1"
+            className={`flex min-h-[44px] min-w-[44px] flex-col items-center rounded-2xl px-0.5 py-0 justify-center gap-1`}
             title={t('profile.setupHub')}
           >
-            <div className={`
-               w-9 h-9 flex items-center justify-center rounded-full border-2 transition-all duration-150
-               ${activeOperator ? userColorClass : 'border-transparent bg-stone-100 text-stone-400'}
-            `}>
-              <User2 size={18} strokeWidth={2.5} />
-            </div>
+            {/* Founder, 2026-10-25: the Setup Hub's own picture, as a small sibling of the nameboard, with a tap effect (SetupHubIcon). */}
+            <SetupHubIcon tap={hubTap} />
             <span
-              className="mt-0.5 max-w-[58px] text-center text-[8.5px] font-bold leading-tight text-emerald-900"
+              className="max-w-[60px] whitespace-nowrap text-center text-[10px] font-extrabold leading-[12px] text-emerald-900"
               style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
             >
               {t('profile.setupHub')}
@@ -523,6 +527,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
               if (currentRoute !== 'main') onNavigate('main');
             }}
             disabled={disabled}
+            hiddenViews={hiddenViews}
           />
         </div>
       )}

@@ -15,7 +15,6 @@ import AudioRecorderStreaming from '../../features/voice/components/AudioRecorde
 import LiveCaption from '../../features/voice/components/LiveCaption';
 import { DEFAULT_VOICE_CONFIG } from '../../infrastructure/voice/types';
 import ManualEntry from '../../features/logs/components/ManualEntry';
-import DailyLogCard from '../../features/logs/components/DailyLogCard';
 // `ArrowLeft` left with `LabourLogBanner`, its only consumer. `Users` stays —
 // the success card's bucket chips still use it.
 import { Leaf } from 'lucide-react';
@@ -60,14 +59,9 @@ import VoiceSavedReassurance from '../../features/logs/components/shramsathi/Voi
 import { ShramSathiUnderstanding } from '../../features/logs/components/shramsathi/ShramSathiUnderstanding';
 
 import { AppRouterContext } from './routeContext';
+import { buildFeedEntries } from './activityFeedEntries';
 import { ReflectPage, ComparePage } from './lazyComponents';
 import { DISPLAY_TIME_ZONE } from '../../shared/utils/displayTime';
-import {
-    formatLogTime,
-    getPrimaryWorkDone,
-    getSummaryLines,
-    getVerificationPresentation
-} from './helpers';
 
 /*
  * The four components this module renders live in `./mainViewComponents`.
@@ -128,8 +122,19 @@ export const LabourResultHost: React.FC<{
 
 export const renderReflectView = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'main' || ctx.mainView !== 'reflect') return null;
+    // The Activity Feed (today's logs), reached from its own button on this page. Tapping a card opens that
+    // log to edit, exactly as it did on the log page.
+    const openLogToEdit = (log: DailyLog) => {
+        ctx.setMainView('log');
+        ctx.handleEditLog(log);
+    };
+    const activityFeed = {
+        entries: buildFeedEntries(ctx.todayLogs, { crops: ctx.crops, operatorNameById: ctx.operatorNameById, getLogContextSnapshot: ctx.getLogContextSnapshot, onOpenLog: openLogToEdit }),
+        dateLabel: new Date().toLocaleDateString('mr-IN', { weekday: 'long', day: 'numeric', month: 'short', timeZone: DISPLAY_TIME_ZONE }),
+    };
     return (
         <ReflectPage
+            activityFeed={activityFeed}
             history={ctx.history}
             crops={ctx.crops}
             ledgerDefaults={ctx.ledgerDefaults}
@@ -211,8 +216,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         voiceStreamingPhase, liveCaption,
         continuityLevel, savedPendingCaptureId,
         getTodayCounts, getContextColorIndicator,
-        history, todayLogs, operatorNameById,
-        getLogContextSnapshot, handleEditLog,
+        history,
         costSnapshot, yesterdayCost,
         setRecordingSegment,
         handleReset,
@@ -585,79 +589,9 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             )}
                         </div>
 
-                        {/* TODAY'S ACTIVITY LEDGER CARDS */}
-                        {!recordingSegment && mode !== 'manual' && (
-                            <div className="mt-12 animate-in slide-in-from-bottom-8 relative z-10">
-
-
-                                {/* Section Divider */}
-                                <div className="flex items-center gap-4 mb-6">
-                                    <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent via-slate-200 to-transparent"></div>
-                                    <div className="px-4 py-1.5 rounded-full bg-slate-100/80 backdrop-blur-sm border border-slate-200 text-slate-500 text-[10px] font-bold uppercase tracking-widest shadow-sm">
-                                        Today's Timeline
-                                    </div>
-                                    <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent via-slate-200 to-transparent"></div>
-                                </div>
-
-                                <div className="flex items-center justify-between px-2 mb-4">
-                                    <h3 className="text-slate-800 font-bold text-lg tracking-tight">Activity Feed</h3>
-                                    <span className="text-[10px] uppercase font-bold text-slate-500 bg-white border border-slate-100 px-2 py-1 rounded-lg shadow-sm">
-                                        {new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short', timeZone: DISPLAY_TIME_ZONE })}
-                                    </span>
-                                </div>
-
-                                {todayLogs.length === 0 ? (
-                                    <div className="text-center p-8 bg-stone-50 rounded-2xl border-2 border-dashed border-stone-100 text-stone-300 font-medium">
-                                        No work logged yet today
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {todayLogs.map(log => {
-                                            const contextDetails = getLogContextSnapshot(log);
-                                            const verification = getVerificationPresentation(log.verification?.status);
-                                            const createdById = log.meta?.createdByOperatorId || '';
-                                            // Truth audit T1.12b, finding 4. This used to fall back
-                                            // to `ownerDisplayName` — so a record nobody was recorded
-                                            // as making was attributed, by name, to a real person.
-                                            // `oversightSelectors.ts:20-22` states the opposite rule in
-                                            // this same release: "a person can only be counted if they
-                                            // were named." `अज्ञात` is the word the app already uses for
-                                            // this exact fact (the unattributed row in
-                                            // OversightBriefingCard), so "no identity" reads the same
-                                            // everywhere. `P4`/`P7`.
-                                            const loggedBy = operatorNameById.get(createdById) || 'अज्ञात';
-                                            const primaryCropId = log.context.selection[0]?.cropId;
-                                            const cropColor = crops.find(crop => crop.id === primaryCropId)?.color || 'bg-slate-400';
-
-                                            return (
-                                                <DailyLogCard
-                                                    key={log.id}
-                                                    logId={log.id}
-                                                    workDone={getPrimaryWorkDone(log)}
-                                                    plotName={contextDetails.plotName}
-                                                    cropName={contextDetails.cropName}
-                                                    cropColor={cropColor}
-                                                    loggedBy={loggedBy}
-                                                    timeLabel={formatLogTime(log.meta?.createdAtISO)}
-                                                    statusLabel={verification.label}
-                                                    statusTone={verification.tone}
-                                                    counts={{
-                                                        cropActivities: log.cropActivities.length,
-                                                        irrigation: log.irrigation.length,
-                                                        labour: log.labour.length,
-                                                        inputs: log.inputs.length
-                                                    }}
-                                                    summaryLines={getSummaryLines(log)}
-                                                    onClick={() => handleEditLog(log)}
-                                                />
-                                            );
-                                        })}
-                                    </div>
-                                )}
-
-
-                            </div>
-                        )}
+                        {/* The "today's timeline / activity feed" that used to sit here MOVED to "माझं शेत"
+                            (founder 2026-10-24: its own button on the Reflect page, not on the log page) —
+                            see `renderReflectView` and `features/logs/components/TodayActivityFeed.tsx`. */}
 
                         {recordingSegment && (
                             <div className="mt-6 text-center">

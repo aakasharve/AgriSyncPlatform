@@ -11,6 +11,8 @@ import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import type { Language } from '../../../i18n/language';
 import { resolveOversightString } from '../../../i18n/oversightTranslations';
 import { toMarathiNumber } from '../../logs/services/disciplineRecognition';
+import { cropImageUrl } from './cropImage';
+import CropPlotStepper, { type StepperExtras } from './CropPlotStepper';
 
 // Same font-selection convention every oversight component uses (root
 // CLAUDE.md Font Rules) — only used below when `hideGlobalCard` opts a
@@ -79,34 +81,23 @@ interface CropSelectorProps {
      * path can now be tested by rendered output at all.
      */
     hideGlobalCard?: boolean;
+    /**
+     * `'stepper'` (PLR-D5, opt-in, log mode only) swaps the horizontal carousel for the
+     * one-question-at-a-time flow in `CropPlotStepper` — crop photos first, then the
+     * plots of the chosen crop(s), then `stepper.footer` (the mic). SAME selection
+     * contract as the carousel (`selectedCrops` / `selectedPlots` / `onSelectionChange`),
+     * so a caller switches layouts by changing this one prop. Default `'carousel'` is
+     * byte-for-byte what every caller renders today.
+     */
+    layout?: 'carousel' | 'stepper';
+    stepper?: StepperExtras;
 }
 
 // --- NEW COMPONENT: CropSymbol (Photo/Emoji Replacement) ---
+export { cropImageUrl };
+
 export const CropSymbol = ({ name, size = 'lg' }: { name: string, size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' }) => {
-    // Map internal icon names to Real Images
-    const getImage = (n: string) => {
-        // Normalize name to handle potential variations
-        const normalized = n.toLowerCase();
-
-        if (normalized.includes('grape')) return '/images/crops/Black Grapes.jpg';
-        if (normalized.includes('sugar')) return '/images/crops/Sugarcane.jpg';
-        if (normalized.includes('onion')) return '/images/crops/Onion.jpg';
-        // Corrected spelling and added robust check
-        if (normalized.includes('pomegranate') || normalized.includes('pomo')) return '/images/crops/Pomegranate.jpg';
-        if (normalized.includes('wheat')) return '/images/crops/Wheat Grain.jpg';
-        if (normalized.includes('guava')) return '/images/crops/Guava.jpg';
-        if (normalized.includes('tomato')) return '/images/crops/Tomato.jpg';
-
-        // Fallback for Entire Farm / Warehouse
-        if (normalized.includes('warehouse') || normalized.includes('farm')) {
-            // No generic farm image yet, use emoji fallback
-            return null;
-        }
-
-        return null; // Fallback to emoji
-    };
-
-    const imageUrl = getImage(name);
+    const imageUrl = cropImageUrl(name);
 
     // Size mappings for Image
     const imgSizeClass =
@@ -190,7 +181,9 @@ const CropSelector: React.FC<CropSelectorProps> = ({
     disabled,
     compact = false,
     showPlots = false,
-    hideGlobalCard = false
+    hideGlobalCard = false,
+    layout = 'carousel',
+    stepper
 }) => {
     // Finding F5 — `useLanguage()` THROWS outside `LanguageProvider`
     // (`i18n/LanguageContext.tsx`). Calling it unconditionally here gave a
@@ -221,6 +214,19 @@ const CropSelector: React.FC<CropSelectorProps> = ({
         const unit = resolveOversightString(language, count === 1 ? 'selectedCountUnitSingular' : 'selectedCountUnitPlural');
         return `${numeral} ${unit}`;
     };
+
+    if (layout === 'stepper') {
+        return (
+            <CropPlotStepper
+                crops={crops}
+                selectedCrops={selectedCrops}
+                selectedPlots={selectedPlots}
+                onSelectionChange={onSelectionChange}
+                disabled={disabled}
+                {...stepper}
+            />
+        );
+    }
 
     const handleGlobalToggle = () => {
         if (disabled) return;

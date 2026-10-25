@@ -2,7 +2,7 @@
  * VerificationStatusBadge — Maps 5 backend verification states to visual chips
  *
  * States: draft, confirmed, verified, disputed, correction_pending
- * Replaces the generic "Pending" badge in DailyLogCard.
+ * Replaces the generic "Pending" badge on the activity cards.
  */
 
 import React from 'react';

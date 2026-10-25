@@ -80,7 +80,9 @@ const HajeriLedger: React.FC<{
     data: LabourData;
     onToast: (m: string) => void;
     onOpenCell?: (row: LedgerRow, dayIndex: number) => void;
-}> = ({ data, onOpenCell }) => {
+    /** Drawn open inside the हजेरी hub's "हजेरी बघा" section (founder 2026-10-25) — no screen-level padding there. */
+    embedded?: boolean;
+}> = ({ data, onOpenCell, embedded }) => {
     const L = data.ledger;
 
     // Carried MINOR (3.4b precedent — display dedup by EXACT key, never by
@@ -99,10 +101,13 @@ const HajeriLedger: React.FC<{
     const hasUnsynced = rows.some((r) => r.cells.some((c) => c !== null && c.unsynced === true));
 
     return (
-        <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2">
-            <div className="flex items-center justify-center rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+        <div className={embedded ? 'flex flex-col gap-2.5' : 'flex flex-col gap-2.5 px-4 pb-24 pt-2'} data-testid={embedded ? 'hub-ledger-open' : undefined}>
+            <div className="flex items-center justify-center rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
                 <span className="text-[13px] font-extrabold text-slate-800">
-                    {isReadableWeekRange(L.weekLabel) ? `${L.weekLabel} · हजेरी वही` : 'हजेरी वही'}
+                    {/* inside the hub the section already says हजेरी बघा and a tile says हजेरी वही — the open grid names only its
+                        dates. With no readable range it says सर्व दिवस: the default window is ALL days, so "this week" would be false. */}
+                    {embedded ? (isReadableWeekRange(L.weekLabel) ? L.weekLabel : 'सर्व दिवस')
+                        : isReadableWeekRange(L.weekLabel) ? `${L.weekLabel} · हजेरी वही` : 'हजेरी वही'}
                 </span>
             </div>
 
@@ -124,7 +129,7 @@ const HajeriLedger: React.FC<{
                 )}
             </div>
 
-            <div className="overflow-x-auto rounded-[18px] border border-slate-100 bg-white p-2.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <div className="overflow-x-auto rounded-[18px] border border-slate-100 bg-white p-2.5 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
                 {/* Header: name column + one cell per day. NOTHING trails (D4: no totals column). */}
                 <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
                     <span className="w-[82px] flex-none text-[12.5px] font-extrabold text-slate-700">नाव</span>

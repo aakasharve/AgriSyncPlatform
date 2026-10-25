@@ -31,7 +31,7 @@ import ReviewSheet from '../ReviewSheet';
 import { fetchLabourData, type LabourDataDto } from '../../data/labourClient';
 
 const HERO = 'बोलून हजेरी घ्या';
-const MANUAL_TILE = 'हजेरी घ्या';
+const MANUAL_TILE = 'नावं दाबून हजेरी';
 const NO_WORK_TILE = 'काम झालं नाही, पण मजूर आले';
 
 const person = (id: string, name: string, role: string) => ({

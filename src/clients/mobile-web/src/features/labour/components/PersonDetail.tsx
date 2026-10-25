@@ -70,7 +70,7 @@ const TrustGraduationSection: React.FC<{ w: LabourPerson; onToast: (m: string) =
                     <button type="button" onClick={() => { setGranted(false); onToast('विश्वास काढला — नोंदी पुन्हा तपासाव्या लागतील'); }} className="mt-2.5 text-[11.5px] font-bold text-slate-500 underline">विश्वास काढा</button>
                 </div>
             ) : eligible ? (
-                <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+                <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-3.5 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
                     <div className="text-[10.5px] font-extrabold uppercase tracking-wide text-emerald-700">शिफारस · recommendation</div>
                     <div className="mt-1 text-[15px] font-bold text-slate-800">{w.name} सांगेल त्यावर विश्वास ठेवायचा?</div>
                     <div className="mt-1 text-[12px] leading-snug text-slate-500">{w.daysActive} दिवस · वाद नाही. विश्वास दिल्यावर याच्या नोंदी <b>आपोआप मंजूर</b> होतील — रोज तपासायची गरज नाही. निर्णय तुमचा.</div>
@@ -103,7 +103,7 @@ const PersonDetail: React.FC<Props> = ({ data, personId, onAdvance, onSettle, on
 
     return (
         <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2">
-            <div className="flex items-center gap-3.5 rounded-[26px] border border-slate-100 bg-gradient-to-br from-white to-slate-50 p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <div className="flex items-center gap-3.5 rounded-[26px] border border-slate-100 bg-gradient-to-br from-white to-slate-50 p-4 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
                 <Avatar tone={w.tone} initial={w.initial} size="lg" />
                 <div className="min-w-0">
                     <div className="flex items-center gap-2 text-[19px] font-black leading-tight text-slate-800">{w.name} {!w.verified && <NameOnlyBadge />}</div>
@@ -205,7 +205,7 @@ const PersonDetail: React.FC<Props> = ({ data, personId, onAdvance, onSettle, on
               * SHOW_TRUST_GRADUATION for the same class of reason.
               */}
             {SHOW_TRUST_SCORE && w.trust != null && (
-                <div className="flex items-center gap-3 rounded-2xl border border-stone-100 bg-white p-3 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+                <div className="flex items-center gap-3 rounded-2xl border border-white/70 bg-white/85 p-3 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
                     <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-600"><Star size={18} /></span>
                     <span className="text-[17px] font-bold text-stone-700">30 दिवसांत वाद नाही</span>
                 </div>

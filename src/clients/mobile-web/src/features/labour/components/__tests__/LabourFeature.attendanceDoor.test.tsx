@@ -76,7 +76,7 @@ configure({ asyncUtilTimeout: 6000 });
 
 const ON_PHONE = translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr');
 
-const CAPTURE_TILE = 'हजेरी घ्या';
+const CAPTURE_TILE = 'नावं दाबून हजेरी';
 const CAPTURE_SCREEN_TITLE = 'आजची हजेरी';
 const NO_WORK_TILE = 'काम झालं नाही, पण मजूर आले';
 
@@ -562,10 +562,10 @@ describe('attendance door — no gate left behind', () => {
         expect(door).not.toMatch(/isPreview|import\.meta|process\.env|LABOUR_MOCK|localStorage|DeviceFlag/);
     });
 
-    it('the voice hero is still anchor-gated (no work logged => grey, with the approved reason)', async () => {
+    it('the voice hero is still anchor-gated (no work logged => no mic at all, the approved reason instead)', async () => {
         renderRealFarm();                                         // history [] => no anchor
         await waitFor(() => expect(screen.getByText(CAPTURE_TILE)).toBeInTheDocument());
-        expect(screen.getByRole('button', { name: /बोलून हजेरी घ्या/ })).toBeDisabled();
+        expect(screen.queryByRole('button', { name: /बोलून हजेरी घ्या/ })).toBeNull();
         expect(screen.getByTestId('labour-no-anchor-reason')).toBeInTheDocument();
     });
 

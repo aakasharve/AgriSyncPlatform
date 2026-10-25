@@ -59,7 +59,7 @@ import { resetRootStore } from '../../../../app/state/RootStore';
 // loaded full-suite run needs more than the 1s default.
 configure({ asyncUtilTimeout: 6000 });
 
-const CAPTURE_TILE = 'हजेरी घ्या';
+const CAPTURE_TILE = 'नावं दाबून हजेरी';
 
 
 const REAL_FARM = {

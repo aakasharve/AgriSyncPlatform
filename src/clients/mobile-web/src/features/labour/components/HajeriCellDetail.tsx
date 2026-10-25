@@ -56,7 +56,8 @@ const HajeriCellDetail: React.FC<{
     if (extra > 0) weekParts.push(`जादा ${extra} तास`);
 
     return (
-        <div className="fixed inset-0 z-40 flex items-end bg-black/30" onClick={onClose}>
+        // above the app's bottom bar (z-50): at z-40 the sheet's lower half sat hidden behind it (found 2026-10-25)
+        <div className="fixed inset-0 z-[60] flex items-end bg-black/30" onClick={onClose}>
             <div className="w-full rounded-t-[24px] bg-white p-4 pb-8" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between gap-3">
                     <span className="flex items-center gap-2 text-[19px] font-bold text-stone-800">

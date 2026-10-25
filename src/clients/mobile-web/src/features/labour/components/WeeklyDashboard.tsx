@@ -146,7 +146,7 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
             {windowRange !== '' && (
                 <div
                     data-testid="weekly-dashboard-week-label"
-                    className="flex items-center justify-center rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_1px_3px_rgba(20,40,30,0.05)]"
+                    className="flex items-center justify-center rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md"
                 >
                     <span className="text-[14px] font-extrabold text-slate-800">{windowRange}</span>
                 </div>
@@ -299,7 +299,7 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
                     subtitle="काम नोंदवल्यावर कोणत्या प्लॉटवर किती दिवस काम झालं ते इथे दिसेल."
                 />
             ) : (
-                <div className="rounded-[20px] border border-slate-100 bg-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+                <div className="rounded-[20px] border border-slate-100 bg-white p-3.5 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
                     {d.plots.map((p, i) => (
                         <div key={p.name} className={`flex items-center gap-2.5 ${i > 0 ? 'mt-2.5' : ''}`}>
                             <span className="w-14 flex-none text-right text-[12px] font-extrabold text-slate-700">{p.name}</span>
@@ -344,7 +344,7 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
               * बाकी देणं stat tile above already gets, and no new copy.
               */}
             <GroupLabel>पैसे</GroupLabel>
-            <div data-testid="labour-money-card" className="rounded-[20px] border border-slate-100 bg-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <div data-testid="labour-money-card" className="rounded-[20px] border border-slate-100 bg-white p-3.5 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
                 {/* Phase 4 (D-H8) — a `null` money card was WITHHELD by view
                   * (मुकादम/worker projection): the whole card body is `—`,
                   * never rebuilt from fabricated zeros. Withheld ≠ absent. */}
@@ -395,7 +395,7 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
             </div>
 
             {/* Correction 5: the हजेरी वही door is never gated — constant DELETED, not flipped. */}
-            <button type="button" onClick={onLedger} className="flex w-full items-center gap-3.5 rounded-[20px] border border-slate-100 bg-white p-3.5 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-transform active:scale-[0.98]">
+            <button type="button" onClick={onLedger} className="flex w-full items-center gap-3.5 rounded-[20px] border border-slate-100 bg-white p-3.5 text-left shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md transition-transform active:scale-[0.98]">
                 <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-blue-100 text-blue-600"><BookText size={20} /></span>
                 <span className="min-w-0 flex-1"><span className="block text-[15px] font-bold text-slate-800">हजेरी वही</span><span className="block text-[11.5px] text-slate-400">सर्व दिवसांची हजेरी पहा</span></span>
                 <ChevronRight size={18} className="flex-shrink-0 text-slate-300" />

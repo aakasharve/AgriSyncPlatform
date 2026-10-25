@@ -39,6 +39,14 @@ const QUARANTINE = new Map([
        + 'must not ride along with an unrelated UI release. Owner: next voice '
        + 'change to land takes it.',
   }],
+  ['features/logs/components/shramsathi/understandingRing/cinematicEngine.ts', {
+    at: 831,
+    since: '2026-10-25',
+    why: 'The founder-supplied "मला किती समजलं" canvas animation, copied as delivered. It is ONE closure '
+       + '(mountCinematicRing) sharing a camera, a clock and ~20 sprite caches, so it cannot be cut into files without '
+       + 'threading all of that state through a new boundary; and any cut must be re-checked frame by frame against the '
+       + 'delivered video. It may not grow. Owner: the next change to the animation takes the split.',
+  }],
 ]);
 
 let violations = 0;

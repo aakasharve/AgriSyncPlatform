@@ -278,7 +278,7 @@ describe('LabourHub — screen honesty (Decision 4b)', () => {
 
     it('shows हजेरी घ्या (the capture screen is finished) and the हजेरी वही (never gated, Correction 5)', () => {
         render(<LabourHub {...baseProps()} data={{ ...LABOUR_MOCK, canManageLabour: true }} />);
-        expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
+        expect(screen.getByText('नावं दाबून हजेरी')).toBeInTheDocument();
         expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
         // The tiles that DO work stay reachable.
         expect(screen.getByText('आढावा')).toBeInTheDocument();
@@ -425,7 +425,7 @@ describe('LabourHub - the attendance door (हजेरी घ्या)', () =>
 
     it('shows हजेरी घ्या and हजेरी वही when the server allows it, with no preview prop involved', () => {
         render(<LabourHub {...baseProps()} data={{ ...LABOUR_MOCK, canManageLabour: true }} />);
-        expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
+        expect(screen.getByText('नावं दाबून हजेरी')).toBeInTheDocument();
         expect(screen.getByText('आज कोण आलं')).toBeInTheDocument();
         expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
         expect(screen.getByText('सर्व दिवस')).toBeInTheDocument();
@@ -434,7 +434,7 @@ describe('LabourHub - the attendance door (हजेरी घ्या)', () =>
     it('the tile opens the screen through onAttendance', () => {
         const onAttendance = vi.fn();
         render(<LabourHub {...baseProps()} data={{ ...LABOUR_MOCK, canManageLabour: true }} onAttendance={onAttendance} />);
-        fireEvent.click(screen.getByText('हजेरी घ्या'));
+        fireEvent.click(screen.getByText('नावं दाबून हजेरी'));
         expect(onAttendance).toHaveBeenCalledTimes(1);
     });
 
@@ -469,10 +469,9 @@ describe('Task 3.1 — anchor gates ONLY the recorder', () => {
     const renderHub = (extra: Partial<React.ComponentProps<typeof LabourHub>>) =>
         render(<LabourHub {...baseProps()} {...extra} />);
 
-    it('no anchor: hero inactive, approved reason rendered, ledger tile untouched', () => {
+    it('no anchor: NO mic at all (founder rule 2026-10-25), approved reason in its place, ledger tile untouched', () => {
         renderHub({ anchor: { state: 'no-anchor' } });          // via the file's render helper
-        const hero = screen.getByRole('button', { name: /बोलून हजेरी घ्या/ });
-        expect(hero).toBeDisabled();
+        expect(screen.queryByRole('button', { name: /बोलून हजेरी घ्या/ })).toBeNull();
         expect(screen.getByTestId('labour-no-anchor-reason').textContent)
             .toContain('आजच्या कामात किती जण होते ते अजून समजलं नाही');
         // Correction 11: the reason never gates the register door.
@@ -517,11 +516,27 @@ describe('LabourHub - Android tile layout', () => {
         }
     });
 
-    it('stacks the grid tiles (icon above the title) so a half-width tile does not break its title', () => {
+    it('stacks the half-width tiles (icon above the title); the full-width ones keep the row they have room for', () => {
         render(<LabourHub {...baseProps()} data={data} />);
-        for (const label of ['हजेरी घ्या', 'हजेरी वही', 'तपासा', 'आढावा']) {
+        for (const label of ['तपासा', 'आढावा']) {
             const tile = screen.getByText(label).closest('button') as HTMLButtonElement;
             expect(tile.className).toMatch(/\bflex-col\b/);
         }
+        // founder 2026-10-25: नावं दाबून हजेरी (in हजेरी घ्या) and हजेरी वही (in हजेरी बघा) are full-width rows
+        for (const label of ['नावं दाबून हजेरी', 'हजेरी वही']) {
+            const tile = screen.getByText(label).closest('button') as HTMLButtonElement;
+            expect(tile.className).not.toMatch(/\bflex-col\b/);
+        }
+    });
+
+    it('two big sections: हजेरी घ्या (voice first, then names) above हजेरी बघा (the वही open in front, then the rest)', () => {
+        render(<LabourHub {...baseProps()} data={data} anchor={{ state: 'anchored', headcount: 12, logId: 'l' }} />);
+        const take = screen.getByTestId('hub-take');
+        const see = screen.getByTestId('hub-see');
+        expect(take.compareDocumentPosition(see) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(within(take).getByText('बोलून हजेरी घ्या')).toBeTruthy();
+        expect(within(see).getByTestId('hub-ledger-open')).toBeTruthy();
+        expect(within(see).getByText('तपासा')).toBeTruthy();
+        expect(within(see).getByText('आढावा')).toBeTruthy();
     });
 });

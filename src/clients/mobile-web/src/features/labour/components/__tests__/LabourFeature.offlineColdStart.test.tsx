@@ -129,7 +129,7 @@ describe('offline cold start - Labour loads', () => {
         await waitFor(() => expect(screen.getByTestId('labour-stale-readout')).toBeInTheDocument());
         expect(screen.getByText('माहिती आणता आली नाही')).toBeInTheDocument();
         expect(screen.getAllByText(new RegExp(NAME)).length).toBeGreaterThan(0);
-        expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
+        expect(screen.getByText('नावं दाबून हजेरी')).toBeInTheDocument();
         const text = document.body.textContent ?? '';
         for (const n of MONEY) expect(text).not.toContain(n.toLocaleString('en-IN'));
         expect(text).not.toContain(String(MONEY[0]));
@@ -151,7 +151,7 @@ describe('offline cold start - Labour loads', () => {
         saveLabourReadout('u1', FARM, 'alltime', ownerData());
         mount();
         await waitFor(() => expect(screen.getByTestId('labour-stale-readout')).toBeInTheDocument());
-        expect(screen.getByText('हजेरी घ्या')).toBeInTheDocument();
+        expect(screen.getByText('नावं दाबून हजेरी')).toBeInTheDocument();
     });
 
     it('a read-out whose server answer was false, or absent (older copy): the door is not drawn', async () => {
@@ -161,7 +161,7 @@ describe('offline cold start - Labour loads', () => {
         saveLabourReadout('u1', FARM, 'alltime', d);
         mount();
         await waitFor(() => expect(screen.getByTestId('labour-stale-readout')).toBeInTheDocument());
-        expect(screen.queryByText('हजेरी घ्या')).not.toBeInTheDocument();
+        expect(screen.queryByText('नावं दाबून हजेरी')).not.toBeInTheDocument();
     });
 
     it('no cache but a queued mark: queued-only register, no stale label', async () => {

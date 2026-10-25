@@ -17,7 +17,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLabourState } from '../useLabourState';
-import { resolveEffectiveLabourAnchor } from '../labourAnchor';
+import { resolveEffectiveLabourAnchor, type LabourAnchor } from '../labourAnchor';
 import { resolveStatedHeadcount } from '../attendanceDisagreement';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { MarkAttendanceCommand } from '../../../application/usecases/sync/MarkAttendanceCommand';
@@ -135,7 +135,15 @@ export const LabourFeature: React.FC<{
      */
     onBeginNoWorkLane?: () => void;
     onDeclareNoWorkDay?: (cause?: BucketIssueType) => Promise<boolean>;
-}> = ({ onExit, onGoToLog, history, ledgerDefaults, lastLabourLogIds, onBeginNoWorkLane, onDeclareNoWorkDay }) => {
+    /**
+     * A host that already knows whether today's headcount is in the main log (the design preview, which has no log history to
+     * derive it from) may state it; otherwise it is derived from `history` exactly as before.
+     */
+    anchorOverride?: LabourAnchor;
+    /** DESIGN PREVIEW ONLY — see ReviewSheet/SeparateConfirm. The real app passes nothing (the real मंजूर / शंका). */
+    confirmMode?: 'together' | 'separate';
+    confirmerLabel?: string;
+}> = ({ onExit, onGoToLog, history, ledgerDefaults, lastLabourLogIds, onBeginNoWorkLane, onDeclareNoWorkDay, anchorOverride, confirmMode, confirmerLabel }) => {
     const { data, loading, error, refresh, timeWindow, setTimeWindow, staleSinceIso } = useLabourState();
     // Safe (non-throwing) outside a provider (`?preview=labour` mounts with
     // none) — `farm` stays `null` there, and the QR-invite CTA below hides
@@ -266,8 +274,8 @@ export const LabourFeature: React.FC<{
     // stays undefined, which the hub's contract reads as "keep today's
     // behaviour: hero active" (its onGoToLog fallback is already a toast).
     const anchor = React.useMemo(
-        () => (history ? resolveEffectiveLabourAnchor(history, getDateKey(), data.home.onFarmToday) : undefined),
-        [history, data.home.onFarmToday],
+        () => anchorOverride ?? (history ? resolveEffectiveLabourAnchor(history, getDateKey(), data.home.onFarmToday) : undefined),
+        [anchorOverride, history, data.home.onFarmToday],
     );
     // The route re-checks the anchor from THIS device's history; tell it when
     // the day is anchored by the server's read-out instead (journey fix D4).
@@ -480,6 +488,8 @@ export const LabourFeature: React.FC<{
                                 ledgerDefaults={ledgerDefaults}
                                 lastLabourLogIds={lastLabourLogIds}
                                 rosterPeople={farmId ? readCachedRoster(farmId)?.filter((o) => o.isActive) ?? undefined : undefined}
+                                onOpenCell={(row, dayIndex) => setCellDetail({ row, dayIndex })}
+                                onToast={showToast}
                             />
                         )}
                         {cur.name === 'mukadam' && cur.id && (
@@ -528,7 +538,8 @@ export const LabourFeature: React.FC<{
                 roster belongs to, and the local log the engagement id was
                 minted on. Both already exist here; neither is required, and
                 without them the sheet renders exactly as it did before. */}
-            <ReviewSheet open={reviewOpen} data={data} onClose={() => setReviewOpen(false)} onToast={showToast} onApproved={refresh} farmId={farm?.farmId} history={history} reviewListUnknown={error} reviewListLoading={loading} />
+            <ReviewSheet open={reviewOpen} data={data} onClose={() => setReviewOpen(false)} onToast={showToast} onApproved={refresh} farmId={farm?.farmId} history={history} reviewListUnknown={error} reviewListLoading={loading}
+                confirmMode={confirmMode} confirmerLabel={confirmerLabel} />
 
             {cellDetail && (
                 <HajeriCellDetail

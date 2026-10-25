@@ -15,8 +15,10 @@
  * (founder, 2026-09-01).
  */
 import React from 'react';
-import { Mic, ClipboardCheck, Inbox, LayoutDashboard, BookText, Users, CloudRain } from 'lucide-react';
+import { Mic, ClipboardCheck, Inbox, LayoutDashboard, BookText, Users, CloudRain, BookOpenCheck, ListChecks } from 'lucide-react';
 import type { LabourData } from '../labourMock';
+import type { LedgerRow } from '../labour.types';
+import HajeriLedger from './HajeriLedger';
 import { inr } from '../labourMock';
 import type { DailyLog, LedgerDefaults } from '../../../types';
 import { generateDayWorkSummary } from '../../analysis/dayWorkSummary';
@@ -50,9 +52,9 @@ interface Props {
     /** Voice input lives only on the canonical log page — the voice card navigates there. */
     onGoToLog: () => void;
     /**
-     * Labour V2 R1 Task 3.1 — the labour mic anchor. `no-anchor` draws the
-     * hero inactive (grey, disabled) with the founder-approved reason card
-     * beneath it; it gates ONLY the recorder — never the route, this hub,
+     * Labour V2 R1 Task 3.1 — the labour mic anchor. `no-anchor` hides the
+     * hero (founder rule 2026-10-25 — it used to be drawn grey and disabled)
+     * and shows the founder-approved reason card in its place; it gates ONLY the recorder — never the route, this hub,
      * the हजेरी वही tile, or HajeriLedger (Correction 11). Absent (the bare
      * `?preview=labour` mount, which has no log history at all) keeps
      * today's behaviour: hero active.
@@ -83,7 +85,28 @@ interface Props {
      * still appears. Names only: nothing here carries money.
      */
     rosterPeople?: ReadonlyArray<{ id: string; displayName: string }>;
+    /** The open हजेरी वही in "हजेरी बघा": a tapped cell opens its detail (who, what was said, how it was counted). */
+    onOpenCell?: (row: LedgerRow, dayIndex: number) => void;
+    onToast?: (m: string) => void;
 }
+
+/**
+ * FOUNDER 2026-10-25 — the hub is TWO big sections, so हजेरी is never "far back": हजेरी घ्या (take it — by voice first, then by
+ * tapping names) and हजेरी बघा (see it — the वही open in front, आज, तपासा, आढावा, money, each person). One frame for both.
+ */
+const HubSection: React.FC<{ testId: string; tone: 'em' | 'bl'; icon: React.ReactNode; title: string; sub: string; children: React.ReactNode }> = ({ testId, tone, icon, title, sub, children }) => (
+    <section data-testid={testId}
+        className="rounded-[26px] border border-white/70 bg-white/60 p-3 shadow-[0_10px_28px_-14px_rgba(20,40,30,0.35)] backdrop-blur-md">
+        <div className="mb-3 flex items-center gap-3 px-1 pt-1">
+            <span className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl ${tone === 'em' ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white'}`}>{icon}</span>
+            <span className="min-w-0">
+                <span className="block text-[23px] font-black leading-tight text-stone-800">{title}</span>
+                <span className="block text-[16px] font-semibold leading-snug text-stone-500">{sub}</span>
+            </span>
+        </div>
+        <div className="flex flex-col gap-2.5">{children}</div>
+    </section>
+);
 
 /**
  * FARMER-FIRST SIZING (2026-08-10 UI pass). Target user is a semi-literate
@@ -117,7 +140,7 @@ const QuickTile: React.FC<{ icon: React.ReactNode; chip: string; label: string; 
     const subEl = sub && <span className="mt-0.5 block text-[16px] leading-snug text-stone-500">{sub}</span>;
     if (layout === 'row') {
         return (
-            <button type="button" onClick={onClick} className={`relative flex min-h-[92px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-4 ${badge != null ? 'pr-12' : ''} text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-transform active:scale-[0.98]`}>
+            <button type="button" onClick={onClick} className={`relative flex min-h-[92px] items-center gap-3.5 rounded-[20px] border border-white/70 bg-white/85 p-4 ${badge != null ? 'pr-12' : ''} text-left shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md transition-transform active:scale-[0.98]`}>
                 <span className={`flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-[16px] ${chip}`}>{icon}</span>
                 <span className="min-w-0 flex-1">
                     <span className="block text-[19px] font-bold leading-snug text-stone-800">{label}</span>
@@ -128,7 +151,7 @@ const QuickTile: React.FC<{ icon: React.ReactNode; chip: string; label: string; 
         );
     }
     return (
-        <button type="button" onClick={onClick} className="relative flex min-h-[116px] min-w-0 flex-col items-start gap-2.5 rounded-[20px] border border-stone-100 bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-transform active:scale-[0.98]">
+        <button type="button" onClick={onClick} className="relative flex min-h-[116px] min-w-0 flex-col items-start gap-2.5 rounded-[20px] border border-white/70 bg-white/85 p-4 text-left shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md transition-transform active:scale-[0.98]">
             <span className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[14px] ${chip}`}>{icon}</span>
             <span className="block w-full min-w-0">
                 <span className="block text-[19px] font-bold leading-snug text-stone-800 [overflow-wrap:anywhere]">{label}</span>
@@ -168,7 +191,7 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
             <GroupLabel>आजच्या नोंदी</GroupLabel>
             <div className="flex flex-col gap-2">
                 {rows.map(({ id, labour }) => (
-                    <div key={id} data-testid="labour-just-logged-card" className="rounded-[20px] border-2 border-orange-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+                    <div key={id} data-testid="labour-just-logged-card" className="rounded-[20px] border-2 border-orange-100 bg-white p-4 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
                         <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-3">
                                 <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[14px] bg-orange-100">
@@ -308,7 +331,7 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
     );
 };
 
-const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onNoWorkAttendance, onDashboard, onLedger, onReview, onGoToLog, onInviteWorker, anchor, history, ledgerDefaults, lastLabourLogIds, rosterPeople }) => {
+const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onNoWorkAttendance, onDashboard, onLedger, onReview, onGoToLog, onInviteWorker, anchor, history, ledgerDefaults, lastLabourLogIds, rosterPeople, onOpenCell, onToast }) => {
     const justLoggedLogs = (history && ledgerDefaults && lastLabourLogIds && lastLabourLogIds.length > 0)
         ? lastLabourLogIds
             .map((id) => history.find((log) => log.id === id))
@@ -344,7 +367,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
     })();
 
     return (
-    <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2">
+    <div className="flex flex-col gap-3 px-4 pb-24 pt-2">
         {/*
           * The mic here is a DOORWAY, not a recorder — it navigates to the app's
           * one canonical voice screen (`onGoToLog`). It used to be drawn with a
@@ -372,23 +395,29 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
           * takes हजेरी and has nowhere to see it — closed by Correction 5:
           * the हजेरी वही tile below renders unconditionally.
           */}
-        {mayRecord && (<>
-        <button type="button" disabled={heroInactive} onClick={heroInactive ? undefined : onGoToLog}
-            className={`relative flex w-full items-center gap-4 overflow-hidden rounded-[24px] p-5 text-left transition-transform ${heroInactive
-                ? 'bg-slate-100 shadow-none'
-                : 'bg-gradient-to-br from-emerald-500 to-emerald-700 shadow-[0_16px_32px_-12px_rgba(5,150,105,0.65)] active:scale-[0.99]'}`}>
-            <span className={`relative flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl ${heroInactive ? 'bg-slate-200 text-slate-400' : 'bg-white/20 text-white'}`}>
+        {/*
+          * FOUNDER RULE 2026-10-25: "the mic will ONLY appear when the headcount is logged on the main log." It used to be drawn
+          * grey and disabled when the day had no headcount; now it is not drawn at all, and the founder-approved reason card
+          * (आधी आजचं काम सांगा) stands in its place. Still gates ONLY the recorder — the हजेरी वही, आढावा and तपासा stay.
+          */}
+        {mayRecord && (
+        <HubSection testId="hub-take" tone="em" icon={<Mic size={26} strokeWidth={2.4} />} title="हजेरी घ्या" sub="बोलून — आज कोण आलं ते सांगा">
+        {!heroInactive && <button type="button" onClick={onGoToLog}
+            className="relative flex w-full items-center gap-4 overflow-hidden rounded-[24px] bg-gradient-to-br from-emerald-500 to-emerald-700 p-5 text-left shadow-[0_16px_32px_-12px_rgba(5,150,105,0.65)] transition-transform active:scale-[0.99]">
+            <span className="relative flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white">
                 <Mic size={32} strokeWidth={2.4} />
             </span>
             <span className="min-w-0 flex-1">
-                <span className={`block text-[23px] font-black leading-tight ${heroInactive ? 'text-slate-400' : 'text-white'}`}>बोलून हजेरी घ्या</span>
-                <span className={`mt-1 block text-[16px] font-medium leading-snug ${heroInactive ? 'text-slate-400' : 'text-emerald-50'}`}>“रोकडेचे दहा लोक आले” — असं बोला</span>
+                <span className="block text-[23px] font-black leading-tight text-white">बोलून हजेरी घ्या</span>
+                <span className="mt-1 block text-[16px] font-medium leading-snug text-emerald-50">“रोकडेचे दहा लोक आले” — असं बोला</span>
             </span>
-            <span className={`flex-shrink-0 rounded-full px-4 py-3 text-[17px] font-extrabold ${heroInactive ? 'bg-slate-200 text-slate-400' : 'bg-white/25 text-white'}`}>उघडा</span>
-        </button>
+            <span className="flex-shrink-0 rounded-full bg-white/25 px-4 py-3 text-[17px] font-extrabold text-white">उघडा</span>
+        </button>}
         {heroInactive && (
+            // where the mic would be: it says plainly why there is no mic yet, in the hero's place and at a readable size
             <div data-testid={NO_ANCHOR_TEST_IDS.reason}
-                className="rounded-xl border border-amber-200 border-l-[3px] border-l-amber-600 bg-amber-50 p-3 text-[13.5px] leading-relaxed text-amber-800">
+                className="flex items-start gap-3 rounded-[20px] border border-amber-200 border-l-[4px] border-l-amber-600 bg-amber-50 p-4 text-[16px] font-semibold leading-relaxed text-amber-900">
+                <ClipboardCheck size={22} className="mt-0.5 flex-shrink-0 text-amber-700" />
                 {ATTENDANCE_COPY.noAnchorReason}
             </div>
         )}
@@ -397,38 +426,19 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
                 <QuickTile icon={<CloudRain size={20} />} chip="bg-sky-50 text-sky-600 ring-1 ring-sky-100" label="काम झालं नाही, पण मजूर आले" layout="row" onClick={onNoWorkAttendance} />
             </div>
         )}
-        </>)}
-
-        {/* D6 (master review 2026-09-02) — one Labour, TWO money truths, never
-            one figure. Owner view only: D-H8 keeps money off every non-owner
-            surface, and the server has already stripped it — this gate only
-            spares the owner-shaped empty shells. Blanks are '—', never ₹0. */}
-        {data.view === 'owner' && (
-            <div className="grid grid-cols-2 gap-2.5">
-                <div className="flex min-w-0 flex-col rounded-[20px] border border-stone-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
-                    {/* FOUNDER VOCABULARY RULE (2026-09-03) — was `रोजंदारी`.
-                        रोजंदारी names the BASIS on which the farmer owes money;
-                        as a card title standing over a headcount breakdown it
-                        had started to read as a KIND OF PERSON. `दिवसाच्या
-                        हिशोबाने` ("settled by the day") states the settlement
-                        basis and classifies nobody. Provisional — the founder's
-                        naming session owns the permanent word. `उक्ते काम`
-                        beside it is unchanged: it already describes the work
-                        arrangement, not the human. */}
-                    <span className="block text-[16px] font-bold leading-tight text-stone-600">दिवसाच्या हिशोबाने</span>
-                    <span className="block text-[13px] font-semibold text-stone-400">नोंदलेली</span>
-                    {/* Android layout (2026-10-16): the value sits at the card's foot (mt-auto) so the two
-                        figures line up even when one title wraps to two lines and the other does not. */}
-                    <span className="mt-auto block pt-1 text-[23px] font-black text-stone-800 [font-variant-numeric:tabular-nums]">{data.home.rojandariStated === null ? '—' : inr(data.home.rojandariStated)}</span>
-                </div>
-                <div className="flex min-w-0 flex-col rounded-[20px] border border-violet-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
-                    <span className="block text-[16px] font-bold leading-tight text-violet-700">उक्ते काम</span>
-                    <span className="block text-[13px] font-semibold text-stone-400">ठरलेली</span>
-                    <span className="mt-auto block pt-1 text-[23px] font-black text-stone-800 [font-variant-numeric:tabular-nums]">{data.home.ukteAgreed === null ? '—' : inr(data.home.ukteAgreed)}</span>
-                </div>
-            </div>
+        {/* the manual way, second to voice: tap each name (the one door that decides it: attendanceDoor.ts) */}
+        {canTakeManualAttendance(data.canManageLabour) && (
+            <QuickTile icon={<ListChecks size={22} />} chip="bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100" label="नावं दाबून हजेरी" sub="आज कोण आलं" layout="row" onClick={onAttendance} />
+        )}
+        </HubSection>
         )}
 
+        {/*
+          * FOUNDER 2026-10-25 — "हजेरी बघा": everything to SEE, in front: who came today, the हजेरी वही itself OPEN (not a
+          * tile away), then तपासा and आढावा, the money, and each person with what is owed. The वही stays the approved clean grid
+          * (D4: name + day marks only, no money in it); each person's wage sits right under it, in the people list.
+          */}
+        <HubSection testId="hub-see" tone="bl" icon={<BookOpenCheck size={26} />} title="हजेरी बघा" sub="कोण आलं, कोण नाही — आणि नोंदलेले पैसे">
         {/* आज कामावर N जण — x दिवसाच्या हिशोबाने · y उक्ते. Whole count
             first; the arrangement is a breakdown, not a filter. The breakdown
             words name how the work is SETTLED, never what kind of human the
@@ -438,7 +448,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
             views: attendance counts are safe for anyone (D-H8). Latin digits
             (approved numeral convention). */}
         {data.home.onFarmToday !== null && (
-            <div className="rounded-[20px] border border-stone-100 bg-white p-3.5 text-[19px] font-bold text-stone-800 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <div className="rounded-[20px] border border-white/70 bg-white/85 p-3.5 text-[19px] font-bold text-stone-800 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
                 आज कामावर {data.home.onFarmToday} जण
                 {(data.home.rojandariToday !== null || data.home.ukteToday !== null) && (
                     <span className="text-[16px] font-semibold text-stone-500">
@@ -460,29 +470,108 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
             return disagreement ? <HeadcountDisagreementCard disagreement={disagreement} markedCount={presentIds.length} /> : null;
         })()}
 
+        <HajeriLedger data={data} onToast={onToast ?? (() => undefined)} onOpenCell={onOpenCell} embedded />
+
         <div className="grid grid-cols-2 gap-2.5">
-            {canTakeManualAttendance(data.canManageLabour) && (
-                <QuickTile icon={<ClipboardCheck size={20} />} chip="bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100" label="हजेरी घ्या" sub="आज कोण आलं" onClick={onAttendance} />
-            )}
-            {/* Correction 5 (founder, 2026-09-01): the हजेरी वही is NEVER gated —
-                not by capture state, not by a constant that can be flipped back.
-                The register draws its own blank week when nothing is recorded.
-                (SHOW_LEDGER_TILE and its || isPreview escape were DELETED, not
-                flipped — a flag is a gate wearing a comment.) */}
-            <QuickTile icon={<BookText size={20} />} chip="bg-blue-100 text-blue-600" label="हजेरी वही" sub="सर्व दिवस" onClick={onLedger} />
             <QuickTile icon={<Inbox size={20} />} chip="bg-amber-100 text-amber-700" label="तपासा" sub="मंजूर करा" badge={data.dashboard.pending} onClick={onReview} />
-            {/*
-              * TASK 11 (spec: 2026-08-28-labour-v2-release-1) — the sub-line
-              * read `या आठवड्याचा` ("this week's"). `da07f668` made the
-              * आढावा screen's default window all-time and let the farmer pick
-              * one of four, so this tile promised a period the screen behind
-              * it no longer shows — the same falsehood the screen's own title
-              * and heading carried, on the doorway rather than the room. The
-              * clause is DELETED, not reworded: no new farmer-facing word is
-              * introduced, and the tile still says exactly what it opens.
-              */}
+            {/* TASK 11: no period in the sub-line — the आढावा screen lets the farmer pick the period. */}
             <QuickTile icon={<LayoutDashboard size={20} />} chip="bg-violet-100 text-violet-600" label="आढावा" onClick={onDashboard} />
         </div>
+        {/* Correction 5 (founder, 2026-09-01): the हजेरी वही is NEVER gated — this opens every week of it. */}
+        <QuickTile icon={<BookText size={20} />} chip="bg-blue-100 text-blue-600" label="हजेरी वही" sub="सर्व दिवस" layout="row" onClick={onLedger} />
+
+        {/* D6 (master review 2026-09-02) — one Labour, TWO money truths, never
+            one figure. Owner view only: D-H8 keeps money off every non-owner
+            surface, and the server has already stripped it — this gate only
+            spares the owner-shaped empty shells. Blanks are '—', never ₹0. */}
+        {data.view === 'owner' && (
+            <div className="grid grid-cols-2 gap-2.5">
+                <div className="flex min-w-0 flex-col rounded-[20px] border border-white/70 bg-white/85 p-4 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
+                    {/* FOUNDER VOCABULARY RULE (2026-09-03) — was `रोजंदारी`.
+                        रोजंदारी names the BASIS on which the farmer owes money;
+                        as a card title standing over a headcount breakdown it
+                        had started to read as a KIND OF PERSON. `दिवसाच्या
+                        हिशोबाने` ("settled by the day") states the settlement
+                        basis and classifies nobody. Provisional — the founder's
+                        naming session owns the permanent word. `उक्ते काम`
+                        beside it is unchanged: it already describes the work
+                        arrangement, not the human. */}
+                    <span className="block text-[16px] font-bold leading-tight text-stone-600">दिवसाच्या हिशोबाने</span>
+                    <span className="block text-[13px] font-semibold text-stone-400">नोंदलेली</span>
+                    {/* Android layout (2026-10-16): the value sits at the card's foot (mt-auto) so the two
+                        figures line up even when one title wraps to two lines and the other does not. */}
+                    <span className="mt-auto block pt-1 text-[23px] font-black text-stone-800 [font-variant-numeric:tabular-nums]">{data.home.rojandariStated === null ? '—' : inr(data.home.rojandariStated)}</span>
+                </div>
+                <div className="flex min-w-0 flex-col rounded-[20px] border border-violet-100 bg-white p-4 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
+                    <span className="block text-[16px] font-bold leading-tight text-violet-700">उक्ते काम</span>
+                    <span className="block text-[13px] font-semibold text-stone-400">ठरलेली</span>
+                    <span className="mt-auto block pt-1 text-[23px] font-black text-stone-800 [font-variant-numeric:tabular-nums]">{data.home.ukteAgreed === null ? '—' : inr(data.home.ukteAgreed)}</span>
+                </div>
+            </div>
+        )}
+
+        <GroupLabel>माणसं</GroupLabel>
+        {shownIds.length === 0 && namedPeople.length === 0 ? (
+            <EmptyState
+                icon={<Users size={22} />}
+                title="अजून कोणाचंही नाव जोडलेलं नाही"
+                /*
+                 * Was one 12px compound sentence naming QR, phone number and OTP
+                 * at once — three unfamiliar ideas before any action. Now it is
+                 * one short line saying what to do; the mechanics live inside the
+                 * QR sheet, at the moment they are actually needed.
+                 */
+                subtitle="खालचं बटण दाबा आणि समोरच्याला QR दाखवा."
+                action={onInviteWorker ? (
+                    <button
+                        type="button"
+                        onClick={onInviteWorker}
+                        className="mt-1 flex min-h-[60px] w-full items-center justify-center gap-2.5 rounded-[16px] bg-emerald-600 px-5 py-4 text-[19px] font-extrabold text-white transition-transform active:scale-[0.98]"
+                    >
+                        <Users size={22} /> QR दाखवा
+                    </button>
+                ) : undefined}
+            />
+        ) : (
+            <>
+                {shownIds.map((id) => {
+                    const person = data.people[id];
+                    const isMukadam = person.role !== 'worker';
+                    return (
+                        <PersonRow
+                            key={id}
+                            person={person}
+                            teamCount={person.memberIds?.length}
+                            onOpen={() => (isMukadam ? onOpenMukadam(id) : onOpenPerson(id))}
+                        />
+                    );
+                })}
+                {namedPeople.length > 0 && (
+                    <ul data-testid="hub-named-people" className="flex flex-col gap-2.5">
+                        {namedPeople.map((p) => (
+                            <li key={p.id} data-testid="hub-named-person"
+                                className="flex min-h-[64px] items-center gap-3.5 rounded-[20px] border border-white/70 bg-white/85 p-3.5 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
+                                <Avatar tone="em" initial={[...p.name][0]} />
+                                <span className="min-w-0 flex-1 truncate text-[20px] font-bold text-stone-800">{p.name}</span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+                {/* Nobody has joined by QR yet, so the empty state's one real next step
+                    (show the QR) must not disappear just because names were added. */}
+                {shownIds.length === 0 && onInviteWorker && (
+                    <button
+                        type="button"
+                        data-testid="hub-invite-qr"
+                        onClick={onInviteWorker}
+                        className="flex min-h-[60px] w-full items-center justify-center gap-2.5 rounded-[16px] bg-emerald-600 px-5 py-4 text-[19px] font-extrabold text-white transition-transform active:scale-[0.98]"
+                    >
+                        <Users size={22} /> QR दाखवा
+                    </button>
+                )}
+            </>
+        )}
+        </HubSection>
 
         {ledgerDefaults && justLoggedLogs.length > 0 && (
             <LabourJustLogged logs={justLoggedLogs} defaults={ledgerDefaults} />
@@ -529,67 +618,6 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
             label="हे कसं वापरायचं?"
         />
 
-        <GroupLabel>माणसं</GroupLabel>
-        {shownIds.length === 0 && namedPeople.length === 0 ? (
-            <EmptyState
-                icon={<Users size={22} />}
-                title="अजून कोणाचंही नाव जोडलेलं नाही"
-                /*
-                 * Was one 12px compound sentence naming QR, phone number and OTP
-                 * at once — three unfamiliar ideas before any action. Now it is
-                 * one short line saying what to do; the mechanics live inside the
-                 * QR sheet, at the moment they are actually needed.
-                 */
-                subtitle="खालचं बटण दाबा आणि समोरच्याला QR दाखवा."
-                action={onInviteWorker ? (
-                    <button
-                        type="button"
-                        onClick={onInviteWorker}
-                        className="mt-1 flex min-h-[60px] w-full items-center justify-center gap-2.5 rounded-[16px] bg-emerald-600 px-5 py-4 text-[19px] font-extrabold text-white transition-transform active:scale-[0.98]"
-                    >
-                        <Users size={22} /> QR दाखवा
-                    </button>
-                ) : undefined}
-            />
-        ) : (
-            <>
-                {shownIds.map((id) => {
-                    const person = data.people[id];
-                    const isMukadam = person.role !== 'worker';
-                    return (
-                        <PersonRow
-                            key={id}
-                            person={person}
-                            teamCount={person.memberIds?.length}
-                            onOpen={() => (isMukadam ? onOpenMukadam(id) : onOpenPerson(id))}
-                        />
-                    );
-                })}
-                {namedPeople.length > 0 && (
-                    <ul data-testid="hub-named-people" className="flex flex-col gap-2.5">
-                        {namedPeople.map((p) => (
-                            <li key={p.id} data-testid="hub-named-person"
-                                className="flex min-h-[64px] items-center gap-3.5 rounded-[20px] border border-stone-100 bg-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
-                                <Avatar tone="em" initial={[...p.name][0]} />
-                                <span className="min-w-0 flex-1 truncate text-[20px] font-bold text-stone-800">{p.name}</span>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-                {/* Nobody has joined by QR yet, so the empty state's one real next step
-                    (show the QR) must not disappear just because names were added. */}
-                {shownIds.length === 0 && onInviteWorker && (
-                    <button
-                        type="button"
-                        data-testid="hub-invite-qr"
-                        onClick={onInviteWorker}
-                        className="flex min-h-[60px] w-full items-center justify-center gap-2.5 rounded-[16px] bg-emerald-600 px-5 py-4 text-[19px] font-extrabold text-white transition-transform active:scale-[0.98]"
-                    >
-                        <Users size={22} /> QR दाखवा
-                    </button>
-                )}
-            </>
-        )}
     </div>
     );
 };

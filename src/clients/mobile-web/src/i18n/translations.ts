@@ -525,7 +525,7 @@ export const translations: Record<Language, Translations> = {
         },
         nav: {
             procure: 'खरेदी',
-            schedule: 'वेळापत्रक',
+            schedule: 'शेड्यूल',
             income: 'उत्पन्न',
             tests: 'चाचण्या',
         },

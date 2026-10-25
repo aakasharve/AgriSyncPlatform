@@ -12,7 +12,7 @@
  * Rendered by mainView while `status === 'processing'`. Flat / vector-friendly.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 const SERIF = "'Noto Serif Devanagari', serif";
 const SANS = "'Noto Sans Devanagari', sans-serif";
@@ -54,7 +54,37 @@ const WAVE = Array.from({ length: BAR_N }, (_, i) => {
     };
 });
 
+/**
+ * The screen is drawn for a phone column 430 css px wide (about 860 tall). On a bigger screen (a tablet, a phone set to a large display size, a wide
+ * window) that column used to stay 430 wide, top-aligned, with the rest empty, so it looked small. It is now scaled up as a whole (`zoom`) so it fills
+ * the screen in the same proportions (founder, 2026-10-25: "proportionate to the screen size"). It is scaled with a transform (not CSS `zoom`, which
+ * makes the container-query units inside it resolve to a smaller width). Phones up to 430 x 860 are untouched (scale 1).
+ */
+const DESIGN_W = 430;
+const DESIGN_H = 860;
+export const fitScale = (w: number, h: number): number => Math.max(1, Math.min(w / DESIGN_W, h / DESIGN_H));
+const currentFit = (): number => (typeof window === 'undefined' ? 1 : fitScale(window.innerWidth, window.innerHeight));
+
 export function ShramSathiUnderstanding(): React.ReactElement {
+    const [sc, setSc] = useState(currentFit);
+    const frame = useRef<HTMLDivElement>(null);
+    const [scaledH, setScaledH] = useState<number | null>(null);
+    useEffect(() => {
+        const on = () => setSc(currentFit());
+        window.addEventListener('resize', on);
+        return () => window.removeEventListener('resize', on);
+    }, []);
+    // a transform does not change the layout box, so the wrapper is given the scaled height (the page can then scroll to its end)
+    useLayoutEffect(() => {
+        const el = frame.current;
+        if (!el || sc <= 1) { setScaledH(null); return undefined; }
+        const measure = () => setScaledH(el.offsetHeight * sc);
+        measure();
+        if (typeof ResizeObserver === 'undefined') return undefined;
+        const ro = new ResizeObserver(measure);
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [sc]);
     // start on a RANDOM line; reading time scales with length → longer quotes linger longer
     const [li, setLi] = useState(() => Math.floor(Math.random() * LINES.length));
     useEffect(() => {
@@ -68,12 +98,14 @@ export function ShramSathiUnderstanding(): React.ReactElement {
         return () => window.clearTimeout(t);
     }, [li]);
     return (
-        <div className="su-root">
+        <div className="su-root" data-fit={sc.toFixed(2)}>
             <style>{`
                 .su-root{ position:fixed; inset:0; z-index:60; overflow-y:auto; overflow-x:hidden; display:flex; justify-content:center; background:#FCFCFC; }
-                .su-frame{ position:relative; width:min(100dvw, 430px); min-height:100dvh; container-type:inline-size;
-                    display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
-                    padding:4dvh 7cqw 4dvh; color:#1C1917; font-family:${SANS};
+                .su-frame{ position:relative; width:${sc > 1 ? `${DESIGN_W}px` : 'min(100dvw, 430px)'}; min-height:${(100 / sc).toFixed(3)}dvh; container-type:inline-size;
+                    display:flex; flex-direction:column; align-items:center; justify-content:${sc > 1 ? 'center' : 'flex-start'};
+                    /* The frame's OWN side padding cannot use cqw: a container's own properties resolve against the ANCESTOR container (here none, so the
+                       viewport), which on a wide screen made it 7% of the whole screen and squeezed everything inside. It is 7% of the frame's own width. */
+                    padding:${(4 / sc).toFixed(2)}dvh calc(${sc > 1 ? `${DESIGN_W}px` : 'min(100dvw, 430px)'} * .07) ${(4 / sc).toFixed(2)}dvh; color:#1C1917; font-family:${SANS};
                     background:
                         radial-gradient(at 22% -2%, hsla(145,58%,97%,.6) 0, transparent 38%),
                         radial-gradient(at 82% 1%, hsla(190,65%,98%,.5) 0, transparent 36%),
@@ -136,7 +168,8 @@ export function ShramSathiUnderstanding(): React.ReactElement {
                 .su-sickle{ position:absolute; left:-4cqw; bottom:-6cqw; width:24cqw; max-width:98px; height:auto; transform:scaleX(-1); filter:drop-shadow(0 4px 5px rgba(0,0,0,.3)); }
             `}</style>
 
-            <div className="su-frame">
+            <div className="su-fit" style={sc > 1 ? { flex: 'none', width: DESIGN_W * sc, height: scaledH ?? undefined } : undefined}>
+            <div className="su-frame" ref={frame} style={sc > 1 ? { transform: `scale(${sc.toFixed(3)})`, transformOrigin: 'top left' } : undefined}>
                 <div className="su-grain" />
 
                 <h1 className="su-title">{BRAND}</h1>
@@ -209,6 +242,7 @@ export function ShramSathiUnderstanding(): React.ReactElement {
                         <path d="M33,22 C37,13 47,10 53,17" fill="none" stroke="#eceef1" strokeWidth="1.4" strokeLinecap="round" opacity="0.7" />
                     </svg>
                 </div>
+            </div>
             </div>
         </div>
     );

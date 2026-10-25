@@ -66,7 +66,7 @@ const LabourWindowSlider: React.FC<LabourWindowSliderProps> = ({ value, onChange
             role="tablist"
             aria-orientation="horizontal"
             data-testid="labour-window-slider"
-            className="relative grid grid-cols-4 rounded-2xl border border-stone-200 bg-white p-1 shadow-[0_1px_3px_rgba(20,40,30,0.05)]"
+            className="relative grid grid-cols-4 rounded-2xl border border-stone-200 bg-white p-1 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md"
         >
             {/* The thing that slides. `p-1` on the track is 4px per side, so a
                 cell is (100% − 8px) / 4 wide and each step is one full cell. */}

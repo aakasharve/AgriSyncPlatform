@@ -31,10 +31,10 @@ const LocationBadge: React.FC<LocationBadgeProps> = ({ location }) => {
                          if (hasLocation) setShowDetails(!showDetails);
                     }}
                     className={`
-                    inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold border transition-colors
+                    inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[12px] font-semibold border transition-colors
                     ${hasLocation
                               ? 'bg-emerald-50 border-emerald-100 text-emerald-700 hover:bg-emerald-100'
-                              : 'bg-slate-50 border-slate-100 text-slate-400'}
+                              : 'bg-slate-50 border-slate-100 text-slate-600'}
                 `}
                >
                     <MapPin size={10} />
@@ -56,32 +56,32 @@ const LocationBadge: React.FC<LocationBadgeProps> = ({ location }) => {
                          />
                          <div className="absolute bottom-full left-0 mb-1 z-50 w-52 bg-white rounded-xl shadow-lg border border-slate-200 p-3 animate-in fade-in slide-in-from-bottom-1 duration-200">
                               <div className="space-y-1.5">
-                                   <div className="flex justify-between text-[11px]">
-                                        <span className="text-slate-400">Lat</span>
+                                   <div className="flex justify-between text-[12px]">
+                                        <span className="text-slate-600">Lat</span>
                                         <span className="font-mono text-slate-700">{location.latitude.toFixed(6)}</span>
                                    </div>
-                                   <div className="flex justify-between text-[11px]">
-                                        <span className="text-slate-400">Lon</span>
+                                   <div className="flex justify-between text-[12px]">
+                                        <span className="text-slate-600">Lon</span>
                                         <span className="font-mono text-slate-700">{location.longitude.toFixed(6)}</span>
                                    </div>
-                                   <div className="flex justify-between text-[11px]">
-                                        <span className="text-slate-400">Accuracy</span>
+                                   <div className="flex justify-between text-[12px]">
+                                        <span className="text-slate-600">Accuracy</span>
                                         <span className="font-mono text-slate-700">{Math.round(location.accuracyMeters)}m</span>
                                    </div>
                                    {location.altitude !== undefined && (
-                                        <div className="flex justify-between text-[11px]">
-                                             <span className="text-slate-400">Alt</span>
+                                        <div className="flex justify-between text-[12px]">
+                                             <span className="text-slate-600">Alt</span>
                                              <span className="font-mono text-slate-700">{Math.round(location.altitude)}m</span>
                                         </div>
                                    )}
-                                   <div className="flex justify-between text-[11px]">
-                                        <span className="text-slate-400">Time</span>
+                                   <div className="flex justify-between text-[12px]">
+                                        <span className="text-slate-600">Time</span>
                                         <span className="text-slate-600">
                                              {formatDisplayTime(location.capturedAtUtc)}
                                         </span>
                                    </div>
-                                   <div className="flex justify-between text-[11px]">
-                                        <span className="text-slate-400">Source</span>
+                                   <div className="flex justify-between text-[12px]">
+                                        <span className="text-slate-600">Source</span>
                                         <span className="text-slate-600">{location.provider}</span>
                                    </div>
                               </div>

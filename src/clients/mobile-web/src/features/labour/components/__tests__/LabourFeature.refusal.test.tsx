@@ -67,7 +67,7 @@ configure({ asyncUtilTimeout: 6000 });
 
 const ON_PHONE = translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr');
 
-const CAPTURE_TILE = 'हजेरी घ्या';
+const CAPTURE_TILE = 'नावं दाबून हजेरी';
 const NO_WORK_TILE = 'काम झालं नाही, पण मजूर आले';
 
 

@@ -33,7 +33,7 @@ const AttendanceContradictionPrompt: React.FC<{
 
     return (
         <div data-testid="attendance-contradiction"
-            className="mx-4 mt-2 rounded-2xl border border-emerald-200 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]"
+            className="mx-4 mt-2 rounded-2xl border border-emerald-200 bg-white p-4 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md"
             style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}>
             <div className="text-[15px] font-extrabold text-emerald-700">{COPY.contradictionTitle}</div>
             <p className="mt-1.5 text-[15px] font-bold leading-snug text-slate-800">

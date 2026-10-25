@@ -40,7 +40,6 @@ async function loadRenderLogView() {
     vi.doMock('../../../features/voice/components/AudioRecorderStreaming', () => stub('audio-streaming'));
     vi.doMock('../../../features/voice/components/LiveCaption', () => stub('live-caption'));
     vi.doMock('../../../features/logs/components/ManualEntry', () => stub('manual-entry'));
-    vi.doMock('../../../features/logs/components/DailyLogCard', () => stub('daily-log-card'));
     vi.doMock('../../../features/logs/components/LedgerRecognitionPanel', () => ({
         LedgerRecognitionPanel: () =>
             React.createElement('div', { 'data-testid': 'ledger-recognition-panel' }),

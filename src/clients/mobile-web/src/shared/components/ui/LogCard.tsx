@@ -9,7 +9,7 @@ interface LogCardProps {
     summary: string;
     status: LogVerificationStatus;
     // Compile-only fix (Labour Phase 2 / T1). This component has ZERO
-    // importers — the live ledger card is features/logs/components/DailyLogCard.tsx.
+    // importers — the live ledger card is features/logs/components/ActivityFeedCard.tsx.
     // Kept compiling, deliberately not revived or wired up (W4/YAGNI).
     syncStatus: SyncHonestyState;
     operatorName: string;

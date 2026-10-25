@@ -163,7 +163,7 @@ export const PersonRow: React.FC<{ person: LabourPerson; teamCount?: number; onO
         <button
             type="button"
             onClick={onOpen}
-            className={`group flex min-h-[84px] w-full items-center gap-3.5 rounded-[20px] border bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-all active:scale-[0.98] ${isMukadam ? 'border-violet-100 hover:border-violet-200' : 'border-stone-100 hover:border-emerald-200/70'}`}
+            className={`group flex min-h-[84px] w-full items-center gap-3.5 rounded-[20px] border bg-white p-4 text-left shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md transition-all active:scale-[0.98] ${isMukadam ? 'border-violet-100 hover:border-violet-200' : 'border-stone-100 hover:border-emerald-200/70'}`}
         >
             <Avatar tone={person.tone} initial={person.initial} />
             <span className="min-w-0 flex-1">
@@ -186,7 +186,7 @@ export const PersonRow: React.FC<{ person: LabourPerson; teamCount?: number; onO
 export const StatTile: React.FC<{ icon: React.ReactNode; tone: 'em' | 'am' | 'bl' | 'or' | 'vi'; value: string; label: string; trend?: number; onClick?: () => void }> = ({ icon, tone, value, label, trend, onClick }) => {
     const chip = tone === 'em' ? 'bg-emerald-50 text-emerald-700' : tone === 'am' ? 'bg-amber-100 text-amber-700' : tone === 'bl' ? 'bg-blue-50 text-blue-600' : tone === 'or' ? 'bg-orange-100 text-orange-600' : 'bg-violet-100 text-violet-600';
     return (
-        <button type="button" onClick={onClick} disabled={!onClick} className={`relative rounded-[18px] border border-stone-100 bg-white p-4 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] ${onClick ? 'active:scale-[0.98]' : ''}`}>
+        <button type="button" onClick={onClick} disabled={!onClick} className={`relative rounded-[18px] border border-white/70 bg-white/85 p-4 text-left shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md ${onClick ? 'active:scale-[0.98]' : ''}`}>
             <span className={`mb-2 flex h-10 w-10 items-center justify-center rounded-[12px] ${chip}`}>{icon}</span>
             {/*
               * TRUST BUG FIXED (2026-08-10). This badge hardcoded a green "↑"
@@ -261,7 +261,7 @@ export const BalanceCard: React.FC<{ balance: LabourBalance; why?: string; settl
     }
 
     return (
-        <div className={`rounded-[24px] border p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)] ${net === null ? 'border-stone-100 bg-white' : net.owe ? 'border-emerald-100 bg-gradient-to-br from-emerald-50 to-white' : 'border-amber-200 bg-gradient-to-br from-amber-50 to-white'}`}>
+        <div className={`rounded-[24px] border p-4 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md ${net === null ? 'border-stone-100 bg-white' : net.owe ? 'border-emerald-100 bg-gradient-to-br from-emerald-50 to-white' : 'border-amber-200 bg-gradient-to-br from-amber-50 to-white'}`}>
             {net && (
                 <div className="flex items-baseline justify-between gap-2">
                     <span className={`font-black leading-none tracking-tight [font-variant-numeric:tabular-nums] text-[40px] ${net.owe ? 'text-emerald-700' : 'text-amber-700'}`}>{inr(net.amount)}</span>
@@ -308,7 +308,7 @@ export const HelpNote: React.FC<{ what: string; act: string; why: string; label?
     const [open, setOpen] = useState(false);
     return (
         <div>
-            <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex min-h-[56px] w-full items-center gap-3 rounded-[14px] border border-stone-100 bg-white px-3.5 py-3 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] active:scale-[0.99]">
+            <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex min-h-[56px] w-full items-center gap-3 rounded-[14px] border border-white/70 bg-white/85 px-3.5 py-3 text-left shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md active:scale-[0.99]">
                 <span className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border text-[19px] font-bold ${open ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-stone-200 bg-white text-stone-500'}`}>?</span>
                 <span className="flex-1 text-[17px] font-bold text-stone-600">{label}</span>
                 <ChevronDown size={24} className={`flex-shrink-0 text-stone-400 transition-transform ${open ? 'rotate-180' : ''}`} />

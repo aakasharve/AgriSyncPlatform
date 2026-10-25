@@ -150,11 +150,11 @@ describe('hub on a device with NO local history (a Mukadam on another phone)', (
         expect(noWorkTile()).toBeNull();
     });
 
-    it('CONTROL - the server says nothing about today: grey hero, its reason, and the no-work tile, as before', async () => {
+    it('CONTROL - the server says nothing about today: no mic (founder rule 2026-10-25), its reason, and the no-work tile', async () => {
         renderRealFarm(noWorkProps());
 
         await waitFor(() => expect(screen.getByTestId(NO_ANCHOR_REASON)).toBeInTheDocument());
-        expect(heroButton()).toBeDisabled();
+        expect(screen.queryByText(HERO)).toBeNull();
         expect(noWorkTile()).not.toBeNull();
         expect(screen.queryByText(/आज कामावर/)).toBeNull();
     });
@@ -164,7 +164,7 @@ describe('hub on a device with NO local history (a Mukadam on another phone)', (
         renderRealFarm(noWorkProps());
 
         await waitFor(() => expect(screen.getByTestId(NO_ANCHOR_REASON)).toBeInTheDocument());
-        expect(heroButton()).toBeDisabled();
+        expect(screen.queryByText(HERO)).toBeNull();
         expect(noWorkTile()).toBeNull();
     });
 });

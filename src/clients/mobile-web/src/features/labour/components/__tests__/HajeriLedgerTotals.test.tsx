@@ -323,7 +323,14 @@ describe('LabourHub — D6: two money truths, never one figure', () => {
         expect(container.textContent).toContain('ठरलेली');
         expect(container.textContent).not.toContain('16,650'); // the forbidden combined figure
         expect(container.textContent).toContain('आज कामावर 12 जण');
-        expect(container.textContent).toContain('बोलून हजेरी घ्या“रोकडेचे दहा लोक आले” — असं बोलाउघडादिवसाच्या हिशोबानेनोंदलेली₹4,650उक्ते कामठरलेली₹12,000आज कामावर 12 जण — दिवसाच्या हिशोबाने 4 जण · उक्त्या कामावर 8 जणहजेरी घ्याआज कोण आलंहजेरी वहीसर्व दिवसतपासामंजूर करा3आढावा?हे कसं वापरायचं?माणसंरोरोकडेमुकादम ₹3,500 उचलटीम 3ररमेश₹2,200 बाकीसुसुनीता₹1,500 बाकीविविलास जाधव ₹500 उचल');
+        // founder 2026-10-25: the hub is two sections — हजेरी घ्या (the voice door) then हजेरी बघा (today, the open वही, the two
+        // money cards SIDE BY SIDE, then each person with what is owed). The two money truths stay two adjacent figures.
+        const take = container.querySelector('[data-testid="hub-take"]')!;
+        const see = container.querySelector('[data-testid="hub-see"]')!;
+        expect(take.textContent).toContain('बोलून हजेरी घ्या“रोकडेचे दहा लोक आले” — असं बोलाउघडा');
+        expect(see.textContent).toContain('आज कामावर 12 जण — दिवसाच्या हिशोबाने 4 जण · उक्त्या कामावर 8 जण');
+        expect(see.textContent).toContain('दिवसाच्या हिशोबानेनोंदलेली₹4,650उक्ते कामठरलेली₹12,000');
+        expect(see.textContent).toContain('माणसंरोरोकडेमुकादम ₹3,500 उचलटीम 3ररमेश₹2,200 बाकीसुसुनीता₹1,500 बाकीविविलास जाधव ₹500 उचल');
         expect(container.textContent).toContain('उक्त्या कामावर 8 जण');
     });
 

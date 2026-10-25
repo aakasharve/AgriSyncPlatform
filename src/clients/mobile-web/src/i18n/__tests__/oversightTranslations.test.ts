@@ -262,7 +262,7 @@ const EXPECTED_MR: Record<keyof OversightTranslations, string> = {
     // (d) founder-approved, Task 13/17 reference table. F7(b): unpinned
     // until now — every one of these is a sentence he typed himself.
     navToday: 'आजची कामे',
-    navMyFarm: 'माझं शेत',
+    navMyFarm: 'पूर्ण शेतीचा आढावा',
     navCompare: 'तुलना',
     waitingSubtitle: 'काही राहिलेल्या कामांकडे तुमचे लक्ष देणे गरजेचे आहे',
     guideGreeting: 'नमस्कार!',

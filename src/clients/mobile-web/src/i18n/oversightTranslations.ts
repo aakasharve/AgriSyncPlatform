@@ -638,7 +638,7 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         dayNotClosedLine: "Yesterday's day was not closed",
 
         navToday: "Today's Tasks",
-        navMyFarm: 'My Farm',
+        navMyFarm: 'Whole farm overview',
         navCompare: 'Compare',
         waitingSubtitle: 'You still have some tasks to finish.',
         guideGreeting: 'Hello!',
@@ -712,7 +712,7 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         // Task 13, category (d) — verbatim from the founder's own reference
         // table. See this file's header for provenance.
         navToday: 'आजची कामे',
-        navMyFarm: 'माझं शेत',
+        navMyFarm: 'पूर्ण शेतीचा आढावा', // founder 2026-10-25 (was 'माझं शेत')
         navCompare: 'तुलना',
         waitingSubtitle: 'काही राहिलेल्या कामांकडे तुमचे लक्ष देणे गरजेचे आहे',
         guideGreeting: 'नमस्कार!',

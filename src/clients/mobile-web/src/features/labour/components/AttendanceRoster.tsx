@@ -164,7 +164,7 @@ const AttendanceRoster: React.FC<Props> = ({ farmId, selections, prefills, onCha
                 const setSel = (patch: Partial<PersonSelection>) => onChange(id, { ...sel, ...patch });
                 return (
                     <div key={id} data-testid={`att-row-${id}`}
-                        className="flex flex-col gap-2.5 rounded-2xl border border-stone-100 bg-white p-3 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+                        className="flex flex-col gap-2.5 rounded-2xl border border-white/70 bg-white/85 p-3 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
                         <div className="flex items-center gap-3">
                             <Avatar tone={toneForOperatorId(id)} initial={row.operator.displayName.trim().slice(0, 1)} />
                             <span className="min-w-0 flex-1">

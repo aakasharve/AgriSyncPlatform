@@ -53,6 +53,7 @@
  */
 import React from 'react';
 import type { Language } from '../../../i18n/language';
+import { BOARD_SHADOW, BRASS, BRASS_FRAME, GREEN_FACE, chamfer } from './boardStyle';
 
 const DEVANAGARI_PATTERN = /[ऀ-ॿ]/;
 const MARATHI_HEAD_FONT = { fontFamily: "'Noto Serif Devanagari', serif" } as const;
@@ -67,13 +68,8 @@ function bodyFontFor(text: string): React.CSSProperties {
     return DEVANAGARI_PATTERN.test(text) ? MARATHI_BODY_FONT : ENGLISH_FONT;
 }
 
-/** Approved corner: chamfer, 11px. One number drives all four layers. */
+/** Approved corner: chamfer, 11px. One number drives all four layers (the shape itself lives in boardStyle.ts). */
 const CORNER = 11;
-const chamfer = (v: number): string => {
-    const p = `${v}px`;
-    return `polygon(${p} 0, calc(100% - ${p}) 0, 100% ${p}, 100% calc(100% - ${p}), `
-        + `calc(100% - ${p}) 100%, ${p} 100%, 0 calc(100% - ${p}), 0 ${p})`;
-};
 
 const MAX_NAME_PX = 25;
 const MIN_NAME_PX = 12;
@@ -200,14 +196,17 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
             data-testid="farm-nameboard"
             data-can-switch={canSwitch ? 'true' : 'false'}
             className="min-w-0 flex-1 text-left"
+            // The board's shadow lives HERE, as a drop-shadow on the unclipped parent. It used to be a box-shadow on the clipped brass layer,
+            // and a clip-path cuts away its own element's box-shadow, so the board never had the shadow it was given.
+            style={{ filter: BOARD_SHADOW }}
         >
             {/* layer 1 — the brass frame */}
             <span
                 className="relative block p-[2.5px]"
                 style={{
-                    background: '#D9B45B',
+                    // brushed brass: light on the top-left edge, darker toward the bottom-right, like a real metal frame
+                    background: BRASS_FRAME,
                     clipPath: chamfer(CORNER),
-                    boxShadow: '0 4px 12px rgba(10,45,25,.38)',
                 }}
             >
                 {/* Four nails, each at its own angle. Aligned nails read as
@@ -226,7 +225,7 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
                         style={{
                             width: 5.5,
                             height: 5.5,
-                            background: 'radial-gradient(circle at 34% 28%, #F0DCA4, #D9B45B 50%, #A8842F)',
+                            background: `radial-gradient(circle at 34% 28%, #F0DCA4, ${BRASS} 50%, #A8842F)`,
                             boxShadow: '0 1px 1.5px rgba(0,0,0,.5)',
                             ...s,
                         }}
@@ -237,7 +236,7 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
                 <span
                     className="block p-[2.5px]"
                     style={{
-                        background: 'linear-gradient(180deg,#17603F 0%,#14532D 48%,#0F3D22 100%)',
+                        background: GREEN_FACE,
                         clipPath: chamfer(CORNER - 1),
                     }}
                 >
@@ -254,10 +253,16 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
                             // when the name is short.
                             className="relative flex items-center justify-center gap-2 px-3 py-[7px]"
                             style={{
-                                background: 'linear-gradient(180deg,#17603F 0%,#14532D 48%,#0F3D22 100%)',
+                                background: GREEN_FACE,
                                 clipPath: chamfer(CORNER - 3),
                             }}
                         >
+                            {/* A soft lacquer sheen on the top half of the face: the board reads as a finished, polished plaque rather than flat paint. */}
+                            <span
+                                aria-hidden="true"
+                                className="pointer-events-none absolute inset-x-0 top-0 h-1/2"
+                                style={{ background: 'linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,0))' }}
+                            />
                             {/* THE SHIELD NEEDS ITS OWN GROUND.
                                 `logo-mark.webp` is a GREEN shield with a dark
                                 green outline. Placed straight onto this board
@@ -273,10 +278,10 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
                                 not decoration and must not be dropped. */}
                             <span
                                 ref={markRef}
-                                className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full"
+                                className="relative flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full"
                                 style={{
                                     background: '#FBF5EC',
-                                    boxShadow: '0 0 0 1.5px #D9B45B, 0 1px 3px rgba(4,24,12,.45)',
+                                    boxShadow: `0 0 0 1.5px ${BRASS}, 0 1px 3px rgba(4,24,12,.45)`,
                                 }}
                             >
                                 <img
@@ -294,10 +299,10 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
                                     <span
                                         ref={nameRef}
                                         data-testid="farm-nameboard-name"
-                                        className="inline-block whitespace-nowrap text-center font-extrabold leading-[1.14] tracking-[-0.005em]"
+                                        className="relative inline-block whitespace-nowrap text-center font-extrabold leading-[1.14] tracking-[0.005em]"
                                         style={{
-                                            color: '#F2E9DB',
-                                            textShadow: '0 1px 0 rgba(4,24,12,.55)',
+                                            color: '#F7EEDA',
+                                            textShadow: '0 1px 0 rgba(4,24,12,.6), 0 0 10px rgba(217,180,91,.18)',
                                             ...headFontFor(farmName),
                                         }}
                                     >
@@ -319,19 +324,19 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
                                      * name -- an ellipsis hides meaning that the board exists to
                                      * show -- simply applied one element down, where it had been
                                      * written and then not followed. */
-                                    <span className="mt-0.5 flex items-center justify-center gap-1.5">
+                                    <span className="relative mt-[3px] flex items-center justify-center gap-1.5">
                                         <i
                                             aria-hidden="true"
                                             className="h-px min-w-0 flex-1 basis-4"
                                             style={{
-                                                maxWidth: '1rem',
-                                                background: 'linear-gradient(90deg,rgba(217,180,91,0),#D9B45B)',
+                                                maxWidth: '1.25rem',
+                                                background: `linear-gradient(90deg,rgba(217,180,91,0),${BRASS})`,
                                             }}
                                         />
                                         <span
                                             data-testid="farm-nameboard-subtitle"
-                                            className="shrink-0 whitespace-nowrap text-[8px] font-semibold tracking-[0.04em]"
-                                            style={{ color: '#E4D3A6', ...bodyFontFor(SUBTITLE) }}
+                                            className="shrink-0 whitespace-nowrap text-[9px] font-semibold tracking-[0.06em]"
+                                            style={{ color: '#EAD9A8', ...bodyFontFor(SUBTITLE) }}
                                         >
                                             {SUBTITLE}
                                         </span>
@@ -339,8 +344,8 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
                                             aria-hidden="true"
                                             className="h-px min-w-0 flex-1 basis-4"
                                             style={{
-                                                maxWidth: '1rem',
-                                                background: 'linear-gradient(90deg,#D9B45B,rgba(217,180,91,0))',
+                                                maxWidth: '1.25rem',
+                                                background: `linear-gradient(90deg,${BRASS},rgba(217,180,91,0))`,
                                             }}
                                         />
                                     </span>

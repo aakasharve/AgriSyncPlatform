@@ -37,8 +37,25 @@ describe('OversightNavCards — three cards replacing the segmented toggle (Task
         render(<OversightNavCards {...baseProps()} />);
 
         expect(screen.getByText(oversightTranslations.mr.navToday)).toBeInTheDocument();
+        // founder 2026-10-25: the middle card reads "पूर्ण शेतीचा आढावा" (it used to be "माझं शेत")
+        expect(screen.getByText('पूर्ण शेतीचा आढावा')).toBeInTheDocument();
         expect(screen.getByText(oversightTranslations.mr.navMyFarm)).toBeInTheDocument();
         expect(screen.getByText(oversightTranslations.mr.navCompare)).toBeInTheDocument();
+    });
+
+    it('a tap starts a ripple on the card that was touched', () => {
+        render(<OversightNavCards {...baseProps()} />);
+        expect(screen.queryByTestId('nav-card-ripple')).not.toBeInTheDocument();
+        fireEvent.pointerDown(screen.getByTestId('oversight-nav-card-compare'), { clientX: 10, clientY: 10 });
+        expect(screen.getByTestId('oversight-nav-card-compare').querySelector('[data-testid="nav-card-ripple"]')).not.toBeNull();
+        expect(screen.getByTestId('oversight-nav-card-log').querySelector('[data-testid="nav-card-ripple"]')).toBeNull();
+    });
+
+    it('one line-icon set, and only the card you are on is solid green with the active pill', () => {
+        render(<OversightNavCards {...baseProps({ view: 'reflect' })} />);
+        expect([...document.querySelectorAll('[data-nav-icon]')].map(e => e.getAttribute('data-nav-icon'))).toEqual(['log', 'reflect', 'compare']);
+        const pills = [...document.querySelectorAll('[data-nav-icon]')].map(e => e.parentElement!.getAttribute('data-active-pill'));
+        expect(pills).toEqual(['no', 'yes', 'no']);
     });
 
     it('english_language_resolves_the_english_labels_not_the_marathi', () => {

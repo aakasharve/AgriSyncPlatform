@@ -33,6 +33,7 @@ import { formatReviewDetail } from '../reviewDetailDate';
 import { t as translate } from '../../../i18n/translations';
 import { resolveOversightString } from '../../../i18n/oversightTranslations';
 import { SYNC_HONESTY_I18N_KEYS } from '../../sync/status/syncHonestyState';
+import { SeparateConfirm } from './SeparateConfirm';
 
 interface Props {
     open: boolean;
@@ -77,6 +78,10 @@ interface Props {
      * is absent or not unique (answer: no picker, and still no nag).
      */
     history?: DailyLog[];
+    /** DESIGN PREVIEW ONLY — 'separate' = हजेरी and मजुरी confirmed apart (SeparateConfirm, sends nothing). Default: the real मंजूर / शंका. */
+    confirmMode?: 'together' | 'separate';
+    /** Who is confirming, shown on a separate confirmation (मालक / मुकादम). */
+    confirmerLabel?: string;
 }
 
 const DISPUTE_REASON = 'या नोंदीवर शंका आहे — एकदा विचारून घ्यायचं आहे.';
@@ -353,7 +358,7 @@ const ReviewFacts: React.FC<{ item: ReviewItem }> = ({ item }) => {
     );
 };
 
-const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved, farmId, history, reviewListUnknown, reviewListLoading }) => {
+const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved, farmId, history, reviewListUnknown, reviewListLoading, confirmMode = 'together', confirmerLabel = 'मालक' }) => {
     const [gone, setGone] = useState<Record<string, boolean>>({});
     const [confirming, setConfirming] = useState<Record<string, ConfirmKind>>({});
     const [undoQueue, setUndoQueue] = useState<UndoEntry[]>([]);
@@ -628,7 +633,7 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
 
     return (
         <>
-            <div onClick={onClose} className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-200 ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`} />
+            <div onClick={onClose} className={`fixed inset-0 z-[60] bg-black/50 transition-opacity duration-200 ${open ? 'opacity-100' : 'pointer-events-none opacity-0'}`} />
             {/*
               * PHONE-FRAME FIX (2026-08-10). This was `fixed inset-x-0`, so on any
               * screen wider than a phone the sheet spanned the ENTIRE browser
@@ -638,7 +643,8 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
               * founder photographed. The max-widths below mirror AppShell's own
               * breakpoints exactly, so the sheet now tracks the app frame.
               */}
-            <div className={`fixed inset-x-0 bottom-0 z-40 mx-auto flex max-h-[88%] w-full max-w-[480px] flex-col rounded-t-3xl bg-white shadow-2xl transition-transform duration-300 md:max-w-[640px] xl:max-w-[720px] ${open ? 'translate-y-0' : 'translate-y-full'}`}>
+            {/* z-[60]: above the app's bottom bar (z-50), which used to hide the sheet's last card and its buttons */}
+            <div className={`fixed inset-x-0 bottom-0 z-[60] mx-auto flex max-h-[88%] w-full max-w-[480px] flex-col rounded-t-3xl bg-white shadow-2xl transition-transform duration-300 md:max-w-[640px] xl:max-w-[720px] ${open ? 'translate-y-0' : 'translate-y-full'}`}>
                 <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-stone-300" />
                 <div className="flex items-center justify-between border-b border-stone-200 px-4 pb-3 pt-2">
                     <div>
@@ -677,7 +683,7 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                         // obvious, but any card that outgrew the sheet would have hit it.
                         return (
                             <div key={it.id} data-testid={`review-card-${it.id}`} className={`review-card-shell shrink-0 rounded-2xl ${kind ? 'is-collapsing' : ''}`}>
-                                <div className="relative rounded-2xl border border-stone-200 bg-white p-3.5 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+                                <div className="relative rounded-2xl border border-stone-200 bg-white p-3.5 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
                                     <div className="flex items-center gap-3">
                                         <Avatar tone={it.tone} initial={it.initial} size="sm" />
                                         <div className="min-w-0 flex-1">
@@ -710,10 +716,12 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                                       * fixed width) so the safe, common action is the big
                                       * green one and the two can never be confused by shape.
                                       */}
-                                    <div className="mt-3 flex gap-3">
+                                    {confirmMode === 'separate' ? (
+                                        <SeparateConfirm item={it} confirmerLabel={confirmerLabel} onQuery={() => onToast('शंका नोंदवली — नमुना, काही पाठवलं नाही')} />
+                                    ) : <div className="mt-3 flex gap-3">
                                         {mayApprove && <button type="button" data-testid={`review-approve-${it.id}`} disabled={!!kind} onClick={() => approve(it.id)} className="flex min-h-[60px] flex-1 items-center justify-center gap-2.5 rounded-xl bg-emerald-600 py-3.5 text-[19px] font-extrabold text-white active:scale-[0.98] disabled:opacity-60"><Check size={24} strokeWidth={2.6} /> मंजूर</button>}
                                         {mayApprove && <button type="button" data-testid={`review-query-${it.id}`} disabled={!!kind} onClick={() => query(it.id)} className="flex min-h-[60px] w-[112px] flex-shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-stone-200 bg-white py-3.5 text-[19px] font-bold text-stone-600 active:scale-[0.98] disabled:opacity-60"><MessageSquare size={20} /> शंका</button>}
-                                    </div>
+                                    </div>}
                                     {/*
                                       * Labour V1 Task 13 — the attribution
                                       * overlay, BELOW मंजूर/शंका on purpose:

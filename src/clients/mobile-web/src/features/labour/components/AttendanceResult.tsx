@@ -116,7 +116,7 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
     return (
         <div className="flex flex-col gap-2.5 pb-6" style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}>
             {/* ShramSafalला समजलं — what memory already holds + what was heard */}
-            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
                 <div className="text-[13px] font-extrabold text-slate-800">{COPY.understoodHeading}</div>
                 {knownCount != null && (
                     <div className="mt-2 flex items-center gap-2">
@@ -166,7 +166,7 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
             {contradictions.map((c) => {
                 const distinct = [...new Set(c.facts.map((f) => f.shift))];
                 return (
-                    <div key={c.name} className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+                    <div key={c.name} className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
                         <div className="text-[15px] font-extrabold text-emerald-700">{COPY.contradictionTitle}</div>
                         <p className="mt-1.5 text-[15px] font-bold leading-snug text-slate-800">
                             {COPY.contradictionBody(c.name, shiftWord(distinct[0]), shiftWord(distinct[1] ?? distinct[0]))}
@@ -189,7 +189,7 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
 
             {/* The rung's one question + the shared mic as the way to answer it. */}
             {question && (
-                <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-[0_1px_3px_rgba(20,40,30,0.05)]">
+                <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
                     <p className="text-[19px] font-bold leading-snug text-stone-800">{question}</p>
                     {(rung === 2 || rung === 3) && (
                         <button type="button" onClick={onSpeakMore}
