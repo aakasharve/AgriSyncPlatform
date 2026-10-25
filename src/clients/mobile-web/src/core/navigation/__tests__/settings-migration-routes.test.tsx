@@ -35,4 +35,14 @@ describe('Setup Hub opens Settings (the Voice Diary + retention-consent page)', 
         page.props.onOpenSettings!();
         expect(setCurrentRoute).toHaveBeenCalledWith('settings');
     });
+
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (H2) — "hear my voice logs" is one tap from the hub.
+    it('profile route wires onOpenVoiceDiary straight to the recordings player', () => {
+        const setCurrentRoute = vi.fn();
+        const node = renderProfileRoute(ctxWith('profile', setCurrentRoute)) as React.ReactElement<{ children: React.ReactElement<{ onOpenVoiceDiary?: () => void }> }>;
+        const page = node.props.children;
+        expect(typeof page.props.onOpenVoiceDiary).toBe('function');
+        page.props.onOpenVoiceDiary!();
+        expect(setCurrentRoute).toHaveBeenCalledWith('voiceDiary');
+    });
 });

@@ -85,6 +85,8 @@ interface ProfilePageProps {
     onOpenAiDrafts?: () => void;
     /** Settings page: Voice Journal / Voice Diary + retention consent. */
     onOpenSettings?: () => void;
+    /** spec: plr-d10 (H2) — आवाज नोंदी opens the recordings player directly (it used to go through Settings). */
+    onOpenVoiceDiary?: () => void;
     /** Leave the Profile screen (back to the main app / daily log). */
     onExit?: () => void;
     /**
@@ -99,7 +101,7 @@ interface ProfilePageProps {
 const ProfilePage: React.FC<ProfilePageProps> = ({
     profile, crops, onUpdateProfile, onUpdateCrops,
     onOpenScheduleLibrary, onOpenFinanceManager, onOpenLabour, onOpenReferrals,
-    onOpenConsent, onOpenExport, onOpenErasure, onOpenAiDrafts, onOpenSettings,
+    onOpenConsent, onOpenExport, onOpenErasure, onOpenAiDrafts, onOpenSettings, onOpenVoiceDiary,
     onExit,
     initialTab,
 }) => {
@@ -345,7 +347,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 // Plain Marathi only (founder T1–T3: no English doubling). Every new string is PROPOSED.
                 const settingsMeta: Record<string, { label: string; icon: React.ReactNode; subtitle?: string }> = {
                     language: { label: 'भाषा', icon: <Globe size={22} />, subtitle: langLabel },
-                    'voice-diary': { label: 'आवाज नोंदी', icon: <BookOpen size={22} />, subtitle: 'आवाजी डायरी आणि नोंदी ठेवण्याची परवानगी' },
+                    'voice-diary': { label: 'आवाज नोंदी', icon: <BookOpen size={22} />, subtitle: 'तुम्ही बोललेल्या नोंदी — दिवसानुसार ऐका' },
                     consent: { label: 'गोपनीयता व संमती', icon: <Shield size={22} />, subtitle: 'तुमच्या परवानग्या' },
                     export: { label: 'डेटा डाउनलोड', icon: <Download size={22} />, subtitle: 'तुमच्या नोंदींची प्रत' },
                     erase: { label: 'डेटा पुसा', icon: <Trash2 size={22} />, subtitle: 'कायमचा पुसा' },
@@ -359,7 +361,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     if (id === 'export') { onOpenExport?.(); return; }
                     if (id === 'erase') { onOpenErasure?.(); return; }
                     if (id === 'ai-drafts') { onOpenAiDrafts?.(); return; }
-                    if (id === 'voice-diary') { onOpenSettings?.(); return; }
+                    if (id === 'voice-diary') { (onOpenVoiceDiary ?? onOpenSettings)?.(); return; }
                     setActiveExtra(id); // 'language' | 'billing' — folded sub-screens
                 };
 

@@ -12,6 +12,7 @@ import { idGenerator } from '../core/domain/services/IdGenerator';
 // surface that opens the Voice Diary page.
 import VoiceRetainedConsentToggle from '../features/consent/VoiceRetainedConsentToggle';
 import { toVoiceDiaryLocale } from '../i18n/voiceDiaryTranslations';
+import { PageBar } from '../shared/components/ui/placeUi';
 
 interface SettingsPageProps {
     defaults: LedgerDefaults;
@@ -23,7 +24,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     defaults,
     onUpdateDefaults
 }) => {
-    const { setCurrentRoute } = useAppNavigationState();
+    const { setCurrentRoute, goBackOr } = useAppNavigationState();
     const { t, language } = useLanguage();
 
     const handleDefaultChange = (category: keyof LedgerDefaults, field: string, value: unknown) => {
@@ -59,6 +60,9 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 
     return (
         <div className="space-y-6 pb-24">
+            {/* spec: plr-d10-redesign-real-integration-2026-10-25 (H2) — reached from the recordings player's
+                "keep my recordings" link; one title bar with मागे, the words in Marathi. */}
+            <PageBar title="आवाज नोंदी — सेटिंग" onBack={() => goBackOr('profile')} />
 
             {/* Voice Journal — stays on Settings (Voice Diary is out of scope of the Setup-Hub migration) */}
             <div className="glass-panel p-5 mb-6">
@@ -68,9 +72,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                             <Mic size={22} strokeWidth={2.5} />
                         </div>
                         <div>
-                            <h4 className="font-bold text-lg">Voice Journal</h4>
-                            <p className="text-xs text-stone-500 mt-1 leading-relaxed max-w-[280px]">
-                                Replay recent voice logs saved on this device for 30 days.
+                            <h4 className="font-bold text-lg">आवाज नोंदी</h4>
+                            {/* No "30 days" here: nothing deletes clips after 30 days (fe59ab21 took the same claim off the preview). */}
+                            <p className="text-sm text-stone-600 mt-1 leading-relaxed max-w-[280px]">
+                                तुम्ही बोललेल्या नोंदी — दिवसानुसार ऐका.
                             </p>
                         </div>
                     </div>
@@ -79,7 +84,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                         className="shrink-0 rounded-xl bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-800 transition-colors hover:bg-emerald-200 active:scale-95"
                     >
                         <BookOpen size={16} className="inline-block mr-1.5 align-[-3px]" />
-                        Open
+                        ऐका
                     </button>
                 </div>
             </div>
@@ -103,9 +108,9 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 <div className="flex items-center gap-4 text-stone-700">
                     <div className="bg-amber-100 p-3 rounded-2xl text-amber-700 shadow-sm"><Coins size={22} strokeWidth={2.5} /></div>
                     <div>
-                        <h4 className="font-bold text-lg">Pricing moved to Finance Manager</h4>
-                        <p className="text-xs text-stone-500 mt-1 leading-relaxed max-w-[280px]">
-                            Configure wages, rates, and item prices from <span className="font-bold text-stone-700">Profile → Finance Manager → Price Book</span>.
+                        <h4 className="font-bold text-lg">दर आता पैसे व हिशोबमध्ये</h4>
+                        <p className="text-sm text-stone-600 mt-1 leading-relaxed max-w-[280px]">
+                            मजुरी, खत-औषध, यंत्र यांचे दर: <span className="font-bold text-stone-700">सेट-अप केंद्र → पैसे व हिशोब → दरपत्रक</span>.
                         </p>
                     </div>
                 </div>

@@ -71,6 +71,7 @@ export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
                 onOpenQrDemo={() => ctx.setCurrentRoute('qr-demo')}
                 onOpenAiDrafts={() => ctx.setCurrentRoute('ai-drafts')}
                 onOpenSettings={() => ctx.setCurrentRoute('settings')}
+                onOpenVoiceDiary={() => ctx.setCurrentRoute('voiceDiary')}
                 onExit={() => ctx.setCurrentRoute('main')}
             />
         </div>
@@ -159,7 +160,7 @@ export const renderVoiceDiaryRoute = (ctx: AppRouterContext): React.ReactNode =>
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
             <VoiceDiaryPage
-                onBack={() => ctx.goBackOr('settings')}
+                onBack={() => ctx.goBackOr('profile')}
                 onOpenSettings={() => ctx.setCurrentRoute('settings')}
             />
         </div>
