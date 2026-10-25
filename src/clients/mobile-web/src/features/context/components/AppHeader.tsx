@@ -63,7 +63,7 @@ interface AppHeaderProps {
   disabled?: boolean;
   /** No longer drawn here (2026-10-25): its colour ring on the Setup Hub clashed with the nameboard's brass and green. Kept so callers need not change. */
   activeOperator?: FarmOperator;
-  /** Design preview (PLR-D9): show the page switcher ONLY on the three main tabs, never on a place like खरेदी or the Setup Hub. Default: the existing route list. */
+  /** Show the page switcher ONLY on the three main tabs, never on a place like खरेदी or the Setup Hub (PLR-D9 N1; the real app passes it since PLR-D10 WP-6). Default: the existing route list. */
   navCardsOnlyOnMain?: boolean;
   /** Pages the page switcher leaves out for this person (preview: a worker gets no तुलना). Default: none. */
   hiddenViews?: readonly PageView[];

@@ -1174,3 +1174,23 @@ describe('AppHeader — the waiting drawer can be opened from outside (F3)', () 
         expect(screen.getByTestId('waiting-drawer-sheet')).toBeInTheDocument();
     });
 });
+
+// spec: plr-d10-redesign-real-integration-2026-10-25 (WP-6, PLR-D9 N1) — the real app passes
+// `navCardsOnlyOnMain`: the page switcher stays on the home tabs and leaves the places, where it
+// used to show आजची कामे lit while the farmer was on खरेदी.
+describe('AppHeader — the page switcher only on the home tabs', () => {
+    it('is drawn on the home tabs', async () => {
+        await act(async () => {
+            renderHeader({ currentRoute: 'main', currentView: 'log', navCardsOnlyOnMain: true });
+        });
+        expect(screen.getByTestId('oversight-nav-cards')).toBeInTheDocument();
+    });
+
+    it.each(['procurement', 'income', 'profile', 'finance-manager'] as const)('is not drawn on %s', async (route) => {
+        await act(async () => {
+            renderHeader({ currentRoute: route, currentView: 'log', navCardsOnlyOnMain: true });
+        });
+        expect(screen.queryByTestId('oversight-nav-cards')).toBeNull();
+        expect(screen.getByTestId('farm-nameboard')).toBeInTheDocument();
+    });
+});

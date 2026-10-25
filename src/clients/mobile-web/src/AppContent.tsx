@@ -152,6 +152,10 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 currentView={navigation.mainView}
                 onNavigate={navigation.setCurrentRoute}
                 onViewChange={navigation.setMainView}
+                // spec: plr-d10-redesign-real-integration-2026-10-25 (WP-6, PLR-D9 N1) — the page
+                // switcher only on the home tabs; a place (खरेदी, सेट-अप केंद्र…) has its own title
+                // and मागे, and used to show आजची कामे lit while the farmer was on खरेदी.
+                navCardsOnlyOnMain
                 disabled={isRecordingPathBusy(voice.status)}
                 activeOperator={data.farmerProfile.operators.find(op => op.id === data.farmerProfile.activeOperatorId)}
                 farmContext={myFarms ? {
