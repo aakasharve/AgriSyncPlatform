@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.Extensions.Options;
 using ShramSafal.Application.Ports.External;
+using ShramSafal.Domain.Crops;
 
 namespace ShramSafal.Infrastructure.AI;
 
@@ -349,10 +350,14 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
     /// stage; if the operation contradicts the stage, trust the operation.
     /// Returns an empty string when no stage is available so the prompt
     /// is not polluted with a useless section.
+    /// PLR-D10 (X3 review B004): a plot made on the phone carries the stage
+    /// <see cref="CropCycle.UnstatedStage"/> — "nobody said" — which used to
+    /// reach the model as "Confirmed stage: unstated". It is no stage, so it
+    /// gets no block (P4: never present an unstated value as confirmed).
     /// </summary>
     private static string BuildStagePrior(string? cropStage)
     {
-        if (string.IsNullOrWhiteSpace(cropStage))
+        if (CropCycle.IsUnstatedStage(cropStage))
         {
             return string.Empty;
         }

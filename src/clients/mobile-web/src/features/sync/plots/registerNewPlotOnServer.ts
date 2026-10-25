@@ -49,7 +49,8 @@ export type { PendingPlotRegistration } from './pendingPlots';
 
 /**
  * The farmer did not state a crop stage when adding the plot, and the server requires one.
- * Sent as an explicit "not stated" rather than a guessed stage (doctrine P4).
+ * Sent as an explicit "not stated" rather than a guessed stage (doctrine P4). Mirrors the
+ * server's `CropCycle.UnstatedStage`, which keeps it out of the AI prompt's stage hint.
  */
 export const UNSTATED_STAGE = 'unstated';
 

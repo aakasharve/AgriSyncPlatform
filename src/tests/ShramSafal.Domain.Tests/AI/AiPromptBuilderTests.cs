@@ -241,6 +241,27 @@ public sealed class AiPromptBuilderTests
         Assert.DoesNotContain("GROWTH STAGE (soft prior", prompt, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// PLR-D10 (X3 review B004) — a plot made on the phone carries the stage
+    /// "unstated" (nobody said). It is not a confirmed stage: no GROWTH STAGE
+    /// block, and the word never reaches the model as one.
+    /// </summary>
+    [Theory]
+    [InlineData("unstated")]
+    [InlineData("Unstated")]
+    [InlineData(" unstated ")]
+    public void ModularVoicePrompt_WithUnstatedCropStage_DoesNotEmitStagePriorBlock(string stage)
+    {
+        var builder = new AiPromptBuilder(
+            new AiPromptTemplateRegistry(),
+            Options.Create(new AiPromptOptions { UseModularPrompt = true }));
+
+        var prompt = builder.BuildVoiceParsingPrompt(CreateContext() with { CropStage = stage });
+
+        Assert.DoesNotContain("GROWTH STAGE (soft prior", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Confirmed stage", prompt, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static VoiceParseContext CreateContext()
     {
         return new VoiceParseContext(
