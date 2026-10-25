@@ -3,6 +3,10 @@
  *
  * States: pending, uploading, uploaded, failed
  * Failed state includes inline "Retry" button.
+ *
+ * spec: plr-d10-redesign-real-integration-2026-10-25 — the four states in Marathi (they showed "Queued /
+ * Uploading / Uploaded / Failed" on the log details and the test's lab-report list). "पाठवला" = reached the
+ * server; until then the photo is only on this phone (P10).
  */
 
 import React from 'react';
@@ -19,22 +23,22 @@ const STATE_CONFIG: Record<AttachmentState, { color: string; Icon: React.FC<{ si
      pending: {
           color: 'bg-slate-100 text-slate-600 border-slate-200',
           Icon: Clock,
-          label: 'Queued',
+          label: 'पाठवायचा बाकी',
      },
      uploading: {
           color: 'bg-blue-50 text-blue-700 border-blue-200',
           Icon: Upload,
-          label: 'Uploading',
+          label: 'पाठवत आहे',
      },
      uploaded: {
           color: 'bg-emerald-50 text-emerald-700 border-emerald-200',
           Icon: CheckCircle,
-          label: 'Uploaded',
+          label: 'पाठवला',
      },
      failed: {
           color: 'bg-red-50 text-red-700 border-red-200',
           Icon: AlertTriangle,
-          label: 'Failed',
+          label: 'पाठवता आला नाही',
      },
 };
 
@@ -71,6 +75,8 @@ const AttachmentStatusBadge: React.FC<AttachmentStatusBadgeProps> = ({ status, o
                {label}
                {state === 'failed' && onRetry && (
                     <button
+                         type="button"
+                         aria-label="पुन्हा पाठवा"
                          onClick={(e) => {
                               e.stopPropagation();
                               onRetry();

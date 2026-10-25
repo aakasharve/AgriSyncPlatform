@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { X, Download, FileText } from 'lucide-react';
+import { X, FileText } from 'lucide-react';
 import type { AttachmentRecord } from '../../../infrastructure/storage/DexieDatabase';
 
 interface AttachmentPreviewProps {
@@ -32,11 +32,11 @@ const AttachmentPreview: React.FC<AttachmentPreviewProps> = ({ attachment, onClo
                     <div className="max-w-full max-h-full">
                          <img
                               src={attachment.localPath || `/api/attachments/${attachment.remoteAttachmentId}/download`}
-                              alt={attachment.originalFileName || 'Attachment'}
+                              alt={attachment.originalFileName || 'जोडलेली फाइल'}
                               className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
                          />
                          <p className="text-center text-white/60 text-xs mt-2">
-                              {attachment.originalFileName || 'Image'}
+                              {attachment.originalFileName || 'फोटो'}
                          </p>
                     </div>
                ) : (
@@ -46,10 +46,10 @@ const AttachmentPreview: React.FC<AttachmentPreviewProps> = ({ attachment, onClo
                               <FileText size={32} className="text-slate-400" />
                          </div>
                          <h3 className="font-bold text-slate-800 text-center mb-2 truncate">
-                              {attachment.originalFileName || 'File'}
+                              {attachment.originalFileName || 'फाइल'}
                          </h3>
                          <p className="text-sm text-slate-400 text-center mb-1">
-                              {attachment.mimeType || 'Unknown type'}
+                              {attachment.mimeType || 'प्रकार माहीत नाही'}
                          </p>
                          {attachment.sizeBytes && (
                               <p className="text-sm text-slate-400 text-center mb-4">

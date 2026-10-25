@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Paperclip, FileText, Image, Film } from 'lucide-react';
+import { FileText, Image, Film } from 'lucide-react';
 import { getDatabase, type AttachmentRecord } from '../../../infrastructure/storage/DexieDatabase';
 import AttachmentStatusBadge from './AttachmentStatusBadge';
 import AttachmentPreview from './AttachmentPreview';
@@ -88,7 +88,7 @@ const AttachmentList: React.FC<AttachmentListProps> = ({
                               {/* File info */}
                               <div className="flex-1 min-w-0">
                                    <p className="text-[11px] font-semibold text-slate-700 truncate">
-                                        {att.originalFileName || 'Attachment'}
+                                        {att.originalFileName || 'जोडलेली फाइल'}
                                    </p>
                                    {!compact && att.sizeBytes && (
                                         <p className="text-[10px] text-slate-400">
