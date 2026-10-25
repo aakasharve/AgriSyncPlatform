@@ -32,6 +32,7 @@ import { Mic } from 'lucide-react';
 import { getDatabase, type DexieTestInstance, type DexieTestProtocol } from '../../../infrastructure/storage/DexieDatabase';
 import { TestInstanceStatus } from '../../../domain/tests/TestInstance';
 import { useFarmContext } from '../../../core/session/FarmContext';
+import { settleWithin } from '../data/phoneWait';
 import TestInstanceCard from '../components/TestInstanceCard';
 import MarkCollectedSheet from '../components/MarkCollectedSheet';
 import RecordResultSheet from '../components/RecordResultSheet';
@@ -55,14 +56,17 @@ interface TestQueuePageProps {
 /**
  * What the last refresh managed (review B002). 'pending' until the first one settles;
  * 'reached' = every crop cycle answered; 'partial' = some did; 'failed' = none did;
- * 'no-cycles' = the phone has no crop cycle for this farm, so nothing could be asked.
+ * 'no-cycles' = the phone has no crop cycle for this farm, so nothing could be asked;
+ * 'no-farm' = no farm is chosen, so there is nothing to ask about (review N2: it used to stay 'pending',
+ * and an empty page said it was fetching, for ever).
  */
-type RefreshOutcome = 'pending' | 'reached' | 'partial' | 'failed' | 'no-cycles';
+type RefreshOutcome = 'pending' | 'reached' | 'partial' | 'failed' | 'no-cycles' | 'no-farm';
 
 const REFRESH_NOTE: Record<Exclude<RefreshOutcome, 'pending' | 'reached'>, string> = {
     partial: 'काही प्लॉटची माहिती आणता आली नाही — त्यांची या फोनवरची जुनी माहिती दाखवत आहोत.',
     failed: 'आत्ता ताजी माहिती आणता आली नाही — या फोनवर साठवलेली दाखवत आहोत.',
     'no-cycles': 'या फोनवर अजून या शेतातल्या पिकांची माहिती आलेली नाही, म्हणून सर्व्हरवरून चाचण्या आणता आल्या नाहीत.',
+    'no-farm': 'आधी शेत निवडा — मग इथे त्या शेताच्या चाचण्या दिसतील.',
 };
 
 const parseQuery = (): { plotId?: string; cropCycleId?: string; filter?: TestFilter; action?: 'collect' | 'record'; instanceId?: string } => {
@@ -119,7 +123,10 @@ const TestQueuePage: React.FC<TestQueuePageProps> = ({ onNavigate, onBack, onTel
     }, [currentFarmId]);
 
     const refreshFromServer = useCallback(async () => {
-        if (!currentFarmId) return;
+        if (!currentFarmId) {
+            setRefreshOutcome('no-farm');
+            return;
+        }
         try {
             const db = getDatabase();
             // Fan out per cached crop cycle on this farm. Tests are asked for per cycle, so with no cycle on
@@ -363,12 +370,16 @@ const TestQueuePage: React.FC<TestQueuePageProps> = ({ onNavigate, onBack, onTel
                     instance={activeAction.instance}
                     onClose={closeSheet}
                     onSuccess={async (updated) => {
-                        // Keep the server's answer at once, so the card moves even if the refresh below cannot reach it.
-                        try {
-                            await getDatabase().testInstances.put(updated);
-                        } catch (error) {
-                            console.error('[tests] collected on the server, but this phone could not keep the answer', { testInstanceId: updated.id, error });
-                        }
+                        // Keep the server's answer at once, so the card moves even if the refresh below cannot reach it —
+                        // but never hold the sheet shut on a hung phone database (review N1): 2 s, then move on.
+                        const kept = await settleWithin(
+                            getDatabase().testInstances.put(updated).then(() => true, (error: unknown) => {
+                                console.error('[tests] collected on the server, but this phone could not keep the answer', { testInstanceId: updated.id, error });
+                                return false;
+                            }),
+                            false,
+                        );
+                        if (!kept) console.warn('[tests] the phone copy of a collected test was not confirmed in time', { testInstanceId: updated.id });
                         await afterSave();
                     }}
                 />

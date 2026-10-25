@@ -25,6 +25,7 @@ import {
 import { useFarmContext } from '../../../core/session/FarmContext';
 import { captureAttachment } from '../../../application/use-cases/CaptureAttachment';
 import { recordResult, type ResultInput, type RecordTestResultResponse } from '../data/testsClient';
+import { settleWithin } from '../data/phoneWait';
 import { BigButton } from '../../../shared/components/ui/placeUi';
 import { SheetTestSummary, TestSheetFrame } from './TestSheetFrame';
 import { failureWords, testName } from './testView';
@@ -126,7 +127,8 @@ const RecordResultSheet: React.FC<RecordResultSheetProps> = ({ instance, protoco
             return;
         }
         // Saved on the server: from here the sheet only shows the outcome (the save button never comes back).
-        setRecsKept(await keepRecommendations(instance.id, response.recommendations));
+        // Never hold the outcome behind a hung phone database (review N1): 2 s, then say they were not kept.
+        setRecsKept(await settleWithin(keepRecommendations(instance.id, response.recommendations), false));
         setSuccessRecs(response);
     };
 

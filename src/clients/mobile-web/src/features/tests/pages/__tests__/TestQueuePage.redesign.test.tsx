@@ -34,11 +34,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Row = Record<string, unknown> & { id: string; status: number };
 
-const farm = { role: 'Owner' };
+const farm: { role: string; id: string | null } = { role: 'Owner', id: 'farm-1' };
 vi.mock('../../../../core/session/FarmContext', () => ({
     useFarmContext: () => ({
-        currentFarmId: 'farm-1',
-        currentFarm: { farmId: 'farm-1', role: farm.role },
+        currentFarmId: farm.id,
+        currentFarm: farm.id ? { farmId: farm.id, role: farm.role } : null,
         meContext: { me: { displayName: 'सुरेश' } },
     }),
 }));
@@ -168,6 +168,7 @@ beforeEach(async () => {
     store.rows = FIXTURE.map(r => ({ ...r }));
     store.cycles = [];
     farm.role = 'Owner';
+    farm.id = 'farm-1';
     putGate = null;
     server.queue.mockImplementation(async () => ({ status: 200, body: [] }));
     server.collect.mockImplementation(async () => ({ status: 500 }));
@@ -410,6 +411,15 @@ describe('B001 — the server\'s suggestions are really kept on the phone', () =
 });
 
 describe('B002 — a refresh time only when the server answered', () => {
+    // Review N2 — with no farm chosen the page used to say it was fetching, for ever.
+    it('no farm chosen: it says to choose a farm, and never claims to be fetching', async () => {
+        farm.id = null;
+        render(<TestQueuePage />);
+        expect(await screen.findByTestId('tests-refresh-no-farm')).toHaveTextContent('आधी शेत निवडा');
+        expect(document.body.textContent).not.toContain('आणत आहे');
+        expect(fakeFetch).not.toHaveBeenCalled();
+    });
+
     it('no crop cycle on the phone: nothing is asked, no time, and the page says why', async () => {
         await openPage();
         expect(await screen.findByTestId('tests-refresh-no-cycles')).toHaveTextContent('या फोनवर अजून या शेतातल्या पिकांची माहिती आलेली नाही');
