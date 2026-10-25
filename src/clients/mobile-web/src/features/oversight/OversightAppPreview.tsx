@@ -76,6 +76,7 @@ import AppHeader from '../context/components/AppHeader';
 import BottomNavigation from '../context/components/BottomNavigation';
 import { renderCompareView, renderLogView, renderReflectView } from '../../core/navigation/mainView';
 import { RouteLoader, ReviewInboxSheet } from '../../core/navigation/lazyComponents';
+import { SIMPLE_ROUTE_RENDERERS } from '../../core/navigation/simpleRoutes';
 import MainViewTransition from '../../core/navigation/MainViewTransition';
 import { isRecordingPathBusy } from '../../shared/utils/recordingPathBusy';
 // spec: owner-oversight-loop (Task 8) — the SAME pinned bar, the SAME
@@ -134,16 +135,13 @@ const PreviewBanner: React.FC = () => (
 );
 
 /**
- * The founder's ask covers Log / Reflect / Compare (spec §ask 2/4). Every
- * OTHER route is real navigation state (tapping the header's profile avatar
- * or settings gear genuinely calls `setCurrentRoute`) but nothing renders
- * for it here — an honest, visible gap rather than a fabricated page.
+ * Shown only for a route that none of the real route renderers draws (see the
+ * `<main>` below) — an honest, visible gap rather than a fabricated page.
  */
 const UnhandledRouteNotice: React.FC<{ route: string; onBack: () => void }> = ({ route, onBack }) => (
     <div className="flex flex-col items-center gap-3 p-10 text-center">
         <p className="text-sm font-semibold text-stone-500" style={ENGLISH_FONT}>
-            The &ldquo;{route}&rdquo; screen isn&apos;t wired into this preview — only Log, Reflect and Compare
-            are (see task report).
+            The &ldquo;{route}&rdquo; screen isn&apos;t wired into this preview.
         </p>
         <button
             type="button"
@@ -265,7 +263,19 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
                 className="page-content relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-none"
             >
                 {ctx.currentRoute !== 'main' ? (
-                    <UnhandledRouteNotice route={ctx.currentRoute} onBack={() => ctx.setCurrentRoute('main')} />
+                    // spec: plr-d10-redesign-real-integration-2026-10-25 — every other route
+                    // renders through the SAME renderers `AppRouter.tsx` uses, on the seeded
+                    // context, so the founder can see the whole redesigned app (setup hub,
+                    // हजेरी, money pages) without a server. A route none of them draws still
+                    // gets the honest notice below.
+                    <Suspense fallback={<RouteLoader />}>
+                        {(() => {
+                            const drawn = SIMPLE_ROUTE_RENDERERS.map(render => render(ctx)).filter(Boolean);
+                            return drawn.length > 0
+                                ? drawn.map((node, idx) => <React.Fragment key={idx}>{node}</React.Fragment>)
+                                : <UnhandledRouteNotice route={ctx.currentRoute} onBack={() => ctx.setCurrentRoute('main')} />;
+                        })()}
+                    </Suspense>
                 ) : (
                     <Suspense fallback={<RouteLoader />}>
                         {/* Task 14, change 5 — same slide-transition +

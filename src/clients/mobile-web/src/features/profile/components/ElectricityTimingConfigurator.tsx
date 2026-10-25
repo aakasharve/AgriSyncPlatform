@@ -1,120 +1,100 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * "वीज कधी असते?" — the electricity timetable on the पाणी आणि वीज page.
+ *
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I7 / WP-5). Redrawn in the approved look
+ * (founder 2026-10-25: "it must ask single-phase timing and three-phase timing"), on the REAL stored
+ * model and the same handlers as before — nothing about what is saved changed:
+ *   - सिंगल फेज and थ्री फेज, each on its own card;
+ *   - वीज असते / वीज जाते (hours a day) and a 24-hour strip, green = on, red = off;
+ *   - "रोज वीज जात नाही (24 तास)" (no OFF window) or the OFF window "पासून … पर्यंत" (may cross midnight);
+ *   - "दर दुसऱ्या आठवड्याला वेळ बदलते" → आठवडा अ / आठवडा ब, each with its own window;
+ *   - the same check (start ≠ end), जतन करा (writes through `onUpdate`) and पूर्वीसारखं करा.
+ * The rules live in `./electricityTiming.ts`.
+ */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Zap } from 'lucide-react';
-import {
-    FarmerProfile,
-    ElectricityTimingConfiguration,
-    ElectricityPhaseSchedule,
-    ElectricityOffWindow
-} from '../../../types';
-import { idGenerator } from '../../../core/domain/services/IdGenerator';
+import { RotateCcw, Save, Zap } from 'lucide-react';
+import type {
+    ElectricityOffWindow, ElectricityPhaseSchedule, ElectricityTimingConfiguration, FarmerProfile,
+} from '../../../domain/types/farm.types';
 import { systemClock } from '../../../core/domain/services/Clock';
-import { formatDisplayTimeFromHHmm } from '../../../shared/utils/displayTime';
-
-type PhaseKey = 'singlePhase' | 'threePhase';
-type WeekKey = 'A' | 'B';
-
-interface WeekSummary {
-    offMinutes: number;
-    onMinutes: number;
-    error: string | null;
-}
+import { GlassCard, SwitchRow, Tap } from './hubUi';
+import {
+    PHASES, PHASE_TITLE, defaultOffWindow, farmerClock, formatHours, normalizeConfig, offAtHour, summarizeWeek,
+    weekWindows, type PhaseKey, type WeekKey, type WeekSummary,
+} from './electricityTiming';
 
 interface ElectricityTimingConfiguratorProps {
     profile: FarmerProfile;
     onUpdate: (profile: FarmerProfile) => void;
 }
 
-const DAY_MINUTES = 24 * 60;
+const PHASE_HINT: Record<PhaseKey, string> = { singlePhase: 'घर आणि लहान पंपासाठी', threePhase: 'मोठ्या मोटरसाठी' };
 
-const defaultOffWindow = (): ElectricityOffWindow => ({
-    id: `off_${idGenerator.generate()}`,
-    startTime: '12:00',
-    endTime: '18:00',
-    repeatRule: 'DAILY',
-    days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-});
+/** 24 hours as a strip: green = power on, red = power off. */
+const DayStrip: React.FC<{ windows: ElectricityOffWindow[]; testId: string }> = ({ windows, testId }) => (
+    <div data-testid={testId} aria-hidden="true">
+        <div className="flex h-5 overflow-hidden rounded-full ring-1 ring-stone-200">
+            {Array.from({ length: 24 }, (_, h) => (
+                <span key={h} data-off={offAtHour(windows, h)}
+                    className={`flex-1 ${offAtHour(windows, h) ? 'bg-rose-400' : 'bg-emerald-400'} ${h % 6 === 0 && h ? 'border-l border-white/70' : ''}`} />
+            ))}
+        </div>
+        <div className="mt-1 flex justify-between text-[11px] font-bold text-stone-500"><span>रात्री 12</span><span>सकाळी 6</span><span>दुपारी 12</span><span>संध्या 6</span><span>रात्री 12</span></div>
+    </div>
+);
 
-const parseMinutes = (time: string): number | null => {
-    const [hStr, mStr] = time.split(':');
-    const h = Number(hStr);
-    const m = Number(mStr);
-    if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
-    if (h < 0 || h > 23 || m < 0 || m > 59) return null;
-    return (h * 60) + m;
-};
+const TimeBox: React.FC<{ label: string; value: string; onChange: (v: string) => void; testId: string }> = ({ label, value, onChange, testId }) => (
+    <label className="block min-w-0 flex-1">
+        <span className="block text-[12.5px] font-extrabold text-stone-600">{label}</span>
+        <input type="time" value={value} onChange={e => onChange(e.target.value)} data-testid={testId}
+            className="mt-1 min-h-[50px] w-full rounded-xl bg-white px-2 text-[18px] font-extrabold text-stone-900 outline-none ring-1 ring-stone-300 focus:ring-2 focus:ring-emerald-500" />
+        <span className="mt-0.5 block text-[12.5px] font-bold text-stone-500">{farmerClock(value)}</span>
+    </label>
+);
 
-/**
- * The third of three private 12-hour implementations this codebase had. The
- * STORED value stays `HH:mm` — only its rendering routes through the shared
- * formatter now.
- */
-const format12h = (time: string): string => formatDisplayTimeFromHHmm(time);
+interface WeekEditorProps {
+    id: string;
+    title?: string;
+    windows: ElectricityOffWindow[];
+    summary: WeekSummary;
+    onNoCut: (noCut: boolean) => void;
+    onTime: (field: 'startTime' | 'endTime', value: string) => void;
+}
 
-const formatHours = (minutes: number): string => {
-    const hours = minutes / 60;
-    const text = Number.isInteger(hours) ? hours.toFixed(0) : hours.toFixed(1);
-    return `${text} hrs/day`;
-};
-
-const summarizeWeek = (windows: ElectricityOffWindow[]): WeekSummary => {
-    if (windows.length === 0) {
-        return { offMinutes: 0, onMinutes: DAY_MINUTES, error: null };
-    }
-
+const WeekEditor: React.FC<WeekEditorProps> = ({ id, title, windows, summary, onNoCut, onTime }) => {
     const window = windows[0];
-    const start = parseMinutes(window.startTime);
-    const end = parseMinutes(window.endTime);
-    if (start === null || end === null) {
-        return { offMinutes: 0, onMinutes: DAY_MINUTES, error: 'Invalid time format.' };
-    }
-    if (start === end) {
-        return { offMinutes: 0, onMinutes: DAY_MINUTES, error: 'Start and end cannot be same.' };
-    }
-
-    const offMinutes = start < end ? (end - start) : ((DAY_MINUTES - start) + end);
-    return {
-        offMinutes,
-        onMinutes: DAY_MINUTES - offMinutes,
-        error: null
-    };
-};
-
-const normalizeWindow = (window?: ElectricityOffWindow): ElectricityOffWindow | null => {
-    if (!window) return null;
-    return {
-        id: window.id || `off_${idGenerator.generate()}`,
-        startTime: window.startTime || '12:00',
-        endTime: window.endTime || '18:00',
-        repeatRule: 'DAILY',
-        days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-    };
-};
-
-const normalizePhase = (phase?: ElectricityPhaseSchedule): ElectricityPhaseSchedule => {
-    const weekA = normalizeWindow(phase?.weekAOffWindows?.[0]);
-    const weekB = normalizeWindow(phase?.weekBOffWindows?.[0]);
-    const alternate = Boolean(phase?.alternateWeeklyPattern || phase?.patternMode === 'ROTATIONAL');
-    return {
-        patternMode: alternate ? 'ROTATIONAL' : 'FIXED_WEEKLY',
-        alternateWeeklyPattern: alternate,
-        weekAOffWindows: weekA ? [weekA] : [],
-        weekBOffWindows: weekB ? [weekB] : []
-    };
-};
-
-const normalizeConfig = (config?: ElectricityTimingConfiguration): ElectricityTimingConfiguration => ({
-    singlePhase: normalizePhase(config?.singlePhase),
-    threePhase: normalizePhase(config?.threePhase),
-    updatedAt: config?.updatedAt
-});
-
-const phaseTitle = (phase: PhaseKey): string => phase === 'singlePhase' ? 'Single Phase' : 'Three Phase';
-
-const weekLabel = (phase: ElectricityPhaseSchedule, week: WeekKey): string => {
-    const windows = week === 'A' ? phase.weekAOffWindows : (phase.weekBOffWindows || []);
-    if (windows.length === 0) return '24h available';
-    const window = windows[0];
-    return `OFF ${format12h(window.startTime)} - ${format12h(window.endTime)}`;
+    return (
+        <div className="space-y-2.5 rounded-2xl bg-stone-50/80 p-2.5 ring-1 ring-stone-200" data-testid={`week-${id}`}>
+            {title && <p className="m-0 text-[15px] font-extrabold text-stone-800">{title}</p>}
+            <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-emerald-50 p-2 ring-1 ring-emerald-100">
+                    <p className="m-0 text-[12.5px] font-extrabold text-emerald-800">वीज असते</p>
+                    <p className="m-0 text-[18px] font-extrabold text-stone-900" data-testid={`on-${id}`}>{formatHours(summary.onMinutes)}</p>
+                </div>
+                <div className="rounded-xl bg-rose-50 p-2 ring-1 ring-rose-100">
+                    <p className="m-0 text-[12.5px] font-extrabold text-rose-800">वीज जाते</p>
+                    <p className="m-0 text-[18px] font-extrabold text-stone-900" data-testid={`off-${id}`}>{formatHours(summary.offMinutes)}</p>
+                </div>
+            </div>
+            <DayStrip windows={windows} testId={`strip-${id}`} />
+            <SwitchRow on={windows.length === 0} onChange={onNoCut} testId={`nocut-${id}`} label="रोज वीज जात नाही (24 तास)" />
+            {window && (
+                <>
+                    <p className="m-0 text-[13.5px] font-extrabold text-stone-700">वीज रोज कधी जाते?</p>
+                    <div className="flex gap-2">
+                        <TimeBox label="पासून (वीज जाते)" value={window.startTime || '12:00'} onChange={v => onTime('startTime', v)} testId={`start-${id}`} />
+                        <TimeBox label="पर्यंत (वीज येते)" value={window.endTime || '18:00'} onChange={v => onTime('endTime', v)} testId={`end-${id}`} />
+                    </div>
+                    {summary.error
+                        ? <p className="m-0 rounded-xl bg-rose-50 p-2 text-[13.5px] font-extrabold text-rose-700" data-testid={`error-${id}`}>{summary.error}</p>
+                        : <p className="m-0 text-[13.5px] font-bold text-stone-600">वीज असते: {farmerClock(window.endTime)} ते {farmerClock(window.startTime)}</p>}
+                </>
+            )}
+        </div>
+    );
 };
 
 const ElectricityTimingConfigurator: React.FC<ElectricityTimingConfiguratorProps> = ({ profile, onUpdate }) => {
@@ -129,11 +109,7 @@ const ElectricityTimingConfigurator: React.FC<ElectricityTimingConfiguratorProps
     }, [profile.electricityTiming]);
 
     const updatePhase = (phase: PhaseKey, updater: (value: ElectricityPhaseSchedule) => ElectricityPhaseSchedule) => {
-        setDraft(prev => ({
-            ...prev,
-            [phase]: updater(prev[phase]),
-            updatedAt: systemClock.nowISO()
-        }));
+        setDraft(prev => ({ ...prev, [phase]: updater(prev[phase]), updatedAt: systemClock.nowISO() }));
         setDirty(true);
         setMessage('');
     };
@@ -141,18 +117,15 @@ const ElectricityTimingConfigurator: React.FC<ElectricityTimingConfiguratorProps
     const setNoPowerCut = (phase: PhaseKey, week: WeekKey, noPowerCut: boolean) => {
         updatePhase(phase, current => {
             const nextWindows = noPowerCut ? [] : [defaultOffWindow()];
-            if (week === 'A') return { ...current, weekAOffWindows: nextWindows };
-            return { ...current, weekBOffWindows: nextWindows };
+            return week === 'A' ? { ...current, weekAOffWindows: nextWindows } : { ...current, weekBOffWindows: nextWindows };
         });
     };
 
     const setWeekTime = (phase: PhaseKey, week: WeekKey, field: 'startTime' | 'endTime', value: string) => {
         updatePhase(phase, current => {
-            const currentWindows = week === 'A' ? current.weekAOffWindows : (current.weekBOffWindows || []);
-            const base = currentWindows[0] || defaultOffWindow();
+            const base = weekWindows(current, week)[0] || defaultOffWindow();
             const updated = [{ ...base, [field]: value }];
-            if (week === 'A') return { ...current, weekAOffWindows: updated };
-            return { ...current, weekBOffWindows: updated };
+            return week === 'A' ? { ...current, weekAOffWindows: updated } : { ...current, weekBOffWindows: updated };
         });
     };
 
@@ -161,29 +134,23 @@ const ElectricityTimingConfigurator: React.FC<ElectricityTimingConfiguratorProps
             ...current,
             patternMode: enabled ? 'ROTATIONAL' : 'FIXED_WEEKLY',
             alternateWeeklyPattern: enabled,
-            weekBOffWindows: enabled ? current.weekBOffWindows : []
+            weekBOffWindows: enabled ? current.weekBOffWindows : [],
         }));
     };
 
     const summaries = useMemo(() => ({
-        singlePhase: {
-            weekA: summarizeWeek(draft.singlePhase.weekAOffWindows),
-            weekB: summarizeWeek(draft.singlePhase.weekBOffWindows || [])
-        },
-        threePhase: {
-            weekA: summarizeWeek(draft.threePhase.weekAOffWindows),
-            weekB: summarizeWeek(draft.threePhase.weekBOffWindows || [])
-        }
+        singlePhase: { A: summarizeWeek(weekWindows(draft.singlePhase, 'A')), B: summarizeWeek(weekWindows(draft.singlePhase, 'B')) },
+        threePhase: { A: summarizeWeek(weekWindows(draft.threePhase, 'A')), B: summarizeWeek(weekWindows(draft.threePhase, 'B')) },
     }), [draft]);
 
     const errors = useMemo(() => {
         const list: string[] = [];
-        (['singlePhase', 'threePhase'] as PhaseKey[]).forEach(phase => {
-            const aError = summaries[phase].weekA.error;
-            if (aError) list.push(`${phaseTitle(phase)} Week A: ${aError}`);
+        PHASES.forEach(phase => {
+            const aError = summaries[phase].A.error;
+            if (aError) list.push(`${PHASE_TITLE[phase]}${draft[phase].alternateWeeklyPattern ? ' · आठवडा अ' : ''}: ${aError}`);
             if (draft[phase].alternateWeeklyPattern) {
-                const bError = summaries[phase].weekB.error;
-                if (bError) list.push(`${phaseTitle(phase)} Week B: ${bError}`);
+                const bError = summaries[phase].B.error;
+                if (bError) list.push(`${PHASE_TITLE[phase]} · आठवडा ब: ${bError}`);
             }
         });
         return list;
@@ -193,172 +160,67 @@ const ElectricityTimingConfigurator: React.FC<ElectricityTimingConfiguratorProps
 
     const save = () => {
         if (hasErrors) {
-            setMessage('Fix invalid times before saving.');
+            setMessage('वेळ दुरुस्त करा, मग जतन करा.');
             return;
         }
-        onUpdate({
-            ...profile,
-            electricityTiming: {
-                ...draft,
-                updatedAt: systemClock.nowISO()
-            }
-        });
+        onUpdate({ ...profile, electricityTiming: { ...draft, updatedAt: systemClock.nowISO() } });
         setDirty(false);
-        setMessage('Electricity timing saved.');
+        setMessage('वीज वेळ जतन झाली ✓');
     };
 
     const reset = () => {
         setDraft(normalizeConfig(profile.electricityTiming));
         setDirty(false);
-        setMessage('Draft reset.');
+        setMessage('पूर्वीसारखं केलं');
     };
 
     return (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-4">
-            <div className="flex items-center gap-2">
-                <Zap size={18} className="text-amber-500" />
-                <div>
-                    <h4 className="font-bold text-slate-800">Electricity Timing</h4>
-                    <p className="text-xs text-slate-500">Simple setup: set OFF time for Week A and optional Week B.</p>
-                </div>
-            </div>
-
-            {(['singlePhase', 'threePhase'] as PhaseKey[]).map(phase => {
+        <div className="space-y-3" data-testid="power-timing">
+            {PHASES.map(phase => {
                 const phaseData = draft[phase];
-                const weekAWindow = phaseData.weekAOffWindows[0];
-                const weekBWindow = phaseData.weekBOffWindows?.[0];
-                const weekASummary = summaries[phase].weekA;
-                const weekBSummary = summaries[phase].weekB;
-
+                const alternate = phaseData.alternateWeeklyPattern;
                 return (
-                    <div key={phase} className="rounded-xl border border-slate-200 p-3 space-y-3">
-                        <div className="flex items-center justify-between">
-                            <p className="font-bold text-slate-800">{phaseTitle(phase)}</p>
-                            <div className="text-right text-xs text-slate-500">
-                                <p>Week A: {weekLabel(phaseData, 'A')}</p>
-                                {phaseData.alternateWeeklyPattern && <p>Week B: {weekLabel(phaseData, 'B')}</p>}
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-2">
-                                <p className="text-emerald-700 font-bold">Available</p>
-                                <p className="text-slate-700">{formatHours(weekASummary.onMinutes)}</p>
-                            </div>
-                            <div className="rounded-lg bg-red-50 border border-red-100 p-2">
-                                <p className="text-red-700 font-bold">Load Shedding</p>
-                                <p className="text-slate-700">{formatHours(weekASummary.offMinutes)}</p>
-                            </div>
-                        </div>
-
-                        <div className="rounded-lg border border-slate-200 p-2 space-y-2">
-                            <p className="text-xs font-bold text-slate-600">Week A</p>
-                            <label className="flex items-center gap-2 text-xs text-slate-600">
-                                <input
-                                    type="checkbox"
-                                    checked={phaseData.weekAOffWindows.length === 0}
-                                    onChange={e => setNoPowerCut(phase, 'A', e.target.checked)}
-                                    className="rounded border-slate-300"
-                                />
-                                No daily power cut (24h available)
-                            </label>
-                            {phaseData.weekAOffWindows.length > 0 && (
-                                <div className="grid grid-cols-2 gap-2">
-                                    <input
-                                        type="time"
-                                        value={weekAWindow?.startTime || '12:00'}
-                                        onChange={e => setWeekTime(phase, 'A', 'startTime', e.target.value)}
-                                        className="w-full p-2 border border-slate-200 rounded-lg text-sm"
-                                    />
-                                    <input
-                                        type="time"
-                                        value={weekAWindow?.endTime || '18:00'}
-                                        onChange={e => setWeekTime(phase, 'A', 'endTime', e.target.value)}
-                                        className="w-full p-2 border border-slate-200 rounded-lg text-sm"
-                                    />
-                                </div>
+                    <GlassCard key={phase} testId={`phase-${phase}`}>
+                        <p className="m-0 flex items-center gap-2 text-[18px] font-extrabold text-stone-900">
+                            <span className="grid h-9 w-9 place-items-center rounded-xl bg-amber-100 text-amber-700"><Zap size={20} aria-hidden="true" /></span>
+                            {PHASE_TITLE[phase]}
+                        </p>
+                        <p className="m-0 mt-0.5 text-[13px] font-semibold text-stone-500">{PHASE_HINT[phase]}</p>
+                        <div className="mt-2.5 space-y-2.5">
+                            <WeekEditor id={`${phase}-A`} title={alternate ? 'आठवडा अ' : undefined}
+                                windows={phaseData.weekAOffWindows} summary={summaries[phase].A}
+                                onNoCut={v => setNoPowerCut(phase, 'A', v)} onTime={(f, v) => setWeekTime(phase, 'A', f, v)} />
+                            <SwitchRow on={alternate} onChange={v => setAlternateWeek(phase, v)} testId={`alternate-${phase}`}
+                                label="दर दुसऱ्या आठवड्याला वेळ बदलते (आठवडा अ / ब)" />
+                            {alternate && (
+                                <WeekEditor id={`${phase}-B`} title="आठवडा ब"
+                                    windows={weekWindows(phaseData, 'B')} summary={summaries[phase].B}
+                                    onNoCut={v => setNoPowerCut(phase, 'B', v)} onTime={(f, v) => setWeekTime(phase, 'B', f, v)} />
                             )}
                         </div>
-
-                        <label className="flex items-center gap-2 text-xs text-slate-600">
-                            <input
-                                type="checkbox"
-                                checked={phaseData.alternateWeeklyPattern}
-                                onChange={e => setAlternateWeek(phase, e.target.checked)}
-                                className="rounded border-slate-300"
-                            />
-                            Use alternate weekly pattern (Week B)
-                        </label>
-
-                        {phaseData.alternateWeeklyPattern && (
-                            <div className="rounded-lg border border-slate-200 p-2 space-y-2">
-                                <p className="text-xs font-bold text-slate-600">Week B</p>
-                                <div className="grid grid-cols-2 gap-2 text-xs">
-                                    <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-2">
-                                        <p className="text-emerald-700 font-bold">Available</p>
-                                        <p className="text-slate-700">{formatHours(weekBSummary.onMinutes)}</p>
-                                    </div>
-                                    <div className="rounded-lg bg-red-50 border border-red-100 p-2">
-                                        <p className="text-red-700 font-bold">Load Shedding</p>
-                                        <p className="text-slate-700">{formatHours(weekBSummary.offMinutes)}</p>
-                                    </div>
-                                </div>
-                                <label className="flex items-center gap-2 text-xs text-slate-600">
-                                    <input
-                                        type="checkbox"
-                                        checked={(phaseData.weekBOffWindows?.length ?? 0) === 0}
-                                        onChange={e => setNoPowerCut(phase, 'B', e.target.checked)}
-                                        className="rounded border-slate-300"
-                                    />
-                                    No daily power cut (24h available)
-                                </label>
-                                {(phaseData.weekBOffWindows?.length ?? 0) > 0 && (
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <input
-                                            type="time"
-                                            value={weekBWindow?.startTime || '12:00'}
-                                            onChange={e => setWeekTime(phase, 'B', 'startTime', e.target.value)}
-                                            className="w-full p-2 border border-slate-200 rounded-lg text-sm"
-                                        />
-                                        <input
-                                            type="time"
-                                            value={weekBWindow?.endTime || '18:00'}
-                                            onChange={e => setWeekTime(phase, 'B', 'endTime', e.target.value)}
-                                            className="w-full p-2 border border-slate-200 rounded-lg text-sm"
-                                        />
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
+                    </GlassCard>
                 );
             })}
 
             {hasErrors && (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-600">
-                    {errors.map(error => <p key={error}>{error}</p>)}
+                <div className="rounded-2xl bg-rose-50 p-3 text-[14px] font-extrabold text-rose-700" data-testid="power-errors">
+                    {errors.map(error => <p key={error} className="m-0">{error}</p>)}
                 </div>
             )}
 
-            <div className="flex items-center justify-end gap-2">
-                <button
-                    onClick={reset}
-                    disabled={!dirty}
-                    className="px-4 py-2 rounded-lg border border-slate-200 text-sm font-bold text-slate-600 disabled:opacity-50"
-                >
-                    Reset
-                </button>
-                <button
-                    onClick={save}
-                    disabled={!dirty || hasErrors}
-                    className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-bold disabled:opacity-50"
-                >
-                    Save
-                </button>
+            <div className="grid grid-cols-2 gap-2">
+                <Tap onClick={reset} disabled={!dirty} data-testid="power-reset"
+                    className="flex min-h-[52px] items-center justify-center gap-1.5 rounded-full bg-white text-[15px] font-extrabold text-stone-700 ring-1 ring-stone-300 disabled:opacity-40">
+                    <RotateCcw size={18} aria-hidden="true" />पूर्वीसारखं करा
+                </Tap>
+                <Tap onClick={save} disabled={!dirty || hasErrors} data-testid="power-save" rippleColor="rgba(255,255,255,0.35)"
+                    className="flex min-h-[52px] items-center justify-center gap-1.5 rounded-full bg-emerald-700 text-[15px] font-extrabold text-white disabled:opacity-40">
+                    <Save size={18} aria-hidden="true" />जतन करा
+                </Tap>
             </div>
 
             {message && (
-                <p className={`text-xs font-bold ${hasErrors ? 'text-red-600' : 'text-emerald-600'}`}>
+                <p className={`m-0 text-center text-[14px] font-extrabold ${hasErrors ? 'text-rose-700' : 'text-emerald-800'}`} role="status" data-testid="power-msg">
                     {message}
                 </p>
             )}

@@ -2,15 +2,17 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Sub-plan 04 Task 6 — extracted from MachineryManager's inline add form
- * in `pages/ProfilePage.tsx`. Used only by MachinesSection.
+ * "नवीन यंत्र" — the add form on the यंत्रं page.
+ *
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I7 / WP-5). The approved look with every real
+ * field: name, type (ट्रॅक्टर / फवारणी यंत्र / रोटाव्हेटर / हार्वेस्टर), own or rented, and the tank in
+ * litres for a sprayer or tractor. It edits the draft it is given; MachinesSection saves it.
  */
-
 import React from 'react';
-import { X, Cylinder } from 'lucide-react';
-import { FarmMachinery } from '../../../types';
-import Button from '../../../shared/components/ui/Button';
-import { useLanguage } from '../../../i18n/LanguageContext';
+import { X } from 'lucide-react';
+import type { FarmMachinery } from '../../../domain/types/farm.types';
+import { BigButton, ChoiceChips, GlassCard, Tap, TextField } from './hubUi';
+import { MACHINE_TYPES, MACHINE_TYPE_LABEL, OWNERSHIP_LABEL } from './setupLabels';
 
 interface AddMachineWizardProps {
     newMachine: Partial<FarmMachinery>;
@@ -20,60 +22,32 @@ interface AddMachineWizardProps {
 }
 
 const AddMachineWizard: React.FC<AddMachineWizardProps> = ({ newMachine, onChange, onSave, onCancel }) => {
-    const { t } = useLanguage();
+    const type = newMachine.type ?? 'Tractor';
+    const hasTank = type === 'Sprayer' || type === 'Tractor';
     return (
-        <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-lg animate-in fade-in ring-1 ring-emerald-50 space-y-3">
-            <div className="flex justify-between items-center">
-                <h4 className="text-xs font-bold text-emerald-600 uppercase">{t('profile.newMachine')}</h4>
-                <button onClick={onCancel}><X size={16} className="text-slate-400" /></button>
+        <GlassCard className="ring-2 ring-amber-300" testId="machine-form">
+            <div className="flex items-center justify-between">
+                <p className="m-0 text-[17px] font-extrabold text-stone-900">नवीन यंत्र</p>
+                <Tap onClick={onCancel} aria-label="बंद करा" data-testid="machine-cancel" className="grid h-11 w-11 place-items-center rounded-full text-stone-500 ring-1 ring-stone-200">
+                    <X size={20} aria-hidden="true" />
+                </Tap>
             </div>
-            <input
-                placeholder="Name (e.g. John Deere 5050)"
-                autoFocus
-                className="w-full p-2.5 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500"
-                value={newMachine.name || ''}
-                onChange={e => onChange({ ...newMachine, name: e.target.value })}
-            />
-            <div className="flex gap-2">
-                <select
-                    className="flex-1 p-2.5 border border-slate-200 rounded-xl bg-white text-sm outline-none"
-                    value={newMachine.type}
-                    onChange={e => onChange({ ...newMachine, type: e.target.value as any })}
-                >
-                    <option value="Tractor">Tractor</option>
-                    <option value="Sprayer">Sprayer</option>
-                    <option value="Rotavator">Rotavator</option>
-                    <option value="Harvester">Harvester</option>
-                </select>
-                <select
-                    className="w-32 p-2.5 border border-slate-200 rounded-xl bg-white text-sm outline-none"
-                    value={newMachine.ownership}
-                    onChange={e => onChange({ ...newMachine, ownership: e.target.value as any })}
-                >
-                    <option value="Owned">{t('profile.owned')}</option>
-                    <option value="Rented">{t('profile.rented')}</option>
-                </select>
+            <div className="mt-3 space-y-3">
+                <TextField label="यंत्राचं नाव *" value={newMachine.name || ''} placeholder="उदा. जॉन डियर 5050" testId="machine-name"
+                    onChange={v => onChange({ ...newMachine, name: v })} />
+                <p className="m-0 text-[13.5px] font-extrabold text-stone-700">प्रकार</p>
+                <ChoiceChips testId="machine-type" value={type} onPick={v => onChange({ ...newMachine, type: v })}
+                    items={MACHINE_TYPES.map(k => [k, MACHINE_TYPE_LABEL[k]] as const)} />
+                <ChoiceChips testId="machine-own" value={newMachine.ownership ?? 'Owned'} onPick={v => onChange({ ...newMachine, ownership: v })}
+                    items={[['Owned', OWNERSHIP_LABEL.Owned], ['Rented', OWNERSHIP_LABEL.Rented]] as const} />
+                {hasTank && (
+                    <TextField label="टाकी (लिटर)" type="number" value={newMachine.capacity != null && !Number.isNaN(newMachine.capacity) ? String(newMachine.capacity) : ''}
+                        placeholder={type === 'Sprayer' ? 'उदा. 200' : 'उदा. 600'} testId="machine-tank"
+                        onChange={v => onChange({ ...newMachine, capacity: v === '' ? undefined : parseFloat(v) })} />
+                )}
+                <BigButton onClick={onSave} testId="machine-save" disabled={!newMachine.name?.trim()}>यंत्र जतन करा</BigButton>
             </div>
-
-            {/* Capacity for Sprayers */}
-            {(newMachine.type === 'Sprayer' || newMachine.type === 'Tractor') && (
-                <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">{t('profile.tankCapacity')}</label>
-                    <div className="relative">
-                        <input
-                            type="number"
-                            placeholder={newMachine.type === 'Sprayer' ? 'e.g. 200' : 'e.g. 600'}
-                            className="w-full mt-1 p-2.5 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-emerald-500 pl-9"
-                            value={newMachine.capacity || ''}
-                            onChange={e => onChange({ ...newMachine, capacity: parseFloat(e.target.value) })}
-                        />
-                        <Cylinder size={16} className="absolute left-3 top-4 text-slate-400" />
-                    </div>
-                </div>
-            )}
-
-            <Button onClick={onSave} className="w-full py-3 text-xs">{t('profile.saveMachine')}</Button>
-        </div>
+        </GlassCard>
     );
 };
 

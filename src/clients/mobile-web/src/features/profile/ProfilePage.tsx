@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Sprout, Zap, Tractor, FlaskConical, ArrowLeft, Globe, Shield, Download, Trash2, CreditCard, Mic, BookOpen } from 'lucide-react';
+import { User, Sprout, Zap, Tractor, FlaskConical, Globe, Shield, Download, Trash2, CreditCard, Mic, BookOpen, Check } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useFarmContext } from '../../core/session/FarmContext';
@@ -30,8 +30,22 @@ import { useCropPlotState } from './hooks/useCropPlotState';
 import { useFarmAdminState } from './hooks/useFarmAdminState';
 import SubscriptionCard from '../admin/billing/SubscriptionCard';
 import { buildSettingsExtraIds } from './settingsItems';
+import { PageBar, SANS, Tap } from './components/hubUi';
 
 import type { CropProfile, FarmerProfile } from '../../types';
+import { VerificationStatus } from '../../domain/types/farm.types';
+
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I7 / WP-5) — one plain Marathi title per hub
+ * page, the same words on the hub row and on the page's title bar (no English doubling).
+ */
+const HUB_TITLE: Record<'identity' | 'structure' | 'utils' | 'machines' | 'health', string> = {
+    identity: 'माझी ओळख',
+    structure: 'पिकं आणि प्लॉट',
+    utils: 'पाणी आणि वीज',
+    machines: 'यंत्रं',
+    health: 'माती व पाणी अहवाल',
+};
 
 /**
  * The eight tabs rendered by ProfilePage. Exported so tests (and any
@@ -90,7 +104,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     initialTab,
 }) => {
     const { logout, session: authSession } = useAuth();
-    const { t, language, setLanguage } = useLanguage();
+    const { language, setLanguage } = useLanguage();
     // null = the Profile menu; a tab = that section's own page (with a back arrow).
     const [activeTab, setActiveTab] = useState<ProfileTab | null>(initialTab ?? null);
     // extra (settings) pages folded into Profile — e.g. 'language'.
@@ -171,12 +185,15 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
         if (crops.length > 0) s.add('structure');
         if ((profile.waterResources?.length ?? 0) > 0) s.add('utils');
         if ((profile.machineries?.length ?? 0) > 0) s.add('machines');
-        // 'health' (soil reports) has no persisted done-signal yet — stays pending.
+        // 'health' (soil reports) cannot be done: report upload is not built (P5), so it is shown as
+        // "लवकरच" and left out of the setup count rather than standing as a step nobody can finish.
         return s;
     }, [profile.name, profile.village, profile.waterResources, profile.machineries, crops.length]);
 
+    const plotCount = crops.reduce((n, c) => n + c.plots.length, 0);
+
     return (
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-4 pb-[calc(8rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))]">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-4 pb-[calc(8rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))]" style={{ fontFamily: SANS }}>
             {farmAdmin.myFarm && (
                 <FarmInviteQrSheet
                     isOpen={farmAdmin.showInviteQr}
@@ -205,8 +222,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 const activePlot = activeCrop?.plots.find(p => p.id === cropPlot.mappingPlotId!.plotId);
                 return (
                     <BoundaryMapModal
-                        headerCaption={`${activeCrop?.name || 'Crop'} · ${activePlot?.name || 'Plot'}`}
-                        headerTitle="Draw plot boundary"
+                        headerCaption={`${activeCrop?.name || 'पीक'} · ${activePlot?.name || 'प्लॉट'}`}
+                        headerTitle="प्लॉटची हद्द आखा"
                         onClose={() => cropPlot.setMappingPlotId(null)}
                         onPlotComplete={(geoData) => cropPlot.handleSaveMap(cropPlot.mappingPlotId!.cropId, cropPlot.mappingPlotId!.plotId, geoData)}
                         onDone={() => cropPlot.setMappingPlotId(null)}
@@ -217,8 +234,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
 
             {farmAdmin.showFarmBoundary && farmAdmin.myFarm && (
                 <BoundaryMapModal
-                    headerCaption={`Farm · ${farmAdmin.myFarm.name}`}
-                    headerTitle="Draw farm boundary"
+                    headerCaption={`शेत · ${farmAdmin.myFarm.name}`}
+                    headerTitle="शेताची हद्द आखा"
                     onClose={() => { farmAdmin.setShowFarmBoundary(false); farmAdmin.setBoundaryError(null); }}
                     onPlotComplete={farmAdmin.handleSaveFarmBoundary}
                     onDone={farmAdmin.handleFinishFarmBoundary}
@@ -231,7 +248,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 const sections: HubSection[] = [
                     {
                         id: 'identity',
-                        label: t('profile.farmerIdentity'),
+                        label: HUB_TITLE.identity,
                         icon: <User size={20} />,
                         body: (
                             <IdentitySection
@@ -256,7 +273,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     },
                     {
                         id: 'structure',
-                        label: t('profile.cropsAndPlots'),
+                        label: HUB_TITLE.structure,
                         icon: <Sprout size={20} />,
                         body: (
                             <StructureSection
@@ -278,17 +295,21 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             />
                         ),
                     },
-                    { id: 'utils', label: t('profile.waterAndPower'), icon: <Zap size={20} />, body: <UtilitiesSection profile={profile} onUpdate={onUpdateProfile} /> },
-                    { id: 'machines', label: t('profile.machinery'), icon: <Tractor size={20} />, body: <MachinesSection profile={profile} onUpdate={onUpdateProfile} /> },
-                    { id: 'health', label: 'माती व पीक आरोग्य · Soil & Crop Health', icon: <FlaskConical size={20} />, body: <HealthSection profile={profile} onUpdate={onUpdateProfile} /> },
+                    { id: 'utils', label: HUB_TITLE.utils, icon: <Zap size={20} />, body: <UtilitiesSection profile={profile} onUpdate={onUpdateProfile} /> },
+                    { id: 'machines', label: HUB_TITLE.machines, icon: <Tractor size={20} />, body: <MachinesSection profile={profile} onUpdate={onUpdateProfile} /> },
+                    { id: 'health', label: HUB_TITLE.health, icon: <FlaskConical size={20} />, body: <HealthSection /> },
                 ];
 
+                // One plain line per row, from the farmer's REAL data (no sample values).
+                const waterCount = profile.waterResources?.length ?? 0;
+                const motorCount = profile.motors?.length ?? 0;
+                const machineCount = profile.machineries?.length ?? 0;
                 const subtitleFor = (id: ProfileTab): string => {
-                    if (id === 'identity') return doneIds.has('identity') ? 'माहिती भरली · Details filled' : 'माहिती भरा · Fill details';
-                    if (id === 'structure') return crops.length > 0 ? `${crops.length} प्लॉट · plots` : 'पिके जोडा · Add crops';
-                    if (id === 'utils') return 'विहीर, मोटर, वीज · Water & power';
-                    if (id === 'machines') return 'यंत्रे जोडा · Add machinery';
-                    if (id === 'health') return 'माती अहवाल · Soil reports';
+                    if (id === 'identity') return doneIds.has('identity') ? 'नाव आणि गाव भरलं' : 'नाव आणि गाव भरा';
+                    if (id === 'structure') return crops.length > 0 ? `${crops.length} पिकं · ${plotCount} प्लॉट` : 'पिकं आणि प्लॉट जोडा';
+                    if (id === 'utils') return waterCount > 0 ? `${waterCount} स्रोत · ${motorCount} मोटर · विजेच्या वेळा` : 'विहीर, मोटर, विजेच्या वेळा';
+                    if (id === 'machines') return machineCount > 0 ? `${machineCount} यंत्रं` : 'ट्रॅक्टर, फवारणी यंत्र';
+                    if (id === 'health') return 'अहवाल जोडण्याची सोय अजून नाही';
                     return '';
                 };
                 const SETUP_HELP: Partial<Record<ProfileTab, { what: string; do: string; why: string }>> = {
@@ -296,12 +317,17 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     structure: { what: 'तुम्ही काय पिकवता आणि कुठे — पिके व जमिनीचे तुकडे (प्लॉट).', do: 'पीक निवडा, किती प्लॉट सांगा, प्रत्येकाची सीमा नकाशावर काढा.', why: 'प्रत्येक प्लॉटची रोजची नोंद, हवामान व खर्च वेगळे कळतात.' },
                     utils: { what: 'तुमच्या शेतातील पाण्याचे स्रोत आणि वीज जोडणी.', do: 'विहीर किंवा बोअर, मोटर किती HP, आणि वीज जोडणी भरा.', why: 'पाणी व वीज खर्चाचं नियोजन नीट करता येतं.' },
                     machines: { what: 'तुमची स्वतःची किंवा भाड्याची शेती-यंत्रे.', do: 'प्रत्येक यंत्र जोडा — ट्रॅक्टर, पंप, फवारणी यंत्र वगैरे.', why: 'यंत्रांचा वापर आणि खर्च नोंदवता येतो.' },
-                    health: { what: 'तुमच्या मातीची तपासणी आणि पिकाचं आरोग्य.', do: 'माती अहवाल जोडा — अहवालाचा फोटो काढा किंवा मूल्ये भरा.', why: 'योग्य खत आणि औषधाचा नेमका सल्ला मिळतो.' },
+                    // P5: no promise of an upload that does not exist.
+                    health: { what: 'तुमच्या मातीची आणि पाण्याची तपासणी.', do: 'अहवाल जोडण्याची सोय अजून तयार नाही — लवकरच.', why: 'तयार झाल्यावर तुमच्या मातीप्रमाणे खताचा विचार करता येईल.' },
                 };
-                const menuItems: HubMenuItem[] = sections.map(s => ({ id: s.id, label: s.label, icon: s.icon, subtitle: subtitleFor(s.id), done: doneIds.has(s.id), help: SETUP_HELP[s.id] }));
+                const menuItems: HubMenuItem[] = sections.map(s => ({
+                    id: s.id, label: s.label, icon: s.icon, subtitle: subtitleFor(s.id),
+                    done: doneIds.has(s.id), soon: s.id === 'health', help: SETUP_HELP[s.id],
+                }));
 
-                // Farm-setup progress — one honest count over the setup sections.
-                const setupOrder = sections.map(s => s.id);
+                // Farm-setup progress — one honest count over the setup sections that CAN be done
+                // ('health' cannot: report upload is not built).
+                const setupOrder = sections.map(s => s.id).filter(id => id !== 'health');
                 const doneCount = setupOrder.filter(id => doneIds.has(id)).length;
                 const nextId = setupOrder.find(id => !doneIds.has(id));
                 const setupProgress = {
@@ -309,25 +335,22 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     total: setupOrder.length,
                     percent: Math.round((doneCount / setupOrder.length) * 100),
                     nextId,
-                    nextLabel: nextId ? sections.find(s => s.id === nextId)?.label.split('·')[0].trim() : undefined,
+                    nextLabel: nextId ? sections.find(s => s.id === nextId)?.label : undefined,
                 };
 
                 const langLabel = language === 'mr' ? 'मराठी' : 'English';
                 // Billing farm = the app's current farm (or first membership) — MyFarmDto carries the subscription.
                 const billingFarm = farmAdmin.myMemberships.find(m => m.farmId === profileFarmId) ?? farmAdmin.myMemberships[0];
                 const isOwner = billingFarm?.role === 'PrimaryOwner';
+                // Plain Marathi only (founder T1–T3: no English doubling). Every new string is PROPOSED.
                 const settingsMeta: Record<string, { label: string; icon: React.ReactNode; subtitle?: string }> = {
-                    language: { label: 'भाषा · Language', icon: <Globe size={20} />, subtitle: langLabel },
-                    // Both strings already exist in the app (nav 'सेटिंग्ज'; Voice Diary bundle 'आवाजी डायरी').
-                    'voice-diary': { label: 'सेटिंग्ज · Settings', icon: <BookOpen size={20} />, subtitle: 'आवाजी डायरी · Voice Diary' },
-                    consent: { label: 'गोपनीयता · Consent', icon: <Shield size={20} />, subtitle: 'तुमच्या परवानग्या · Your permissions' },
-                    export: { label: 'डेटा डाउनलोड · Export my data', icon: <Download size={20} />, subtitle: 'तुमच्या नोंदींची प्रत · A copy of your records' },
-                    erase: { label: 'डेटा पुसा · Erase my data', icon: <Trash2 size={20} />, subtitle: 'कायमचा पुसा · Permanent' },
-                    billing: { label: 'बिलिंग · Billing', icon: <CreditCard size={20} />, subtitle: 'तुमचा प्लॅन · Your plan' },
-                    // English-only placeholder copy (Global Constraint: never compose new
-                    // Marathi) — every other row here already had an existing Marathi
-                    // string to reuse verbatim; this one does not.
-                    'ai-drafts': { label: 'AI Drafts', icon: <Mic size={20} />, subtitle: 'Review voice notes' },
+                    language: { label: 'भाषा', icon: <Globe size={22} />, subtitle: langLabel },
+                    'voice-diary': { label: 'आवाज नोंदी', icon: <BookOpen size={22} />, subtitle: 'आवाजी डायरी आणि नोंदी ठेवण्याची परवानगी' },
+                    consent: { label: 'गोपनीयता व संमती', icon: <Shield size={22} />, subtitle: 'तुमच्या परवानग्या' },
+                    export: { label: 'डेटा डाउनलोड', icon: <Download size={22} />, subtitle: 'तुमच्या नोंदींची प्रत' },
+                    erase: { label: 'डेटा पुसा', icon: <Trash2 size={22} />, subtitle: 'कायमचा पुसा' },
+                    billing: { label: 'बिलिंग', icon: <CreditCard size={22} />, subtitle: 'तुमचा प्लॅन' },
+                    'ai-drafts': { label: 'तपासायच्या आवाज नोंदी', icon: <Mic size={22} />, subtitle: 'नेट नसताना बोललेल्या नोंदी — तपासून जतन करा' },
                 };
                 const settingsItems = buildSettingsExtraIds(isOwner).map(id => ({ id, ...settingsMeta[id] }));
 
@@ -340,33 +363,20 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     setActiveExtra(id); // 'language' | 'billing' — folded sub-screens
                 };
 
-                // shared compact header with a clearly-labelled back button
-                const header = (title: string, onBack: () => void) => (
-                    <div className="sticky top-0 z-20 -mx-4 mb-3 flex items-center gap-3 bg-[#f6f7f5] px-4 pb-3 pt-2 shadow-[0_8px_14px_-12px_rgba(20,40,30,0.35)] sm:-mx-6 sm:px-6">
-                        <button type="button" onClick={onBack} className="flex items-center gap-1.5 rounded-full bg-white py-2 pl-2.5 pr-3.5 text-[13px] font-bold text-slate-700 shadow-sm ring-1 ring-slate-100 transition-all active:scale-95">
-                            <ArrowLeft size={16} /> मागे
-                        </button>
-                        <div className="flex-1 truncate pr-16 text-center text-[14px] font-bold text-slate-800">{title}</div>
-                    </div>
-                );
-
                 if (activeExtra === 'language') {
-                    const langs: { code: 'mr' | 'en'; native: string; label: string }[] = [
-                        { code: 'mr', native: 'मराठी', label: 'Marathi' },
-                        { code: 'en', native: 'English', label: 'English' },
+                    const langs: { code: 'mr' | 'en'; native: string }[] = [
+                        { code: 'mr', native: 'मराठी' },
+                        { code: 'en', native: 'English' },
                     ];
                     return (
                         <div>
-                            {header('भाषा · Language', () => setActiveExtra(null))}
-                            <p className="mb-3 px-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">भाषा निवडा · Choose language</p>
+                            <PageBar title="भाषा" onBack={() => setActiveExtra(null)} />
                             <div className="space-y-2.5">
                                 {langs.map(l => (
-                                    <button key={l.code} type="button" onClick={() => setLanguage(l.code)}
-                                        className={`flex w-full items-center gap-3 rounded-2xl border p-4 text-left transition-all active:scale-[0.98] ${language === l.code ? 'border-emerald-300 bg-emerald-50 shadow-sm' : 'border-slate-200 bg-white'}`}>
-                                        <span className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${language === l.code ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}><Globe size={20} /></span>
-                                        <span className="flex-1"><span className="block text-[15px] font-bold text-slate-800">{l.native}</span><span className="block text-[11px] text-slate-400">{l.label}</span></span>
-                                        {language === l.code && <span className="text-xs font-bold text-emerald-700">निवडले ✓</span>}
-                                    </button>
+                                    <Tap key={l.code} onClick={() => setLanguage(l.code)} aria-pressed={language === l.code} data-testid={`lang-${l.code}`}
+                                        className={`flex min-h-[60px] w-full items-center justify-between rounded-2xl px-4 text-[18px] font-extrabold ${language === l.code ? 'bg-emerald-50 text-emerald-900 ring-2 ring-emerald-500' : 'bg-white text-stone-800 ring-1 ring-stone-200'}`}>
+                                        {l.native}{language === l.code && <Check size={22} aria-hidden="true" />}
+                                    </Tap>
                                 ))}
                             </div>
                         </div>
@@ -375,7 +385,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 if (activeExtra === 'billing') {
                     return (
                         <div>
-                            {header('बिलिंग · Billing', () => setActiveExtra(null))}
+                            <PageBar title="बिलिंग" onBack={() => setActiveExtra(null)} />
                             <SubscriptionCard
                                 subscription={billingFarm?.subscription}
                                 role={billingFarm?.role ?? ''}
@@ -390,7 +400,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     return (
                         <SetupHubMenu
                             farmerName={profile.name ?? ''}
-                            verified={doneIds.has('identity')}
+                            /* One truth about verification (PLR-D9 T4): a filled name + village is NOT a verified
+                               identity — only a government-verified one is called that. */
+                            verified={profile.verificationStatus === VerificationStatus.GovernmentVerified}
                             farmName={farmAdmin.myFarm?.name ?? undefined}
                             farms={farmAdmin.myMemberships}
                             familyName={profile.name ? `${profile.name.split(' ')[0]} कुटुंब` : undefined}
@@ -414,8 +426,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     );
                 }
                 return (
-                    <div>
-                        {header(current.label, () => setActiveTab(null))}
+                    <div data-testid={`hub-page-${current.id}`}>
+                        <PageBar title={current.label} onBack={() => setActiveTab(null)} />
                         {current.body}
                     </div>
                 );

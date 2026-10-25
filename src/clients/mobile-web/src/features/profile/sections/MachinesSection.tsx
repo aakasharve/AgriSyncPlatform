@@ -2,94 +2,81 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Sub-plan 04 Task 6 — Machines tab section.
+ * "यंत्रं" — the farm's own and rented machines.
  *
- * Extracted verbatim from `pages/ProfilePage.tsx`'s MachineryManager. The
- * AddMachineWizard component lives at `../components/AddMachineWizard.tsx`
- * and renders the inline add form when triggered.
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I7 / WP-5). The approved look on the REAL
+ * `profile.machineries`: each machine (name, own/rented, type, tank litres), remove it, add one
+ * (`AddMachineWizard`). Every change goes out through `onUpdate` (the page's `onUpdateProfile`).
+ * Machines are saved on this phone only (I3), and the page says so.
  */
-
 import React, { useState } from 'react';
-import { Plus, Trash2, X, Tractor, Wrench } from 'lucide-react';
-import { FarmerProfile, FarmMachinery } from '../../../types';
-import Button from '../../../shared/components/ui/Button';
-import { useLanguage } from '../../../i18n/LanguageContext';
+import { Plus, Tractor, Trash2, Wrench } from 'lucide-react';
+import type { FarmerProfile, FarmMachinery } from '../../../domain/types/farm.types';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import AddMachineWizard from '../components/AddMachineWizard';
+import { BigButton, GlassCard, IconDot, Tap, ThisPhoneOnly } from '../components/hubUi';
+import { MACHINE_TYPE_LABEL, OWNERSHIP_LABEL } from '../components/setupLabels';
 
 interface MachinesSectionProps {
     profile: FarmerProfile;
     onUpdate: (p: FarmerProfile) => void;
 }
 
+const EMPTY_DRAFT: Partial<FarmMachinery> = { type: 'Tractor', ownership: 'Owned' };
+
 const MachinesSection: React.FC<MachinesSectionProps> = ({ profile, onUpdate }) => {
-    const { t } = useLanguage();
     const [isAdding, setIsAdding] = useState(false);
-    const [newMachine, setNewMachine] = useState<Partial<FarmMachinery>>({ type: 'Tractor', ownership: 'Owned' });
+    const [newMachine, setNewMachine] = useState<Partial<FarmMachinery>>(EMPTY_DRAFT);
+    const machines = profile.machineries || [];
 
     const addMachine = () => {
-        if (!newMachine.name) return;
+        const name = newMachine.name?.trim();
+        if (!name) return;
         const machine: FarmMachinery = {
             id: `mach_${idGenerator.generate()}`,
-            name: newMachine.name,
+            name,
             type: newMachine.type || 'Tractor',
             ownership: newMachine.ownership || 'Owned',
-            capacity: newMachine.capacity
+            capacity: newMachine.capacity,
         };
-        const updatedMachines = [...(profile.machineries || []), machine];
-        onUpdate({ ...profile, machineries: updatedMachines });
+        onUpdate({ ...profile, machineries: [...machines, machine] });
         setIsAdding(false);
-        setNewMachine({ type: 'Tractor', ownership: 'Owned' });
+        setNewMachine(EMPTY_DRAFT);
     };
 
     const deleteMachine = (id: string) => {
-        const updatedMachines = (profile.machineries || []).filter(m => m.id !== id);
-        onUpdate({ ...profile, machineries: updatedMachines });
+        onUpdate({ ...profile, machineries: machines.filter(m => m.id !== id) });
     };
 
     return (
-        <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-            <div className="flex justify-between items-center px-1">
-                <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
-                    <Tractor size={24} className="text-orange-500" /> {t('profile.machinery')}
-                </h3>
-                <button onClick={() => setIsAdding(true)} className="text-emerald-600 font-bold text-xs flex items-center bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100 hover:bg-emerald-100">
-                    <Plus size={14} className="mr-1" /> {t('profile.addMachine')}
-                </button>
-            </div>
-
-            <div className="grid gap-3">
-                {(profile.machineries || []).map(m => (
-                    <div key={m.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-slate-100 rounded-lg text-slate-500">
-                                {m.type === 'Tractor' ? <Tractor size={20} /> : <Wrench size={20} />}
-                            </div>
-                            <div>
-                                <p className="font-bold text-slate-800">{m.name}</p>
-                                <p className="text-xs text-slate-500">
-                                    {m.ownership} • {m.type}
-                                    {m.capacity ? ` • ${m.capacity}L` : ''}
-                                </p>
-                            </div>
+        <div className="space-y-3" data-testid="hub-machines">
+            <ThisPhoneOnly />
+            {machines.map(m => (
+                <GlassCard key={m.id} testId={`machine-${m.id}`}>
+                    <div className="flex items-center gap-3">
+                        <IconDot tone="amber">{m.type === 'Tractor' ? <Tractor size={22} aria-hidden="true" /> : <Wrench size={22} aria-hidden="true" />}</IconDot>
+                        <div className="min-w-0 flex-1">
+                            <p className="m-0 text-[16px] font-extrabold text-stone-900">{m.name}</p>
+                            <p className="m-0 text-[13.5px] font-semibold text-stone-600">
+                                {OWNERSHIP_LABEL[m.ownership] ?? m.ownership} · {MACHINE_TYPE_LABEL[m.type] ?? m.type}
+                                {m.capacity ? ` · टाकी ${m.capacity} लिटर` : ''}
+                            </p>
                         </div>
-                        <button onClick={() => deleteMachine(m.id)} className="text-slate-300 hover:text-red-500"><Trash2 size={16} /></button>
+                        <Tap onClick={() => deleteMachine(m.id)} aria-label="हे यंत्र काढा" data-testid={`machine-remove-${m.id}`}
+                            className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-stone-500 ring-1 ring-stone-200"><Trash2 size={18} aria-hidden="true" /></Tap>
                     </div>
-                ))}
-                {(!profile.machineries || profile.machineries.length === 0) && (
-                    <div className="p-6 text-center text-slate-400 text-sm border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
-                        {t('profile.noMachinery')}
-                    </div>
-                )}
-            </div>
-
-            {isAdding && (
-                <AddMachineWizard
-                    newMachine={newMachine}
-                    onChange={setNewMachine}
-                    onSave={addMachine}
-                    onCancel={() => setIsAdding(false)}
-                />
+                </GlassCard>
+            ))}
+            {machines.length === 0 && !isAdding && (
+                <GlassCard testId="machines-empty">
+                    <p className="m-0 text-[15px] font-bold text-stone-700">अजून एकही यंत्र जोडलेलं नाही.</p>
+                </GlassCard>
+            )}
+            {isAdding ? (
+                <AddMachineWizard newMachine={newMachine} onChange={setNewMachine} onSave={addMachine}
+                    onCancel={() => { setIsAdding(false); setNewMachine(EMPTY_DRAFT); }} />
+            ) : (
+                <BigButton onClick={() => setIsAdding(true)} tone="white" testId="machine-add"><Plus size={20} aria-hidden="true" />यंत्र जोडा</BigButton>
             )}
         </div>
     );

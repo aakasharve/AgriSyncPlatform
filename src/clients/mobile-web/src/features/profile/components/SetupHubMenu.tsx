@@ -2,18 +2,22 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * SetupHubMenu — the Profile as a simple account-style menu. A profile
- * summary, a farm-setup progress card (real % from the farmer's data), the
- * farms list, and the setup sections as clean rows — each with a status
- * badge and a discreet "?" that opens a short, plain-language guide.
- * Built for a semi-literate farmer: one clear list, big rows, plain words.
+ * SetupHubMenu — "सेट-अप केंद्र", the hub reached from the header's Setup Hub button.
+ *
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I7 / WP-5). The founder-approved look (PLR-D9
+ * preview `SetupHubPage`): one title, one back, me, "शेत तयार करणं — X पैकी Y पूर्ण" with the next
+ * step, then plain groups. Every real row is kept: the setup sections (each with its status and the
+ * "?" guide), the farms list, "तुमच्या शेती" (switch / create / join — the SAME `FarmSwitcherSheet`,
+ * unchanged), कामगार व हजेरी, पैसे व हिशोब, रेफरल्स, every settings row (testid `hub-settings-<id>`)
+ * and बाहेर पडा. No English doubling. It claims "ओळख पडताळलेली" only when told `verified`.
  */
 import React, { useState } from 'react';
-import { ChevronRight, ArrowLeft, CheckCircle2, Check, MapPin, LogOut, BarChart3, Medal, Users, Sprout } from 'lucide-react';
+import { BarChart3, CheckCircle2, LogOut, MapPin, Medal, ShieldCheck, Sprout, Users } from 'lucide-react';
 import type { ProfileTab } from '../ProfilePage';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 import { FarmSwitcherSheet } from '../../context/components/FarmContextSwitcher';
 import FarmsSection from './FarmsSection';
+import { Chip, GlassCard, PageBar, RowLink, SANS, SectionHead, Tap } from './hubUi';
 
 export interface SetupHelp {
     what: string;
@@ -27,6 +31,8 @@ export interface HubMenuItem {
     icon: React.ReactNode;
     subtitle?: string;
     done?: boolean;
+    /** Not built yet: shows "लवकरच" instead of "बाकी" and is not counted as a setup step. */
+    soon?: boolean;
     help?: SetupHelp;
 }
 
@@ -47,25 +53,13 @@ interface SetupHubMenuProps {
     onOpenFarm?: (farmId: string) => void;
     onAddFarm?: () => void;
     /**
-     * spec: owner-oversight-loop (Task 12) — the "तुमच्या शेती · Your farms"
-     * row's farm-switcher data. `तुमच्या शेती` is copied verbatim from
-     * `FarmContextSwitcher.tsx` (already load-bearing there), never
-     * reinvented. All four fields are required together; omit any one to
-     * hide the row entirely rather than render a control that cannot act
-     * (this is ALSO how a single-farm — or zero-farm — account creates or
-     * joins a farm, so it is not gated on `farms.length`).
+     * spec: owner-oversight-loop (Task 12) — the "तुमच्या शेती" row's farm-switcher data. All four
+     * (farms, currentFarmId-or-first, onSwitchFarm, onCreateFarm, onJoinViaQr) are required together;
+     * omit any one to hide the row rather than render a control that cannot act.
      */
     currentFarmId?: string;
-    /** Switches the app's active farm — the exact handler `AppHeader`'s own
-     * farm-switcher trigger already calls (spec §2.1: "Only the trigger's
-     * shell changes" — this is a second trigger for the SAME sheet). */
     onSwitchFarm?: (farmId: string) => void;
-    /** Opens the SAME `FirstFarmWizard` instance `AppContent.tsx` owns —
-     * see `requestCreateFarmWizard()` (`app/hooks/useFarmContextState.ts`)
-     * for why this is an event dispatch, not a threaded prop. */
     onCreateFarm?: () => void;
-    /** The same `promptAndJoinFarmViaQr()` flow AppHeader's farm switcher
-     * already uses — reused, not reinvented. */
     onJoinViaQr?: () => void;
     language?: 'mr' | 'en';
     setupProgress?: SetupProgressData;
@@ -80,103 +74,61 @@ interface SetupHubMenuProps {
     logout: () => void;
 }
 
-const GroupLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <div className="mb-2.5 mt-5 px-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">{children}</div>
-);
-
-/** Farm-setup progress card — one honest bar over the setup sections. */
-const ProgressHero: React.FC<{ p: SetupProgressData; onNext: () => void }> = ({ p, onNext }) => (
-    <div className="relative mt-2 overflow-hidden rounded-[26px] border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-white p-5 shadow-[0_16px_32px_-22px_rgba(5,150,105,0.4)]">
-        <div className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-emerald-600">शेती तयारी · Farm setup</div>
-        <div className="mt-1.5 flex items-end gap-2.5">
-            <div className="text-[44px] font-black leading-[0.9] tracking-tight text-emerald-700 [font-variant-numeric:tabular-nums]">{p.percent}%</div>
-            <div className="pb-1.5 text-[12px] font-bold leading-tight text-slate-500">{p.total} पैकी {p.done} पूर्ण<br />{p.done} of {p.total} complete</div>
+/** "शेत तयार करणं" — one honest bar over the setup sections. Marathi `X पैकी Y` = Y out of X. */
+const ProgressCard: React.FC<{ p: SetupProgressData; onNext: () => void }> = ({ p, onNext }) => (
+    <GlassCard testId="hub-progress">
+        <div className="flex items-baseline justify-between gap-2">
+            <p className="m-0 text-[16px] font-extrabold text-stone-900">शेत तयार करणं</p>
+            <p className="m-0 text-[15px] font-extrabold text-emerald-800">{p.total} पैकी {p.done} पूर्ण</p>
         </div>
-        <div className="relative mt-3.5 h-2.5 overflow-hidden rounded-full bg-emerald-100">
-            <span className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-[width] duration-500" style={{ width: `${p.percent}%` }} />
+        <div className="mt-2 h-3 overflow-hidden rounded-full bg-stone-200">
+            <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-700 transition-[width] duration-500" style={{ width: `${p.percent}%` }} />
         </div>
         {p.done < p.total && p.nextLabel ? (
-            <div className="mt-3.5 flex items-center gap-2 text-[12.5px] text-slate-600">
-                <span className="truncate">पुढे · Next: <b className="font-extrabold text-emerald-800">{p.nextLabel}</b></span>
-                <button type="button" onClick={onNext} className="ml-auto flex flex-shrink-0 items-center gap-1.5 rounded-full bg-emerald-600 px-3.5 py-1.5 text-[11.5px] font-extrabold text-white shadow-[0_6px_14px_-6px_rgba(5,150,105,0.6)] transition-transform active:scale-95">
-                    सुरू करा <ChevronRight size={13} />
-                </button>
-            </div>
+            <Tap onClick={onNext} data-testid="hub-next" rippleColor="rgba(255,255,255,0.35)"
+                className="mt-3 flex min-h-[48px] w-full items-center justify-center rounded-full bg-gradient-to-r from-emerald-700 to-emerald-500 text-[15px] font-extrabold text-white shadow">
+                पुढचं: {p.nextLabel}
+            </Tap>
         ) : (
-            <div className="mt-3.5 flex items-center gap-1.5 text-[12.5px] font-bold text-emerald-700"><CheckCircle2 size={15} /> सर्व पूर्ण! छान काम.</div>
+            <p className="m-0 mt-3 flex items-center gap-1.5 text-[15px] font-extrabold text-emerald-800" data-testid="hub-all-done">
+                <CheckCircle2 size={18} aria-hidden="true" />सगळं पूर्ण! छान काम.
+            </p>
         )}
-    </div>
+    </GlassCard>
 );
 
-/** One setup section: clean row + status badge + a "?" that opens simple help. */
+/** One setup section: the row, its status, and a "?" that opens a short plain guide. */
 const SetupRow: React.FC<{ item: HubMenuItem; isNext: boolean; onSelect: () => void }> = ({ item, isNext, onSelect }) => {
     const [open, setOpen] = useState(false);
-    const done = !!item.done;
-    const tile = done ? 'bg-emerald-50 text-emerald-600'
-        : isNext ? 'bg-emerald-600 text-white shadow-[0_8px_16px_-8px_rgba(5,150,105,0.6)]'
-            : 'bg-slate-50 text-slate-400 ring-1 ring-slate-100';
+    const badge = item.done ? <Chip tone="green">पूर्ण</Chip> : item.soon ? <Chip tone="stone">लवकरच</Chip> : <Chip tone="amber">बाकी</Chip>;
     return (
-        <div className={`overflow-hidden rounded-[18px] border bg-white shadow-[0_1px_2px_rgba(20,40,30,0.05)] ${isNext ? 'border-emerald-200 border-l-[3px] border-l-emerald-600 shadow-[0_14px_26px_-18px_rgba(5,150,105,0.4)]' : 'border-slate-100'}`}>
-            <div className="flex items-center gap-3 p-3.5">
-                <button type="button" onClick={onSelect} className="flex min-w-0 flex-1 items-center gap-3.5 text-left transition-transform active:scale-[0.99]">
-                    <span className={`relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[13px] ${tile}`}>
-                        {item.icon}
-                        {done && <span className="absolute -bottom-1 -right-1 flex h-[19px] w-[19px] items-center justify-center rounded-full border-2 border-white bg-emerald-600 text-white"><Check size={11} strokeWidth={3} /></span>}
-                    </span>
+        <div className={`overflow-hidden rounded-2xl border bg-white shadow-[0_1px_2px_rgba(28,25,23,0.05)] ${isNext ? 'border-emerald-300 ring-2 ring-emerald-200' : 'border-stone-200/80'}`}
+            data-testid={`hub-row-${item.id}`}>
+            <div className="flex items-center gap-2 py-2.5 pl-3 pr-2.5">
+                <Tap onClick={onSelect} data-testid={`hub-open-${item.id}`} className="flex min-h-[48px] min-w-0 flex-1 items-center gap-3 text-left">
+                    <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${item.done ? 'bg-emerald-100 text-emerald-800' : isNext ? 'bg-emerald-600 text-white' : 'bg-stone-100 text-stone-600'}`}>{item.icon}</span>
                     <span className="min-w-0 flex-1">
-                        <span className="block line-clamp-2 text-[15px] font-bold leading-tight text-slate-800">{item.label}</span>
-                        {item.subtitle && <span className={`mt-0.5 block truncate text-[11.5px] ${isNext ? 'font-semibold text-emerald-700' : 'text-slate-400'}`}>{item.subtitle}</span>}
+                        <span className="block text-[16px] font-extrabold leading-tight text-stone-900">{item.label}</span>
+                        {item.subtitle && <span className="mt-0.5 block text-[13px] font-semibold leading-snug text-stone-600">{item.subtitle}</span>}
                     </span>
-                </button>
-                <span className={`flex-shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-extrabold tracking-wide ${done ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}>{done ? 'पूर्ण' : 'बाकी'}</span>
+                </Tap>
+                {badge}
                 {item.help && (
-                    <button type="button" aria-label="मदत · help" aria-expanded={open} onClick={() => setOpen(o => !o)}
-                        className={`flex h-[30px] w-[30px] flex-shrink-0 items-center justify-center rounded-full border font-serif text-[14px] font-bold transition-all active:scale-90 ${open ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-500'}`}>?</button>
+                    <Tap aria-label="मदत" aria-expanded={open} onClick={() => setOpen(o => !o)} data-testid={`hub-help-${item.id}`}
+                        className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-[16px] font-extrabold ${open ? 'bg-emerald-600 text-white' : 'bg-white text-stone-600 ring-1 ring-stone-300'}`}>?</Tap>
                 )}
             </div>
             {open && item.help && (
-                <div className="px-3.5 pb-3.5 pl-[73px]">
-                    <div className="rounded-[13px] border border-emerald-100 bg-emerald-50 p-3">
-                        {([['काय आहे', item.help.what], ['काय करायचं', item.help.do], ['का?', item.help.why]] as [string, string][]).map(([k, v], i) => (
-                            <div key={k} className={`flex gap-2.5 ${i > 0 ? 'mt-2.5 border-t border-emerald-100 pt-2.5' : ''}`}>
-                                <span className="w-[76px] flex-shrink-0 pt-px text-[11px] font-extrabold leading-snug text-emerald-700">{k}</span>
-                                <span className="flex-1 text-[12.5px] font-semibold leading-snug text-slate-700">{v}</span>
-                            </div>
-                        ))}
-                    </div>
+                <div className="mx-3 mb-3 rounded-2xl bg-emerald-50 p-3 ring-1 ring-emerald-100">
+                    {([['काय आहे', item.help.what], ['काय करायचं', item.help.do], ['का?', item.help.why]] as [string, string][]).map(([k, v], i) => (
+                        <div key={k} className={`flex gap-2.5 ${i > 0 ? 'mt-2.5 border-t border-emerald-100 pt-2.5' : ''}`}>
+                            <span className="w-[84px] shrink-0 text-[13px] font-extrabold leading-snug text-emerald-800">{k}</span>
+                            <span className="flex-1 text-[14px] font-semibold leading-snug text-stone-700">{v}</span>
+                        </div>
+                    ))}
                 </div>
             )}
         </div>
-    );
-};
-
-interface RowCardProps {
-    icon: React.ReactNode;
-    label: string;
-    subtitle?: string;
-    tone?: 'emerald' | 'muted' | 'danger';
-    onClick?: () => void;
-    testId?: string;
-}
-const RowCard: React.FC<RowCardProps> = ({ icon, label, subtitle, tone = 'muted', onClick, testId }) => {
-    const tileTone =
-        tone === 'emerald' ? 'bg-emerald-50 text-emerald-600 ring-emerald-100'
-            : tone === 'danger' ? 'bg-red-50 text-red-500 ring-red-100'
-                : 'bg-slate-50 text-slate-400 ring-slate-100';
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            data-testid={testId}
-            className="group flex w-full items-center gap-3.5 rounded-[20px] border border-slate-100 bg-white p-3.5 text-left shadow-[0_1px_3px_rgba(20,40,30,0.05)] transition-all active:scale-[0.98] hover:border-emerald-200/70 hover:shadow-[0_6px_16px_-8px_rgba(20,40,30,0.18)]"
-        >
-            <span className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl ring-1 ${tileTone}`}>{icon}</span>
-            <span className="min-w-0 flex-1">
-                <span className={`block truncate text-[15px] font-bold ${tone === 'danger' ? 'text-red-500' : 'text-slate-800'}`}>{label}</span>
-                {subtitle && <span className={`mt-0.5 block truncate text-[11.5px] ${tone === 'emerald' ? 'font-semibold text-emerald-700' : 'text-slate-400'}`}>{subtitle}</span>}
-            </span>
-            {tone !== 'danger' && <ChevronRight size={18} className="flex-shrink-0 text-slate-300 transition-transform group-active:translate-x-0.5" />}
-        </button>
     );
 };
 
@@ -187,140 +139,76 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
 }) => {
     const [showFarmSwitcher, setShowFarmSwitcher] = useState(false);
 
-    // spec: owner-oversight-loop (Task 12) — all four wired together, or
-    // the row does not render at all (never a dead control).
+    // spec: owner-oversight-loop (Task 12) — all wired together, or the row does not render at all.
     const farmSwitcherReady = !!(farms && onSwitchFarm && onCreateFarm && onJoinViaQr);
     const farmSwitcherSubtitle = farms && farms.length > 0
         ? `${(farms.find(f => f.farmId === currentFarmId) ?? farms[0]).name} · ${farms.length} शेती`
         : undefined;
 
     return (
-        <div>
-            {/* header — solid band so nothing shows through behind the back button */}
-            <div className="sticky top-0 z-20 -mx-4 mb-2 flex items-center gap-3 bg-[#f6f7f5] px-4 pb-3 pt-2 shadow-[0_8px_14px_-12px_rgba(20,40,30,0.35)] sm:-mx-6 sm:px-6">
-                {onExit && (
-                    <button
-                        type="button"
-                        onClick={onExit}
-                        className="flex items-center gap-1.5 rounded-full bg-white py-2 pl-2.5 pr-3.5 text-[13px] font-bold text-slate-700 shadow-sm ring-1 ring-slate-100 transition-all active:scale-95"
-                    >
-                        <ArrowLeft size={16} /> मागे
-                    </button>
-                )}
-                <div className="flex-1 truncate pr-16 text-center text-[13px] font-bold uppercase tracking-wide text-slate-400">प्रोफाइल · Profile</div>
-            </div>
-
-            {/* profile summary */}
-            <div className="mb-2 flex items-center gap-4 rounded-[26px] border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-white p-4 shadow-[0_4px_20px_-12px_rgba(5,150,105,0.35)]">
-                <div className="relative flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full border-[3px] border-white bg-white text-3xl shadow-md shadow-emerald-200/50">
-                    👨‍🌾
-                    {verified && (
-                        <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-emerald-600 text-white">
-                            <CheckCircle2 size={14} />
-                        </span>
-                    )}
-                </div>
-                <div className="min-w-0">
-                    <div className="truncate text-lg font-black leading-tight text-slate-800">{farmerName || '—'}</div>
-                    {verified && (
-                        <div className="mt-1 flex items-center gap-1 text-[11px] font-bold text-emerald-800">
-                            <CheckCircle2 size={13} /> पडताळणी झाली · Verified
+        <div style={{ fontFamily: SANS }} data-testid="setup-hub">
+            <PageBar title="सेट-अप केंद्र" onBack={onExit} />
+            <div className="space-y-3 pb-4">
+                <GlassCard testId="hub-me">
+                    <div className="flex items-center gap-3">
+                        <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-gradient-to-br from-emerald-100 to-emerald-200 text-[28px] shadow" aria-hidden="true">👨‍🌾</span>
+                        <div className="min-w-0 flex-1">
+                            <p className="m-0 text-[19px] font-extrabold text-stone-900 [overflow-wrap:anywhere]">{farmerName || '—'}</p>
+                            {farmName && <p className="m-0 flex items-center gap-1 text-[14px] font-semibold text-stone-600"><MapPin size={15} aria-hidden="true" />{farmName}</p>}
+                            {verified && <p className="m-0 mt-0.5 flex items-center gap-1 text-[13px] font-extrabold text-emerald-800" data-testid="hub-verified"><ShieldCheck size={15} aria-hidden="true" />ओळख पडताळलेली</p>}
                         </div>
-                    )}
-                    {farmName && (
-                        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500">
-                            <MapPin size={13} /> {farmName}
-                        </div>
-                    )}
-                </div>
-            </div>
+                    </div>
+                </GlassCard>
 
-            {/* farm-setup progress — real % from the farmer's data */}
-            {setupProgress && (
-                <ProgressHero p={setupProgress} onNext={() => setupProgress.nextId && onSelect(setupProgress.nextId)} />
-            )}
+                {setupProgress && <ProgressCard p={setupProgress} onNext={() => setupProgress.nextId && onSelect(setupProgress.nextId)} />}
 
-            {/* your farms — each a 7/12 holding; tap to open its own page */}
-            {farms && farms.length > 0 && onOpenFarm && (
-                <FarmsSection
-                    farms={farms}
-                    familyName={familyName}
-                    onOpenFarm={onOpenFarm}
-                    onAddFarm={onAddFarm}
-                    language={language ?? 'mr'}
-                />
-            )}
-
-            {/* farm-setup sections — clean rows with status + "?" help */}
-            <GroupLabel>शेती सेटअप · Farm setup</GroupLabel>
-            <div className="space-y-2.5">
-                {items.map(it => (
-                    <SetupRow key={it.id} item={it} isNext={setupProgress?.nextId === it.id} onSelect={() => onSelect(it.id)} />
-                ))}
-            </div>
-
-            {/* more */}
-            <GroupLabel>अधिक · More</GroupLabel>
-            <div className="space-y-2.5">
-                {/* spec: owner-oversight-loop (Task 12) — appears for ALL
-                    accounts, including single-farm: it is also how you
-                    create or join a farm (`FarmSwitcherSheet`'s own footer
-                    CTAs, unchanged). */}
-                {farmSwitcherReady && (
-                    <RowCard
-                        icon={<Sprout size={20} />}
-                        label="तुमच्या शेती · Your farms"
-                        subtitle={farmSwitcherSubtitle}
-                        tone="emerald"
-                        onClick={() => setShowFarmSwitcher(true)}
-                    />
+                {/* your farms — each a 7/12 holding; tap to open its own page (FarmsSection, unchanged) */}
+                {farms && farms.length > 0 && onOpenFarm && (
+                    <FarmsSection farms={farms} familyName={familyName} onOpenFarm={onOpenFarm} onAddFarm={onAddFarm} language={language ?? 'mr'} />
                 )}
-                {/* Task 7 (labour-v2-release-1) — DELETED "हजेरी · " from the
-                    subtitle below: this row's live/reachable Marathi claimed
-                    "attendance" as a headline capability of Labour
-                    Management, but no attendance capture exists in that
-                    feature.
-                    Task 7b (labour-v2-release-1) — DELETED " · उचल" too:
-                    उचल (advance) does not exist as a system either — no
-                    table, no write path, no engine
-                    (GetLabourDataHandler.cs:205 hardcodes `advance = 0m`
-                    server-side). */}
-                {/* FOUNDER VOCABULARY RULE (2026-09-03) — was
-                    "कामगार व्यवस्थापन · Labour". Both halves were banned: the
-                    English "Labour", and `कामगार`, which names a class of
-                    person. Now `कामाच्या नोंदी` — the same provisional
-                    work-centred wording the hub title uses, so the door and
-                    the room agree. The English pair is DROPPED rather than
-                    translated: any English noun here would be a new name, and
-                    the founder's naming session owns that. The subtitle
-                    `मजुरी` is untouched (Task 7 / 7b honesty deletions stand). */}
-                {/* FOUNDER NAMING DECISION (2026-10-16): the section is `कामगार व हजेरी` (door and room agree). */}
-                {onOpenLabour && <RowCard icon={<Users size={20} />} label="कामगार व हजेरी" subtitle="मजुरी" tone="emerald" onClick={onOpenLabour} />}
-                <RowCard icon={<BarChart3 size={20} />} label="पैसे व हिशोब" onClick={onOpenFinance} />
-                {onOpenReferrals && <RowCard icon={<Medal size={20} />} label="रेफरल्स · Referrals" onClick={onOpenReferrals} />}
-            </div>
 
-            {/* settings — folded into Profile so there's one place */}
-            {settingsItems && settingsItems.length > 0 && (
-                <>
-                    <GroupLabel>सेटिंग्ज · Settings</GroupLabel>
-                    <div className="space-y-2.5">
+                <div className="space-y-2" data-testid="hub-farm">
+                    <SectionHead title="माझं शेत" />
+                    {items.map(it => (
+                        <SetupRow key={it.id} item={it} isNext={setupProgress?.nextId === it.id} onSelect={() => onSelect(it.id)} />
+                    ))}
+                </div>
+
+                {onOpenFinance && (
+                    <div className="space-y-2" data-testid="hub-money">
+                        <SectionHead title="पैसे" />
+                        <RowLink testId="hub-finance" icon={<BarChart3 size={22} aria-hidden="true" />} tone="blue" title="पैसे व हिशोब" onClick={onOpenFinance} />
+                    </div>
+                )}
+
+                {(onOpenLabour || farmSwitcherReady || onOpenReferrals) && (
+                    <div className="space-y-2" data-testid="hub-people">
+                        <SectionHead title="माणसं आणि शेती" />
+                        {/* FOUNDER NAMING DECISION (2026-10-16): the section is `कामगार व हजेरी` (door and room agree).
+                            The subtitle stays `मजुरी` — Task 7 / 7b honesty deletions stand. */}
+                        {onOpenLabour && <RowLink testId="hub-labour" icon={<Users size={22} aria-hidden="true" />} tone="green" title="कामगार व हजेरी" line="मजुरी" onClick={onOpenLabour} />}
+                        {/* `तुमच्या शेती` is copied verbatim from FarmContextSwitcher.tsx — also how a farm is created or joined. */}
+                        {farmSwitcherReady && <RowLink testId="hub-farms" icon={<Sprout size={22} aria-hidden="true" />} tone="green" title="तुमच्या शेती" line={farmSwitcherSubtitle} onClick={() => setShowFarmSwitcher(true)} />}
+                        {onOpenReferrals && <RowLink testId="hub-referrals" icon={<Medal size={22} aria-hidden="true" />} tone="stone" title="रेफरल्स" onClick={onOpenReferrals} />}
+                    </div>
+                )}
+
+                {settingsItems && settingsItems.length > 0 && (
+                    <div className="space-y-2" data-testid="hub-app">
+                        <SectionHead title="अ‍ॅप" />
                         {settingsItems.map(it => (
-                            <RowCard key={it.id} icon={it.icon} label={it.label} subtitle={it.subtitle} testId={`hub-settings-${it.id}`} onClick={() => onSelectExtra?.(it.id)} />
+                            <RowLink key={it.id} testId={`hub-settings-${it.id}`} icon={it.icon} tone="stone" title={it.label} line={it.subtitle} onClick={() => onSelectExtra?.(it.id)} />
                         ))}
                     </div>
-                </>
-            )}
+                )}
 
-            {/* logout */}
-            <div className="mt-5">
-                <RowCard icon={<LogOut size={20} />} label="बाहेर पडा · Log out" tone="danger" onClick={logout} />
+                <Tap onClick={logout} data-testid="hub-logout" rippleColor="rgba(225,29,72,0.15)"
+                    className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full border border-rose-200 bg-white text-[16px] font-extrabold text-rose-700">
+                    <LogOut size={19} aria-hidden="true" />बाहेर पडा
+                </Tap>
             </div>
-            <div className="h-4" />
 
-            {/* Farm switcher — reuses the EXISTING `FarmSwitcherSheet`
-                unchanged (spec §2.1: "Only the trigger's shell changes"),
-                the same sheet `AppHeader`'s own farm chip opens. */}
+            {/* Farm switcher — reuses the EXISTING `FarmSwitcherSheet` unchanged, the same sheet AppHeader's farm chip opens. */}
             {showFarmSwitcher && farmSwitcherReady && farms && onSwitchFarm && onCreateFarm && onJoinViaQr && (
                 <FarmSwitcherSheet
                     farms={farms}

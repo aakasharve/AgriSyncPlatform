@@ -4,22 +4,13 @@
  *
  * Sub-plan 04 Task 6 — Soil & Crop Health tab section.
  *
- * Thin wrapper around the existing SoilHealthReportsManager so the
- * orchestrator can render `<HealthSection profile=… onUpdate=… />`
- * uniformly with the other tabs.
+ * Thin wrapper around SoilHealthReportsManager. Since I7 (plr-d10, doctrine P5) that page only says
+ * plainly that report upload is not built yet, so it needs no profile and saves nothing.
  */
 
 import React from 'react';
-import { FarmerProfile } from '../../../types';
 import { SoilHealthReportsManager } from '../components/SoilHealthReportsManager';
 
-interface HealthSectionProps {
-    profile: FarmerProfile;
-    onUpdate: (p: FarmerProfile) => void;
-}
-
-const HealthSection: React.FC<HealthSectionProps> = ({ profile, onUpdate }) => {
-    return <SoilHealthReportsManager profile={profile} onUpdate={onUpdate} />;
-};
+const HealthSection: React.FC = () => <SoilHealthReportsManager />;
 
 export default HealthSection;

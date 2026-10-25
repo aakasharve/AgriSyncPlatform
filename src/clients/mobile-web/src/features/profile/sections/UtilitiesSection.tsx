@@ -2,204 +2,157 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Sub-plan 04 Task 6 — Utilities (Water & Power) tab section.
+ * "पाणी आणि वीज" — water sources with their motors, and the electricity timetable.
  *
- * Extracted verbatim from `pages/ProfilePage.tsx`'s UtilitiesManager. The
- * WaterSourceWizard component lives at `../components/WaterSourceWizard.tsx`.
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I7 / WP-5). The approved look on the REAL
+ * profile; every change goes out through `onUpdate` (the page's `onUpdateProfile`), as before:
+ *   - each source: name, type, how many motors ("मोटर नाही" in orange when none); open it to see its
+ *     motors (HP, फेज, वीज, ठिबक), remove a motor, CHANGE the source and its motors, or remove the
+ *     source (asks first — its motors go with it);
+ *   - "पाण्याचा स्रोत जोडा": the two-step form (`WaterSourceWizard`);
+ *   - linking a motor to a plot was a "coming soon" alert, hidden until hover — it now says लवकरच;
+ *   - the electricity timetable (`ElectricityTimingConfigurator`), single- AND three-phase;
+ *   - setup is saved on this phone only, and the page says so (I3, PENDING D-9).
  */
-
 import React, { useState } from 'react';
-import {
-    Plus, Trash2, MapPin, Settings2, Droplets,
-    ChevronRight, CheckCircle2, AlertTriangle
-} from 'lucide-react';
-import { FarmerProfile, WaterResource, FarmMotor } from '../../../types';
+import { AlertTriangle, CheckCircle2, ChevronDown, Droplets, Pencil, Plus, Settings2, Trash2 } from 'lucide-react';
+import type { FarmerProfile, FarmMotor, WaterResource } from '../../../domain/types/farm.types';
 import ElectricityTimingConfigurator from '../components/ElectricityTimingConfigurator';
 import WaterSourceWizard from '../components/WaterSourceWizard';
+import { BigButton, GlassCard, IconDot, SectionHead, Soon, Tap, ThisPhoneOnly } from '../components/hubUi';
+import { SOURCE_TYPE_LABEL, motorLine, pipeLabel } from '../components/setupLabels';
 
 interface UtilitiesSectionProps {
     profile: FarmerProfile;
     onUpdate: (p: FarmerProfile) => void;
 }
 
-const UtilitiesSection: React.FC<UtilitiesSectionProps> = ({ profile, onUpdate }) => {
-    const [showWizard, setShowWizard] = useState(false);
-    const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
+/** null = no form; 'new' = adding; a source id = changing that source. */
+type FormState = null | 'new' | string;
 
-    // Handle saving source + motors from wizard
+const UtilitiesSection: React.FC<UtilitiesSectionProps> = ({ profile, onUpdate }) => {
+    const [form, setForm] = useState<FormState>(null);
+    const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
+    const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+    const getMotorsForSource = (sourceId: string) => profile.motors.filter(m => m.linkedWaterSourceId === sourceId);
+
     const handleSaveSourceWithMotors = (source: WaterResource, motors: FarmMotor[]) => {
+        const exists = profile.waterResources.some(w => w.id === source.id);
         onUpdate({
             ...profile,
-            waterResources: [...profile.waterResources, source],
-            motors: [...profile.motors, ...motors]
+            waterResources: exists ? profile.waterResources.map(w => (w.id === source.id ? source : w)) : [...profile.waterResources, source],
+            motors: [...profile.motors.filter(m => m.linkedWaterSourceId !== source.id), ...motors],
         });
-        setShowWizard(false);
+        setForm(null);
+        setExpandedSourceId(source.id);
     };
 
     const deleteSource = (id: string) => {
-        const newMotors = profile.motors.filter(m => m.linkedWaterSourceId !== id);
-        const newSources = profile.waterResources.filter(w => w.id !== id);
-        onUpdate({ ...profile, waterResources: newSources, motors: newMotors });
+        onUpdate({
+            ...profile,
+            waterResources: profile.waterResources.filter(w => w.id !== id),
+            motors: profile.motors.filter(m => m.linkedWaterSourceId !== id),
+        });
+        setConfirmDeleteId(null);
     };
 
     const deleteMotor = (motorId: string) => {
         onUpdate({ ...profile, motors: profile.motors.filter(m => m.id !== motorId) });
     };
 
-    // Get motors for a specific source
-    const getMotorsForSource = (sourceId: string) => {
-        return profile.motors.filter(m => m.linkedWaterSourceId === sourceId);
-    };
+    const editing = form && form !== 'new' ? profile.waterResources.find(w => w.id === form) : undefined;
 
     return (
-        <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-            {/* Wizard overlay */}
-            {showWizard && (
-                <WaterSourceWizard
-                    profile={profile}
-                    onSave={handleSaveSourceWithMotors}
-                    onCancel={() => setShowWizard(false)}
-                />
+        <div className="space-y-3" data-testid="hub-water-power">
+            <ThisPhoneOnly />
+            <SectionHead title="पाण्याचे स्रोत" hint="विहीर, बोअर, कालवा, शेततळं — आणि त्यावरच्या मोटर" />
+
+            {profile.waterResources.length === 0 && !form && (
+                <GlassCard testId="sources-empty">
+                    <div className="flex items-center gap-3">
+                        <IconDot tone="blue"><Droplets size={22} aria-hidden="true" /></IconDot>
+                        <p className="m-0 text-[15px] font-bold leading-snug text-stone-700">अजून पाण्याचा स्रोत जोडलेला नाही. स्रोत आणि त्यावरची मोटर जोडा.</p>
+                    </div>
+                </GlassCard>
             )}
 
-            {/* Header + Add button */}
-            <div className="flex justify-between items-center">
-                <div>
-                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                        <Droplets size={20} className="text-blue-500" />
-                        Water & Power
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-1">Water sources with their pump motors</p>
-                    {/* spec: plr-d10-redesign-real-integration (I3) — honest about where it lives:
-                        saved on this phone, not shared with the farm's other phones (PENDING D-9). */}
-                    <p data-testid="setup-this-phone-only" className="mt-1 text-xs font-semibold text-amber-700">
-                        फक्त या फोनवर साठवलं जातं · Saved on this phone only
-                    </p>
-                </div>
-                <button
-                    onClick={() => setShowWizard(true)}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg active:scale-95 transition-all flex items-center gap-2"
-                >
-                    <Plus size={16} /> Add Water Source
-                </button>
-            </div>
-
-            {/* Sources list with integrated motors */}
-            <div className="space-y-3">
-                {profile.waterResources.length === 0 ? (
-                    <div className="bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 p-8 text-center">
-                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <Droplets size={32} className="text-slate-300" />
-                        </div>
-                        <h3 className="font-bold text-slate-600 mb-2">No water sources yet</h3>
-                        <p className="text-sm text-slate-400">
-                            Add a water source with its pump motor to get started.
-                        </p>
-                    </div>
-                ) : (
-                    profile.waterResources.map(source => {
-                        const linkedMotors = getMotorsForSource(source.id);
-                        const isExpanded = expandedSourceId === source.id;
-
-                        return (
-                            <div key={source.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                                {/* Source header */}
-                                <div
-                                    className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-50"
-                                    onClick={() => setExpandedSourceId(isExpanded ? null : source.id)}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-100">
-                                            <Droplets size={20} />
-                                        </div>
-                                        <div>
-                                            <p className="font-bold text-slate-800">{source.name}</p>
-                                            <div className="flex items-center gap-2 text-xs text-slate-500">
-                                                <span>{source.type}</span>
-                                                <span>•</span>
-                                                {linkedMotors.length === 0 ? (
-                                                    <span className="text-orange-600 font-bold flex items-center gap-1">
-                                                        <AlertTriangle size={12} /> No motors
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-emerald-600 font-bold flex items-center gap-1">
-                                                        <CheckCircle2 size={12} /> {linkedMotors.length} motor(s)
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <ChevronRight size={18} className={`text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); deleteSource(source.id); }}
-                                            className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    </div>
-                                </div>
-
-
-                                {/* Expanded motors list (Visual Link Tree) */}
-                                {isExpanded && (
-                                    <div className="bg-slate-50 p-4 border-t border-slate-100 flex pb-5">
-                                        <div className="w-6 border-l-2 border-slate-300 border-b-2 rounded-bl-xl ml-2 mb-8 mr-4 self-stretch"></div>
-                                        <div className="flex-1 space-y-3 mt-4">
-                                            {linkedMotors.length === 0 ? (
-                                                <p className="text-sm text-slate-400 py-2">No motors linked.</p>
-                                            ) : (
-                                                linkedMotors.map(motor => (
-                                                    <div key={motor.id} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm relative group">
-                                                        {/* Connector line for multiple items */}
-                                                        <div className="absolute -left-5 top-6 w-5 border-b-2 border-slate-300"></div>
-
-                                                        <div className="flex justify-between items-start">
-                                                            <div className="flex items-start gap-3">
-                                                                <div className="p-2 bg-slate-800 text-white rounded-xl shadow-inner mt-1">
-                                                                    <Settings2 size={18} />
-                                                                </div>
-                                                                <div>
-                                                                    <p className="font-bold text-slate-800 text-sm">{motor.name}</p>
-                                                                    <p className="text-xs text-slate-500 mb-1">
-                                                                        {motor.hp}HP • {motor.phase} Phase • {motor.powerSourceType}
-                                                                    </p>
-                                                                    {motor.dripDetails && (
-                                                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100 inline-flex mt-1">
-                                                                            <Droplets size={10} />
-                                                                            Drip: {motor.dripDetails.pipeSize} {motor.dripDetails.hasFilter ? '• Filtered' : ''}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex flex-col gap-2 items-end">
-                                                                <button
-                                                                    onClick={() => deleteMotor(motor.id)}
-                                                                    className="p-1.5 text-slate-300 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors"
-                                                                >
-                                                                    <Trash2 size={16} />
-                                                                </button>
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); alert('Link to plot functionality coming soon'); }}
-                                                                    className="px-2 py-1 text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 border hover:border-emerald-200 rounded-lg transition-colors flex items-center gap-1 opacity-0 group-hover:opacity-100"
-                                                                >
-                                                                    <MapPin size={10} /> Link to Plot
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))
+            {profile.waterResources.map(source => {
+                const linkedMotors = getMotorsForSource(source.id);
+                const isOpen = expandedSourceId === source.id;
+                return (
+                    <section key={source.id} data-testid={`source-${source.id}`}
+                        className="overflow-hidden rounded-3xl border border-white/60 bg-white/80 shadow-[0_4px_18px_-8px_rgba(28,25,23,0.18)] backdrop-blur-md">
+                        <Tap onClick={() => setExpandedSourceId(isOpen ? null : source.id)} aria-expanded={isOpen} data-testid={`source-toggle-${source.id}`}
+                            className="flex min-h-[68px] w-full items-center gap-3 px-3.5 py-2.5 text-left">
+                            <IconDot tone="blue"><Droplets size={22} aria-hidden="true" /></IconDot>
+                            <span className="min-w-0 flex-1">
+                                <span className="block text-[16.5px] font-extrabold text-stone-900">{source.name}</span>
+                                <span className="flex flex-wrap items-center gap-1.5 text-[13px] font-bold">
+                                    <span className="text-stone-500">{SOURCE_TYPE_LABEL[source.type] ?? source.type}</span>
+                                    {linkedMotors.length
+                                        ? <span className="flex items-center gap-1 text-emerald-700"><CheckCircle2 size={13} aria-hidden="true" />{linkedMotors.length} मोटर</span>
+                                        : <span className="flex items-center gap-1 text-orange-600" data-testid={`no-motor-${source.id}`}><AlertTriangle size={13} aria-hidden="true" />मोटर नाही</span>}
+                                </span>
+                            </span>
+                            <ChevronDown size={22} className={`shrink-0 text-stone-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                        </Tap>
+                        {isOpen && (
+                            <div className="space-y-2 border-t border-stone-100 px-3 pb-3 pt-2.5">
+                                {linkedMotors.length === 0 && <p className="m-0 text-[14px] font-bold text-stone-500">या स्रोतावर अजून मोटर जोडलेली नाही.</p>}
+                                {linkedMotors.map(m => (
+                                    <div key={m.id} className="flex items-start gap-3 rounded-2xl bg-white p-3 ring-1 ring-stone-200" data-testid={`motor-${m.id}`}>
+                                        <span className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-stone-800 text-white"><Settings2 size={19} aria-hidden="true" /></span>
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block text-[15.5px] font-extrabold text-stone-900">{m.name}</span>
+                                            <span className="block text-[13px] font-bold text-stone-600">{motorLine(m)}</span>
+                                            {m.dripDetails && (
+                                                <span className="mt-1 inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-0.5 text-[12.5px] font-extrabold text-emerald-800 ring-1 ring-emerald-100">
+                                                    <Droplets size={12} aria-hidden="true" />ठिबक{m.dripDetails.pipeSize ? `: ${pipeLabel(m.dripDetails.pipeSize)}` : ''}{m.dripDetails.hasFilter ? ' · फिल्टर' : ''}{m.dripDetails.flowRatePerHour ? ` · ${m.dripDetails.flowRatePerHour} लि/तास` : ''}
+                                                </span>
                                             )}
+                                        </span>
+                                        <Tap onClick={() => deleteMotor(m.id)} aria-label="ही मोटर काढा" data-testid={`motor-remove-${m.id}`}
+                                            className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-stone-500 ring-1 ring-stone-200"><Trash2 size={18} aria-hidden="true" /></Tap>
+                                    </div>
+                                ))}
+                                <Soon what="मोटर कोणत्या प्लॉटला पाणी देते ते जोडणं" />
+                                <Tap onClick={() => { setForm(source.id); setConfirmDeleteId(null); }} data-testid={`source-edit-${source.id}`}
+                                    className="flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-full bg-blue-50 text-[15px] font-extrabold text-blue-800 ring-1 ring-blue-200">
+                                    <Pencil size={16} aria-hidden="true" />स्रोत आणि मोटर बदला
+                                </Tap>
+                                {confirmDeleteId === source.id ? (
+                                    <div className="rounded-2xl bg-rose-50 p-3 ring-1 ring-rose-200" data-testid={`source-remove-confirm-${source.id}`}>
+                                        <p className="m-0 text-[14.5px] font-extrabold text-rose-900">हा स्रोत आणि त्यावरच्या सगळ्या मोटर काढायच्या?</p>
+                                        <div className="mt-2 grid grid-cols-2 gap-2">
+                                            <Tap onClick={() => setConfirmDeleteId(null)} className="min-h-[46px] rounded-full bg-white text-[14px] font-extrabold text-stone-800 ring-1 ring-stone-300">नको</Tap>
+                                            <Tap onClick={() => deleteSource(source.id)} data-testid={`source-remove-yes-${source.id}`} className="min-h-[46px] rounded-full bg-rose-600 text-[14px] font-extrabold text-white">हो, काढा</Tap>
                                         </div>
                                     </div>
+                                ) : (
+                                    <Tap onClick={() => setConfirmDeleteId(source.id)} data-testid={`source-remove-${source.id}`}
+                                        className="flex min-h-[46px] w-full items-center justify-center gap-1.5 rounded-full text-[14px] font-extrabold text-rose-700 ring-1 ring-rose-200">
+                                        <Trash2 size={16} aria-hidden="true" />हा स्रोत काढा
+                                    </Tap>
                                 )}
-
                             </div>
-                        );
-                    })
-                )}
-            </div>
+                        )}
+                    </section>
+                );
+            })}
 
+            {form ? (
+                <WaterSourceWizard
+                    key={form}
+                    initial={editing ? { source: editing, motors: getMotorsForSource(editing.id) } : undefined}
+                    onSave={handleSaveSourceWithMotors}
+                    onCancel={() => setForm(null)}
+                />
+            ) : (
+                <BigButton onClick={() => setForm('new')} tone="white" testId="source-add"><Plus size={20} aria-hidden="true" />पाण्याचा स्रोत जोडा</BigButton>
+            )}
+
+            <SectionHead title="वीज कधी असते?" hint="सिंगल फेज आणि थ्री फेज — दोन्हीची वेळ वेगळी" />
             <ElectricityTimingConfigurator profile={profile} onUpdate={onUpdate} />
         </div>
     );

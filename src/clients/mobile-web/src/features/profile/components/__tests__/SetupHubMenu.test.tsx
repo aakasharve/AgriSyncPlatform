@@ -62,10 +62,12 @@ describe('SetupHubMenu — Labour row honesty (Task 7)', () => {
 describe('SetupHubMenu - the setup progress count reads the right way round', () => {
     afterEach(() => cleanup());
 
-    it('4 of 5 done: Marathi says 5 पैकी 4 पूर्ण, never 4 पैकी 5 पूर्ण; English agrees', () => {
+    // spec: plr-d10 I7 (WP-5) — the redesigned hub reads in plain Marathi only (founder T1–T3: no
+    // English doubling), so the English "4 of 5 complete" line is gone; the word-order guard stays.
+    it('4 of 5 done: Marathi says 5 पैकी 4 पूर्ण, never 4 पैकी 5 पूर्ण; no English doubling', () => {
         render(<SetupHubMenu {...baseProps()} setupProgress={{ done: 4, total: 5, percent: 80, nextLabel: 'x' }} />);
         expect(screen.getByText(/5 पैकी 4 पूर्ण/)).toBeInTheDocument();
-        expect(screen.getByText(/4 of 5 complete/)).toBeInTheDocument();
         expect(screen.queryByText(/4 पैकी 5/)).toBeNull();
+        expect(screen.queryByText(/complete/i)).toBeNull();
     });
 });
