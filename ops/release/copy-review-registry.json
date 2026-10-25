@@ -56,27 +56,27 @@
     {
       "path": "src/clients/mobile-web/public/legal/privacy_en.md",
       "reviewStatus": "unreviewed",
-      "sha256": "5b6d7df396b934e6f0cc5a2924cb2310ef9c24e857e05f21258f18e08e7a1f60"
+      "sha256": "4ff13a01a7bb1549ba0de758f785c51207ca88564af17ab712378f15e2cea63b"
     },
     {
       "path": "src/clients/mobile-web/public/legal/privacy_mr.md",
       "reviewStatus": "unreviewed",
-      "sha256": "a6b6ba9f829e36434cccc9b3d1d0d730c0e0cd07178261f0407bbaaf18ef1a47"
+      "sha256": "48a5434089123f6ac13d8d0b871de28376c84a0f8b2911815a9c55edd94b0dd8"
     },
     {
       "path": "src/clients/mobile-web/public/legal/terms_en.md",
       "reviewStatus": "unreviewed",
-      "sha256": "b64dbe57d9733c260c95f4b2c35be6476c43d858c12662dedfcce73fade6568d"
+      "sha256": "df46e5589d3a3c75297ebeff188d8d77fb61f12303b0c152896e62335a3c0f14"
     },
     {
       "path": "src/clients/mobile-web/public/legal/terms_mr.md",
       "reviewStatus": "unreviewed",
-      "sha256": "929448de09dc0da18cff89f4aa328a39b7f57a680379766f4cf5254b5731f8fc"
+      "sha256": "29a0114423ec0e25057f21eba4b326c72493239c3ad9dcf2c1b35cd4f7940314"
     },
     {
       "path": "src/clients/mobile-web/src/features/consent/gate/consentNotice.ts",
       "reviewStatus": "unreviewed",
-      "sha256": "9757487ea42435a12818175671e1ff6d6b2d078792e6c15d15dd4793f7f35ff0"
+      "sha256": "c9be65d4ee0ba92f92cf305e311a7459658b4deaa2c25598421852b55c1a8e49"
     },
     {
       "path": "src/clients/mobile-web/src/i18n/consentTranslations.ts",

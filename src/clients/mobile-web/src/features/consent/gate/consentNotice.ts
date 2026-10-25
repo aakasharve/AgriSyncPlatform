@@ -69,14 +69,15 @@
 // discloses everything, and a farmer who wants the detail has a document to open. Two
 // remain genuinely unsettled and stay omitted: a grievance phone number and a named DPO.
 //
-// ⚠️ STILL OWED, and stated here rather than assumed away: the documents EXIST but the
-// gate's own links do not yet REACH them. `ConsentGateScreen.tsx:341,343` hrefs are
-// `/legal/terms` and `/legal/privacy`; the served files are `/legal/terms_{mr,en}.md` and
-// `/legal/privacy_{mr,en}.md`. Repointing the href is a one-line change and is NOT the
-// fix — a hard `<a href>` to a raw markdown file unloads the gate mid-consent and drops
-// the pre-registration session. What is owed is a language-aware in-app viewer. Until it
-// lands, the version strings below are honest (the documents are written and served) but
-// the farmer cannot open them from this screen.
+// ── THE TICK, founder decision 2026-10-25 (second) ─────────────────────────────────
+// "put the link and only tick mark while logging in." The full-screen gate is gone. The
+// farmer now meets ONE tick on the screen where he types his phone number; `tick.link` is
+// the tappable part of its label and opens this whole notice in an in-app sheet
+// (`ConsentNoticeSheet.tsx`), with the Terms and the Privacy Notice one tap further in
+// (`features/legal/LegalDocumentView.tsx`, reading the bundled `/legal/{doc}_{lang}.md`).
+// That viewer is the debt this note used to carry: the gate's old hrefs pointed at
+// `/legal/terms` and `/legal/privacy`, which did not exist, and a hard `<a href>` would
+// have unloaded the page mid-consent. Nothing here navigates any more.
 //
 // Founder decision 13 scopes the word for "record" (n-o-n-d) to Sathi's own surface. It
 // appears nowhere in the copy below — deliberately spelled out here rather than written,
@@ -164,10 +165,22 @@ import {
  * two corrections, so `PRIVACY_POLICY_VERSION` is `privacy-2026-10-13.2` (also never
  * released at `.1`). `TERMS_VERSION` and `RETENTION_POLICY_VERSION` are unchanged: neither
  * document changed in this pass.
+ *
+ * `notice-2026-10-25.1` - the TICK pass (founder decision 2026-10-25, second). Consent is
+ * one tick on the phone-number screen instead of a full-screen gate, so the words that
+ * carry the acceptance changed: the 18+ checkbox, the "Agree and Continue" button and the
+ * "I do not agree" button are gone, and `tick` (one sentence: read, agree, 18 or older)
+ * replaces all three. `acceptanceMeaning` now explains what the TICK does, and
+ * `ctaDisabledHint` now carries what refusing costs him. Every other statement is word for
+ * word what `.2` said. Both documents moved with it, because both described the old
+ * screen: the Terms (§1, §2) said he accepts by choosing "Agree and Continue" on the first
+ * screen, and the Privacy Notice (§2, §2a, §9) spoke of the "first-open" notice that
+ * "showed" him its contents. They now describe the tick, so `terms-2026-10-25.1` and
+ * `privacy-2026-10-25.1`. Retention is unchanged.
  */
-export const NOTICE_VERSION = 'notice-2026-10-13.2';
-export const PRIVACY_POLICY_VERSION = 'privacy-2026-10-13.2';
-export const TERMS_VERSION = 'terms-2026-08-17.1';
+export const NOTICE_VERSION = 'notice-2026-10-25.1';
+export const PRIVACY_POLICY_VERSION = 'privacy-2026-10-25.1';
+export const TERMS_VERSION = 'terms-2026-10-25.1';
 
 /**
  * The data fiduciary, as registered. One copy, shared by both languages, because a
@@ -259,27 +272,22 @@ export interface NoticeCopy {
      * label is how a removed field creeps back.
      */
     entity: { heading: string; contactLabel: string };
-    /** What the single tap actually does. Disclosed, because one button writing two
+    /** What the single tick actually does. Disclosed, because one tick writing two
      *  records is only honest if the farmer is told that is what it does. */
     acceptanceMeaning: string;
-    ageDeclaration: string;
-    cta: string;
-    ctaDisabledHint: string;
     /**
-     * The REFUSAL, and what refusing costs him.
-     *
-     * `label` is the decline action itself. It renders at the same type size as the CTA
-     * and across the same full width, because accept and decline have to be offered with
-     * equal prominence — a notice that shows only "agree" is a dark pattern wearing a
-     * legal notice's clothes, and this screen's own `willNotDo` promises are worth
-     * nothing if the screen itself pulls one.
-     *
-     * `consequence` is what he is told the moment he taps it: that the app cannot be used
-     * without this consent, that nothing about him was saved, and how to change his mind.
-     * It is copy on the notice — not chrome — because "what happens if you say no" is a
-     * disclosure about the consent itself, so it is hashed with everything else.
+     * The tick's label, on the phone-number screen: `lead` + `link` + `tail` read as one
+     * sentence. `link` is the tappable part that opens this notice. One sentence says all
+     * three things the tick asserts — he read it, he agrees, he is 18 or older — so there
+     * is exactly one affirmative act and nothing pre-ticked.
      */
-    decline: { label: string; consequence: string };
+    tick: { lead: string; link: string; tail: string };
+    /**
+     * Shown under the tick while it is empty: why sending is grey, and what refusing
+     * costs him. There is no "I do not agree" button — not ticking IS not agreeing — so
+     * this line is where the consequence of saying no is disclosed, and it is hashed.
+     */
+    ctaDisabledHint: string;
     links: { terms: string; privacy: string };
 }
 
@@ -357,14 +365,13 @@ const mr: NoticeCopy = {
         heading: 'ही सेवा कोण चालवतं',
         contactLabel: 'संपर्क',
     },
-    acceptanceMeaning: '‘मान्य आहे — पुढे चला’ म्हणजे (१) वापराच्या अटी मान्य, आणि (२) वरच्या कामांपुरतीच माहिती वापरायला स्वतंत्र संमती. दोन्ही वेगळ्या साठवल्या जातात आणि तितक्याच सोप्या पद्धतीने मागे घेता येतात.',
-    ageDeclaration: 'माझं वय १८ वर्षे किंवा त्याहून जास्त आहे.',
-    cta: 'मान्य आहे — पुढे चला',
-    ctaDisabledHint: 'पुढे जाण्यासाठी वरची खूण करा.',
-    decline: {
-        label: 'मान्य नाही',
-        consequence: 'या संमतीशिवाय श्रम सफल वापरता येणार नाही. तुमची कोणतीही माहिती साठवली गेलेली नाही. विचार बदलल्यास वरची खूण करून पुढे चला.',
+    acceptanceMeaning: 'खूण केल्यावर (१) वापराच्या अटी मान्य होतात, आणि (२) वरच्या कामांपुरतीच माहिती वापरायला तुम्ही स्वतंत्र संमती देता. दोन्ही वेगळ्या साठवल्या जातात आणि तितक्याच सोप्या पद्धतीने मागे घेता येतात.',
+    tick: {
+        lead: 'मी ',
+        link: 'माहिती वापराची सूचना व अटी',
+        tail: ' वाचल्या आणि मला मान्य आहेत. माझं वय १८ वर्षे किंवा त्याहून जास्त आहे.',
     },
+    ctaDisabledHint: 'पुढे जाण्यासाठी खूण करा. खूण केल्याशिवाय श्रम सफल वापरता येत नाही; तोपर्यंत तुमची कोणतीही माहिती साठवली जात नाही.',
     links: { terms: 'वापराच्या अटी', privacy: 'गोपनीयता धोरण' },
 };
 
@@ -445,14 +452,13 @@ const en: NoticeCopy = {
         heading: 'Who runs this service',
         contactLabel: 'Contact',
     },
-    acceptanceMeaning: 'Choosing ‘Agree and Continue’ means (1) you accept the Terms of Use, and (2) you separately consent to use of only the data needed for the purposes above. The two are stored separately and can be withdrawn just as easily.',
-    ageDeclaration: 'I am 18 years of age or older.',
-    cta: 'Agree and Continue',
-    ctaDisabledHint: 'Tick the box above to continue.',
-    decline: {
-        label: 'I do not agree',
-        consequence: 'Shram Safal cannot be used without this consent. Nothing about you has been saved. If you change your mind, tick the box above and continue.',
+    acceptanceMeaning: 'Ticking the box means (1) you accept the Terms of Use, and (2) you separately consent to use of only the data needed for the purposes above. The two are stored separately and can be withdrawn just as easily.',
+    tick: {
+        lead: 'I have read and agree to the ',
+        link: 'data notice and Terms',
+        tail: '. I am 18 years of age or older.',
     },
+    ctaDisabledHint: 'Tick the box to continue. Shram Safal cannot be used without it; until then nothing about you is saved.',
     links: { terms: 'Terms of Use', privacy: 'Privacy Policy' },
 };
 
@@ -508,11 +514,12 @@ export function canonicalNoticeText(language: NoticeLanguage): string {
         DATA_FIDUCIARY.legalName,
         `${c.entity.contactLabel}:${DATA_FIDUCIARY.contact}`,
     );
-    lines.push(c.acceptanceMeaning, c.ageDeclaration, c.cta, c.ctaDisabledHint);
-    // The refusal and its stated consequence are part of the notice: what he was told
-    // would happen if he said no is as much a disclosure as what happens if he says yes.
-    lines.push(c.decline.label, c.decline.consequence);
     lines.push(c.links.terms, c.links.privacy);
+    lines.push(c.acceptanceMeaning);
+    // The tick row on the phone-number screen: the sentence he ticks, and the line that
+    // tells him what not ticking costs. What he was told would happen if he said no is as
+    // much a disclosure as what happens if he says yes.
+    lines.push(c.tick.lead, c.tick.link, c.tick.tail, c.ctaDisabledHint);
 
     return lines.join('\n');
 }

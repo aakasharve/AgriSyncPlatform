@@ -2,8 +2,8 @@
 //
 // The gate's lifecycle, end to end, now reads:
 //
-//   useConsentGate      mints a pre-registration session id  (pre-login, device-scoped)
-//   ConsentGateScreen   shows the notice, takes the tap
+//   useConsentBeforeOtp mints a pre-registration session id per acceptance
+//   ConsentTick         one tick on the phone-number screen, linked to the notice
 //   consentGateApi      POST /consent-gate/accept   → two rows, user_id NULL (orphaned)
 //   ConsentGateLinkStore  keeps the displayed facts on the device
 //   ── the farmer registers or logs in ──
@@ -49,7 +49,7 @@ import {
 import { linkConsentGateToUser } from '../../../infrastructure/consent/ConsentGateLinkClient';
 import { APP_VERSION } from '../../../infrastructure/api/transport';
 import { resolveConsentSource } from './consentGateApi';
-import type { ConsentGateAcceptance } from './ConsentGateScreen';
+import type { ConsentGateAcceptance } from './consentAcceptance';
 
 /**
  * Named outcomes, for tests and for reading. Nothing renders them and nothing branches on

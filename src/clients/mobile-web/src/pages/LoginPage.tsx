@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { QrCode, ShieldCheck, UserCheck, Sprout } from 'lucide-react';
 import { useAuth } from '../app/providers/AuthProvider';
 import OtpLoginForm from '../features/auth/components/OtpLoginForm';
@@ -7,6 +7,11 @@ import PasswordField from '../features/auth/components/PasswordField';
 import type { StartOtpResponse } from '../features/auth/data/otpClient';
 import { APP_VERSION } from '../buildInfo';
 import { invalidateMeContext } from '../core/session/MeContextService';
+import { useLanguage } from '../i18n/LanguageContext';
+// spec: plr-d10-x1-consent-tick-on-phone-screen-2026-10-25 — consent is one tick here,
+// recorded before the phone number leaves the device (replaces the full-screen gate).
+import ConsentTick from '../features/consent/gate/ConsentTick';
+import { useConsentBeforeOtp } from '../features/consent/gate/useConsentBeforeOtp';
 
 // Top-level auth mode. 'otp' is the single PUBLIC flow — real users enter their
 // phone, verify via OTP once, and the account is created-or-found by phone
@@ -70,17 +75,34 @@ const LoginPage: React.FC = () => {
     const [otpPhone, setOtpPhone] = useState('');
     const [otpMeta, setOtpMeta] = useState<StartOtpResponse | null>(null);
 
+    const { t } = useLanguage();
+    const consent = useConsentBeforeOtp();
+    const [consentError, setConsentError] = useState<string | null>(null);
+    // One press = one sign-in. `isLoading` only turns true inside login(), so without this a
+    // second tap during the consent write would sign in twice.
+    const submittingRef = useRef(false);
+
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         const normalizedPhone = phone.trim();
         const normalizedPassword = password.trim();
-        if (!normalizedPhone || !normalizedPassword) {
+        if (!normalizedPhone || !normalizedPassword || !consent.canSend || submittingRef.current) {
             return;
         }
+        submittingRef.current = true;
+        setConsentError(null);
         try {
+            try {
+                await consent.recordIfNeeded();
+            } catch {
+                setConsentError(t('consentGate.saveFailed'));
+                return;
+            }
             await login(normalizedPhone, normalizedPassword, rememberDevice);
         } catch {
             // Error is surfaced by AuthProvider state.
+        } finally {
+            submittingRef.current = false;
         }
     };
 
@@ -104,6 +126,10 @@ const LoginPage: React.FC = () => {
                             {otpMeta === null ? (
                                 <OtpLoginForm
                                     onOtpSent={(ph, meta) => { setOtpPhone(ph); setOtpMeta(meta); }}
+                                    consentSlot={<ConsentTick consent={consent} />}
+                                    sendBlocked={!consent.canSend}
+                                    beforeSend={consent.recordIfNeeded}
+                                    beforeSendFailedMessage={t('consentGate.saveFailed')}
                                 />
                             ) : (
                                 <OtpVerifyForm
@@ -252,15 +278,17 @@ const LoginPage: React.FC = () => {
                         </label>
                     </div>
 
-                    {authError && (
+                    <ConsentTick consent={consent} disabled={isLoading} />
+
+                    {(consentError ?? authError) && (
                         <div role="alert" className="text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
-                            {authError}
+                            {consentError ?? authError}
                         </div>
                     )}
 
                     <button
                         type="submit"
-                        disabled={isLoading}
+                        disabled={isLoading || consent.recording || !consent.canSend}
                         className="w-full rounded-xl disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold text-sm py-2.5 transition-colors bg-emerald-600 hover:bg-emerald-700"
                     >
                         {isLoading ? 'Signing in...' : 'Sign In'}

@@ -26,6 +26,12 @@ import { agriSyncClient } from '../infrastructure/api/AgriSyncClient';
 import { useOptionalAuth } from '../app/providers/AuthProvider';
 import { useUiPref } from '../shared/hooks/useUiPref';
 import { getRoleLabel } from '../shared/roles/roleLabels';
+import { useLanguage } from '../i18n/LanguageContext';
+// spec: plr-d10-x1-consent-tick-on-phone-screen-2026-10-25 (X1) — a QR deep link used to
+// skip consent entirely: this page sent the number (startOtp) and verified it with no
+// consent anywhere. The tick now sits on the phone step and is recorded before the send.
+import ConsentTick from '../features/consent/gate/ConsentTick';
+import { useConsentBeforeOtp } from '../features/consent/gate/useConsentBeforeOtp';
 
 type Step = 'phone' | 'otp' | 'done' | 'invalid' | 'checking' | 'revoked';
 
@@ -193,6 +199,10 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
     // Pre-checked by founder decision (2026-06-27).
     const [rememberDevice, setRememberDeviceState] = useState(true);
     const otpInputRef = useRef<HTMLInputElement | null>(null);
+    const { t } = useLanguage();
+    const consent = useConsentBeforeOtp();
+    // One press = one send: a second tap in the same tick must not send the number twice.
+    const sendingRef = useRef(false);
 
     // Sub-plan 04 Task 3 — both prefs now live in Dexie's uiPrefs via
     // useUiPref. The "last joined farm" record was previously persisted as
@@ -292,7 +302,18 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
             setError('Please enter your 10-digit phone number.');
             return;
         }
+        if (!consent.canSend || sendingRef.current) return;
+        sendingRef.current = true;
         setIsSubmitting(true);
+        // Consent FIRST. If the two records cannot be written the number is not sent.
+        try {
+            await consent.recordIfNeeded();
+        } catch {
+            setError(t('consentGate.saveFailed'));
+            setIsSubmitting(false);
+            sendingRef.current = false;
+            return;
+        }
         try {
             await startOtp(phone);
             setStep('otp');
@@ -304,6 +325,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
             }
         } finally {
             setIsSubmitting(false);
+            sendingRef.current = false;
         }
     };
 
@@ -475,6 +497,10 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                             />
                         </div>
 
+                        <div className="mt-4">
+                            <ConsentTick consent={consent} disabled={isSubmitting} />
+                        </div>
+
                         {error && (
                             <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-center text-xs font-semibold text-rose-700">
                                 {error}
@@ -483,7 +509,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
 
                         <button
                             type="button"
-                            disabled={phone.length !== 10 || isSubmitting}
+                            disabled={phone.length !== 10 || isSubmitting || !consent.canSend}
                             onClick={handlePhoneSubmit}
                             className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-4 text-lg font-bold text-white shadow-md transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                         >

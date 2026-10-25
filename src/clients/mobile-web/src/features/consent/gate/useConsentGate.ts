@@ -25,7 +25,8 @@ const PREREG_SESSION_PREF = 'shramsafal_preregistration_session_id';
 
 export type GateStatus = 'undecided' | 'required' | 'passed';
 
-function mintSessionId(): string {
+/** A fresh pre-registration session id. Exported so each acceptance can carry its own. */
+export function mintPreRegistrationSessionId(): string {
     const c = typeof globalThis !== 'undefined' ? globalThis.crypto : undefined;
     if (c && typeof c.randomUUID === 'function') return c.randomUUID();
     // Non-secure fallback for environments without randomUUID. Only ever an id — never
@@ -59,7 +60,7 @@ export function useConsentGate(): ConsentGateState {
     // cannot overwrite the id a previous open already stored, and the mint is never a
     // side effect of rendering.
     useEffect(() => {
-        if (loaded && !sessionId) setSessionId(mintSessionId());
+        if (loaded && !sessionId) setSessionId(mintPreRegistrationSessionId());
         // setSessionId is re-created every render by useUiPref; depending on it would
         // re-run this on every render and mint repeatedly.
         // eslint-disable-next-line react-hooks/exhaustive-deps

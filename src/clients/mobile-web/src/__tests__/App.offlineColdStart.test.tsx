@@ -55,12 +55,6 @@ vi.mock('../infrastructure/storage/AiTestModeStore', () => ({ setAiTestModeEnabl
 vi.mock('../app/components/AppShell', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock('../pages/LoginPage', () => ({ default: () => <div data-testid="login-page" /> }));
 vi.mock('../pages/JoinFarmLandingPage', () => ({ default: () => null }));
-vi.mock('../features/consent/gate/ConsentGateScreen', () => ({ default: () => <div data-testid="consent-gate" /> }));
-vi.mock('../features/consent/gate/useConsentGate', () => ({
-    useConsentGate: () => ({ status: 'passed', preRegistrationSessionId: null, markPassed: vi.fn() }),
-}));
-vi.mock('../features/consent/gate/consentGateApi', () => ({ recordConsentGateAcceptance: vi.fn() }));
-vi.mock('../features/consent/gate/consentGateLinkReconciler', () => ({ rememberConsentGateAcceptanceForLinking: vi.fn() }));
 vi.mock('../features/consent/gate/useConsentGateLink', () => ({ useConsentGateLinkReconciliation: vi.fn() }));
 vi.mock('../app/featureFlags', () => ({ IS_OVERSIGHT_PREVIEW_ENABLED: false }));
 

@@ -22,11 +22,7 @@ import { setAiTestModeEnabled, clearAiTestMode } from './infrastructure/storage/
 import AppShell from './app/components/AppShell';
 import LoginPage from './pages/LoginPage';
 import JoinFarmLandingPage from './pages/JoinFarmLandingPage';
-import ConsentGateScreen from './features/consent/gate/ConsentGateScreen';
-import { useConsentGate } from './features/consent/gate/useConsentGate';
-import { recordConsentGateAcceptance } from './features/consent/gate/consentGateApi';
 // spec: 2026-08-25-prod-cutover-waves (B1) — the pre-login acceptance gets its owner.
-import { rememberConsentGateAcceptanceForLinking } from './features/consent/gate/consentGateLinkReconciler';
 import { useConsentGateLinkReconciliation } from './features/consent/gate/useConsentGateLink';
 import { IS_OVERSIGHT_PREVIEW_ENABLED } from './app/featureFlags';
 
@@ -50,10 +46,11 @@ const AppFrame: React.FC<{
     const { isAuthenticated, authStatus, session } = useAuth();
     const [joinActive, setJoinActive] = useState<boolean>(hasJoinDeepLink);
 
-    // spec: dfes-companion-2026-07-11 (wave-4.1) — first-open Terms + DPDP consent gate.
-    // Read here, at the top of AppFrame, because the gate is PRE-LOGIN: it stands in
-    // front of LoginPage, not behind it.
-    const consentGate = useConsentGate();
+    // spec: plr-d10-x1-consent-tick-on-phone-screen-2026-10-25 — there is no full-screen
+    // consent gate any more. Consent is one tick on every screen that takes a phone number
+    // (LoginPage, both modes, and JoinFarmLandingPage), recorded before the number leaves
+    // the device. That also closes X1: a QR deep link used to reach the join page — and
+    // send the number — without passing any consent at all.
 
     // spec: 2026-08-25-prod-cutover-waves (B1) — the gate runs pre-login, so its two legal
     // records land with no user attached and are readable by nobody. This attaches them to
@@ -87,49 +84,10 @@ const AppFrame: React.FC<{
         );
     }
 
-    // spec: dfes-companion-2026-07-11 (wave-4.1) — the gate stands in front of LoginPage.
-    //
-    // Only when the answer is KNOWN. `undecided` means the Dexie read has not settled, and
-    // "not loaded" is indistinguishable from "never accepted" — acting on it would flash a
-    // full-screen legal notice at every cold start of a farmer who accepted weeks ago.
-    // SplashScreen already owns that window (App renders it until `showSplash` clears).
-    //
-    // Not shown to an authenticated session: a farmer who is already signed in accepted at
-    // some point, and re-gating a live account on a Dexie miss would lock him out of his
+    // Not re-asked of an authenticated session: a farmer who is already signed in accepted
+    // at some point, and re-gating a live account on a Dexie miss would lock him out of his
     // own farm over a cleared cache. Re-consent on a NEW notice version is a server-side
     // decision, not a client cache one.
-    if (!isAuthenticated && consentGate.status === 'required') {
-        return (
-            <AppShell>
-                <ConsentGateScreen
-                    onAccept={async (acceptance) => {
-                        // wave-4.2 — the two legal records are written FIRST. markPassed
-                        // runs only after both ids come back; a throw leaves the gate up
-                        // and shows the failure. Letting him through on a failed write
-                        // would mean the app holds data with no record of the basis for
-                        // holding it, which is the one outcome consent exists to prevent.
-                        await recordConsentGateAcceptance(
-                            acceptance, consentGate.preRegistrationSessionId);
-
-                        // B1 — keep what was DISPLAYED so it can be restated once an
-                        // account exists. After the accepting write, never before: a
-                        // payload stored for an acceptance that never landed would later
-                        // produce a linking row asserting a consent that does not exist.
-                        //
-                        // Deliberately NOT awaited. Doctrine P9 — a wedged IndexedDB must
-                        // not be able to hold a farmer on the consent screen. Losing the
-                        // race between this write and the app being killed costs one
-                        // unlinked acceptance, which is the state we are already in.
-                        void rememberConsentGateAcceptanceForLinking(
-                            acceptance, consentGate.preRegistrationSessionId);
-
-                        consentGate.markPassed();
-                    }}
-                />
-            </AppShell>
-        );
-    }
-
     return (
         <AppShell>
             {isAuthenticated ? <AppContent crops={crops} setCrops={setCrops} /> : <LoginPage />}

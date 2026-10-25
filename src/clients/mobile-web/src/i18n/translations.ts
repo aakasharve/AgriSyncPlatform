@@ -279,6 +279,14 @@ export interface Translations {
         languageGroupLabel: string;
         /** Shown when the two legal records could not be written. Never a silent pass. */
         saveFailed: string;
+        /** Closes the full notice and returns to the phone-number screen. */
+        noticeClose: string;
+        /** From the Terms or the Privacy Notice back to the notice. */
+        noticeBack: string;
+        documentLoading: string;
+        /** A legal document could not be opened — never a blank page. */
+        documentFailed: string;
+        retry: string;
     };
 
     /**
@@ -495,6 +503,11 @@ export const translations: Record<Language, Translations> = {
         consentGate: {
             languageGroupLabel: 'Choose language',
             saveFailed: 'We could not save this. Please check your connection and try again.',
+            noticeClose: 'Close',
+            noticeBack: 'Back to the notice',
+            documentLoading: 'Opening…',
+            documentFailed: 'This document could not be opened.',
+            retry: 'Try again',
         },
         sync: syncTranslations.en,
         shramSathi: shramSathiTranslations.en,
@@ -708,6 +721,11 @@ export const translations: Record<Language, Translations> = {
         consentGate: {
             languageGroupLabel: 'भाषा निवडा',
             saveFailed: 'हे साठवता आलं नाही. इंटरनेट तपासून पुन्हा प्रयत्न करा.',
+            noticeClose: 'बंद करा',
+            noticeBack: 'सूचनेकडे परत',
+            documentLoading: 'उघडत आहे…',
+            documentFailed: 'हा कागद उघडता आला नाही.',
+            retry: 'पुन्हा प्रयत्न करा',
         },
         sync: syncTranslations.mr,
         shramSathi: shramSathiTranslations.mr,

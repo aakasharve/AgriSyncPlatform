@@ -18,7 +18,7 @@
 
 # Privacy Notice — Shram Safal
 
-**Version `privacy-2026-10-13.2` · revised 13 October 2026**
+**Version `privacy-2026-10-25.1` · revised 25 October 2026**
 
 > **This is a founder-authored draft. It has not been reviewed by a lawyer.**
 > It is published so that nobody is asked to accept a document that does not exist. It
@@ -51,7 +51,7 @@ that would bounce.
 ## 2. What we collect, and why
 
 Everything in this table is collected because the app cannot do the job without it. Each
-row is one of the five things the first-open notice showed you before you agreed.
+row is one of the five things listed in the notice you agreed to when you ticked the box.
 
 | What | Specifically | Why |
 |---|---|---|
@@ -63,7 +63,7 @@ row is one of the five things the first-open notice showed you before you agreed
 
 ### 2a. The people who work on your farm
 
-This one is not on the first-open screen, and it is the most important paragraph in this
+This one is not in that short notice, and it is the most important paragraph in this
 document, so it gets its own section.
 
 When you speak or type a day's work, the app **reads your workers' and mukadams' names
@@ -198,8 +198,8 @@ and sending you to an invented channel would be worse than sending you to none.
 
 ## 9. Children
 
-**Shram Safal is not for anyone under 18.** You confirmed you were 18 or older before you
-could continue — the app will not let you past that screen without it.
+**Shram Safal is not for anyone under 18.** You confirmed you were 18 or older when you
+ticked the box — the app does not send your phone number without it.
 
 We do not yet store that confirmation alongside your consent record. The app enforces the
 rule but does not yet keep the proof; that is owed and is being added. We would rather say

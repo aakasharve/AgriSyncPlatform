@@ -5,29 +5,56 @@
  * Multi-tenant plan §3.6.
  * Design: emerald, Marathi-above-English, one decision per screen.
  */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Phone } from 'lucide-react';
 import { startOtp, type StartOtpResponse, type OtpError } from '../data/otpClient';
 
 interface OtpLoginFormProps {
     onOtpSent: (phone: string, response: StartOtpResponse) => void;
+    /**
+     * spec: plr-d10-x1-consent-tick-on-phone-screen-2026-10-25 — the page's consent tick,
+     * rendered between the number and the button. The form stays consent-agnostic: it
+     * only knows that something must be done before the number may leave the device.
+     */
+    consentSlot?: React.ReactNode;
+    /** True while sending is not allowed yet (e.g. the consent box is not ticked). */
+    sendBlocked?: boolean;
+    /** Runs BEFORE `startOtp`; a throw means the number is not sent. */
+    beforeSend?: () => Promise<void>;
+    /** Shown when `beforeSend` throws. */
+    beforeSendFailedMessage?: string;
 }
 
 // 2026-05-13 (purvesh-demo-v2 Halt Point 3): the "purvesh" demo phone shortcut
 // was removed entirely. See LoginPage.tsx for full rationale (production-look
 // design-mode brief; stealth back-door removed). Demo testers type the literal
 // phone 8888888888.
-const OtpLoginForm: React.FC<OtpLoginFormProps> = ({ onOtpSent }) => {
+const OtpLoginForm: React.FC<OtpLoginFormProps> = ({
+    onOtpSent, consentSlot, sendBlocked = false, beforeSend, beforeSendFailedMessage,
+}) => {
     const [phone, setPhone] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // One press = one send. State alone cannot stop two taps landing in the same tick.
+    const sendingRef = useRef(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const normalized = phone.trim();
-        if (!normalized) return;
+        if (!normalized || sendBlocked || sendingRef.current) return;
+        sendingRef.current = true;
         setIsLoading(true);
         setError(null);
+        if (beforeSend) {
+            try {
+                await beforeSend();
+            } catch {
+                setError(beforeSendFailedMessage ?? 'हे साठवता आलं नाही. / Could not save this.');
+                setIsLoading(false);
+                sendingRef.current = false;
+                return;
+            }
+        }
         try {
             const res = await startOtp(normalized);
             onOtpSent(normalized, res);
@@ -40,6 +67,7 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({ onOtpSent }) => {
             }
         } finally {
             setIsLoading(false);
+            sendingRef.current = false;
         }
     };
 
@@ -76,6 +104,8 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({ onOtpSent }) => {
                 </div>
             </div>
 
+            {consentSlot}
+
             {error && (
                 <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
                     {error}
@@ -84,7 +114,7 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({ onOtpSent }) => {
 
             <button
                 type="submit"
-                disabled={isLoading || !phone.trim()}
+                disabled={isLoading || !phone.trim() || sendBlocked}
                 className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
             >
                 {isLoading ? 'OTP पाठवत आहे…' : 'OTP पाठवा / Send OTP'}

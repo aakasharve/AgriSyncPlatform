@@ -17,7 +17,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { resetAndSeed } from '../fixtures/seed.api';
-import { loginViaPassword, passConsentGateIfPresent, HOME_READY_TESTID } from '../fixtures/loginHelper';
+import { loginViaPassword, tickConsentIfPresent, HOME_READY_TESTID } from '../fixtures/loginHelper';
 
 test.describe('Login', () => {
     test('login with seeded user lands on home', async ({ page }) => {
@@ -36,10 +36,6 @@ test.describe('Login', () => {
         // Inline the toggle-to-password flow with a WRONG password.
         await page.goto('/');
 
-        // The consent gate renders in front of LoginPage on every logged-out boot,
-        // so this inlined flow needs the same pass-through the helper does.
-        await passConsentGateIfPresent(page);
-
         const useLegacyButton = page.getByRole('button', { name: /password.*legacy|पासवर्डने/i });
         await useLegacyButton.waitFor({ timeout: 15_000 });
         await useLegacyButton.click();
@@ -53,6 +49,8 @@ test.describe('Login', () => {
         await passwordInput.fill('wrong_password_xyz');
 
         const submitBtn = page.locator('button[type="submit"]').first();
+        // Consent is one tick on this screen; the submit stays disabled until it is ticked.
+        await tickConsentIfPresent(page, submitBtn);
         await submitBtn.click();
 
         // An inline alert div (role="alert") should appear with an error message
@@ -107,11 +105,8 @@ async function logoutViaProfile(page: Page): Promise<void> {
     // OTP login form header ("OTP पाठवा / Send OTP") or the "Use password"
     // toggle button as the canonical sign that the login screen is showing.
     //
-    // The consent gate stands in front of LoginPage for every logged-out boot, and
-    // after a logout it is shown again (the acceptance is read from the active
-    // per-user database, which logout moves away from). Pass it exactly as a farmer
-    // does, then assert the login screen - otherwise this waits behind the gate.
-    await passConsentGateIfPresent(page);
+    // There is no consent screen in front of LoginPage any more: consent is a tick on
+    // the login form itself, so the login screen is what appears.
     const useLegacyButton = page.getByRole('button', { name: /पासवर्डने/i });
     await expect(useLegacyButton).toBeVisible({ timeout: 20_000 });
 }
@@ -212,7 +207,6 @@ test.describe('remembered device sessions', () => {
         // LoginPage is rendered. (Already asserted inside logoutViaProfile —
         // we re-assert after reload to prove the revoked state persists.)
         await page.reload({ waitUntil: 'domcontentloaded' });
-        await passConsentGateIfPresent(page);
 
         // The OTP login surface (or its "Use password" toggle) must be visible.
         // We do NOT require the exact OTP form — either the OTP panel or the

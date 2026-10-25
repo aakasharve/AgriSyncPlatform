@@ -22,7 +22,7 @@
 // 2026-08-25-prod-cutover-waves, B1).
 
 import { APP_VERSION } from '../../../infrastructure/api/transport';
-import type { ConsentGateAcceptance } from './ConsentGateScreen';
+import type { ConsentGateAcceptance } from './consentAcceptance';
 
 interface ViteImportMeta { env?: { VITE_AGRISYNC_API_URL?: unknown } }
 

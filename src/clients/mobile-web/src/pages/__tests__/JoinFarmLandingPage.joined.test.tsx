@@ -52,6 +52,18 @@ vi.mock('../../app/providers/AuthProvider', () => ({
     useOptionalAuth: () => authValue,
 }));
 
+// spec: plr-d10-x1-consent-tick-on-phone-screen-2026-10-25 - consent is a tick on this
+// page now. This suite tests something else, so the device is treated as having already
+// accepted the current notice (no tick, sending allowed). The tick has its own suites.
+vi.mock('../../features/consent/gate/useConsentBeforeOtp', () => ({
+    useConsentBeforeOtp: () => ({
+        status: 'passed', ticked: false, setTicked: vi.fn(), canSend: true, language: 'mr',
+        noticeOpen: false, setNoticeOpen: vi.fn(), recordIfNeeded: vi.fn(async () => undefined),
+    }),
+}));
+vi.mock('../../i18n/LanguageContext', () => ({
+    useLanguage: () => ({ language: 'mr', setLanguage: vi.fn(), t: (key: string) => key }),
+}));
 import JoinFarmLandingPage, { __resetCompletedJoinsForTests } from '../JoinFarmLandingPage';
 
 const CLAIM = {

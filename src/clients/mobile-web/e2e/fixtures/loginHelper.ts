@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 
 /**
@@ -44,68 +44,39 @@ export interface LoginOptions {
 }
 
 /**
- * The consent gate stands in FRONT of LoginPage for every unauthenticated boot
- * (`App.tsx`: `!isAuthenticated && consentGate.status === 'required'`), and each
- * Playwright test gets a fresh browser context, so it renders on every spec that
- * starts logged out. Without this the login specs time out waiting for a control
- * that is not on screen yet.
+ * spec: plr-d10-x1-consent-tick-on-phone-screen-2026-10-25 — consent is one tick on the
+ * phone-number screen (LoginPage, both modes; the QR join page), recorded before the
+ * number leaves the device. There is no full-screen gate any more, and the tick is shown
+ * on EVERY login (consent belongs to the person logging in, not the phone), so the submit
+ * button stays disabled until it is ticked - including after a logout.
  *
- * DELIBERATELY NOT FLAG-GATED AWAY. It would have been cheaper to hide the gate
- * under `VITE_E2E_HARNESS`, but the worst defect found on this branch was a
- * consent button rendered below the fold on a real handset — a bug that made the
- * app unopenable and that every automated check passed straight through. Gating
- * the screen out of e2e would delete the only automated coverage of the surface
- * that has already failed hardest. A real farmer has to pass this screen, so the
- * test passes it too, exactly the way he does: tick 18+, then accept.
+ * DELIBERATELY NOT FLAG-GATED AWAY. A real farmer has to tick this box, so the test
+ * ticks it too, the way he does - and the submit then records consent for real before
+ * signing in, so every login spec exercises the consent write.
  *
- * Returns true when the gate was present and passed, false when it was already
- * satisfied. Never throws on absence — if neither the gate nor the login form
- * appears, it returns false and lets the CALLER's own wait produce the real
- * failure message, rather than masking it with a timeout from in here.
+ * Waits for ONE of two things rather than sleeping: the tick appearing (tick it, then the
+ * submit must turn enabled), or the submit turning enabled on its own (the tick was
+ * already given on this visit). Neither is true while the screen is still mounting, and
+ * clicking a disabled submit would do nothing.
+ *
+ * Returns true when the tick was present and ticked. Never throws on absence: if neither
+ * happens it returns false and lets the CALLER's own wait produce the real failure.
  */
-export async function passConsentGateIfPresent(page: Page): Promise<boolean> {
-    const acceptCta = page.getByTestId('consent-accept-cta');
-    // SplashScreen owns the first moments of a cold boot, so neither the gate nor
-    // the login form is on screen immediately. Race the two rather than sleeping.
-    const useLegacyButton = page.getByRole('button', { name: /Use password/i });
-
-    const GATE_SETTLE_POLLS = 8; // 8 x 250 ms = 2 s of a stable login form
-    let loginSeenPolls = 0;
+export async function tickConsentIfPresent(page: Page, submit: Locator): Promise<boolean> {
+    const tick = page.getByTestId('consent-tick');
     const deadline = Date.now() + 20_000;
     while (Date.now() < deadline) {
-        if (await acceptCta.isVisible().catch(() => false)) {
-            // The CTA is disabled until the 18+ declaration is ticked
-            // (ConsentGateScreen: `disabled={!ageConfirmed || submitting}`).
-            await page.getByTestId('consent-age-checkbox').check();
-            await acceptCta.click();
-            // Acceptance writes two legal records BEFORE markPassed, so the screen
-            // stays up until they land. Waiting for it to go proves the write
-            // succeeded — clicking and moving on would pass even if it threw.
-            await expect(acceptCta).toBeHidden({ timeout: 20_000 });
+        if (await tick.isVisible().catch(() => false)) {
+            await tick.check();
+            await expect(submit).toBeEnabled({ timeout: 10_000 });
             return true;
         }
-
-        if (await useLegacyButton.isVisible().catch(() => false)) {
-            // The login form being visible is NOT proof the gate was passed: while
-            // the consent preference is still being read (`status: 'undecided'`,
-            // App.tsx) the app renders LoginPage, then swaps to the gate once the
-            // read settles. Treating the first sighting as "already past the gate"
-            // clicked a button that was then detached (the 60 s "element was
-            // detached" timeouts). Only believe it after it has stayed up for a
-            // settle window in which the gate never appeared.
-            loginSeenPolls += 1;
-            if (loginSeenPolls >= GATE_SETTLE_POLLS) {
-                return false; // genuinely past the gate
-            }
-        } else {
-            loginSeenPolls = 0;
-        }
-
+        if (await submit.isEnabled().catch(() => false)) return false;
         await page.waitForTimeout(250);
     }
-
     return false;
 }
+
 
 export async function loginViaPassword(
     page: Page,
@@ -114,8 +85,6 @@ export async function loginViaPassword(
     options: LoginOptions = {},
 ): Promise<void> {
     await page.goto('/');
-
-    await passConsentGateIfPresent(page);
 
     // Toggle from OTP (default) to password (legacy) form. The button is only
     // visible while topMode === 'otp'; clicking switches to topMode='password'.
@@ -149,6 +118,7 @@ export async function loginViaPassword(
     // The submit button text varies by mode (Sign In / Register / etc).
     // Use the form's button[type="submit"] as the canonical selector.
     const submitButton = page.locator('button[type="submit"]').first();
+    await tickConsentIfPresent(page, submitButton);
     await submitButton.click();
 
     let landing = await waitForLoginLanding(page);

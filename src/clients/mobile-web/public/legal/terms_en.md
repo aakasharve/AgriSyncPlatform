@@ -12,7 +12,7 @@
 
 # Terms of Use — Shram Safal
 
-**Version `terms-2026-08-17.1` · in force from 17 August 2026**
+**Version `terms-2026-10-25.1` · in force from 25 October 2026**
 
 > **This is a founder-authored draft. It has not been reviewed by a lawyer.**
 > It is published so that nobody is asked to accept a document that does not exist. It
@@ -29,8 +29,9 @@ Market, Pandharpur, Dist. Solapur, Maharashtra – 413304, India.
 
 Contact: arvesystems@gmail.com
 
-By choosing **"Agree and Continue"** on the first screen, you accept these Terms. That
-same tap separately records your consent to the use of your data described in the
+By ticking the box on the screen where you enter your phone number — the box that says
+you have read and agree to the data notice and these Terms — you accept these Terms. That
+same tick separately records your consent to the use of your data described in the
 [Privacy Notice](/legal/privacy_en.md). The two are stored as two separate records, and
 you can withdraw the consent without ceasing to be bound by these Terms.
 
@@ -40,8 +41,8 @@ you can withdraw the consent without ceasing to be bound by these Terms.
 
 **Shram Safal is not for anyone under the age of 18.**
 
-You confirmed your age before you could continue — the app will not let you past that
-screen without it, and the server refuses an acceptance that does not carry it.
+You confirmed your age in that same tick — the app does not send your phone number
+without it, and the server refuses an acceptance that does not carry it.
 
 **One honest limitation:** we do not yet *store* that confirmation alongside your consent
 record. The rule is enforced; the proof is not yet kept. We are adding that, and we would
