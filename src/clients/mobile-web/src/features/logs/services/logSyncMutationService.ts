@@ -3,6 +3,7 @@ import { CreateDailyLogCommand, type LabourItemPayload, type ManualDraftPayload 
 import { type CropCycleDto, type PlotDto } from '../../../infrastructure/api/AgriSyncClient';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
+import { cropCycleIdForPlot, findSendablePendingPlot } from '../../sync/plots/pendingPlots';
 import { type DailyLog } from '../../../types';
 import { buildTaskPayloads, ensureUuid, normalizeName } from './logTaskPayloads';
 import {
@@ -330,11 +331,13 @@ async function resolveLogPlots(
 
     for (const plotId of plotIds) {
         const plotRecord = await db.plots.get(plotId);
-        if (!plotRecord) {
-            return null;
-        }
-
-        const plotFarmId = (plotRecord.payload as PlotDto).farmId;
+        // spec: plr-d10-redesign-real-integration (I9 — X3). A plot made on THIS phone and
+        // already queued (create_plot ahead of this log, still able to reach the server) is
+        // not in the server's copy yet; its farm is the one recorded when it was made.
+        // Anything else still refuses.
+        const plotFarmId = plotRecord
+            ? (plotRecord.payload as PlotDto).farmId
+            : (await findSendablePendingPlot(plotId))?.farmId;
         if (!plotFarmId || (farmId !== null && plotFarmId !== farmId)) {
             return null;
         }
@@ -583,6 +586,18 @@ async function resolveSyncTarget(
     const cropName = normalizeName(selection?.cropName);
 
     const cycleRecords = await db.cropCycles.where('plotId').equals(plotId).toArray();
+
+    // spec: plr-d10-redesign-real-integration (I9 — X3). No server cycle yet for a plot
+    // made on THIS phone: its one cycle is the derived one queued with the plot, ahead of
+    // this log, so attribute to it — for any log date (the server has no date window on a
+    // cycle, and this plot has exactly one cycle the farmer could mean).
+    if (cycleRecords.length === 0) {
+        const pending = await findSendablePendingPlot(plotId);
+        if (pending && pending.farmId === farmId) {
+            return { farmId, scope: 'Plot', plotIds, plotId, cropCycleId: await cropCycleIdForPlot(plotId) };
+        }
+    }
+
     const candidates = cycleRecords
         .map(record => record.payload as CropCycleDto)
         .filter(candidate => normalizeName(candidate.cropName) === cropName);

@@ -8,7 +8,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    Plus, Trash2, X, Crosshair, ArrowRight, ArrowLeft, Save,
+    X, ArrowRight, Save,
     CheckCircle2, Wrench, AlertTriangle, Tractor
 } from 'lucide-react';
 import {
@@ -72,6 +72,11 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
         if (!plotName.trim()) {
             newErrors.plotName = 'Plot name is required';
         }
+        // spec: plr-d10-redesign-real-integration-2026-10-25 (I9). The server refuses a plot
+        // with no area, and an area is never guessed for him — so it is asked for here.
+        if (!(Number(area) > 0)) {
+            newErrors.area = 'क्षेत्र लिहा · Enter the area';
+        }
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -126,7 +131,10 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
             linkedMachineryIds: selectedMachineIds
         };
 
-        const plotId = `p_${idGenerator.generate()}`;
+        // spec: plr-d10-redesign-real-integration-2026-10-25 (I9 — X3). A bare GUID, the id the
+        // server will keep: a `p_` prefix failed the sync contract's GUID check, so the plot
+        // and every log on it never left the phone.
+        const plotId = idGenerator.generate();
         const startDate = systemClock.nowISO();
 
         const newPlot: Plot = {
@@ -161,15 +169,6 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
         setStep(step + 1);
     };
     const prevStep = () => setStep(step - 1);
-
-    const progress = (step / 4) * 100;
-
-    const irrMethodLabels: Record<string, string> = {
-        'Drip': t('profile.drip'),
-        'Flood': t('profile.flood'),
-        'Sprinkler': t('profile.sprinkler'),
-        'None': t('profile.none'),
-    };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
@@ -219,18 +218,27 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                                     <label className="block text-xs font-bold text-slate-400 uppercase mb-1">{t('profile.area')}</label>
                                     <input
                                         type="number"
-                                        className="w-full p-3 border border-slate-200 rounded-xl font-bold outline-none focus:border-emerald-500"
+                                        data-testid="plot-area"
+                                        className={`w-full p-3 border rounded-xl font-bold outline-none focus:border-emerald-500 ${errors.area ? 'border-red-500 bg-red-50' : 'border-slate-200'}`}
                                         placeholder="0"
                                         value={area}
-                                        onChange={e => setArea(parseFloat(e.target.value))}
+                                        onChange={e => {
+                                            setArea(parseFloat(e.target.value));
+                                            if (errors.area) setErrors({ ...errors, area: '' });
+                                        }}
                                     />
+                                    {errors.area && (
+                                        <p data-testid="plot-area-error" className="mt-1 flex items-center gap-1 text-xs font-bold text-red-600">
+                                            <AlertTriangle size={12} /> {errors.area}
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="w-1/3">
                                     <label className="block text-xs font-bold text-slate-400 uppercase mb-1">{t('profile.unit')}</label>
                                     <select
                                         className="w-full p-3 border border-slate-200 rounded-xl bg-white font-bold outline-none"
                                         value={areaUnit}
-                                        onChange={e => setAreaUnit(e.target.value as any)}
+                                        onChange={e => setAreaUnit(e.target.value as LandUnit)}
                                     >
                                         <option value="Acre">{t('profile.acre')}</option>
                                         <option value="Guntha">{t('profile.guntha')}</option>

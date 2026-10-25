@@ -7,11 +7,17 @@ import { getDatabase } from '../storage/DexieDatabase';
 import { AiJobWorker } from './AiJobWorker';
 import { isSyncMutationType } from './SyncMutationCatalog';
 import { getRootStore } from '../../app/state/RootStore';
-import { categorizePushFailure, categorizeRejection, isDependencyPendingRejection } from './RejectionPolicy';
+import {
+    categorizePushFailure,
+    categorizeRejection,
+    isDependencyPendingRejection,
+    isPlotDependencyRejection,
+} from './RejectionPolicy';
 import {
     describeDependencyRejection,
     describeDependencyWait,
     resolveDailyLogDependency,
+    resolvePlotDependency,
 } from './MutationDependency';
 import { resetFailedUploadsToPending } from './UploadQueueRetry';
 
@@ -66,7 +72,11 @@ export class BackgroundSyncWorker {
         // §P0.7 box 2e — WORKER START ONLY, never inside the cycle. Same rule
         // as `abandonedStateRecovery`: a scan placed among the items of a live
         // cycle would run against rows that cycle is holding.
-        void this.reconcileStrandedLogs();
+        //
+        // spec: plr-d10-redesign-real-integration (I9) — phone-made plots the server has
+        // not sent back yet are queued again FIRST (same ids, so a repeat collapses), so a
+        // stranded log on such a plot is recovered behind its plot, never ahead of it.
+        void this.reconcileUnregisteredPlots().then(() => this.reconcileStrandedLogs());
         this.safeRunCycle();
 
         this.timerId = window.setInterval(() => {
@@ -251,6 +261,20 @@ export class BackgroundSyncWorker {
         }
     }
 
+    /**
+     * spec: plr-d10-redesign-real-integration-2026-10-25 (I9 — X3). Worker start only, for
+     * the same reason as the stranded-log reconciler, and loaded the same deferred way.
+     * Public so a test can await it.
+     */
+    async reconcileUnregisteredPlots(): Promise<void> {
+        try {
+            const { reconcileUnregisteredPlots } = await import('../../features/sync/plots/registerNewPlotOnServer');
+            await reconcileUnregisteredPlots();
+        } catch (error) {
+            console.error('[BackgroundSyncWorker] phone-made plot retry could not run', error);
+        }
+    }
+
     private handleOnline = () => {
         this.safeRunCycle();
     };
@@ -417,11 +441,14 @@ export class BackgroundSyncWorker {
                 // whether the child should wait or escalate depends entirely on
                 // what that parent is doing. See `MutationDependency` for why
                 // "parent still open" is the wrong question and loops forever.
-                if (isDependencyPendingRejection({
-                    errorCode: result.errorCode,
-                    errorMessage: result.errorMessage,
-                })) {
-                    const verdict = await resolveDailyLogDependency(
+                // spec: plr-d10-redesign-real-integration (I9 — X3) — the same rule for a log
+                // whose parent is a plot (or its crop cycle) made on this phone.
+                const rejection = { errorCode: result.errorCode, errorMessage: result.errorMessage };
+                const resolveDependency = isDependencyPendingRejection(rejection)
+                    ? resolveDailyLogDependency
+                    : isPlotDependencyRejection(rejection) ? resolvePlotDependency : null;
+                if (resolveDependency) {
+                    const verdict = await resolveDependency(
                         mutationQueue.getDeviceId(),
                         mutation.mutationType,
                         mutation.payload,

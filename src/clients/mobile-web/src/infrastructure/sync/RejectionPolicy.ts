@@ -249,6 +249,20 @@ export function isDependencyPendingRejection(input: RejectionInput): boolean {
     return message.toUpperCase().includes(DEPENDENCY_PENDING_CODE);
 }
 
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I9 — X3). The same class, one
+ * level up: a log refused because its PLOT or CROP CYCLE is missing
+ * (`ShramSafalErrors.cs:27-28`). Whether that is the log's parent at all — a plot
+ * made on this phone, still queued — is for `resolvePlotDependency` to say.
+ * Code only: "Plot was not found." carries no code to match on.
+ */
+const PLOT_DEPENDENCY_CODES = new Set(['PLOTNOTFOUND', 'CROPCYCLENOTFOUND']);
+
+export function isPlotDependencyRejection(input: RejectionInput): boolean {
+    const code = input.errorCode ? normalizeCode(input.errorCode) : '';
+    return PLOT_DEPENDENCY_CODES.has(code);
+}
+
 // ---------------------------------------------------------------------------
 // Labour Phase 2 -> Phase 1 (honesty backstop), Task T3 / finding R1.
 // ---------------------------------------------------------------------------

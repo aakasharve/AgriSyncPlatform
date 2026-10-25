@@ -14,6 +14,7 @@ import { normalizeMojibakeText } from '../../../../shared/utils/textEncoding';
 import type { CropProfile, Plot } from '../../../../types';
 import type { CropCycleDto, PlotDto } from '../../../../infrastructure/api/AgriSyncClient';
 import { pickIconName, toCropId } from './cropIdentity';
+import { areaInAcres } from '../../plots/plotArea';
 
 export const CROP_COLORS = [
     'bg-emerald-500',
@@ -71,15 +72,25 @@ export function upsertPlot(crop: CropProfile, plotDto: PlotDto, cycle: CropCycle
     if (existingPlot) {
         existingPlot.name = normalizedPlotName;
         existingPlot.startDate = cycle.startDate;
-        existingPlot.variety = normalizedCropName;
+        // spec: plr-d10-redesign-real-integration (I9). A plot made on this phone carries
+        // the farmer's own variety and his own area in his own unit ("20 गुंठे"). The
+        // server keeps acres to 2 places and has no variety, so overwriting would replace
+        // his statement with a rounded conversion and the crop's name. The variety is only
+        // filled when missing; the area is kept while it still says what the server says
+        // (same acres to 2 places) and replaced when the server's area really differs.
+        existingPlot.variety = existingPlot.variety || normalizedCropName;
         if (existingPlot.schedule) {
             existingPlot.schedule.templateId = templateId ?? existingPlot.schedule.templateId;
         }
-        existingPlot.baseline = {
-            ...existingPlot.baseline,
-            totalArea: plotDto.areaInAcres,
-            unit: 'Acre',
-        };
+        const localAcres = areaInAcres(existingPlot.baseline?.totalArea, existingPlot.baseline?.unit);
+        const sameArea = localAcres > 0 && Math.abs(Math.round(localAcres * 100) / 100 - plotDto.areaInAcres) < 0.005;
+        if (!sameArea) {
+            existingPlot.baseline = {
+                ...existingPlot.baseline,
+                totalArea: plotDto.areaInAcres,
+                unit: 'Acre',
+            };
+        }
         return;
     }
 

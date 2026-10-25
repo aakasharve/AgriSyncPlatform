@@ -15,6 +15,7 @@ import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import { systemClock } from '../../../core/domain/services/Clock';
 import { getTemplateById as getScheduleById, getTemplatesForCrop as getSchedulesForCrop } from '../../../infrastructure/reference/TemplateCatalog';
 import { getNextUnusedColor } from '../helpers/cropPalette';
+import { registerNewPlotOnServer } from '../../sync/plots/registerNewPlotOnServer';
 
 export interface UseCropPlotStateInput {
     crops: CropProfile[];
@@ -86,6 +87,12 @@ export function useCropPlotState({ crops, onUpdateCrops }: UseCropPlotStateInput
     };
 
     const handleAddPlot = (plot: Plot) => {
+        // spec: plr-d10-redesign-real-integration-2026-10-25 (I9 — X3) — the new plot and its
+        // crop cycle are sent to the server (they never were). Fire-and-forget: it never
+        // throws, and a failure is reported as unsent by the sync badge.
+        const cropName = crops.find(crop => crop.id === wizardCropId)?.name;
+        if (cropName) void registerNewPlotOnServer({ plot, cropName });
+
         onUpdateCrops(crops.map(crop => {
             if (crop.id !== wizardCropId) return crop;
 

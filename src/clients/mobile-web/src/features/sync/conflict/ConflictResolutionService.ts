@@ -23,7 +23,10 @@ import { getRootStore } from '../../../app/state/RootStore';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { systemClock } from '../../../core/domain/services/Clock';
 import { getEditSurface } from './EditSurfaceRegistry';
-import { DEPENDENCY_PARENT_UNRESOLVED_CODE } from '../../../infrastructure/sync/MutationDependency';
+import {
+    DEPENDENCY_PARENT_UNRESOLVED_CODE,
+    DEPENDENCY_PLOT_UNRESOLVED_CODE,
+} from '../../../infrastructure/sync/MutationDependency';
 
 export interface RejectedMutationView {
     mutationId: string;
@@ -181,6 +184,11 @@ export class ConflictResolutionService {
             // §P0.7 box 2a — the parent log is named in `reason` itself; this
             // says what to do about it.
             return 'ही नोंद ज्या दैनंदिन नोंदीशी जोडली आहे ती सर्व्हरवर पोहोचली नाही. आधी ती नोंद तपासा.';
+        }
+        if (upper.includes(DEPENDENCY_PLOT_UNRESOLVED_CODE)) {
+            // spec: plr-d10-redesign-real-integration (I9 — X3) — the plot made on this
+            // phone that the log is on was refused; the plot is named in `reason`.
+            return 'ही नोंद ज्या नवीन प्लॉटवर आहे तो प्लॉट सर्व्हरवर पोहोचला नाही. आधी तो प्लॉट तपासा.';
         }
         if (upper.includes('CLIENT_TOO_OLD') || upper.includes('CLIENT_OUTDATED')) {
             return 'अॅप अपडेट करा आणि पुन्हा सिंक करा.';

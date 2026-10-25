@@ -141,6 +141,10 @@ export type DependencyDisposition =
 
 export interface DependencyVerdict {
     disposition: DependencyDisposition;
+    /** What the parent is — absent means a daily log, the original and commonest case. */
+    parentKind?: 'plot' | 'crop cycle';
+    /** The parent plot / crop-cycle id, when `parentKind` is set. */
+    parentId?: string;
     /** The parent daily-log id, when one could be read off the payload. */
     parentDailyLogId?: string;
     /** The key the lookup used — `create_daily_log:{id}`. */
@@ -258,6 +262,148 @@ export async function resolveDailyLogDependency(
     };
 }
 
+// ---------------------------------------------------------------------------
+// spec: plr-d10-redesign-real-integration-2026-10-25 (I9 — X3) — the PLOT parent.
+// ---------------------------------------------------------------------------
+
+/**
+ * A log on a plot made on THIS phone depends on two rows queued ahead of it,
+ * keyed the same derivable way as the daily-log parent:
+ * `create_plot:{plotId}` (`CreatePlotCommand`) and
+ * `create_crop_cycle:{cropCycleId}` (`CreateCropCycleCommand`). When either is
+ * refused, the server answers the log with `PlotNotFound` / `CropCycleNotFound`
+ * (`CreateDailyLogHandler.cs`), which is a verdict about the parent, not the log.
+ *
+ * ABSENT IS NOT A DEPENDENCY HERE — the one deliberate difference from the
+ * daily-log rule. Most plots were made on the server or on another phone and
+ * have no row on this device at all; a `PlotNotFound` about one of those is the
+ * server saying something this module cannot interpret (a deleted plot, another
+ * farm), so the ordinary classification stands.
+ */
+interface QueuedParent {
+    kind: 'plot' | 'crop cycle';
+    id: string;
+    clientRequestId: string;
+}
+
+export function plotParentClientRequestId(plotId: string): string {
+    return `${SyncMutationName.CreatePlot}:${plotId}`;
+}
+
+export function cropCycleParentClientRequestId(cropCycleId: string): string {
+    return `${SyncMutationName.CreateCropCycle}:${cropCycleId}`;
+}
+
+/**
+ * PURE — the plot and crop-cycle rows a `create_daily_log` payload names, or the plot row
+ * a `create_crop_cycle` names (the cycle is refused `PlotNotFound` when its plot was; its
+ * own `cropCycleId` is itself, never its parent).
+ */
+export function plotParentsOf(mutationType: string, payload: unknown): QueuedParent[] {
+    if (mutationType === SyncMutationName.CreateCropCycle) {
+        const plotId = readStringField(payload, 'plotId');
+        return plotId ? [{ kind: 'plot', id: plotId, clientRequestId: plotParentClientRequestId(plotId) }] : [];
+    }
+    if (mutationType !== SyncMutationName.CreateDailyLog) {
+        return [];
+    }
+
+    const plotIds = new Set<string>();
+    const single = readStringField(payload, 'plotId');
+    if (single) {
+        plotIds.add(single);
+    }
+    const many = typeof payload === 'object' && payload !== null
+        ? (payload as Record<string, unknown>).plotIds
+        : undefined;
+    if (Array.isArray(many)) {
+        for (const id of many) {
+            if (typeof id === 'string' && id.trim().length > 0) {
+                plotIds.add(id.trim());
+            }
+        }
+    }
+
+    const parents: QueuedParent[] = [...plotIds].map(id => ({
+        kind: 'plot', id, clientRequestId: plotParentClientRequestId(id),
+    }));
+    const cropCycleId = readStringField(payload, 'cropCycleId');
+    if (cropCycleId) {
+        parents.push({ kind: 'crop cycle', id: cropCycleId, clientRequestId: cropCycleParentClientRequestId(cropCycleId) });
+    }
+    return parents;
+}
+
+async function findQueuedRow(deviceId: string, clientRequestId: string) {
+    return getDatabase().mutationQueue
+        .where('[deviceId+clientRequestId]')
+        .equals([deviceId, clientRequestId])
+        .first();
+}
+
+/**
+ * Resolve what the phone-made plot (and its crop cycle) a refused log names is
+ * doing right now. Any parent that will not move again without a tap wins —
+ * the log is refused naming it; otherwise any parent still moving makes the log
+ * wait, uncharged; parents with no row here are not dependencies (see above).
+ */
+export async function resolvePlotDependency(
+    deviceId: string,
+    mutationType: string,
+    payload: unknown,
+): Promise<DependencyVerdict> {
+    let waiting: DependencyVerdict | null = null;
+
+    for (const parent of plotParentsOf(mutationType, payload)) {
+        const row = await findQueuedRow(deviceId, parent.clientRequestId);
+        if (!row) {
+            continue;
+        }
+
+        const disposition = classifyParentStatus(row.status, row.retryCount);
+        const verdict: DependencyVerdict = {
+            disposition,
+            parentKind: parent.kind,
+            parentId: parent.id,
+            parentClientRequestId: parent.clientRequestId,
+            parentStatus: row.status,
+        };
+        if (disposition === 'PARENT_UNRECOVERABLE') {
+            return verdict;
+        }
+        if (disposition === 'PARENT_IN_PROGRESS' && !waiting) {
+            waiting = verdict;
+        }
+    }
+
+    return waiting ?? { disposition: 'NOT_A_DEPENDENCY' };
+}
+
+/**
+ * May a log be queued against this phone-made plot right now? Only while BOTH
+ * rows queued for it are on this device and can still reach the server.
+ *
+ * A row that is ABSENT here means the plot was recorded but its rows never made
+ * it into the queue (the app stopped in between) — a log queued now would go
+ * out with no plot ahead of it. A row that will not move again without a tap
+ * (refused, discarded, out of retries) means every log queued on it would be
+ * refused in turn. Either way the log stays on the phone, reported as unsent,
+ * until the plot's own rows are live again.
+ */
+export async function isPhoneMadePlotSendable(
+    deviceId: string,
+    plotId: string,
+    cropCycleId: string,
+): Promise<boolean> {
+    for (const key of [plotParentClientRequestId(plotId), cropCycleParentClientRequestId(cropCycleId)]) {
+        const row = await findQueuedRow(deviceId, key);
+        if (!row || classifyParentStatus(row.status, row.retryCount) === 'PARENT_UNRECOVERABLE') {
+            return false;
+        }
+    }
+    return true;
+}
+
 /**
  * The machine-stable token carried in `lastError` for a dependency rejection.
  *
@@ -266,6 +412,15 @@ export async function resolveDailyLogDependency(
  * constant so the producer and the matcher cannot drift.
  */
 export const DEPENDENCY_PARENT_UNRESOLVED_CODE = 'DEPENDENCY_PARENT_UNRESOLVED';
+
+/** The same, when the parent is a phone-made plot or its crop cycle — the remedy differs. */
+export const DEPENDENCY_PLOT_UNRESOLVED_CODE = 'DEPENDENCY_PLOT_UNRESOLVED';
+
+function parentNamed(verdict: DependencyVerdict): string {
+    return verdict.parentKind
+        ? `${verdict.parentKind} ${verdict.parentId ?? '(unknown)'}`
+        : `daily log ${verdict.parentDailyLogId ?? '(unknown)'}`;
+}
 
 /**
  * The `lastError` written while the child is WAITING on a live parent.
@@ -276,7 +431,7 @@ export const DEPENDENCY_PARENT_UNRESOLVED_CODE = 'DEPENDENCY_PARENT_UNRESOLVED';
  * does not mistake a patient child for a burning one.
  */
 export function describeDependencyWait(verdict: DependencyVerdict): string {
-    return `Waiting for daily log ${verdict.parentDailyLogId ?? '(unknown)'} to reach the server `
+    return `Waiting for ${parentNamed(verdict)} to reach the server `
         + `(${verdict.parentStatus ?? 'UNKNOWN'}). This attempt was not counted against the retry limit.`;
 }
 
@@ -296,7 +451,7 @@ export function describeDependencyRejection(verdict: DependencyVerdict): string 
         ? `its state here is ${verdict.parentStatus}`
         : 'it is not in this device\'s queue at all';
 
-    return `${DEPENDENCY_PARENT_UNRESOLVED_CODE}: the server has no daily log `
-        + `${verdict.parentDailyLogId ?? '(unknown)'}, and ${parentState}. `
-        + 'This record cannot be sent until that log reaches the server.';
+    const code = verdict.parentKind ? DEPENDENCY_PLOT_UNRESOLVED_CODE : DEPENDENCY_PARENT_UNRESOLVED_CODE;
+    return `${code}: the server has no ${parentNamed(verdict)}, and ${parentState}. `
+        + `This record cannot be sent until that ${verdict.parentKind ?? 'log'} reaches the server.`;
 }

@@ -54,6 +54,12 @@ type ReferencePayload = SyncPullResponse & {
     operators?: SyncOperatorDto[];
 };
 
+/** Same crop by name — trimmed, case- and space-insensitive, and safe for Marathi names. */
+const sameCropName = (a: string, b: string): boolean => {
+    const norm = (s: string) => normalizeMojibakeText(s).trim().toLowerCase().replace(/\s+/g, ' ');
+    return norm(a) === norm(b);
+};
+
 export async function reconcileProfileAndCrops(
     payload: SyncPullResponse,
 ): Promise<ProfileAndCropsResult> {
@@ -70,7 +76,14 @@ export async function reconcileProfileAndCrops(
 
     const plotsById = new Map(payload.plots.map(plot => [plot.id, plot]));
     for (const cycle of payload.cropCycles) {
-        const crop = ensureCrop(cropsById, cycle.cropName);
+        // spec: plr-d10-redesign-real-integration (I9). A crop made on this phone has its
+        // own id (`c_<uuid>`), not the `crop_<name>` id this download derives from a name —
+        // so a plot made on the phone, coming back from the server, used to land in a SECOND
+        // crop of the same name and show twice. The crop that already holds the plot wins
+        // when it is the same crop by name; otherwise (the plot changed crop) the name does.
+        const holder = [...cropsById.values()].find(c =>
+            c.plots.some(p => p.id === cycle.plotId) && sameCropName(c.name, cycle.cropName));
+        const crop = holder ?? ensureCrop(cropsById, cycle.cropName);
         const resolvedTemplateId = cropTypeDefaults.get(normalizeCropTypeKey(cycle.cropName))
             ?? crop.activeScheduleId
             ?? null;

@@ -26,6 +26,7 @@ import {
     describeDependencyRejection,
     parentClientRequestIdForDailyLog,
     parentDailyLogIdOf,
+    plotParentsOf,
     resolveDailyLogDependency,
 } from '../MutationDependency';
 import { CreateDailyLogCommand } from '../../../application/usecases/sync/CreateDailyLogCommand';
@@ -256,5 +257,30 @@ describe('MutationDependency — box 2b: the lookup is keyed, not scanned', () =
 
         expect(verdict.disposition).toBe('PARENT_UNRECOVERABLE');
         expect(recordsRead).toBe(0);
+    });
+});
+
+// spec: plr-d10-redesign-real-integration-2026-10-25 (I9 — X3) — the plot parent.
+describe('plotParentsOf — which plot and cycle rows a log waits on', () => {
+    it('a one-plot log names its plot and its crop cycle', () => {
+        expect(plotParentsOf(SyncMutationName.CreateDailyLog, { plotId: 'p1', plotIds: ['p1'], cropCycleId: 'c1' }))
+            .toEqual([
+                { kind: 'plot', id: 'p1', clientRequestId: `${SyncMutationName.CreatePlot}:p1` },
+                { kind: 'crop cycle', id: 'c1', clientRequestId: `${SyncMutationName.CreateCropCycle}:c1` },
+            ]);
+    });
+
+    it('a several-plot log names every plot, and no cycle', () => {
+        expect(plotParentsOf(SyncMutationName.CreateDailyLog, { plotIds: ['p1', 'p2'] }).map(p => p.id))
+            .toEqual(['p1', 'p2']);
+    });
+
+    it('a crop cycle waits on its plot, never on itself', () => {
+        expect(plotParentsOf(SyncMutationName.CreateCropCycle, { plotId: 'p1', cropCycleId: 'c1' }))
+            .toEqual([{ kind: 'plot', id: 'p1', clientRequestId: `${SyncMutationName.CreatePlot}:p1` }]);
+    });
+
+    it('other mutations have no plot parents', () => {
+        expect(plotParentsOf(SyncMutationName.AddLogTask, { plotId: 'p1' })).toEqual([]);
     });
 });
