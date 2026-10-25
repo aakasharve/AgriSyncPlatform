@@ -76,7 +76,10 @@ const LoginPage: React.FC = () => {
     const [otpMeta, setOtpMeta] = useState<StartOtpResponse | null>(null);
 
     const { t } = useLanguage();
-    const consent = useConsentBeforeOtp();
+    // The number typed in the OTP form (it owns its own input). Consent belongs to the
+    // number it was given for, so the hook is told which number is on screen.
+    const [otpTypedPhone, setOtpTypedPhone] = useState('');
+    const consent = useConsentBeforeOtp(topMode === 'otp' ? otpTypedPhone : phone);
     const [consentError, setConsentError] = useState<string | null>(null);
     // One press = one sign-in. `isLoading` only turns true inside login(), so without this a
     // second tap during the consent write would sign in twice.
@@ -130,6 +133,7 @@ const LoginPage: React.FC = () => {
                                     sendBlocked={!consent.canSend}
                                     beforeSend={consent.recordIfNeeded}
                                     beforeSendFailedMessage={t('consentGate.saveFailed')}
+                                    onPhoneChange={setOtpTypedPhone}
                                 />
                             ) : (
                                 <OtpVerifyForm

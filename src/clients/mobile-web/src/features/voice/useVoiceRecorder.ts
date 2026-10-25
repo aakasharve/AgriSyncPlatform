@@ -349,10 +349,10 @@ export const useVoiceRecorder = ({
         try {
             await PendingInterpretationStore.getInstance().persist(record);
         } catch (err) {
-            // spec: dfes-companion-2026-07-11 (wave-4.3) — the store refuses to keep raw
-            // audio without core consent. In production this cannot be reached: the gate
-            // stands in front of login and the recorder is behind it. If it ever is, the
-            // right outcome is that WE LOSE THE CLIP, not that the farmer loses the app —
+            // spec: dfes-companion-2026-07-11 (wave-4.3) — no raw audio without core consent.
+            // Reached only when this phone holds no acceptance of the CURRENT notice (it was
+            // hit by every signed-in farmer until coreConsentGate read the right database —
+            // plr-d10-redesign-real-integration I1). WE LOSE THE CLIP, not the farmer his app,
             // so this reports and returns instead of throwing out of the save path.
             // The clip is gone, and honestly so: without a basis we may not hold his voice.
             if (err instanceof CoreConsentMissingError) {

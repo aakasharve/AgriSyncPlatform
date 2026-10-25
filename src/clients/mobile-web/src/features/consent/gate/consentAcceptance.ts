@@ -30,6 +30,20 @@ export interface ConsentGateAcceptance {
 }
 
 /**
+ * A fresh pre-registration session id — one per acceptance. The acceptance happens
+ * before any account exists, so this id is what the later linking row restates; one id
+ * per acceptance keeps the server's (account, session) link from mistaking a new
+ * acceptance for an old one.
+ */
+export function mintPreRegistrationSessionId(): string {
+    const c = typeof globalThis !== 'undefined' ? globalThis.crypto : undefined;
+    if (c && typeof c.randomUUID === 'function') return c.randomUUID();
+    // Non-secure fallback for environments without randomUUID. Only ever an id — never
+    // a secret, never an authorisation.
+    return `preauth-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
  * The acceptance for the notice as displayed in `language`. The tick's own sentence says
  * he is 18 or older, so `ageDeclaredAdult` is true by construction: there is no way to
  * tick it without declaring that.

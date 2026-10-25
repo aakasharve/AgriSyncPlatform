@@ -35,7 +35,8 @@
 //
 // @module infrastructure/storage/ConsentGateLinkStore
 
-import { getDatabase } from './DexieDatabase';
+import { getDatabase, type AgriLogDatabase } from './DexieDatabase';
+import { withPreLoginDatabase } from './preLoginDatabase';
 
 /** One key, declared once. Same namespace as the gate's other two uiPrefs keys. */
 export const PENDING_CONSENT_GATE_LINK_PREF_KEY = 'shramsafal_consent_gate_pending_link';
@@ -115,14 +116,35 @@ export async function savePendingConsentGateLink(pending: PendingConsentGateLink
     }
 }
 
+// ── WHICH DATABASE (spec plr-d10-redesign-real-integration, I1) ─────────────────────
+// The payload is SAVED into the active database — on the login screen that is the
+// pre-login one. By the time it is read the farmer is signed in and HIS database is
+// active, which never held it: the first attempt only worked because it raced ahead of
+// the database switch, a retry found nothing, and the "clear" deleted from the wrong
+// place. So reads look in the active database and then the pre-login one, a claim is
+// written where the payload lives, and a clear removes it from both.
+
+type PayloadHome = 'active' | 'preLogin';
+
+async function readFrom(db: AgriLogDatabase): Promise<PendingConsentGateLink | null> {
+    const row = await db.uiPrefs.get(PENDING_CONSENT_GATE_LINK_PREF_KEY);
+    return isPendingConsentGateLink(row?.value) ? row.value : null;
+}
+
+async function locatePending(): Promise<{ pending: PendingConsentGateLink; home: PayloadHome } | null> {
+    try {
+        const active = await readFrom(getDatabase());
+        if (active) return { pending: active, home: 'active' };
+    } catch {
+        // fall through to the pre-login database
+    }
+    const preLogin = await withPreLoginDatabase(readFrom, null);
+    return preLogin ? { pending: preLogin, home: 'preLogin' } : null;
+}
+
 /** The pending payload, or null when there is none / it is unreadable. Never throws. */
 export async function readPendingConsentGateLink(): Promise<PendingConsentGateLink | null> {
-    try {
-        const row = await getDatabase().uiPrefs.get(PENDING_CONSENT_GATE_LINK_PREF_KEY);
-        return isPendingConsentGateLink(row?.value) ? row.value : null;
-    } catch {
-        return null;
-    }
+    return (await locatePending())?.pending ?? null;
 }
 
 /**
@@ -133,27 +155,47 @@ export async function readPendingConsentGateLink(): Promise<PendingConsentGateLi
 export async function claimPendingConsentGateLink(
     userId: string,
 ): Promise<PendingConsentGateLink | null> {
-    const pending = await readPendingConsentGateLink();
-    if (!pending) return null;
+    const found = await locatePending();
+    if (!found) return null;
+    const { pending, home } = found;
     if (pending.claimedByUserId) return pending;
     if (!isNonEmptyString(userId)) return pending;
 
     const claimed: PendingConsentGateLink = { ...pending, claimedByUserId: userId };
-    await savePendingConsentGateLink(claimed);
+    if (home === 'active') {
+        await savePendingConsentGateLink(claimed);
+    } else {
+        await withPreLoginDatabase(async (db) => {
+            await db.uiPrefs.put({ key: PENDING_CONSENT_GATE_LINK_PREF_KEY, value: claimed });
+        }, undefined);
+    }
     return claimed;
 }
 
+/** Deletes the payload from `db` when it is the one asked for (or when none is named). */
+async function clearFrom(db: AgriLogDatabase, sessionId: string | undefined): Promise<void> {
+    if (sessionId !== undefined) {
+        const held = await readFrom(db);
+        if (held && held.preRegistrationSessionId !== sessionId) return;
+    }
+    await db.uiPrefs.delete(PENDING_CONSENT_GATE_LINK_PREF_KEY);
+}
+
 /**
- * Drops the payload. Called on ONE condition only — the server confirmed both linking
- * rows. Every other outcome (offline, 4xx, 5xx, a half response, a different account)
- * leaves it exactly where it was, so the next attempt cannot tell a failed try from a try
- * that never happened. Never throws.
+ * Drops the payload — from the active database AND the pre-login one. With
+ * `preRegistrationSessionId`, only a payload carrying that id is dropped: the two
+ * databases can hold DIFFERENT acceptances, and only the one just linked may go.
+ * Called on ONE condition only — the server confirmed both linking rows. Every other
+ * outcome (offline, 4xx, 5xx, a half response, a different account) leaves it exactly
+ * where it was, so the next attempt cannot tell a failed try from a try that never
+ * happened. Never throws.
  */
-export async function clearPendingConsentGateLink(): Promise<void> {
+export async function clearPendingConsentGateLink(preRegistrationSessionId?: string): Promise<void> {
     try {
-        await getDatabase().uiPrefs.delete(PENDING_CONSENT_GATE_LINK_PREF_KEY);
+        await clearFrom(getDatabase(), preRegistrationSessionId);
     } catch {
         // A payload we failed to delete is re-sent on the next start; the endpoint is
         // idempotent on (user_id, session, event_type) and writes nothing on a replay.
     }
+    await withPreLoginDatabase((db) => clearFrom(db, preRegistrationSessionId), undefined);
 }

@@ -23,6 +23,8 @@ interface OtpLoginFormProps {
     beforeSend?: () => Promise<void>;
     /** Shown when `beforeSend` throws. */
     beforeSendFailedMessage?: string;
+    /** The number as typed — the page's consent belongs to the number it was given for. */
+    onPhoneChange?: (phone: string) => void;
 }
 
 // 2026-05-13 (purvesh-demo-v2 Halt Point 3): the "purvesh" demo phone shortcut
@@ -30,7 +32,7 @@ interface OtpLoginFormProps {
 // design-mode brief; stealth back-door removed). Demo testers type the literal
 // phone 8888888888.
 const OtpLoginForm: React.FC<OtpLoginFormProps> = ({
-    onOtpSent, consentSlot, sendBlocked = false, beforeSend, beforeSendFailedMessage,
+    onOtpSent, consentSlot, sendBlocked = false, beforeSend, beforeSendFailedMessage, onPhoneChange,
 }) => {
     const [phone, setPhone] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -93,7 +95,12 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({
                         id="otp-phone"
                         type="tel"
                         value={phone}
-                        onChange={e => { setPhone(e.target.value.replace(/[^0-9]/g, '')); setError(null); }}
+                        onChange={e => {
+                            const next = e.target.value.replace(/[^0-9]/g, '');
+                            setPhone(next);
+                            setError(null);
+                            onPhoneChange?.(next);
+                        }}
                         placeholder="10-digit number"
                         autoComplete="tel"
                         className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm font-medium outline-none placeholder:text-stone-400"

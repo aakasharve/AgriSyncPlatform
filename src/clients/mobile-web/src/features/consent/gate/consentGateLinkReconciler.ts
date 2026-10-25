@@ -171,6 +171,8 @@ async function runReconciliation(userId: string | null | undefined): Promise<Con
     }
 
     // Only now, and only here.
-    await clearPendingConsentGateLink();
+    // Only the payload that was linked — another acceptance waiting in the other
+    // database (a different session id) must survive to be linked on its own.
+    await clearPendingConsentGateLink(claimed.preRegistrationSessionId);
     return 'linked';
 }

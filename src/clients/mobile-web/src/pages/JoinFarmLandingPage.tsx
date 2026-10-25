@@ -200,7 +200,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
     const [rememberDevice, setRememberDeviceState] = useState(true);
     const otpInputRef = useRef<HTMLInputElement | null>(null);
     const { t } = useLanguage();
-    const consent = useConsentBeforeOtp();
+    const consent = useConsentBeforeOtp(phone);
     // One press = one send: a second tap in the same tick must not send the number twice.
     const sendingRef = useRef(false);
 

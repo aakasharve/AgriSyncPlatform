@@ -2,23 +2,38 @@
 //
 // "NEVER STORE A VOICE CLIP BEFORE CORE CONSENT" — the readable form of that rule.
 //
-// The gate screen (wave-4.1) writes the accepted notice version into Dexie's uiPrefs
-// after both legal records land (wave-4.2). This is the same value, read from outside
-// React so a non-component boundary — the one place a voice clip becomes durable on the
-// device — can refuse.
+// The consent tick on the phone-number screen writes the accepted notice version into
+// Dexie's uiPrefs after both legal records land (`markCoreConsentOnThisDevice` below).
+// This reads the same value from outside React so a non-component boundary — the one
+// place a voice clip becomes durable on the device — can refuse.
 //
 // Why a hook would not do: the rule has to hold at the STORE, not at the screen. A screen
 // check is a check a future caller can route around by calling the store directly, and
 // the store is exactly what a background retry, a drain worker or an offline queue calls.
 
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
+import { withPreLoginDatabase } from '../../../infrastructure/storage/preLoginDatabase';
 import { NOTICE_VERSION } from '../gate/consentNotice';
 
-/** Same key `useConsentGate` writes. One name, declared once. */
+/** The device's consent mark. One name, declared once. */
 export const ACCEPTED_NOTICE_PREF_KEY = 'shramsafal_consent_gate_accepted_notice';
+
+const isCurrent = (row: { value?: unknown } | undefined): boolean => row?.value === NOTICE_VERSION;
 
 /**
  * True only when this device has recorded an acceptance of the CURRENT notice.
+ *
+ * WHERE IT LOOKS (spec plr-d10-redesign-real-integration, I1 — X6). The tick is given on
+ * the phone-number screen, usually BEFORE sign-in, so the mark lands in the pre-login
+ * database; a signed-in visitor on the QR page writes it into his own. This checks the
+ * active database and then the pre-login one. Reading only the active database made this
+ * false for every signed-in farmer, and his offline voice capture was discarded.
+ *
+ * Why the pre-login mark may speak for the signed-in farmer: the tick is asked on EVERY
+ * login, and an acceptance counts only for the phone number it was given for (a second
+ * number on the same screen is asked again — useConsentBeforeOtp), so the latest
+ * acceptance on this phone was given by whoever signed in after it. A session that began
+ * before the current notice finds an older version and gets false.
  *
  * Fails CLOSED: an unreadable database, a missing row, or an acceptance of an older
  * notice all return false. "We could not tell" and "he has not consented" get the same
@@ -27,10 +42,27 @@ export const ACCEPTED_NOTICE_PREF_KEY = 'shramsafal_consent_gate_accepted_notice
  */
 export async function hasCoreConsent(): Promise<boolean> {
     try {
-        const row = await getDatabase().uiPrefs.get(ACCEPTED_NOTICE_PREF_KEY);
-        return row?.value === NOTICE_VERSION;
+        if (isCurrent(await getDatabase().uiPrefs.get(ACCEPTED_NOTICE_PREF_KEY))) return true;
     } catch {
-        return false;
+        // fall through to the pre-login database
+    }
+    return withPreLoginDatabase(
+        async (db) => isCurrent(await db.uiPrefs.get(ACCEPTED_NOTICE_PREF_KEY)),
+        false,
+    );
+}
+
+/**
+ * Records on this device that the current notice was accepted — into the ACTIVE database
+ * (the pre-login one on the login screen, his own on the QR page when signed in). Awaited
+ * by the tick before the phone number is sent. Never throws: a mark we failed to write
+ * costs one clip we will not keep, never the farmer's login.
+ */
+export async function markCoreConsentOnThisDevice(): Promise<void> {
+    try {
+        await getDatabase().uiPrefs.put({ key: ACCEPTED_NOTICE_PREF_KEY, value: NOTICE_VERSION });
+    } catch {
+        // see above
     }
 }
 

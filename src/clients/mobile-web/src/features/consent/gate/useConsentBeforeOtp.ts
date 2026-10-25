@@ -24,18 +24,28 @@
 //
 // ONE TAP, ONE RECORD. A second tap while the first acceptance is still being written
 // gets the same in-flight promise — never a second pair of rows in an append-only ledger.
+//
+// THE DEVICE MARK IS ON DISK BEFORE THE NUMBER IS SENT (spec
+// plr-d10-redesign-real-integration, I1). The voice-clip store reads it
+// (`coreConsentGate.ts`); it is awaited here — for at most 2 s, so a stuck IndexedDB
+// costs one clip we will not keep, never the farmer's login.
+//
+// AN ACCEPTANCE BELONGS TO THE NUMBER IT WAS GIVEN FOR (I1 review, B001). One mounted
+// screen can see two people: X ticks and sends, taps Back, and Y types his own number.
+// So the screen passes the number it shows; the acceptance only counts for that number,
+// and a successful accept clears the tick — a different number shows it again, unticked.
 
 import { useRef, useState } from 'react';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { recordConsentGateAcceptance } from './consentGateApi';
 import { rememberConsentGateAcceptanceForLinking } from './consentGateLinkReconciler';
-import { buildConsentAcceptance } from './consentAcceptance';
-import { mintPreRegistrationSessionId, useConsentGate, type GateStatus } from './useConsentGate';
+import { buildConsentAcceptance, mintPreRegistrationSessionId } from './consentAcceptance';
+import { markCoreConsentOnThisDevice } from '../separation/coreConsentGate';
 import type { NoticeLanguage } from './consentNotice';
 
 export interface ConsentBeforeOtp {
     /** `required` until an acceptance is recorded on this screen visit, then `passed`. */
-    status: GateStatus;
+    status: 'required' | 'passed';
     ticked: boolean;
     setTicked: (ticked: boolean) => void;
     /** True while the acceptance is being written — the tick and the send are held. */
@@ -55,20 +65,24 @@ export interface ConsentBeforeOtp {
 
 const toNoticeLanguage = (lang: string): NoticeLanguage => (lang === 'mr' ? 'mr' : 'en');
 
-export function useConsentBeforeOtp(): ConsentBeforeOtp {
-    // Kept for its device mark only: the voice-clip store reads it (coreConsentGate.ts).
-    const gate = useConsentGate();
+const MARK_WRITE_LIMIT_MS = 2000;
+const normalizePhone = (phone: string): string => phone.replace(/\D+/g, '');
+
+/** `phone` is the number on screen; an acceptance counts only for the number it was given for. */
+export function useConsentBeforeOtp(phone = ''): ConsentBeforeOtp {
     const { language } = useLanguage();
     const [ticked, setTicked] = useState(false);
     const [noticeOpen, setNoticeOpen] = useState(false);
-    const [recorded, setRecorded] = useState(false);
+    const [recordedFor, setRecordedFor] = useState<string | null>(null);
     const [recording, setRecording] = useState(false);
     const inFlight = useRef<Promise<void> | null>(null);
 
     const displayed = toNoticeLanguage(language);
+    const number = normalizePhone(phone);
+    const passed = recordedFor !== null && recordedFor === number;
 
     const recordIfNeeded = (): Promise<void> => {
-        if (recorded) return Promise.resolve();
+        if (passed) return Promise.resolve();
         if (inFlight.current) return inFlight.current;
         if (!ticked) return Promise.reject(new Error('consent not given'));
 
@@ -82,8 +96,13 @@ export function useConsentBeforeOtp(): ConsentBeforeOtp {
                 // that never landed would later produce a linking row asserting a consent
                 // that does not exist. Not awaited — a wedged IndexedDB must not hold him here.
                 void rememberConsentGateAcceptanceForLinking(acceptance, sessionId);
-                gate.markPassed();
-                setRecorded(true);
+                await Promise.race([
+                    markCoreConsentOnThisDevice(),
+                    new Promise<void>((resolve) => setTimeout(resolve, MARK_WRITE_LIMIT_MS)),
+                ]);
+                setRecordedFor(number);
+                // The tick was HIS; the next number on this screen must be ticked again.
+                setTicked(false);
             } finally {
                 inFlight.current = null;
                 setRecording(false);
@@ -94,11 +113,11 @@ export function useConsentBeforeOtp(): ConsentBeforeOtp {
     };
 
     return {
-        status: recorded ? 'passed' : 'required',
+        status: passed ? 'passed' : 'required',
         ticked,
         setTicked,
         recording,
-        canSend: recorded || (ticked && !recording),
+        canSend: passed || (ticked && !recording),
         language: displayed,
         noticeOpen,
         setNoticeOpen,
