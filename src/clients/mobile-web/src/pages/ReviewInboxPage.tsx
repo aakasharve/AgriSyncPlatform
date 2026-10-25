@@ -1,13 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { AppRoute } from '../types';
 import { financeSelectors } from '../features/finance/financeSelectors';
-import { financeService } from '../features/finance/financeService';
-import { financeCommandService } from '../features/finance/financeCommandService';
 import { FinanceManagerNav } from '../features/finance/components/FinanceManagerNav';
 import { MoneyChip } from '../features/finance/components/MoneyChip';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
 import { FinanceFilters } from '../features/finance/finance.types';
-import { AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { AlertTriangle, CheckCircle } from 'lucide-react';
 
 interface ReviewInboxPageProps {
     currentRoute: AppRoute;
@@ -18,33 +16,15 @@ const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavig
     const [refresh, setRefresh] = useState(0);
     const [drawerFilter, setDrawerFilter] = useState<FinanceFilters | null>(null);
 
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I8 — X5). "Approve" used to mark
+    // entries verified on this phone and send a LOG verification carrying a money entry's
+    // id — the server found no such log, recorded nothing, and the mark vanished on the
+    // next reload. There is no server path for approving a money entry yet (PENDING D-12),
+    // so the buttons are gone and the page says so (doctrine P5), the same way the review
+    // sheet already does. `refresh` stays for the money drawer's adjustments.
+    // `currentRoute` and `refresh` are re-read triggers: the selector reads a mutable store.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     const entries = useMemo(() => financeSelectors.getReviewInbox(), [currentRoute, refresh]);
-
-    const approveAllLowRisk = () => {
-        const ids = entries.filter(item => !(item.reviewReasons || []).includes('HIGH_AMOUNT')).map(item => item.id);
-        financeCommandService.approveEvents(ids, 'owner');
-        setRefresh(v => v + 1);
-    };
-
-    const approveHighImpact = () => {
-        const ids = entries
-            .filter(item => item.effectiveAmount >= financeService.getSettings().highAmountThreshold)
-            .map(item => item.id);
-        financeCommandService.approveEvents(ids, 'owner');
-        setRefresh(v => v + 1);
-    };
-
-    const approveToday = () => {
-        const today = new Date().toISOString().split('T')[0];
-        const ids = entries.filter(item => item.dateTime.startsWith(today)).map(item => item.id);
-        financeCommandService.approveEvents(ids, 'owner');
-        setRefresh(v => v + 1);
-    };
-
-    const handleApproveSingle = (id: string) => {
-        financeCommandService.approveEvents([id], 'owner');
-        setRefresh(v => v + 1);
-    };
 
     return (
         <div className="max-w-4xl mx-auto px-4 py-6 pb-24 min-h-screen bg-slate-50">
@@ -56,17 +36,9 @@ const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavig
             <FinanceManagerNav currentRoute={currentRoute} onNavigate={onNavigate} />
 
             {entries.length > 0 && (
-                <div className="mb-6 flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-4 duration-500">
-                    <button onClick={approveAllLowRisk} className="rounded-full bg-emerald-100 border border-emerald-200 px-4 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-200 transition-colors">
-                        Approve Low Risk
-                    </button>
-                    <button onClick={approveHighImpact} className="rounded-full bg-blue-100 border border-blue-200 px-4 py-2 text-xs font-bold text-blue-700 hover:bg-blue-200 transition-colors">
-                        Approve High Impact
-                    </button>
-                    <button onClick={approveToday} className="rounded-full bg-slate-200 border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-300 transition-colors">
-                        Approve Today
-                    </button>
-                </div>
+                <p data-testid="review-approve-unavailable" className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                    मंजुरी अजून उपलब्ध नाही — खर्च दुरुस्त करायचा असेल तर रकमेवर दाबा. · Approving is not available yet; tap an amount to correct it.
+                </p>
             )}
 
             <div className="space-y-3">
@@ -107,13 +79,6 @@ const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavig
                                 onClick={() => setDrawerFilter({ sourceType: item.sourceType, sourceId: item.sourceId })}
                                 className="bg-amber-50 text-amber-700 border-amber-200 group-hover:bg-amber-100 transition-colors"
                             />
-                            <button
-                                onClick={() => handleApproveSingle(item.id)}
-                                className="p-2 rounded-lg bg-slate-100 text-slate-400 hover:bg-emerald-100 hover:text-emerald-600 transition-colors"
-                                title="Approve"
-                            >
-                                <CheckCircle size={18} />
-                            </button>
                         </div>
                     </div>
                 ))}
@@ -131,7 +96,7 @@ const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavig
 
             <MoneyLensDrawer
                 isOpen={!!drawerFilter}
-                onClose={() => setDrawerFilter(null)}
+                onClose={() => { setDrawerFilter(null); setRefresh(v => v + 1); }}
                 filters={drawerFilter || {}}
                 canAdjust={true}
             />

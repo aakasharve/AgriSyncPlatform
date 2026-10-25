@@ -14,7 +14,6 @@ import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWo
 import { AddCostEntryCommand } from '../../application/usecases/sync/AddCostEntryCommand';
 import { SetPriceConfigCommand } from '../../application/usecases/sync/SetPriceConfigCommand';
 import { CorrectCostEntryCommand } from '../../application/usecases/sync/CorrectCostEntryCommand';
-import { VerifyLogCommand } from '../../application/usecases/sync/VerifyLogCommand';
 import { financeService } from './financeService';
 import { SessionStore } from '../../infrastructure/storage/SessionStore';
 import { noteUnqueueableLogs } from '../sync/status/unqueueableLogs';
@@ -298,33 +297,10 @@ export const financeCommandService = {
         return next;
     },
 
-    approveEvents(ids: string[], verifierId: string): void {
-        if (ids.length === 0) return;
-
-        financeService._updateEvents(events =>
-            events.map(event => {
-                if (!ids.includes(event.id)) return event;
-                return {
-                    ...event,
-                    trustStatus: 'Verified' as const,
-                    reviewStatus: 'OK' as const,
-                    reviewReasons: [],
-                    verifiedByUserId: verifierId,
-                    updatedAt: systemClock.nowISO(),
-                };
-            })
-        );
-
-        // Queue a verification mutation for each approved event
-        for (const id of ids) {
-            void VerifyLogCommand.enqueue({
-                dailyLogId: id,
-                verificationStatus: 'verified',
-                reason: 'Approved via finance review',
-            });
-        }
-        triggerSyncBestEffort();
-    },
+    // `approveEvents` was removed (spec: plr-d10-redesign-real-integration-2026-10-25, I8 —
+    // X5): it sent a LOG verification carrying a money entry's id, which the server refuses,
+    // and its local "verified" vanished on the next reload. Approving a money entry needs a
+    // server path that does not exist yet (PENDING D-12); until then nothing offers it.
 
     /**
      * `correctionId` is optional for the same reason it is on `applyAdjustment`:
