@@ -5,7 +5,7 @@
  * BottomNavigation — the app's bottom bar (founder-approved 2026-10-25, "trial v3").
  *
  * The standard Android (Material 3) navigation bar, the one farmers already know from their other apps:
- *   - five equal columns: Attention, खरेदी, शेड्यूल, उत्पन्न, चाचण्या;
+ *   - five equal columns: लक्ष द्या, खरेदी, शेड्यूल, उत्पन्न, चाचण्या;
  *   - one professional line-icon set (the app's Lucide icons, 27px) — it replaced two PNG pictures, one line icon and one hand-drawn SVG of
  *     different sizes;
  *   - where you are: the icon sits in a soft green pill (it pops in when chosen) and its label turns bold green; the rest stays a quiet grey;
@@ -26,11 +26,11 @@ interface BottomNavigationProps {
     /** Not used by the bar; kept so callers need not change. */
     onViewChange?: (view: PageView) => void;
     hidden?: boolean;
-    /** Design preview (PLR-D9): a Marathi word for the Attention place (the shipped bar still says "Attention"). */
+    /** The Attention place's label. Founder-approved name (2026-10-25): "लक्ष द्या". */
     attentionLabel?: string;
 }
 
-const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentRoute, onNavigate, hidden = false, attentionLabel = 'Attention' }) => {
+const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentRoute, onNavigate, hidden = false, attentionLabel = 'लक्ष द्या' }) => {
     const { t } = useLanguage();
     const go = (route: AppRoute) => { hapticFeedback.medium(); onNavigate(route); };
     const on = (route: AppRoute) => currentRoute === route;
