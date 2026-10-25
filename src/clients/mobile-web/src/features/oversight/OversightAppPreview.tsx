@@ -211,6 +211,8 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
                 currentView={ctx.mainView}
                 onNavigate={ctx.setCurrentRoute}
                 onViewChange={ctx.setMainView}
+                // As the real app (AppContent): the page switcher only on the home tabs.
+                navCardsOnlyOnMain
                 disabled={isRecordingPathBusy(ctx.status)}
                 activeOperator={activeOperator}
                 farmContext={{
