@@ -273,16 +273,16 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
                         })()}
 
                         <div className="mt-2.5 space-y-1.5 pl-[56px] text-[16px] text-stone-600">
+                            {/* Counts only (WP-1 A8): "× ₹400" was a default nobody stated,
+                                and count × rate is a wage worked out from a count. */}
                             {labour.maleCount > 0 && (
                                 <div className="flex items-center justify-between">
-                                    <span>पुरुष: {labour.maleCount} × {formatCurrency(labour.maleRate)}</span>
-                                    <span className="font-mono text-[16px] font-semibold text-stone-700">{formatCurrency(labour.maleCount * labour.maleRate)}</span>
+                                    <span>पुरुष: {labour.maleCount}</span>
                                 </div>
                             )}
                             {labour.femaleCount > 0 && (
                                 <div className="flex items-center justify-between">
-                                    <span>महिला: {labour.femaleCount} × {formatCurrency(labour.femaleRate)}</span>
-                                    <span className="font-mono text-[16px] font-semibold text-stone-700">{formatCurrency(labour.femaleCount * labour.femaleRate)}</span>
+                                    <span>महिला: {labour.femaleCount}</span>
                                 </div>
                             )}
                             {/*

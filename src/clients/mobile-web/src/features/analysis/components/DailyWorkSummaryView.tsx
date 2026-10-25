@@ -156,16 +156,15 @@ const DailyWorkSummaryView: React.FC<DailyWorkSummaryViewProps> = ({ summary }) 
                             <span className="text-xs font-mono text-orange-700 font-bold">{formatCurrency(summary.labour.totalCost)}</span>
                         </div>
                         <div className="pl-8 text-sm text-slate-600 space-y-0.5">
+                            {/* Counts only (WP-1 A8): no default rate, no count × rate. */}
                             {summary.labour.maleCount > 0 && (
                                 <div className="flex items-center justify-between">
-                                    <span>Male: {summary.labour.maleCount} × {formatCurrency(summary.labour.maleRate)}</span>
-                                    <span className="font-mono text-xs">{formatCurrency(summary.labour.maleCount * summary.labour.maleRate)}</span>
+                                    <span>Male: {summary.labour.maleCount}</span>
                                 </div>
                             )}
                             {summary.labour.femaleCount > 0 && (
                                 <div className="flex items-center justify-between">
-                                    <span>Female: {summary.labour.femaleCount} × {formatCurrency(summary.labour.femaleRate)}</span>
-                                    <span className="font-mono text-xs">{formatCurrency(summary.labour.femaleCount * summary.labour.femaleRate)}</span>
+                                    <span>Female: {summary.labour.femaleCount}</span>
                                 </div>
                             )}
                             {/*

@@ -73,7 +73,7 @@ export const generateDayWorkSummary = (
 ): DayWorkSummary => {
 
     try {
-        const labourSummary = generateLabourSummary(log, settings);
+        const labourSummary = generateLabourSummary(log);
         const irrigationSummary = generateIrrigationSummary(log);
         const machinerySummary = generateMachinerySummary(log);
         const inputsSummary = generateInputsSummary(log);
@@ -132,8 +132,6 @@ export const generateDayWorkSummary = (
                 maleCount: 0,
                 femaleCount: 0,
                 headcount: 0,
-                maleRate: 0,
-                femaleRate: 0,
                 totalCost: 0,
                 isEmpty: true,
                 events: []
@@ -166,13 +164,10 @@ export const generateDayWorkSummary = (
 };
 
 /**
- * Extract and aggregate labour data
- * CRITICAL: Rates must come from Settings, not from log entries
+ * Extract and aggregate labour data: counts and the money the farmer STATED.
+ * No per-person rate and no count × rate (WP-1 A8; see `LabourSummary`).
  */
-const generateLabourSummary = (
-    log: DailyLog,
-    settings: LedgerDefaults
-): LabourSummary => {
+const generateLabourSummary = (log: DailyLog): LabourSummary => {
 
     if (!log.labour || log.labour.length === 0) {
         return {
@@ -184,8 +179,6 @@ const generateLabourSummary = (
             // "labour happened but nobody said how many" case is unknown, and
             // that is decided inside sumLabourHeadcount below, not here.
             headcount: 0,
-            maleRate: settings.labour.defaultWage,
-            femaleRate: settings.labour.defaultWage,
             totalCost: 0,
             isEmpty: true,
             events: []
@@ -203,11 +196,6 @@ const generateLabourSummary = (
         totalCost += event.totalCost || 0;
     });
 
-    // Get rates from settings (use first shift as default, or fallback)
-    const defaultShift = settings.labour.shifts[0];
-    const maleRate = defaultShift?.defaultRateMale || settings.labour.defaultWage;
-    const femaleRate = defaultShift?.defaultRateFemale || settings.labour.defaultWage;
-
     return {
         maleCount: totalMale,
         femaleCount: totalFemale,
@@ -221,8 +209,6 @@ const generateLabourSummary = (
         // headcount; it must reach the screens as unknown (em-dash), never be
         // coerced back to 0 here, which is the defect one layer out.
         headcount: sumLabourHeadcount(log.labour),
-        maleRate,
-        femaleRate,
         totalCost,
         isEmpty: false,
         events: log.labour

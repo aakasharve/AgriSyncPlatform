@@ -130,8 +130,11 @@ describe('LabourHub — "just logged" labour summary (Task 3.5)', () => {
         );
 
         expect(screen.getByTestId('labour-just-logged-card')).toBeInTheDocument();
-        expect(screen.getByText(/पुरुष: 3 × ₹400/)).toBeInTheDocument();
-        expect(screen.getByText(/महिला: 1 × ₹300/)).toBeInTheDocument();
+        // spec plr-d10-redesign-real-integration (WP-1 A8): counts only. "× ₹400" was a
+        // default rate nobody stated, and count × rate a wage worked out from a count.
+        expect(screen.getByText('पुरुष: 3')).toBeInTheDocument();
+        expect(screen.getByText('महिला: 1')).toBeInTheDocument();
+        expect(screen.getByTestId('labour-just-logged-card').textContent).not.toMatch(/×\s*₹/);
         // Headline cost is the log's own labour.totalCost (₹1,600) — the
         // same number reflect's DailyWorkSummaryView would show for this log.
         expect(screen.getByText('₹1,600')).toBeInTheDocument();
@@ -177,7 +180,7 @@ describe('LabourHub — "just logged" labour summary (Task 3.5)', () => {
             />
         );
 
-        expect(screen.getByText(/पुरुष: 3 × ₹400/)).toBeInTheDocument();
+        expect(screen.getByText('पुरुष: 3')).toBeInTheDocument();
         expect(screen.queryByText(/मजूर$/)).toBeNull();
     });
 

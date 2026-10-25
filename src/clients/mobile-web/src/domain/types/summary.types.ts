@@ -59,8 +59,15 @@ export interface LabourSummary {
      * every construction site must state which case it is.
      */
     headcount: number | undefined;
-    maleRate: number;
-    femaleRate: number;
+    /*
+     * `maleRate` / `femaleRate` USED TO LIVE HERE AND WERE DELETED (spec
+     * plr-d10-redesign-real-integration-2026-10-25, WP-1 A8). They fell back to
+     * `settings.labour.defaultWage` — a constant ₹400 that was never saved and
+     * never stated — and two screens multiplied it by the headcount and showed
+     * the product as money: a wage worked out from a count, which doctrine P4
+     * and Labour V1 Global Constraint 6 both forbid. The stated money is
+     * `totalCost` below; nothing derives a per-person wage.
+     */
     /**
      * Labour V1 Task 8.3 — `hoursWorked` USED TO LIVE HERE AND WAS DELETED.
      * It was `settings.labour.defaultHours || 8` maximised inside a forEach,
