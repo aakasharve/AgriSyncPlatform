@@ -542,4 +542,14 @@ describe('LabourHub - Android tile layout', () => {
         expect(within(see).getByText('तपासा')).toBeTruthy();
         expect(within(see).getByText('आढावा')).toBeTruthy();
     });
+
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (WP-1 A6) — the server says this person may not
+    // record labour: nothing to TAKE हजेरी with is drawn, and the वही is still open in front.
+    it('without the right to record: no हजेरी घ्या at all, and हजेरी बघा with the वही open is still there', () => {
+        render(<LabourHub {...baseProps()} data={{ ...data, canManageLabour: false }} anchor={{ state: 'anchored', headcount: 12, logId: 'l' }} />);
+        expect(screen.queryByTestId('hub-take')).toBeNull();
+        expect(screen.queryByText('बोलून हजेरी घ्या')).toBeNull();
+        expect(screen.queryByText('नावं दाबून हजेरी')).toBeNull();
+        expect(within(screen.getByTestId('hub-see')).getByTestId('hub-ledger-open')).toBeTruthy();
+    });
 });
