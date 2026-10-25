@@ -253,6 +253,7 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
     const ctx: AppRouterContext = {
         currentRoute: navigation.currentRoute,
         setCurrentRoute: navigation.setCurrentRoute,
+        goBackOr: navigation.goBackOr,
         mainView: navigation.mainView,
         setMainView: navigation.setMainView,
         logIntent: navigation.logIntent,

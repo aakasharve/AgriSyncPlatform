@@ -29,6 +29,8 @@ export interface UseAppNavigationResult {
     // exit the app. Moves nothing but the route/tab: it never touches queued
     // or unsaved data.
     goBack: () => boolean;
+    /** A screen's own back button: where he came from, else `fallback` (WP-6). */
+    goBackOr: (fallback: AppRoute) => void;
 }
 
 const MAX_HISTORY = 20;
@@ -131,6 +133,20 @@ export const useAppNavigation = (): UseAppNavigationResult => {
         setMainView(view);
     }, []);
 
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (WP-6) — a screen's OWN back
+    // button. It returns to wherever the farmer actually came from (the route history),
+    // and only when there is no history does it go to the screen's usual parent. Before,
+    // every in-page back went to a fixed parent: open a money page from the farm overview
+    // and "back" landed on the finance menu, a screen he had never been on.
+    const goBackOr = useCallback((fallback: AppRoute): void => {
+        const history = historyRef.current;
+        if (history.length > 0) {
+            applyRoute(history.pop() as AppRoute);
+            return;
+        }
+        applyRoute(fallback);
+    }, [applyRoute]);
+
     const goBack = useCallback((): boolean => {
         const history = historyRef.current;
         if (history.length > 0) {
@@ -173,6 +189,7 @@ export const useAppNavigation = (): UseAppNavigationResult => {
         setLogIntent,
         lastLabourLogIds,
         setLastLabourLogIds,
-        goBack
+        goBack,
+        goBackOr
     };
 };

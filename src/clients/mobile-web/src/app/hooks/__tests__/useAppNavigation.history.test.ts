@@ -58,6 +58,28 @@ describe('useAppNavigation — goBack history', () => {
         expect(result.current.currentRoute).toBe('main');
     });
 
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (WP-6) — a screen's OWN back button.
+    it('goBackOr returns to where he came from, not to the screen\'s fixed parent', () => {
+        const { result } = renderHook(() => useAppNavigation());
+        act(() => result.current.setCurrentRoute('attention'));
+        act(() => result.current.setCurrentRoute('finance-ledger'));
+        act(() => result.current.goBackOr('finance-manager'));
+        expect(result.current.currentRoute).toBe('attention');
+    });
+
+    it('goBackOr goes to the given parent when there is nowhere he came from', () => {
+        // A deep link opens the screen with no history behind it.
+        window.history.replaceState({}, '', '/?route=finance-ledger');
+        try {
+            const { result } = renderHook(() => useAppNavigation());
+            expect(result.current.currentRoute).toBe('finance-ledger');
+            act(() => result.current.goBackOr('finance-manager'));
+            expect(result.current.currentRoute).toBe('finance-manager');
+        } finally {
+            window.history.replaceState({}, '', '/');
+        }
+    });
+
     it('from the Reflect tab Back returns to the log tab first, still inside the app', () => {
         const { result } = renderHook(() => useAppNavigation());
         act(() => result.current.setMainView('reflect'));

@@ -83,6 +83,13 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
     const pageScrollRef = React.useRef<HTMLElement>(null);
     useSavedSurfaceScrollReset(pageScrollRef, voice.status);
 
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (WP-6) — every screen opens at
+    // its top. The ONE scroll container outlives the route swapped inside it, so the last
+    // screen's offset used to carry over and a farmer landed halfway down a new page.
+    React.useLayoutEffect(() => {
+        pageScrollRef.current?.scrollTo?.({ top: 0 });
+    }, [navigation.currentRoute, navigation.mainView]);
+
     // spec: 2026-08-25-prod-cutover-waves — Android hardware Back (native only).
     // Overlays close first, then the app's own route history, and only at Home
     // does it exit (or background the app while a capture is in flight).

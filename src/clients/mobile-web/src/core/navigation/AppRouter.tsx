@@ -219,6 +219,7 @@ const AppRouter: React.FC = () => {
     const ctx: AppRouterContext = {
         activeFarmId: currentFarmId,
         currentRoute, setCurrentRoute, mainView, setMainView,
+        goBackOr: navigation.goBackOr,
         logIntent, setLogIntent, lastLabourLogIds,
         logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady,
         isDemoMode, setIsDemoMode,

@@ -74,6 +74,8 @@ export interface AppRouterContext {
     // navigation
     currentRoute: Navigation['currentRoute'];
     setCurrentRoute: Navigation['setCurrentRoute'];
+    /** A screen's own back button: where he came from, else the given parent (WP-6). */
+    goBackOr: Navigation['goBackOr'];
     mainView: Navigation['mainView'];
     setMainView: Navigation['setMainView'];
     // spec: 2026-07-13-labour-attendance-approval-design (Task 3.4) — "why am

@@ -159,7 +159,7 @@ export const renderVoiceDiaryRoute = (ctx: AppRouterContext): React.ReactNode =>
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
             <VoiceDiaryPage
-                onBack={() => ctx.setCurrentRoute('settings')}
+                onBack={() => ctx.goBackOr('settings')}
                 onOpenSettings={() => ctx.setCurrentRoute('settings')}
             />
         </div>
@@ -170,7 +170,7 @@ export const renderAiAdminRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'ai-admin') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <AdminAiOpsPage onBack={() => ctx.setCurrentRoute('settings')} />
+            <AdminAiOpsPage onBack={() => ctx.goBackOr('settings')} />
         </div>
     );
 };
@@ -179,7 +179,7 @@ export const renderOpsAdminRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'ops-admin') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <AdminOpsPage onBack={() => ctx.setCurrentRoute('settings')} />
+            <AdminOpsPage onBack={() => ctx.goBackOr('settings')} />
         </div>
     );
 };
@@ -197,7 +197,7 @@ export const renderOfflineConflictsRoute = (ctx: AppRouterContext): React.ReactN
     if (ctx.currentRoute !== 'offline-conflicts') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <OfflineConflictPage onBack={() => ctx.setCurrentRoute('main')} />
+            <OfflineConflictPage onBack={() => ctx.goBackOr('main')} />
         </div>
     );
 };
@@ -249,7 +249,7 @@ export const renderIncomeRoute = (ctx: AppRouterContext): React.ReactNode => {
         <HarvestIncomePage
             context={ctx.currentLogContext}
             crops={ctx.crops}
-            onBack={() => ctx.setCurrentRoute('main')}
+            onBack={() => ctx.goBackOr('main')}
         />
     );
 };
@@ -318,7 +318,7 @@ export const renderQrDemoRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'qr-demo') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <QrDemoPage onBack={() => ctx.setCurrentRoute('profile')} />
+            <QrDemoPage onBack={() => ctx.goBackOr('profile')} />
         </div>
     );
 };
@@ -351,7 +351,7 @@ export const renderTestDetailRoute = (ctx: AppRouterContext): React.ReactNode =>
                     const match = window.location.pathname.match(/\/tests\/([^/?#]+)/);
                     return match?.[1] ?? '';
                 })()}
-                onBack={() => ctx.setCurrentRoute('tests')}
+                onBack={() => ctx.goBackOr('tests')}
             />
         </div>
     );
@@ -364,7 +364,7 @@ export const renderComplianceRoute = (ctx: AppRouterContext): React.ReactNode =>
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
             <ComplianceSignalsPage
                 onNavigate={ctx.setCurrentRoute}
-                onBack={() => ctx.setCurrentRoute('attention')}
+                onBack={() => ctx.goBackOr('attention')}
             />
         </div>
     );
@@ -377,7 +377,7 @@ export const renderServiceProofRoute = (ctx: AppRouterContext): React.ReactNode 
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
             <ServiceProofPage
                 onNavigate={ctx.setCurrentRoute}
-                onBack={() => ctx.setCurrentRoute('finance-reports')}
+                onBack={() => ctx.goBackOr('finance-reports')}
             />
         </div>
     );
@@ -410,7 +410,7 @@ export const renderJobDetailRoute = (ctx: AppRouterContext): React.ReactNode => 
                     if (typeof window === 'undefined') return '';
                     return window.sessionStorage.getItem('job_card_id') ?? '';
                 })()}
-                onBack={() => ctx.setCurrentRoute('jobs')}
+                onBack={() => ctx.goBackOr('jobs')}
                 onNavigateToLedger={() => ctx.setCurrentRoute('finance-ledger')}
                 onNavigateToWorker={(userId) => {
                     if (typeof window !== 'undefined') {
@@ -428,7 +428,7 @@ export const renderConsentRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'consent') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <ConsentScreen onBack={() => ctx.setCurrentRoute('profile')} />
+            <ConsentScreen onBack={() => ctx.goBackOr('profile')} />
         </div>
     );
 };
@@ -438,7 +438,7 @@ export const renderErasureRequestRoute = (ctx: AppRouterContext): React.ReactNod
     if (ctx.currentRoute !== 'dataRights/erasure') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <ErasureRequestScreen onBack={() => ctx.setCurrentRoute('profile')} />
+            <ErasureRequestScreen onBack={() => ctx.goBackOr('profile')} />
         </div>
     );
 };
@@ -448,7 +448,7 @@ export const renderExportRequestRoute = (ctx: AppRouterContext): React.ReactNode
     if (ctx.currentRoute !== 'dataRights/export') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <ExportRequestScreen onBack={() => ctx.setCurrentRoute('profile')} />
+            <ExportRequestScreen onBack={() => ctx.goBackOr('profile')} />
         </div>
     );
 };
@@ -470,7 +470,7 @@ export const renderAiDraftsRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'ai-drafts') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <AiDraftsPage onBack={() => ctx.setCurrentRoute('profile')} />
+            <AiDraftsPage onBack={() => ctx.goBackOr('profile')} />
         </div>
     );
 };
@@ -485,7 +485,7 @@ export const renderWorkerProfileRoute = (ctx: AppRouterContext): React.ReactNode
                     if (typeof window === 'undefined') return '';
                     return window.sessionStorage.getItem('worker_profile_user_id') ?? '';
                 })()}
-                onBack={() => ctx.setCurrentRoute('jobs')}
+                onBack={() => ctx.goBackOr('jobs')}
                 onNavigateToJobCard={(jobCardId) => {
                     if (typeof window !== 'undefined') {
                         window.sessionStorage.setItem('job_card_id', jobCardId);
