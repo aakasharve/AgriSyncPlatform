@@ -359,7 +359,7 @@ describe('renderLogView — a brand-new farmer with no schedule (both flag state
 
         // The screen did render — this is an assertion about what is absent
         // from a working log view, not about a render that fell over.
-        expect(screen.getByText(/Running Cost/)).toBeInTheDocument();
+        expect(screen.getByTestId('running-cost-scope')).toBeInTheDocument();
     });
 
     // SUPERSEDED: this was wave 2.4's discriminating case — proof that
@@ -389,7 +389,7 @@ describe('renderLogView — a brand-new farmer with no schedule (both flag state
 
         expect(screen.queryByText('Yesterday not fully closed')).toBeNull();
         expect(screen.queryByText('Close Yesterday')).toBeNull();
-        expect(screen.getByText(/Running Cost/)).toBeInTheDocument();
+        expect(screen.getByTestId('running-cost-scope')).toBeInTheDocument();
     });
 
     it('ON: an empty day raises no closure verdict and no yesterday banner', async () => {

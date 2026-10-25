@@ -53,6 +53,8 @@ export interface CostSnapshot {
     today: number;
     cropSoFar: number;
     unverifiedToday: number;
+    /** What the three figures cover: a plot's name, a crop's name, or "संपूर्ण शेत". */
+    scopeLabel: string;
 }
 
 export interface AppRouterContext {

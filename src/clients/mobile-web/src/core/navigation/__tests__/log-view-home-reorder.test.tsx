@@ -191,7 +191,7 @@ describe('renderLogView — home-screen reorder (Task 7)', () => {
         // Running Cost's ambient numbers are NOT gone — they moved below the
         // selector (proven by the ordering test above); this test only
         // proves the closure/heading content, which really is deleted.
-        expect(allText).toContain('Running Cost');
+        expect(allText).toContain('खर्च:');
     });
 
     it('no_longer_renders_CompactWeatherChip — Task 11 moved it into AppHeader row 1, never rendered twice', () => {

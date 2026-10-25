@@ -203,7 +203,7 @@ describe('renderLogView — the log view offers no route into the review inbox, 
             // The real-world reproduction: an ordinary day with recorded
             // expenses (finance trustStatus 'Unverified' until manually
             // corrected) but NOTHING actually awaiting review.
-            costSnapshot: { today: 500, cropSoFar: 5000, unverifiedToday: 4 },
+            costSnapshot: { today: 500, cropSoFar: 5000, unverifiedToday: 4, scopeLabel: 'संपूर्ण शेत' },
         });
         render(<>{renderLogView(ctx)}</>);
 
@@ -244,7 +244,7 @@ describe('renderLogView — the log view offers no route into the review inbox, 
                 closurePercent: 70, isClosed: false, hasStarted: true,
                 completedCount: 0, plannedCount: 0, pendingCount: 0, unverifiedCount: 1,
             },
-            costSnapshot: { today: 500, cropSoFar: 5000, unverifiedToday: 1 },
+            costSnapshot: { today: 500, cropSoFar: 5000, unverifiedToday: 1, scopeLabel: 'संपूर्ण शेत' },
         });
         render(<>{renderLogView(ctx)}</>);
 
@@ -260,6 +260,6 @@ describe('renderLogView — the log view offers no route into the review inbox, 
         // moved it below the plot selector as ambient status rather than
         // deleting it. Asserted so "nothing renders" cannot be satisfied by a
         // render that failed outright.
-        expect(screen.getByText(/Running Cost/)).toBeInTheDocument();
+        expect(screen.getByTestId('running-cost-scope')).toBeInTheDocument();
     });
 });

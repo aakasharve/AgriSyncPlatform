@@ -34,7 +34,7 @@ export interface AppRouterDerivations {
     todayLogs: DailyLog[];
     todayDayState: ReturnType<typeof computeDayState>;
     yesterdayDayState: ReturnType<typeof computeDayState>;
-    costSnapshot: { today: number; cropSoFar: number; unverifiedToday: number };
+    costSnapshot: { today: number; cropSoFar: number; unverifiedToday: number; scopeLabel: string };
     yesterdayCost: number;
     getLogContextSnapshot: (
         log: DailyLog,
@@ -134,13 +134,28 @@ export function useAppRouterDerivations({
         selectedPlotIds: scopePlotIds,
     }), [history, crops, plannedTasks, yesterdayDate, scopeCropIds, scopePlotIds]);
 
-    const baseFinanceFilters = React.useMemo(
-        () => ({
-            cropId: scopeCropIds?.[0],
-            plotId: scopePlotIds?.[0],
-        }),
-        [scopeCropIds, scopePlotIds],
-    );
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (PLR-D9 T1, P4) — the log screen's
+    // cost card names what its money covers. It used to filter by the FIRST selected crop and
+    // plot, so with two plots selected it showed one plot's money as if it were the
+    // selection's. One plot → that plot; one crop → that crop (all its plots, and it says so
+    // by naming the crop); anything else → the whole farm, named as the farm.
+    const costScope = React.useMemo(() => {
+        const plotId = scopePlotIds?.length === 1 ? scopePlotIds[0] : undefined;
+        if (plotId) {
+            const crop = crops.find(item => item.plots.some(plot => plot.id === plotId));
+            const plotName = crop?.plots.find(plot => plot.id === plotId)?.name;
+            if (crop && plotName) {
+                return { filters: { cropId: crop.id, plotId }, label: plotName };
+            }
+        }
+        const cropId = scopeCropIds?.length === 1 ? scopeCropIds[0] : undefined;
+        const cropName = cropId ? crops.find(item => item.id === cropId)?.name : undefined;
+        if (cropId && cropName) {
+            return { filters: { cropId, plotId: undefined }, label: cropName };
+        }
+        return { filters: { cropId: undefined, plotId: undefined }, label: 'संपूर्ण शेत' };
+    }, [crops, scopeCropIds, scopePlotIds]);
+    const baseFinanceFilters = costScope.filters;
 
     const costSnapshot = React.useMemo(() => {
         const today = financeSelectors.getTotalCost({
@@ -156,9 +171,9 @@ export function useAppRouterDerivations({
                 toDate: todayDateKey,
             })
             .lines.filter(line => line.trustStatus === 'Unverified').length;
-        return { today, cropSoFar, unverifiedToday };
+        return { today, cropSoFar, unverifiedToday, scopeLabel: costScope.label };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [baseFinanceFilters, todayDateKey, history.length]);
+    }, [baseFinanceFilters, costScope.label, todayDateKey, history.length]);
 
     const yesterdayCost = React.useMemo(
         () => financeSelectors.getTotalCost({

@@ -343,19 +343,22 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             data-testid="running-cost-card"
                             className="mb-6 rounded-2xl bg-stone-900 text-white p-3.5 space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500"
                         >
-                            <p className="text-[10px] uppercase tracking-wide font-bold text-stone-300">Running Cost</p>
+                            {/* PLR-D9 T1 — in Marathi, and naming what the money covers. */}
+                            <p data-testid="running-cost-scope" className="text-xs font-bold text-stone-300">
+                                खर्च: {costSnapshot.scopeLabel}
+                            </p>
                             <div className="grid grid-cols-3 gap-2 text-sm">
                                 <div>
-                                    <p className="text-stone-400 text-xs">Today</p>
-                                    <p className="font-black">Rs {formatCurrencyINR(costSnapshot.today)}</p>
+                                    <p className="text-stone-400 text-xs">आज</p>
+                                    <p className="font-black">₹ {formatCurrencyINR(costSnapshot.today)}</p>
                                 </div>
                                 <div>
-                                    <p className="text-stone-400 text-xs">Yesterday</p>
-                                    <p className="font-black">Rs {formatCurrencyINR(yesterdayCost)}</p>
+                                    <p className="text-stone-400 text-xs">काल</p>
+                                    <p className="font-black">₹ {formatCurrencyINR(yesterdayCost)}</p>
                                 </div>
                                 <div>
-                                    <p className="text-stone-400 text-xs">Running</p>
-                                    <p className="font-black">Rs {formatCurrencyINR(costSnapshot.cropSoFar)}</p>
+                                    <p className="text-stone-400 text-xs">आतापर्यंत</p>
+                                    <p className="font-black">₹ {formatCurrencyINR(costSnapshot.cropSoFar)}</p>
                                 </div>
                             </div>
                         </div>
