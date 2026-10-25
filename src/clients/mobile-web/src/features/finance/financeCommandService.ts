@@ -16,6 +16,7 @@ import { SetPriceConfigCommand } from '../../application/usecases/sync/SetPriceC
 import { CorrectCostEntryCommand } from '../../application/usecases/sync/CorrectCostEntryCommand';
 import { VerifyLogCommand } from '../../application/usecases/sync/VerifyLogCommand';
 import { financeService } from './financeService';
+import { SessionStore } from '../../infrastructure/storage/SessionStore';
 import { noteUnqueueableLogs } from '../sync/status/unqueueableLogs';
 import {
     MoneyAdjustment,
@@ -147,9 +148,17 @@ export const financeCommandService = {
         const id = idGenerator.generate();
         const createdByUserId = getCurrentUserId(payload.createdByUserId);
         const amount = Number(payload.amount || 0);
+        // spec: plr-d10-redesign-real-integration-2026-10-25 (I4 — X4). The farm is the
+        // caller's, else the farm this phone is working on now (the same source the log
+        // path uses). It used to fall back to the FIRST cached money event's farm — the
+        // wrong farm for a farmer with two — or to the literal 'farm_unknown', which fails
+        // the GUID check, so a first bill on a fresh phone was kept on the phone and never
+        // sent. With no farm at all nothing is queued and the entry is reported as unsent
+        // (the receipt or log it came from stays on the phone).
+        const farmId = payload.farmId || SessionStore.getCurrentFarmId() || '';
         const event: MoneyEvent = {
             id,
-            farmId: payload.farmId || financeService.getMoneyEvents()[0]?.farmId || 'farm_unknown',
+            farmId,
             plotId: payload.plotId,
             cropId: payload.cropId,
             dateTime: payload.dateTime,
@@ -174,6 +183,11 @@ export const financeCommandService = {
         };
 
         financeService._addEvent(event);
+
+        if (!farmId) {
+            noteNeverReachedOutbox(id, 'money event', new Error('no current farm on this phone'));
+            return event;
+        }
 
         AddCostEntryCommand.enqueue({
             costEntryId: id,

@@ -298,16 +298,13 @@ describe('JOURNEY 1 — the farm is the one the farmer was IN', () => {
         // `db.farms` holds two farms right here. Nothing may reach for one.
         currentFarmId = null;
 
-        // The engagement states NO cost here, and that is a deliberate dodge
-        // around a PRE-EXISTING, unrelated defect rather than part of the
-        // journey: with no farm context and a stated cost,
-        // `captureMoneyEventsFromLog` -> `createMoneyEventFromSource` falls back
-        // to the literal string `'farm_unknown'`
-        // (`financeCommandService.ts:98`), which fails the `add_cost_entry`
-        // ZGuid check inside a `void`-ed promise and surfaces as an unhandled
-        // rejection. That is the finance capture path (Decision 3a already
-        // documents the class), it predates this change and is untouched by it —
-        // reported, not silently absorbed, and not fixed here.
+        // The engagement states NO cost here. It used to be a dodge around a
+        // defect: with no farm context and a stated cost, the money path fell
+        // back to the literal 'farm_unknown' and failed the ZGuid check as an
+        // unhandled rejection. Since plr-d10-redesign-real-integration (I4) a
+        // money entry with no farm is kept on the phone and reported as unsent
+        // instead; the cost stays out of this journey because money is not
+        // what it tests.
         const { logs, outcome } = await recordEightWorkersOnTheWholeFarm(
             entireFarmScope,
             [{ id: 'lab-1', type: 'HIRED', engagementType: 'hired_daily', count: 8 } as LabourEvent],

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Package, Search, Filter, Camera, Plus } from 'lucide-react';
+import { Package, Search, Camera, Plus } from 'lucide-react';
 import SlidingCropSelector from '../features/context/components/SlidingCropSelector';
 import { CropProfile, ProcurementExpense } from '../types';
 import { procurementRepository } from '../services/procurementRepository';
@@ -8,19 +8,7 @@ import { ExpenseSummaryCards } from '../features/procurement/components/ExpenseS
 import { ExpenseCard } from '../features/procurement/components/ExpenseCard';
 import { ReceiptCaptureSheet } from '../features/procurement/components/ReceiptCaptureSheet';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
-import { FinanceFilters, MoneyCategory } from '../features/finance/finance.types';
-import { financeCommandService } from '../features/finance/financeCommandService';
-
-const mapExpenseCategoryToMoneyCategory = (category: string): MoneyCategory => {
-    if (category === 'LABOUR') return 'Labour';
-    if (category === 'FUEL') return 'Fuel';
-    if (category === 'MACHINERY_RENTAL') return 'Machinery';
-    if (category === 'TRANSPORT') return 'Transport';
-    if (category === 'ELECTRICITY') return 'Electricity';
-    if (category === 'EQUIPMENT_REPAIR') return 'Repair';
-    if (['FERTILIZER', 'PESTICIDE', 'FUNGICIDE', 'SEEDS_PLANTS', 'IRRIGATION'].includes(category)) return 'Input';
-    return 'Other';
-};
+import { FinanceFilters } from '../features/finance/finance.types';
 
 interface Props {
     crops: CropProfile[];
@@ -52,30 +40,14 @@ const ProcurementPage: React.FC<Props> = ({ crops = [] }) => {
     const activeCrop = crops.find(c => c.id === selectedCropId);
 
     // Load Expenses
+    //
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I4). This used to create a money
+    // entry for EVERY stored receipt line on every visit. The receipt is already turned
+    // into money entries once, when it is saved (ReceiptCaptureSheet), and the "already
+    // created" check cannot see entries after the money cache reloads from the server — so
+    // each visit to this tab sent another copy of every bill. Reading is all this does now.
     const refreshData = () => {
-        // For prototype: Load ALL and filter in UI or Load specific. 
-        // Let's load all to calculate accurate stats per scope.
-        const all = procurementRepository.getExpenses();
-        all.forEach(expense => {
-            expense.lineItems.forEach(item => {
-                financeCommandService.createMoneyEventFromSource({
-                    type: 'Procurement',
-                    sourceId: `${expense.id}:${item.id}`,
-                    dateTime: new Date(expense.date).toISOString(),
-                    eventType: 'Expense',
-                    category: mapExpenseCategoryToMoneyCategory(item.category),
-                    plotId: expense.plotId,
-                    cropId: expense.cropId,
-                    amount: item.totalAmount,
-                    qty: item.quantity,
-                    unit: item.unit,
-                    unitPrice: item.unitPrice,
-                    paymentMode: expense.paymentStatus === 'CREDIT' ? 'Credit' : 'Cash',
-                    vendorName: expense.vendorName
-                });
-            });
-        });
-        setExpenses(all);
+        setExpenses(procurementRepository.getExpenses());
     };
 
     useEffect(() => {
