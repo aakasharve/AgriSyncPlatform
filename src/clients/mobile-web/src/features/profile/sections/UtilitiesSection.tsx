@@ -70,6 +70,11 @@ const UtilitiesSection: React.FC<UtilitiesSectionProps> = ({ profile, onUpdate }
                         Water & Power
                     </h3>
                     <p className="text-xs text-slate-400 mt-1">Water sources with their pump motors</p>
+                    {/* spec: plr-d10-redesign-real-integration (I3) — honest about where it lives:
+                        saved on this phone, not shared with the farm's other phones (PENDING D-9). */}
+                    <p data-testid="setup-this-phone-only" className="mt-1 text-xs font-semibold text-amber-700">
+                        फक्त या फोनवर साठवलं जातं · Saved on this phone only
+                    </p>
                 </div>
                 <button
                     onClick={() => setShowWizard(true)}

@@ -11,6 +11,7 @@ import { useAuth } from '../providers/AuthProvider';
 import { generateDemoHarvestSessions, generateDemoPlannedTasks, generateDemoProcurementExpenses } from '../../features/demo/DemoDataService';
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 import { keepDatedLogs } from '../helpers/datedHistory';
+import { useFarmerSetupPersistence } from './useFarmerSetupPersistence';
 
 const PLANNED_TASKS_META_KEY = 'agrisync_local_planned_tasks_v1';
 
@@ -211,6 +212,10 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
      */
     const [dataLoaded, setDataLoaded] = useState(false);
 
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I3 — X2) — setup edits are
+    // saved on the phone (they used to vanish when the app closed).
+    const { noteStoredProfile } = useFarmerSetupPersistence({ farmerProfile, dataSource, isDemoMode, dataLoaded });
+
     // --- LOAD DATA EFFECT ---
     useEffect(() => {
         let mounted = true;
@@ -226,6 +231,7 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
             const loadedProfile = await dataSource.profile.get();
             if (!mounted) return;
             if (loadedProfile && loadedProfile.name) {
+                noteStoredProfile(loadedProfile);
                 setFarmerProfile(loadedProfile);
             }
 
@@ -298,7 +304,7 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
                 window.removeEventListener('agrisync:sync-reconciled', handleSyncReconciled);
             }
         };
-    }, [dataSource, isDemoMode, isAuthenticated]);
+    }, [dataSource, isDemoMode, isAuthenticated, noteStoredProfile]);
 
     useEffect(() => {
         if (isDemoMode) {
