@@ -24,6 +24,8 @@ export const ATTENDANCE_COPY = {
     /** Pre-save honesty line (founder harvest). */
     preSaveHonesty: '"बरोबर" दाबेपर्यंत काहीही जतन होणार नाही.',
     confirmButton: 'बरोबर',
+    /** spec: plr-d10 (WP-1 A9) — above the day chips (आज · काल · २३ ऑक्टो). PROPOSED copy, founder sign-off at A5. */
+    dayChoiceQuestion: 'कोणत्या दिवसाची हजेरी?',
     editButton: 'बदल करा',
     /** State D — the contradiction question (founder harvest + mockup 04). */
     contradictionTitle: 'एक गोष्ट स्पष्ट करा',

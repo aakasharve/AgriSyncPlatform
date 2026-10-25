@@ -2,7 +2,11 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Attendance — the manual हजेरी घ्या screen: WHO came today, by tapping.
+ * Attendance — the manual हजेरी घ्या screen: WHO came on a day (today, unless he picks another), by tapping.
+ *
+ * WHICH DAY (spec: plr-d10, WP-1 A9): today by default; when the host offers a choice, chips
+ * at the top pick today or one of the six days before it (`attendanceDay.ts` says when that is
+ * safe, and why it usually is not). Changing the day clears what was tapped.
  *
  * FOUNDER RULING 2026-08-31 — the single way in to SPEAKING is the hub hero
  * ("बोलून हजेरी घ्या"); this screen has no mic.
@@ -50,6 +54,7 @@ import {
     type PersonSelection,
 } from '../attendanceManual';
 import { findMarkedAboveStated } from '../attendanceDisagreement';
+import { workDateChipLabel } from '../attendanceDay';
 import AttendanceRoster from './AttendanceRoster';
 import HeadcountDisagreementCard from './HeadcountDisagreementCard';
 
@@ -59,8 +64,15 @@ export type ManualAttendanceMark = { fieldOperatorId: string } & ManualMarkFacts
 export type AttendanceMode = 'normal' | 'no-work';
 
 interface Props {
-    /** Read ONLY for today's register cells (prefill); never for who to list. */
+    /** Read ONLY for the chosen day's register cells (prefill); never for who to list. */
     data: LabourData;
+    /**
+     * spec: plr-d10 (WP-1 A9) — the day these marks are for (`yyyy-MM-dd`); today when absent.
+     * Chosen from `workDates` by the chips at the top, which show only when there is a choice.
+     */
+    workDate?: string;
+    workDates?: readonly string[];
+    onWorkDateChange?: (workDate: string) => void;
     /** undefined = no farm context: nothing can be listed, added or saved. */
     farmId: string | undefined;
     mode?: AttendanceMode;
@@ -83,7 +95,11 @@ interface Props {
 /** D9.6 — the no-work question is WHO + WHY, no count. */
 const NO_WORK_QUESTION = 'आज कोण आले होते आणि काम का झालं नाही?';
 
-const Attendance: React.FC<Props> = ({ data, farmId, mode = 'normal', statedHeadcount = null, onSave, onToast }) => {
+const Attendance: React.FC<Props> = ({
+    data, farmId, workDate, workDates, onWorkDateChange, mode = 'normal', statedHeadcount = null, onSave, onToast,
+}) => {
+    const todayKey = getDateKey();
+    const day = workDate ?? todayKey;
     const [selections, setSelections] = useState<Record<string, PersonSelection>>({});
     const [cause, setCause] = useState<BucketIssueType | undefined>(undefined);
     const [saving, setSaving] = useState(false);
@@ -91,18 +107,29 @@ const Attendance: React.FC<Props> = ({ data, farmId, mode = 'normal', statedHead
     // false from the same render. One press = one save.
     const savingRef = useRef(false);
 
-    // Today's register cell per person (read-only context). The register
-    // already composes the device's queued marks over the server's rows, so a
-    // re-opened screen shows what is already recorded.
+    // What he tapped was about the day he had chosen; another day starts clean.
+    const [selectionsDay, setSelectionsDay] = useState(day);
+    if (selectionsDay !== day) {
+        setSelectionsDay(day);
+        setSelections({});
+    }
+
+    // The chosen day's register cell per person (read-only context). The
+    // register already composes the device's queued marks over the server's
+    // rows, so a re-opened screen shows what is already recorded.
     const prefills = useMemo(() => {
         const out: Record<string, PersonPrefill> = {};
-        const todayIndex = data.ledger.days.indexOf(getDateKey());
-        if (todayIndex < 0) return out;
+        const dayIndex = data.ledger.days.indexOf(day);
+        if (dayIndex < 0) return out;
         for (const row of data.ledger.rows) {
-            out[row.fieldOperatorId] = prefillFromCell(row.cells[todayIndex]);
+            out[row.fieldOperatorId] = prefillFromCell(row.cells[dayIndex]);
         }
         return out;
-    }, [data.ledger]);
+    }, [data.ledger, day]);
+
+    // The stated headcount is TODAY's; on another day there is none to compare with.
+    const dayHeadcount = day === todayKey ? statedHeadcount : null;
+    const showDayChoice = mode === 'normal' && Boolean(onWorkDateChange) && (workDates?.length ?? 0) > 1;
 
     const marks = useMemo<ManualAttendanceMark[]>(() => Object.entries(selections).flatMap(([id, sel]) => {
         const facts = toMarkPayload(sel, prefills[id] ?? EMPTY_PREFILL);
@@ -113,8 +140,8 @@ const Attendance: React.FC<Props> = ({ data, farmId, mode = 'normal', statedHead
     // shown through the existing disagreement card, never resolved here.
     const presentIds = useMemo(() => effectivePresentIds(selections, prefills), [selections, prefills]);
     const aboveStated = useMemo(
-        () => findMarkedAboveStated(statedHeadcount, presentIds),
-        [statedHeadcount, presentIds],
+        () => findMarkedAboveStated(dayHeadcount, presentIds),
+        [dayHeadcount, presentIds],
     );
 
     const canSave = Boolean(farmId) && marks.length > 0 && !saving;
@@ -134,6 +161,23 @@ const Attendance: React.FC<Props> = ({ data, farmId, mode = 'normal', statedHead
 
     return (
         <div className="flex flex-col gap-2.5 px-4 pb-24 pt-2" data-testid="attendance-screen">
+            {showDayChoice && (
+                <div data-testid="att-day-choice" className="flex flex-col gap-2">
+                    <div className="px-1 pt-1 text-[17px] font-bold text-stone-800">{ATTENDANCE_COPY.dayChoiceQuestion}</div>
+                    <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label={ATTENDANCE_COPY.dayChoiceQuestion}>
+                        {workDates!.map((d) => (
+                            <button key={d} type="button" disabled={saving}
+                                data-testid={`att-workdate-${d}`}
+                                aria-pressed={d === day}
+                                onClick={() => { if (d !== day) onWorkDateChange!(d); }}
+                                className={`min-h-[48px] flex-none rounded-xl border px-4 py-2 text-[16px] font-extrabold transition-colors ${d === day ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-stone-200 bg-white text-stone-500'}`}>
+                                {workDateChipLabel(d, todayKey)}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {mode === 'no-work' && (
                 <>
                     <div data-testid="att-no-work-question" className="px-1 pt-1 text-[19px] font-bold text-stone-800">{NO_WORK_QUESTION}</div>

@@ -49,7 +49,8 @@ import { ATTENDANCE_COPY } from '../attendanceCopy';
 import LabourHub from './LabourHub';
 import MukadamDetail from './MukadamDetail';
 import PersonDetail from './PersonDetail';
-import Attendance, { type ManualAttendanceMark } from './Attendance';
+import Attendance, { type AttendanceMode, type ManualAttendanceMark } from './Attendance';
+import { attendanceTitleFor, choosableWorkDates } from '../attendanceDay';
 import WeeklyDashboard from './WeeklyDashboard';
 import HajeriLedger from './HajeriLedger';
 import HajeriCellDetail from './HajeriCellDetail';
@@ -262,9 +263,18 @@ export const LabourFeature: React.FC<{
     // existing toast instead of navigating or crashing.
     const goToLogFallback = () => showToast('🎙 बोलून नोंद करायची असेल तर कामाच्या पानावर जा.');
 
+    // spec: plr-d10 (WP-1 A9) — the day the manual हजेरी is for. Every visit to the screen
+    // starts on today (`openAttendance`); the title names the day chosen.
+    const [attendanceDate, setAttendanceDate] = useState<string>(() => getDateKey());
+    const openAttendance = useCallback((mode?: AttendanceMode) => {
+        setAttendanceDate(getDateKey());
+        push(mode ? { name: 'attendance', mode } : { name: 'attendance' });
+    }, [push]);
+
     const title = cur.name === 'mukadam' && cur.id ? (data.people[cur.id]?.name ?? 'मुकादम')
         : cur.name === 'person' && cur.id ? (data.people[cur.id]?.name ?? 'कामगार')
-            : TITLES[cur.name];
+            : cur.name === 'attendance' && cur.mode !== 'no-work' ? attendanceTitleFor(attendanceDate, getDateKey())
+                : TITLES[cur.name];
 
     // Labour V2 R1 Task 3.1 — the labour mic anchor, derived from the same
     // optional log history the hub already receives. The real app always
@@ -326,7 +336,8 @@ export const LabourFeature: React.FC<{
      */
     const saveManualAttendance = async (marks: ManualAttendanceMark[], noWorkCause?: BucketIssueType): Promise<void> => {
         if (!farmId) throw new Error('no farm context'); // the button is disabled without a farm
-        const workDate = getDateKey();
+        // A no-work day is declared for TODAY only, so that screen never offers another day.
+        const workDate = cur.mode === 'no-work' ? getDateKey() : attendanceDate;
         try {
             await Promise.all(marks.map(({ fieldOperatorId, ...facts }) => MarkAttendanceCommand.enqueue({
                 attendanceMarkId: crypto.randomUUID(),
@@ -366,6 +377,9 @@ export const LabourFeature: React.FC<{
         <Attendance
             data={data}
             farmId={farmId}
+            workDate={cur.mode === 'no-work' ? undefined : attendanceDate}
+            workDates={choosableWorkDates(getDateKey(), { window: timeWindow, view: data.view, fresh: !error && !staleSinceIso })}
+            onWorkDateChange={setAttendanceDate}
             mode={cur.mode ?? 'normal'}
             statedHeadcount={resolveStatedHeadcount(anchor, data.home.onFarmToday)}
             onSave={saveManualAttendance}
@@ -473,10 +487,10 @@ export const LabourFeature: React.FC<{
                                 data={data}
                                 onOpenMukadam={(id) => push({ name: 'mukadam', id })}
                                 onOpenPerson={(id) => push({ name: 'person', id })}
-                                onAttendance={() => push({ name: 'attendance' })}
+                                onAttendance={() => openAttendance()}
                                 onNoWorkAttendance={farm && onDeclareNoWorkDay ? () => {
                                     onBeginNoWorkLane?.();
-                                    push({ name: 'attendance', mode: 'no-work' });
+                                    openAttendance('no-work');
                                 } : undefined}
                                 onDashboard={() => push({ name: 'dashboard' })}
                                 onLedger={() => push({ name: 'ledger' })}

@@ -60,7 +60,7 @@ interface Props {
     farmId: string | undefined;
     /** Only people the farmer has touched on this screen have an entry. */
     selections: Record<string, PersonSelection>;
-    /** What the register already holds today, by field operator id. */
+    /** What the register already holds for the chosen day, by field operator id. */
     prefills: Record<string, PersonPrefill>;
     onChange: (fieldOperatorId: string, next: PersonSelection) => void;
     onToast: (message: string) => void;

@@ -226,7 +226,8 @@ describe('attendance door — opens, and says only true things', () => {
         expect(screen.getByTestId('att-honesty')).toHaveTextContent('"बरोबर" दाबेपर्यंत काहीही जतन होणार नाही.');
         // a save with nothing stated is not possible
         expect(save).toBeDisabled();
-        document.querySelectorAll('[aria-pressed]').forEach((el) => expect(el).toHaveAttribute('aria-pressed', 'false'));
+        // no PERSON's mark is pre-selected (the day chip above the names says which day, by design)
+        screen.getByTestId('attendance-roster').querySelectorAll('[aria-pressed]').forEach((el) => expect(el).toHaveAttribute('aria-pressed', 'false'));
     });
 
     it('नाव जोडा creates a real person, lists them unmarked, and never attaches or marks', async () => {
@@ -351,6 +352,107 @@ describe('attendance door — the save', () => {
 
         expect(screen.getByTestId(`att-day-Full-${OP_A.id}`)).toHaveAttribute('aria-pressed', 'true');
         expect(mockFetchLabourData.mock.calls.length).toBe(callsBefore);
+    });
+});
+
+// spec: plr-d10-redesign-real-integration-2026-10-25 (WP-1 A9) — a past day.
+describe('attendance door — a past day', () => {
+    // Computed here, not with the code under test: 24 hours ago, as a farm (IST) date key.
+    const TODAY = () => getDateKey();
+    const YESTERDAY = () => getDateKey(new Date(Date.now() - 86_400_000));
+    const fullCell = { day: 'full' as const, night: null, hours: null, extraHours: null, ukte: false, work: null };
+    const rowA = (cells: (typeof fullCell | null)[]) => ({
+        personId: `op:${OP_A.id}`, fieldOperatorId: OP_A.id, name: OP_A.displayName, initial: 'र', tone: 'or' as const, cells,
+    });
+
+    const openWith = async (fixture: LabourData) => {
+        mockFetchLabourData.mockResolvedValue(fixture);
+        renderRealFarm();
+        await openCaptureScreen();
+        await waitFor(() => expect(screen.getByTestId(`att-row-${OP_A.id}`)).toBeInTheDocument());
+    };
+
+    it('offers today and the six days before; choosing काल names the screen and dates the marks', async () => {
+        await openWith(LABOUR_NO_TODAY);
+
+        const choice = screen.getByTestId('att-day-choice');
+        expect(within(choice).getAllByRole('button')).toHaveLength(7);
+        expect(screen.getByTestId(`att-workdate-${TODAY()}`)).toHaveAttribute('aria-pressed', 'true');
+
+        fireEvent.click(screen.getByTestId(`att-workdate-${YESTERDAY()}`));
+        await waitFor(() => expect(screen.getByText('कालची हजेरी')).toBeInTheDocument());
+
+        fireEvent.click(screen.getByTestId(`att-day-Full-${OP_A.id}`));
+        fireEvent.click(screen.getByTestId('att-save'));
+        await waitFor(async () => expect(await attendanceMarks()).toHaveLength(1));
+        expect((await attendanceMarks())[0]).toMatchObject({ fieldOperatorId: OP_A.id, dayMark: 'Full', workDate: YESTERDAY() });
+    });
+
+    it('a past day shows what the register already holds for THAT day, and it cannot be un-said', async () => {
+        await openWith({
+            ...LABOUR_NO_TODAY,
+            ledger: { weekLabel: '', days: [YESTERDAY(), TODAY()], rows: [rowA([fullCell, null])], crewRows: [] },
+        });
+        expect(screen.getByTestId(`att-day-Full-${OP_A.id}`)).toHaveAttribute('aria-pressed', 'false'); // today: nothing yet
+
+        fireEvent.click(screen.getByTestId(`att-workdate-${YESTERDAY()}`));
+        await waitFor(() => expect(screen.getByTestId(`att-day-Full-${OP_A.id}`)).toHaveAttribute('aria-pressed', 'true'));
+        fireEvent.click(screen.getByTestId(`att-day-Full-${OP_A.id}`));                  // try to un-say it
+        expect(screen.getByTestId(`att-day-Full-${OP_A.id}`)).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId('att-save')).toBeDisabled();
+    });
+
+    it('changing the day clears what was tapped for the other day', async () => {
+        await openWith(LABOUR_NO_TODAY);
+        fireEvent.click(screen.getByTestId(`att-day-Full-${OP_A.id}`));
+        fireEvent.click(screen.getByTestId(`att-workdate-${YESTERDAY()}`));
+        await waitFor(() => expect(screen.getByTestId(`att-day-Full-${OP_A.id}`)).toHaveAttribute('aria-pressed', 'false'));
+        expect(screen.getByTestId('att-save')).toBeDisabled();
+    });
+
+    it('every visit starts on today again', async () => {
+        await openWith(LABOUR_NO_TODAY);
+        fireEvent.click(screen.getByTestId(`att-workdate-${YESTERDAY()}`));
+        await waitFor(() => expect(screen.getByText('कालची हजेरी')).toBeInTheDocument());
+
+        fireEvent.click(screen.getByRole('button', { name: /मागे/ }));
+        await openCaptureScreen();
+        await waitFor(() => expect(screen.getByText(CAPTURE_SCREEN_TITLE)).toBeInTheDocument());
+    });
+
+    it('the stated headcount is today\'s: its disagreement card never shows on another day', async () => {
+        await openWith({ ...LABOUR_NO_TODAY, home: { ...LABOUR_NO_TODAY.home, onFarmToday: 1 } });
+        fireEvent.click(screen.getByTestId(`att-day-Full-${OP_A.id}`));
+        fireEvent.click(screen.getByTestId(`att-day-Full-${OP_B.id}`));
+        await waitFor(() => expect(screen.getByTestId('headcount-disagreement')).toBeInTheDocument()); // positive control
+
+        fireEvent.click(screen.getByTestId(`att-workdate-${YESTERDAY()}`));
+        fireEvent.click(screen.getByTestId(`att-day-Full-${OP_A.id}`));
+        fireEvent.click(screen.getByTestId(`att-day-Full-${OP_B.id}`));
+        expect(screen.queryByTestId('headcount-disagreement')).toBeNull();
+    });
+
+    // Review B001/B002/B005 — a day whose marks are not on screen would look empty, and a tap
+    // there silently amends the stored mark on the server. Only today is offered then.
+    it('an old copy shown during an outage: today only', async () => {
+        mockFetchLabourData.mockRejectedValue(new Error('offline'));
+        saveLabourReadout('u1', REAL_FARM.farmId, 'alltime', LABOUR_NO_TODAY);
+        renderRealFarm();
+        await openCaptureScreen();
+        await waitFor(() => expect(screen.getByTestId(`att-row-${OP_A.id}`)).toBeInTheDocument());
+        expect(screen.queryByTestId('att-day-choice')).toBeNull();
+    });
+
+    it('a register that shows only his own row (not the owner\'s view): today only', async () => {
+        await openWith({ ...LABOUR_NO_TODAY, view: 'own' });
+        expect(screen.queryByTestId('att-day-choice')).toBeNull();
+    });
+
+    it('a narrower period on the register (हा आठवडा): today only', async () => {
+        SessionStore.setLabourWindow('week');
+        await openWith(LABOUR_NO_TODAY);
+        expect(mockFetchLabourData).toHaveBeenCalledWith(REAL_FARM.farmId, 'week'); // positive control
+        expect(screen.queryByTestId('att-day-choice')).toBeNull();
     });
 });
 
@@ -489,6 +591,8 @@ describe('attendance door — no-work day (काम झालं नाही, 
         await waitFor(() => expect(screen.getByTestId('att-no-work-question')).toHaveTextContent('आज कोण आले होते आणि काम का झालं नाही?'));
         expect(begin).toHaveBeenCalledTimes(1);
         await waitFor(() => expect(screen.getByTestId(`att-row-${OP_A.id}`)).toBeInTheDocument());
+        // a no-work day is declared for today, so this screen offers no other day (WP-1 A9)
+        expect(screen.queryByTestId('att-day-choice')).toBeNull();
 
         fireEvent.click(screen.getByTestId(`att-day-Full-${OP_A.id}`));
         fireEvent.click(screen.getByTestId('att-cause-WEATHER'));
@@ -497,6 +601,7 @@ describe('attendance door — no-work day (काम झालं नाही, 
         await waitFor(() => expect(declare).toHaveBeenCalledTimes(1));
         expect(declare).toHaveBeenCalledWith('WEATHER');
         expect(await attendanceMarks()).toHaveLength(1);
+        expect((await attendanceMarks())[0]).toMatchObject({ workDate: getDateKey() });
         // no unnamed headcount is ever recorded (Q2)
         expect((await attendanceMarks())[0]).not.toHaveProperty('count');
     });
