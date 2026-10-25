@@ -11,7 +11,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import type { FarmMachinery } from '../../../domain/types/farm.types';
-import { BigButton, ChoiceChips, GlassCard, Tap, TextField } from './hubUi';
+import { BigButton, ChoiceChips, GlassCard, Tap, TextField } from '../../../shared/components/ui/placeUi';
 import { MACHINE_TYPES, MACHINE_TYPE_LABEL, OWNERSHIP_LABEL } from './setupLabels';
 
 interface AddMachineWizardProps {

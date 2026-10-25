@@ -20,7 +20,7 @@ import type {
     ElectricityOffWindow, ElectricityPhaseSchedule, ElectricityTimingConfiguration, FarmerProfile,
 } from '../../../domain/types/farm.types';
 import { systemClock } from '../../../core/domain/services/Clock';
-import { GlassCard, SwitchRow, Tap } from './hubUi';
+import { GlassCard, SwitchRow, Tap } from '../../../shared/components/ui/placeUi';
 import {
     PHASES, PHASE_TITLE, defaultOffWindow, farmerClock, formatHours, normalizeConfig, offAtHour, summarizeWeek,
     weekWindows, type PhaseKey, type WeekKey, type WeekSummary,

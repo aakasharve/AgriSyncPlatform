@@ -30,7 +30,7 @@ import { useCropPlotState } from './hooks/useCropPlotState';
 import { useFarmAdminState } from './hooks/useFarmAdminState';
 import SubscriptionCard from '../admin/billing/SubscriptionCard';
 import { buildSettingsExtraIds } from './settingsItems';
-import { PageBar, SANS, Tap } from './components/hubUi';
+import { PageBar, SANS, Tap } from '../../shared/components/ui/placeUi';
 
 import type { CropProfile, FarmerProfile } from '../../types';
 import { VerificationStatus } from '../../domain/types/farm.types';

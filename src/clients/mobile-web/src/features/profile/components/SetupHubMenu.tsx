@@ -17,7 +17,7 @@ import type { ProfileTab } from '../ProfilePage';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 import { FarmSwitcherSheet } from '../../context/components/FarmContextSwitcher';
 import FarmsSection from './FarmsSection';
-import { Chip, GlassCard, PageBar, RowLink, SANS, SectionHead, Tap } from './hubUi';
+import { Chip, GlassCard, PageBar, RowLink, SANS, SectionHead, Tap } from '../../../shared/components/ui/placeUi';
 
 export interface SetupHelp {
     what: string;

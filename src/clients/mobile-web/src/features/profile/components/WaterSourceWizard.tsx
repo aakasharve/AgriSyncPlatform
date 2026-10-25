@@ -14,7 +14,7 @@ import React, { useState } from 'react';
 import { Droplets, Plus, Trash2 } from 'lucide-react';
 import type { FarmMotor, WaterResource } from '../../../domain/types/farm.types';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
-import { ChoiceChips, GlassCard, Tap, TextField } from './hubUi';
+import { ChoiceChips, GlassCard, Tap, TextField } from '../../../shared/components/ui/placeUi';
 import { PIPE_SIZES, POWER_SOURCES, POWER_SOURCE_LABEL, SOURCE_TYPES, SOURCE_TYPE_LABEL, pipeLabel } from './setupLabels';
 
 interface WaterSourceWizardProps {

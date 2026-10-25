@@ -12,7 +12,7 @@
  */
 import React from 'react';
 import { FlaskConical } from 'lucide-react';
-import { GlassCard, IconDot, Soon } from './hubUi';
+import { GlassCard, IconDot, Soon } from '../../../shared/components/ui/placeUi';
 
 export const SoilHealthReportsManager: React.FC = () => (
     <div className="space-y-3" data-testid="soil-reports">

@@ -19,7 +19,7 @@ import { AlertTriangle, CalendarDays, MapPin, Plus, Sprout, Trash2 } from 'lucid
 import type { CropProfile } from '../../../domain/types/farm.types';
 import { CropSymbol } from '../../context/components/CropSelector';
 import { getTemplateById as getScheduleById, getTemplatesForCrop as getSchedulesForCrop } from '../../../infrastructure/reference/TemplateCatalog';
-import { BigButton, GlassCard, IconDot, Tap, TextField } from '../components/hubUi';
+import { BigButton, GlassCard, IconDot, Tap, TextField } from '../../../shared/components/ui/placeUi';
 import { IRRIGATION_LABEL, LAND_UNIT_LABEL } from '../components/setupLabels';
 
 interface StructureSectionProps {

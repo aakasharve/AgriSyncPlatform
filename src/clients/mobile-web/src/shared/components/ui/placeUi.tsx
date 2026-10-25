@@ -2,11 +2,13 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: plr-d10-redesign-real-integration-2026-10-25 (I7 / WP-5) — the few building blocks every
- * सेट-अप केंद्र page uses, taken from the founder-approved preview (PLR-D9 `app/ui.tsx`) so every page
- * looks and behaves the same: one title bar with ONE big "मागे", the app's light glass card, one way a
- * row looks, big buttons and switches, and a plain "लवकरच" for a part that is not built (never a dead
- * button). Presentational only — no data, no sample values.
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I7 / WP-5, I8) — the few building blocks every
+ * redesigned page uses (सेट-अप केंद्र, and the bottom-bar places: खरेदी, उत्पन्न, पैसे व हिशोब), taken
+ * from the founder-approved preview (PLR-D9 `app/ui.tsx`) so every page looks and behaves the same: one
+ * title bar with ONE big "मागे", the app's light glass card, one way a row looks, big buttons and
+ * switches, and a plain "लवकरच" for a part that is not built (never a dead button). Presentational only
+ * — no data, no sample values. Moved here from `features/profile/components/hubUi.tsx` when the money
+ * pages started using it too.
  */
 import React, { useState } from 'react';
 import { ArrowLeft, ChevronRight, Clock3, Smartphone } from 'lucide-react';

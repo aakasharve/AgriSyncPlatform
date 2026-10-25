@@ -14,7 +14,7 @@ import { Plus, Tractor, Trash2, Wrench } from 'lucide-react';
 import type { FarmerProfile, FarmMachinery } from '../../../domain/types/farm.types';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import AddMachineWizard from '../components/AddMachineWizard';
-import { BigButton, GlassCard, IconDot, Tap, ThisPhoneOnly } from '../components/hubUi';
+import { BigButton, GlassCard, IconDot, Tap, ThisPhoneOnly } from '../../../shared/components/ui/placeUi';
 import { MACHINE_TYPE_LABEL, OWNERSHIP_LABEL } from '../components/setupLabels';
 
 interface MachinesSectionProps {

@@ -19,7 +19,7 @@ import { AlertTriangle, CheckCircle2, ChevronDown, Droplets, Pencil, Plus, Setti
 import type { FarmerProfile, FarmMotor, WaterResource } from '../../../domain/types/farm.types';
 import ElectricityTimingConfigurator from '../components/ElectricityTimingConfigurator';
 import WaterSourceWizard from '../components/WaterSourceWizard';
-import { BigButton, GlassCard, IconDot, SectionHead, Soon, Tap, ThisPhoneOnly } from '../components/hubUi';
+import { BigButton, GlassCard, IconDot, SectionHead, Soon, Tap, ThisPhoneOnly } from '../../../shared/components/ui/placeUi';
 import { SOURCE_TYPE_LABEL, motorLine, pipeLabel } from '../components/setupLabels';
 
 interface UtilitiesSectionProps {
