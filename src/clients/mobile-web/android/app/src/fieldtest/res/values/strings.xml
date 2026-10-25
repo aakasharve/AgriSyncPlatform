@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- spec: plr-d10 (H1) - the test copy's name, so it is never mistaken for the live app on the phone. -->
+<resources>
+    <string name="app_name">ShramSafal TEST</string>
+    <string name="title_activity_main">ShramSafal TEST</string>
+</resources>

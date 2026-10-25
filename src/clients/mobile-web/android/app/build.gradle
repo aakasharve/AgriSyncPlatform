@@ -31,6 +31,16 @@ android {
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+        // spec: plr-d10-redesign-real-integration-2026-10-25 (H1) - the founder's TEST copy. Installs BESIDE the
+        // live app (its own id, name and data), signed with the debug key, never published. Its web assets are
+        // built with `npm run build:fieldtest`, which points it at the test server - never at live farms.
+        // `assembleRelease` / `assembleDebug` are unchanged.
+        fieldtest {
+            initWith debug
+            applicationIdSuffix ".test"
+            versionNameSuffix "-test"
+            matchingFallbacks = ['debug']
+        }
     }
 }
 

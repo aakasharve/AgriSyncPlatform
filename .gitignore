@@ -54,6 +54,8 @@ __pycache__/
 # .env.production was tracked by mistake (CTO debt #10, 2026-06-26).
 # Ignore real values; commit .env.production.example as the template.
 .env.production
+# spec: plr-d10 (H1) - the founder's test-copy build env; template is .env.fieldtest.example.
+.env.fieldtest
 src/AgriSync.Bootstrapper/secrets/
 src/AgriSync.Bootstrapper/App_Data/
 # Dev connection strings / local overrides — copy appsettings.Development.example.json and fill in locally

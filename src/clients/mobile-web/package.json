@@ -8,6 +8,7 @@
     "start": "vite --host",
     "build": "vite build",
     "build:prod": "vite build --mode production",
+    "build:fieldtest": "vite build --mode fieldtest",
     "clean": "rimraf dist",
     "preview": "vite preview",
     "deploy:s3": "bash scripts/deploy-s3.sh",

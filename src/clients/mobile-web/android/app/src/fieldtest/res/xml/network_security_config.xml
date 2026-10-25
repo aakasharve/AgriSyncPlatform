@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  spec: plr-d10 (H1) - TEST COPY ONLY. The test server may run on the founder's PC on his home Wi-Fi
+  (plain http on a local address such as 192.168.x.x), which the live app's config refuses. This file
+  replaces the main one only in the `fieldtest` build; the live app keeps cleartext off.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
