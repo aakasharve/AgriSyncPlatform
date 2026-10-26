@@ -526,6 +526,113 @@ public sealed class DailyLog : Entity<Guid>
     public const string BackfilledAttestationReason = "self-attested-backfilled";
 
     /// <summary>
+    /// spec: plr-d10-redesign-real-integration-2026-10-25 (I13) — FOUNDER DECISION
+    /// 2026-09-02: a voice log is saved the moment the parse succeeds, with no Save tap,
+    /// and "ShramSafal captured his statement" must never be confused with "the farmer
+    /// reviewed it". This is the marker on the ONE <see cref="VerificationStatus.Draft"/>
+    /// event <see cref="MarkAutoSavedFromVoice"/> writes for such a log.
+    ///
+    /// <para><b>Why a Draft event and not Confirmed.</b> Draft is the only status that
+    /// claims nothing: "recorded, nobody has reviewed it yet". Confirmed would read on the
+    /// phone as "he confirmed it", and would move a foreman's log out of the place an
+    /// owner's review looks for it. No status or FSM edge is added.</para>
+    ///
+    /// <para><b>What it closes.</b> While this marker is on a log,
+    /// <see cref="TrySelfVerifyAsCreator"/> refuses — at creation, after a task is added
+    /// (<c>AddLogTaskHandler</c>) and in the one-time backfill alike. The only way such a
+    /// log reaches <see cref="VerificationStatus.Verified"/> is a person's own verify act
+    /// (<see cref="VerifyReachingTarget"/>), credited to that person.</para>
+    ///
+    /// <para>Machine-readable and stable. Do not localise it, do not reword it.</para>
+    /// </summary>
+    public const string AutoSavedFromVoiceReason = "auto-saved-from-voice";
+
+    /// <summary>
+    /// spec: plr-d10 (I13) — the creation marker <see cref="MarkAutoSavedFromVoice"/> wrote,
+    /// or <c>null</c> when this log was not saved straight from a voice parse.
+    ///
+    /// <para><b>Only the creation marker counts, never the reason text alone.</b>
+    /// <c>VerifyLogHandler</c> passes a client's free-text reason into every event it
+    /// writes, and <c>Draft → Confirmed</c> / <c>CorrectionPending → Draft</c> are open to
+    /// every role. Matching "any event whose reason is <see cref="AutoSavedFromVoiceReason"/>"
+    /// would let anyone who can confirm a log stamp the capture fact onto it later (I13-V1-M1).
+    /// So the marker is recognised only where <see cref="MarkAutoSavedFromVoice"/> can put
+    /// it: the EARLIEST event of the history (it refuses a log that has any), status
+    /// <see cref="VerificationStatus.Draft"/>, credited to this log's own operator. Event
+    /// times are server-clock times on every write path, so nothing can land before it.</para>
+    /// </summary>
+    public VerificationEvent? AutoSavedFromVoiceMarker
+    {
+        get
+        {
+            if (_verificationEvents.Count == 0)
+            {
+                return null;
+            }
+
+            var first = _verificationEvents.OrderBy(e => e.OccurredAtUtc).First();
+            return first.Status == VerificationStatus.Draft
+                   && first.Reason == AutoSavedFromVoiceReason
+                   && first.VerifiedByUserId == OperatorUserId
+                ? first
+                : null;
+        }
+    }
+
+    /// <summary>
+    /// spec: plr-d10 (I13) — true when this log was saved by the phone straight from a
+    /// voice parse, with no review tap (see <see cref="AutoSavedFromVoiceMarker"/>). Read
+    /// from the verification history, so it survives every reload and every later event.
+    /// </summary>
+    public bool WasAutoSavedFromVoice => AutoSavedFromVoiceMarker is not null;
+
+    /// <summary>
+    /// spec: plr-d10 (I13) — records, at creation, that the phone saved this log straight
+    /// from a voice parse. Writes ONE <see cref="VerificationStatus.Draft"/> event carrying
+    /// <see cref="AutoSavedFromVoiceReason"/>, credited to the log's own operator (it is his
+    /// statement that was captured). The status does not move.
+    ///
+    /// <para><b>Creation-only.</b> How a log was captured is a fact about its creation, so
+    /// a log that already has any verification history is refused: stamping the marker
+    /// onto a day someone has attested would rewrite what happened.</para>
+    ///
+    /// <para>The event also gives the log a verification history, so the one-time backfill
+    /// (which only looks at logs with none) never picks it up.</para>
+    ///
+    /// <para><b>Server-side only — never on the wire.</b> Every phone build that exists
+    /// stamps "confirmed by X at T" from the latest verification event of ANY status
+    /// (<c>logsReconciler.toDailyLog</c>), and the day ring credits that stamp. So
+    /// <c>DtoMappingExtensions.ToDto</c> leaves this one event out of
+    /// <c>DailyLogDto.VerificationEvents</c>: an auto-saved log reads on every phone exactly
+    /// like an unreviewed foreman's log today — Draft, no events (I13-V1-B1).</para>
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The log already has verification history.</exception>
+    public VerificationEvent MarkAutoSavedFromVoice(Guid verificationEventId, DateTime occurredAtUtc)
+    {
+        if (_verificationEvents.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Only a log with no verification history can be marked auto-saved from voice.");
+        }
+
+        var marker = new VerificationEvent(
+            verificationEventId,
+            Id,
+            VerificationStatus.Draft,
+            AutoSavedFromVoiceReason,
+            OperatorUserId,
+            occurredAtUtc);
+
+        _verificationEvents.Add(marker);
+        if (occurredAtUtc > ModifiedAtUtc)
+        {
+            ModifiedAtUtc = occurredAtUtc;
+        }
+
+        return marker;
+    }
+
+    /// <summary>
     /// spec: dfes-companion-2026-07-11 (wave-1.4) — REACH <paramref name="target"/> BY WALKING
     /// ONLY EDGES <paramref name="callerRole"/> ALREADY HOLDS.
     ///
@@ -722,6 +829,15 @@ public sealed class DailyLog : Entity<Guid>
         // deliberately walked back to Draft — and the CALLER still has to prove the actor
         // is the log's own operator before it asks (AddLogTaskHandler does exactly that).
         if (CurrentVerificationStatus != VerificationStatus.Draft)
+        {
+            return false;
+        }
+
+        // spec: plr-d10 (I13), founder decision 2026-09-02 — a log the phone saved straight
+        // from a voice parse was CAPTURED, not reviewed. The machine never vouches for it on
+        // anyone's behalf (create, add-task re-attest and backfill all come through here);
+        // only a person's own verify act takes it to Verified. See AutoSavedFromVoiceReason.
+        if (WasAutoSavedFromVoice)
         {
             return false;
         }

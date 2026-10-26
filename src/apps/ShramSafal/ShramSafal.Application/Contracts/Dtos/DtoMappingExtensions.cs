@@ -102,10 +102,7 @@ internal static class DtoMappingExtensions
                 .OrderBy(t => t.OccurredAtUtc)
                 .Select(ToDto)
                 .ToList(),
-            log.VerificationEvents
-                .OrderBy(v => v.OccurredAtUtc)
-                .Select(ToDto)
-                .ToList(),
+            WireVerificationEvents(log),
             // LABOUR_PHASE2 A2a — the farmer's spatial assertion, projected
             // VERBATIM. Not derived, not defaulted, not reordered:
             //
@@ -131,6 +128,35 @@ internal static class DtoMappingExtensions
             // the entity produces NULL on the wire, exactly as doctrine P4
             // requires (see the remarks on DailyLogDto.DayOutcome).
             log.DayOutcome);
+
+    /// <summary>
+    /// spec: plr-d10-redesign-real-integration-2026-10-25 (I13) — the verification history a
+    /// device is sent: every event, oldest first, EXCEPT the auto-save capture marker
+    /// (<see cref="DailyLog.AutoSavedFromVoiceMarker"/>).
+    ///
+    /// <para><b>Why the marker stays on the server.</b> Every phone build that exists,
+    /// installed APKs included (they bundle their web assets at build time), rebuilds
+    /// <c>verification.verifiedAtISO</c> / <c>verifiedByOperatorId</c> from the LATEST event
+    /// of any status (<c>logsReconciler.toDailyLog</c>), and <c>dayState</c> gives the day its
+    /// "today's record is confirmed" credit for that stamp. Sent down, a marker nobody pressed a
+    /// button for would read as the farmer's confirmation — the exact "captured read as
+    /// reviewed" confusion the founder decision of 2026-09-02 forbids (I13-V1-B1). Left out, an
+    /// auto-saved log reads on every phone exactly as an unreviewed foreman's log does today:
+    /// <c>Draft</c>, no events.</para>
+    ///
+    /// <para>Nothing else is filtered: a real human act stays on the wire whatever reason text
+    /// it carries. The marker itself is still stored, still drives
+    /// <see cref="DailyLog.TrySelfVerifyAsCreator"/>, and still has its audit row.</para>
+    /// </summary>
+    private static List<VerificationEventDto> WireVerificationEvents(DailyLog log)
+    {
+        var captureMarkerId = log.AutoSavedFromVoiceMarker?.Id;
+        return log.VerificationEvents
+            .Where(v => v.Id != captureMarkerId)
+            .OrderBy(v => v.OccurredAtUtc)
+            .Select(ToDto)
+            .ToList();
+    }
 
     /// <summary>
     /// LABOUR_PHASE2 Phase 3 — the ONE place a <see cref="LabourEngagementDto"/> is

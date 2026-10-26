@@ -180,6 +180,14 @@ export interface CreateDailyLogPayload {
      // for every other log. NOTE: a server older than this contract refuses the key
      // (strict allow-list), so it must ship server-first.
      captureScope?: LogCaptureScope;
+     // PLR-D10 I13, founder decision 2026-09-02 — `true` when the phone saved this log
+     // straight from a voice parse with no review tap: the server then keeps it in Draft
+     // (not self-verified) until the farmer's own confirm. Omitted = today's behaviour.
+     // Type only here (CreateDailyLogPayload.scope.test.ts makes this twin carry every
+     // contract field); the voice auto-save wiring sets it. RELEASE GATE: a server older
+     // than this contract refuses the key (strict allow-list, permanent
+     // SyncInvalidPayload), so the server must be deployed BEFORE any build sends it.
+     autoSavedFromVoice?: boolean;
 }
 
 export class CreateDailyLogCommand {

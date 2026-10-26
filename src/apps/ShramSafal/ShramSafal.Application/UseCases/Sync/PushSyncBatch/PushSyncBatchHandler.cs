@@ -873,7 +873,8 @@ public sealed class PushSyncBatchHandler(
         // sync-contract/schemas/payloads/create_daily_log.zod.ts and the
         // generated CreateDailyLogPayload record.
         // B002 adds "captureScope" (which door captured the record), same lockstep.
-        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "scope", "plotIds", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId", "labour", "manualDraft", "captureScope"))
+        // PLR-D10 I13 adds "autoSavedFromVoice" (saved from a voice parse, never reviewed).
+        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "scope", "plotIds", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId", "labour", "manualDraft", "captureScope", "autoSavedFromVoice"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -898,6 +899,17 @@ public sealed class PushSyncBatchHandler(
         if (ValidateLabourWorkerNames(payload) is { } namesFailure)
         {
             return namesFailure;
+        }
+
+        // PLR-D10 I13 — a plain JSON boolean, or nothing. Checked BEFORE deserialisation
+        // so a string/number stand-in ("true", 1) is refused as an invalid payload, loudly
+        // and permanently, instead of surfacing as an unhandled fault the phone retries.
+        if (payload.TryGetProperty("autoSavedFromVoice", out var autoSavedFromVoice)
+            && autoSavedFromVoice.ValueKind is not (JsonValueKind.True or JsonValueKind.False or JsonValueKind.Null))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "create_daily_log autoSavedFromVoice must be a boolean.");
         }
 
         var request = DeserializePayload<CreateDailyLogPayload>(payload);
@@ -1029,7 +1041,11 @@ public sealed class PushSyncBatchHandler(
                 // client older than this contract, which is the pre-task-0b path exactly.
                 ManualDraft: request.ManualDraft,
                 // B002 — the door, mapped strictly above.
-                CaptureScope: captureScope),
+                CaptureScope: captureScope,
+                // PLR-D10 I13 — absent/false is today's behaviour (P11); only an explicit
+                // JSON true keeps the log out of the creator's self-attestation. A
+                // non-boolean value was already refused above, before any write.
+                AutoSavedFromVoice: request.AutoSavedFromVoice == true),
             ct);
 
         return ToOutcome(result);

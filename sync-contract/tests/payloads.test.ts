@@ -272,6 +272,35 @@ describe('CreateDailyLogPayload', () => {
             expect(payloads.CreateDailyLogPayload.safeParse(withScope(bad)).success, String(bad)).toBe(false);
         }
     });
+
+    // PLR-D10 I13 (founder decision 2026-09-02) — autoSavedFromVoice: the phone saved
+    // this voice log on a successful parse, with no review tap. The server must then
+    // keep the log out of Verified until the farmer's own confirm.
+    const withAutoSave = (autoSavedFromVoice: unknown) => ({
+        dailyLogId: VALID_GUID_A,
+        farmId: VALID_GUID_B,
+        plotId: VALID_GUID_C,
+        cropCycleId: VALID_GUID_D,
+        logDate: VALID_LOG_DATE,
+        sourceAiJobId: VALID_GUID_E,
+        autoSavedFromVoice,
+    });
+    it('accepts autoSavedFromVoice true and false', () => {
+        const yes = payloads.CreateDailyLogPayload.safeParse(withAutoSave(true));
+        expect(yes.success).toBe(true);
+        expect(yes.success && yes.data.autoSavedFromVoice).toBe(true);
+        expect(payloads.CreateDailyLogPayload.safeParse(withAutoSave(false)).success).toBe(true);
+    });
+    it('accepts a payload with no autoSavedFromVoice — every older client', () => {
+        const r = payloads.CreateDailyLogPayload.safeParse(withAutoSave(undefined));
+        expect(r.success).toBe(true);
+        expect(r.success && r.data.autoSavedFromVoice).toBeUndefined();
+    });
+    it('rejects a non-boolean autoSavedFromVoice (no string or number stand-ins)', () => {
+        for (const bad of ['true', 1, 0, null, 'yes']) {
+            expect(payloads.CreateDailyLogPayload.safeParse(withAutoSave(bad)).success, String(bad)).toBe(false);
+        }
+    });
 });
 
 describe('AddLogTaskPayload', () => {
