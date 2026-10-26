@@ -32,7 +32,9 @@ import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { useFarmContext } from '../../core/session/FarmContext';
 import { emitClosureSummaryViewed } from '../../core/telemetry/eventEmitters';
 import FarmWideTodayPanel from '../logs/components/FarmWideTodayPanel';
-import { TodayActivityButton, TodayActivitySheet } from '../logs/components/TodayActivityFeed';
+import { TodayActivityButton } from '../logs/components/TodayActivityFeed';
+// PLR-D10 I13 (LP-24, V-5) — the same sheet, with each card's recording (when on this phone) and its glance.
+import { TodayActivityClipsSheet } from '../logs/components/voiceResult/ClipGlance';
 import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
 // The ONLY import of this stylesheet in the app: the event cards inside the log drawer (and the cost
 // summary card) are styled by it. It stays with the page that always loaded it.
@@ -217,7 +219,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                 </div>
             )}
             {activityFeed && feedOpen && (
-                <TodayActivitySheet entries={activityFeed.entries} dateLabel={activityFeed.dateLabel} onClose={() => setFeedOpen(false)} />
+                <TodayActivityClipsSheet entries={activityFeed.entries} dateLabel={activityFeed.dateLabel} onClose={() => setFeedOpen(false)} />
             )}
 
             {/* REVIEW INBOX (Trust Layer 2) — a read surface; visible only to a verifier when something waits. */}

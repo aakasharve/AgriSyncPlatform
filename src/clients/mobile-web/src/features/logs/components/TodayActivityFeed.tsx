@@ -16,7 +16,7 @@
  */
 import React from 'react';
 import { ArrowLeft, ChevronRight, ListChecks } from 'lucide-react';
-import type { TodayCounts } from '../../../types';
+import type { DailyLog, TodayCounts } from '../../../types';
 import ActivityFeedCard, { type CardAudio } from './ActivityFeedCard';
 import { PHONE_COLUMN } from './phoneColumn';
 
@@ -41,6 +41,11 @@ export interface FeedEntry {
     snippet?: string;
     audio?: CardAudio;
     chips?: React.ReactNode;
+    /**
+     * PLR-D10 I13 — the real log behind the card, so the sheet can find its clip on this phone and show
+     * everything understood from it. Sample/preview entries omit it (then the card just opens).
+     */
+    log?: DailyLog;
     onOpen: () => void;
 }
 
