@@ -102,7 +102,8 @@ const AppFrame: React.FC<{
     // A QR deep link (above) still goes straight to its own page: a worker who scanned the
     // owner's QR is not sent round स्वागत first. DECISION FOR THE FOUNDER (round-1 review F7): this
     // departs from PLR-D9 T8's order (स्वागत first for everyone). On that page the language can still
-    // be changed — the consent tick's notice has the मराठी / English switch (ConsentNoticeSheet).
+    // be changed — the consent tick's notice has the मराठी / English switch (ConsentNoticeSheet), and the
+    // whole page follows it: every word there is `joinLandingCopy` in ONE language (round-2 LANG-2-QR).
     if (!isAuthenticated && showWelcome) {
         return (
             <AppShell>

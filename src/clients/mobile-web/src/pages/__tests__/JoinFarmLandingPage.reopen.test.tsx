@@ -63,6 +63,11 @@ vi.mock('../../i18n/LanguageContext', () => ({
     useLanguage: () => ({ language: 'mr', setLanguage: vi.fn(), t: (key: string) => key }),
 }));
 import JoinFarmLandingPage, { __resetCompletedJoinsForTests } from '../JoinFarmLandingPage';
+import { joinLandingCopy } from '../../features/onboarding/qr/joinLandingCopy';
+
+// spec: plr-d10-redesign-real-integration-2026-10-25 (I16 — round-2 review LANG-2-QR) — the page speaks
+// ONE language: in Marathi the "could not reach" line is Marathi, never the English it used to print.
+const UNREACHABLE_MR = joinLandingCopy('mr').errors.unreachable;
 
 const SESSION = { userId: 'u-1', accessToken: 'a', expiresAtUtc: '2099-01-01T00:00:00Z' };
 const MINE = [{ farmId: 'farm-2', name: 'पवार यांची शेती', role: 'Mukadam', farmCode: 'FRM002', subscription: null }];
@@ -173,7 +178,10 @@ describe('FIX 2 - a join the server did not confirm says so', () => {
         await walkToJoinPress();
 
         await waitFor(() => expect(screen.getByText(NEW_QR_MR)).toBeInTheDocument());
-        expect(screen.getByText(/Ask the farmer for a new QR/)).toBeInTheDocument();
+        // One language: the Marathi line alone, under a Marathi title (no "Ask the farmer…", no "QR is not valid").
+        expect(screen.getByText(joinLandingCopy('mr').invalidTitle)).toBeInTheDocument();
+        expect(screen.queryByText(/Ask the farmer for a new QR/)).toBeNull();
+        expect(document.body.textContent).not.toMatch(/QR is not valid|Go back/);
         expect(screen.queryByText(STEP1)).toBeNull();
         expect(screen.queryByText(SUCCESS)).toBeNull();
     });
@@ -200,14 +208,15 @@ describe('FIX 2 - a join the server did not confirm says so', () => {
         mockGetMyFarms.mockResolvedValue([]);
         await hardOpenAsAnonymousBoot();
         await walkToJoinPress();
-        await waitFor(() => expect(document.body.textContent).toContain('Could not reach the server'));
+        await waitFor(() => expect(document.body.textContent).toContain(UNREACHABLE_MR));
         cleanup();
 
         mockRefreshSession.mockResolvedValue({ kind: 'refreshed', session: SESSION });
         await hardOpenAsAnonymousBoot();
 
         await waitFor(() => expect(screen.getByText(STEP1)).toBeInTheDocument());
-        expect(document.body.textContent).toContain('Could not reach the server');
+        expect(document.body.textContent).toContain(UNREACHABLE_MR);
+        expect(document.body.textContent).not.toContain('Could not reach the server');
         expect(screen.queryByText(SUCCESS)).toBeNull();
     });
 });

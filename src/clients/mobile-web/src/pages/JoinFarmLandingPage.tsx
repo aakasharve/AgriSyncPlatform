@@ -5,7 +5,10 @@
  *   - One task per screen. Phone, then OTP, then "you're in."
  *   - One input, giant font, autofocus.
  *   - One primary button per screen.
- *   - Marathi label above English, same visual weight.
+ *   - ONE language per screen (PLR-D9 T1/T2): the words are `joinLandingCopy` in the chosen
+ *     language — Marathi unless English was chosen (स्वागत, सेट-अप केंद्र, or the consent notice's
+ *     मराठी / English switch on this page). Never Marathi and English side by side, and never the
+ *     server's English error to someone reading Marathi (round-2 review LANG-2-QR).
  *   - No jargon, no policy toggles, no back-buttons that can strand a user.
  *
  * Backend: calls /user/auth/start-otp and /user/auth/verify-otp on the
@@ -27,7 +30,8 @@ import { useOptionalAuth } from '../app/providers/AuthProvider';
 import { useUiPref } from '../shared/hooks/useUiPref';
 import { getOperatorRoleLabel } from '../shared/roles/roleLabels';
 import { isActiveSeat } from '../core/session/seatStatus';
-import { JOIN_BY_CODE_COPY } from '../features/onboarding/components/JoinByCodeScreen';
+import { joinByCodeCopy } from '../features/onboarding/components/joinByCodeCopy';
+import { joinLandingCopy, otpVerifyProblem, type JoinProblem } from '../features/onboarding/qr/joinLandingCopy';
 import { waitingSeatKind } from '../features/onboarding/components/PendingJoinRequests';
 import { useLanguage } from '../i18n/LanguageContext';
 // spec: plr-d10-x1-consent-tick-on-phone-screen-2026-10-25 (X1) — a QR deep link used to
@@ -47,7 +51,6 @@ type Step = 'phone' | 'otp' | 'done' | 'invalid' | 'checking' | 'revoked';
 interface JoinContext {
     token: string;
     farmCode: string;
-    farmName: string;
 }
 
 /**
@@ -74,7 +77,7 @@ let lastConfirmedContext: JoinContext | null = null;
  * memory so a page mounted again - signed in this time - still tells him why,
  * instead of silently showing Step 1. Only ever set from a server answer.
  */
-interface JoinFailure { code: string; message: string }
+interface JoinFailure { code: string; problem: JoinProblem }
 const joinFailures = new Map<string, JoinFailure>();
 const REVOKED_CODES = ['join.token_invalid', 'join.farm_code_mismatch'];
 export const __resetCompletedJoinsForTests = (): void => {
@@ -90,22 +93,14 @@ const readJoinContextFromUrl = (): JoinContext | null => {
     const farmCode = params.get('farm');
 
     if (token && farmCode) {
-        return {
-            token,
-            farmCode,
-            farmName: 'Your farm',
-        };
+        return { token, farmCode };
     }
 
     const qrPayload = params.get('q');
     if (qrPayload) {
         const parsed = parseJoinPayload(qrPayload);
         if (parsed.isValid && parsed.token && parsed.farmCode) {
-            return {
-                token: parsed.token,
-                farmCode: parsed.farmCode,
-                farmName: 'Your farm',
-            };
+            return { token: parsed.token, farmCode: parsed.farmCode };
         }
     }
 
@@ -189,12 +184,14 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
     const [phone, setPhone] = useState('');
     const [otp, setOtp] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [error, setError] = useState<string | null>(() => (context ? joinFailures.get(context.token)?.message ?? null : null));
+    const [error, setError] = useState<JoinProblem | null>(() => (context ? joinFailures.get(context.token)?.problem ?? null : null));
     // spec: secure-remembered-device-sessions-2026-06-24 — Task 4.2
     // Pre-checked by founder decision (2026-06-27).
     const [rememberDevice, setRememberDeviceState] = useState(true);
     const otpInputRef = useRef<HTMLInputElement | null>(null);
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
+    const copy = joinLandingCopy(language);
+    const seatCopy = joinByCodeCopy(language);
     const consent = useConsentBeforeOtp(phone);
     // One press = one send: a second tap in the same tick must not send the number twice.
     const sendingRef = useRef(false);
@@ -272,10 +269,10 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
             <div className="min-h-screen bg-stone-50 px-4 py-10">
                 <div className="mx-auto max-w-md rounded-3xl bg-white p-6 shadow-sm">
                     <h1 className="font-display text-xl font-black text-stone-900">
-                        QR is not valid
+                        {copy.invalidTitle}
                     </h1>
                     <p className="mt-2 text-sm text-stone-500">
-                        तुमच्या मालकाला नवीन QR मागा. Ask the farmer for a new QR.
+                        {copy.invalidLine}
                     </p>
                     {onExit && (
                         <button
@@ -283,7 +280,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                             onClick={onExit}
                             className="mt-5 w-full rounded-2xl bg-stone-900 px-4 py-3 text-sm font-bold text-white"
                         >
-                            Go back
+                            {copy.back}
                         </button>
                     )}
                 </div>
@@ -294,7 +291,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
     const handlePhoneSubmit = async () => {
         setError(null);
         if (phone.length !== 10) {
-            setError('Please enter your 10-digit phone number.');
+            setError({ key: 'phoneLength' });
             return;
         }
         if (!consent.canSend || sendingRef.current) return;
@@ -304,7 +301,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
         try {
             await consent.recordIfNeeded();
         } catch {
-            setError(t('consentGate.saveFailed'));
+            setError({ key: 'consentSave' });
             setIsSubmitting(false);
             sendingRef.current = false;
             return;
@@ -314,9 +311,11 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
             setStep('otp');
         } catch (err) {
             if (isOtpError(err)) {
-                setError(err.message);
+                // The same split as the login screen (OtpLoginForm): "too many" is said in the screen's
+                // language; any other refusal keeps the server's own (English) words for English only.
+                setError(err.status === 429 ? { key: 'sendTooMany' } : { key: 'sendFailed', server: err.message });
             } else {
-                setError('Could not reach the server. Check your connection and try again.');
+                setError({ key: 'unreachable' });
             }
         } finally {
             setIsSubmitting(false);
@@ -328,7 +327,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
         if (claimingRef.current || joined) return;
         setError(null);
         if (otp.length !== 6) {
-            setError('OTP should be 6 digits.');
+            setError({ key: 'otpLength' });
             return;
         }
         claimingRef.current = true;
@@ -382,7 +381,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
             // and never as "joined".
             const listed = isActiveSeat(claim) ? await askServerIfMember({ farmId: claim.farmId }) : null;
             if (listed === false) {
-                throw { error: 'join.not_confirmed', message: 'Could not reach the server. Check your connection and try again.', status: 0 };
+                throw { error: 'join.not_confirmed', message: '', status: 0 };
             }
             confirmJoin(context, claim);
             setJoined(claim);
@@ -395,7 +394,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
             // isOtpError and isInviteApiError are the same shape check, so the claim's own
             // `join.*` codes must be told apart by prefix first, or they land in the OTP branch.
             if (isOtpError(err) && !String(err.error).startsWith('join.')) {
-                setError(err.message);
+                setError(otpVerifyProblem(err));
                 if (err.error === 'otp.expired' || err.error === 'otp.locked_out' || err.error === 'otp.no_pending_challenge') {
                     setStep('phone');
                     setOtp('');
@@ -403,15 +402,20 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
             } else if (isInviteApiError(err)) {
                 // OTP succeeded but the QR is invalid / revoked — keep the
                 // user authenticated but surface the specific claim error.
-                setError(err.message);
-                joinFailures.set(context.token, { code: err.error, message: err.message });
+                // `join.not_confirmed` is this page's own: the claim answered but /farms/mine
+                // did not list the farm — said as "could not reach", never in the server's words.
+                const problem: JoinProblem = err.error === 'join.not_confirmed'
+                    ? { key: 'unreachable' }
+                    : { key: 'claimFailed', server: err.message };
+                setError(problem);
+                joinFailures.set(context.token, { code: err.error, problem });
                 if (REVOKED_CODES.includes(err.error)) {
                     // The QR itself is dead (rotated / revoked / wrong farm): a phone
                     // number cannot fix that. Say so, and say who can.
                     setStep('revoked');
                 }
             } else {
-                setError('Could not reach the server. Check your connection and try again.');
+                setError({ key: 'unreachable' });
             }
             recordJoinAttempt(context.farmCode, context.token, 'failed');
         } finally {
@@ -419,6 +423,11 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
             setIsSubmitting(false);
         }
     };
+
+    // Said in the screen's language when drawn, so the consent notice's language switch changes it too.
+    const errorText = error === null ? null
+        : error.key === 'consentSave' ? t('consentGate.saveFailed')
+            : (language === 'en' && error.server ? error.server : copy.errors[error.key]);
 
     const handleFinish = () => {
         clearJoinParamsFromUrl();
@@ -436,13 +445,13 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                         <Leaf size={24} />
                     </div>
                     <h1 className="mt-3 font-display text-3xl font-black text-stone-900">
-                        ShramSafal
+                        {copy.brand}
                     </h1>
                     {step !== 'done' && (
                         /* PROPOSED Marathi. Neither the farm's name (the link carries only a
                            placeholder) nor a role (the server decides it) is known here yet. */
                         <p data-testid="join-intro" className="text-sm font-semibold text-stone-500">
-                            तुम्ही शेतात सामील होत आहात.
+                            {copy.intro}
                         </p>
                     )}
                 </header>
@@ -451,7 +460,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
 
                 {step === 'checking' && (
                     <p data-testid="join-checking" className="text-center text-sm font-semibold text-stone-500">
-                        तपासत आहे… / Checking…
+                        {copy.checking}
                     </p>
                 )}
 
@@ -461,14 +470,14 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                             <div className="flex items-center justify-center gap-2 text-emerald-700">
                                 <Phone size={14} />
                                 <span className="text-[11px] font-bold uppercase tracking-widest">
-                                    Step 1
+                                    {copy.step1}
                                 </span>
                             </div>
                             <div className="mt-2 font-display text-xl font-black text-stone-900">
-                                तुमचा फोन नंबर
+                                {copy.phoneTitle}
                             </div>
                             <div className="text-sm font-semibold text-stone-500">
-                                Enter your phone number
+                                {copy.phoneLine}
                             </div>
                         </label>
 
@@ -496,9 +505,9 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                             <ConsentTick consent={consent} disabled={isSubmitting} />
                         </div>
 
-                        {error && (
+                        {errorText && (
                             <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-center text-xs font-semibold text-rose-700">
-                                {error}
+                                {errorText}
                             </div>
                         )}
 
@@ -508,12 +517,9 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                             onClick={handlePhoneSubmit}
                             className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-4 text-lg font-bold text-white shadow-md transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {isSubmitting ? 'पाठवत आहे…' : 'OTP मिळवा'}
+                            {isSubmitting ? copy.sending : copy.send}
                             {!isSubmitting && <ArrowRight size={18} />}
                         </button>
-                        <p className="mt-2 text-center text-xs text-stone-500">
-                            {isSubmitting ? 'Sending…' : 'Send OTP'}
-                        </p>
                     </section>
                 )}
 
@@ -522,15 +528,15 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                         <div className="flex items-center justify-center gap-2 text-emerald-700">
                             <MessageCircleMore size={14} />
                             <span className="text-[11px] font-bold uppercase tracking-widest">
-                                Step 2
+                                {copy.step2}
                             </span>
                         </div>
                         <div className="mt-2 text-center">
                             <div className="font-display text-xl font-black text-stone-900">
-                                OTP टाका
+                                {copy.otpTitle}
                             </div>
-                            <div className="text-sm font-semibold text-stone-500">
-                                Enter the 6-digit code sent to +91 {phone}
+                            <div className="text-sm font-semibold text-stone-500" data-testid="join-otp-sent-to">
+                                {copy.sentTo(phone)}
                             </div>
                         </div>
 
@@ -549,9 +555,9 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                             className="mt-5 w-full rounded-2xl border-2 border-stone-200 bg-stone-50 py-4 text-center font-mono text-3xl font-black tracking-[0.8em] text-stone-900 outline-none placeholder:text-stone-300 focus:border-emerald-400 focus:bg-white"
                         />
 
-                        {error && (
+                        {errorText && (
                             <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-center text-xs font-semibold text-rose-700">
-                                {error}
+                                {errorText}
                             </div>
                         )}
 
@@ -571,10 +577,8 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                                 className="text-xs font-medium text-stone-600 select-none cursor-pointer"
                             >
                                 <span style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}>
-                                    हे डिव्हाइस लक्षात ठेवा
+                                    {copy.remember}
                                 </span>
-                                {' · '}
-                                <span>Remember this device</span>
                             </label>
                         </div>
 
@@ -584,12 +588,9 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                             onClick={handleOtpSubmit}
                             className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-4 text-lg font-bold text-white shadow-md transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                            {isSubmitting ? 'तपासत आहे…' : 'सामील व्हा'}
+                            {isSubmitting ? copy.joining : copy.join}
                             {!isSubmitting && <ArrowRight size={18} />}
                         </button>
-                        <p className="mt-2 text-center text-xs text-stone-500">
-                            {isSubmitting ? 'Verifying…' : 'Join the farm'}
-                        </p>
 
                         <button
                             type="button"
@@ -600,7 +601,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                             }}
                             className="mt-3 w-full text-center text-xs font-semibold text-stone-500 hover:text-stone-700"
                         >
-                            फोन नंबर बदला / Change phone number
+                            {copy.changePhone}
                         </button>
                     </section>
                 )}
@@ -614,23 +615,25 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                     <section data-testid="join-done-waiting" data-kind={waitingSeatKind(joined.status)} className="rounded-3xl bg-white p-6 text-center shadow-lg shadow-amber-100/50">
                         <h2 className="mt-2 font-display text-2xl font-black text-stone-900">
                             {waitingSeatKind(joined.status) === 'paused'
-                                ? JOIN_BY_CODE_COPY.pausedTitle
-                                : 'विनंती आधीच पाठवली आहे'}
+                                ? seatCopy.pausedTitle
+                                : copy.waitingTitle}
                         </h2>
-                        <p data-testid="join-done-farm" className="mt-2 text-lg font-bold text-stone-800">
-                            {joined.farmName || context.farmName}
-                        </p>
+                        {joined.farmName && (
+                            <p data-testid="join-done-farm" className="mt-2 text-lg font-bold text-stone-800">
+                                {joined.farmName}
+                            </p>
+                        )}
                         <p className="mt-2 text-sm font-semibold text-stone-600">
                             {waitingSeatKind(joined.status) === 'paused'
-                                ? JOIN_BY_CODE_COPY.pausedLine
-                                : 'मालक तुमची भूमिका ठरवतील आणि मंजूर करतील — तोपर्यंत वाट पाहा.'}
+                                ? seatCopy.pausedLine
+                                : copy.waitingLine}
                         </p>
                         <button
                             type="button"
                             onClick={handleFinish}
                             className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-stone-900 px-4 py-3 text-base font-bold text-white"
                         >
-                            ठीक आहे
+                            {copy.ok}
                         </button>
                     </section>
                 )}
@@ -641,20 +644,19 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                             <CheckCircle2 size={32} className="text-emerald-600" />
                         </div>
                         <h2 className="mt-4 font-display text-2xl font-black text-stone-900">
-                            तुम्ही जोडले गेलात!
+                            {copy.doneTitle}
                         </h2>
-                        <p className="text-sm font-semibold text-emerald-700">
-                            You're in.
-                        </p>
                         {/* The farm the SERVER says he joined (claim.farmName), and the role
-                            it gave him - never the "Your farm" placeholder the QR link
-                            carries, and never the role the link merely PROPOSED. */}
-                        <p data-testid="join-done-farm" className="mt-2 text-lg font-bold text-stone-800">
-                            {joined?.farmName || context.farmName}
-                        </p>
+                            it gave him - never a placeholder (the QR link carries no farm
+                            name), and never the role the link merely PROPOSED. */}
+                        {joined?.farmName && (
+                            <p data-testid="join-done-farm" className="mt-2 text-lg font-bold text-stone-800">
+                                {joined.farmName}
+                            </p>
+                        )}
                         {joined?.role && (
                             <p data-testid="join-done-role" className="text-sm font-semibold text-stone-600">
-                                {getOperatorRoleLabel(joined.role).mr}
+                                {language === 'en' ? getOperatorRoleLabel(joined.role).en : getOperatorRoleLabel(joined.role).mr}
                             </p>
                         )}
                         <button
@@ -662,7 +664,7 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                             onClick={handleFinish}
                             className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-base font-bold text-white hover:bg-emerald-700"
                         >
-                            शेती उघडा / Open my farm
+                            {copy.openFarm}
                             <ArrowRight size={16} />
                         </button>
                     </section>

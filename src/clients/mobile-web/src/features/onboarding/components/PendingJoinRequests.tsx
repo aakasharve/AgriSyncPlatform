@@ -17,7 +17,7 @@
 import React, { useState } from 'react';
 import { Clock3, PauseCircle } from 'lucide-react';
 import type { Language } from '../../../i18n/language';
-import { JOIN_BY_CODE_COPY } from './JoinByCodeScreen';
+import { JOIN_BY_CODE_COPY, JOIN_BY_CODE_COPY_EN } from './joinByCodeCopy';
 
 /** PROPOSED Marathi. */
 export const PENDING_SEAT_COPY = {
@@ -38,7 +38,7 @@ const PENDING_SEAT_COPY_EN: Record<keyof typeof PENDING_SEAT_COPY, string> = {
     withdraw: 'Withdraw the request',
     withdrawing: 'Withdrawing…',
     withdrawFailed: 'Could not withdraw it now. Check the internet and try again.',
-    pausedLine: 'Your work on this farm is paused. Talk to the owner.',
+    pausedLine: `${JOIN_BY_CODE_COPY_EN.pausedTitle}. ${JOIN_BY_CODE_COPY_EN.pausedLine}`,
 };
 
 /** What a seat that is not Active means to the person holding it. */

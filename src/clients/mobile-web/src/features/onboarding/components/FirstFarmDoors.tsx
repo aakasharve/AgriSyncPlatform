@@ -22,14 +22,8 @@ import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { Tap } from '../../../shared/components/ui/placeUi';
 import { FirstRunGlass, FirstRunHeading, FirstRunShell, Rise } from '../firstRun/FirstRunShell';
 import { firstRunCopy } from '../firstRun/firstRunCopy';
-import { JOIN_BY_CODE_COPY } from './JoinByCodeScreen';
+import { joinByCodeCopy } from './joinByCodeCopy';
 import PendingJoinRequests, { waitingSeatKind, type WaitingSeat } from './PendingJoinRequests';
-
-/** The join door's own "request sent" words, in English for someone who chose English. */
-const WAITING_EN = {
-    sentTitle: 'Request sent',
-    sentLine: 'The owner will decide your role and approve it — until then, please wait',
-} as const;
 
 export interface FirstFarmDoorsProps {
     onStartOwnFarm: () => void;
@@ -43,7 +37,8 @@ export interface FirstFarmDoorsProps {
 const FirstFarmDoors: React.FC<FirstFarmDoorsProps> = ({ onStartOwnFarm, onJoin, onBack, pendingSeats = [], onWithdrawRequest }) => {
     const language = useOptionalLanguage()?.language ?? 'mr';
     const c = firstRunCopy(language);
-    const sent = language === 'en' ? WAITING_EN : JOIN_BY_CODE_COPY;
+    // The join door's own "request sent" words, in the chosen language (`joinByCodeCopy`).
+    const sent = joinByCodeCopy(language);
     const waiting = pendingSeats.some(s => waitingSeatKind(s.status) === 'request');
     const [askingToLeave, setAskingToLeave] = useState(false);
     // Round-2 review A11Y-1: the question takes the focus (on "इथेच राहा", the safe answer) so a

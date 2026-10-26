@@ -38,14 +38,18 @@ export const Tap: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { rip
     );
 };
 
-/** The one title bar: big "मागे" + the page title. Sticks to the top; bleeds to the page edges. */
-export const PageBar: React.FC<{ title: string; onBack?: () => void }> = ({ title, onBack }) => (
+/**
+ * The one title bar: big "मागे" + the page title. Sticks to the top; bleeds to the page edges.
+ * `backLabel` (default "मागे") is only for a screen that follows the chosen language (one language per
+ * screen — PLR-D9 T1/T2): someone who chose English reads "Back" there.
+ */
+export const PageBar: React.FC<{ title: string; onBack?: () => void; backLabel?: string }> = ({ title, onBack, backLabel = 'मागे' }) => (
     <div className="sticky top-0 z-20 -mx-4 mb-3 flex items-center gap-2 border-b border-stone-200/70 bg-white/90 px-3 py-2 backdrop-blur-md sm:-mx-6"
         data-testid="page-bar" style={{ fontFamily: SANS }}>
         {onBack && (
-            <Tap onClick={onBack} data-testid="page-back" aria-label="मागे"
+            <Tap onClick={onBack} data-testid="page-back" aria-label={backLabel}
                 className="flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3.5 text-[15px] font-extrabold text-stone-800 shadow-sm">
-                <ArrowLeft size={20} strokeWidth={2.4} aria-hidden="true" />मागे
+                <ArrowLeft size={20} strokeWidth={2.4} aria-hidden="true" />{backLabel}
             </Tap>
         )}
         <h1 className="m-0 min-w-0 flex-1 truncate text-[19px] font-extrabold text-stone-900" data-testid="page-title">{title}</h1>
