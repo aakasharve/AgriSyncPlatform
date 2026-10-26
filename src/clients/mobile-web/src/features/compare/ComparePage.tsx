@@ -85,6 +85,7 @@ export const ComparePage: React.FC<Props> = ({ crops = [], logs = [], onTellPlot
                         crop={row.crop}
                         plot={row.plot}
                         summary={row.summary}
+                        laidOut={row.laidOut}
                         plotLogs={row.plotLogs}
                         logsCount={logs.length}
                         onOpenMoney={setMoneyLensFilters}

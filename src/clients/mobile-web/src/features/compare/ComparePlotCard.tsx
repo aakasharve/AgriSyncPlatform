@@ -141,8 +141,11 @@ export const ComparePlotCard: React.FC<Props> = ({ row, onTell, onOpenSchedule, 
                 <>
                     <Tap onClick={onToggleDetails} aria-expanded={detailsOpen} data-testid={`compare-details-toggle-${id}`}
                         className="mt-3 flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-full bg-stone-100 text-[14px] font-extrabold text-stone-700">
-                        {/* PROPOSED (Marathi) */}
-                        {detailsOpen ? <><ChevronUp size={18} aria-hidden="true" />तपशील लपवा</> : <><ChevronDown size={18} aria-hidden="true" />पूर्ण तपशील पाहा</>}
+                        {/* PROPOSED (Marathi) — a plot with no schedule start opens its spend only (`CompareDetails`,
+                            I14-V3-03): there is no plan to detail, so the button does not promise "full details". */}
+                        {detailsOpen
+                            ? <><ChevronUp size={18} aria-hidden="true" />तपशील लपवा</>
+                            : <><ChevronDown size={18} aria-hidden="true" />{row.laidOut ? 'पूर्ण तपशील पाहा' : 'खर्च पाहा'}</>}
                     </Tap>
                     {detailsOpen && children}
                 </>

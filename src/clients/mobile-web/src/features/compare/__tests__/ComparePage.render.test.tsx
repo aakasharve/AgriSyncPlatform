@@ -50,8 +50,9 @@ const SUMMARIES: Record<string, ExecutionBucket[]> = {
     g2: [bucket('IRRIGATION', [item('x1', 'Drip Irrigation #1', 39, true), item('x2', 'Drip Irrigation #2', 40, true)], [work('ex1', 'Drip - 2hrs', 39), work('ex2', 'Drip - 2hrs', 40)])],
     // g4: everything due this week was recorded, nothing older open
     g4: [bucket('IRRIGATION', [item('y1', 'Drip Irrigation #1', 36, true)], [work('ey1', 'Drip - 1hrs', 36)])],
-    // g5: the crop's schedule is known but this plot has no schedule start, so the engine plans nothing
-    g5: [bucket('IRRIGATION', [])],
+    // g5: the crop's schedule is known but this plot has no schedule start, so the engine plans nothing — and
+    // so every job recorded on it comes back flagged extra (I14-V3-03)
+    g5: [bucket('IRRIGATION', [], [work('ez1', 'Drip - 1hrs', 39, true)])],
 };
 // g2 also has an EARLIER stage with a pruning never recorded (an "older" miss from another stage).
 const EARLIER: Record<string, ExecutionBucket[]> = { g2: [bucket('ACTIVITY', [item('p0', 'Pruning', 5, false)])] };
@@ -246,6 +247,52 @@ describe('तुलना — every old feature kept under "पूर्ण त�
         fireEvent.click(screen.getByTestId('compare-details-toggle-g4'));
         expect(screen.getByTestId('compare-extra-none-g4')).toHaveTextContent('आतापर्यंत जास्तीचं काम नाही.');
         expect(screen.getByTestId('compare-extra-g4')).not.toHaveTextContent('या टप्प्यात');
+    });
+
+    it('a plot with no schedule start opens its SPEND only — never "वेळेवर आहे" or every job called extra (I14-V3-03, P4)', () => {
+        renderPage();
+        // a plot WITH a start still offers its full details
+        expect(screen.getByTestId('compare-details-toggle-g1')).toHaveTextContent('पूर्ण तपशील पाहा');
+        const toggle = screen.getByTestId('compare-details-toggle-g5');
+        expect(toggle).toHaveTextContent('खर्च पाहा');
+        expect(toggle).not.toHaveTextContent('पूर्ण तपशील');
+        fireEvent.click(toggle);
+        const details = screen.getByTestId('compare-details-g5');
+        // what is real without a plan stays: the spend so far, with its money link; the planned cost is "—"
+        expect(screen.getByTestId('compare-planned-cost-g5')).toHaveTextContent('—');
+        fireEvent.click(within(screen.getByTestId('compare-money-g5')).getByRole('button'));
+        expect(screen.getByTestId('money-lens')).toHaveTextContent('"cropId":"grape","plotId":"g5"');
+        // nothing that reads the (missing) plan: no status, no counts, no kinds of work, no checklist, no replica, no "extra"
+        for (const part of ['now', 'stage', 'done', 'open', 'categories', 'checklist', 'replica', 'extra']) {
+            expect(screen.queryByTestId(`compare-${part}-g5`)).toBeNull();
+        }
+        expect(details.textContent).not.toMatch(/वेळेवर आहे|जास्तीचं|हंगामाचा दिवस/);
+        // and the card's own "तुलना करता येत नाही" stays, uncontradicted
+        expect(screen.getByTestId('compare-nostart-g5')).toHaveTextContent('तुलना करता येत नाही');
+    });
+
+    it('the checklist is one row per kind of work with its count, and each row unfolds its items (I14-V3-06)', () => {
+        renderPage();
+        fireEvent.click(screen.getByTestId('compare-details-toggle-g1'));
+        const water = screen.getByTestId('compare-checklist-g1-IRRIGATION');
+        // three "Drip Irrigation #n" items are ONE row, not three
+        const groups = within(water).getAllByTestId(/^compare-checklist-group-g1-IRRIGATION-\d+$/);
+        expect(groups).toHaveLength(1);
+        expect(within(groups[0]).getByText('ठिबकने पाणी')).toBeInTheDocument();
+        expect(screen.getByTestId('compare-checklist-group-g1-IRRIGATION-0-count')).toHaveTextContent('झालं 0 · बाकी 3');
+        // folded: the per-day rows are not a wall until he asks
+        expect(within(water).queryByText(/ठरलेला दिवस/)).toBeNull();
+        const toggle = screen.getByTestId('compare-checklist-group-g1-IRRIGATION-0-toggle');
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        fireEvent.click(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        // nothing dropped: every item, with its planned day and "अजून नोंद नाही"
+        const items = screen.getByTestId('compare-checklist-group-g1-IRRIGATION-0-items');
+        expect(within(items).getByText('ठरलेला दिवस 20 · अजून नोंद नाही')).toBeInTheDocument();
+        expect(within(items).getByText('ठरलेला दिवस 38 · अजून नोंद नाही')).toBeInTheDocument();
+        expect(within(items).getByText('ठरलेला दिवस 40 · अजून नोंद नाही')).toBeInTheDocument();
+        // a done kind of work reads as done
+        expect(screen.getByTestId('compare-checklist-group-g1-ACTIVITY-0-count')).toHaveTextContent('झालं 1 · बाकी 0');
     });
 
     it('the money link opens the money lens for this crop and plot', () => {

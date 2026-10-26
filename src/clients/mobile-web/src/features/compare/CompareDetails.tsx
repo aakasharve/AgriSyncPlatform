@@ -17,11 +17,16 @@
  * stays, with its money link.
  * Every Marathi string here is PROPOSED (Marathi).
  *
- * "आतापर्यंतची यादी" (was "This Phase Checklist") is the checklist of EVERY stage that has begun — what the
- * data always held — so an older open item the plot card counts can be found here.
+ * "आतापर्यंतची यादी" (the checklist of every stage begun, grouped by kind of work) is `CompareChecklist`.
+ *
+ * A plot whose schedule start was never set (`laidOut: false`, verifier I14-V3-03): the engine laid NO work
+ * on its days, so every figure that reads the plan would be invented — "वेळेवर आहे" from 0 done and 0 open,
+ * or "जास्तीचं काम केलं" with every recorded job listed as extra — and would contradict the card's own
+ * "तुलना करता येत नाही" (P4). For such a plot only what is real without a plan is shown: the spend so far,
+ * with its money link. The same when the comparison has no stage to report on.
  */
 import React, { useMemo } from 'react';
-import { CheckCircle2, Circle, Droplets, PlusCircle } from 'lucide-react';
+import { Droplets, PlusCircle } from 'lucide-react';
 import type { CropProfile, DailyLog, Plot, PlotComparisonSummary } from '../../types';
 import { Chip, GlassCard } from '../../shared/components/ui/placeUi';
 import { MoneyChip } from '../finance/components/MoneyChip';
@@ -29,8 +34,6 @@ import { financeSelectors } from '../finance/financeSelectors';
 import type { FinanceFilters } from '../finance/finance.types';
 import {
     buildCompareReport,
-    CATEGORY_META,
-    CATEGORY_ORDER,
     getCategoryCardStyles,
     getCategoryIcon,
     getHealthText,
@@ -38,6 +41,7 @@ import {
     type FarmerStatus,
 } from './comparePageHelpers';
 import { CompareReplica } from './CompareReplica';
+import { CompareChecklist } from './CompareChecklist';
 import { stageNameMr } from '../../shared/utils/stageNameMr';
 
 const STATUS_TONE: Record<FarmerStatus, 'green' | 'amber' | 'rose' | 'blue'> = {
@@ -63,23 +67,40 @@ interface Props {
     crop: CropProfile;
     plot: Plot;
     summary: PlotComparisonSummary;
+    /** The schedule's work was laid on this plot's days (`ComparePlotRow.laidOut`). Without it, money only. */
+    laidOut: boolean;
     plotLogs: DailyLog[];
     /** Re-reads the money figure when new logs land (the finance store is module-level). */
     logsCount: number;
     onOpenMoney: (filters: FinanceFilters) => void;
 }
 
-export const CompareDetails: React.FC<Props> = ({ crop, plot, summary, plotLogs, logsCount, onOpenMoney }) => {
-    const report = useMemo(() => buildCompareReport(summary, plot, plotLogs), [summary, plot, plotLogs]);
+export const CompareDetails: React.FC<Props> = ({ crop, plot, summary, laidOut, plotLogs, logsCount, onOpenMoney }) => {
+    const report = useMemo(() => (laidOut ? buildCompareReport(summary, plot, plotLogs) : null), [laidOut, summary, plot, plotLogs]);
     const spent = useMemo(
         () => financeSelectors.getTotalCost({ cropId: crop.id, plotId: plot.id }),
         // eslint-disable-next-line react-hooks/exhaustive-deps -- `logsCount` is the recompute trigger (the finance store is module-level), as on the old page.
         [crop.id, plot.id, logsCount],
     );
-    if (!report) return null;
+    const id = plot.id;
+    const money = (
+        <GlassCard testId={`compare-money-${id}`}>
+            <Title hint="या प्लॉटवर आतापर्यंत झालेला खर्च">खर्च</Title>
+            <div className="flex items-center justify-between gap-2">
+                <p className="m-0 text-[14px] font-bold text-stone-700">ठरलेला खर्च</p>
+                <p className="m-0 text-[16px] font-extrabold text-stone-900" data-testid={`compare-planned-cost-${id}`}>—</p>
+            </div>
+            <div className="mt-1.5 flex items-center justify-between gap-2">
+                <p className="m-0 text-[14px] font-bold text-stone-700">झालेला खर्च</p>
+                <MoneyChip amount={spent} onClick={() => onOpenMoney({ cropId: crop.id, plotId: plot.id })} />
+            </div>
+        </GlassCard>
+    );
+    if (!report) {
+        return <div className="mt-3 space-y-3" data-testid={`compare-details-${id}`}>{money}</div>;
+    }
 
     const waterTimeKnown = Boolean(plot.irrigationPlan?.durationMinutes);
-    const id = plot.id;
     // The template's stage names are English ("Vegetative Growth"): said in Marathi, or not shown.
     const stage = stageNameMr(report.stageName, report.stageCode);
 
@@ -104,17 +125,7 @@ export const CompareDetails: React.FC<Props> = ({ crop, plot, summary, plotLogs,
                 </div>
             </GlassCard>
 
-            <GlassCard testId={`compare-money-${id}`}>
-                <Title hint="या प्लॉटवर आतापर्यंत झालेला खर्च">खर्च</Title>
-                <div className="flex items-center justify-between gap-2">
-                    <p className="m-0 text-[14px] font-bold text-stone-700">ठरलेला खर्च</p>
-                    <p className="m-0 text-[16px] font-extrabold text-stone-900" data-testid={`compare-planned-cost-${id}`}>—</p>
-                </div>
-                <div className="mt-1.5 flex items-center justify-between gap-2">
-                    <p className="m-0 text-[14px] font-bold text-stone-700">झालेला खर्च</p>
-                    <MoneyChip amount={spent} onClick={() => onOpenMoney({ cropId: crop.id, plotId: plot.id })} />
-                </div>
-            </GlassCard>
+            {money}
 
             <GlassCard testId={`compare-categories-${id}`}>
                 <Title hint="पाणी, खत, फवारणी आणि कामं — कुठे काम बाकी आहे">कामाचे प्रकार</Title>
@@ -132,40 +143,7 @@ export const CompareDetails: React.FC<Props> = ({ crop, plot, summary, plotLogs,
                 </div>
             </GlassCard>
 
-            <GlassCard testId={`compare-checklist-${id}`}>
-                {/* PROPOSED (Marathi) — every stage that has begun, not this one alone (`buildCompareReport` →
-                    `stagesForAnalysis`), so the card's "त्याआधीची N कामं … पूर्ण तपशीलात पाहा" points at a list
-                    that really shows them. */}
-                <Title hint="सुरू झालेल्या सगळ्या टप्प्यांची कामं · हिरवी खूण = झालं · रिकामं वर्तुळ = अजून नोंद नाही">आतापर्यंतची यादी</Title>
-                <div className="space-y-3">
-                    {CATEGORY_ORDER.map(category => {
-                        const items = report.mustDoItems.filter(item => item.category === category);
-                        if (items.length === 0) return null;
-                        const done = items.filter(item => item.isDone).length;
-                        return (
-                            <div key={category} className="overflow-hidden rounded-2xl border border-stone-200">
-                                <div className="flex items-center justify-between border-b border-stone-200 bg-stone-50 px-3 py-2">
-                                    <p className="m-0 flex items-center gap-2 text-[14px] font-extrabold text-stone-900">{getCategoryIcon(category, 15, 'text-stone-700')}{CATEGORY_META[category].label}</p>
-                                    <p className="m-0 text-[12.5px] font-bold text-stone-700">झालं {done} · बाकी {items.length - done}</p>
-                                </div>
-                                <div className="space-y-1.5 p-2">
-                                    {items.map(item => (
-                                        <div key={item.id} className={`flex items-start gap-2.5 rounded-xl border p-2.5 ${item.isDone ? 'border-emerald-200 bg-emerald-50/50' : 'border-amber-200 bg-amber-50/60'}`}>
-                                            {item.isDone
-                                                ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" aria-hidden="true" />
-                                                : <Circle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" aria-hidden="true" />}
-                                            <div className="min-w-0 flex-1">
-                                                <p className="m-0 text-[14px] font-extrabold text-stone-900">{item.name}</p>
-                                                <p className="m-0 text-[12.5px] font-semibold text-stone-600">{item.plannedText} · {item.actualText}</p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </GlassCard>
+            <CompareChecklist items={report.mustDoItems} plotId={id} />
 
             <CompareReplica report={report} plotId={id} />
 
