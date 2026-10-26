@@ -225,6 +225,8 @@ export const renderScheduleRoute = (ctx: AppRouterContext): React.ReactNode => {
                 // never unmounted and there is nothing to navigate back
                 // from.
                 onCloseDay={() => requestOpenWaitingDrawer()}
+                // spec: plr-d10 (I15) — the redesigned शेड्यूल has one page bar with one big "← मागे".
+                onBack={() => ctx.goBackOr('main')}
             />
         </div>
     );

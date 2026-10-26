@@ -413,6 +413,17 @@ function parseReferenceTemplate(input: unknown): ReferenceScheduleTemplate | nul
     };
 }
 
+const FALLBACK_TEMPLATE_PREFIX = 'tpl_fallback_';
+
+/**
+ * spec: plr-d10 (I15) — true for the stand-in schedule this catalog makes up when no real (server)
+ * schedule is cached for a crop. Its stages and tasks are invented, so a farmer-facing page must not show
+ * them as "what your schedule expects" (doctrine P4); the शेड्यूल page says there is no schedule instead.
+ */
+export function isFallbackTemplate(template: Pick<CropScheduleTemplate, 'id'> | null | undefined): boolean {
+    return !!template && template.id.startsWith(FALLBACK_TEMPLATE_PREFIX);
+}
+
 function buildFallbackTemplate(cropName: string): CropScheduleTemplate {
     const cropCode = canonicalCropCode(cropName);
     const existing = fallbackTemplatesByCrop.get(cropCode);
@@ -420,7 +431,7 @@ function buildFallbackTemplate(cropName: string): CropScheduleTemplate {
         return existing;
     }
 
-    const templateId = `tpl_fallback_${cropCode}`;
+    const templateId = `${FALLBACK_TEMPLATE_PREFIX}${cropCode}`;
     const displayName = toDisplayName(cropCode);
     const stages: StageTemplate[] = [
         { id: `stg_${templateId}_1`, templateId, name: 'Early Stage', code: 'ESTABLISHMENT', dayStart: 0, dayEnd: 30, orderIndex: 1, notes: STAGE_NOTE_FALLBACKS.ESTABLISHMENT },

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Droplets, Sprout, SprayCan, CheckCircle2, AlertTriangle, XCircle, Minus, Hammer, AlertCircle, Thermometer, Cloud, Wind } from 'lucide-react';
+import { Droplets, Sprout, SprayCan, CheckCircle2, Hammer, AlertCircle, Thermometer, Cloud } from 'lucide-react';
 import { formatTemperature, formatHumidity } from '../../../shared/utils/weatherFormatter';
 
 
@@ -36,7 +36,28 @@ export interface DayCardProps {
     dayNumberTextClass?: string;
     dateLabelTextClass?: string;
     compact?: boolean;
+    /**
+     * spec: plr-d10 (I15) — the words to show instead of the English ones (DAY / PREP / DONE / MISSED...).
+     * When given, each cell also says its status in a coloured pill, so a missed day reads differently from a
+     * planned one, and the weather footer leaves out the provider's English condition text. Absent = the old
+     * English look (the Compare page still uses it).
+     */
+    words?: DayCardWords;
 }
+
+export interface DayCardWords {
+    day: string;
+    prep: string;
+    status: Readonly<Record<BlockStatus, string>>;
+}
+
+const STATUS_PILL: Readonly<Record<BlockStatus, string>> = {
+    DONE: 'bg-emerald-100 text-emerald-800',
+    MISSED: 'bg-red-100 text-red-800',
+    PENDING: 'bg-amber-100 text-amber-800',
+    PLANNED: 'bg-stone-100 text-stone-600',
+    NOT_REQUIRED: 'bg-stone-50 text-stone-400',
+};
 
 const NotebookCell = ({
     icon: Icon,
@@ -44,14 +65,16 @@ const NotebookCell = ({
     note,
     onClick,
     colorClass,
-    compact = false
+    compact = false,
+    words
 }: {
-    icon: any,
+    icon: React.ElementType,
     status: BlockStatus,
     note?: string,
     onClick: () => void,
     colorClass: string,
-    compact?: boolean
+    compact?: boolean,
+    words?: DayCardWords
 }) => {
     // Notebook Cell Logic
     const isEmpty = status === 'NOT_REQUIRED' && !note;
@@ -77,7 +100,12 @@ const NotebookCell = ({
 
             {/* Text Content */}
             <div className="w-full text-left">
-                {note ? (
+                {words ? (
+                    <>
+                        {note && <div className="text-[12px] font-bold text-stone-800 leading-tight break-words whitespace-pre-wrap">{note}</div>}
+                        <span data-status={status} className={`mt-1 inline-block rounded-full px-1.5 py-0.5 text-[11px] font-extrabold ${STATUS_PILL[status]}`}>{words.status[status]}</span>
+                    </>
+                ) : note ? (
                     <div className="text-[10px] font-bold text-stone-700 leading-tight break-words font-mono whitespace-pre-wrap">
                         {note}
                     </div>
@@ -89,7 +117,7 @@ const NotebookCell = ({
             </div>
 
             {/* Intervention Dot */}
-            {note && !isDone && (
+            {note && !isDone && !words && (
                 <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse absolute top-2 right-2" />
             )}
         </button>
@@ -109,12 +137,14 @@ const DayCard: React.FC<DayCardProps & { isPast?: boolean, dayType?: 'CYCLE' | '
     dayColumnWidthClass,
     dayNumberTextClass,
     dateLabelTextClass,
-    compact = false
+    compact = false,
+    words
 }) => {
 
     // Styling Logic
     const isPrep = dayType === 'PREP';
-    const isCyclePast = isPast && !isToday && !isPrep;
+    // With `words` (the शेड्यूल grid) a gone day is NOT drawn as done: each cell says झालं or राहिलं itself.
+    const isCyclePast = isPast && !isToday && !isPrep && !words;
 
     // Stronger Prep Brown (Coffee/Amber), Clean White for Past, Green Tint for Today
     const bgClass = isToday ? 'bg-emerald-50/30' : isPrep ? 'bg-[#FFF8E7]' : 'bg-white';
@@ -147,7 +177,7 @@ const DayCard: React.FC<DayCardProps & { isPast?: boolean, dayType?: 'CYCLE' | '
                 )}
 
                 <span className={`text-[8px] uppercase font-black tracking-widest leading-none mb-0.5 ${labelTextClass}`}>
-                    {dayType === 'PREP' ? 'PREP' : 'DAY'}
+                    {words ? (dayType === 'PREP' ? words.prep : words.day) : (dayType === 'PREP' ? 'PREP' : 'DAY')}
                 </span>
                 <span className={`${dayNumberTextClass || (compact ? 'text-lg' : 'text-xl')} font-black font-mono leading-none tracking-tight`}>{dayNumber}</span>
                 <span className={`${dateLabelTextClass || 'text-[9px]'} uppercase font-bold opacity-60 mt-1`}>{dateLabel}</span>
@@ -156,10 +186,10 @@ const DayCard: React.FC<DayCardProps & { isPast?: boolean, dayType?: 'CYCLE' | '
             {/* Notebook Cells & Note Wrapper */}
             <div className="flex-1 flex flex-col min-w-0">
                 <div className={`grid grid-cols-4 divide-x flex-1 ${isPrep ? 'divide-amber-200/50' : 'divide-stone-100/50'}`}>
-                    <NotebookCell icon={Droplets} status={status.irrigation} note={notes?.irrigation} onClick={() => onTapBlock('IRRIGATION')} colorClass="text-blue-500" compact={compact} />
-                    <NotebookCell icon={Sprout} status={status.nutrition} note={notes?.nutrition} onClick={() => onTapBlock('NUTRITION')} colorClass="text-emerald-500" compact={compact} />
-                    <NotebookCell icon={SprayCan} status={status.spray} note={notes?.spray} onClick={() => onTapBlock('SPRAY')} colorClass="text-rose-500" compact={compact} />
-                    <NotebookCell icon={Hammer} status={status.activity} note={notes?.activity} onClick={() => onTapBlock('ACTIVITY')} colorClass="text-amber-500" compact={compact} />
+                    <NotebookCell icon={Droplets} status={status.irrigation} note={notes?.irrigation} onClick={() => onTapBlock('IRRIGATION')} colorClass="text-blue-500" compact={compact} words={words} />
+                    <NotebookCell icon={Sprout} status={status.nutrition} note={notes?.nutrition} onClick={() => onTapBlock('NUTRITION')} colorClass="text-emerald-500" compact={compact} words={words} />
+                    <NotebookCell icon={SprayCan} status={status.spray} note={notes?.spray} onClick={() => onTapBlock('SPRAY')} colorClass="text-rose-500" compact={compact} words={words} />
+                    <NotebookCell icon={Hammer} status={status.activity} note={notes?.activity} onClick={() => onTapBlock('ACTIVITY')} colorClass="text-amber-500" compact={compact} words={words} />
                 </div>
 
                 {/* Weather Footer (Premium Aesthetic) */}
@@ -192,10 +222,13 @@ const DayCard: React.FC<DayCardProps & { isPast?: boolean, dayType?: 'CYCLE' | '
                             )}
                         </div>
 
-                        {/* Condition Text */}
-                        <div className="uppercase tracking-wide text-[9px] font-bold opacity-70">
-                            {weatherContext.conditionText}
-                        </div>
+                        {/* Condition Text — the weather provider's English words ("Partly cloudy"), so the
+                            Marathi grid (`words`) shows the numbers only (spec: plr-d10 I15). */}
+                        {!words && (
+                            <div className="uppercase tracking-wide text-[9px] font-bold opacity-70">
+                                {weatherContext.conditionText}
+                            </div>
+                        )}
                     </div>
                 )}
 

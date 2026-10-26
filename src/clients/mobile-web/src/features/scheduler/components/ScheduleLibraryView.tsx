@@ -1,12 +1,28 @@
+/**
+ * शेड्यूल लायब्ररी — the schedules the app holds for the farmer's crops (up to 3 per crop), each with who made
+ * it, how long it runs and how many stages it has; "पाहा" opens its stages and tasks, "हे शेड्यूल वापरा" adopts
+ * it for the chosen crop (only for the same crop).
+ *
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I15; inventory S2, S15). It was English and showed four
+ * score tiles (Adoption x/100, Detail x/100, Followers) and a sort with four orders. The scores are demo
+ * fields every real schedule carries as 0 (`TemplateCatalog.mapTemplate`), so they are not drawn (P4), and the
+ * three orders built on them or on a date no schedule has ("Highest Adoption", "Most Followed", "Newest")
+ * could only reorder equal values (P5). The one real order, shortest first (by the schedule's total days), is
+ * kept as a two-chip choice. The per-stage "Stage Notes" were app-made filler (the same English line for
+ * every crop, `STAGE_NOTE_FALLBACKS`), not the schedule's, so they are not shown either. Search stays (it also
+ * finds the Marathi name). Names are Marathi for the schedules the app ships (`scheduleNames`); a name a person
+ * wrote is shown as written, and each task shows the schedule's own name for it.
+ */
 import React, { useMemo, useState } from 'react';
-import { CheckCircle2, Eye, X } from 'lucide-react';
+import { CheckCircle2, Eye, Search } from 'lucide-react';
 import { CropProfile, CropScheduleTemplate } from '../../../types';
-import { TemplateCatalogSort, getAllTemplates, getStageNote, sortTemplates } from '../../../infrastructure/reference/TemplateCatalog';
-// Stubbed operation name getter since PlanEngine was migrated
-const getOperationName = (operationTypeId: string): string => {
-    const parts = operationTypeId.split('_');
-    return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
-};
+import { getAllTemplates, sortTemplates } from '../../../infrastructure/reference/TemplateCatalog';
+import { getOperationCategory } from '../planning/ClientPlanEngine';
+import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
+import { BigButton, ChoiceChips, Chip, GlassCard, SANS, Tap } from '../../../shared/components/ui/placeUi';
+import { OWNER_LABEL, frequencyMr, opNameMr, stageNameMr } from '../schedulePage/scheduleCopy';
+import { PART_LABEL, partOf } from '../schedulePage/scheduleModel';
+import { scheduleNameMr, taskNameMr } from '../schedulePage/scheduleNames';
 
 interface ScheduleLibraryViewProps {
     crop?: CropProfile;
@@ -15,246 +31,155 @@ interface ScheduleLibraryViewProps {
     onAdopt: (templateId: string) => void;
 }
 
-const formatPeriodicTiming = (frequencyMode: string, frequencyValue: number): string => {
-    if (frequencyMode === 'PER_WEEK') return `${frequencyValue}x/week`;
-    return `Every ${frequencyValue} day${frequencyValue > 1 ? 's' : ''}`;
+const opLabel = (opId: string): string => opNameMr(opId) ?? PART_LABEL[partOf(getOperationCategory(opId))];
+
+/** The schedule's own name for a task, when it says more than the label or the part. */
+const ownName = (opId: string, notes?: string): string | null => {
+    const own = notes ? taskNameMr(notes) : '';
+    return own && own !== opLabel(opId) && own !== PART_LABEL[partOf(getOperationCategory(opId))] ? own : null;
 };
 
-const getStageActivities = (template: CropScheduleTemplate, stageId: string): Array<{ label: string; timing: string; }> => {
-    const periodic = template.periodicExpectations
-        .filter(item => item.stageId === stageId)
-        .map(item => ({
-            label: getOperationName(item.operationTypeId),
-            timing: formatPeriodicTiming(item.frequencyMode, item.frequencyValue)
-        }));
+const stageTasks = (template: CropScheduleTemplate, stageId: string): Array<{ label: string; detail: string | null; timing: string }> => [
+    ...template.periodicExpectations.filter(i => i.stageId === stageId).map(i => ({ label: opLabel(i.operationTypeId), detail: ownName(i.operationTypeId, i.notes), timing: frequencyMr(i.frequencyMode, i.frequencyValue) })),
+    ...template.oneTimeExpectations.filter(i => i.stageId === stageId).map(i => ({ label: opLabel(i.operationTypeId), detail: ownName(i.operationTypeId, i.notes), timing: `दिवस ${i.targetDayFromRef}` })),
+];
 
-    const oneTime = template.oneTimeExpectations
-        .filter(item => item.stageId === stageId)
-        .map(item => ({
-            label: getOperationName(item.operationTypeId),
-            timing: `Day ${item.targetDayFromRef}`
-        }));
-
-    return [...periodic, ...oneTime];
-};
+type Order = 'usual' | 'short';
+const ORDERS: ReadonlyArray<readonly [Order, string]> = [
+    ['usual', 'नेहमीचा क्रम'], // PROPOSED (Marathi)
+    ['short', 'कमी दिवसांचं आधी'], // PROPOSED (Marathi) — the old "Shortest Duration"
+];
 
 const canonicalCropCode = (value: string): string => {
     const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
-    if (normalized.endsWith('s')) {
-        return normalized.slice(0, -1);
-    }
+    return normalized.endsWith('s') ? normalized.slice(0, -1) : normalized;
+};
 
-    return normalized;
+/** Up to three schedules per crop the farmer grows (most detailed first) — the same rule the page counts by. */
+export function libraryTemplates(allCrops: readonly CropProfile[]): CropScheduleTemplate[] {
+    const allowed = new Set(allCrops.map(c => canonicalCropCode(c.name)));
+    const byCrop = new Map<string, CropScheduleTemplate[]>();
+    getAllTemplates().forEach(t => {
+        const code = canonicalCropCode(t.cropCode);
+        if (allowed.size > 0 && !allowed.has(code)) return;
+        byCrop.set(code, [...(byCrop.get(code) ?? []), t]);
+    });
+    const out: CropScheduleTemplate[] = [];
+    byCrop.forEach(bucket => {
+        out.push(...[...bucket].sort((a, b) => {
+            const d = (b.periodicExpectations.length + b.oneTimeExpectations.length) - (a.periodicExpectations.length + a.oneTimeExpectations.length);
+            return d !== 0 ? d : a.name.localeCompare(b.name);
+        }).slice(0, 3));
+    });
+    return sortTemplates(out);
+}
+
+const INTERNAL_AUTHORS = new Set(['ShramSafal Reference Data', 'System Fallback']);
+const madeBy = (t: CropScheduleTemplate) => `${OWNER_LABEL[t.ownerType] ?? OWNER_LABEL.SYSTEM_DEFAULT}${t.createdBy && !INTERNAL_AUTHORS.has(t.createdBy) ? ` · ${t.createdBy}` : ''}`;
+
+const StagesSheet: React.FC<{ template: CropScheduleTemplate; onClose: () => void }> = ({ template, onClose }) => {
+    useBackDismiss(true, onClose);
+    return (
+        <div className="fixed inset-0 z-[120] flex justify-center bg-stone-900/40" style={{ fontFamily: SANS }}>
+            <div className="flex h-full w-full max-w-md flex-col bg-stone-50" role="dialog" aria-modal="true" aria-label={scheduleNameMr(template.name)} data-testid="library-stages">
+                <div className="flex shrink-0 items-center gap-3 border-b border-stone-200 bg-white px-3 py-2.5">
+                    <Tap onClick={onClose} data-testid="library-stages-back" aria-label="मागे" className="flex min-h-[48px] shrink-0 items-center rounded-full border border-stone-300 bg-white px-4 text-[16px] font-extrabold text-stone-800">← मागे</Tap>
+                    <p className="m-0 min-w-0 truncate text-[17px] font-extrabold text-stone-900" data-testid="library-stages-title">{scheduleNameMr(template.name)}</p>
+                </div>
+                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-24 pt-3">
+                    {[...template.stages].sort((a, b) => a.orderIndex - b.orderIndex).map(stage => {
+                        const tasks = stageTasks(template, stage.id);
+                        return (
+                            <GlassCard key={stage.id} testId={`library-stage-${stage.orderIndex}`}>
+                                <div className="flex items-center justify-between gap-3">
+                                    <h4 className="m-0 text-[17px] font-extrabold text-stone-900">{stageNameMr(stage.name)}</h4>
+                                    <span className="text-[14px] font-bold text-stone-600">दिवस {stage.dayStart}–{stage.dayEnd}</span>
+                                </div>
+                                <ul className="m-0 mt-2 space-y-1.5 p-0">
+                                    {tasks.length === 0
+                                        ? <li className="list-none text-[15px] font-bold text-stone-500">—</li>
+                                        : tasks.map((t, i) => (
+                                            <li key={i} className="flex list-none items-center justify-between gap-2 rounded-xl bg-white px-3 py-2 ring-1 ring-stone-200">
+                                                <span className="min-w-0 text-[16px] font-extrabold text-stone-800">
+                                                    {t.label}
+                                                    {t.detail && <span className="block text-[14px] font-bold text-stone-600" data-testid="library-task-detail">{t.detail}</span>}
+                                                </span>
+                                                <span className="shrink-0 text-[14px] font-bold text-stone-600">{t.timing}</span>
+                                            </li>
+                                        ))}
+                                </ul>
+                            </GlassCard>
+                        );
+                    })}
+                </div>
+            </div>
+        </div>
+    );
 };
 
 const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrops = [], adoptedScheduleId, onAdopt }) => {
-    const [sortBy, setSortBy] = useState<TemplateCatalogSort>('HIGHEST_ADOPTION');
     const [search, setSearch] = useState('');
-    const [detailTemplate, setDetailTemplate] = useState<CropScheduleTemplate | null>(null);
+    const [order, setOrder] = useState<Order>('usual');
+    const [detail, setDetail] = useState<CropScheduleTemplate | null>(null);
     const activeCropCode = crop ? canonicalCropCode(crop.name) : null;
-
-    const schedules = useMemo(() => {
-        const allowedCropCodes = new Set(
-            allCrops.map(item => canonicalCropCode(item.name))
-        );
-
-        const candidateTemplates = getAllTemplates().filter(template => {
-            if (allowedCropCodes.size === 0) {
-                return true;
-            }
-
-            return allowedCropCodes.has(canonicalCropCode(template.cropCode));
-        });
-
-        const limitedTemplates: CropScheduleTemplate[] = [];
-        const byCrop = new Map<string, CropScheduleTemplate[]>();
-        candidateTemplates.forEach(template => {
-            const cropCode = canonicalCropCode(template.cropCode);
-            const bucket = byCrop.get(cropCode) ?? [];
-            bucket.push(template);
-            byCrop.set(cropCode, bucket);
-        });
-
-        byCrop.forEach(bucket => {
-            const topTemplates = [...bucket]
-                .sort((left, right) => {
-                    const leftSize = left.periodicExpectations.length + left.oneTimeExpectations.length;
-                    const rightSize = right.periodicExpectations.length + right.oneTimeExpectations.length;
-                    if (leftSize !== rightSize) {
-                        return rightSize - leftSize;
-                    }
-
-                    return left.name.localeCompare(right.name);
-                })
-                .slice(0, 3);
-            limitedTemplates.push(...topTemplates);
-        });
-
-        return sortTemplates(limitedTemplates, sortBy);
-    }, [allCrops, sortBy]);
-
-    const filteredSchedules = useMemo(() => {
-        const query = search.trim().toLowerCase();
-        if (!query) {
-            return schedules;
-        }
-
-        return schedules.filter(item =>
-            item.name.toLowerCase().includes(query)
-            || item.createdBy.toLowerCase().includes(query)
-            || item.cropCode.toLowerCase().includes(query)
-        );
-    }, [schedules, search]);
+    const schedules = useMemo(() => libraryTemplates(allCrops), [allCrops]);
+    const shown = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        const found = q
+            ? schedules.filter(t => t.name.toLowerCase().includes(q) || scheduleNameMr(t.name).toLowerCase().includes(q) || t.createdBy.toLowerCase().includes(q) || t.cropCode.toLowerCase().includes(q))
+            : schedules;
+        return order === 'short' ? sortTemplates(found, 'SHORTEST_DURATION') : found;
+    }, [schedules, search, order]);
 
     return (
-        <div className="space-y-4">
-            <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <input
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Search owner or schedule"
-                        className="sm:col-span-2 px-3 py-2 rounded-xl border border-stone-200 text-sm font-medium outline-none focus:border-emerald-500"
-                    />
-                    <select
-                        value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value as TemplateCatalogSort)}
-                        className="px-3 py-2 rounded-xl border border-stone-200 text-sm font-bold bg-white outline-none focus:border-emerald-500"
-                    >
-                        <option value="HIGHEST_ADOPTION">Highest Adoption Score</option>
-                        <option value="MOST_FOLLOWED">Most Followed</option>
-                        <option value="SHORTEST_DURATION">Shortest Duration</option>
-                        <option value="NEWEST">Newest</option>
-                    </select>
-                </div>
-            </div>
-
-            {!crop && (
-                <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-xs font-semibold text-stone-600">
-                    Select a crop in scheduler to adopt templates. Library still shows all catalog templates.
-                </div>
-            )}
-
-            <div className="space-y-3">
-                {filteredSchedules.map(template => {
-                    const isAdopted = template.id === adoptedScheduleId;
-                    const templateCropCode = canonicalCropCode(template.cropCode);
-                    const canAdopt = !!activeCropCode && templateCropCode === activeCropCode;
-                    return (
-                        <div key={template.id} className="bg-white rounded-2xl border border-stone-200 p-4 shadow-sm">
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                    <h3 className="font-black text-stone-800 leading-tight">{template.name}</h3>
-                                    <p className="text-xs text-stone-500 mt-1">Created by: {template.createdBy}</p>
-                                    <p className="text-[10px] font-bold uppercase tracking-wide text-stone-400 mt-1">
-                                        Crop: {template.cropCode}
-                                    </p>
-                                </div>
-                                {isAdopted && (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700">
-                                        <CheckCircle2 size={12} /> Adopted
-                                    </span>
-                                )}
+        <div className="space-y-3" style={{ fontFamily: SANS }} data-testid="schedule-library">
+            <label className="flex min-h-[52px] items-center gap-2 rounded-2xl bg-white px-3 ring-1 ring-stone-300">
+                <Search size={20} className="shrink-0 text-stone-500" aria-hidden="true" />
+                {/* PROPOSED (Marathi) */}
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="शेड्यूल किंवा बनवणाऱ्याचं नाव शोधा" data-testid="library-search"
+                    className="min-w-0 flex-1 bg-transparent text-[16px] font-bold text-stone-900 outline-none" />
+            </label>
+            {schedules.length > 1 && <ChoiceChips items={ORDERS} value={order} onPick={setOrder} testId="library-order" />}
+            {/* PROPOSED (Marathi) */}
+            {schedules.length === 0 && <p className="m-0 rounded-2xl bg-stone-50 p-3 text-[15px] font-bold text-stone-600 ring-1 ring-stone-200" data-testid="library-empty">तुमच्या पिकांसाठी अजून एकही शेड्यूल आलेलं नाही. इंटरनेट चालू असताना ॲप उघडा.</p>}
+            {shown.map(t => {
+                const adopted = t.id === adoptedScheduleId;
+                const canAdopt = !!activeCropCode && canonicalCropCode(t.cropCode) === activeCropCode;
+                return (
+                    <GlassCard key={t.id} testId={`library-${t.id}`}>
+                        <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                                <h3 className="m-0 text-[18px] font-black leading-snug text-stone-900" data-testid={`library-name-${t.id}`}>{scheduleNameMr(t.name)}</h3>
+                                {/* PROPOSED (Marathi) */}
+                                <p className="m-0 mt-0.5 text-[14px] font-bold text-stone-600">कोणी बनवलं: {madeBy(t)}</p>
                             </div>
-
-                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-4">
-                                <div className="rounded-xl bg-stone-50 p-2.5 border border-stone-100">
-                                    <div className="text-[10px] uppercase font-bold text-stone-400">Duration</div>
-                                    <div className="text-sm font-black text-stone-800 mt-0.5">{template.totalDurationDays || '-'} days</div>
-                                </div>
-                                <div className="rounded-xl bg-emerald-50 p-2.5 border border-emerald-100">
-                                    <div className="text-[10px] uppercase font-bold text-emerald-600">Adoption</div>
-                                    <div className="text-sm font-black text-emerald-700 mt-0.5">{template.adoptionScore || 0}/100</div>
-                                </div>
-                                <div className="rounded-xl bg-blue-50 p-2.5 border border-blue-100">
-                                    <div className="text-[10px] uppercase font-bold text-blue-600">Detail</div>
-                                    <div className="text-sm font-black text-blue-700 mt-0.5">{template.detailScore || 0}/100</div>
-                                </div>
-                                <div className="rounded-xl bg-amber-50 p-2.5 border border-amber-100">
-                                    <div className="text-[10px] uppercase font-bold text-amber-600">Followers</div>
-                                    <div className="text-sm font-black text-amber-700 mt-0.5">{template.followersCount || 0}</div>
-                                </div>
-                                <div className="rounded-xl bg-stone-50 p-2.5 border border-stone-100">
-                                    <div className="text-[10px] uppercase font-bold text-stone-400">Stages</div>
-                                    <div className="text-sm font-black text-stone-800 mt-0.5">{template.stages.length}</div>
-                                </div>
+                            {/* PROPOSED (Marathi) */}
+                            {adopted && <Chip tone="green"><CheckCircle2 size={14} aria-hidden="true" />वापरात आहे</Chip>}
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                            <div className="rounded-xl bg-stone-50 p-2.5 ring-1 ring-stone-200">
+                                <div className="text-[13px] font-bold text-stone-600">एकूण दिवस</div>
+                                <div className="text-[17px] font-black text-stone-900">{t.totalDurationDays ?? '—'}</div>
                             </div>
-
-                            <div className="flex items-center gap-2 mt-4">
-                                <button
-                                    onClick={() => setDetailTemplate(template)}
-                                    className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-stone-200 text-xs font-bold text-stone-700 hover:bg-stone-50"
-                                >
-                                    <Eye size={14} /> View
-                                </button>
-                                {!isAdopted && canAdopt && (
-                                    <button
-                                        onClick={() => onAdopt(template.id)}
-                                        className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700"
-                                    >
-                                        Adopt
-                                    </button>
-                                )}
-                                {!isAdopted && !canAdopt && (
-                                    <span className="inline-flex items-center px-3 py-2 rounded-xl border border-stone-200 text-[11px] font-bold text-stone-500">
-                                        Crop mismatch
-                                    </span>
-                                )}
+                            <div className="rounded-xl bg-stone-50 p-2.5 ring-1 ring-stone-200">
+                                <div className="text-[13px] font-bold text-stone-600">स्टेज</div>
+                                <div className="text-[17px] font-black text-stone-900">{t.stages.length}</div>
                             </div>
                         </div>
-                    );
-                })}
-            </div>
-
-            {detailTemplate && (
-                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-                    <div className="bg-white w-full max-w-2xl rounded-3xl border border-stone-200 shadow-2xl max-h-[90vh] overflow-hidden">
-                        <div className="px-5 py-4 border-b border-stone-100 flex items-start justify-between gap-3">
-                            <div>
-                                <h3 className="font-black text-stone-800">{detailTemplate.name}</h3>
-                                <p className="text-xs text-stone-500 mt-1">Stage-wise schedule with fixed stage notes</p>
-                            </div>
-                            <button
-                                onClick={() => setDetailTemplate(null)}
-                                className="p-2 rounded-full text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-                            >
-                                <X size={18} />
-                            </button>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <Tap onClick={() => setDetail(t)} data-testid={`library-view-${t.id}`} className="inline-flex min-h-[48px] items-center gap-1.5 rounded-full bg-white px-4 text-[15px] font-extrabold text-stone-800 ring-1 ring-stone-300">
+                                {/* PROPOSED (Marathi) */}
+                                <Eye size={18} aria-hidden="true" />पाहा
+                            </Tap>
+                            {/* PROPOSED (Marathi) */}
+                            {!adopted && canAdopt && <div className="min-w-[60%] flex-1"><BigButton onClick={() => onAdopt(t.id)} testId={`library-adopt-${t.id}`}>हे शेड्यूल वापरा</BigButton></div>}
+                            {/* PROPOSED (Marathi) */}
+                            {!adopted && !canAdopt && <span className="text-[14px] font-bold text-stone-500" data-testid={`library-other-crop-${t.id}`}>हे दुसऱ्या पिकाचं शेड्यूल आहे</span>}
                         </div>
-                        <div className="p-5 overflow-y-auto max-h-[75vh] space-y-3">
-                            {detailTemplate.stages
-                                .sort((a, b) => a.orderIndex - b.orderIndex)
-                                .map(stage => {
-                                    const activities = getStageActivities(detailTemplate, stage.id);
-                                    return (
-                                        <div key={stage.id} className="rounded-2xl border border-stone-200 p-4">
-                                            <div className="flex items-center justify-between gap-3">
-                                                <h4 className="font-bold text-stone-800">{stage.name}</h4>
-                                                <span className="text-xs font-bold text-stone-500">
-                                                    Day {stage.dayStart} - {stage.dayEnd}
-                                                </span>
-                                            </div>
-                                            <div className="mt-3 space-y-2">
-                                                {activities.length === 0 ? (
-                                                    <p className="text-xs text-stone-500">No mandatory activities defined for this stage.</p>
-                                                ) : activities.map((item, index) => (
-                                                    <div key={`${stage.id}_${index}`} className="flex items-center justify-between text-sm rounded-lg bg-stone-50 px-3 py-2">
-                                                        <span className="text-stone-700 font-medium">{item.label}</span>
-                                                        <span className="text-xs text-stone-500 font-bold">{item.timing}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                            <div className="mt-3 rounded-xl bg-amber-50 border border-amber-100 px-3 py-2">
-                                                <p className="text-[11px] uppercase tracking-wide font-bold text-amber-700">Stage Notes</p>
-                                                <p className="text-sm text-amber-900 mt-1">{getStageNote(stage)}</p>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                        </div>
-                    </div>
-                </div>
-            )}
+                    </GlassCard>
+                );
+            })}
+            {detail && <StagesSheet template={detail} onClose={() => setDetail(null)} />}
         </div>
     );
 };

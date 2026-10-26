@@ -23,6 +23,10 @@ export type OperationCategory = 'IRRIGATION' | 'FERTIGATION' | 'FOLIAR_SPRAY' | 
 
 export type DayRiskStatus = 'stable' | 'risk_rising';
 
+/** Days since the last spray / irrigation after which `computeDayState` raises a risk signal (one rule, read by the शेड्यूल page too). */
+export const SPRAY_RISK_DAYS = 10;
+export const IRRIGATION_RISK_DAYS = 3;
+
 export interface DayState {
     date: string;
     plannedCount: number;
@@ -628,10 +632,10 @@ export const computeDayState = ({
     if (pendingCount > 0) {
         riskSignals.push(`${pendingCount} planned activities pending`);
     }
-    if (sprayDaysAgo !== null && sprayDaysAgo > 10) {
+    if (sprayDaysAgo !== null && sprayDaysAgo > SPRAY_RISK_DAYS) {
         riskSignals.push(`Spray delayed (${sprayDaysAgo} days since last spray)`);
     }
-    if (irrigationDaysAgo !== null && irrigationDaysAgo > 3) {
+    if (irrigationDaysAgo !== null && irrigationDaysAgo > IRRIGATION_RISK_DAYS) {
         riskSignals.push(`Irrigation gap increasing (${irrigationDaysAgo} days since last irrigation)`);
     }
 
