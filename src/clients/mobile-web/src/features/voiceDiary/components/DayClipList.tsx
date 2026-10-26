@@ -6,8 +6,8 @@
 
 import React from 'react';
 import { Mic } from 'lucide-react';
-import { formatDateKeyForDisplay } from '../../../core/domain/services/DateKeyService';
 import ClipPlayerCard, { type UnifiedClip } from './ClipPlayerCard';
+import { formatDayKey } from '../calendarMonths';
 import {
     type VoiceDiaryLocale,
     tVoiceDiary,
@@ -20,11 +20,12 @@ interface DayClipListProps {
 }
 
 const DayClipList: React.FC<DayClipListProps> = ({ locale, dateKey, clips }) => {
-    const dayHeading = formatDateKeyForDisplay(dateKey, {
+    // plr-d10 (I17, V-2): the day in his language (it was always English: "Monday, 26 Oct").
+    const dayHeading = formatDayKey(dateKey, {
         weekday: 'long',
         day: 'numeric',
         month: 'short',
-    });
+    }, locale);
     const countLabel = clips.length === 1
         ? tVoiceDiary(locale, 'dayHeading.countSingular')
         : tVoiceDiary(locale, 'dayHeading.countPlural');

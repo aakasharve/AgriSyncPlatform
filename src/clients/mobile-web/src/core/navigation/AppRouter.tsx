@@ -16,7 +16,7 @@ import {
 
 import { OnboardingPermissionsPage, WelcomeScreen, RouteLoader } from './lazyComponents';
 import { AppRouterContext } from './routeContext';
-import { SIMPLE_ROUTE_RENDERERS } from './simpleRoutes';
+import { SimpleRoutes } from './simpleRoutes';
 import { renderReflectView, renderCompareView, renderLogView } from './mainView';
 import { renderGlobalSheets } from './globalSheets';
 import MainViewTransition from './MainViewTransition';
@@ -264,9 +264,9 @@ const AppRouter: React.FC = () => {
     return (
         <React.Suspense fallback={<RouteLoader />}>
             <div className="relative w-full">
-                {SIMPLE_ROUTE_RENDERERS.map((render, idx) => (
-                    <React.Fragment key={idx}>{render(ctx)}</React.Fragment>
-                ))}
+                {/* spec: plr-d10-redesign-real-integration-2026-10-25 (I17) — re-tapping the place he is in
+                    (bottom bar / सेट-अप केंद्र) bumps `placeResetKey`, which remounts it at its first screen. */}
+                <SimpleRoutes ctx={ctx} resetKey={navigation.placeResetKey} />
 
                 {/* Task 14, change 5 — the slide transition + swipe every
                     other route already has, extended to Log/Reflect/Compare.

@@ -9,7 +9,12 @@ import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const h = vi.hoisted(() => ({ logout: vi.fn(), setLanguage: vi.fn() }));
+const h = vi.hoisted(() => ({ logout: vi.fn(), setLanguage: vi.fn(), waiting: [] as unknown[] }));
+
+// plr-d10 (I17): the offline-notes row is drawn only while a note waits for review.
+vi.mock('../../../infrastructure/sync/PendingAiResultsReader', () => ({
+    listUnreviewedAiResults: () => Promise.resolve(h.waiting),
+}));
 
 vi.mock('../../../i18n/LanguageContext', () => ({
     useLanguage: () => ({ language: 'mr', setLanguage: h.setLanguage, t: (k: string) => k }),
@@ -38,10 +43,11 @@ vi.mock('../../../features/admin/billing/EntitlementBanner', () => ({ default: (
 vi.mock('../../../features/onboarding/qr/FarmInviteQrSheet', () => ({ default: () => null }));
 vi.mock('../../../features/people/components/MembershipsList', () => ({ default: () => null }));
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import ProfilePage from '../ProfilePage';
 import { TestProviders } from '../../../shared/test/TestProviders';
 import { VerificationStatus, type FarmerProfile } from '../../../domain/types/farm.types';
+import { __resetBackStackForTests, dismissTopOverlay } from '../../../core/navigation/backStack';
 
 const baseProfile = (over: Partial<FarmerProfile> = {}): FarmerProfile => ({
     name: 'Purvesh Arve', village: 'Pimpalgaon', phone: '8888888888', language: 'mr',
@@ -52,8 +58,8 @@ const baseProfile = (over: Partial<FarmerProfile> = {}): FarmerProfile => ({
 
 const handlers = () => ({
     onUpdateProfile: vi.fn(), onUpdateCrops: vi.fn(), onOpenScheduleLibrary: vi.fn(), onOpenFinanceManager: vi.fn(),
-    onOpenLabour: vi.fn(), onOpenReferrals: vi.fn(), onOpenConsent: vi.fn(), onOpenExport: vi.fn(), onOpenErasure: vi.fn(),
-    onOpenAiDrafts: vi.fn(), onOpenSettings: vi.fn(), onExit: vi.fn(),
+    onOpenLabour: vi.fn(), onOpenConsent: vi.fn(),
+    onOpenAiDrafts: vi.fn(), onOpenSettings: vi.fn(), onOpenVoiceDiary: vi.fn(), onExit: vi.fn(),
 });
 
 const mount = (profile = baseProfile(), hs = handlers()) => {
@@ -62,7 +68,7 @@ const mount = (profile = baseProfile(), hs = handlers()) => {
 };
 
 describe('ProfilePage — the redesigned सेट-अप केंद्र', () => {
-    afterEach(() => { cleanup(); vi.clearAllMocks(); });
+    afterEach(() => { cleanup(); vi.clearAllMocks(); h.waiting = []; __resetBackStackForTests(); });
 
     it('reads सेट-अप केंद्र with one back, and lists every setup page in plain Marathi', () => {
         const hs = mount();
@@ -96,21 +102,65 @@ describe('ProfilePage — the redesigned सेट-अप केंद्र', (
         expect(screen.getByTestId('page-title')).toHaveTextContent('सेट-अप केंद्र');
     });
 
-    it('keeps every other row reachable and wired: money, labour, referrals, settings, logout', () => {
+    it('keeps every other row reachable and wired: money, labour, recordings, privacy, logout', () => {
         const hs = mount();
         fireEvent.click(screen.getByTestId('hub-finance'));
         fireEvent.click(screen.getByTestId('hub-labour'));
-        fireEvent.click(screen.getByTestId('hub-referrals'));
         fireEvent.click(screen.getByTestId('hub-settings-voice-diary'));
         fireEvent.click(screen.getByTestId('hub-settings-consent'));
-        fireEvent.click(screen.getByTestId('hub-settings-export'));
-        fireEvent.click(screen.getByTestId('hub-settings-erase'));
-        fireEvent.click(screen.getByTestId('hub-settings-ai-drafts'));
         fireEvent.click(screen.getByTestId('hub-logout'));
-        for (const fn of [hs.onOpenFinanceManager, hs.onOpenLabour, hs.onOpenReferrals, hs.onOpenSettings, hs.onOpenConsent, hs.onOpenExport, hs.onOpenErasure, hs.onOpenAiDrafts, h.logout]) {
+        for (const fn of [hs.onOpenFinanceManager, hs.onOpenLabour, hs.onOpenVoiceDiary, hs.onOpenConsent, h.logout]) {
             expect(fn).toHaveBeenCalledTimes(1);
         }
         expect(screen.getByTestId('hub-labour')).toHaveTextContent('मजुरी');
+    });
+
+    // spec: plr-d10 (I17, PLR-D9 O4 / §6 line 100 + 106)
+    it('Referrals is out of the farmer\'s hub, and privacy is ONE row (copy and erase live inside it)', () => {
+        mount();
+        expect(screen.queryByTestId('hub-referrals')).toBeNull();
+        expect(screen.queryByText('रेफरल्स')).toBeNull();
+        expect(screen.queryByTestId('hub-settings-export')).toBeNull();
+        expect(screen.queryByTestId('hub-settings-erase')).toBeNull();
+        const app = screen.getByTestId('hub-app');
+        expect(within(app).getByTestId('hub-settings-consent')).toHaveTextContent('गोपनीयता व संमती');
+        expect(within(app).getByTestId('hub-settings-consent')).toHaveTextContent('परवानग्या · माझा डेटा');
+        // the recordings row and its page carry one name
+        expect(within(app).getByTestId('hub-settings-voice-diary')).toHaveTextContent('आवाज नोंदी');
+        expect(app.textContent ?? '').not.toMatch(/[A-Za-z]{3,}/);
+    });
+
+    it('the offline-notes row is hidden while nothing waits for review', async () => {
+        mount();
+        await act(async () => { await Promise.resolve(); });
+        expect(screen.queryByTestId('hub-settings-ai-drafts')).toBeNull();
+    });
+
+    it('the offline-notes row appears, with how many wait, while notes wait — and opens the review page', async () => {
+        // a voice note AND a bill photo: the row's name covers both, so the "2" is not called voice notes
+        h.waiting = [{ id: 1, operationType: 'voice_parse' }, { id: 2, operationType: 'receipt_extract' }];
+        const hs = mount();
+        // the waiting list is read from the phone after the first paint: slow on a busy machine
+        const row = await screen.findByTestId('hub-settings-ai-drafts', {}, { timeout: 20_000 });
+        expect(row).toHaveTextContent('नेट नसताना केलेल्या नोंदी');
+        expect(row).not.toHaveTextContent('आवाज नोंदी');
+        expect(row).toHaveTextContent('2');
+        expect(row.textContent ?? '').not.toMatch(/[A-Za-z]/);
+        fireEvent.click(row);
+        expect(hs.onOpenAiDrafts).toHaveBeenCalledTimes(1);
+    }, 60_000);
+
+    it('the phone\'s own Back on a hub page returns to the hub, like the page\'s मागे', () => {
+        const hs = mount();
+        fireEvent.click(screen.getByTestId('hub-open-machines'));
+        expect(screen.getByTestId('page-title')).toHaveTextContent('यंत्रं');
+        let closed = false;
+        act(() => { closed = dismissTopOverlay(); });
+        expect(closed).toBe(true);
+        expect(screen.getByTestId('page-title')).toHaveTextContent('सेट-अप केंद्र');
+        expect(hs.onExit).not.toHaveBeenCalled();
+        // on the hub itself nothing is left to close: Back then belongs to the app's route history
+        expect(dismissTopOverlay()).toBe(false);
     });
 
     it('the "?" on a row opens its plain guide', () => {

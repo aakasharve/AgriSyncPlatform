@@ -62,7 +62,7 @@ async function seedClip(extra: Record<string, unknown> = {}) {
     } as never);
 }
 
-const mount = () => render(<VoiceDiaryPage onBack={() => undefined} onOpenSettings={() => undefined} forceLocale="en-IN" />);
+const mount = () => render(<VoiceDiaryPage onBack={() => undefined} forceLocale="en-IN" />);
 const sourceBadge = () => screen.getByTestId(`voice-diary-clip-source-${CLIP}`).textContent;
 const pending = () => screen.queryByTestId(`voice-diary-clip-pending-cloud-${CLIP}`);
 

@@ -153,7 +153,6 @@ describe('ProfilePage (Sub-plan 04 Task 1 baseline smoke)', () => {
                     onUpdateCrops={noop}
                     onOpenScheduleLibrary={noop}
                     onOpenFinanceManager={noop}
-                    onOpenReferrals={noop}
                     onOpenQrDemo={noop}
                 />
             </TestProviders>

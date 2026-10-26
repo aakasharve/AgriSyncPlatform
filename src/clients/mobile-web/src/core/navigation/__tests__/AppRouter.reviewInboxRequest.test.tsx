@@ -97,7 +97,7 @@ vi.mock('../../session/FarmContext', () => ({
     useFarmContext: () => ({ currentFarmId: null }),
 }));
 
-vi.mock('../simpleRoutes', () => ({ SIMPLE_ROUTE_RENDERERS: [] }));
+vi.mock('../simpleRoutes', () => ({ SIMPLE_ROUTE_RENDERERS: [], SimpleRoutes: () => null }));
 vi.mock('../mainView', () => ({
     renderReflectView: () => null,
     renderCompareView: () => null,

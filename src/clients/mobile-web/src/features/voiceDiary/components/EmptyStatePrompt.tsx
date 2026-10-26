@@ -1,7 +1,10 @@
 // spec: voice-diary-e2e-2026-05-17 (D.11)
 //
 // Empty state shown when consent is OFF AND there are no local clips.
-// CTA navigates to Settings → consent toggle anchor.
+// CTA "चालू करा" asks to turn saving on (since plr-d10 I17 the "keep my recordings"
+// switch sits on the recordings page itself, and the handler opens that switch's own
+// first-grant confirmation; the prop keeps its old name).
+// One language at a time (V-2): the English second lines are gone.
 //
 // When consent is ON but no clips exist yet, VoiceDiaryPage renders the
 // "no clips yet" Mic card from DayClipList instead (per coordinator
@@ -32,15 +35,9 @@ const EmptyStatePrompt: React.FC<Props> = ({ locale, onOpenSettings }) => {
                 <h2 className="font-['Noto_Serif_Devanagari'] font-bold text-lg text-stone-900">
                     {tVoiceDiary(locale, 'emptyState.headline')}
                 </h2>
-                <p className="mt-1 font-['DM_Sans'] text-sm font-bold text-stone-500">
-                    {tVoiceDiary(locale, 'emptyState.headlineEn')}
-                </p>
             </div>
             <p className="font-['Noto_Sans_Devanagari'] text-sm text-stone-700 leading-relaxed max-w-sm mx-auto">
                 {tVoiceDiary(locale, 'emptyState.body')}
-            </p>
-            <p className="font-['DM_Sans'] text-xs text-stone-500 max-w-sm mx-auto">
-                {tVoiceDiary(locale, 'emptyState.bodyEn')}
             </p>
             <div className="pt-2">
                 <button

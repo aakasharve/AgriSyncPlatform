@@ -8,8 +8,13 @@
 
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, configure } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// The page reads the phone, the consent and the server before drawing: under a full parallel run that
+// outlasted the 1 s default wait and failed at random (it passes alone). A wait resolves as soon as
+// its condition holds, so the longer ceiling slows nothing that passes.
+configure({ asyncUtilTimeout: 10_000 });
 
 vi.mock('../../../infrastructure/api/AgriSyncClient', () => ({
     agriSyncClient: {
@@ -96,7 +101,7 @@ describe('VoiceDiaryPage - local clip and its archived copy are one card', () =>
             { clipId: OTHER_CLOUD_ONLY, recordedAtUtc: RECORDED_AT, durationSeconds: 5, language: 'mr-IN', s3Key: 'retained/u/b.bin' },
         ]);
 
-        render(<VoiceDiaryPage onBack={() => undefined} onOpenSettings={() => undefined} forceLocale="en-IN" />);
+        render(<VoiceDiaryPage onBack={() => undefined} forceLocale="en-IN" />);
 
         await waitFor(() => {
             expect(screen.getByTestId(`voice-diary-clip-card-${LOCAL_ID}`)).toBeInTheDocument();

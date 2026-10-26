@@ -31,6 +31,14 @@ export interface UseAppNavigationResult {
     goBack: () => boolean;
     /** A screen's own back button: where he came from, else `fallback` (WP-6). */
     goBackOr: (fallback: AppRoute) => void;
+    /**
+     * spec: plr-d10-redesign-real-integration-2026-10-25 (I17, PLR-D9 N3/N6) — the bottom bar and
+     * the header's सेट-अप केंद्र button. Opens a place on top of the home tabs (so its मागे returns
+     * to the tab he was on); tapping the place he is ALREADY in returns it to its first screen.
+     */
+    openPlace: (route: AppRoute) => void;
+    /** Bumped when a place is re-opened from the bar: the router remounts it at its first screen. */
+    placeResetKey: number;
 }
 
 const MAX_HISTORY = 20;
@@ -82,11 +90,19 @@ export const useAppNavigation = (): UseAppNavigationResult => {
     const [mainView, setMainView] = useState<PageView>('log');
     const [logIntent, setLogIntentState] = useState<LogIntent>(null);
     const [lastLabourLogIds, setLastLabourLogIdsState] = useState<string[]>([]);
+    const [placeResetKey, setPlaceResetKey] = useState(0);
     // Back-button history. Refs (not state): reading them must not re-render,
     // and goBack must see the latest value without a stale closure.
     const routeRef = useRef<AppRoute>(currentRoute);
     const mainViewRef = useRef<PageView>(mainView);
     const historyRef = useRef<AppRoute[]>([]);
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I17, H19) — हजेरी's "बोलून हजेरी" is a round
+    // trip THROUGH the log page: हजेरी → log (the mic) → back to हजेरी once saved (or via its "back to
+    // हजेरी" banner). Arriving on the log page clears the history (it is home), so without this the
+    // farmer's मागे on हजेरी afterwards landed on the log page instead of where he had opened हजेरी from
+    // (the hub). The history he had on हजेरी is kept across that one hop and handed back on return;
+    // any other move forgets it.
+    const labourHopRef = useRef<AppRoute[] | null>(null);
 
     // Any route change away from the log page ('main') clears the labour
     // hint, so it never lingers into an unrelated later visit. Routing back
@@ -116,8 +132,13 @@ export const useAppNavigation = (): UseAppNavigationResult => {
         const from = routeRef.current;
         if (route !== from) {
             const history = historyRef.current;
+            const labourHop = labourHopRef.current;
+            labourHopRef.current = null;
             if (route === 'main') {
+                if (from === 'labour') labourHopRef.current = [...history];
                 history.length = 0;
+            } else if (route === 'labour' && from === 'main' && labourHop) {
+                historyRef.current = labourHop;
             } else if (history[history.length - 1] === route) {
                 history.pop();
             } else {
@@ -139,6 +160,7 @@ export const useAppNavigation = (): UseAppNavigationResult => {
     // every in-page back went to a fixed parent: open a money page from the farm overview
     // and "back" landed on the finance menu, a screen he had never been on.
     const goBackOr = useCallback((fallback: AppRoute): void => {
+        labourHopRef.current = null;
         const history = historyRef.current;
         if (history.length > 0) {
             applyRoute(history.pop() as AppRoute);
@@ -147,8 +169,28 @@ export const useAppNavigation = (): UseAppNavigationResult => {
         applyRoute(fallback);
     }, [applyRoute]);
 
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I17) — the approved preview's `openPlace`
+    // (PLR-D9 app/appNav.ts): a place opened from the bottom bar or the header sits on the home tabs,
+    // not on whatever place he was in, so its मागे returns to the tab (the tab he was on is kept:
+    // `mainView` is untouched). Tapping the place he is already in — even deep inside it (a setup page,
+    // the schedule editor) — takes him back to its first screen, which before did nothing at all.
+    const openPlace = useCallback((route: AppRoute): void => {
+        if (route === routeRef.current) {
+            if (route !== 'main') setPlaceResetKey(k => k + 1);
+            return;
+        }
+        if (route === 'main') {
+            setCurrentRoute('main');
+            return;
+        }
+        labourHopRef.current = null;
+        historyRef.current = ['main'];
+        applyRoute(route);
+    }, [applyRoute, setCurrentRoute]);
+
     const goBack = useCallback((): boolean => {
         const history = historyRef.current;
+        if (history.length > 0 || routeRef.current !== 'main') labourHopRef.current = null;
         if (history.length > 0) {
             applyRoute(history.pop() as AppRoute);
             return true;
@@ -190,6 +232,8 @@ export const useAppNavigation = (): UseAppNavigationResult => {
         lastLabourLogIds,
         setLastLabourLogIds,
         goBack,
-        goBackOr
+        goBackOr,
+        openPlace,
+        placeResetKey
     };
 };

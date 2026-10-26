@@ -34,7 +34,7 @@ import {
     JobCardDetailPage,
     WorkerProfilePage,
     LabourFeaturePage,
-    ConsentScreen,
+    PrivacyAndConsentPage,
     ErasureRequestScreen,
     ExportRequestScreen,
     PiiReviewQueuePage,
@@ -46,6 +46,7 @@ import { requestOpenWaitingDrawer } from '../../features/oversight/oversightNavi
 import { resolveLabourAnchor } from '../../features/labour/labourAnchor';
 import { attendanceCaptureDay } from '../../features/logs/attendanceDraft';
 import { buildNoWorkDayPayload } from './noWorkDay';
+import { PageBar } from '../../shared/components/ui/placeUi';
 
 export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'profile') return null;
@@ -64,10 +65,9 @@ export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
                 }}
                 onOpenFinanceManager={() => ctx.setCurrentRoute('finance-manager')}
                 onOpenLabour={() => ctx.setCurrentRoute('labour')}
-                onOpenReferrals={() => ctx.setCurrentRoute('referrals')}
+                // spec: plr-d10 (I17, PLR-D9 O4/§6) — Referrals is out of the farmer's hub (it opened a
+                // blank English page); export + erase now live inside "गोपनीयता व संमती" (one page).
                 onOpenConsent={() => ctx.setCurrentRoute('consent')}
-                onOpenExport={() => ctx.setCurrentRoute('dataRights/export')}
-                onOpenErasure={() => ctx.setCurrentRoute('dataRights/erasure')}
                 onOpenQrDemo={() => ctx.setCurrentRoute('qr-demo')}
                 onOpenAiDrafts={() => ctx.setCurrentRoute('ai-drafts')}
                 onOpenSettings={() => ctx.setCurrentRoute('settings')}
@@ -83,7 +83,9 @@ export const renderLabourRoute = (ctx: AppRouterContext): React.ReactNode => {
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
             <LabourFeaturePage
-                onExit={() => ctx.setCurrentRoute('profile')}
+                // spec: plr-d10 (I17, H19) — मागे returns where he came from (the hub, the log page…);
+                // the hub only when there is nowhere he came from. It was fixed to the hub.
+                onExit={() => ctx.goBackOr('profile')}
                 onGoToLog={(opts) => {
                     // Labour V2 R1 Task 3.1 — the labour mic is a VERIFICATION instrument.
                     // No anchor → no mic. This is the door (the hub hero is already drawn
@@ -155,14 +157,13 @@ export const renderSettingsRoute = (ctx: AppRouterContext): React.ReactNode => {
 };
 
 // spec: voice-diary-e2e-2026-05-17 (D.18) — V1 voice-journal RENAMED to voiceDiary (camelCase).
+// spec: plr-d10 (I17, PLR-D9 O8) — "keep my recordings" now sits on this page itself, so the leftover
+// Settings page is no longer a farmer's door (its route stays for deep links and the DEV tools).
 export const renderVoiceDiaryRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'voiceDiary') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <VoiceDiaryPage
-                onBack={() => ctx.goBackOr('profile')}
-                onOpenSettings={() => ctx.setCurrentRoute('settings')}
-            />
+            <VoiceDiaryPage onBack={() => ctx.goBackOr('profile')} />
         </div>
     );
 };
@@ -185,10 +186,13 @@ export const renderOpsAdminRoute = (ctx: AppRouterContext): React.ReactNode => {
     );
 };
 
+// spec: plr-d10 (I17, PLR-D9 O4) — no longer a hub row; the route stays for a deep link, and it is
+// no longer a dead end: one title bar with मागे (the page itself was blank behind no back).
 export const renderReferralsRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'referrals') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+            <PageBar title="रेफरल्स" onBack={() => ctx.goBackOr('profile')} />
             <ReferralsPage />
         </div>
     );
@@ -445,12 +449,13 @@ export const renderJobDetailRoute = (ctx: AppRouterContext): React.ReactNode => 
     );
 };
 
-// spec: data-principle-spine-2026-05-05/06.4 — Consent settings screen.
+// spec: data-principle-spine-2026-05-05/06.4 — Consent settings screen. plr-d10 (I17, PLR-D9 §6 line
+// 106): ONE "गोपनीयता व संमती" place — the three consents, a copy of my data, and erase with its confirm.
 export const renderConsentRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'consent') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <ConsentScreen onBack={() => ctx.goBackOr('profile')} />
+            <PrivacyAndConsentPage onBack={() => ctx.goBackOr('profile')} />
         </div>
     );
 };
@@ -558,3 +563,17 @@ export const SIMPLE_ROUTE_RENDERERS: Array<(ctx: AppRouterContext) => React.Reac
     renderPiiReviewRoute,
     renderAiDraftsRoute
 ];
+
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I17, H20) — every simple route, rendered in order.
+ * When `resetKey` moves (he tapped the bottom-bar item or सेट-अप केंद्र he is already in), the place is
+ * remounted, so it opens at its FIRST screen: a setup page, the language page or the schedule editor
+ * kept in a page's own state is closed. Before, that tap did nothing at all.
+ */
+export const SimpleRoutes: React.FC<{ ctx: AppRouterContext; resetKey: number }> = ({ ctx, resetKey }) => (
+    <React.Fragment key={resetKey}>
+        {SIMPLE_ROUTE_RENDERERS.map((render, idx) => (
+            <React.Fragment key={idx}>{render(ctx)}</React.Fragment>
+        ))}
+    </React.Fragment>
+);

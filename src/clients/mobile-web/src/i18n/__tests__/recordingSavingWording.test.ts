@@ -74,9 +74,10 @@ describe('no string claims saved history or success from consent alone', () => {
     const settingKeys = [
         'retentionBanner.grantedTitle', 'retentionBanner.grantedBody',
         'retentionBanner.deniedTitle', 'retentionBanner.deniedBody',
-        'emptyState.body', 'emptyState.bodyEn',
-        'consentToggle.helper', 'consentToggle.helperEn',
-        'firstGrant.headline', 'firstGrant.headlineEn', 'firstGrant.body', 'firstGrant.bodyEn',
+        // plr-d10 (I17, V-2): the `*En` second lines were removed from the bundles (one language at a time).
+        'emptyState.body',
+        'consentToggle.helper',
+        'firstGrant.headline', 'firstGrant.body',
         'firstGrant.bullet1',
         'stopFutureConfirm.headline', 'stopFutureConfirm.body', 'stopFutureConfirm.keptNote',
     ];

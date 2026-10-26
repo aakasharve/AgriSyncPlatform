@@ -10,7 +10,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Sprout, Zap, Tractor, FlaskConical, Globe, Shield, Download, Trash2, CreditCard, Mic, BookOpen, Check } from 'lucide-react';
+import { User, Sprout, Zap, Tractor, FlaskConical, Globe, Shield, CreditCard, Mic, BookOpen, Check } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useFarmContext } from '../../core/session/FarmContext';
@@ -29,8 +29,10 @@ import { SetupHubMenu, type HubMenuItem } from './components/SetupHubMenu';
 import { useCropPlotState } from './hooks/useCropPlotState';
 import { useFarmAdminState } from './hooks/useFarmAdminState';
 import SubscriptionCard from '../admin/billing/SubscriptionCard';
-import { buildSettingsExtraIds } from './settingsItems';
-import { PageBar, SANS, Tap } from '../../shared/components/ui/placeUi';
+import { buildSettingsExtraIds, OFFLINE_NOTES_TITLE, PRIVACY_TITLE } from './settingsItems';
+import { useWaitingDraftCount } from './hooks/useWaitingDraftCount';
+import { useBackDismiss } from '../../core/navigation/useBackDismiss';
+import { Chip, PageBar, SANS, Tap } from '../../shared/components/ui/placeUi';
 
 import type { CropProfile, FarmerProfile } from '../../types';
 import { VerificationStatus } from '../../domain/types/farm.types';
@@ -75,10 +77,8 @@ interface ProfilePageProps {
     onOpenScheduleLibrary?: (cropId?: string) => void;
     onOpenFinanceManager?: () => void;
     onOpenLabour?: () => void;
-    onOpenReferrals?: () => void;
+    /** The ONE "गोपनीयता व संमती" place: consents + a copy of my data + erase (plr-d10 I17). */
     onOpenConsent?: () => void;
-    onOpenExport?: () => void;
-    onOpenErasure?: () => void;
     onOpenQrDemo?: () => void;
     /** spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — offline
      * voice-note drafts waiting for the farmer's review. */
@@ -100,8 +100,8 @@ interface ProfilePageProps {
 
 const ProfilePage: React.FC<ProfilePageProps> = ({
     profile, crops, onUpdateProfile, onUpdateCrops,
-    onOpenScheduleLibrary, onOpenFinanceManager, onOpenLabour, onOpenReferrals,
-    onOpenConsent, onOpenExport, onOpenErasure, onOpenAiDrafts, onOpenSettings, onOpenVoiceDiary,
+    onOpenScheduleLibrary, onOpenFinanceManager, onOpenLabour,
+    onOpenConsent, onOpenAiDrafts, onOpenSettings, onOpenVoiceDiary,
     onExit,
     initialTab,
 }) => {
@@ -111,6 +111,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     const [activeTab, setActiveTab] = useState<ProfileTab | null>(initialTab ?? null);
     // extra (settings) pages folded into Profile — e.g. 'language'.
     const [activeExtra, setActiveExtra] = useState<string | null>(null);
+    // spec: plr-d10 (I17, H19) — one back model: the phone's own Back on a hub page returns to the hub,
+    // exactly like the page's मागे (it used to leave the hub altogether).
+    useBackDismiss(activeTab !== null || activeExtra !== null, () => { setActiveTab(null); setActiveExtra(null); });
+    const waitingDrafts = useWaitingDraftCount();
 
     const cropPlot = useCropPlotState({ crops, onUpdateCrops });
     const farmAdmin = useFarmAdminState();
@@ -347,21 +351,23 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 const billingFarm = farmAdmin.myMemberships.find(m => m.farmId === profileFarmId) ?? farmAdmin.myMemberships[0];
                 const isOwner = billingFarm?.role === 'PrimaryOwner';
                 // Plain Marathi only (founder T1–T3: no English doubling). Every new string is PROPOSED.
-                const settingsMeta: Record<string, { label: string; icon: React.ReactNode; subtitle?: string }> = {
+                const settingsMeta: Record<string, { label: string; icon: React.ReactNode; subtitle?: string; badge?: React.ReactNode }> = {
                     language: { label: 'भाषा', icon: <Globe size={22} />, subtitle: langLabel },
                     'voice-diary': { label: 'आवाज नोंदी', icon: <BookOpen size={22} />, subtitle: 'तुम्ही बोललेल्या नोंदी — दिवसानुसार ऐका' },
-                    consent: { label: 'गोपनीयता व संमती', icon: <Shield size={22} />, subtitle: 'तुमच्या परवानग्या' },
-                    export: { label: 'डेटा डाउनलोड', icon: <Download size={22} />, subtitle: 'तुमच्या नोंदींची प्रत' },
-                    erase: { label: 'डेटा पुसा', icon: <Trash2 size={22} />, subtitle: 'कायमचा पुसा' },
+                    // PROPOSED (Marathi): "परवानग्या · माझा डेटा" (the preview's line; copy + erase now live inside).
+                    consent: { label: PRIVACY_TITLE, icon: <Shield size={22} />, subtitle: 'परवानग्या · माझा डेटा' },
                     billing: { label: 'बिलिंग', icon: <CreditCard size={22} />, subtitle: 'तुमचा प्लॅन' },
-                    'ai-drafts': { label: 'तपासायच्या आवाज नोंदी', icon: <Mic size={22} />, subtitle: 'नेट नसताना बोललेल्या नोंदी — तपासून जतन करा' },
+                    // PROPOSED (Marathi): one name with its page (OFFLINE_NOTES_TITLE) — it lists voice notes AND
+                    // bill / slip photos, so the count is not called "voice notes"; the line says what to do.
+                    'ai-drafts': {
+                        label: OFFLINE_NOTES_TITLE, icon: <Mic size={22} />, subtitle: 'उघडून जतन करा, किंवा काढून टाका',
+                        badge: <Chip tone="amber">{waitingDrafts}</Chip>,
+                    },
                 };
-                const settingsItems = buildSettingsExtraIds(isOwner).map(id => ({ id, ...settingsMeta[id] }));
+                const settingsItems = buildSettingsExtraIds(isOwner, waitingDrafts > 0).map(id => ({ id, ...settingsMeta[id] }));
 
                 const handleSelectExtra = (id: string) => {
                     if (id === 'consent') { onOpenConsent?.(); return; }
-                    if (id === 'export') { onOpenExport?.(); return; }
-                    if (id === 'erase') { onOpenErasure?.(); return; }
                     if (id === 'ai-drafts') { onOpenAiDrafts?.(); return; }
                     if (id === 'voice-diary') { (onOpenVoiceDiary ?? onOpenSettings)?.(); return; }
                     setActiveExtra(id); // 'language' | 'billing' — folded sub-screens
@@ -422,7 +428,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             onExit={onExit}
                             onOpenFinance={onOpenFinanceManager}
                             onOpenLabour={onOpenLabour}
-                            onOpenReferrals={onOpenReferrals}
                             settingsItems={settingsItems}
                             onSelectExtra={handleSelectExtra}
                             logout={logout}

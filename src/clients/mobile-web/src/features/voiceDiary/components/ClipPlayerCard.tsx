@@ -22,7 +22,7 @@ import {
     type VoiceDiaryLocale,
     tVoiceDiary,
 } from '../../../i18n/voiceDiaryTranslations';
-import { formatDisplayTime } from '../../../shared/utils/displayTime';
+import { formatDisplayTime, formatFarmerTime } from '../../../shared/utils/displayTime';
 
 /**
  * Unified clip projection consumed by the player. Either a local Dexie
@@ -70,7 +70,11 @@ interface Props {
     clip: UnifiedClip;
 }
 
-const formatTime = (iso: string): string => formatDisplayTime(iso, '--:--');
+// spec: plr-d10-redesign-real-integration-2026-10-25 (I17, V-2) — in Marathi the clock reads the part of
+// the day ("सकाळी 9:15", founder 2026-08-23), not "9:15 AM"; English keeps the 12-hour AM/PM clock.
+const formatTime = (iso: string, locale: VoiceDiaryLocale): string => (locale === 'mr-IN'
+    ? formatFarmerTime(iso, '--:--')
+    : formatDisplayTime(iso, '--:--'));
 
 const formatDuration = (durationMs?: number): string => {
     if (!durationMs || durationMs <= 0) return '0:00';
@@ -273,7 +277,7 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
             <button
                 type="button"
                 onClick={() => void handlePlayPause()}
-                aria-label={isPlaying ? 'Pause' : 'Play'}
+                aria-label={tVoiceDiary(locale, isPlaying ? 'player.pause' : 'player.play')}
                 data-testid={`voice-diary-clip-play-${clip.id}`}
                 className="h-11 w-11 shrink-0 rounded-full bg-emerald-600 text-white flex items-center justify-center active:bg-emerald-700"
             >
@@ -289,7 +293,7 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                     <span className="font-['DM_Sans'] font-bold text-sm text-stone-900 tabular-nums">
-                        {formatTime(clip.recordedAtUtc)}
+                        {formatTime(clip.recordedAtUtc, locale)}
                     </span>
                     <span className="font-['DM_Sans'] text-xs text-stone-500 tabular-nums">
                         {formatDuration(clip.durationMs)}

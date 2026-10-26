@@ -47,21 +47,16 @@ const VoiceRetainedStopFutureBanner: React.FC<Props> = ({
                     <MicOff size={28} strokeWidth={2.4} />
                 </div>
 
+                {/* spec: plr-d10 (I17, V-2) — one language at a time: the English second lines are gone. */}
                 <div className="text-center space-y-1">
                     <h2 className="font-['Noto_Serif_Devanagari'] font-bold text-2xl text-stone-900">
                         {tVoiceDiary(locale, 'stopFutureConfirm.headline')}
                     </h2>
-                    <p className="font-['DM_Sans'] text-sm font-bold text-stone-500">
-                        {tVoiceDiary(locale, 'stopFutureConfirm.headlineEn')}
-                    </p>
                 </div>
 
                 <div className="space-y-2 text-stone-700">
                     <p className="font-['Noto_Sans_Devanagari'] text-base leading-relaxed">
                         {tVoiceDiary(locale, 'stopFutureConfirm.body')}
-                    </p>
-                    <p className="font-['DM_Sans'] text-sm text-stone-500 leading-relaxed">
-                        {tVoiceDiary(locale, 'stopFutureConfirm.bodyEn')}
                     </p>
                 </div>
 
@@ -75,9 +70,6 @@ const VoiceRetainedStopFutureBanner: React.FC<Props> = ({
                 >
                     <p className="font-['Noto_Sans_Devanagari'] text-sm font-bold text-emerald-900 leading-relaxed">
                         {tVoiceDiary(locale, 'stopFutureConfirm.keptNote')}
-                    </p>
-                    <p className="font-['DM_Sans'] text-xs text-emerald-700 leading-relaxed">
-                        {tVoiceDiary(locale, 'stopFutureConfirm.keptNoteEn')}
                     </p>
                 </div>
 

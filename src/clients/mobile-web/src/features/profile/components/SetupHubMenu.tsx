@@ -8,11 +8,13 @@
  * preview `SetupHubPage`): one title, one back, me, "शेत तयार करणं — X पैकी Y पूर्ण" with the next
  * step, then plain groups. Every real row is kept: the setup sections (each with its status and the
  * "?" guide), the farms list, "तुमच्या शेती" (switch / create / join — the SAME `FarmSwitcherSheet`,
- * unchanged), कामगार व हजेरी, पैसे व हिशोब, रेफरल्स, every settings row (testid `hub-settings-<id>`)
- * and बाहेर पडा. No English doubling. It claims "ओळख पडताळलेली" only when told `verified`.
+ * unchanged), कामगार व हजेरी, पैसे व हिशोब, every settings row (testid `hub-settings-<id>`) and
+ * बाहेर पडा. No English doubling. It claims "ओळख पडताळलेली" only when told `verified`.
+ * plr-d10 (I17, PLR-D9 O4 / §6 line 100): रेफरल्स is out of the farmer's view — it opened a blank,
+ * English page with no back (its route still answers a direct link, now with a मागे).
  */
 import React, { useState } from 'react';
-import { BarChart3, CheckCircle2, LogOut, MapPin, Medal, ShieldCheck, Sprout, Users } from 'lucide-react';
+import { BarChart3, CheckCircle2, LogOut, MapPin, ShieldCheck, Sprout, Users } from 'lucide-react';
 import type { ProfileTab } from '../ProfilePage';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 import { FarmSwitcherSheet } from '../../context/components/FarmContextSwitcher';
@@ -68,8 +70,7 @@ interface SetupHubMenuProps {
     onExit?: () => void;
     onOpenFinance?: () => void;
     onOpenLabour?: () => void;
-    onOpenReferrals?: () => void;
-    settingsItems?: { id: string; label: string; icon: React.ReactNode; subtitle?: string }[];
+    settingsItems?: { id: string; label: string; icon: React.ReactNode; subtitle?: string; badge?: React.ReactNode }[];
     onSelectExtra?: (id: string) => void;
     logout: () => void;
 }
@@ -135,7 +136,7 @@ const SetupRow: React.FC<{ item: HubMenuItem; isNext: boolean; onSelect: () => v
 export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
     farmerName, verified, farmName, farms, familyName, onOpenFarm, onAddFarm,
     currentFarmId, onSwitchFarm, onCreateFarm, onJoinViaQr,
-    language, setupProgress, items, onSelect, onExit, onOpenFinance, onOpenLabour, onOpenReferrals, settingsItems, onSelectExtra, logout,
+    language, setupProgress, items, onSelect, onExit, onOpenFinance, onOpenLabour, settingsItems, onSelectExtra, logout,
 }) => {
     const [showFarmSwitcher, setShowFarmSwitcher] = useState(false);
 
@@ -181,7 +182,7 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                     </div>
                 )}
 
-                {(onOpenLabour || farmSwitcherReady || onOpenReferrals) && (
+                {(onOpenLabour || farmSwitcherReady) && (
                     <div className="space-y-2" data-testid="hub-people">
                         <SectionHead title="माणसं आणि शेती" />
                         {/* FOUNDER NAMING DECISION (2026-10-16): the section is `कामगार व हजेरी` (door and room agree).
@@ -189,7 +190,6 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                         {onOpenLabour && <RowLink testId="hub-labour" icon={<Users size={22} aria-hidden="true" />} tone="green" title="कामगार व हजेरी" line="मजुरी" onClick={onOpenLabour} />}
                         {/* `तुमच्या शेती` is copied verbatim from FarmContextSwitcher.tsx — also how a farm is created or joined. */}
                         {farmSwitcherReady && <RowLink testId="hub-farms" icon={<Sprout size={22} aria-hidden="true" />} tone="green" title="तुमच्या शेती" line={farmSwitcherSubtitle} onClick={() => setShowFarmSwitcher(true)} />}
-                        {onOpenReferrals && <RowLink testId="hub-referrals" icon={<Medal size={22} aria-hidden="true" />} tone="stone" title="रेफरल्स" onClick={onOpenReferrals} />}
                     </div>
                 )}
 
@@ -197,7 +197,7 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                     <div className="space-y-2" data-testid="hub-app">
                         <SectionHead title="अ‍ॅप" />
                         {settingsItems.map(it => (
-                            <RowLink key={it.id} testId={`hub-settings-${it.id}`} icon={it.icon} tone="stone" title={it.label} line={it.subtitle} onClick={() => onSelectExtra?.(it.id)} />
+                            <RowLink key={it.id} testId={`hub-settings-${it.id}`} icon={it.icon} tone="stone" title={it.label} line={it.subtitle} badge={it.badge} onClick={() => onSelectExtra?.(it.id)} />
                         ))}
                     </div>
                 )}

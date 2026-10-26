@@ -19,12 +19,19 @@ export function toVoiceDiaryLocale(lang: string | null | undefined): VoiceDiaryL
     return 'en-IN';
 }
 
+// spec: plr-d10-redesign-real-integration-2026-10-25 (I17, V-2) — one language at a time and one name
+// for the place. The `*En` second lines (an English copy printed under the Marathi one) and the doubled
+// "मराठी · English" button labels are gone; the page is called what the setup hub calls it, "आवाज नोंदी",
+// with no second line ("Voice Diary · सर्व नोंदी"). Its मागे comes from the shared title bar.
 export interface VoiceDiaryBundle {
     page: {
         title: string;
-        subtitle: string;
         refresh: string;
-        back: string;
+    };
+    /** The play button's spoken label (it was the English "Play" / "Pause" in every language). */
+    player: {
+        play: string;
+        pause: string;
     };
     retentionBanner: {
         grantedTitle: string;
@@ -35,23 +42,17 @@ export interface VoiceDiaryBundle {
     };
     emptyState: {
         headline: string;
-        headlineEn: string;
         body: string;
-        bodyEn: string;
         cta: string;
     };
     consentToggle: {
         title: string;
-        titleEn: string;
         helper: string;
-        helperEn: string;
         expand: string;
     };
     firstGrant: {
         headline: string;
-        headlineEn: string;
         body: string;
-        bodyEn: string;
         bullet1: string;
         bullet2: string;
         bullet3: string;
@@ -70,11 +71,8 @@ export interface VoiceDiaryBundle {
      */
     stopFutureConfirm: {
         headline: string;
-        headlineEn: string;
         body: string;
-        bodyEn: string;
         keptNote: string;
-        keptNoteEn: string;
         primaryCta: string;
         secondaryCta: string;
     };
@@ -127,10 +125,16 @@ export interface VoiceDiaryBundle {
 // -- mr-IN --------------------------------------------------------------
 const mr: VoiceDiaryBundle = {
     page: {
-        title: 'आवाजी डायरी',
-        subtitle: 'Voice Diary · सर्व नोंदी',
-        refresh: 'रिफ्रेश',
-        back: 'मागे',
+        // the setup hub row's own words (ProfilePage settingsMeta 'voice-diary') — one name for the place
+        title: 'आवाज नोंदी',
+        // PROPOSED (Marathi): plain words for the refresh button (it was the transliteration "रिफ्रेश").
+        refresh: 'नव्या नोंदी पाहा',
+    },
+    player: {
+        // PROPOSED (Marathi)
+        play: 'ऐका',
+        // PROPOSED (Marathi)
+        pause: 'थांबवा',
     },
     retentionBanner: {
         grantedTitle: 'आवाजी नोंदी खात्यात जतन करण्याची सोय सुरू आहे.',
@@ -141,39 +145,36 @@ const mr: VoiceDiaryBundle = {
     },
     emptyState: {
         headline: 'अजून आवाजी नोंदी नाहीत',
-        headlineEn: 'No voice notes yet',
-        body: 'आवाजी नोंदी खात्यात जतन करण्यासाठी सेटिंग्जमध्ये Full History Journal चालू करा.',
-        bodyEn: 'Turn on Full History Journal in Settings to allow saving of recordings to your account.',
-        cta: 'सेटिंग्ज उघडा · Open Settings',
+        // PROPOSED (Marathi): the switch now sits on this page — no "Settings", no English setting name.
+        body: 'आवाजी नोंदी खात्यात जतन करण्यासाठी खालचं "आवाज नोंदी जतन करून ठेवा" चालू करा.',
+        // the banner's own "चालू करा" (retentionBanner.deniedCta) — the doubled "· Open Settings" is gone
+        cta: 'चालू करा',
     },
     consentToggle: {
-        title: 'आवाजी नोंदी जतन करून ठेवा',
-        titleEn: 'Keep voice recordings saved',
+        // the गोपनीयता व संमती screen's words for the same consent (consentTranslations fullHistoryJournal.title)
+        title: 'आवाज नोंदी जतन करून ठेवा',
         helper: 'यामुळे नवीन आवाजी नोंदी खात्यात जतन करण्याची सोय सुरू होते. कधीही बंद करता येते — आधी जतन झालेल्या नोंदी तुम्ही मिटवेपर्यंत राहतील.',
-        helperEn: 'This turns on saving of new voice recordings to your account. You can turn off any time — recordings saved earlier stay until you erase them.',
         expand: '+ अधिक',
     },
     firstGrant: {
         headline: 'आवाजी नोंदी जतन करण्याची परवानगी',
-        headlineEn: 'Allow saving of voice recordings',
-        body: 'नवीन आवाजी नोंदी तुमच्या खात्यात जतन करण्याची सोय सुरू होईल. प्रत्येक नोंदीची जतन स्थिती डायरीत दिसेल. फक्त तुमच्या खात्यातूनच जतन झालेल्या नोंदी ऐकता येतील.',
-        bodyEn: 'Saving of new voice recordings to your account will be turned on. Each recording shows its own saving status in the diary. Only your account can play saved recordings back in the app.',
+        // PROPOSED (Marathi): "डायरीत" → the place's one name, "आवाज नोंदी" (V-2). The same old name still
+        // sits in the legal agreement and the consent screen's copy of it (consentTranslations): legal text,
+        // left for the founder.
+        body: 'नवीन आवाजी नोंदी तुमच्या खात्यात जतन करण्याची सोय सुरू होईल. प्रत्येक नोंदीची जतन स्थिती "आवाज नोंदी" मध्ये दिसेल. फक्त तुमच्या खात्यातूनच जतन झालेल्या नोंदी ऐकता येतील.',
         bullet1: 'प्रत्येक नोंदीची जतन स्थिती दिसते',
         bullet2: 'कधीही बंद करता येते',
         bullet3: 'तुम्ही नोंदी मिटवायला सांगू शकता',
-        primaryCta: 'मी सहमत आहे · I agree',
-        secondaryCta: 'नंतर / Not now',
+        primaryCta: 'मी सहमत आहे',
+        secondaryCta: 'नंतर',
         attestation: 'तुमची संमती नोंदवली जाते.',
     },
     stopFutureConfirm: {
         headline: 'यापुढे नवीन आवाजी नोंदी जतन करणे बंद करायचे?',
-        headlineEn: 'Stop saving new voice recordings?',
         body: 'यापुढच्या नवीन आवाजी नोंदी तुमच्या खात्यात जतन केल्या जाणार नाहीत. आधी जतन झालेल्या नोंदी राहतील.',
-        bodyEn: 'New voice recordings from now on will not be saved to your account. Recordings saved earlier will stay.',
         keptNote: 'आधी जतन झालेल्या नोंदी जशाच्या तशा राहतील. त्या मिटवायच्या असतील तर ती वेगळी कृती आहे.',
-        keptNoteEn: 'Recordings already saved stay as they are. Deleting them is a separate action.',
         primaryCta: 'होय, यापुढे साठवू नका',
-        secondaryCta: 'नको / Cancel',
+        secondaryCta: 'नको',
     },
     clipBadge: {
         pendingCloudSave: 'अजून जतन झाले नाही — फक्त या फोनमध्ये आहे',
@@ -191,8 +192,9 @@ const mr: VoiceDiaryBundle = {
         recorded: 'नोंदले',
     },
     dayHeading: {
-        countSingular: 'क्लिप',
-        countPlural: 'क्लिप',
+        // PROPOSED (Marathi): "नोंद / नोंदी" for the English loan word "क्लिप" (plain words on farmer screens).
+        countSingular: 'नोंद',
+        countPlural: 'नोंदी',
         empty: 'या दिवशी कोणत्याही नोंदी नाहीत',
     },
 };
@@ -200,10 +202,12 @@ const mr: VoiceDiaryBundle = {
 // -- en-IN --------------------------------------------------------------
 const en: VoiceDiaryBundle = {
     page: {
-        title: 'Voice Diary',
-        subtitle: 'All clips',
+        title: 'Voice notes',
         refresh: 'Refresh',
-        back: 'Back',
+    },
+    player: {
+        play: 'Play',
+        pause: 'Pause',
     },
     retentionBanner: {
         grantedTitle: 'Saving of voice recordings to your account is on.',
@@ -214,23 +218,17 @@ const en: VoiceDiaryBundle = {
     },
     emptyState: {
         headline: 'No voice notes yet',
-        headlineEn: 'No voice notes yet',
-        body: 'Turn on Full History Journal in Settings to allow saving of recordings to your account.',
-        bodyEn: 'Turn on Full History Journal in Settings to allow saving of recordings to your account.',
-        cta: 'Open Settings',
+        body: 'Turn on "Keep voice recordings saved" below to allow saving of recordings to your account.',
+        cta: 'Turn on',
     },
     consentToggle: {
         title: 'Keep voice recordings saved',
-        titleEn: 'Keep voice recordings saved',
         helper: 'This turns on saving of new voice recordings to your account. You can turn off any time — recordings saved earlier stay until you erase them.',
-        helperEn: 'This turns on saving of new voice recordings to your account. You can turn off any time — recordings saved earlier stay until you erase them.',
         expand: '+ more',
     },
     firstGrant: {
         headline: 'Allow saving of voice recordings',
-        headlineEn: 'Allow saving of voice recordings',
-        body: 'Saving of new voice recordings to your account will be turned on. Each recording shows its own saving status in the diary. Only your account can play saved recordings back in the app.',
-        bodyEn: 'Saving of new voice recordings to your account will be turned on. Each recording shows its own saving status in the diary. Only your account can play saved recordings back in the app.',
+        body: 'Saving of new voice recordings to your account will be turned on. Each recording shows its own saving status in "Voice notes". Only your account can play saved recordings back in the app.',
         bullet1: 'Each recording shows its saving status',
         bullet2: 'Turn off any time',
         bullet3: 'You can ask us to erase them',
@@ -240,11 +238,8 @@ const en: VoiceDiaryBundle = {
     },
     stopFutureConfirm: {
         headline: 'Stop saving new voice recordings?',
-        headlineEn: 'Stop saving new voice recordings?',
         body: 'New voice recordings from now on will not be saved to your account. Recordings saved earlier will stay.',
-        bodyEn: 'New voice recordings from now on will not be saved to your account. Recordings saved earlier will stay.',
         keptNote: 'Recordings already saved stay as they are. Deleting them is a separate action.',
-        keptNoteEn: 'Recordings already saved stay as they are. Deleting them is a separate action.',
         primaryCta: 'Yes, stop saving',
         secondaryCta: 'Cancel',
     },
