@@ -37,6 +37,13 @@ describe('buildRoleWelcome', () => {
         expect(w.jobs.find(j => j.icon === 'attendance')?.text).toBe('मालकाने परवानगी दिली की हजेरी घ्या');
     });
 
+    it('mukadam: the preview\'s "मालकाने दिलेली कामं पाहा" is NOT promised — the owner\'s planned work does not reach his phone (P5 cut)', () => {
+        const w = buildRoleWelcome('Mukadam', 'पवार मळा', 'mr');
+        expect(w.jobs.map(j => j.text)).toEqual(['झालेलं काम बोलून सांगा', 'मालकाने परवानगी दिली की हजेरी घ्या']);
+        expect(w.jobs.map(j => j.text).join(' ')).not.toMatch(/दिलेली कामं/);
+        expect(w.jobs.map(j => j.icon)).not.toContain('plan');
+    });
+
     it('worker: no work list he does not have, and the typing route', () => {
         const w = buildRoleWelcome('Worker', 'पवार मळा', 'mr');
         expect(w.jobs.map(j => j.text)).toEqual(['काम झालं की बोलून सांगा', 'हाताने लिहूनही सांगता येतं']);

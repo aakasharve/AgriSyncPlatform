@@ -12,6 +12,13 @@
  *   - owner "कामं ठरवा आणि सोपवा": assigning work to a person is not built (PLR-D6) → "कामं ठरवा";
  *   - mukadam "रोज हजेरी घ्या": attendance opens only when the owner has granted it
  *     (`features/labour/attendanceDoor.ts`) → said with that condition;
+ *   - mukadam "मालकाने दिलेली कामं पाहा" (preview HELLO.planner, third line): CUT, P5 (round-2 review
+ *     FR-7-mukadam-line). Work the owner plans never reaches another phone today: `handleSaveTask`
+ *     keeps a planned task on the owner's own phone only (`app/hooks/useAppData.ts`, "TODO:
+ *     dataSource.tasks.save"; stored in that phone's `appMeta`), a log pulled from the server arrives
+ *     with `plannedTasks: []` (`features/sync/pull/reconcilers/logsReconciler.ts`), and the server's
+ *     planned activities that sync into `db.plannedTasks` are read by no screen. A mukadam would open
+ *     an empty list. It comes back when PLR-D6 (assign and plan work) syncs tasks between phones;
  *   - worker "आजचं तुमचं काम इथे दिसेल": no per-worker work list exists yet → not promised;
  *   - "प्लॉट: …": plot scope is not real until PLR-D7 → never shown;
  *   - an adviser role (not in the preview) gets the farm and the role, and no list.
