@@ -115,12 +115,14 @@ const ManualEntryHeader: React.FC<ManualEntryHeaderProps> = ({
             <div className="px-4 py-2 flex justify-between items-center text-xs text-slate-500 bg-slate-50/50 border-b border-slate-100 mb-4 mx-4 rounded-b-xl -mt-2 pt-4">
                 <div className="flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Logging as: <strong className="text-slate-700">{profile.operators.find(op => op.id === profile.activeOperatorId)?.name || 'Unknown'}</strong></span>
+                    {/* PLR-D10 I13 (LP-27) — Marathi only: "कोणी" (the feed card's word) and the approved "अज्ञात". */}
+                    <span>कोणी: <strong className="text-slate-700">{profile.operators.find(op => op.id === profile.activeOperatorId)?.name || 'अज्ञात'}</strong></span>
                 </div>
                 {selectedLogId && (
                     <div className="flex items-center gap-1.5 bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-100">
                         <Edit3 className="w-3 h-3" />
-                        <span>Editing Log by: <strong>{profile.operators.find(op => op.id === todayLogs.find(l => l.id === selectedLogId)?.meta?.createdByOperatorId)?.name || 'Unknown'}</strong></span>
+                        {/* PROPOSED (Marathi) "कोणी सांगितलं" (the preview's whoSaid). */}
+                        <span>कोणी सांगितलं: <strong>{profile.operators.find(op => op.id === todayLogs.find(l => l.id === selectedLogId)?.meta?.createdByOperatorId)?.name || 'अज्ञात'}</strong></span>
                     </div>
                 )}
             </div>
@@ -153,10 +155,11 @@ const ManualEntryHeader: React.FC<ManualEntryHeaderProps> = ({
                             </div>
                             <div>
                                 <h3 className="font-bold text-sm uppercase tracking-wider text-amber-700">
-                                    Fixing Past Record
+                                    {/* PROPOSED (Marathi) — "दुरुस्ती" / "बदल यातच जतन होतील". */}
+                                    दुरुस्ती
                                 </h3>
                                 <p className="text-[10px] text-stone-400 font-medium">
-                                    Changes will update this log
+                                    बदल यातच जतन होतील
                                 </p>
                             </div>
                         </div>
@@ -165,7 +168,8 @@ const ManualEntryHeader: React.FC<ManualEntryHeaderProps> = ({
                             onClick={onCancelEdit}
                             className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-bold transition-colors"
                         >
-                            Cancel Edit
+                            {/* the approved "रद्द करा" (common.cancel) */}
+                            रद्द करा
                         </button>
                     </div>
                 )}
