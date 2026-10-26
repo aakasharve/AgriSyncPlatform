@@ -15,6 +15,9 @@
  *
  *     सगळ्या शेती आज व्यवस्थित आहेत  /  All your farms are on track today
  *
+ * (That sentence is now gone altogether — founder D-1, 2026-10-26: the empty board says
+ * "सध्या लक्ष देण्यासारखे काही नाही." — but the same gate still applies to the new words.)
+ *
  * A farmer who is told his farms are fine does not go and look. That is the
  * whole cost of this one.
  *
@@ -59,7 +62,12 @@ const fakeDb = {
 
 import AttentionPage from '../AttentionPage';
 
-const FALSE_REASSURANCE = 'सगळ्या शेती आज व्यवस्थित आहेत';
+// spec: plr-d10 (I14) — founder D-1 (FOUNDER-ANSWERS-2026-10-26): the empty board says "सध्या लक्ष देण्यासारखे
+// काही नाही." in his words; the old crop-health sentence is rejected by name ("an empty action list cannot prove
+// crop health"), so it must never appear in EITHER state. The honesty gate this file locks is unchanged: on a
+// never-synced board even the new sentence would be a false reassurance.
+const FALSE_REASSURANCE = 'सध्या लक्ष देण्यासारखे काही नाही.';
+const REJECTED_CROP_HEALTH = 'सगळ्या शेती आज व्यवस्थित आहेत';
 const FALSE_REASSURANCE_EN = 'All your farms are on track today';
 const ERROR_LABEL = 'माहिती आणता आली नाही';
 const RETRY_LABEL = 'पुन्हा प्रयत्न करा';
@@ -84,6 +92,7 @@ describe('AttentionPage — a never-succeeded sync is not "all your farms are on
         // The falsehood itself, in both languages it was spoken in.
         expect(screen.queryByText(FALSE_REASSURANCE)).toBeNull();
         expect(screen.queryByText(FALSE_REASSURANCE_EN)).toBeNull();
+        expect(screen.queryByText(REJECTED_CROP_HEALTH)).toBeNull();
     });
 
     it('a sync HAS succeeded and the board is genuinely empty: still shows the true all-clear, no banner', async () => {
@@ -95,6 +104,8 @@ describe('AttentionPage — a never-succeeded sync is not "all your farms are on
         // spec: plr-d10 (I14, H14) — the page is Marathi only now: the English twin line is gone (no doubled
         // labels). The TRUE all-clear itself is unchanged, which is what this test protects.
         expect(screen.queryByText(FALSE_REASSURANCE_EN)).toBeNull();
+        // founder D-1: nothing to act on is NOT "all your farms are fine"
+        expect(screen.getByTestId('attention-page').textContent).not.toContain('व्यवस्थित');
         expect(screen.queryByText(ERROR_LABEL)).toBeNull();
         expect(screen.queryByText(RETRY_LABEL)).toBeNull();
     });

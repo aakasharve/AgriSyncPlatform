@@ -13,6 +13,7 @@
  * The board's honesty rules are kept exactly (Task 8 / 8b): a board that was never synced shows the error
  * banner and a retry that re-runs the sync — never the all-clear; a true all-clear says when it is from.
  * One addition: while late to-dos are on the page, the all-clear sentence is not shown above them.
+ * The all-clear says only that nothing needs his attention now (founder D-1), never that the farm is fine.
  */
 import React, { useCallback, useMemo } from 'react';
 import { CheckCircle2 } from 'lucide-react';
@@ -112,10 +113,15 @@ const AttentionPage: React.FC<AttentionPageProps> = ({ onBack, onGo, hiddenViews
          */
         board = <LoadErrorBanner onRetry={refresh} compact />;
     } else if (cards.length === 0) {
+        /*
+         * The founder's own words (D-1, FOUNDER-ANSWERS-2026-10-26): "सध्या लक्ष देण्यासारखे काही नाही." — and
+         * never "सगळी शेती व्यवस्थित आहे": an empty action list cannot prove crop health. The honesty gates
+         * above and the as-of stamp below are unchanged.
+         */
         board = lateTodos.length > 0 ? null : (
             <GlassCard testId="attention-all-clear">
                 <p className="m-0 flex items-center gap-2 text-[16px] font-extrabold text-emerald-800">
-                    <CheckCircle2 size={20} aria-hidden="true" />सगळ्या शेती आज व्यवस्थित आहेत
+                    <CheckCircle2 size={20} aria-hidden="true" />सध्या लक्ष देण्यासारखे काही नाही.
                 </p>
                 {/* TASK 8b — the all-clear says WHEN it is from (a day-old pull must not read as today). */}
                 {stamp && <p className="m-0 mt-1 text-[13px] font-semibold text-stone-500" data-testid="attention-as-of">{stamp}</p>}
