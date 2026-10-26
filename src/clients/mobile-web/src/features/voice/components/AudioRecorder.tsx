@@ -1,14 +1,23 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
-*/
+ *
+ * The batch (MediaRecorder) recorder. HOW audio is captured and handed on is unchanged: one
+ * MediaRecorder on the mic stream, chunks -> one audio/webm Blob -> base64 -> `onAudioCaptured`,
+ * auto-stop at 60 s, cancel empties the chunks (the clip is discarded).
+ *
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I12, LP-04, LP-06) — what it SHOWS is the
+ * founder-approved mic (`recorder/RecorderFace`): his sentence on the idle card, "ऐकत आहे" with a
+ * LIVE level meter (an AnalyserNode that only listens to this same stream), the stop hint after 10 s,
+ * cancel set apart, and the quiet "type instead" way in (same `onTextCaptured` parse as before).
+ */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Mic, Square, AlertCircle, ArrowUp, X } from 'lucide-react';
 import { AudioData } from '../../../types';
-import { useLanguage } from '../../../i18n/LanguageContext';
-import { hapticFeedback } from '../../../shared/utils/haptics';
 import { acquireMicStream } from '../../../infrastructure/voice/acquireMicStream';
+import { useMicLevel } from '../hooks/useMicLevel';
+import RecorderFace from './recorder/RecorderFace';
+import { REC_WORDS, readableError } from './recorder/recorderWords';
 
 interface AudioRecorderProps {
   onAudioCaptured: (audioData: AudioData) => void;
@@ -18,30 +27,54 @@ interface AudioRecorderProps {
   transcript?: string;
   suggestInteraction?: boolean;
   onRequestContextSelection?: () => void;
+  /** Told when the mic starts / stops listening (the entry flow hides its choices meanwhile). */
+  onRecordingChange?: (recording: boolean) => void;
+  /** The real hand-filled form, offered quietly in the typing sheet. */
+  onOpenForm?: () => void;
 }
 
-const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCaptured, disabled, externalError, transcript, suggestInteraction, onRequestContextSelection }) => {
-  const { t } = useLanguage();
+const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCaptured, disabled, externalError, transcript, suggestInteraction, onRequestContextSelection, onRecordingChange, onOpenForm }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
+  // I12-V1-m3 — the mic's own failure, in Marathi whatever the app language; its technical cause
+  // (`internalErrorCode`) is kept apart and never shown as words.
   const [internalError, setInternalError] = useState<string | null>(null);
+  const [internalErrorCode, setInternalErrorCode] = useState<string | null>(null);
+  // I12 — the open mic stream, ONLY so the level meter can listen to it; and two facts the face needs.
+  const [liveStream, setLiveStream] = useState<MediaStream | null>(null);
+  const [micRefused, setMicRefused] = useState(false);
+  const [lastInputTyped, setLastInputTyped] = useState(false);
+  const level = useMicLevel(isRecording ? liveStream : null);
 
-  // Combine errors: External (from AI) takes precedence if present, otherwise internal (mic permission)
-  const displayError = externalError || internalError;
+  // Combine errors: External (from AI) takes precedence if present, otherwise internal (mic permission).
+  // An English message from the parse service is shown as plain Marathi (no English on this screen).
+  const displayError = externalError ? readableError(externalError) : internalError;
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  // I12 — a cancelled recording must never be sent. MediaRecorder.stop() fires one LAST
+  // `dataavailable` (with everything recorded, when no timeslice is used) and only then `stop`,
+  // so emptying the chunks before stop() did not discard anything: the clip was still emitted.
+  // The streaming recorder already guards with the same flag.
+  const cancelledRef = useRef(false);
+
+  const recordingChangeRef = useRef(onRecordingChange);
+  recordingChangeRef.current = onRecordingChange;
+  useEffect(() => { recordingChangeRef.current?.(isRecording); }, [isRecording]);
 
   const startRecording = useCallback(async () => {
     setInternalError(null);
+    setInternalErrorCode(null);
+    setMicRefused(false);
 
     // Platform / secure-context guard: navigator.mediaDevices is undefined in insecure
     // contexts and some WebViews; without this it surfaces as a confusing generic
     // "permission" error even though it's really a context/availability problem.
     if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
-      setInternalError(`${t('voice.micError')} [no-mediaDevices]`);
+      setInternalError(REC_WORDS.micError);
+      setInternalErrorCode('no-mediaDevices');
       return;
     }
 
@@ -52,6 +85,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
+      cancelledRef.current = false;
 
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
@@ -62,6 +96,10 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
       mediaRecorder.onstop = () => {
         // VOICE_LATENCY_PIPELINE_V2 perf instrumentation (Step 4) — batch path.
         try { performance.mark('voice:processing-start'); } catch { /* observability-only */ }
+        if (cancelledRef.current) {
+          // Cancel path: drop the recording, do not emit (the clip is discarded).
+          chunksRef.current = [];
+        }
         if (chunksRef.current.length > 0) {
           const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
           const reader = new FileReader();
@@ -87,10 +125,13 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
           streamRef.current.getTracks().forEach(track => track.stop());
           streamRef.current = null;
         }
+        setLiveStream(null);
       };
 
       mediaRecorder.start();
       setIsRecording(true);
+      setLastInputTyped(false);
+      setLiveStream(stream);
 
       // Timer
       const startTime = Date.now();
@@ -111,25 +152,23 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
       }, 1000);
 
     } catch (err) {
-      // Surface the precise failure code — on-device there is no console, so the
-      // bracketed name is the only way to distinguish denied (NotAllowedError) from
+      // Keep the precise failure code — it distinguishes denied (NotAllowedError) from
       // mic-busy (NotReadableError), no-device (NotFoundError) or recorder/codec
-      // (NotSupportedError). Remove the suffix once the root cause is confirmed.
+      // (NotSupportedError). I12-V1-m3: no longer appended to the farmer's words (no English
+      // on this screen); it rides on the error box as `data-error-code` and in the console.
       const name = (err as { name?: string })?.name || 'Error';
       console.error("Error accessing microphone:", err);
 
       // spec: dfes-companion-2026-07-11 (wave-4.3) — REFUSING THE MICROPHONE MUST NOT
-      // BLOCK MANUAL ENTRY. The typing form below has always stayed mounted and enabled
-      // through a mic failure, but the message did not say so, and a farmer reading only
-      // "microphone error" reasonably concludes the app is now useless to him. A route
-      // that exists but is not visible is not a route. Also: a denial is an OS decision,
-      // never a withdrawal of consent — nothing here touches the consent record.
-      setInternalError(
-        name === 'NotAllowedError'
-          ? t('voice.micDeniedTypeInstead')
-          : `${t('voice.micError')} [${name}]`);
+      // BLOCK MANUAL ENTRY. The typing way in has always stayed available through a mic
+      // failure, and the message says so; I12 also lifts the "type instead" line to full
+      // strength, because it is now the way in. A denial is an OS decision, never a
+      // withdrawal of consent — nothing here touches the consent record.
+      setMicRefused(name === 'NotAllowedError');
+      setInternalError(name === 'NotAllowedError' ? REC_WORDS.micDenied : REC_WORDS.micError);
+      setInternalErrorCode(name);
     }
-  }, [onAudioCaptured, t]);
+  }, [onAudioCaptured]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
@@ -147,6 +186,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
 
   const cancelRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
+      cancelledRef.current = true;
       chunksRef.current = [];
       mediaRecorderRef.current.stop();
       setIsRecording(false);
@@ -168,184 +208,30 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
     };
   }, []);
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  const sendTyped = useCallback((text: string) => {
+    setLastInputTyped(true);
+    onTextCaptured?.(text);
+  }, [onTextCaptured]);
 
   return (
-    <div
-      className="flex flex-col items-center justify-center p-10 bg-white/80 backdrop-blur-2xl rounded-[3rem] shadow-2xl shadow-emerald-100/50 mb-[-2rem] pb-24 relative z-0 border-t border-white/60 overflow-hidden"
-      style={{
-        maskImage: 'radial-gradient(circle at 50% 100%, transparent 40px, black 40.5px)',
-        WebkitMaskImage: 'radial-gradient(circle at 50% 100%, transparent 40px, black 40.5px)'
-      }}
-    >
-      {/* LOCKED STATE OVERLAY */}
-      {disabled && (
-        <div
-          className="absolute inset-0 z-50 flex flex-col items-center justify-start pt-12 cursor-pointer transition-all duration-300 animate-in fade-in"
-          onClick={onRequestContextSelection}
-        >
-          <div className="absolute top-4 animate-bounce text-emerald-600">
-            <ArrowUp size={48} strokeWidth={2.5} />
-          </div>
-
-          <div className="bg-white/90 backdrop-blur-md p-6 rounded-3xl shadow-xl mt-8 border border-emerald-100 max-w-[280px] text-center transform hover:scale-105 transition-transform">
-            <p className="text-lg font-black text-slate-800 leading-snug">
-              {t('voice.selectCropFirst')}
-            </p>
-            <p className="text-xs text-emerald-600 font-bold uppercase tracking-wider mt-3">
-              {t('voice.tapToSelect')}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* MAIN CONTENT WRAPPER - BLURS WHEN DISABLED */}
-      <div className={`flex flex-col items-center w-full transition-all duration-500 ${disabled ? 'blur-md opacity-30 pointer-events-none grayscale' : ''}`}>
-
-        {/* MIC ICON - CLICK TO START */}
-        <div className="relative mb-8">
-          {/* WAVE ANIMATION for User Suggestion */}
-          {suggestInteraction && !isRecording && (
-            <>
-              <div className="absolute inset-0 rounded-full border-4 border-emerald-500/30 opacity-100 animate-ping" style={{ animationDuration: '2s' }}></div>
-              <div className="absolute -inset-6 rounded-full border-2 border-emerald-600/20 opacity-40 animate-pulse"></div>
-            </>
-          )}
-
-          <button
-            onClick={isRecording ? stopRecording : (!disabled ? startRecording : onRequestContextSelection)}
-            disabled={false} // Clickable for interaction guidance
-            className={`relative flex items-center justify-center w-32 h-32 rounded-full transition-all duration-500 outline-none z-10 group
-              ${disabled
-                ? 'bg-stone-200 cursor-not-allowed shadow-none grayscale opacity-70 ring-4 ring-stone-100' // LOCKED STATE
-                : isRecording
-                  ? 'bg-gradient-to-br from-rose-500 to-red-600 scale-110 shadow-red-500/50 shadow-2xl ring-4 ring-rose-200'
-                  : suggestInteraction
-                    ? 'bg-gradient-to-br from-emerald-500 to-emerald-700 scale-110 shadow-2xl shadow-emerald-500/40 ring-4 ring-emerald-500/20'
-                    : 'bg-gradient-to-br from-emerald-400 to-emerald-600 hover:scale-105 shadow-emerald-500/30 shadow-xl cursor-pointer ring-4 ring-transparent hover:ring-emerald-200'
-              }
-            `}
-            aria-label={isRecording ? "Stop Recording" : disabled ? "Select a Plot First" : "Start Recording"}
-          >
-            {/* GLOSS EFFECT OVERLAY (Top Shine) - Hide if disabled */}
-            {!disabled && <div className="absolute inset-x-4 top-2 h-1/2 bg-gradient-to-b from-white/40 to-transparent rounded-full opacity-80 pointer-events-none"></div>}
-
-            {/* Inner Shadow / Depth */}
-            <div className="absolute inset-0 rounded-full shadow-inner opacity-30 pointer-events-none mix-blend-multiply"></div>
-
-            {isRecording && (
-              <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-20 animate-ping"></span>
-            )}
-            {isRecording ? (
-              <div className="text-white drop-shadow-md">
-                <Square size={36} fill="currentColor" className="animate-pulse" />
-              </div>
-            ) : (
-              <div className={`text-white drop-shadow-md transform transition-transform group-hover:scale-110 ${disabled ? 'opacity-50' : ''}`}>
-                <Mic size={48} className={suggestInteraction ? 'animate-bounce-subtle' : ''} />
-              </div>
-            )}
-          </button>
-        </div>
-
-        {isRecording && (
-          <button
-            type="button"
-            onClick={() => {
-              hapticFeedback.medium();
-              cancelRecording();
-            }}
-            className="mb-4 flex items-center gap-2 rounded-full border border-rose-200 bg-rose-50 px-6 py-2.5 text-sm font-bold text-rose-600 active:scale-95 transition-all duration-150"
-          >
-            <X size={14} strokeWidth={2.5} />
-            {t('voice.discardRecording')}
-          </button>
-        )}
-
-        <div className="text-center mb-6 w-full">
-          {isRecording ? (
-            <div>
-              <h3 className="text-2xl font-bold text-stone-800 mb-2">{t('logPage.listening')}</h3>
-              <p className="text-6xl font-mono font-medium text-emerald-700 tracking-wider tabular-nums">{formatTime(duration)}</p>
-            </div>
-          ) : (
-            <div>
-              <h3 className="text-2xl font-bold text-stone-800">{t('voice.startLogging')}</h3>
-              <p className="text-stone-400 text-lg mt-2 mb-4">{t('voice.tapToSpeak')}</p>
-            </div>
-          )}
-        </div>
-
-        {/* ERROR DISPLAY */}
-        {displayError && (
-          <div className="flex flex-col items-center w-full mb-6 animate-in slide-in-from-top-2">
-            <div className="bg-red-50 text-red-700 px-6 py-4 rounded-xl text-center font-medium border border-red-100 shadow-sm w-full">
-              <div className="flex items-center justify-center gap-2 mb-1">
-                <AlertCircle size={20} />
-                <span className="font-bold">{t('voice.checkInput')}</span>
-              </div>
-              {displayError}
-            </div>
-
-            {/* TRANSCRIPT DISPLAY FOR ERROR CONTEXT */}
-            {transcript && (
-              <div className="mt-3 w-full bg-stone-50 border border-stone-200 rounded-lg p-3 text-stone-600 italic text-sm text-center">
-                "{transcript}"
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TEXT INPUT FALLBACK (New Requirement) */}
-        {!isRecording && (
-          <div className="w-full mt-2 animate-in fade-in slide-in-from-bottom-2">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (disabled) return; // Prevent submission if disabled
-                const input = (e.currentTarget.elements.namedItem('textInput') as HTMLInputElement);
-                const text = input.value.trim();
-                if (text && onTextCaptured) {
-                  onTextCaptured(text);
-                  input.value = '';
-                }
-              }}
-              className={`relative group transition-opacity duration-300 ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
-            >
-              <input
-                name="textInput"
-                type="text"
-                disabled={disabled}
-                placeholder={disabled ? t('voice.selectPlotAbove') : t('voice.orTypeHere')}
-                className="w-full bg-slate-100/50 backdrop-blur-sm border border-slate-200 text-slate-700 font-medium px-4 py-3.5 rounded-xl shadow-inner outline-none focus:ring-2 focus:ring-emerald-400 focus:bg-white transition-all text-center placeholder:text-slate-400 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed"
-              />
-              <button
-                type="submit"
-                disabled={disabled}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-emerald-500 text-white rounded-lg opacity-0 group-focus-within:opacity-100 transition-opacity shadow-lg scale-90 active:scale-95 disabled:bg-stone-400"
-              >
-                <ArrowUp size={18} strokeWidth={3} />
-              </button>
-            </form>
-          </div>
-        )}
-
-        {isRecording && duration >= 50 && (
-          <div className="animate-pulse text-amber-600 font-bold mb-4 text-center">
-            {t('voice.autoStopping').replace('{seconds}', String(60 - duration))}
-          </div>
-        )}
-
-        {/* FOOTER BUTTON REMOVED - Using Mic Icon Interaction */}
-        {isRecording && (
-          <p className="text-stone-400 text-sm animate-pulse">{t('voice.tapToStop')}</p>
-        )}
-      </div>
-    </div>
+    <RecorderFace
+      isRecording={isRecording}
+      seconds={duration}
+      level={level}
+      disabled={disabled}
+      suggest={suggestInteraction}
+      error={displayError}
+      errorCode={externalError ? null : internalErrorCode}
+      transcript={transcript}
+      lastInputTyped={lastInputTyped}
+      micRefused={micRefused}
+      onStart={() => { void startRecording(); }}
+      onStop={stopRecording}
+      onCancel={cancelRecording}
+      onRequestContextSelection={onRequestContextSelection}
+      onTextCaptured={onTextCaptured ? sendTyped : undefined}
+      onOpenForm={onOpenForm}
+    />
   );
 };
 

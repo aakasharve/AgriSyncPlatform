@@ -1,0 +1,55 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I12, PLR-D5) — every word the mic card says.
+ *
+ * Plain Marathi only, whatever the app's language (founder rule 2026-10-25: no English on the
+ * farmer's log screens). Three kinds, kept apart on purpose:
+ *   - the FOUNDER'S OWN words (2026-10-24, kept exactly as he said them);
+ *   - EXISTING approved strings from `i18n/translations.ts` (read with `t(key, 'mr')`);
+ *   - PROPOSED words, each marked `// PROPOSED (Marathi)`, shown in the preview but not yet ruled.
+ */
+import { t } from '../../../../i18n/translations';
+
+/** The founder's own sentence for the idle mic (2026-10-24). It replaces "नोंद सुरू करा" on this screen. */
+export const MIC_INSTRUCTION = 'हिरव्या रंगाचा माइक चे बटन एकदा दाबून बोलायला सुरवात करा';
+
+export const REC_WORDS = {
+    /** The founder's own words for cancel (PLR-D5, set well apart from stop). */
+    cancel: 'काही चुकीचे बोलले गेले असेल तर रद्द करा',
+    /** The founder's own text, with standard spelling and full stops (MicRecorderUI, 2026-10-24). */
+    stopHint: 'सर्व कामे व्यवस्थित सांगून झाली असतील तरच लाल बटन दाबा. तोपर्यंत सविस्तर बोलत राहा. श्रम सफल तुमचे शेत अजून नीट समजून घेऊ शकतो.',
+    // PROPOSED (Marathi) — dismisses the stop hint.
+    gotIt: 'समजलं',
+    // PROPOSED (Marathi) — said for a moment after cancel, so he knows the recording is gone.
+    cancelled: 'बोलणं रद्द केलं',
+    // PROPOSED (Marathi) — shown instead of an English error from the parse service.
+    genericError: 'काहीतरी चुकलं. पुन्हा बोलून पाहा किंवा लिहून सांगा.',
+    /** Existing approved strings. */
+    listening: t('logPage.listening', 'mr'),
+    tapToStop: t('voice.tapToStop', 'mr'),
+    checkInput: t('voice.checkInput', 'mr'),
+    selectCropFirst: t('voice.selectCropFirst', 'mr'),
+    autoStopping: (secondsLeft: number) => t('voice.autoStopping', 'mr').replace('{seconds}', String(secondsLeft)),
+    /**
+     * The mic's OWN failures, in Marathi whatever the app language (I12-V1-m3). The technical cause
+     * (NotReadableError, no-mediaDevices, ...) is NOT appended to the words any more: it travels on
+     * the error box as `data-error-code` and in the console, where a diagnosis can read it.
+     */
+    micError: t('voice.micError', 'mr'),
+    micDenied: t('voice.micDeniedTypeInstead', 'mr'),
+} as const;
+
+/** The stop hint appears after this many seconds of speaking and stays this long unless dismissed. */
+export const STOP_HINT_AFTER_SEC = 10;
+export const STOP_HINT_FOR_SEC = 16;
+/** The recorder stops by itself at 60 s (unchanged); the countdown shows from here. */
+export const AUTO_STOP_WARN_SEC = 50;
+export const AUTO_STOP_SEC = 60;
+
+const DEVANAGARI = /[ऀ-ॿ]/;
+/** An error the farmer can read: Marathi as it is, anything else replaced by the plain Marathi line. */
+export const readableError = (message: string): string => (DEVANAGARI.test(message) ? message : REC_WORDS.genericError);
+
+export const formatClock = (s: number): string => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
