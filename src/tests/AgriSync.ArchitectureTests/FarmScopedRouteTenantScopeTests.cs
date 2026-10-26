@@ -45,6 +45,26 @@ public sealed class FarmScopedRouteTenantScopeTests
     private static readonly string[] FarmScopedEndpointFiles =
     {
         Path.Combine("ShramSafal", "ShramSafal.Api", "Endpoints", "FarmEndpoints.cs"),
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the membership routes (invite QR, rotate,
+        // self-exit, labour permissions) are farm-keyed too.
+        Path.Combine("ShramSafal", "ShramSafal.Api", "Endpoints", "MembershipEndpoints.cs"),
+    };
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the ONE farm-keyed route whose lambda does
+    /// not establish the scope itself, and why that is still a scoped route: self-exit's handler
+    /// establishes the RELATIONSHIP scope (a pending request or a paused seat must always be able
+    /// to leave, and the Active-only access scope would refuse them). The handler file must carry
+    /// that call, so deleting it there still turns this test red. Not a skip-list: every entry
+    /// names the exact route, the exact file and the exact call.
+    /// </summary>
+    private static readonly (string Route, string HandlerFile, string ScopeCall)[] ScopeEstablishedInHandler =
+    {
+        (
+            "/farms/{farmId:guid}/memberships/self-exit",
+            Path.Combine("ShramSafal", "ShramSafal.Application", "UseCases", "Memberships", "ExitMembership", "ExitMembershipHandler.cs"),
+            "EstablishRelationshipForCallerAsync"
+        ),
     };
 
     [Fact]
@@ -84,10 +104,24 @@ public sealed class FarmScopedRouteTenantScopeTests
                 var nextIndex = text.IndexOf("group.Map", start + match.Length, StringComparison.Ordinal);
                 var body = nextIndex < 0 ? text[start..] : text[start..nextIndex];
 
-                if (!body.Contains("EstablishForCallerAsync", StringComparison.Ordinal))
+                if (body.Contains("EstablishForCallerAsync", StringComparison.Ordinal))
                 {
-                    unscoped.Add($"{relative}: {match.Groups["verb"].Value} {match.Groups["route"].Value}");
+                    continue;
                 }
+
+                var route = match.Groups["route"].Value;
+                var inHandler = ScopeEstablishedInHandler.SingleOrDefault(a => a.Route == route);
+                if (inHandler.Route is not null)
+                {
+                    var handlerPath = Path.Combine(appsRoot, inHandler.HandlerFile);
+                    Assert.True(File.Exists(handlerPath), $"Handler file not found at {handlerPath}.");
+                    if (File.ReadAllText(handlerPath).Contains(inHandler.ScopeCall, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+                }
+
+                unscoped.Add($"{relative}: {match.Groups["verb"].Value} {route}");
             }
         }
 

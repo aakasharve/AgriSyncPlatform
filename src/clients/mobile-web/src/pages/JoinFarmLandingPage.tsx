@@ -15,7 +15,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, ArrowRight, Phone, MessageCircleMore, Leaf } from 'lucide-react';
-import { parseJoinPayload, type JoinRole } from '../features/onboarding/qr/qrTokenClient';
+import { parseJoinPayload } from '../features/onboarding/qr/qrTokenClient';
 import { recordJoinAttempt } from '../features/onboarding/qr/farmInviteStore';
 import { setAuthSession } from '../infrastructure/storage/AuthTokenStore';
 import { setRememberDevice } from '../infrastructure/storage/RememberDeviceStore';
@@ -25,7 +25,10 @@ import { claimFarmJoin, getMyFarms, isInviteApiError, type ClaimResponse } from 
 import { agriSyncClient } from '../infrastructure/api/AgriSyncClient';
 import { useOptionalAuth } from '../app/providers/AuthProvider';
 import { useUiPref } from '../shared/hooks/useUiPref';
-import { getRoleLabel } from '../shared/roles/roleLabels';
+import { getOperatorRoleLabel } from '../shared/roles/roleLabels';
+import { isActiveSeat } from '../core/session/seatStatus';
+import { JOIN_BY_CODE_COPY } from '../features/onboarding/components/JoinByCodeScreen';
+import { waitingSeatKind } from '../features/onboarding/components/PendingJoinRequests';
 import { useLanguage } from '../i18n/LanguageContext';
 // spec: plr-d10-x1-consent-tick-on-phone-screen-2026-10-25 (X1) — a QR deep link used to
 // skip consent entirely: this page sent the number (startOtp) and verified it with no
@@ -35,23 +38,17 @@ import { useConsentBeforeOtp } from '../features/consent/gate/useConsentBeforeOt
 
 type Step = 'phone' | 'otp' | 'done' | 'invalid' | 'checking' | 'revoked';
 
+/**
+ * spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — NO role here. A link's `role=` (or a QR
+ * payload's `r=`) used to be shown as "you are joining as <role>", but the server never
+ * honours it (ClaimJoinHandler decides the seat), so the page claimed something it could not
+ * enforce (doctrine P5). The only role this page shows is the one the SERVER answered.
+ */
 interface JoinContext {
     token: string;
     farmCode: string;
-    proposedRole: JoinRole;
     farmName: string;
 }
-
-const ROLE_LABEL_MR: Record<JoinRole, string> = {
-    Worker: getRoleLabel('Worker').mr,
-    Mukadam: getRoleLabel('Mukadam').mr,
-    SecondaryOwner: getRoleLabel('SecondaryOwner').mr,
-};
-const ROLE_LABEL_EN: Record<JoinRole, string> = {
-    Worker: getRoleLabel('Worker').en,
-    Mukadam: getRoleLabel('Mukadam').en,
-    SecondaryOwner: getRoleLabel('SecondaryOwner').en,
-};
 
 /**
  * Joins this page has SERVER-CONFIRMED, by QR token. The (single-use) token
@@ -91,16 +88,11 @@ const readJoinContextFromUrl = (): JoinContext | null => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('join');
     const farmCode = params.get('farm');
-    const roleParam = params.get('role') as JoinRole | null;
-    const role: JoinRole = roleParam && ['Worker', 'Mukadam', 'SecondaryOwner'].includes(roleParam)
-        ? roleParam
-        : 'Worker';
 
     if (token && farmCode) {
         return {
             token,
             farmCode,
-            proposedRole: role,
             farmName: 'Your farm',
         };
     }
@@ -112,7 +104,6 @@ const readJoinContextFromUrl = (): JoinContext | null => {
             return {
                 token: parsed.token,
                 farmCode: parsed.farmCode,
-                proposedRole: parsed.proposedRole ?? 'Worker',
                 farmName: 'Your farm',
             };
         }
@@ -132,12 +123,16 @@ const clearJoinParamsFromUrl = () => {
     }
 };
 
-/** Server truth: does /farms/mine list this farm? `null` = the server could not be asked. */
+/**
+ * Server truth: does /farms/mine list this farm AS ONE HE IS IN? `null` = the server could not be
+ * asked. spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — /farms/mine also lists a typed-code
+ * request still waiting for the owner; that is not membership, so only an Active seat counts.
+ */
 const askServerIfMember = async (match: { farmId?: string; farmCode?: string }): Promise<
     { name: string; role: string; farmId: string } | false | null
 > => {
     try {
-        const mine = await getMyFarms();
+        const mine = (await getMyFarms()).filter(isActiveSeat);
         const hit = mine.find(f =>
             (match.farmId !== undefined && f.farmId === match.farmId)
             || (match.farmCode !== undefined && f.farmCode === match.farmCode));
@@ -381,7 +376,11 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
             // The claim answered 200 (server truth). Cross-check it against the
             // server's own membership list: if that list ANSWERS and omits the
             // farm, this is not a join - fall to the failure/retry path below.
-            const listed = await askServerIfMember({ farmId: claim.farmId });
+            // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, F3) — unless the claim itself
+            // says the seat is NOT Active (an earlier typed-code request still waiting for
+            // the owner): that is an honest answer, shown as "waiting", not as a failure
+            // and never as "joined".
+            const listed = isActiveSeat(claim) ? await askServerIfMember({ farmId: claim.farmId }) : null;
             if (listed === false) {
                 throw { error: 'join.not_confirmed', message: 'Could not reach the server. Check your connection and try again.', status: 0 };
             }
@@ -440,15 +439,11 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                         ShramSafal
                     </h1>
                     {step !== 'done' && (
-                        <>
-                            <p className="text-sm font-semibold text-stone-500">
-                                तुम्ही <span className="font-bold text-emerald-700">{context.farmName}</span> मध्ये <span className="font-bold text-stone-800">{ROLE_LABEL_MR[context.proposedRole]}</span> म्हणून सामील होत आहात.
-                            </p>
-                            <p className="text-xs text-stone-500">
-                                You are joining <span className="font-bold text-emerald-700">{context.farmName}</span> as{' '}
-                                <span className="font-bold text-stone-800">{ROLE_LABEL_EN[context.proposedRole]}</span>.
-                            </p>
-                        </>
+                        /* PROPOSED Marathi. Neither the farm's name (the link carries only a
+                           placeholder) nor a role (the server decides it) is known here yet. */
+                        <p data-testid="join-intro" className="text-sm font-semibold text-stone-500">
+                            तुम्ही शेतात सामील होत आहात.
+                        </p>
                     )}
                 </header>
 
@@ -610,7 +605,37 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                     </section>
                 )}
 
-                {step === 'done' && (
+                {/* spec: plr-d7-m1-multiuser-2026-10-26 (step 1, F3) — the QR claim returned an
+                    EXISTING seat that is not Active. Not "joined": no role, no "open my farm".
+                    The server now lets a typed-code request in through the owner's QR, so what
+                    reaches here is a PAUSED seat (said as paused — never as a request, m2) or a
+                    request from another path still waiting for the owner. PROPOSED Marathi. */}
+                {step === 'done' && joined && !isActiveSeat(joined) && (
+                    <section data-testid="join-done-waiting" data-kind={waitingSeatKind(joined.status)} className="rounded-3xl bg-white p-6 text-center shadow-lg shadow-amber-100/50">
+                        <h2 className="mt-2 font-display text-2xl font-black text-stone-900">
+                            {waitingSeatKind(joined.status) === 'paused'
+                                ? JOIN_BY_CODE_COPY.pausedTitle
+                                : 'विनंती आधीच पाठवली आहे'}
+                        </h2>
+                        <p data-testid="join-done-farm" className="mt-2 text-lg font-bold text-stone-800">
+                            {joined.farmName || context.farmName}
+                        </p>
+                        <p className="mt-2 text-sm font-semibold text-stone-600">
+                            {waitingSeatKind(joined.status) === 'paused'
+                                ? JOIN_BY_CODE_COPY.pausedLine
+                                : 'मालक तुमची भूमिका ठरवतील आणि मंजूर करतील — तोपर्यंत वाट पाहा.'}
+                        </p>
+                        <button
+                            type="button"
+                            onClick={handleFinish}
+                            className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-stone-900 px-4 py-3 text-base font-bold text-white"
+                        >
+                            ठीक आहे
+                        </button>
+                    </section>
+                )}
+
+                {step === 'done' && (!joined || isActiveSeat(joined)) && (
                     <section className="rounded-3xl bg-white p-6 text-center shadow-lg shadow-emerald-100/50">
                         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
                             <CheckCircle2 size={32} className="text-emerald-600" />
@@ -627,9 +652,11 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
                         <p data-testid="join-done-farm" className="mt-2 text-lg font-bold text-stone-800">
                             {joined?.farmName || context.farmName}
                         </p>
-                        <p data-testid="join-done-role" className="text-sm font-semibold text-stone-600">
-                            {ROLE_LABEL_MR[(joined?.role as JoinRole | undefined) ?? context.proposedRole] ?? joined?.role}
-                        </p>
+                        {joined?.role && (
+                            <p data-testid="join-done-role" className="text-sm font-semibold text-stone-600">
+                                {getOperatorRoleLabel(joined.role).mr}
+                            </p>
+                        )}
                         <button
                             type="button"
                             onClick={handleFinish}

@@ -44,4 +44,16 @@ public interface ICallerFarmTenantScope
     /// empty.
     /// </summary>
     Task<Result> EstablishForCallerAsync(Guid farmId, Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the same scope, but validated against
+    /// the caller's RELATIONSHIP with the farm (owner, or any seat that has not ended — a
+    /// PendingApproval request or a Suspended seat included) instead of
+    /// <see cref="EstablishForCallerAsync"/>'s Active-only access gate. Its ONLY caller is
+    /// self-exit: a person must always be able to withdraw a pending request or leave a
+    /// paused seat, and that one write needs the farm scope. Never use it for a read.
+    /// Default body = the access gate (fail-closed), so stub implementations keep compiling.
+    /// </summary>
+    Task<Result> EstablishRelationshipForCallerAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+        => EstablishForCallerAsync(farmId, userId, ct);
 }

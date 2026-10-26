@@ -17,6 +17,7 @@ import type {
 } from '../../application/ports/FarmGeographyPort';
 import type { DrawCanonicalFarmResult, DrawPlotAreaResult } from '../../application/ports/MapPort';
 import { haversineMeters } from '../../domain/farmGeography/FarmAggregate';
+import { INCLUDE_PENDING_SEATS_QUERY } from '../../core/session/seatStatus';
 
 interface ViteImportMeta {
     env?: {
@@ -66,6 +67,8 @@ interface FarmDto {
 
 interface MyFarmDto {
     farmId: string;
+    /** spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — additive; absent from older servers. */
+    status?: string;
 }
 
 interface BootstrapFirstFarmResponse {
@@ -168,12 +171,18 @@ export class BackendFarmGeographyClient implements FarmGeographyPort {
     }
 
     async listAccessibleFarms(): Promise<Farm[]> {
-        const response = await fetch(`${resolveBaseUrl()}/shramsafal/farms/mine`, {
+        const response = await fetch(`${resolveBaseUrl()}/shramsafal/farms/mine?${INCLUDE_PENDING_SEATS_QUERY}`, {
             headers: authHeaders(),
         });
         const memberships = await parseJson<MyFarmDto[]>(response);
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — asked with includePending=true (as every
+        // /farms/mine call from this phone is), /farms/mine also lists a typed-code
+        // join request waiting for the owner. That farm is not accessible (its details answer
+        // 403, which would fail this whole list), so only Active seats are fetched — the same
+        // rule as core/session/seatStatus `isActiveSeat`; no status = an older server = Active.
+        const accessible = memberships.filter(m => !m.status || m.status === 'Active');
         const farms = await Promise.all(
-            memberships.map(membership => this.getFarm(makeFarmId(membership.farmId))),
+            accessible.map(membership => this.getFarm(makeFarmId(membership.farmId))),
         );
         return farms.filter((farm): farm is Farm => farm !== null);
     }

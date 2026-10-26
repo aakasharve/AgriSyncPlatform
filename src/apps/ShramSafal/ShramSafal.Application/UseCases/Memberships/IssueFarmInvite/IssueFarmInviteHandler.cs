@@ -60,6 +60,11 @@ public sealed class IssueFarmInviteHandler(
 
         var utcNow = clock.UtcNow;
 
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — this used to answer `farm.FarmCode ?? ""`
+        // and the owner's QR sheet showed a blank code (D-1). A farm the startup backfill has not
+        // reached yet gets its code here, committed before the sheet ever shows it.
+        var farmCode = await farmRepository.EnsureFarmCodeAsync(farm, utcNow, ct);
+
         // Stage A0 / A3 — both sinks below were hardcoded to PrimaryOwner. Authorization
         // runs OUTSIDE this handler (IssueFarmInviteAuthorizer -> EnsureIsOwner), which
         // admits SecondaryOwner too (ShramSafalRepository.cs:94) — so the moment a
@@ -97,7 +102,7 @@ public sealed class IssueFarmInviteHandler(
                     JoinTokenId: existingToken.Id,
                     FarmId: farm.Id,
                     FarmName: farm.Name,
-                    FarmCode: farm.FarmCode ?? "",
+                    FarmCode: farmCode,
                     Token: existingToken.RawToken,
                     IssuedAtUtc: existingToken.CreatedAtUtc));
             }
@@ -176,7 +181,7 @@ public sealed class IssueFarmInviteHandler(
             JoinTokenId: token.Id,
             FarmId: farm.Id,
             FarmName: farm.Name,
-            FarmCode: farm.FarmCode ?? "",
+            FarmCode: farmCode,
             Token: rawToken,
             IssuedAtUtc: token.CreatedAtUtc));
     }

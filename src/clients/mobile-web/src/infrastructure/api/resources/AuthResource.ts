@@ -24,6 +24,7 @@ import {
 } from '../../storage/RefreshSessionStore';
 import { markPendingLogout, clearPendingLogout, hasPendingLogout } from '../../storage/PendingLogoutStore';
 import { categorizePushFailure } from '../../sync/RejectionPolicy';
+import { INCLUDE_PENDING_SEATS_QUERY } from '../../../core/session/seatStatus';
 
 /**
  * Writes the native refresh token to the Android Keystore after a successful
@@ -72,9 +73,15 @@ export async function generateReferralCode(t: HttpTransport): Promise<{ code: st
     return response.data;
 }
 
-/** GET /user/auth/me/context — aggregate: me + farms (with plan + capabilities) + share + alerts. */
+/**
+ * GET /user/auth/me/context — aggregate: me + farms (with plan + capabilities) + share + alerts.
+ * spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — always with `includePending=true`, so `farms` also
+ * lists seats that are not Active (a typed-code request waiting for the owner, a paused seat);
+ * a reader that opens or selects a farm keeps Active seats only (`core/session/seatStatus`
+ * `isActiveSeat`). Without the query the server lists Active seats only (older installed apps).
+ */
 export async function getMeContext(t: HttpTransport): Promise<import('../../../core/session/MeContextService').MeContext> {
-    const response = await t.http.get('/user/auth/me/context');
+    const response = await t.http.get(`/user/auth/me/context?${INCLUDE_PENDING_SEATS_QUERY}`);
     return response.data;
 }
 

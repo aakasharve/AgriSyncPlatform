@@ -20,7 +20,26 @@ public sealed class GetMeContextHandler(
 {
     private const int PlanExpiringWindowDays = 7;
 
-    public async Task<Result<MeContextDto>> HandleAsync(UserId userId, CancellationToken ct = default)
+    /// <summary>The membership status (as <c>FarmMembershipSnapshot.Status</c> spells it) that
+    /// means access. Every other status is a relationship only.</summary>
+    private const string ActiveSeatStatus = "Active";
+
+    private static readonly MeCapabilitiesDto NoCapabilities = new(
+        CanInvite: false,
+        CanVerify: false,
+        CanAddCost: false,
+        CanSeeBilling: false);
+
+    /// <param name="includePending">spec: plr-d7-m1-multiuser-2026-10-26 (step 1, P11) — list the
+    /// seats that are NOT Active (a typed-code request waiting for the owner, a paused seat) too.
+    /// Only the route's <c>?includePending=true</c> sets it, and only this release's phone sends
+    /// it. Without it <c>farms</c> holds Active seats only — what an installed older app (the
+    /// 1.0.16 APK) understood before step 1: a person whose only seat is a waiting request sees
+    /// the no-farm screen (<c>no_farms_yet</c>) as before, never a farm he cannot open.</param>
+    public async Task<Result<MeContextDto>> HandleAsync(
+        UserId userId,
+        bool includePending = false,
+        CancellationToken ct = default)
     {
         var user = await userRepository.GetByIdAsync(userId.Value, ct);
         if (user is null)
@@ -37,6 +56,7 @@ public sealed class GetMeContextHandler(
         var utcNow = clock.UtcNow;
 
         var farmDtos = memberships
+            .Where(m => includePending || string.Equals(m.Status, ActiveSeatStatus, StringComparison.Ordinal))
             .Select(m => MapFarm(m, accounts, userId))
             .ToList();
 
@@ -67,6 +87,28 @@ public sealed class GetMeContextHandler(
         AccountsSnapshot accounts,
         UserId caller)
     {
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — a seat that is not Active (a typed-code
+        // join request still waiting for the owner, a paused seat) is a relationship, not access.
+        // It is listed (only when asked with includePending) so the person can see THAT it waits —
+        // name and status only, the same rule as GET /shramsafal/farms/mine (GetMyFarmsHandler):
+        // no farm code, no owner account, no plan or plan date (so no plan alert), no
+        // capabilities. The person has not been let in, so the owner's billing is not his to see.
+        // Plan carries the contract's "nothing known" value, never the farm's real plan.
+        if (!string.Equals(m.Status, ActiveSeatStatus, StringComparison.Ordinal))
+        {
+            return new MeFarmDto(
+                FarmId: m.FarmId.Value,
+                Name: m.FarmName,
+                FarmCode: null,
+                OwnerAccountId: Guid.Empty,
+                Role: m.Role,
+                Status: m.Status,
+                JoinedVia: m.JoinedVia,
+                Plan: ResolvePlan(sub: null),
+                PlanValidUntilUtc: null,
+                Capabilities: NoCapabilities);
+        }
+
         var plan = ResolvePlan(m.Subscription);
         var validUntil = m.Subscription?.ValidUntilUtc;
         var callerIsPrimaryOwner = accounts.OwnerAccounts

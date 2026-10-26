@@ -28,6 +28,7 @@ import {
 import { useAuth } from '../../app/providers/AuthProvider';
 import { SessionStore } from '../../infrastructure/storage/SessionStore';
 import { purgeLabourCachesForFarm } from '../../infrastructure/storage/labourFarmAccess';
+import { isActiveSeat } from './seatStatus';
 
 interface FarmContextValue {
     meContext: MeContext | null;
@@ -102,7 +103,10 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
             const ctx = await fetchMeContext({ force });
             setLoadFailed(false);
             setMeContext(ctx);
-            const ids = ctx.farms.map(f => f.farmId);
+            // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, F2) — /me/context lists every seat
+            // that has not ended, a typed-code join request (PendingApproval) included. Only an
+            // Active seat is a farm this person is in, so only one can become the current farm.
+            const ids = ctx.farms.filter(isActiveSeat).map(f => f.farmId);
             setCurrentFarmId(prev => {
                 const valid = prev && ids.includes(prev) ? prev : (ids[0] ?? null);
                 if (prev && !ids.includes(prev)) {
@@ -167,7 +171,8 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
         SessionStore.setCurrentFarmId(farmId);
     }, []);
 
-    const farms = useMemo(() => meContext?.farms ?? [], [meContext]);
+    // Active seats only (see `refresh`): a pending request is not a farm to list or switch to.
+    const farms = useMemo(() => (meContext?.farms ?? []).filter(isActiveSeat), [meContext]);
     const currentFarm = useMemo(
         () => farms.find(f => f.farmId === currentFarmId) ?? farms[0] ?? null,
         [farms, currentFarmId],

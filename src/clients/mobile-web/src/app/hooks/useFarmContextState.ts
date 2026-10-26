@@ -8,20 +8,32 @@
  *   - my-farms list (lazy fetched after auth),
  *   - currentFarmId (mirrored to SessionStore for persistence),
  *   - first-farm wizard open/close,
- *   - 3 user actions: switch / wizard-complete / join-via-QR.
+ *   - the join door (JoinByCodeScreen) open/close,
+ *   - user actions: switch / wizard-complete / join (code or QR) / join-complete.
  */
 
 import React from 'react';
 import { SessionStore } from '../../infrastructure/storage/SessionStore';
 import { useAuth } from '../providers/AuthProvider';
+import { useOptionalFarmContext } from '../../core/session/FarmContext';
+import { isActiveSeat } from '../../core/session/seatStatus';
 import {
+    exitMembership,
     getMyFarms,
     type BootstrapFirstFarmResponse,
+    type JoinedFarm,
     type MyFarmDto,
 } from '../../features/onboarding/qr/inviteApi';
+import { takeJoinAfterSignIn } from '../../features/onboarding/qr/farmCodeEntry';
 
 export interface FarmContextState {
+    /**
+     * The farms the person is IN — Active seats only (spec plr-d7-m1-multiuser-2026-10-26 step 1).
+     * A typed-code join request waiting for the owner is NOT here: it is in `pendingFarms`.
+     */
     myFarms: MyFarmDto[] | null;
+    /** Seats that have not ended but grant nothing yet (a join request waiting for the owner). */
+    pendingFarms: MyFarmDto[];
     currentFarmId: string | null;
     showFirstFarmWizard: boolean;
     setShowFirstFarmWizard: React.Dispatch<React.SetStateAction<boolean>>;
@@ -30,7 +42,19 @@ export interface FarmContextState {
     setShowMinimalOnboarding: React.Dispatch<React.SetStateAction<boolean>>;
     handleSwitchFarm: (farmId: string) => void;
     handleWizardComplete: (result: BootstrapFirstFarmResponse) => void;
+    /** Opens the join door (typed farm code, or the QR way). Name kept: every `onJoinViaQr` prop calls it. */
     handleJoinViaQr: () => void;
+    /** spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the join door (`JoinByCodeScreen`). */
+    showJoinByCode: boolean;
+    closeJoinByCode: () => void;
+    /** The server made (or already had) a seat: re-read the farm lists. Never switches farm by itself. */
+    handleJoinComplete: (farm: JoinedFarm) => void;
+    /**
+     * spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — withdraws a waiting join request (the
+     * server's self-exit, which always accepts one) and re-reads both farm lists. Rejects when
+     * the server refused or could not be reached, so the caller can say so.
+     */
+    handleWithdrawRequest: (farmId: string) => Promise<void>;
 }
 
 /**
@@ -63,68 +87,89 @@ export function requestCreateFarmWizard(): void {
 }
 
 /**
- * The join-via-QR prompt flow, extracted to a standalone, stateless
- * function (Task 12) so `SetupHubMenu.tsx`'s new farm-switcher row can call
- * the EXACT same logic `AppHeader`'s farm switcher already uses — not a
- * second, independently-typed copy that could drift. Pure: reads only
- * `window.prompt`/`window.location`, no closure over this hook's state.
+ * spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the ONE join door. It used to be a
+ * `window.prompt` asking for a pasted QR link (English, no typed code, a dead end for a
+ * person who only had the code the owner read out). Every "join" control now opens the
+ * same full screen, `JoinByCodeScreen` (typed farm code + the QR way), owned by this hook
+ * and mounted once in `AppContent`. Controls that have a prop path call `handleJoinViaQr`;
+ * `SetupHubMenu`'s row (deep inside `AppRouter`, no prop path) dispatches this event —
+ * the same pattern, for the same reason, as `OPEN_CREATE_FARM_WIZARD_EVENT` above.
  */
-export function promptAndJoinFarmViaQr(): void {
-    // Deep-link: JoinFarmLandingPage expects `?join=<token>&farm=<code>`.
-    // Without a scanner, prompt the user to paste the link.
-    const link = window.prompt(
-        'तुमच्या मालकाने शेअर केलेली QR लिंक पेस्ट करा\nPaste the QR link shared by the farmer:',
-    );
-    if (!link) return;
-    try {
-        const url = new URL(link.trim());
-        const token = url.searchParams.get('t') ?? url.searchParams.get('join');
-        const farm = url.searchParams.get('f') ?? url.searchParams.get('farm');
-        if (token && farm) {
-            window.location.assign(
-                `/?join=${encodeURIComponent(token)}&farm=${encodeURIComponent(farm)}`,
-            );
-            return;
-        }
-    } catch { /* fall through to alert */ }
-    window.alert('Link not recognised. Ask the farmer to share it again.');
+export const OPEN_JOIN_FARM_EVENT = 'agrisync:open-join-farm';
+
+/** Dispatches the event above. Safe to call from anywhere (no-ops without `window`). */
+export function requestJoinFarm(): void {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new Event(OPEN_JOIN_FARM_EVENT));
 }
 
 export function useFarmContextState(): FarmContextState {
     const { isAuthenticated, session } = useAuth();
     const [myFarms, setMyFarms] = React.useState<MyFarmDto[] | null>(null);
+    const [pendingFarms, setPendingFarms] = React.useState<MyFarmDto[]>([]);
     const [currentFarmId, setCurrentFarmId] = React.useState<string | null>(
         () => SessionStore.getCurrentFarmId() || null,
     );
     const [showFirstFarmWizard, setShowFirstFarmWizard] = React.useState(false);
     const [showMinimalOnboarding, setShowMinimalOnboarding] = React.useState(false);
+    const [showJoinByCode, setShowJoinByCode] = React.useState(false);
     const [refreshCounter, setRefreshCounter] = React.useState(0);
     // Refetch when an offline presence session is upgraded to a real token
     // (isAuthenticated/userId do not change at that moment).
     const hasRealToken = Boolean(session?.accessToken);
+    // The app-wide farm list (/me/context) learns about a joined farm too. Read through a
+    // ref: its `refresh` changes identity every fetch (see FarmContext.tsx).
+    const farmContext = useOptionalFarmContext();
+    const farmContextRef = React.useRef(farmContext);
+    farmContextRef.current = farmContext;
+
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the join door opens on request from
+    // anywhere, and by itself right after sign-in when the login screen's join button asked
+    // for it (the server answers a code only for a signed-in person).
+    React.useEffect(() => {
+        const open = () => setShowJoinByCode(true);
+        window.addEventListener(OPEN_JOIN_FARM_EVENT, open);
+        return () => window.removeEventListener(OPEN_JOIN_FARM_EVENT, open);
+    }, []);
+    React.useEffect(() => {
+        if (isAuthenticated && takeJoinAfterSignIn()) setShowJoinByCode(true);
+    }, [isAuthenticated]);
 
     React.useEffect(() => {
         if (!isAuthenticated) {
             setMyFarms(null);
+            setPendingFarms([]);
             setShowFirstFarmWizard(false);
             setShowMinimalOnboarding(false);
+            setShowJoinByCode(false);
             return;
         }
 
         let cancelled = false;
         (async () => {
             try {
-                const farms = await getMyFarms();
+                const listed = await getMyFarms();
                 if (cancelled) return;
+                // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, F2) — /farms/mine now lists a
+                // typed-code join request too (status PendingApproval). That is not a farm the
+                // person is in: the server sends it no data and refuses its writes. So it is never
+                // listed, opened or picked as the current farm; it waits in `pendingFarms`.
+                const farms = listed.filter(isActiveSeat);
                 setMyFarms(farms);
+                setPendingFarms(listed.filter(f => !isActiveSeat(f)));
 
                 if (farms.length === 0) {
                     // Show the minimal 2-field onboarding, NOT the heavy wizard.
                     // The heavy wizard (FirstFarmWizard) is still available from the
                     // AppHeader "create farm" affordance (setShowFirstFarmWizard).
+                    // A person whose only seat is a pending request still has no farm, so the
+                    // 0-farm screen stays (it says the request is waiting) and no farm is picked.
                     setShowMinimalOnboarding(true);
                     return;
                 }
+                // The 0-farm screen is for a person with no farm. A farm can arrive without the
+                // wizard (an owner-approved request, a QR claim), so the server listing one closes it.
+                setShowMinimalOnboarding(false);
 
                 if (!currentFarmId || !farms.some(f => f.farmId === currentFarmId)) {
                     const next = farms[0].farmId;
@@ -152,15 +197,30 @@ export function useFarmContextState(): FarmContextState {
         setRefreshCounter(x => x + 1);
     }, []);
 
-    // Task 12 — now a thin call into the standalone, exported
-    // `promptAndJoinFarmViaQr()` above, so `SetupHubMenu.tsx`'s new row can
-    // reuse the identical flow without duplicating it.
     const handleJoinViaQr = React.useCallback(() => {
-        promptAndJoinFarmViaQr();
+        setShowJoinByCode(true);
+    }, []);
+
+    const closeJoinByCode = React.useCallback(() => {
+        setShowJoinByCode(false);
+    }, []);
+
+    // A seat on another farm is usually PendingApproval: the lists are re-read from the
+    // server, but the open farm is NOT switched — the owner has not let him in yet.
+    const handleJoinComplete = React.useCallback((_farm: JoinedFarm) => {
+        setRefreshCounter(x => x + 1);
+        void farmContextRef.current?.refresh();
+    }, []);
+
+    const handleWithdrawRequest = React.useCallback(async (farmId: string) => {
+        await exitMembership(farmId);
+        setRefreshCounter(x => x + 1);
+        void farmContextRef.current?.refresh();
     }, []);
 
     return {
         myFarms,
+        pendingFarms,
         currentFarmId,
         showFirstFarmWizard,
         setShowFirstFarmWizard,
@@ -169,5 +229,9 @@ export function useFarmContextState(): FarmContextState {
         handleSwitchFarm,
         handleWizardComplete,
         handleJoinViaQr,
+        showJoinByCode,
+        closeJoinByCode,
+        handleJoinComplete,
+        handleWithdrawRequest,
     };
 }

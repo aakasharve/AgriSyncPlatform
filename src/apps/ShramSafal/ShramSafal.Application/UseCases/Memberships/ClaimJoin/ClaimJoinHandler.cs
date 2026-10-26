@@ -23,6 +23,11 @@ namespace ShramSafal.Application.UseCases.Memberships.ClaimJoin;
 ///     return the same membership row, not a duplicate.
 ///   - A revoked token must return a recoverable error, never a silent
 ///     zero-membership success.
+///   - spec: plr-d7-m1-multiuser-2026-10-26 (step 1): a person whose live
+///     seat is a typed-code join REQUEST is not "already a member" — the QR
+///     answers the request and the seat becomes Active (see
+///     <see cref="FarmMembership.ActivateFromOwnerQr"/>). Every other live seat
+///     (Active, Suspended) is returned as it is.
 ///
 /// Authorization:
 ///   - The token is the authorization artifact for this path. If a
@@ -106,8 +111,8 @@ public sealed class ClaimJoinHandler(
             // the same sweep. ClaimedCode is the code the SCANNER sent, so a newline in it
             // forges a log line — and this line is the only trace a spliced QR leaves,
             // which makes it exactly the wrong line to let an attacker author. RealCode is
-            // NOT wrapped: it is server-generated (FirstFarmBootstrapEndpoints
-            // .GenerateFarmCode) and never client-writable.
+            // NOT wrapped: it is server-generated (FarmCode.New) and never
+            // client-writable.
             logger.LogWarning(
                 "Claim rejected: token for farm {FarmId} but QR carried farm code '{ClaimedCode}' ≠ '{RealCode}'.",
                 farm.Id, LogSafe.Text(command.FarmCode), farm.FarmCode);
@@ -119,16 +124,38 @@ public sealed class ClaimJoinHandler(
         var utcNow = clock.UtcNow;
         var existing = await farmRepository.GetFarmMembershipAsync(farm.Id.Value, command.CallerUserId.Value, ct);
 
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the person typed this farm's code
+        // earlier and the request is still waiting. The QR is the owner's own consent, so it
+        // answers the request: the seat becomes what a fresh claim makes (Active Worker, QrScan).
+        // Returning the request as it was would let a typed code BLOCK the QR — the one live seat
+        // per person per farm — and leave the worker outside until an approval step exists.
+        if (existing is not null && existing.IsTypedCodeJoinRequest)
+        {
+            var answered = await TryActivateTypedCodeRequestAsync(command, farm, tokenRow.InvitationId, utcNow, ct);
+            if (answered is not null)
+            {
+                return answered;
+            }
+
+            // The request ended between the two reads (withdrawn by its maker): there is no live
+            // seat any more, so this is an ordinary first claim, below.
+            existing = null;
+        }
+
         if (existing is not null && !existing.IsTerminal)
         {
             // Idempotent: same user scanning same QR returns the same
-            // membership row.
+            // membership row. A paused (Suspended) seat stays paused: the QR is not a way
+            // around the owner's pause.
             return Result.Success(new ClaimJoinResult(
                 MembershipId: existing.Id,
                 FarmId: farm.Id,
                 FarmName: farm.Name,
                 Role: existing.Role.ToString(),
-                WasAlreadyMember: true));
+                WasAlreadyMember: true,
+                // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — say the seat's real status
+                // rather than imply "joined".
+                Status: existing.Status));
         }
 
         // Plan §5.1 Flow A: no approval gate, so membership lands Active
@@ -186,10 +213,104 @@ public sealed class ClaimJoinHandler(
                 FarmId: farm.Id,
                 FarmName: farm.Name,
                 Role: winner.Role.ToString(),
-                WasAlreadyMember: true));
+                WasAlreadyMember: true,
+                Status: winner.Status));
         }
 
-        await analytics.EmitAsync(new AnalyticsEvent(
+        await EmitInvitationClaimedAsync(command, farm, membership, utcNow, ct);
+
+        return Result.Success(new ClaimJoinResult(
+            MembershipId: membership.Id,
+            FarmId: farm.Id,
+            FarmName: farm.Name,
+            Role: membership.Role.ToString(),
+            WasAlreadyMember: false,
+            Status: membership.Status));
+    }
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the QR answers the caller's typed-code
+    /// request (<see cref="FarmMembership.ActivateFromOwnerQr"/>). The seat is re-read TRACKED under
+    /// a row lock, so a double scan activates it, writes its audit row and emits its analytics
+    /// event exactly once: the second scan waits, reads the committed Active seat and gets the
+    /// idempotent already-member answer. Returns <c>null</c> when the request ended between the
+    /// two reads (the caller then makes an ordinary first claim).
+    /// </summary>
+    private async Task<Result<ClaimJoinResult>?> TryActivateTypedCodeRequestAsync(
+        ClaimJoinCommand command,
+        Farm farm,
+        FarmInvitationId invitationId,
+        DateTime utcNow,
+        CancellationToken ct)
+    {
+        var seat = await farmRepository.GetTrackedFarmMembershipForUpdateAsync(
+            farm.Id.Value, command.CallerUserId.Value, ct);
+        if (seat is null)
+        {
+            return null;
+        }
+
+        if (!seat.IsTypedCodeJoinRequest)
+        {
+            // A concurrent scan answered it first (or it changed in between): return it as it is.
+            return Result.Success(new ClaimJoinResult(
+                MembershipId: seat.Id,
+                FarmId: farm.Id,
+                FarmName: farm.Name,
+                Role: seat.Role.ToString(),
+                WasAlreadyMember: true,
+                Status: seat.Status));
+        }
+
+        seat.ActivateFromOwnerQr(invitationId, utcNow);
+
+        // Same action as a fresh claim ("MemberJoined": this is when the person was let in), on
+        // the request's own row, saying which request it answered. The request itself is already
+        // on record as "MemberJoinRequested".
+        await farmRepository.AddAuditEventAsync(
+            AuditEventFactory.Create(
+                entityType: "FarmMembership",
+                entityId: seat.Id,
+                action: "MemberJoined",
+                actorUserId: command.CallerUserId.Value,
+                actorRole: seat.Role.ToString().ToLowerInvariant(),
+                payload: new
+                {
+                    farmId = farm.Id,
+                    userId = command.CallerUserId,
+                    role = seat.Role.ToString(),
+                    joinedVia = "QrScan",
+                    answeredJoinRequest = true,
+                },
+                farmId: farm.Id.Value,
+                clientCommandId: null,
+                appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                    ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                    : command.ClientAppVersion,
+                deviceId: command.AuditDeviceId,
+                ipHash: command.AuditIpHash,
+                sourceAiJobId: null), ct);
+        await farmRepository.SaveChangesAsync(ct);
+
+        await EmitInvitationClaimedAsync(command, farm, seat, utcNow, ct);
+
+        return Result.Success(new ClaimJoinResult(
+            MembershipId: seat.Id,
+            FarmId: farm.Id,
+            FarmName: farm.Name,
+            Role: seat.Role.ToString(),
+            // He was not a member before this scan: a waiting request grants nothing.
+            WasAlreadyMember: false,
+            Status: seat.Status));
+    }
+
+    private Task EmitInvitationClaimedAsync(
+        ClaimJoinCommand command,
+        Farm farm,
+        FarmMembership membership,
+        DateTime utcNow,
+        CancellationToken ct)
+        => analytics.EmitAsync(new AnalyticsEvent(
             EventId: Guid.NewGuid(),
             EventType: AnalyticsEventType.InvitationClaimed,
             OccurredAtUtc: utcNow,
@@ -207,12 +328,4 @@ public sealed class ClaimJoinHandler(
                 role = membership.Role.ToString().ToLowerInvariant()
             })
         ), ct);
-
-        return Result.Success(new ClaimJoinResult(
-            MembershipId: membership.Id,
-            FarmId: farm.Id,
-            FarmName: farm.Name,
-            Role: membership.Role.ToString(),
-            WasAlreadyMember: false));
-    }
 }

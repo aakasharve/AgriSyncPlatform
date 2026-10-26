@@ -325,7 +325,132 @@ public sealed class JoinClaimRoutesRealPostgresTests : IAsyncLifetime
         (await AuditCountAsync(FarmA, Racer, "MemberJoined")).Should().Be(1);
     }
 
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — a person who TYPED the farm's code holds a
+    // waiting request (PendingApproval + SelfJoin). The owner's QR is the owner's own consent, so
+    // a scan must let him in exactly as a fresh scan would — not answer "already requested" and
+    // leave him outside (the typed code would otherwise BLOCK the QR: one live seat per person per
+    // farm). Planted as superuser, so the plant never depends on the code under test.
+    [Fact]
+    public async Task A_QR_scan_answers_an_earlier_typed_code_request_the_same_seat_becomes_an_Active_Worker()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        var requestId = await SeedTypedCodeRequestAsync(FarmA, AccountA, Requester);
+        var invite = await IssueOkAsync(OwnerA, FarmA);
+
+        using var claim = await ClaimAsync(Requester, invite.Token, invite.FarmCode);
+        var body = await claim.Content.ReadAsStringAsync();
+        claim.StatusCode.Should().Be(HttpStatusCode.OK, body);
+
+        using var doc = JsonDocument.Parse(body);
+        doc.RootElement.GetProperty("membershipId").GetGuid().Should().Be(requestId, "the request's own seat is answered; no second seat");
+        doc.RootElement.GetProperty("status").GetString().Should().Be("Active");
+        doc.RootElement.GetProperty("role").GetString().Should().Be("Worker");
+        doc.RootElement.GetProperty("wasAlreadyMember").GetBoolean().Should().BeFalse("a waiting request is not membership");
+
+        // The exact shape a fresh claim stores: Worker, Active (3), QrScan (3), under this QR's invitation.
+        (await MembershipsAsync(FarmA, Requester)).Should().Equal(("Worker", 3, 3));
+        (await InvitationOfAsync(requestId)).Should().Be(invite.InvitationId);
+        (await AuditCountAsync(FarmA, Requester, "MemberJoined")).Should().Be(1);
+
+        // A repeat scan is the ordinary idempotent answer.
+        using var again = await ClaimAsync(Requester, invite.Token, invite.FarmCode);
+        using var againDoc = JsonDocument.Parse(await again.Content.ReadAsStringAsync());
+        againDoc.RootElement.GetProperty("wasAlreadyMember").GetBoolean().Should().BeTrue();
+        againDoc.RootElement.GetProperty("status").GetString().Should().Be("Active");
+        (await AuditCountAsync(FarmA, Requester, "MemberJoined")).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_paused_person_who_scans_the_QR_stays_paused_and_is_told_so()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        await SeedMembershipAsyncVia(FarmA, AccountA, PausedWorker, "Worker", status: 4, joinedVia: 3);
+        var invite = await IssueOkAsync(OwnerA, FarmA);
+
+        using var claim = await ClaimAsync(PausedWorker, invite.Token, invite.FarmCode);
+        var body = await claim.Content.ReadAsStringAsync();
+        claim.StatusCode.Should().Be(HttpStatusCode.OK, body);
+
+        using var doc = JsonDocument.Parse(body);
+        doc.RootElement.GetProperty("status").GetString().Should().Be("Suspended", "the QR is not a way around the owner's pause");
+        doc.RootElement.GetProperty("wasAlreadyMember").GetBoolean().Should().BeTrue();
+        (await MembershipsAsync(FarmA, PausedWorker)).Should().Equal(("Worker", 4, 3));
+        (await AuditCountAsync(FarmA, PausedWorker, "MemberJoined")).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Concurrent_scans_over_a_typed_code_request_activate_it_once()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        await SeedTypedCodeRequestAsync(FarmA, AccountA, RequestRacer);
+        var invite = await IssueOkAsync(OwnerA, FarmA);
+
+        // The seat row is locked before it is re-read, so the losers wait, then read the winner's
+        // committed Active seat: one activation, one audit row, everyone answered 200.
+        var outcomes = await Task.WhenAll(Enumerable.Range(0, 4).Select(async _ =>
+        {
+            using var r = await ClaimAsync(RequestRacer, invite.Token, invite.FarmCode);
+            return (r.StatusCode, Body: await r.Content.ReadAsStringAsync());
+        }));
+
+        outcomes.Should().OnlyContain(o => o.StatusCode == HttpStatusCode.OK,
+            "every racer must get 200, never a 500: " + string.Join(" | ", outcomes.Select(o => (int)o.StatusCode + " " + o.Body)));
+        var fresh = outcomes.Count(o =>
+        {
+            using var doc = JsonDocument.Parse(o.Body);
+            return !doc.RootElement.GetProperty("wasAlreadyMember").GetBoolean();
+        });
+        fresh.Should().Be(1, "exactly one scan let him in");
+        outcomes.Should().OnlyContain(o => o.Body.Contains("\"Active\""));
+        (await MembershipsAsync(FarmA, RequestRacer)).Should().Equal(("Worker", 3, 3));
+        (await AuditCountAsync(FarmA, RequestRacer, "MemberJoined")).Should().Be(1);
+    }
+
     // -- Harness ----------------------------------------------------------------
+
+    private static readonly Guid Requester = Guid.Parse("c9e20001-0000-0000-0000-0000000000e1");
+    private static readonly Guid PausedWorker = Guid.Parse("c9e20001-0000-0000-0000-0000000000e2");
+    private static readonly Guid RequestRacer = Guid.Parse("c9e20001-0000-0000-0000-0000000000e3");
+
+    /// <summary>A typed-code request exactly as JoinByCodeHandler stores one: Worker placeholder,
+    /// PendingApproval (2), SelfJoin (4), no invitation.</summary>
+    private async Task<Guid> SeedTypedCodeRequestAsync(Guid farm, Guid account, Guid user)
+    {
+        var id = Guid.NewGuid();
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        await ExecAsync(db, """
+            INSERT INTO ssf.farm_memberships
+                ("Id", farm_id, user_id, role, granted_at_utc, modified_at_utc, owner_account_id, status, joined_via)
+            VALUES (@id, @farm, @user, 'Worker', NOW(), NOW(), @account, 2, 4);
+            """,
+            ("id", id), ("farm", farm), ("user", user), ("account", account));
+        return id;
+    }
+
+    private async Task SeedMembershipAsyncVia(Guid farm, Guid account, Guid user, string role, int status, int joinedVia)
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        await ExecAsync(db, """
+            INSERT INTO ssf.farm_memberships
+                ("Id", farm_id, user_id, role, granted_at_utc, modified_at_utc, owner_account_id, status, joined_via)
+            VALUES (@id, @farm, @user, @role, NOW(), NOW(), @account, @status, @via);
+            """,
+            ("id", Guid.NewGuid()), ("farm", farm), ("user", user), ("role", role),
+            ("account", account), ("status", status), ("via", joinedVia));
+    }
+
+    private async Task<Guid?> InvitationOfAsync(Guid membershipId)
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT invitation_id FROM ssf.farm_memberships WHERE \"Id\" = @id";
+        cmd.Parameters.AddWithValue("id", membershipId);
+        var value = await cmd.ExecuteScalarAsync();
+        return value is Guid g ? g : null;
+    }
 
     private sealed record Invite(Guid InvitationId, Guid FarmId, string Token, string FarmCode);
 

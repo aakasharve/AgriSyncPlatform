@@ -219,6 +219,8 @@ public sealed class E2eFixtureSeeder(
 
         var farm = Farm.Create(farmKey, name, ownerUserId, nowUtc);
         farm.AttachToOwnerAccount(ownerAccountId, nowUtc);
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — every farm has a code from birth.
+        farm.AssignFarmCode(FarmCode.New(), nowUtc);
         ssfContext.Farms.Add(farm);
         return true;
     }

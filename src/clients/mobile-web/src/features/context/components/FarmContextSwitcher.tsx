@@ -22,6 +22,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Sprout, Plus, QrCode, CheckCircle2, X } from 'lucide-react';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
+import { JOIN_DOOR_LABEL } from '../../onboarding/qr/farmCodeEntry';
 import { getRoleLabel } from '../../../shared/roles/roleLabels';
 import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 
@@ -260,8 +261,9 @@ export const FarmSwitcherSheet: React.FC<FarmSwitcherSheetProps> = ({
                             onClick={onJoinViaQr}
                             className="flex items-center justify-center gap-1.5 rounded-2xl border border-stone-200 bg-white px-3 py-3 text-sm font-bold text-stone-700 hover:border-stone-300"
                         >
-                            <QrCode size={15} />
-                            QR ने जोडा
+                            <QrCode size={15} className="shrink-0" />
+                            {/* spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the join door takes the typed farm code too. */}
+                            {JOIN_DOOR_LABEL}
                         </button>
                     </div>
                     <div className="mt-2 grid grid-cols-2 gap-2 text-center text-[10px] font-semibold text-stone-400">

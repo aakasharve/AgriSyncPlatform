@@ -71,7 +71,10 @@ public sealed class CreateFarmHandler(
                 ipHash: command.AuditIpHash,
                 sourceAiJobId: null),
             ct);
-        await repository.SaveChangesAsync(ct);
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — every farm has a code from birth. The
+        // code is drawn as the farm is saved, and drawn again on the rare collision with another
+        // farm's code (M3), so a collision never refuses the farmer his farm.
+        await repository.SaveNewFarmAsync(farm, nowUtc, ct);
 
         await analytics.EmitAsync(new AnalyticsEvent(
             EventId: Guid.NewGuid(),

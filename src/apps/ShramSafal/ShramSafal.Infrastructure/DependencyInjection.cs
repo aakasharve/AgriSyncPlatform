@@ -390,6 +390,9 @@ public static class DependencyInjection
         // context returns zero rows and the repair would silently do nothing. See the
         // runner's class doc.
         services.AddScoped<OwnerAttestationBackfillRunner>();
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — every farm without a code gets one,
+        // through the admin factory for the same reason as the runner above.
+        services.AddScoped<FarmCodeBackfillRunner>();
         services.AddScoped<IUserDirectory, UserDirectoryService>();
         services.AddScoped<IMisReportRepository, MisReportRepository>();
         services.AddScoped<IAdminOpsRepository, AdminOpsRepository>();
@@ -422,6 +425,8 @@ public static class DependencyInjection
         // can inject it.
         services.AddScoped<ICallerFarmTenantScope, CallerFarmTenantScope>();
         services.AddScoped<IJoinClaimTenantScope, JoinClaimTenantScope>();
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — typed farm-code join.
+        services.AddScoped<IJoinCodeTenantScope, JoinCodeTenantScope>();
         // spec: dfes-companion-2026-07-11 — user-scoped (no farm dimension)
         // tenant scope for POST /shramsafal/corrections. See
         // ICallerUserTenantScope for why this is a distinct port from

@@ -12,6 +12,7 @@ namespace ShramSafal.Domain.Farms;
 ///   PendingOtpClaim ──(ClaimWithoutApproval)──► Active
 ///   PendingOtpClaim ──(ClaimAwaitingApproval)──► PendingApproval
 ///   PendingApproval ──(Approve)──► Active
+///   PendingApproval + SelfJoin ──(ActivateFromOwnerQr)──► Active   (typed-code request, owner's QR)
 ///   Active ──(Suspend)──► Suspended ──(Restore)──► Active
 ///   Active ──(Revoke)──► Revoked   (terminal)
 ///   Active ──(Exit)──►   Exited    (terminal)
@@ -120,6 +121,16 @@ public sealed class FarmMembership : Entity<Guid>
         Status is MembershipStatus.Revoked or MembershipStatus.Exited;
 
     /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — a request made by TYPING the farm's code
+    /// (<see cref="CreateJoinRequest"/>), still waiting: <see cref="MembershipStatus.PendingApproval"/>
+    /// and <see cref="JoinedVia.SelfJoin"/>. The one kind of seat the owner's QR may activate
+    /// (<see cref="ActivateFromOwnerQr"/>), and the one kind a code rollback must end first
+    /// (<c>Scripts/end-typed-code-join-requests.sql</c>).
+    /// </summary>
+    public bool IsTypedCodeJoinRequest =>
+        Status == MembershipStatus.PendingApproval && JoinedVia == JoinedVia.SelfJoin;
+
+    /// <summary>
     /// Direct (no-invitation) factory producing an immediately
     /// <see cref="MembershipStatus.Active"/> membership. Callers that created
     /// memberships before the state machine existed assumed every membership
@@ -184,6 +195,40 @@ public sealed class FarmMembership : Entity<Guid>
         return new FarmMembership(id, farmId, userId, role, status, joinedVia, invitationId, grantedAtUtc);
     }
 
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — a person TYPED the farm's
+    /// code and asks to join. The result is always
+    /// <see cref="MembershipStatus.PendingApproval"/>, with no invitation behind
+    /// it (<see cref="JoinedVia.SelfJoin"/>).
+    ///
+    /// <para><b>The joiner never chooses a role, so this factory does not take
+    /// one.</b> <see cref="AppRole.Worker"/> is a placeholder that the owner
+    /// replaces when approving (step 2); nothing a request body says can reach
+    /// it. It grants nothing while the seat is PendingApproval: every role and
+    /// member check counts <see cref="MembershipStatus.Active"/> seats only — in
+    /// this release's code. Older binaries count any seat that has not ended, so
+    /// a code rollback first ends these requests
+    /// (<c>Scripts/end-typed-code-join-requests.sql</c>, doctrine E8).</para>
+    /// </summary>
+    public static FarmMembership CreateJoinRequest(
+        Guid id,
+        FarmId farmId,
+        UserId userId,
+        DateTime requestedAtUtc)
+    {
+        EnsureValidIds(id, farmId, userId);
+
+        return new FarmMembership(
+            id,
+            farmId,
+            userId,
+            AppRole.Worker,
+            MembershipStatus.PendingApproval,
+            JoinedVia.SelfJoin,
+            invitationId: null,
+            requestedAtUtc);
+    }
+
     public void ClaimWithoutApproval(DateTime utcNow)
     {
         if (Status != MembershipStatus.PendingOtpClaim)
@@ -193,6 +238,40 @@ public sealed class FarmMembership : Entity<Guid>
         }
 
         Status = MembershipStatus.Active;
+        ModifiedAtUtc = utcNow;
+        LastSeenAtUtc = utcNow;
+    }
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the owner's QR answers a person's earlier
+    /// typed-code request. Scanning the owner's QR is the owner's own consent (the QR has no
+    /// approval step, plan §5.1 Flow A), so the request becomes exactly what a fresh QR claim
+    /// makes: an Active <see cref="AppRole.Worker"/> seat, joined via
+    /// <see cref="JoinedVia.QrScan"/> under that QR's invitation. Without this, an unanswered
+    /// request BLOCKED the QR (one live seat per person per farm), so the way in that works today
+    /// answered "already requested" and left the worker outside.
+    ///
+    /// <para>Only <see cref="IsTypedCodeJoinRequest"/> moves. A PendingApproval seat from any other
+    /// path (an invitation that requires approval, with a role the owner chose) is not approved
+    /// by the farm-wide QR, and no other status is changed here.</para>
+    /// </summary>
+    public void ActivateFromOwnerQr(FarmInvitationId invitationId, DateTime utcNow)
+    {
+        if (!IsTypedCodeJoinRequest)
+        {
+            throw new InvalidOperationException(
+                $"Membership '{Id}' is not a typed-code join request (status {Status}, joined via {JoinedVia}).");
+        }
+
+        if (invitationId.Value == Guid.Empty)
+        {
+            throw new ArgumentException("The QR's invitation id is required.", nameof(invitationId));
+        }
+
+        Status = MembershipStatus.Active;
+        Role = AppRole.Worker;
+        JoinedVia = JoinedVia.QrScan;
+        InvitationId = invitationId;
         ModifiedAtUtc = utcNow;
         LastSeenAtUtc = utcNow;
     }

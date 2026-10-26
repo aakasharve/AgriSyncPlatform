@@ -52,6 +52,51 @@ public sealed class AssignJobCardHandlerTests
         result.Error.Code.Should().Contain("JobCardWorkerNotMember");
     }
 
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, BN-1) — the worker read returns any seat that
+    // has not ended. A typed-code join request (PendingApproval, Worker PLACEHOLDER role) and a
+    // paused seat are not people work can be given to: the server grants them nothing, so a job
+    // card assigned to one would go to a person who cannot see or do it.
+    [Fact]
+    public async Task AssignJobCard_ToTypedCodeJoinRequest_IsRefused_AndNothingChanges()
+    {
+        var jobCard = BuildDraftJobCard();
+        var request = FarmMembership.CreateJoinRequest(Guid.NewGuid(), FarmId, WorkerUserId, Now);
+        var repo = new FakeRepo(jobCard, mukadamRole: AppRole.Mukadam, workerIsMember: true, workerSeat: request);
+        var handler = new AssignJobCardHandler(repo, new FixedClock(Now));
+
+        var result = await handler.HandleAsync(new AssignJobCardCommand(
+            JobCardId: jobCard.Id,
+            WorkerUserId: WorkerUserId,
+            CallerUserId: MukadamUserId,
+            ClientCommandId: "assign-pending"));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Contain("JobCardWorkerNotMember");
+        jobCard.Status.Should().Be(JobCardStatus.Draft);
+        jobCard.AssignedWorkerUserId.Should().BeNull();
+        repo.AuditEvents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AssignJobCard_ToSuspendedSeat_IsRefused()
+    {
+        var jobCard = BuildDraftJobCard();
+        var paused = FarmMembership.Create(Guid.NewGuid(), FarmId, WorkerUserId, AppRole.Worker, Now);
+        paused.Suspend(Now);
+        var repo = new FakeRepo(jobCard, mukadamRole: AppRole.Mukadam, workerIsMember: true, workerSeat: paused);
+        var handler = new AssignJobCardHandler(repo, new FixedClock(Now));
+
+        var result = await handler.HandleAsync(new AssignJobCardCommand(
+            JobCardId: jobCard.Id,
+            WorkerUserId: WorkerUserId,
+            CallerUserId: MukadamUserId,
+            ClientCommandId: "assign-paused"));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Contain("JobCardWorkerNotMember");
+        jobCard.AssignedWorkerUserId.Should().BeNull();
+    }
+
     [Fact]
     public async Task AssignJobCard_ByMukadam_Succeeds()
     {
@@ -78,7 +123,11 @@ public sealed class AssignJobCardHandlerTests
         public DateTime UtcNow { get; } = utcNow;
     }
 
-    private sealed class FakeRepo(JobCard jobCard, AppRole mukadamRole, bool workerIsMember)
+    private sealed class FakeRepo(
+        JobCard jobCard,
+        AppRole mukadamRole,
+        bool workerIsMember,
+        FarmMembership? workerSeat = null)
         : StubShramSafalRepository
     {
         public List<AuditEvent> AuditEvents { get; } = [];
@@ -99,9 +148,11 @@ public sealed class AssignJobCardHandlerTests
             if (!workerIsMember || userId != WorkerGuid)
                 return Task.FromResult<ShramSafal.Domain.Farms.FarmMembership?>(null);
 
-            // Return a non-null stub membership (FarmMembership has a private ctor, so we just return a new one via EF-style)
+            // Return a non-null stub membership (FarmMembership has a private ctor, so we just return a new one via EF-style).
+            // `workerSeat` stands in for a live seat that is NOT Active (the production read returns any seat
+            // that has not ended).
             return Task.FromResult<ShramSafal.Domain.Farms.FarmMembership?>(
-                FarmMembership.Create(Guid.NewGuid(), FarmId, new UserId(WorkerGuid), AppRole.Worker, Now));
+                workerSeat ?? FarmMembership.Create(Guid.NewGuid(), FarmId, new UserId(WorkerGuid), AppRole.Worker, Now));
         }
 
         public override Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken ct = default)

@@ -24,6 +24,19 @@ import {
 } from './inviteApi';
 import { getShareOrigin } from '../../../shared/config/publicWebOrigin';
 import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
+import { JOIN_DOOR_LABEL } from './farmCodeEntry';
+
+/**
+ * spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — "type this code" is TRUE now (the joiner's
+ * app has a door that takes it), so the line says where to type it, in the words on that door.
+ * PROPOSED Marathi.
+ *
+ * F5 (doctrine P11): that door exists only in the NEW app. An installed 1.0.16 has no such button
+ * (its only code box asks for a link), so the line says so and what to do — update the app —
+ * instead of naming a button the worker cannot find. Scanning the QR works on every version.
+ */
+const TYPE_CODE_LINE = `QR स्कॅन करता येत नसेल तर: त्यांनी ॲपमध्ये "${JOIN_DOOR_LABEL}" दाबून हा कोड टाकावा.`;
+const OLD_APP_LINE = 'हे बटण नवीन ॲपमध्ये आहे — जुने ॲप असेल तर आधी ॲप अपडेट करायला सांगा.';
 
 interface FarmInviteQrSheetProps {
     isOpen: boolean;
@@ -211,8 +224,10 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
                         )}
                     </div>
 
-                    {invite && (
-                        <div className="mt-5 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-center">
+                    {/* Never a blank code: an older server answered `farmCode: ""` for a farm
+                        that had none (D-1). No code, no box and no "type this code" line. */}
+                    {invite && (invite.farmCode ?? '').trim() !== '' && (
+                        <div data-testid="invite-farm-code-card" className="mt-5 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-center">
                             <div className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
                                 Farm code · शेती कोड
                             </div>
@@ -229,8 +244,11 @@ const FarmInviteQrSheet: React.FC<FarmInviteQrSheetProps> = ({ isOpen, onClose, 
                                     <Copy size={14} className="text-stone-400 opacity-0 transition-opacity group-hover:opacity-100" />
                                 )}
                             </button>
-                            <div className="mt-1 text-[11px] text-stone-500">
-                                Workers who cannot scan can type this code to join.
+                            <div data-testid="invite-type-code-line" className="mt-1 text-[12px] font-semibold leading-snug text-stone-600">
+                                {TYPE_CODE_LINE}
+                            </div>
+                            <div data-testid="invite-old-app-line" className="mt-1 text-[11px] leading-snug text-stone-500">
+                                {OLD_APP_LINE}
                             </div>
                         </div>
                     )}

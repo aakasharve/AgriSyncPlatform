@@ -24,17 +24,30 @@ import {
     isInviteApiError,
     type BootstrapFirstFarmResponse,
 } from '../qr/inviteApi';
+import { JOIN_DOOR_LABEL } from '../qr/farmCodeEntry';
+import PendingJoinRequests, { type WaitingSeat } from './PendingJoinRequests';
 
 interface MinimalOnboardingProps {
     isOpen: boolean;
     onComplete: (result: BootstrapFirstFarmResponse) => void;
     onJoinViaQr: () => void;
+    /**
+     * spec: plr-d7-m1-multiuser-2026-10-26 (step 1, F2) — seats that grant nothing yet: farms this
+     * person asked to join (typed code) that the owner has not approved, or a paused seat. He
+     * still has no farm, so this screen stays; it says what each one is (a request waiting, or
+     * work paused — never one for the other) instead of looking as if nothing happened.
+     */
+    pendingSeats?: WaitingSeat[];
+    /** Withdraws a waiting request (server self-exit) and refreshes the farm lists. */
+    onWithdrawRequest?: (farmId: string) => Promise<void>;
 }
 
 const MinimalOnboarding: React.FC<MinimalOnboardingProps> = ({
     isOpen,
     onComplete,
     onJoinViaQr,
+    pendingSeats = [],
+    onWithdrawRequest,
 }) => {
     const [farmerName, setFarmerName] = useState('');
     const [farmName, setFarmName] = useState('');
@@ -217,6 +230,16 @@ const MinimalOnboarding: React.FC<MinimalOnboardingProps> = ({
                         </div>
                     </form>
 
+                    {pendingSeats.length > 0 && (
+                        <div className="mt-8">
+                            <PendingJoinRequests
+                                seats={pendingSeats}
+                                onWithdraw={onWithdrawRequest}
+                                testId="minimal-onboarding-pending"
+                            />
+                        </div>
+                    )}
+
                     {/* Join-via-QR escape hatch — for workers joining an existing farm */}
                     <div className="mt-8 flex flex-col items-center gap-2 pb-4">
                         <p className="text-xs text-stone-400">
@@ -229,13 +252,9 @@ const MinimalOnboarding: React.FC<MinimalOnboardingProps> = ({
                             className="flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-4 py-2 text-xs font-bold text-stone-600 hover:border-stone-300 disabled:opacity-50"
                         >
                             <Users size={13} />
-                            QR ने जोडा
-                            <span
-                                className="font-normal text-stone-400"
-                                style={{ fontFamily: '"DM Sans", sans-serif' }}
-                            >
-                                · Join via QR
-                            </span>
+                            {/* spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — opens the join
+                                door: the typed farm code as well as the QR. */}
+                            {JOIN_DOOR_LABEL}
                         </button>
                     </div>
 

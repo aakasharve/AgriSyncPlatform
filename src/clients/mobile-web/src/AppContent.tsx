@@ -16,6 +16,7 @@ import ActionToast from './shared/components/ui/ActionToast';
 import WeatherReactionPrompt from './features/weather/components/WeatherReactionPrompt';
 import FirstFarmWizard from './features/onboarding/components/FirstFarmWizard';
 import MinimalOnboarding from './features/onboarding/components/MinimalOnboarding';
+import JoinByCodeScreen from './features/onboarding/components/JoinByCodeScreen';
 import { AiTestModeBanner } from './shared/components/AiTestModeBanner';
 
 import { CropProfile } from './types';
@@ -56,6 +57,7 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
 
     const {
         myFarms,
+        pendingFarms,
         currentFarmId,
         showFirstFarmWizard,
         setShowFirstFarmWizard,
@@ -63,6 +65,10 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
         handleSwitchFarm,
         handleWizardComplete,
         handleJoinViaQr,
+        showJoinByCode,
+        closeJoinByCode,
+        handleJoinComplete,
+        handleWithdrawRequest,
     } = useFarmContextState();
 
     const currentFarmName = myFarms?.find(f => f.farmId === currentFarmId)?.name;
@@ -216,6 +222,8 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 isOpen={showMinimalOnboarding}
                 onComplete={handleWizardComplete}
                 onJoinViaQr={handleJoinViaQr}
+                pendingSeats={pendingFarms}
+                onWithdrawRequest={handleWithdrawRequest}
             />
 
             {/* Heavy wizard — still available from AppHeader "create farm" CTA
@@ -225,6 +233,14 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 onComplete={handleWizardComplete}
                 onDismiss={myFarms && myFarms.length > 0 ? () => setShowFirstFarmWizard(false) : undefined}
                 suggestedOwnerName={data.farmerProfile?.name?.split(' ')[0]}
+            />
+
+            {/* spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the ONE join door (typed farm
+                code + the QR way). Every "join" control opens this single instance. */}
+            <JoinByCodeScreen
+                isOpen={showJoinByCode}
+                onClose={closeJoinByCode}
+                onJoined={handleJoinComplete}
             />
 
             {weather.pendingWeatherEvent && (

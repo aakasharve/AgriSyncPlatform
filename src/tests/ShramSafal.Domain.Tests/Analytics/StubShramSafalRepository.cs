@@ -73,6 +73,19 @@ internal sealed class StubShramSafalRepository : IShramSafalRepository
     }
 
     /// <summary>
+    /// The live (non-terminal) seat, as the production tracked read returns it. The seeded
+    /// objects ARE the store, so a mutation applied to what this returns is what a later read
+    /// sees. (Its locked sibling <c>GetTrackedFarmMembershipForUpdateAsync</c> falls back to this
+    /// through the port's default body.)
+    /// </summary>
+    public Task<FarmMembership?> GetTrackedFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        var m = _memberships.FirstOrDefault(x => x.FarmId.Value == farmId && x.UserId.Value == userId
+            && !x.IsTerminal);
+        return Task.FromResult(m);
+    }
+
+    /// <summary>
     /// Mirrors the production repository's exit-path read: status-blind, live row
     /// first. The seeded objects ARE the store here, so a mutation applied to what
     /// this returns is visible to a later read — which is precisely the property

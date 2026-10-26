@@ -313,7 +313,11 @@ public static class AuthEndpoints
         .WithName("LogoutAll")
         .RequireAuthorization();
 
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, P11) — `?includePending=true` (sent by this
+        // release's phone on every call) also lists the caller's seats that are not Active, each
+        // with its status. Without it: Active seats only, what an older installed app understands.
         group.MapGet("/me/context", async (
+            bool? includePending,
             ClaimsPrincipal user,
             GetMeContextHandler handler,
             CancellationToken ct) =>
@@ -323,7 +327,7 @@ public static class AuthEndpoints
                 return Results.Unauthorized();
             }
 
-            var result = await handler.HandleAsync(new UserId(userId), ct);
+            var result = await handler.HandleAsync(new UserId(userId), includePending == true, ct);
 
             return result.IsSuccess
                 ? Results.Ok(result.Value)

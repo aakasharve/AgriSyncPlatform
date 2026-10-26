@@ -60,6 +60,10 @@ internal sealed class ShramSafalRepository(
         await db.FarmMemberships.AddAsync(membership, ct);
     }
 
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the RELATIONSHIP read: any seat that has not
+    // ended (a PendingApproval request included), returned with its Status so the caller decides.
+    // It is NOT an access check; the gates below (GetUserRoleForFarmAsync, IsUserMemberOfFarmAsync,
+    // GetFarmMembershipForTenantAsync, GetFarmIdsForUserAsync) count Active seats only.
     public async Task<FarmMembership?> GetFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default)
     {
         var typedFarmId = new FarmId(farmId);
@@ -88,10 +92,13 @@ internal sealed class ShramSafalRepository(
             return AppRole.PrimaryOwner;
         }
 
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, BN-1) — only an ACTIVE seat holds a role on
+        // the farm. A PendingApproval request (a typed farm code) carries a placeholder role the
+        // owner has not granted, and a Suspended seat is paused: neither may act as that role.
         var membership = await db.FarmMemberships
             .AsNoTracking()
             .Where(x => x.FarmId == typedFarmId && x.UserId == typedUserId
-                && x.Status != MembershipStatus.Revoked && x.Status != MembershipStatus.Exited)
+                && x.Status == MembershipStatus.Active)
             .Select(x => (AppRole?)x.Role)
             .FirstOrDefaultAsync(ct);
 
@@ -1002,10 +1009,12 @@ internal sealed class ShramSafalRepository(
             .Select(f => (Guid)f.Id)
             .ToListAsync(ct);
 
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, BN-1) — the farms whose DATA this person
+        // may pull: owned, or an ACTIVE seat. A typed-code join request (PendingApproval) must
+        // download nothing of the farm until the owner approves it.
         var membershipFarmIds = await db.FarmMemberships
             .AsNoTracking()
-            .Where(m => (Guid)m.UserId == userId
-                && m.Status != MembershipStatus.Revoked && m.Status != MembershipStatus.Exited)
+            .Where(m => (Guid)m.UserId == userId && m.Status == MembershipStatus.Active)
             .Select(m => (Guid)m.FarmId)
             .ToListAsync(ct);
 
@@ -1043,17 +1052,23 @@ internal sealed class ShramSafalRepository(
             },
             ct);
 
-        var roleByFarm = memberships
+        var seatByFarm = memberships
             .GroupBy(m => (Guid)m.FarmId)
-            .ToDictionary(g => g.Key, g => g.First().Role);
+            .ToDictionary(g => g.Key, g => g.First());
 
         return farms.Select(f =>
         {
             var farmId = (Guid)f.Id;
-            AppRole? role = roleByFarm.TryGetValue(farmId, out var membershipRole)
-                ? membershipRole
-                : ((Guid)f.OwnerUserId == userId ? AppRole.PrimaryOwner : (AppRole?)null);
-            return new MyFarmProjection(farmId, f.Name, f.FarmCode, (Guid)f.OwnerAccountId, role);
+            var isRegistrant = (Guid)f.OwnerUserId == userId;
+            seatByFarm.TryGetValue(farmId, out var seat);
+            AppRole? role = seat is not null
+                ? seat.Role
+                : (isRegistrant ? AppRole.PrimaryOwner : (AppRole?)null);
+            // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — this list is "not ended", so it can
+            // hold a PendingApproval request; the status says so (the registrant always has
+            // access, whatever his own seat row says — the same shortcut every gate applies).
+            var status = isRegistrant || seat is null ? MembershipStatus.Active : seat.Status;
+            return new MyFarmProjection(farmId, f.Name, f.FarmCode, (Guid)f.OwnerAccountId, role, status);
         }).ToList();
     }
 
@@ -1141,20 +1156,39 @@ internal sealed class ShramSafalRepository(
             return true;
         }
 
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, BN-1) — a member is an ACTIVE seat. A
+        // PendingApproval request or a Suspended seat is a relationship, not access.
         return await db.FarmMemberships
             .AsNoTracking()
             .AnyAsync(
                 membership => membership.FarmId == typedFarmId &&
                               membership.UserId == typedUserId &&
-                              membership.Status != MembershipStatus.Revoked &&
-                              membership.Status != MembershipStatus.Exited,
+                              membership.Status == MembershipStatus.Active,
                 ct);
     }
 
-    public async Task<(bool IsMember, Guid OwnerAccountId)> GetFarmMembershipForTenantAsync(
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, BN-1) — the ACCESS gate (push, REST farm
+    // scope, the pipeline's EnsureIsFarmMember): owner, or an ACTIVE seat.
+    public Task<(bool IsMember, Guid OwnerAccountId)> GetFarmMembershipForTenantAsync(
         Guid farmId,
         Guid userId,
         CancellationToken ct = default)
+        => ReadFarmMembershipForTenantAsync(farmId, userId, activeOnly: true, ct);
+
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the RELATIONSHIP read: owner, or any seat
+    // that has not ended. Only the self-exit scope uses it, so a person can always withdraw a
+    // pending request or leave a paused seat (see the port).
+    public Task<(bool IsMember, Guid OwnerAccountId)> GetFarmMembershipRelationshipForTenantAsync(
+        Guid farmId,
+        Guid userId,
+        CancellationToken ct = default)
+        => ReadFarmMembershipForTenantAsync(farmId, userId, activeOnly: false, ct);
+
+    private async Task<(bool IsMember, Guid OwnerAccountId)> ReadFarmMembershipForTenantAsync(
+        Guid farmId,
+        Guid userId,
+        bool activeOnly,
+        CancellationToken ct)
     {
         // DATA_PRINCIPLE_SPINE 03.2 — Owner shortcut first so a farm's
         // declared OwnerUserId resolves to its OwnerAccountId in one
@@ -1176,23 +1210,37 @@ internal sealed class ShramSafalRepository(
         // owner_account_id was added to ssf.farm_memberships by migration
         // 20260516120000_AddOwnerAccountIdToFarmMemberships but is not on
         // the FarmMembership domain entity (kept stable for that migration
-        // per its own rationale comment). Read it via raw SQL alongside
-        // the non-terminal status filter the existing LINQ predicates use.
-        // Status enum: 0=PendingOtpClaim, 1=PendingApproval, 2=Active,
-        // 3=Suspended, 5=Revoked, 6=Exited (see MembershipStatus enum).
-        var membershipOwner = await db.Database
-            .SqlQueryRaw<Guid?>(
-                """
-                SELECT owner_account_id AS "Value"
-                FROM ssf.farm_memberships
-                WHERE farm_id = {0}
-                  AND user_id = {1}
-                  AND status NOT IN (5, 6)
-                LIMIT 1
-                """,
-                farmId,
-                userId)
-            .FirstOrDefaultAsync(ct);
+        // per its own rationale comment). Read it via raw SQL.
+        // Status enum: 1=PendingOtpClaim, 2=PendingApproval, 3=Active,
+        // 4=Suspended, 5=Revoked, 6=Exited (see MembershipStatus enum).
+        // Two fixed statements, never a spliced predicate.
+        var membershipOwner = activeOnly
+            ? await db.Database
+                .SqlQueryRaw<Guid?>(
+                    """
+                    SELECT owner_account_id AS "Value"
+                    FROM ssf.farm_memberships
+                    WHERE farm_id = {0}
+                      AND user_id = {1}
+                      AND status = 3
+                    LIMIT 1
+                    """,
+                    farmId,
+                    userId)
+                .FirstOrDefaultAsync(ct)
+            : await db.Database
+                .SqlQueryRaw<Guid?>(
+                    """
+                    SELECT owner_account_id AS "Value"
+                    FROM ssf.farm_memberships
+                    WHERE farm_id = {0}
+                      AND user_id = {1}
+                      AND status NOT IN (5, 6)
+                    LIMIT 1
+                    """,
+                    farmId,
+                    userId)
+                .FirstOrDefaultAsync(ct);
 
         return membershipOwner is Guid mappedOwner
             ? (true, mappedOwner)
@@ -1361,7 +1409,54 @@ internal sealed class ShramSafalRepository(
         }
     }
 
-    private static bool IsUniqueViolationOn(DbUpdateException ex, string constraintName)
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — see IShramSafalRepository.
+    public async Task<Farm?> GetFarmByJoinCodeAsync(string normalizedFarmCode, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedFarmCode))
+        {
+            return null;
+        }
+
+        return await db.Farms
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => f.FarmCode == normalizedFarmCode, ct);
+    }
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — where <see cref="EnsureFarmCodeAsync"/> and
+    /// <see cref="SaveNewFarmAsync"/> draw a code from. Always <see cref="FarmCode.New"/> in
+    /// production; internal and settable ONLY so a real-Postgres test can force the rare collision
+    /// with another farm's code and prove the redraw really runs inside the request transaction
+    /// (<c>JoinByCodeRealPostgresTests</c>). Nothing outside tests sets it.
+    /// </summary>
+    internal Func<string> DrawFarmCode { get; set; } = FarmCode.New;
+
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — see IShramSafalRepository.
+    public async Task<string> EnsureFarmCodeAsync(Farm farm, DateTime utcNow, CancellationToken ct = default)
+    {
+        if (!string.IsNullOrWhiteSpace(farm.FarmCode))
+        {
+            return farm.FarmCode;
+        }
+
+        // A farm handed in un-tracked would take the code in memory and never write it — the
+        // blank QR code again, now with a success behind it. Attach before changing it.
+        if (db.Entry(farm).State == EntityState.Detached)
+        {
+            db.Farms.Attach(farm);
+        }
+
+        // Drawn again on the rare collision with another farm's code (FarmCodeAssignment).
+        await FarmCodeAssignment.SaveWithFreshFarmCodeAsync(db, farm, utcNow, DrawFarmCode, ct);
+        return farm.FarmCode!;
+    }
+
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, M3) — see IShramSafalRepository. The farm was
+    // added through this repository (AddFarmAsync), so it is tracked as Added on this context.
+    public Task SaveNewFarmAsync(Farm farm, DateTime utcNow, CancellationToken ct = default)
+        => FarmCodeAssignment.SaveWithFreshFarmCodeAsync(db, farm, utcNow, DrawFarmCode, ct);
+
+    internal static bool IsUniqueViolationOn(DbUpdateException ex, string constraintName)
     {
         for (Exception? inner = ex; inner is not null; inner = inner.InnerException)
         {
@@ -1847,9 +1942,10 @@ internal sealed class ShramSafalRepository(
     /// ONLY for roles that do not already carry the capability
     /// (<c>LabourManagementGate</c> short-circuits owner-tier and Mukadam), so
     /// in practice it is one extra round trip on the rarest branch.
-    /// <para>The non-terminal filter matches <see cref="GetUserRoleForFarmAsync"/>
-    /// exactly, so the grant and the role can never disagree about whether the
-    /// membership counts.</para>
+    /// <para>The status filter matches <see cref="GetUserRoleForFarmAsync"/>
+    /// exactly (Active only since spec plr-d7-m1-multiuser-2026-10-26 step 1), so
+    /// the grant and the role can never disagree about whether the membership
+    /// counts.</para>
     /// </summary>
     public async Task<bool> GetLabourManagementGrantAsync(
         Guid farmId, Guid userId, DateTime nowUtc, CancellationToken ct = default)
@@ -1861,8 +1957,7 @@ internal sealed class ShramSafalRepository(
             .AsNoTracking()
             .AnyAsync(m => m.FarmId == typedFarmId
                 && m.UserId == typedUserId
-                && m.Status != MembershipStatus.Revoked
-                && m.Status != MembershipStatus.Exited
+                && m.Status == MembershipStatus.Active
                 && m.CanManageLabourRecords
                 && (m.LabourGrantExpiresAtUtc == null || m.LabourGrantExpiresAtUtc > nowUtc), ct);
     }
@@ -1884,6 +1979,30 @@ internal sealed class ShramSafalRepository(
                 && m.UserId == typedUserId
                 && m.Status != MembershipStatus.Revoked
                 && m.Status != MembershipStatus.Exited, ct);
+    }
+
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — see the port. The lock is a plain row lock
+    // on the one live seat (ix_farm_memberships_farm_user_nonterminal allows one), held by the
+    // request transaction TenantTransactionMiddleware opened. Under READ COMMITTED the tracked
+    // read below is a NEW statement, so a request that waited at the lock reads the row as the
+    // first request committed it. The RLS policies the read already passes (p_tenant_farm_memberships
+    // under the caller's farm scope) are the ones FOR UPDATE checks. No lock under a non-relational
+    // provider (EF InMemory: no FORCE-RLS, no raw SQL, no concurrency).
+    public async Task<FarmMembership?> GetTrackedFarmMembershipForUpdateAsync(
+        Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        if (db.Database.IsRelational())
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                SELECT 1 FROM ssf.farm_memberships
+                WHERE farm_id = {farmId} AND user_id = {userId} AND status NOT IN (5, 6)
+                FOR UPDATE
+                """,
+                ct);
+        }
+
+        return await GetTrackedFarmMembershipAsync(farmId, userId, ct);
     }
 
     /// <summary>

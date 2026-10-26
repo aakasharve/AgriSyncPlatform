@@ -53,6 +53,8 @@ public class SeedDataService
         // 3. Create Ramus Farm
         var farmId = new FarmId(Guid.NewGuid());
         var farm = Farm.Create(farmId, "Ramus Farm", userId, DateTime.UtcNow);
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — every farm has a code from birth.
+        farm.AssignFarmCode(FarmCode.New(), DateTime.UtcNow);
         _SSFContext.Farms.Add(farm);
 
         // 4. Create Plots & Crops

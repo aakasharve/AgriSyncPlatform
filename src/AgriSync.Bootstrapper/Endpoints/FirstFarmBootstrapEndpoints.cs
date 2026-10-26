@@ -105,54 +105,9 @@ public static class FirstFarmBootstrapEndpoints
 
             await accountsDb.SaveChangesAsync(ct);
 
-            // 4. Scope the FORCE-RLS ssf writes WITHOUT the TenantConnectionInterceptor's
-            //    SET LOCAL prelude. The interceptor prepends `SET LOCAL agrisync.* = ...` to
-            //    every EF command on a single-tenant claim; on a WRITING command that prepend
-            //    desynchronises EF's rows-affected accounting and surfaces a spurious
-            //    DbUpdateConcurrencyException ("expected 1 row, affected 0") on the INSERT —
-            //    the real root cause of the first-farm 500s (NOT a WITH CHECK / RLS denial).
-            //    Instead, elevate to admin scope so the interceptor no-ops, then set the farm
-            //    GUC ourselves so the ssf.farms / ssf.farm_memberships WITH CHECK
-            //    ("= current_setting('agrisync.farm_id')") still pass for THIS user's own new
-            //    farm. Same self-GUC pattern as the getMyFarms read path
-            //    (ShramSafalRepository.GetMyFarmsAsync). The GUCs are tx-local (is_local=true)
-            //    and ride the per-request transaction TenantTransactionMiddleware already opened
-            //    on this writing context. spec: getmyfarms-user-scoped-rls-read-path-2026-06-06.
-            var typedFarmId = new FarmId(farmId);
-            tenantContext.ElevateToAdminCrossTenant();
-            await ssfDb.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT set_config('agrisync.farm_id', {farmId.ToString()}, true)", ct);
-            await ssfDb.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT set_config('agrisync.owner_account_id', {((Guid)account.Id).ToString()}, true)", ct);
-            await ssfDb.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT set_config('agrisync.user_id', {userId.ToString()}, true)", ct);
-
-            // 5. Find-or-create the Farm (ssf). The manual farm GUC scopes this read to
-            //    exactly this farm id, so it returns the farm iff a prior run already created it.
-            var farm = await ssfDb.Farms.FirstOrDefaultAsync(f => f.Id == typedFarmId, ct);
-            var wasAlreadyBootstrapped = farm is not null;
-
-            if (farm is null)
-            {
-                farm = Farm.Create(
-                    id: typedFarmId,
-                    name: farmName,
-                    ownerUserId: typedUserId,
-                    createdAtUtc: nowUtc);
-                farm.AttachToOwnerAccount(account.Id, nowUtc);
-                farm.AssignFarmCode(GenerateFarmCode(), nowUtc);
-                ssfDb.Farms.Add(farm);
-
-                var membership = FarmMembership.Create(
-                    id: Guid.NewGuid(),
-                    farmId: farm.Id,
-                    userId: typedUserId,
-                    role: AppRole.PrimaryOwner,
-                    grantedAtUtc: nowUtc);
-                ssfDb.FarmMemberships.Add(membership);
-
-                await ssfDb.SaveChangesAsync(ct);
-            }
+            // 4.–5. Scope the ssf writes to this farm, then find-or-create it (see the method).
+            var (farm, wasAlreadyBootstrapped) = await FindOrCreateFirstFarmAsync(
+                ssfDb, tenantContext, farmId, account.Id, typedUserId, farmName, nowUtc, FarmCode.New, ct);
 
             // 6. Farmer Name (minimal post-OTP onboarding) → user display name.
             //    public.users is NOT under RLS (it is the global auth directory —
@@ -178,6 +133,79 @@ public static class FirstFarmBootstrapEndpoints
         .RequireAuthorization();
 
         return endpoints;
+    }
+
+    /// <summary>
+    /// Steps 4–5 of <c>POST /bootstrap/first-farm</c>: scope the FORCE-RLS ssf writes to the
+    /// bootstrap farm, then return that farm if a prior run already made it, or create it with its
+    /// PrimaryOwner seat. Public (not inlined in the route) by spec: plr-d7-m1-multiuser-2026-10-26
+    /// (step 1, M3) so a real-Postgres test can run EXACTLY this code with a forced farm-code
+    /// collision (<paramref name="drawFarmCode"/>; the route always passes
+    /// <see cref="FarmCode.New"/>).
+    /// </summary>
+    public static async Task<(Farm Farm, bool WasAlreadyBootstrapped)> FindOrCreateFirstFarmAsync(
+        ShramSafalDbContext ssfDb,
+        TenantContext tenantContext,
+        Guid farmId,
+        OwnerAccountId ownerAccountId,
+        UserId ownerUserId,
+        string farmName,
+        DateTime nowUtc,
+        Func<string> drawFarmCode,
+        CancellationToken ct)
+    {
+        // 4. Scope the FORCE-RLS ssf writes WITHOUT the TenantConnectionInterceptor's
+        //    SET LOCAL prelude. The interceptor prepends `SET LOCAL agrisync.* = ...` to
+        //    every EF command on a single-tenant claim; on a WRITING command that prepend
+        //    desynchronises EF's rows-affected accounting and surfaces a spurious
+        //    DbUpdateConcurrencyException ("expected 1 row, affected 0") on the INSERT —
+        //    the real root cause of the first-farm 500s (NOT a WITH CHECK / RLS denial).
+        //    Instead, elevate to admin scope so the interceptor no-ops, then set the farm
+        //    GUC ourselves so the ssf.farms / ssf.farm_memberships WITH CHECK
+        //    ("= current_setting('agrisync.farm_id')") still pass for THIS user's own new
+        //    farm. Same self-GUC pattern as the getMyFarms read path
+        //    (ShramSafalRepository.GetMyFarmsAsync). The GUCs are tx-local (is_local=true)
+        //    and ride the per-request transaction TenantTransactionMiddleware already opened
+        //    on this writing context. spec: getmyfarms-user-scoped-rls-read-path-2026-06-06.
+        var typedFarmId = new FarmId(farmId);
+        tenantContext.ElevateToAdminCrossTenant();
+        await ssfDb.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.farm_id', {farmId.ToString()}, true)", ct);
+        await ssfDb.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.owner_account_id', {((Guid)ownerAccountId).ToString()}, true)", ct);
+        await ssfDb.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.user_id', {((Guid)ownerUserId).ToString()}, true)", ct);
+
+        // 5. Find-or-create the Farm (ssf). The manual farm GUC scopes this read to
+        //    exactly this farm id, so it returns the farm iff a prior run already created it.
+        var farm = await ssfDb.Farms.FirstOrDefaultAsync(f => f.Id == typedFarmId, ct);
+        if (farm is not null)
+        {
+            return (farm, true);
+        }
+
+        farm = Farm.Create(
+            id: typedFarmId,
+            name: farmName,
+            ownerUserId: ownerUserId,
+            createdAtUtc: nowUtc);
+        farm.AttachToOwnerAccount(ownerAccountId, nowUtc);
+        ssfDb.Farms.Add(farm);
+
+        var membership = FarmMembership.Create(
+            id: Guid.NewGuid(),
+            farmId: farm.Id,
+            userId: ownerUserId,
+            role: AppRole.PrimaryOwner,
+            grantedAtUtc: nowUtc);
+        ssfDb.FarmMemberships.Add(membership);
+
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, M3) — the farm takes its code as it is
+        // saved, and draws again on the rare collision with another farm's code instead of
+        // failing the farmer's first farm (FarmCodeAssignment, the same path as every other
+        // farm creation).
+        await FarmCodeAssignment.SaveWithFreshFarmCodeAsync(ssfDb, farm, nowUtc, drawFarmCode, ct);
+        return (farm, false);
     }
 
     private static object BuildResponse(Farm farm, OwnerAccount account, Subscription? subscription, bool wasAlreadyBootstrapped)
@@ -210,20 +238,6 @@ public static class FirstFarmBootstrapEndpoints
 
     private static bool IsPhoneVerified(ClaimsPrincipal user) =>
         string.Equals(user.FindFirstValue("phone_verified"), "true", StringComparison.OrdinalIgnoreCase);
-
-    private static readonly char[] FarmCodeAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ".ToCharArray();
-
-    private static string GenerateFarmCode()
-    {
-        Span<byte> bytes = stackalloc byte[6];
-        System.Security.Cryptography.RandomNumberGenerator.Fill(bytes);
-        Span<char> chars = stackalloc char[6];
-        for (var i = 0; i < 6; i++)
-        {
-            chars[i] = FarmCodeAlphabet[bytes[i] % FarmCodeAlphabet.Length];
-        }
-        return new string(chars);
-    }
 }
 
 public sealed record BootstrapFirstFarmRequest(string? FarmName, string? Village, string? FarmerName = null);

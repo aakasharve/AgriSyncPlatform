@@ -41,7 +41,9 @@ public sealed class AssignJobCardHandler(
         var workerMembership = await repository.GetFarmMembershipAsync(
             jobCard.FarmId.Value, command.WorkerUserId.Value, ct);
 
-        if (workerMembership is null)
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, BN-1) — the read returns any seat that has
+        // not ended; a pending join request or a paused seat is not someone work can be given to.
+        if (workerMembership is null || !workerMembership.IsActive)
             return Result.Failure<AssignJobCardResult>(ShramSafalErrors.JobCardWorkerNotMember);
 
         // 4. Assign via domain method.

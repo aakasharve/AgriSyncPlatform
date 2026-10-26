@@ -88,7 +88,22 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
     /// back to <see cref="MigrationBefore"/>, which reverts everything after it.
     /// Add an entry only after reading its Down(); never delete the guard.
     /// </summary>
-    private static readonly string[] ReviewedMigrationsAfterThisOne = [];
+    private static readonly string[] ReviewedMigrationsAfterThisOne =
+    [
+        // ── Reviewed 2026-10-26 (spec: plr-d7-m1-multiuser-2026-10-26, step 1); both Down()s
+        //    read in full. Policy DDL only: no table, column, row or GRANT/REVOKE, and neither
+        //    touches any of the nine append-only ledgers this suite asserts about.
+        //
+        // One permissive FOR SELECT policy on ssf.farms (agrisync.join_code GUC); Down() drops
+        // it. Nothing here sets that GUC. Safe to revert and re-apply mid-proof.
+        "20261025192535_AddFarmJoinCodeReadPolicy",
+
+        // ALTER POLICY on every ssf p_user_select_* DATA policy: m.status NOT IN (5, 6) ->
+        // m.status = 3, Down() the exact reverse on the same set. No privilege changes, so it
+        // cannot mask or undo the ledger REVOKEs proven here. Safe mid-proof. (On production a
+        // Down() re-opens farm data to pending / paused seats — see the migration's summary.)
+        "20261025204459_RequireActiveMembershipForUserScopedDataReads",
+    ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");
     private static readonly Guid Mark = Guid.Parse("a0a00000-2222-4222-8222-000000000001");

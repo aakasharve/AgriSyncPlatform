@@ -119,7 +119,7 @@ internal sealed class BackfillFarmOwnerAccounts : IHostedService
                 farm.AttachToOwnerAccount(account.Id, nowUtc);
                 if (string.IsNullOrWhiteSpace(farm.FarmCode))
                 {
-                    farm.AssignFarmCode(GenerateFarmCode(), nowUtc);
+                    farm.AssignFarmCode(FarmCode.New(), nowUtc);
                 }
 
                 attached++;
@@ -188,21 +188,4 @@ internal sealed class BackfillFarmOwnerAccounts : IHostedService
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    private static readonly char[] Alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ".ToCharArray();
-
-    private static string GenerateFarmCode()
-    {
-        // 6 chars Crockford-base32. Collision probability on a 10M-farm
-        // corpus is ~0.5%; the DB's unique partial index guarantees
-        // detection on the rare collision and the caller can retry.
-        Span<byte> bytes = stackalloc byte[6];
-        System.Security.Cryptography.RandomNumberGenerator.Fill(bytes);
-        Span<char> chars = stackalloc char[6];
-        for (var i = 0; i < 6; i++)
-        {
-            chars[i] = Alphabet[bytes[i] % Alphabet.Length];
-        }
-        return new string(chars);
-    }
 }

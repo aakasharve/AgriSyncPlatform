@@ -1220,6 +1220,27 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // above. Safe mid-proof in both directions. Its own proof is
         // Security/AppendOnlyLedgerGrantsRealPostgresTests.
         "20261017080742_EnforceAppendOnlyLedgerGrants",
+
+        // ── Reviewed 2026-10-26 (spec: plr-d7-m1-multiuser-2026-10-26, step 1). Both
+        //    Down()s read in full. Policy DDL only — no table, column, row or grant.
+        //
+        // Up() adds ONE permissive FOR SELECT policy on ssf.farms keyed on the
+        // agrisync.join_code GUC; Down() is DROP POLICY IF EXISTS of that one policy.
+        // Nothing here sets agrisync.join_code, so the policy contributes no row in either
+        // direction, and it never touches ssf.audit_events. Safe mid-proof. On production a
+        // Down() closes the typed-code door (every code answers 404) — fail-closed.
+        "20261025192535_AddFarmJoinCodeReadPolicy",
+
+        // Up() rewrites the USING of every ssf p_user_select_* DATA policy from
+        // m.status NOT IN (5, 6) to m.status = 3 (introspected via pg_get_expr, then
+        // ALTER POLICY) and RAISEs if any is left; Down() is the reverse replace on the
+        // same policy set. No data, no grants; p_user_select_farms/_memberships and every
+        // audit_events policy are untouched. Safe mid-proof (the roll-forward replays a
+        // statement that already succeeded here during InitializeAsync). ⚠️ On production
+        // a Down() is a SECURITY REGRESSION: pending / paused seats read farm data again —
+        // see the migration's own summary. Its own proof is
+        // Memberships/PendingJoinRequestAccessRealPostgresTests.
+        "20261025204459_RequireActiveMembershipForUserScopedDataReads",
     ];
 
     /// <summary>

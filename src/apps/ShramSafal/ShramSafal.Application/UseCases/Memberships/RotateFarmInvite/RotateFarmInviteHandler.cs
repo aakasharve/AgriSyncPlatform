@@ -52,6 +52,10 @@ public sealed class RotateFarmInviteHandler(
 
         var utcNow = clock.UtcNow;
 
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — same as IssueFarmInviteHandler: the
+        // sheet must never be handed a blank code. Rotating changes the QR token, never the code.
+        var farmCode = await farmRepository.EnsureFarmCodeAsync(farm, utcNow, ct);
+
         var existing = await invitationRepository.GetActiveInvitationByFarmAsync(command.FarmId, ct);
         if (existing is not null)
         {
@@ -87,7 +91,7 @@ public sealed class RotateFarmInviteHandler(
                 JoinTokenId: token.Id,
                 FarmId: farm.Id,
                 FarmName: farm.Name,
-                FarmCode: farm.FarmCode ?? "",
+                FarmCode: farmCode,
                 Token: rawToken,
                 IssuedAtUtc: token.CreatedAtUtc)));
     }

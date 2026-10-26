@@ -14,7 +14,7 @@ import { User, Sprout, Zap, Tractor, FlaskConical, Globe, Shield, Download, Tras
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useFarmContext } from '../../core/session/FarmContext';
-import { requestCreateFarmWizard, promptAndJoinFarmViaQr } from '../../app/hooks/useFarmContextState';
+import { requestCreateFarmWizard, requestJoinFarm } from '../../app/hooks/useFarmContextState';
 import { useWorkerProfile } from '../work/hooks/useWorkerProfile';
 import FarmInviteQrSheet from '../onboarding/qr/FarmInviteQrSheet';
 
@@ -259,6 +259,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                                 logout={logout}
                                 myFarm={farmAdmin.myFarm}
                                 myMemberships={farmAdmin.myMemberships}
+                                pendingSeats={farmAdmin.pendingSeats}
+                                currentFarmId={profileFarmId}
                                 farmDetails={farmAdmin.farmDetails}
                                 weatherConnected={farmAdmin.weatherConnected}
                                 connectingWeather={farmAdmin.connectingWeather}
@@ -412,7 +414,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             currentFarmId={profileFarmId ?? undefined}
                             onSwitchFarm={handleSwitchFarmFromMenu}
                             onCreateFarm={requestCreateFarmWizard}
-                            onJoinViaQr={promptAndJoinFarmViaQr}
+                            onJoinViaQr={requestJoinFarm}
                             language={language}
                             setupProgress={setupProgress}
                             items={menuItems}

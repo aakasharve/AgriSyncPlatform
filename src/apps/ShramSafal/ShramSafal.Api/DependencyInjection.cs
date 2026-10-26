@@ -43,6 +43,7 @@ using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
 using ShramSafal.Application.UseCases.Memberships.ClaimJoin;
+using ShramSafal.Application.UseCases.Memberships.JoinByCode;
 using ShramSafal.Application.UseCases.Memberships.ExitMembership;
 using ShramSafal.Application.UseCases.Memberships.GetMyFarms;
 using ShramSafal.Application.UseCases.Memberships.IssueFarmInvite;
@@ -355,6 +356,24 @@ public static class DependencyInjection
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<ClaimJoinCommand>>()),
                 new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<ClaimJoinCommand, ClaimJoinResult>(
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<ClaimJoinCommand>>())));
+
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — typed farm-code join REQUEST. Same
+        // validation-only shape as ClaimJoin: the caller is not a member yet, so there is no
+        // ownership to authorize; the code finds the farm and the result is only ever a
+        // PendingApproval seat the owner must approve.
+        services.AddScoped<JoinByCodeHandler>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<JoinByCodeCommand>,
+            JoinByCodeValidator>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<JoinByCodeCommand, JoinByCodeResult>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<JoinByCodeHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<JoinByCodeCommand, JoinByCodeResult>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<JoinByCodeCommand, JoinByCodeResult>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.ValidationBehavior<JoinByCodeCommand, JoinByCodeResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IValidator<JoinByCodeCommand>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<JoinByCodeCommand, JoinByCodeResult>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<JoinByCodeCommand>>())));
 
         // ── LABOUR_PHASE2 Phase 5 (founder decision O-4) — labour-capability
         // grant / revoke + the roster read that lets the switch render truth.

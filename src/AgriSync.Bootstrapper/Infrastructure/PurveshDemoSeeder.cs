@@ -1428,6 +1428,10 @@ public sealed partial class PurveshDemoSeeder
         // ParseVoiceInputHandler entitlement check returns
         // SubscriptionMissing (the exact 403 reproduced on 2026-05-13).
         farm.AttachToOwnerAccount(PurveshOwnerAccountId, nowUtc);
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the demo farm had no code (D-1): its
+        // QR sheet showed a blank one. An already-seeded demo farm gets one from the startup
+        // backfill (FarmCodeBackfillRunner).
+        farm.AssignFarmCode(FarmCode.New(), nowUtc);
         _ssfContext.Farms.Add(farm);
         return farm;
     }

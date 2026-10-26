@@ -179,4 +179,9 @@ public static class ShramSafalErrors
     public static readonly Error JoinUnauthenticated = Error.Unauthenticated("join.unauthenticated", "Caller must be authenticated.");
     public static readonly Error JoinPhoneNotVerified = Error.Forbidden("join.phone_not_verified", "Verify your phone via OTP before joining a farm.");
     public static readonly Error JoinInvalidPayload = Error.Validation("join.invalid_payload", "Scan the farm QR again.");
+
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the ONE answer for a blank, malformed,
+    // wrong or unknown typed farm code. It never names a farm. The endpoint sends only the code
+    // ({"error":"join.code_unknown"}); the phone shows its own Marathi text for it.
+    public static readonly Error JoinCodeUnknown = Error.NotFound("join.code_unknown", "No farm has this code.");
 }

@@ -1,4 +1,5 @@
 using AgriSync.SharedKernel.Contracts.Ids;
+using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Memberships.ClaimJoin;
 
@@ -14,9 +15,14 @@ public sealed record ClaimJoinCommand(
     string AuditDeviceId = "unknown",
     string AuditIpHash = "sha256:unknown");
 
+/// <param name="Status">spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — ADDITIVE, last: the
+/// seat's real status. A fresh QR claim is <c>Active</c>, and so is a typed-code request the QR
+/// just answered; but the already-a-member answer returns any other EXISTING seat as it is, and
+/// that seat can be paused (<c>Suspended</c>). The join page must not call that "joined".</param>
 public sealed record ClaimJoinResult(
     Guid MembershipId,
     FarmId FarmId,
     string FarmName,
     string Role,
-    bool WasAlreadyMember);
+    bool WasAlreadyMember,
+    MembershipStatus Status = MembershipStatus.Active);

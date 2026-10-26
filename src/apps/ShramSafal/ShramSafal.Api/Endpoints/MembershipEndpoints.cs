@@ -9,6 +9,7 @@ using ShramSafal.Application.UseCases.Memberships.ClaimJoin;
 using ShramSafal.Application.UseCases.Memberships.ExitMembership;
 using ShramSafal.Application.UseCases.Memberships.GetLabourPermissions;
 using ShramSafal.Application.UseCases.Memberships.GetMyFarms;
+using ShramSafal.Application.UseCases.Memberships.JoinByCode;
 using ShramSafal.Application.UseCases.Memberships.IssueFarmInvite;
 using ShramSafal.Application.UseCases.Memberships.RotateFarmInvite;
 using ShramSafal.Application.UseCases.Memberships.SetLabourPermission;
@@ -17,6 +18,14 @@ namespace ShramSafal.Api.Endpoints;
 
 public static class MembershipEndpoints
 {
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the rate-limit policy on
+    /// <c>POST /shramsafal/join/by-code</c>. ONE name shared by this route and the Bootstrapper's
+    /// registration (<c>RateLimitingConfig</c>), so a rename on either side is a compile error,
+    /// not a production 500. Pinned by <c>JoinByCodeRealPostgresTests</c>.
+    /// </summary>
+    public const string JoinRateLimitPolicy = "join";
+
     public static RouteGroupBuilder MapMembershipEndpoints(this RouteGroupBuilder group)
     {
         // Owner-only: get/create the persistent Active invitation+QR for a farm.
@@ -181,9 +190,79 @@ public static class MembershipEndpoints
                 farmName = result.Value.FarmName,
                 role = result.Value.Role,
                 wasAlreadyMember = result.Value.WasAlreadyMember,
+                // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — ADDITIVE: the seat's real
+                // status ("Active" for a fresh claim and for a typed-code request this QR just
+                // answered; an existing paused seat answers "Suspended"). Older apps ignore it.
+                status = result.Value.Status.ToString(),
             });
         })
         .WithName("ClaimJoin");
+
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — a signed-in person TYPES a farm's code
+        // to ask to join it. The contract (fixed; the phone follows it exactly):
+        //   200 {farmId, farmName, status}  status = "PendingApproval" for a new request, or the
+        //                                   REAL status of a live seat the caller already holds
+        //   404 {"error":"join.code_unknown"}  the one answer for ANY blank/malformed/wrong/
+        //                                   unknown code; carries no farm name, no message text
+        //   429                             "join" rate limit (Program.cs)
+        // plus the two identity refusals /join/claim already has (401; 403 phone not verified).
+        // There is no role in the body and none is read: the owner chooses it when approving.
+        // Not farm-keyed in the path, so ICallerFarmTenantScope does not apply — the farm is
+        // found under RLS by the code alone (IJoinCodeTenantScope, inside the handler).
+        group.MapPost("/join/by-code", async (
+            JoinByCodeRequest request,
+            HttpContext httpContext,
+            ClaimsPrincipal user,
+            IHandler<JoinByCodeCommand, JoinByCodeResult> handler,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var phoneVerified = string.Equals(
+                user.FindFirstValue("phone_verified"),
+                "true",
+                StringComparison.OrdinalIgnoreCase);
+
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var clientAppVersion = ResolveClientAppVersion(httpContext);
+
+            var result = await handler.HandleAsync(
+                new JoinByCodeCommand(
+                    FarmCode: request?.FarmCode ?? string.Empty,
+                    CallerUserId: new UserId(userId),
+                    PhoneVerified: phoneVerified,
+                    ClientAppVersion: clientAppVersion,
+                    AuditDeviceId: auditDeviceId,
+                    AuditIpHash: auditIpHash),
+                ct);
+
+            if (result.IsFailure)
+            {
+                return result.Error.Code switch
+                {
+                    "join.code_unknown" => Results.Json(new { error = result.Error.Code }, statusCode: 404),
+                    "join.unauthenticated" => Results.Unauthorized(),
+                    "join.phone_not_verified" => Results.Json(
+                        new { error = result.Error.Code, message = result.Error.Description }, statusCode: 403),
+                    "join.concurrent_claim_unresolved" => Results.Json(
+                        new { error = result.Error.Code, message = result.Error.Description }, statusCode: 409),
+                    _ => Results.Json(
+                        new { error = result.Error.Code, message = result.Error.Description }, statusCode: 400),
+                };
+            }
+
+            return Results.Ok(new
+            {
+                farmId = (Guid)result.Value!.FarmId,
+                farmName = result.Value.FarmName,
+                status = result.Value.Status.ToString(),
+            });
+        })
+        .RequireRateLimiting(JoinRateLimitPolicy)
+        .WithName("JoinFarmByCode");
 
         // Self-exit from a farm. Honours invariant I3 (last PrimaryOwner cannot leave).
         group.MapPost("/farms/{farmId:guid}/memberships/self-exit", async (
@@ -335,7 +414,13 @@ public static class MembershipEndpoints
         .WithName("SetFarmLabourPermission");
 
         // Minimal "my farms" list so the frontend can resolve the real farmId.
+        //
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, P11) — `?includePending=true` (sent by this
+        // release's phone on every call) also lists the caller's seats that are not Active, each
+        // with its status. Without it: Active seats only, the list an older installed app
+        // understands (GetMyFarmsCommand.IncludePending).
         group.MapGet("/farms/mine", async (
+            bool? includePending,
             ClaimsPrincipal user,
             GetMyFarmsHandler handler,
             CancellationToken ct) =>
@@ -345,7 +430,8 @@ public static class MembershipEndpoints
                 return Results.Unauthorized();
             }
 
-            var result = await handler.HandleAsync(new GetMyFarmsCommand(new UserId(userId)), ct);
+            var result = await handler.HandleAsync(
+                new GetMyFarmsCommand(new UserId(userId), IncludePending: includePending == true), ct);
             return result.IsSuccess
                 ? Results.Ok(result.Value!.Farms)
                 : ToErrorResult(result.Error);
@@ -418,6 +504,12 @@ public static class MembershipEndpoints
 }
 
 public sealed record ClaimJoinRequest(string? Token, string? FarmCode);
+
+/// <summary>
+/// spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — body of <c>POST /shramsafal/join/by-code</c>.
+/// The code only; deliberately no role (the joiner never chooses one).
+/// </summary>
+public sealed record JoinByCodeRequest(string? FarmCode);
 
 /// <summary>
 /// LABOUR_PHASE2 Phase 5 — body of

@@ -18,9 +18,9 @@ using Xunit;
 namespace ShramSafal.Sync.IntegrationTests.Labour;
 
 /// <summary>
-/// R1 closure — <b>CHARACTERIZATION, not a blessing.</b> What each of the six
-/// <c>MembershipStatus</c> values actually gets from the Labour/हजेरी read
-/// today, proven end to end against real Postgres as <c>agrisync_app</c>.
+/// R1 closure, then spec: plr-d7-m1-multiuser-2026-10-26 (step 1, BN-1) — what each of the six
+/// <c>MembershipStatus</c> values gets from the Labour/हजेरी read, proven end to end against
+/// real Postgres as <c>agrisync_app</c>.
 ///
 /// <para><b>Read this before touching a single assertion.</b> The founder's
 /// stated expectation is:
@@ -29,29 +29,26 @@ namespace ShramSafal.Sync.IntegrationTests.Labour;
 /// PendingOtpClaim / PendingApproval / Suspended -> NO operational access
 /// Revoked / Exited                              -> NO operational access
 /// </code>
-/// The code does NOT do that today, and this suite exists to say so in a form
-/// that cannot rot. Four statuses pass — Active AND the three non-terminal
-/// non-Active ones — because every layer of the read filters on
-/// <i>non-terminal</i> (<c>status NOT IN (5, 6)</c>) rather than on
-/// <i>operationally active</i>:
+/// Until step 1 the code did NOT do that: four statuses passed, because every layer filtered on
+/// <i>non-terminal</i> (<c>status NOT IN (5, 6)</c>). This suite was the tripwire for exactly
+/// that, worded "currently". Step 1 made the gap reachable from the internet (typing a farm
+/// code stores a PendingApproval seat), so the Active-only predicate landed with it, and the
+/// assertions were flipped DELIBERATELY to the founder's expectation (plan step 2 named these
+/// three facts). Each layer is now asserted to refuse on its own:
 /// <list type="number">
-/// <item>the endpoint gate — <c>CallerFarmTenantScope.EstablishForCallerAsync</c>
-/// (CallerFarmTenantScope.cs:99-108) via
-/// <c>ShramSafalRepository.GetFarmMembershipForTenantAsync</c> (:1183-1195)</item>
-/// <item>the RLS layer — <c>p_user_select_farms</c>,
-/// <c>p_user_select_daily_logs</c>, <c>p_user_select_labour_assignments</c>,
-/// each testing <c>m.status NOT IN (5, 6)</c></item>
-/// <item>the handler gate — <c>GetLabourDataHandler</c>:173-178 via
-/// <c>ShramSafalRepository.GetUserRoleForFarmAsync</c> (:91-95)</item>
+/// <item>the endpoint gate — <c>CallerFarmTenantScope.EstablishForCallerAsync</c> via
+/// <c>ShramSafalRepository.GetFarmMembershipForTenantAsync</c> (<c>status = 3</c>)</item>
+/// <item>the handler gate — <c>GetLabourDataHandler</c> via
+/// <c>ShramSafalRepository.GetUserRoleForFarmAsync</c> (Active seats only)</item>
+/// <item>the RLS layer — every <c>p_user_select_*</c> DATA policy tests <c>m.status = 3</c>
+/// (migration <c>RequireActiveMembershipForUserScopedDataReads</c>); <c>p_user_select_farms</c>
+/// deliberately keeps "not ended" so a pending / paused person can see THAT he is</item>
 /// </list>
 /// </para>
 ///
-/// <para><b>These assertions are a TRIPWIRE.</b> They are worded as "currently"
-/// on purpose. The moment a central membership predicate is introduced and the
-/// labour read is wired to it, this suite goes RED — which is the point. Update
-/// it deliberately, alongside the founder's decision; never delete it, and never
-/// weaken it into "any non-terminal status may read", which is the very claim
-/// under review.</para>
+/// <para><b>Never delete this suite, and never weaken it back into "any non-terminal status may
+/// read".</b> The registrant shortcut (last fact) is unchanged on purpose and still recorded
+/// here, so its own fix decides it deliberately.</para>
 ///
 /// <para><b>Doctrine E3 — vacuity guard.</b> Every [Fact] opens with the
 /// <c>rolsuper OR rolbypassrls</c> check on the SAME role the code under test
@@ -163,6 +160,19 @@ public sealed class LabourReadMembershipStatusRealPostgresTests(Xunit.Abstractio
 
             await SeedMembershipAsync(raw, Farm, SuspendedSecondaryOwner, Account, "SecondaryOwner", status: 4);
 
+            // One DATA row, so the RLS fact can tell "sees the farm row" (relationship) from
+            // "sees the farm's data" (access).
+            await using (var plot = raw.CreateCommand())
+            {
+                plot.CommandText = """
+                    INSERT INTO ssf.plots ("Id", farm_id, name, area_in_acres, created_at_utc, modified_at_utc)
+                    VALUES (@id, @farm, 'Status Boundary Plot', 1.0, NOW(), NOW());
+                    """;
+                plot.Parameters.AddWithValue("id", Guid.NewGuid());
+                plot.Parameters.AddWithValue("farm", Farm);
+                await plot.ExecuteNonQueryAsync();
+            }
+
             await SeedFarmAsync(raw, GhostFarm, GhostOwner, GhostAccount, "Revoked-Declared-Owner Farm");
             await SeedMembershipAsync(raw, GhostFarm, GhostOwner, GhostAccount, "PrimaryOwner", status: 5);
         }
@@ -231,17 +241,19 @@ public sealed class LabourReadMembershipStatusRealPostgresTests(Xunit.Abstractio
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // THE claim: what each of the six statuses gets from the labour read TODAY.
+    // THE claim: what each of the six statuses gets from the labour read.
     // ═════════════════════════════════════════════════════════════════════════
 
     /// <summary>
     /// Every status, every layer, one table. Deliberately ONE [Fact]: the
-    /// finding is the SHAPE of the six answers together — four in, two out —
+    /// finding is the SHAPE of the six answers together — one in, five out —
     /// and six independent facts would let five stay green while the sixth
-    /// changed, which is exactly how a boundary drifts unnoticed.
+    /// changed, which is exactly how a boundary drifts unnoticed. Each layer
+    /// (endpoint gate, role read, handler) is probed on its OWN, so a fix in
+    /// one layer cannot hide a hole in another.
     /// </summary>
     [Fact]
-    public async Task Four_of_the_six_membership_statuses_currently_pass_the_labour_read_gate()
+    public async Task Only_Active_of_the_six_membership_statuses_passes_the_labour_read_gate()
     {
         await AssertAppRoleIsNotVacuousAsync();
 
@@ -253,7 +265,7 @@ public sealed class LabourReadMembershipStatusRealPostgresTests(Xunit.Abstractio
             output.WriteLine(
                 $"[EVIDENCE] status {status} {name,-16} endpointGate={probe.GateAdmits,-5} "
                 + $"role={probe.Role ?? "<null>",-14} read={probe.HandlerSucceeded,-5} "
-                + $"view={probe.View ?? probe.ErrorCode}");
+                + $"view={probe.View ?? probe.HandlerError}");
         }
 
         // ── Active: the only status the founder's model admits. ──
@@ -262,33 +274,21 @@ public sealed class LabourReadMembershipStatusRealPostgresTests(Xunit.Abstractio
         probes["Active"].HandlerSucceeded.Should().BeTrue();
         probes["Active"].View.Should().Be("crew", "an Active Mukadam gets the हजेरी register — D-H8");
 
-        // ── Revoked / Exited: refused, as they must be. ──
-        foreach (var terminal in new[] { "Revoked", "Exited" })
+        // ── Everyone else: refused at EVERY layer. PendingOtpClaim / PendingApproval /
+        //    Suspended are no longer admitted with an Active member's access (spec
+        //    plr-d7-m1-multiuser-2026-10-26 step 1, BN-1 — the founder's expectation above).
+        foreach (var refused in new[] { "PendingOtpClaim", "PendingApproval", "Suspended", "Revoked", "Exited" })
         {
-            probes[terminal].GateAdmits.Should().BeFalse(
-                $"{terminal} is terminal — CallerFarmTenantScope must refuse before any farm_id GUC is set");
-            probes[terminal].ErrorCode.Should().Be("ShramSafal.Forbidden",
+            probes[refused].GateAdmits.Should().BeFalse(
+                $"{refused} is not Active — CallerFarmTenantScope must refuse before any farm_id GUC is set");
+            probes[refused].GateError.Should().Be("ShramSafal.Forbidden",
                 "Forbidden, never NotFound — a distinct NotFound would turn the endpoint into an "
                 + "existence oracle");
-            probes[terminal].HandlerSucceeded.Should().BeFalse();
-        }
-
-        // ── THE FINDING. Three statuses the founder expects to be shut out are
-        //    admitted with the SAME access an Active member gets. Nothing in the
-        //    response marks them as provisional or suspended.
-        foreach (var admitted in new[] { "PendingOtpClaim", "PendingApproval", "Suspended" })
-        {
-            probes[admitted].GateAdmits.Should().BeTrue(
-                "CURRENT behaviour, under review: the endpoint gate filters on NON-TERMINAL "
-                + $"(status NOT IN (5,6)) and so admits {admitted}. The founder's expectation is that it "
-                + "should NOT — read this class's summary before changing this line");
-            probes[admitted].Role.Should().Be("Mukadam",
-                $"CURRENT behaviour: GetUserRoleForFarmAsync returns the role for {admitted} too");
-            probes[admitted].HandlerSucceeded.Should().BeTrue(
-                $"CURRENT behaviour: GetLabourDataHandler serves {admitted} the labour read");
-            probes[admitted].View.Should().Be("crew",
-                $"CURRENT behaviour: {admitted} receives the SAME हजेरी register an Active Mukadam gets — "
-                + "there is no provisional or suspended projection anywhere in the response");
+            probes[refused].Role.Should().BeNull(
+                $"GetUserRoleForFarmAsync must not hand {refused} a role to act as");
+            probes[refused].HandlerSucceeded.Should().BeFalse(
+                $"GetLabourDataHandler must not serve {refused} the labour read even if a gate above it were skipped");
+            probes[refused].View.Should().BeNull();
         }
     }
 
@@ -298,55 +298,56 @@ public sealed class LabourReadMembershipStatusRealPostgresTests(Xunit.Abstractio
     /// farm GUC held at the all-zeros sentinel, exactly as
     /// <c>CallerFarmTenantScope</c> step 3b leaves it before the gate decides).
     /// Proves the database agrees with the application about which statuses
-    /// count — so a fix applied in C# alone would leave this half unchanged.
+    /// count — a fix applied in C# alone would leave the data column unchanged.
     /// </summary>
     [Fact]
-    public async Task The_user_scoped_RLS_policies_admit_the_same_four_statuses()
+    public async Task The_user_scoped_RLS_shows_the_farm_row_to_every_live_seat_but_its_data_to_Active_only()
     {
         await AssertAppRoleIsNotVacuousAsync();
 
-        var visible = new Dictionary<string, long>();
+        var visible = new Dictionary<string, (long Farms, long Plots)>();
         foreach (var (status, name, user) in Cases)
         {
-            visible[name] = await VisibleFarmRowsAsync(user);
-            output.WriteLine($"[EVIDENCE] status {status} {name,-16} ssf.farms rows visible = {visible[name]}");
+            visible[name] = await VisibleRowsAsync(user);
+            output.WriteLine(
+                $"[EVIDENCE] status {status} {name,-16} ssf.farms rows visible = {visible[name].Farms}  "
+                + $"ssf.plots rows visible = {visible[name].Plots}");
         }
 
-        visible["Active"].Should().Be(1);
-        visible["Revoked"].Should().Be(0, "p_user_select_farms excludes status 5");
-        visible["Exited"].Should().Be(0, "p_user_select_farms excludes status 6");
+        visible["Active"].Should().Be((1L, 1L));
+        visible["Revoked"].Should().Be((0L, 0L), "status 5 is terminal");
+        visible["Exited"].Should().Be((0L, 0L), "status 6 is terminal");
 
-        foreach (var admitted in new[] { "PendingOtpClaim", "PendingApproval", "Suspended" })
+        foreach (var live in new[] { "PendingOtpClaim", "PendingApproval", "Suspended" })
         {
-            visible[admitted].Should().Be(1,
-                "CURRENT behaviour, under review: p_user_select_farms (and its siblings on daily_logs, "
-                + $"labour_assignments, cost_entries, …) test 'status NOT IN (5, 6)', so {admitted} sees "
-                + "the farm. A central predicate applied only in C# would NOT move this number");
+            visible[live].Farms.Should().Be(1,
+                "p_user_select_farms keeps 'not ended' on purpose: /farms/mine shows a pending or paused "
+                + "person THAT he is pending or paused (name + status, no data)");
+            visible[live].Plots.Should().Be(0,
+                $"every p_user_select_* DATA policy counts Active seats only (m.status = 3), so {live} "
+                + "reads none of the farm's rows");
         }
     }
 
     /// <summary>
-    /// The sharpest form. A SUSPENDED co-owner is not merely let in — he is let
-    /// in to the OWNER BOOK, money included. Suspension currently withholds
-    /// nothing at all.
+    /// The sharpest form, before step 1: a SUSPENDED co-owner was let in to the OWNER BOOK,
+    /// money included. Suspension now withholds the whole read.
     /// </summary>
     [Fact]
-    public async Task A_suspended_secondary_owner_currently_receives_the_whole_wage_book()
+    public async Task A_suspended_secondary_owner_receives_nothing_of_the_wage_book()
     {
         await AssertAppRoleIsNotVacuousAsync();
 
         var probe = await ProbeAsync(SuspendedSecondaryOwner);
 
-        probe.GateAdmits.Should().BeTrue();
-        probe.Role.Should().Be("SecondaryOwner");
-        probe.HandlerSucceeded.Should().BeTrue();
-        probe.View.Should().Be("owner",
-            "CURRENT behaviour, under review: ResolveRegisterView reads the role and never the status, "
-            + "so a SUSPENDED co-owner gets LabourRegisterView.OwnerBook — the money roster, the ledger "
-            + "and the review inbox. Suspension withholds nothing today");
+        probe.GateAdmits.Should().BeFalse();
+        probe.GateError.Should().Be("ShramSafal.Forbidden");
+        probe.Role.Should().BeNull("a paused co-owner holds no role to act as");
+        probe.HandlerSucceeded.Should().BeFalse();
+        probe.View.Should().BeNull("no LabourRegisterView at all — never OwnerBook");
 
         output.WriteLine("[EVIDENCE] === suspended SecondaryOwner ===");
-        output.WriteLine($"[EVIDENCE] gate={probe.GateAdmits} role={probe.Role} view={probe.View} (expect owner — the defect)");
+        output.WriteLine($"[EVIDENCE] gate={probe.GateAdmits} role={probe.Role ?? "<null>"} handler={probe.HandlerError}");
     }
 
     /// <summary>
@@ -382,7 +383,7 @@ public sealed class LabourReadMembershipStatusRealPostgresTests(Xunit.Abstractio
     // ═════════════════════════════════════════════════════════════════════════
 
     private sealed record StatusProbe(
-        bool GateAdmits, string? ErrorCode, string? Role, bool HandlerSucceeded, string? View);
+        bool GateAdmits, string? GateError, string? Role, bool HandlerSucceeded, string? HandlerError, string? View);
 
     /// <summary>
     /// Mirrors the production request exactly: the ambient transaction
@@ -390,6 +391,10 @@ public sealed class LabourReadMembershipStatusRealPostgresTests(Xunit.Abstractio
     /// <see cref="ICallerFarmTenantScope"/> (not a hand-rolled imitation of it),
     /// then the REAL handler on the REAL repository over the <c>agrisync_app</c>
     /// connection — so RLS is in the path, not bypassed.
+    ///
+    /// <para>The role read and the handler run whether or not the gate admitted the caller
+    /// (production would stop at a refused gate): each layer is asserted to refuse ON ITS OWN,
+    /// so a later change that skips one gate cannot pass unnoticed behind another.</para>
     /// </summary>
     private async Task<StatusProbe> ProbeAsync(Guid userId, Guid? farmId = null)
     {
@@ -403,11 +408,6 @@ public sealed class LabourReadMembershipStatusRealPostgresTests(Xunit.Abstractio
 
         var gate = await sp.GetRequiredService<ICallerFarmTenantScope>()
             .EstablishForCallerAsync(farm, userId);
-        if (!gate.IsSuccess)
-        {
-            await tx.RollbackAsync();
-            return new StatusProbe(false, gate.Error.Code, null, false, null);
-        }
 
         var repository = sp.GetRequiredService<IShramSafalRepository>();
         var role = await repository.GetUserRoleForFarmAsync(farm, userId);
@@ -415,23 +415,24 @@ public sealed class LabourReadMembershipStatusRealPostgresTests(Xunit.Abstractio
         var result = await new GetLabourDataHandler(repository, new FixedClock(Now))
             .HandleAsync(new GetLabourDataQuery(new FarmId(farm), new UserId(userId)));
 
-        await tx.CommitAsync();
+        await tx.RollbackAsync();
 
         return new StatusProbe(
-            GateAdmits: true,
-            ErrorCode: result.IsSuccess ? null : result.Error.Code,
+            GateAdmits: gate.IsSuccess,
+            GateError: gate.IsSuccess ? null : gate.Error.Code,
             Role: role?.ToString(),
             HandlerSucceeded: result.IsSuccess,
+            HandlerError: result.IsSuccess ? null : result.Error.Code,
             View: result.IsSuccess ? result.Value!.View : null);
     }
 
     /// <summary>
-    /// How many rows of <c>ssf.farms</c> this user can see with ONLY
-    /// <c>agrisync.user_id</c> meaningful — the farm GUC held at the all-zeros
-    /// sentinel so the tenant policy contributes nothing and the user-scoped
-    /// policy is the sole answer.
+    /// How many rows of <c>ssf.farms</c> (the relationship) and <c>ssf.plots</c> (the farm's
+    /// data) this user can see with ONLY <c>agrisync.user_id</c> meaningful — the farm GUC held
+    /// at the all-zeros sentinel so the tenant policies contribute nothing and the user-scoped
+    /// policies are the sole answer.
     /// </summary>
-    private async Task<long> VisibleFarmRowsAsync(Guid userId)
+    private async Task<(long Farms, long Plots)> VisibleRowsAsync(Guid userId)
     {
         await using var db = new NpgsqlConnection(_appConn);
         await db.OpenAsync();
@@ -439,10 +440,12 @@ public sealed class LabourReadMembershipStatusRealPostgresTests(Xunit.Abstractio
         await SetGucAsync(db, "agrisync.user_id", userId);
         await SetGucAsync(db, "agrisync.farm_id", Guid.Empty);
 
-        var count = Convert.ToInt64(await ScalarAsync(db,
+        var farms = Convert.ToInt64(await ScalarAsync(db,
             "SELECT count(*) FROM ssf.farms WHERE \"Id\" = @f", ("f", Farm)));
+        var plots = Convert.ToInt64(await ScalarAsync(db,
+            "SELECT count(*) FROM ssf.plots WHERE farm_id = @f", ("f", Farm)));
         await tx.RollbackAsync();
-        return count;
+        return (farms, plots);
     }
 
     private async Task<(string Role, bool SuperOrBypass)> ReadAppRolePostureAsync()

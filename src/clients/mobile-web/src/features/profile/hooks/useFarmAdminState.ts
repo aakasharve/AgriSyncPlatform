@@ -15,6 +15,7 @@
 import React from 'react';
 import type { PlotGeoData } from '../../../types';
 import { useUiPref } from '../../../shared/hooks/useUiPref';
+import { isActiveSeat } from '../../../core/session/seatStatus';
 import {
     getFarmDetails,
     probeFarmWeather,
@@ -38,6 +39,12 @@ export interface UseFarmAdminStateResult {
     setMyFarm: React.Dispatch<React.SetStateAction<MyFarmSummary | null>>;
     myMemberships: MyFarmDto[];
     setMyMemberships: React.Dispatch<React.SetStateAction<MyFarmDto[]>>;
+    /**
+     * spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — seats that have not ended but grant nothing
+     * yet (a typed-code request waiting for the owner, a paused seat). Never in `myMemberships`;
+     * listed apart so a request can be withdrawn (M1) and a pause is said as a pause.
+     */
+    pendingSeats: MyFarmDto[];
     farmLookupError: string | null;
     farmDetails: FarmDetailsDto | null;
     showFarmBoundary: boolean;
@@ -60,6 +67,7 @@ export interface UseFarmAdminStateResult {
 export function useFarmAdminState(): UseFarmAdminStateResult {
     const [myFarm, setMyFarm] = React.useState<MyFarmSummary | null>(null);
     const [myMemberships, setMyMemberships] = React.useState<MyFarmDto[]>([]);
+    const [pendingSeats, setPendingSeats] = React.useState<MyFarmDto[]>([]);
     const [farmLookupError, setFarmLookupError] = React.useState<string | null>(null);
     const [farmDetails, setFarmDetails] = React.useState<FarmDetailsDto | null>(null);
     const [showFarmBoundary, setShowFarmBoundary] = React.useState(false);
@@ -81,9 +89,14 @@ export function useFarmAdminState(): UseFarmAdminStateResult {
         (async () => {
             try {
                 const { getMyFarms } = await import('../../onboarding/qr/inviteApi');
-                const farms = await getMyFarms();
+                // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, F2/F3) — Active seats only: a
+                // typed-code request waiting for the owner is not a farm to open, label or pick.
+                // It is kept apart (pendingSeats) so it can still be seen and withdrawn.
+                const listed = await getMyFarms();
+                const farms = listed.filter(isActiveSeat);
                 if (cancelled) return;
                 setMyMemberships(farms);
+                setPendingSeats(listed.filter(f => !isActiveSeat(f)));
                 if (farms.length === 0) return;
                 const ownerFarm = farms.find(f => f.role === 'PrimaryOwner' || f.role === 'SecondaryOwner') ?? farms[0];
                 setMyFarm(prev => prev ?? {
@@ -121,7 +134,7 @@ export function useFarmAdminState(): UseFarmAdminStateResult {
         }
         try {
             const { getMyFarms } = await import('../../onboarding/qr/inviteApi');
-            const farms = await getMyFarms();
+            const farms = (await getMyFarms()).filter(isActiveSeat);
             if (farms.length === 0) {
                 setFarmLookupError('You do not own a farm yet. Ask for help to set one up.');
                 return;
@@ -193,8 +206,10 @@ export function useFarmAdminState(): UseFarmAdminStateResult {
         const { exitMembership, getMyFarms, isInviteApiError } = await import('../../onboarding/qr/inviteApi');
         try {
             await exitMembership(farmId);
-            const refreshed = await getMyFarms();
+            const listed = await getMyFarms();
+            const refreshed = listed.filter(isActiveSeat);
             setMyMemberships(refreshed);
+            setPendingSeats(listed.filter(f => !isActiveSeat(f)));
             if (myFarm?.farmId === farmId) {
                 setMyFarm(null);
             }
@@ -207,6 +222,7 @@ export function useFarmAdminState(): UseFarmAdminStateResult {
     return {
         myFarm, setMyFarm,
         myMemberships, setMyMemberships,
+        pendingSeats,
         farmLookupError,
         farmDetails,
         showFarmBoundary, setShowFarmBoundary,

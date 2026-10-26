@@ -76,7 +76,11 @@ public sealed class RlsIdentityScopeRules
     /// Not folded into the helper because its step 3b all-zeros
     /// <c>agrisync.farm_id</c> sentinel is load-bearing ordering (it neutralises a
     /// legacy bare-cast policy BEFORE the membership read) and rewriting it is a
-    /// security-review-sized change, not a refactor.</item>
+    /// security-review-sized change, not a refactor. The same file is the reviewed home of
+    /// the two pre-membership join scopes: <c>JoinClaimTenantScope</c> (QR token) and
+    /// <c>JoinCodeTenantScope</c> (typed farm code — spec plr-d7-m1-multiuser-2026-10-26
+    /// step 1), which alone writes <c>agrisync.join_code</c>, the GUC the SELECT-only policy
+    /// <c>p_join_code_select_farms</c> keys on.</item>
     /// <item><c>PushSyncBatchHandler</c> — the <c>/sync/push</c> two-phase
     /// "discover the farm from a child entity, then scope to it" mechanism.</item>
     /// <item><c>FirstFarmBootstrapEndpoints</c> — the first-farm write path.</item>
@@ -119,6 +123,31 @@ public sealed class RlsIdentityScopeRules
             "AgriSync.BuildingBlocks.Persistence.RlsIdentityScope (RunAsUserAsync / RunAsFarmAsync). " +
             "If a genuinely new mechanism is required, add it to GucWriteAllowlist in this test with " +
             "a comment saying why — deliberately, in review");
+    }
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — <c>agrisync.join_code</c> opens a READ
+    /// door on <c>ssf.farms</c> (policy <c>p_join_code_select_farms</c>) for whoever knows a code.
+    /// The allowlist above lets five files write tenant GUCs in general; this one GUC is narrower
+    /// still: only the typed-join scope may set it, so no other path can turn a code into
+    /// farm visibility.
+    /// </summary>
+    [Fact]
+    public void The_join_code_guc_is_written_only_by_the_typed_join_scope()
+    {
+        var joinCodeWrite = new Regex(
+            @"set_config\(\s*'agrisync\.join_code'|SET\s+LOCAL\s+agrisync\.join_code",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        var writers = ProductionSourceFiles()
+            .Where(file => joinCodeWrite.IsMatch(StripComments(File.ReadAllText(file))))
+            .Select(Relative)
+            .ToList();
+
+        writers.Should().Equal(
+            new[] { "apps/ShramSafal/ShramSafal.Infrastructure/Auth/CallerFarmTenantScope.cs" },
+            "agrisync.join_code may be set only by JoinCodeTenantScope — any other writer could make a " +
+            "farm visible to a caller who is not its member");
     }
 
     [Fact]

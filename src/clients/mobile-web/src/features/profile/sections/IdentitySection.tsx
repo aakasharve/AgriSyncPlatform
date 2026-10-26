@@ -20,12 +20,15 @@ import {
 import { FarmerProfile, VerificationStatus } from '../../../types';
 import EntitlementBanner, { type SubscriptionSnapshotView } from '../../admin/billing/EntitlementBanner';
 import MembershipsList from '../../people/components/MembershipsList';
+import PendingJoinRequests from '../../onboarding/components/PendingJoinRequests';
 import type { MyFarmDto, FarmDetailsDto } from '../../onboarding/qr/inviteApi';
 import { TeamMemberCard } from '../components/TeamMemberCard';
 import { useLabourPermissions } from '../hooks/useLabourPermissions';
 import { FarmWorkersCard } from '../components/FarmWorkersCard';
 import { isOwnerTierRole, isPhoneLocalOnlyMember, mergeTeamWithServerRoster } from '../helpers/teamRoster';
 import { useLanguage } from '../../../i18n/LanguageContext';
+import { getOperatorRoleLabel } from '../../../shared/roles/roleLabels';
+import { isActiveSeat } from '../../../core/session/seatStatus';
 
 // Identity verification status for farmer ID
 type IdentityStatus = 'NOT_STARTED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
@@ -44,6 +47,10 @@ interface IdentitySectionProps {
     logout: () => void;
     myFarm: { farmId: string; name: string; role: string; subscription: SubscriptionSnapshotView | null } | null;
     myMemberships: MyFarmDto[];
+    /** spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — seats that grant nothing yet (a waiting request, a pause). */
+    pendingSeats?: MyFarmDto[];
+    /** The app's current farm (FarmContext). Its server role is the role shown beside the name. */
+    currentFarmId?: string | null;
     farmDetails: FarmDetailsDto | null;
     weatherConnected: boolean;
     connectingWeather: boolean;
@@ -64,6 +71,8 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
     logout,
     myFarm,
     myMemberships,
+    pendingSeats = [],
+    currentFarmId,
     farmDetails,
     weatherConnected,
     connectingWeather,
@@ -75,6 +84,15 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
     handleExitMembership,
 }) => {
     const { t } = useLanguage();
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the chip beside the name said "मुख्य मालक" to
+    // EVERYONE, a worker included. It now says the role the SERVER holds for the current farm
+    // (/farms/mine), falling back to the farm this page loaded; no server answer, no chip.
+    // F3: a seat that is not Active (a typed-code request waiting for the owner) carries the
+    // placeholder role "Worker", which nobody granted — such a seat shows NO chip, never "कामगार".
+    const currentSeat = currentFarmId ? myMemberships.find(m => m.farmId === currentFarmId) : undefined;
+    const serverRole = currentSeat
+        ? (isActiveSeat(currentSeat) ? currentSeat.role : null)
+        : (myFarm?.role ?? null);
     // LABOUR_PHASE2 Phase 5. `myFarm.farmId` is the SERVER's farm id. The hook
     // makes no request until it resolves, and on a failed read it stays `null`
     // rather than falling back to the local profile — see its docblock for why
@@ -140,13 +158,12 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                             </div>
                         );
                     }
+                    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — "Verified Farmer" dropped: the
+                    // same plain words the सेट-अप केंद्र uses for a verified identity (PLR-D9 T4).
                     return (
                         <div className="bg-emerald-500 text-white px-6 py-3 flex items-center gap-3">
                             <ShieldCheck size={20} />
-                            <div>
-                                <p className="font-bold text-sm">✓ पडताळणी झालेला शेतकरी · Verified Farmer</p>
-                                <p className="text-xs opacity-90">सरकारी ओळख पडताळली · Government-verified identity</p>
-                            </div>
+                            <p className="font-bold text-sm">✓ ओळख पडताळलेली</p>
                         </div>
                     );
                 })()}
@@ -176,9 +193,11 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                         <div className="flex-1 min-w-0">
                             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1">
                                 <h2 className="min-w-0 max-w-full text-2xl font-black text-slate-800 [overflow-wrap:anywhere]">{profile.name || '—'}</h2>
-                                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide border border-emerald-200 whitespace-nowrap">
-                                    {t('profile.primaryOwner')}
-                                </span>
+                                {serverRole && (
+                                    <span data-testid="identity-role-chip" className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide border border-emerald-200 whitespace-nowrap">
+                                        {getOperatorRoleLabel(serverRole).mr}
+                                    </span>
+                                )}
                             </div>
 
                             <div className="flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-sm text-slate-500 mb-3">
@@ -413,6 +432,17 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                     farms={myMemberships}
                     nonExitableFarmIds={nonExitableFarmIds}
                     onExit={handleExitMembership}
+                />
+            )}
+
+            {/* spec: plr-d7-m1-multiuser-2026-10-26 (step 1, M1) — a request this person sent
+                (typed farm code) that the owner has not answered, or a paused seat. Not a farm he
+                is in, so not in the list above; listed here so a request can be withdrawn. */}
+            {pendingSeats.length > 0 && (
+                <PendingJoinRequests
+                    seats={pendingSeats}
+                    onWithdraw={farmId => handleExitMembership(farmId, '')}
+                    testId="profile-pending-seats"
                 />
             )}
 

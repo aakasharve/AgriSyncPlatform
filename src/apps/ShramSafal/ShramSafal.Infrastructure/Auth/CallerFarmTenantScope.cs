@@ -41,7 +41,16 @@ internal sealed class CallerFarmTenantScope(
     ShramSafalDbContext db,
     IShramSafalRepository repository) : ICallerFarmTenantScope
 {
-    public async Task<Result> EstablishForCallerAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, BN-1) — the access gate counts the owner and
+    // ACTIVE seats only (GetFarmMembershipForTenantAsync), so a typed-code join request opens no
+    // farm scope. Self-exit alone validates the relationship instead (see the port).
+    public Task<Result> EstablishForCallerAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+        => EstablishAsync(farmId, userId, relationshipOnly: false, ct);
+
+    public Task<Result> EstablishRelationshipForCallerAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+        => EstablishAsync(farmId, userId, relationshipOnly: true, ct);
+
+    private async Task<Result> EstablishAsync(Guid farmId, Guid userId, bool relationshipOnly, CancellationToken ct)
     {
         if (farmId == Guid.Empty || userId == Guid.Empty)
         {
@@ -96,8 +105,9 @@ internal sealed class CallerFarmTenantScope(
 
         // Step 4 — the isolation gate. Reads ssf.farms (owner shortcut) +
         // ssf.farm_memberships under the user-scoped policies set in step 3.
-        var (isMember, ownerAccountId) = await repository
-            .GetFarmMembershipForTenantAsync(farmId, userId, ct);
+        var (isMember, ownerAccountId) = relationshipOnly
+            ? await repository.GetFarmMembershipRelationshipForTenantAsync(farmId, userId, ct)
+            : await repository.GetFarmMembershipForTenantAsync(farmId, userId, ct);
 
         // Step 5 — non-member → Forbidden, with NO farm_id GUC set. Nothing
         // about a foreign farm leaks. This is the sole authorization gate for
@@ -163,5 +173,69 @@ internal sealed class JoinClaimTenantScope(
             $"SELECT set_config('agrisync.farm_id', {tokenFarmId.ToString()}, true)", ct);
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT set_config('agrisync.user_id', {claimantUserId.ToString()}, true)", ct);
+    }
+}
+
+/// <summary>
+/// spec: plr-d7-m1-multiuser-2026-10-26 (step 1) - see <see cref="IJoinCodeTenantScope"/>. Lives
+/// in this file for the same reason as <see cref="JoinClaimTenantScope"/>: it is the single
+/// reviewed home of the admin-elevate + transaction-local <c>set_config</c> technique
+/// (<c>RlsIdentityScopeRules.GucWriteAllowlist</c>).
+///
+/// <para><b>Why a GUC-keyed read policy and not an RLS-exempt lookup table</b> (the two options
+/// the plan offered). An exempt <c>ssf.farm_join_codes(code, farm_id)</c> would be readable in
+/// full by ANY query the app role runs: one stray <c>SELECT *</c> lists every farm's code, and
+/// every code is a valid join request. Hashing does not help - a 6-character code is
+/// brute-forced offline in seconds. It would also be a second copy of <c>farms.farm_code</c> that
+/// six creation paths plus a backfill must keep in step. The policy instead keeps
+/// <c>ssf.farms</c> under FORCE RLS with one more SELECT-only door that opens for exactly one row,
+/// and only to a transaction that already KNOWS that row's code; the code stays in one column;
+/// and the GUC can only be written from this allowlisted file.</para>
+/// </summary>
+internal sealed class JoinCodeTenantScope(
+    TenantContext tenantContext,
+    ShramSafalDbContext db) : IJoinCodeTenantScope
+{
+    public async Task BeginCodeLookupAsync(string normalizedFarmCode, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedFarmCode))
+        {
+            throw new ArgumentException("A normalized farm code is required.", nameof(normalizedFarmCode));
+        }
+
+        // EF InMemory: no FORCE-RLS, no raw SQL, no interceptor to silence.
+        if (!db.Database.IsRelational())
+        {
+            return;
+        }
+
+        // Silences the interceptor ONLY (sets no GUC). Throws if a single-tenant claim was
+        // already set (it cannot be on this route).
+        tenantContext.ElevateToAdminCrossTenant();
+
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.join_code', {normalizedFarmCode}, true)", ct);
+    }
+
+    public async Task PublishCodeFarmScopeAsync(Guid codeFarmId, Guid joinerUserId, CancellationToken ct = default)
+    {
+        if (codeFarmId == Guid.Empty || joinerUserId == Guid.Empty)
+        {
+            throw new ArgumentException("A code-validated farm id and a joiner user id are both required.");
+        }
+
+        if (!db.Database.IsRelational())
+        {
+            return;
+        }
+
+        // The code has done its one job (finding the farm). Close that door before the farm
+        // scope opens, so the rest of the transaction runs under the ordinary farm policies.
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.join_code', '', true)", ct);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.farm_id', {codeFarmId.ToString()}, true)", ct);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.user_id', {joinerUserId.ToString()}, true)", ct);
     }
 }

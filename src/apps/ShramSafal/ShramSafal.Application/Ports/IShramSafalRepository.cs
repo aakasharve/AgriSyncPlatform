@@ -19,17 +19,22 @@ using AgriSync.SharedKernel.Contracts.Roles;
 namespace ShramSafal.Application.Ports;
 
 /// <summary>
-/// User-scoped my-farms projection row — one per farm the caller owns or is an
-/// active member of, with the caller's role on that farm. Returned by
+/// User-scoped my-farms projection row — one per farm the caller owns or holds a
+/// seat on that has not ended, with the caller's role on that farm. Returned by
 /// <see cref="IShramSafalRepository.GetMyFarmsAsync"/> for the
 /// <c>/shramsafal/farms/mine</c> read path.
+/// <para>spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — <paramref name="Status"/> says
+/// whether that seat is Active (access) or only a relationship (a PendingApproval request,
+/// a Suspended seat). The registrant is always <see cref="MembershipStatus.Active"/>.
+/// Optional and last, so existing constructions keep compiling.</para>
 /// </summary>
 public sealed record MyFarmProjection(
     Guid FarmId,
     string Name,
     string? FarmCode,
     Guid OwnerAccountId,
-    AppRole? Role);
+    AppRole? Role,
+    MembershipStatus Status = MembershipStatus.Active);
 
 /// <summary>
 /// Labour V2 R1 Task 3.5b — one engagement's day-fact about a person, as read
@@ -53,7 +58,22 @@ public interface IShramSafalRepository
         => Task.FromResult<FarmBoundary?>(null);
     Task<Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default);
     Task AddFarmMembershipAsync(FarmMembership membership, CancellationToken ct = default);
+
+    /// <summary>
+    /// The caller's seat on the farm that has not ended (any status but Revoked / Exited),
+    /// with its <see cref="FarmMembership.Status"/> — a RELATIONSHIP read, not an access
+    /// check (spec plr-d7-m1-multiuser-2026-10-26 step 1). Join idempotency reads it; a
+    /// caller that means "may act on this farm" must check <c>IsActive</c> or use one of the
+    /// Active-only gates below.
+    /// </summary>
     Task<FarmMembership?> GetFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The role the user may ACT as on the farm: <see cref="AppRole.PrimaryOwner"/> for the
+    /// declared owner, otherwise the role of an <c>Active</c> seat, otherwise <c>null</c>.
+    /// spec plr-d7-m1-multiuser-2026-10-26 (step 1, BN-1): a PendingApproval request's
+    /// placeholder role and a Suspended seat's role are NOT returned.
+    /// </summary>
     Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default);
     Task<bool> IsUserOwnerOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default);
 
@@ -208,11 +228,19 @@ public interface IShramSafalRepository
 
     Task<List<AuditEvent>> GetAuditEventsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default);
     Task<List<AuditEvent>> GetAuditEventsForFarmAsync(Guid farmId, DateOnly from, DateOnly to, int limit, int offset, CancellationToken ct = default);
+
+    /// <summary>
+    /// The farms whose data this user may read (the sync pull's farm list): owned, or an
+    /// <c>Active</c> seat. spec plr-d7-m1-multiuser-2026-10-26 (step 1, BN-1): a
+    /// PendingApproval request or a Suspended seat contributes no farm.
+    /// </summary>
     Task<List<Guid>> GetFarmIdsForUserAsync(Guid userId, CancellationToken ct = default);
 
     /// <summary>
-    /// User-scoped my-farms projection (owner + active-member farms, with the
-    /// caller's role per farm). Opens its OWN transaction and emits
+    /// User-scoped my-farms projection (owner farms + every seat that has not ended,
+    /// with the caller's role and seat status per farm — spec plr-d7-m1-multiuser-2026-10-26
+    /// step 1: a pending request is listed so the person can see THAT it is pending; it
+    /// grants nothing). Opens its OWN transaction and emits
     /// <c>SET LOCAL agrisync.user_id</c> so the <c>p_user_select_farms</c> /
     /// <c>p_user_select_memberships</c> RLS policies surface the caller's farms
     /// on the admin-elevated <c>/shramsafal/farms/mine</c> route (where the
@@ -224,6 +252,11 @@ public interface IShramSafalRepository
         => Task.FromResult(new List<MyFarmProjection>());
 
     Task<IReadOnlyList<SyncOperatorDto>> GetOperatorsByIdsAsync(IEnumerable<Guid> userIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// The declared owner, or an <c>Active</c> seat. spec plr-d7-m1-multiuser-2026-10-26
+    /// (step 1, BN-1): a PendingApproval request or a Suspended seat is not a member.
+    /// </summary>
     Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default);
 
     /// <summary>
@@ -236,10 +269,13 @@ public interface IShramSafalRepository
     /// round-trip.
     /// <para>
     /// Returns <c>(false, Guid.Empty)</c> when the user has no active
-    /// membership on the farm. Returns <c>(true, ownerAccountId)</c> for
-    /// any non-terminal status — Active, PendingApproval, PendingOtpClaim,
-    /// Suspended — matching the same predicate the existing
-    /// <see cref="GetFarmMembershipAsync"/> entity-returning overload uses.
+    /// membership on the farm. Returns <c>(true, ownerAccountId)</c> for an
+    /// <c>Active</c> seat ONLY — spec plr-d7-m1-multiuser-2026-10-26 (step 1,
+    /// BN-1): a PendingApproval request (a typed farm code), a PendingOtpClaim
+    /// seat and a Suspended seat are refused here, so none of them can push to
+    /// the farm or open its REST farm scope. (Before that spec this admitted
+    /// every non-terminal status.) For "does this person still have a seat that
+    /// has not ended" use <see cref="GetFarmMembershipRelationshipForTenantAsync"/>.
     /// Owner-of-farm shortcut: when <paramref name="userId"/> is the
     /// declared <c>Farm.OwnerUserId</c>, the method returns
     /// <c>(true, farm.OwnerAccountId)</c> even if the membership row is
@@ -266,12 +302,29 @@ public interface IShramSafalRepository
         => Task.FromResult((false, Guid.Empty));
 
     /// <summary>
-    /// spec: 2026-08-25-prod-cutover-waves (D1, tenant-DEK authorization) — STRICTER
-    /// than <see cref="GetFarmMembershipForTenantAsync"/>: that one admits every
-    /// non-terminal status (PendingOtpClaim, PendingApproval, Suspended), which is right
-    /// for "may this person see the farm" and wrong for "may this person be handed the
-    /// farm's owner-account encryption key". Here only the farm's declared owner or an
-    /// <c>Active</c> membership counts. The owner account is read from the FARM row
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the RELATIONSHIP twin of
+    /// <see cref="GetFarmMembershipForTenantAsync"/>: <c>(true, ownerAccountId)</c> for the
+    /// declared owner or ANY seat that has not ended (Active, PendingApproval, PendingOtpClaim,
+    /// Suspended). It grants nothing by itself. Its one caller is the self-exit scope
+    /// (<c>ICallerFarmTenantScope.EstablishRelationshipForCallerAsync</c>): a person must
+    /// always be able to withdraw a pending request or leave a paused seat, and that write
+    /// needs the farm scope the access gate now refuses them.
+    /// Default body = the access gate's answer, so a test double that overrides only that
+    /// one keeps its old behaviour (and the default stays fail-closed).
+    /// </summary>
+    Task<(bool IsMember, Guid OwnerAccountId)> GetFarmMembershipRelationshipForTenantAsync(
+        Guid farmId,
+        Guid userId,
+        CancellationToken ct = default)
+        => GetFarmMembershipForTenantAsync(farmId, userId, ct);
+
+    /// <summary>
+    /// spec: 2026-08-25-prod-cutover-waves (D1, tenant-DEK authorization) — only the
+    /// farm's declared owner or an <c>Active</c> membership counts (written when
+    /// <see cref="GetFarmMembershipForTenantAsync"/> still admitted every non-terminal
+    /// status; since spec plr-d7-m1-multiuser-2026-10-26 step 1 the two agree on status,
+    /// and this one still differs by reading the owner account from the FARM row and by
+    /// refusing a farm with no owner account). The owner account is read from the FARM row
     /// (never from the caller), so the key is always bound to the account that really
     /// owns the farm. Returns <c>(false, Guid.Empty)</c> otherwise (no such farm, not a
     /// member, pending, suspended, revoked, exited) — the caller cannot tell which.
@@ -335,6 +388,50 @@ public interface IShramSafalRepository
     {
         await SaveChangesAsync(ct);
         return true;
+    }
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the farm whose code is
+    /// <paramref name="normalizedFarmCode"/> (already passed through
+    /// <c>FarmCode.Normalize</c>), or <c>null</c>. On the typed-join path the caller is not
+    /// yet a member of any farm it could find here, so this read only sees a row because
+    /// <see cref="IJoinCodeTenantScope.BeginCodeLookupAsync"/> published that exact code.
+    /// Default body = "no such farm" (fail closed), so the in-tree test doubles compile (F7).
+    /// </summary>
+    Task<Farm?> GetFarmByJoinCodeAsync(string normalizedFarmCode, CancellationToken ct = default)
+        => Task.FromResult<Farm?>(null);
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — returns the farm's code, giving it one
+    /// first (and committing it) when it has none. <paramref name="farm"/> must have been read
+    /// through this repository. The production body draws again on the rare collision with
+    /// another farm's code (<c>ux_farms_farm_code</c>); provider specifics never leave
+    /// Infrastructure. Default body = assign once + plain save.
+    /// </summary>
+    async Task<string> EnsureFarmCodeAsync(Farm farm, DateTime utcNow, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(farm.FarmCode))
+        {
+            farm.AssignFarmCode(FarmCode.New(), utcNow);
+            await SaveChangesAsync(ct);
+        }
+
+        return farm.FarmCode!;
+    }
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 1, M3) — saves the unit of work that CREATES
+    /// <paramref name="farm"/> (added through <see cref="AddFarmAsync"/>, together with whatever
+    /// else was added with it — the owner's seat, the audit row), giving the farm its code as it
+    /// is saved: every new farm is born with a code. The production body draws again on the rare
+    /// collision with another farm's code (<c>ux_farms_farm_code</c>), bounded, so a collision no
+    /// longer fails the creation; provider specifics never leave Infrastructure.
+    /// Default body = one draw + plain save (the in-tree test doubles have no unique index).
+    /// </summary>
+    Task SaveNewFarmAsync(Farm farm, DateTime utcNow, CancellationToken ct = default)
+    {
+        farm.AssignFarmCode(FarmCode.New(), utcNow);
+        return SaveChangesAsync(ct);
     }
 
     // --- CEI Phase 1 §4.4 ----------------------------------------------------------------
@@ -1151,8 +1248,9 @@ public interface IShramSafalRepository
 
     /// <summary>
     /// Does this user hold the EXPLICIT <c>can_manage_labour_records</c> grant
-    /// on this farm? Non-terminal memberships only — a grant cannot outlive the
-    /// membership that carries it.
+    /// on this farm? <c>Active</c> memberships only (spec plr-d7-m1-multiuser-2026-10-26
+    /// step 1; non-terminal before it) — a grant cannot outlive, or act through a paused or
+    /// pending, membership that carries it.
     ///
     /// <para><b>This is one INPUT to the decision, never the decision.</b>
     /// Owner-tier and Mukadam are allowed with this flag <c>false</c>; the
@@ -1184,6 +1282,20 @@ public interface IShramSafalRepository
     /// </summary>
     Task<FarmMembership?> GetTrackedFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default)
         => Task.FromResult<FarmMembership?>(null);
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — <see cref="GetTrackedFarmMembershipAsync"/>,
+    /// read only after the live seat's row is LOCKED for the rest of the request transaction
+    /// (<c>FOR UPDATE</c>). For a status change decided on what the read returns (the owner's QR
+    /// activating a typed-code request): a second request for the same seat (a double scan) waits
+    /// at the lock, then reads the committed result and sees nothing left to do — so the change,
+    /// its audit row and its analytics event happen once. Requires the caller's transaction (the
+    /// request transaction); the lock is released when it ends.
+    /// Default body = the unlocked read, so in-tree test doubles keep compiling (F7); they have
+    /// no concurrency to serialise.
+    /// </summary>
+    Task<FarmMembership?> GetTrackedFarmMembershipForUpdateAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+        => GetTrackedFarmMembershipAsync(farmId, userId, ct);
 
     /// <summary>
     /// The caller's <see cref="FarmMembership"/> on a farm <b>whatever its

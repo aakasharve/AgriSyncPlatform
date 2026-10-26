@@ -122,8 +122,12 @@ export async function resolveFarmIdFromCache(): Promise<string | undefined> {
     }
 
     // 2) The /user/auth/me/context aggregate (the caller's farms), cached in memory.
+    //    spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — Active seats only: /me/context also
+    //    lists a typed-code join request waiting for the owner, and the server refuses a parse
+    //    against that farm (same rule as core/session/seatStatus; no status = older server).
     const meFarmId = getLastCachedMeContext()?.farms?.find(
-        farm => typeof farm.farmId === 'string' && farm.farmId.trim().length > 0,
+        farm => typeof farm.farmId === 'string' && farm.farmId.trim().length > 0
+            && (!farm.status || farm.status === 'Active'),
     )?.farmId;
     if (meFarmId) {
         return meFarmId;

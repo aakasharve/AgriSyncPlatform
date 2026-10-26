@@ -12,6 +12,14 @@ import { useLanguage } from '../i18n/LanguageContext';
 // recorded before the phone number leaves the device (replaces the full-screen gate).
 import ConsentTick from '../features/consent/gate/ConsentTick';
 import { useConsentBeforeOtp } from '../features/consent/gate/useConsentBeforeOtp';
+// spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the join button no longer pops a
+// window.prompt for a link. The server answers a farm code only for a signed-in person, so
+// the button says so plainly and the join door (code or QR) opens by itself after sign-in.
+import { JOIN_DOOR_LABEL, rememberJoinAfterSignIn } from '../features/onboarding/qr/farmCodeEntry';
+
+/** PROPOSED Marathi. */
+const JOIN_AFTER_SIGN_IN_HINT =
+    'आधी तुमच्या फोन नंबरने आत या. आत आल्यावर शेताचा कोड टाकायचं पान लगेच उघडेल. QR असेल तर तो फोनच्या कॅमेऱ्याने स्कॅन करा.';
 
 // Top-level auth mode. 'otp' is the single PUBLIC flow — real users enter their
 // phone, verify via OTP once, and the account is created-or-found by phone
@@ -84,6 +92,11 @@ const LoginPage: React.FC = () => {
     // One press = one sign-in. `isLoading` only turns true inside login(), so without this a
     // second tap during the consent write would sign in twice.
     const submittingRef = useRef(false);
+    const [joinAfterSignIn, setJoinAfterSignIn] = useState(false);
+    const askToJoinAfterSignIn = () => {
+        rememberJoinAfterSignIn();
+        setJoinAfterSignIn(true);
+    };
 
     const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -163,26 +176,18 @@ const LoginPage: React.FC = () => {
                                 </div>
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        const code = window.prompt('शेतीचा QR स्कॅन करा किंवा लिंक टाका\nScan the farm QR or paste the invite link:');
-                                        if (!code) return;
-                                        const trimmed = code.trim();
-                                        if (trimmed.startsWith('http')) {
-                                            try {
-                                                const url = new URL(trimmed);
-                                                const token = url.searchParams.get('t');
-                                                const farm = url.searchParams.get('f');
-                                                if (token && farm) {
-                                                    window.location.assign(`/?join=${encodeURIComponent(token)}&farm=${encodeURIComponent(farm)}`);
-                                                }
-                                            } catch { /* bad URL */ }
-                                        }
-                                    }}
+                                    onClick={askToJoinAfterSignIn}
+                                    data-testid="login-join"
                                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm font-bold text-emerald-700 transition-colors hover:bg-emerald-50"
                                 >
                                     <QrCode size={16} />
-                                    शेतीच्या QR ने सामील व्हा / Join via farm QR
+                                    {JOIN_DOOR_LABEL}
                                 </button>
+                                {joinAfterSignIn && (
+                                    <p role="status" data-testid="login-join-hint" className="m-0 rounded-xl bg-emerald-50 px-3 py-2 text-center text-[13px] font-bold leading-snug text-emerald-900 ring-1 ring-emerald-200">
+                                        {JOIN_AFTER_SIGN_IN_HINT}
+                                    </p>
+                                )}
                             </div>
                         </div>
 
@@ -309,36 +314,18 @@ const LoginPage: React.FC = () => {
                     </div>
                     <button
                         type="button"
-                        onClick={() => {
-                            const code = window.prompt('शेतीचा QR स्कॅन करा किंवा कोड टाका\nScan the farm QR or enter the 6-character code:');
-                            if (!code) return;
-                            const trimmed = code.trim();
-                            // Accept either a pasted full URL or just the farm code.
-                            if (trimmed.startsWith('http')) {
-                                try {
-                                    const url = new URL(trimmed);
-                                    const token = url.searchParams.get('t');
-                                    const farm = url.searchParams.get('f');
-                                    const role = url.searchParams.get('r') ?? 'Worker';
-                                    if (token && farm) {
-                                        window.location.assign(`/?join=${encodeURIComponent(token)}&farm=${encodeURIComponent(farm)}&role=${encodeURIComponent(role)}`);
-                                        return;
-                                    }
-                                } catch {
-                                    /* fall through to alert */
-                                }
-                            } else if (/^[0-9A-HJKMNPQRSTVWXYZ]{6}$/i.test(trimmed)) {
-                                // Short code path: we don't have the token here — alert.
-                                window.alert('Please ask the farmer to share the full QR link with you.');
-                                return;
-                            }
-                            window.alert('Link not recognised. Ask the farmer to share the QR link again.');
-                        }}
+                        onClick={askToJoinAfterSignIn}
+                        data-testid="login-join"
                         className="w-full flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm font-bold text-emerald-700 hover:bg-emerald-50 transition-colors"
                     >
                         <QrCode size={16} />
-                        शेतीच्या QR ने सामील व्हा / Join using farm QR
+                        {JOIN_DOOR_LABEL}
                     </button>
+                    {joinAfterSignIn && (
+                        <p role="status" data-testid="login-join-hint" className="m-0 rounded-xl bg-emerald-50 px-3 py-2 text-center text-[13px] font-bold leading-snug text-emerald-900 ring-1 ring-emerald-200">
+                            {JOIN_AFTER_SIGN_IN_HINT}
+                        </p>
+                    )}
                     <p className="text-[10px] text-stone-400 text-center leading-relaxed">
                         Workers only need their phone number and the OTP. No password.
                     </p>

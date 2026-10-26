@@ -58,6 +58,79 @@ public sealed class FarmMembershipStateMachineTests
         Assert.Equal(Approver, m.ApprovedByUserId);
     }
 
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — typing a farm code makes a REQUEST.
+    [Fact(DisplayName = "Typed-code join request: PendingApproval, Worker placeholder, no invitation → Active only via Approve")]
+    public void Join_request_is_pending_approval_with_a_placeholder_role()
+    {
+        var m = FarmMembership.CreateJoinRequest(Guid.NewGuid(), Farm, Worker, Now);
+
+        Assert.Equal(MembershipStatus.PendingApproval, m.Status);
+        Assert.Equal(AppRole.Worker, m.Role);
+        Assert.Equal(JoinedVia.SelfJoin, m.JoinedVia);
+        Assert.Null(m.InvitationId);
+        Assert.False(m.IsActive);
+        Assert.Throws<InvalidOperationException>(() => m.ClaimWithoutApproval(Now));
+
+        m.Approve(Approver, Now.AddMinutes(5));
+
+        Assert.Equal(MembershipStatus.Active, m.Status);
+        Assert.Equal(Approver, m.ApprovedByUserId);
+    }
+
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the owner's QR answers a typed-code request.
+    [Fact(DisplayName = "Owner's QR activates a typed-code request exactly like a fresh QR claim")]
+    public void Owner_qr_activates_a_typed_code_request_as_a_fresh_claim_would()
+    {
+        var m = FarmMembership.CreateJoinRequest(Guid.NewGuid(), Farm, Worker, Now);
+        Assert.True(m.IsTypedCodeJoinRequest);
+
+        m.ActivateFromOwnerQr(Invitation, Now.AddMinutes(3));
+
+        // The shape ClaimJoin's fresh claim produces: Active Worker, QrScan, that QR's invitation.
+        Assert.Equal(MembershipStatus.Active, m.Status);
+        Assert.Equal(AppRole.Worker, m.Role);
+        Assert.Equal(JoinedVia.QrScan, m.JoinedVia);
+        Assert.Equal(Invitation, m.InvitationId);
+        Assert.Equal(Now.AddMinutes(3), m.LastSeenAtUtc);
+        Assert.Equal(Now.AddMinutes(3), m.ModifiedAtUtc);
+        Assert.Null(m.ApprovedByUserId);
+        Assert.False(m.IsTypedCodeJoinRequest);
+    }
+
+    [Fact(DisplayName = "Owner's QR does not approve a PendingApproval seat that did not come from a typed code")]
+    public void Owner_qr_does_not_approve_an_invitation_request_that_carries_a_chosen_role()
+    {
+        var m = FarmMembership.CreateFromInvitation(
+            Guid.NewGuid(), Farm, Worker, AppRole.Mukadam, JoinedVia.QrScan, Invitation, requireApproval: true, Now);
+
+        Assert.False(m.IsTypedCodeJoinRequest);
+        Assert.Throws<InvalidOperationException>(() => m.ActivateFromOwnerQr(Invitation, Now));
+        Assert.Equal(MembershipStatus.PendingApproval, m.Status);
+        Assert.Equal(AppRole.Mukadam, m.Role);
+    }
+
+    [Fact(DisplayName = "Owner's QR does not lift a pause or touch an Active seat")]
+    public void Owner_qr_does_not_lift_a_pause_or_touch_an_active_seat()
+    {
+        var active = FarmMembership.Create(Guid.NewGuid(), Farm, Worker, AppRole.Mukadam, Now);
+        Assert.Throws<InvalidOperationException>(() => active.ActivateFromOwnerQr(Invitation, Now));
+        Assert.Equal(AppRole.Mukadam, active.Role);
+
+        var paused = FarmMembership.Create(Guid.NewGuid(), Farm, Worker, AppRole.Worker, Now);
+        paused.Suspend(Now);
+        Assert.Throws<InvalidOperationException>(() => paused.ActivateFromOwnerQr(Invitation, Now));
+        Assert.Equal(MembershipStatus.Suspended, paused.Status);
+    }
+
+    [Fact(DisplayName = "Owner's QR activation needs the QR's invitation id")]
+    public void Owner_qr_activation_needs_an_invitation_id()
+    {
+        var m = FarmMembership.CreateJoinRequest(Guid.NewGuid(), Farm, Worker, Now);
+
+        Assert.Throws<ArgumentException>(() => m.ActivateFromOwnerQr(new FarmInvitationId(Guid.Empty), Now));
+        Assert.Equal(MembershipStatus.PendingApproval, m.Status);
+    }
+
     [Fact(DisplayName = "ClaimWithoutApproval from non-PendingOtpClaim throws")]
     public void Claim_from_wrong_status_throws()
     {

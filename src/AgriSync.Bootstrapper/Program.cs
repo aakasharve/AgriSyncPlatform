@@ -9,7 +9,6 @@ using AgriSync.BuildingBlocks.Analytics;
 using Amazon;
 using Amazon.KeyManagementService;
 using Amazon.S3;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -81,39 +80,10 @@ try
         Environment.GetEnvironmentVariable("ALLOW_E2E_SEED"),
         "true",
         StringComparison.OrdinalIgnoreCase);
-    var authPermitLimit = e2eHarnessEnabled ? 100_000 : 10;
-    var aiPermitLimit = e2eHarnessEnabled ? 100_000 : 30;
-    builder.Services.AddRateLimiter(options =>
-    {
-        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-        options.OnRejected = (rateLimitContext, _) =>
-        {
-            rateLimitContext.HttpContext.Response.Headers["Retry-After"] = "60";
-            return ValueTask.CompletedTask;
-        };
-
-        options.AddPolicy("auth", httpContext =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: ResolveRemoteIpRateLimitPartitionKey(httpContext),
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = authPermitLimit,
-                    Window = TimeSpan.FromMinutes(1),
-                    QueueLimit = 0,
-                    AutoReplenishment = true
-                }));
-
-        options.AddPolicy("ai", httpContext =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: ResolveAiRateLimitPartitionKey(httpContext),
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = aiPermitLimit,
-                    Window = TimeSpan.FromMinutes(1),
-                    QueueLimit = 0,
-                    AutoReplenishment = true
-                }));
-    });
+    // The "auth" / "ai" / "join" policies (and the relaxation above) live in
+    // Composition/RateLimitingConfig so a test host can register exactly these and
+    // prove the 429 (spec: plr-d7-m1-multiuser-2026-10-26, step 1).
+    builder.Services.AddAgriSyncRateLimiting(e2eHarnessEnabled);
 
     if (builder.Environment.IsDevelopment())
     {
@@ -412,6 +382,10 @@ try
     builder.Services.AddHostedService<AgriSync.BuildingBlocks.Persistence.Outbox.OutboxConnectionInvariantChecker>();
 
     builder.Services.AddHostedService<AgriSync.Bootstrapper.Migrations.BackfillFarmOwnerAccounts>();
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — every farm without a code gets one (the
+    // owner's QR sheet showed a blank code). After the account backfill above, which assigns
+    // codes to the farms it attaches; idempotent by data, never fatal — see the class doc.
+    builder.Services.AddHostedService<AgriSync.Bootstrapper.Migrations.BackfillFarmCodes>();
     // spec: dfes-companion-2026-07-11 (wave-1.5) — closes the days a pilot farmer recorded
     // before the server learned to self-attest an owner's own log. Those logs have no
     // verification history at all, so every pull reports them Draft and no screen in the
@@ -548,10 +522,9 @@ try
             .GetRequiredService<ILoggerFactory>()
             .CreateLogger(typeof(AgriSync.BuildingBlocks.Security.RegionGuard).FullName!));
 
-    app.UseForwardedHeaders(new ForwardedHeadersOptions
-    {
-        ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-    });
+    // The client IP every per-IP rate limit keys on. One definition, shared with the rate-limit
+    // tests (spec: plr-d7-m1-multiuser-2026-10-26, step 1 — SEC-1); unchanged behaviour.
+    app.UseForwardedHeaders(RateLimitingConfig.CreateForwardedHeadersOptions());
     app.Use(async (context, next) =>
     {
         var traceId = Activity.Current?.TraceId.ToString() ?? context.TraceIdentifier;
@@ -1237,25 +1210,6 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
 
         logger.LogWarning("Continuing despite init failure because environment is Development.");
     }
-}
-
-static string ResolveRemoteIpRateLimitPartitionKey(HttpContext context)
-{
-    return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-}
-
-static string ResolveAiRateLimitPartitionKey(HttpContext context)
-{
-    var subject =
-        context.User.FindFirst("sub")?.Value ??
-        context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-    if (!string.IsNullOrWhiteSpace(subject))
-    {
-        return $"user:{subject}";
-    }
-
-    return $"ip:{ResolveRemoteIpRateLimitPartitionKey(context)}";
 }
 
 /// <summary>

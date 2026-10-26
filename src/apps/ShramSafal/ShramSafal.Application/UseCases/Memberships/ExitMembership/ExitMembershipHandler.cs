@@ -80,7 +80,12 @@ public sealed class ExitMembershipHandler(
         // which only a SUCCESSFUL scope sets — so a write can never happen off
         // the back of a refused scope. The verdict is re-consulted before any
         // mutation, below.
-        var scoped = await callerFarmScope.EstablishForCallerAsync(farmId.Value, callerUserId.Value, ct);
+        //
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the RELATIONSHIP scope, not the
+        // Active-only access scope: a person whose seat is a pending join request (or paused)
+        // has no access to the farm but must still be able to withdraw / leave. It agrees with
+        // the read below on what "a live seat" means, so the refusal branch stays unreachable.
+        var scoped = await callerFarmScope.EstablishRelationshipForCallerAsync(farmId.Value, callerUserId.Value, ct);
 
         // TRACKED and status-blind. Tracked because Exit() below must actually
         // persist; status-blind because the IsTerminal branch is the idempotent

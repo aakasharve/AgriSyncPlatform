@@ -37,9 +37,26 @@ public sealed class Farm : Entity<FarmId>
     public OwnerAccountId OwnerAccountId { get; private set; }
 
     /// <summary>
-    /// Human-friendly display code for the farm (6 chars Crockford base32).
-    /// DISPLAY ONLY — never grants access. All joining goes through signed
-    /// tokens per spec §5.4.
+    /// Human-friendly code for the farm (6 chars Crockford base32, generated
+    /// only by the static <c>ShramSafal.Domain.Farms.FarmCode.New()</c>).
+    ///
+    /// <para>spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — supersedes the
+    /// earlier "DISPLAY ONLY — never grants access". The code still grants no
+    /// access by itself: TYPING it (<c>POST /shramsafal/join/by-code</c>) only
+    /// creates a join REQUEST — a <see cref="MembershipStatus.PendingApproval"/>
+    /// seat with a placeholder role — that the farm's owner must approve and
+    /// give a role to. The signed QR token remains the only artifact that
+    /// joins without approval (spec §5.4). "No access" is enforced outside this
+    /// entity: every data and operational gate (sync pull, push, REST farm
+    /// scope, role checks, user-scoped data RLS) counts the owner and ACTIVE
+    /// seats only — see <c>PendingJoinRequestAccessRealPostgresTests</c>. Older
+    /// binaries do NOT (they count any seat that has not ended), so a code
+    /// rollback past the release that added typing first runs
+    /// <c>Scripts/end-typed-code-join-requests.sql</c> (doctrine E8).</para>
+    ///
+    /// <para>Nullable in the schema on purpose (a NOT NULL column would break
+    /// rollback); every creation path assigns one and the startup backfill
+    /// <c>FarmCodeBackfillRunner</c> gives one to every farm made before.</para>
     /// </summary>
     public string? FarmCode { get; private set; }
 

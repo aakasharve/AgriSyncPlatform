@@ -59,6 +59,11 @@ public sealed class InviteQrRoutesRealPostgresTests : IAsyncLifetime
     private static readonly Guid ExitedMukadam = Guid.Parse("c9e10001-0000-0000-0000-0000000000b4");
     private static readonly Guid Stranger = Guid.Parse("c9e10001-0000-0000-0000-0000000000f9");
     private static readonly Guid NewWorker = Guid.Parse("c9e10001-0000-0000-0000-0000000000d1");
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — a farm created by a path that never
+    // assigned a code (the demo farm was one: D-1).
+    private static readonly Guid FarmNoCode = Guid.Parse("c9e10001-0000-0000-0000-000000000003");
+    private static readonly Guid AccountNoCode = Guid.Parse("c9e10001-0000-0000-0000-0000000000c3");
+    private static readonly Guid OwnerNoCode = Guid.Parse("c9e10001-0000-0000-0000-0000000000a3");
 
     private string _rootConn = string.Empty;
     private string _scratchDbName = string.Empty;
@@ -100,6 +105,8 @@ public sealed class InviteQrRoutesRealPostgresTests : IAsyncLifetime
             await SeedMembershipAsync(raw, FarmA, AccountA, RevokedCoOwner, "SecondaryOwner", 5);
             await SeedMembershipAsync(raw, FarmA, AccountA, ExitedMukadam, "Mukadam", 6);
             await SeedMembershipAsync(raw, FarmB, AccountB, OwnerB, "PrimaryOwner", 3);
+            await SeedFarmAsync(raw, FarmNoCode, "Code-less Farm", OwnerNoCode, AccountNoCode, code: null);
+            await SeedMembershipAsync(raw, FarmNoCode, AccountNoCode, OwnerNoCode, "PrimaryOwner", 3);
         }
 
         _app = await BuildHostAsync(_appConn);
@@ -295,7 +302,68 @@ public sealed class InviteQrRoutesRealPostgresTests : IAsyncLifetime
         (await CountAsync("farm_invitations", FarmA)).Should().Be(0);
     }
 
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the sheet used to be handed `farmCode: ""`
+    // for a farm without a code (D-1). Now the farm gets one, it is committed, it never changes
+    // on a re-issue or a rotate, and it is what a joiner types.
+    [Fact]
+    public async Task A_farm_without_a_code_gets_one_when_the_owner_opens_the_invite_and_it_stays()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        (await FarmCodeAsync(FarmNoCode)).Should().BeNull("arrange: the farm starts without a code");
+
+        var first = await IssueOkAsync(OwnerNoCode, FarmNoCode);
+
+        first.FarmCode.Should().NotBeNullOrWhiteSpace("the QR sheet must never be handed a blank code");
+        ShramSafal.Domain.Farms.FarmCode.Normalize(first.FarmCode).Should().Be(first.FarmCode,
+            "it must be a well-formed code, the same one a joiner types");
+        (await FarmCodeAsync(FarmNoCode)).Should().Be(first.FarmCode, "the code is committed, not invented per response");
+        new Uri(ReadQrPayload(await IssueBodyAsync(OwnerNoCode, FarmNoCode))).Query
+            .Should().Contain($"f={first.FarmCode}", "the QR link carries the real code");
+
+        var again = await IssueOkAsync(OwnerNoCode, FarmNoCode);
+        again.FarmCode.Should().Be(first.FarmCode);
+        using var rotate = await SendAsync(HttpMethod.Post, RotateUrl(FarmNoCode), OwnerNoCode);
+        var rotateBody = await rotate.Content.ReadAsStringAsync();
+        rotate.StatusCode.Should().Be(HttpStatusCode.OK, rotateBody);
+        ReadInvite(rotateBody).FarmCode
+            .Should().Be(first.FarmCode, "rotating changes the QR token, never the farm's code");
+
+        // The farms that already had a code keep it.
+        (await IssueOkAsync(OwnerA, FarmA)).FarmCode.Should().Be("IVA001");
+
+        // And the code works at the typed-join door: a request, never access.
+        using var join = await SendAsync(
+            HttpMethod.Post, "/shramsafal/join/by-code", NewWorker, new { farmCode = first.FarmCode.ToLowerInvariant() });
+        join.StatusCode.Should().Be(HttpStatusCode.OK, await join.Content.ReadAsStringAsync());
+        (await MembershipRoleAndStatusAsync(FarmNoCode, NewWorker)).Should().Be(("Worker", 2));
+    }
+
     // -- Harness ----------------------------------------------------------------
+
+    private async Task<string> IssueBodyAsync(Guid caller, Guid farm)
+    {
+        using var response = await SendAsync(HttpMethod.Post, IssueUrl(farm), caller);
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        return body;
+    }
+
+    private static string ReadQrPayload(string body)
+    {
+        using var doc = JsonDocument.Parse(body);
+        return doc.RootElement.GetProperty("qrPayload").GetString()!;
+    }
+
+    private async Task<string?> FarmCodeAsync(Guid farm)
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT farm_code FROM ssf.farms WHERE \"Id\" = @f";
+        cmd.Parameters.AddWithValue("f", farm);
+        var value = await cmd.ExecuteScalarAsync();
+        return value is DBNull or null ? null : (string)value;
+    }
 
     private static string IssueUrl(Guid farm) => $"/shramsafal/farms/{farm}/invite-qr";
 
@@ -431,12 +499,13 @@ public sealed class InviteQrRoutesRealPostgresTests : IAsyncLifetime
     }
 
     private static Task SeedFarmAsync(
-        NpgsqlConnection db, Guid farm, string name, Guid owner, Guid account, string code)
+        NpgsqlConnection db, Guid farm, string name, Guid owner, Guid account, string? code)
         => ExecAsync(db, """
             INSERT INTO ssf.farms ("Id", name, owner_user_id, owner_account_id, created_at_utc, modified_at_utc, weather_radius_km, geo_validation_status, farm_code)
             VALUES (@farm, @name, @owner, @account, NOW(), NOW(), 3.0, 'Unchecked', @code);
             """,
-            ("farm", farm), ("name", name), ("owner", owner), ("account", account), ("code", code));
+            ("farm", farm), ("name", name), ("owner", owner), ("account", account),
+            ("code", (object?)code ?? DBNull.Value));
 
     private static Task SeedMembershipAsync(
         NpgsqlConnection db, Guid farm, Guid account, Guid userId, string role, int status)
