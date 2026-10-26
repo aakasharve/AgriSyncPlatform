@@ -617,7 +617,11 @@ export interface ScheduleTemplateCacheItem {
 export interface AttentionCardCacheRecord {
     cardId: string;
     farmId: string;
-    rank: string;
+    /**
+     * spec: plr-d10 (I14) — the server's `AttentionRank` ORDINAL (0-3) as it really arrives (no string enum
+     * converter on the API); a name is accepted too. Read it through `features/attention/attentionWire.ts`.
+     */
+    rank: string | number;
     computedAtUtc: string;
     // mirror of AttentionCardDto fields
     farmName: string;
@@ -629,7 +633,8 @@ export interface AttentionCardCacheRecord {
     titleMr: string;
     descriptionEn: string;
     descriptionMr: string;
-    suggestedAction: string;
+    /** spec: plr-d10 (I14) — `SuggestedActionKind` ORDINAL (0-5) as it really arrives, or a name (`attentionWire.ts`). */
+    suggestedAction: string | number;
     suggestedActionLabelEn: string;
     suggestedActionLabelMr: string;
     overdueTaskCount?: number | null;

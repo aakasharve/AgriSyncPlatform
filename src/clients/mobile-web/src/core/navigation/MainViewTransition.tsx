@@ -75,11 +75,21 @@ export interface MainViewTransitionProps {
      * `isRecordingPathBusy(status)`, never a second inline expression. While
      * true, no swipe may change the view (spec §P-I). Required on purpose. */
     disabled: boolean;
+    /**
+     * spec: plr-d10 (I14, CMP-3) — tabs this person may not open (a worker gets no तुलना,
+     * `core/navigation/hiddenViews.ts`). A swipe skips them: it moves only between the tabs that are
+     * left, in the same order, so a swipe can never land on a hidden tab. Default: none hidden.
+     */
+    hiddenViews?: readonly PageView[];
     children: React.ReactNode;
 }
 
-const MainViewTransition: React.FC<MainViewTransitionProps> = ({ view, onChangeView, disabled, children }) => {
+const MainViewTransition: React.FC<MainViewTransitionProps> = ({ view, onChangeView, disabled, hiddenViews, children }) => {
     const currentIndex = VIEW_ORDER.indexOf(view);
+    // The swipe walks only the tabs this person may open (CMP-3). The slide direction above keeps the
+    // full order, so a tap between two visible tabs still slides the way it always did.
+    const swipeOrder = hiddenViews?.length ? VIEW_ORDER.filter(v => !hiddenViews.includes(v)) : VIEW_ORDER;
+    const swipeIndex = swipeOrder.indexOf(view);
     // Tracks the PREVIOUS index across renders so the slide direction can be
     // computed without a second prop the caller would have to track itself.
     const prevIndexRef = React.useRef(currentIndex);
@@ -135,11 +145,14 @@ const MainViewTransition: React.FC<MainViewTransitionProps> = ({ view, onChangeV
 
         // Swiping left (finger travels right-to-left, dx < 0) moves forward
         // through the tabs (higher index); swiping right moves back.
-        const nextIndex = dx < 0 ? currentIndex + 1 : currentIndex - 1;
-        if (nextIndex < 0 || nextIndex >= VIEW_ORDER.length) return;
+        // A hidden tab that is somehow on screen (`AppRouter` sends it back to आजची कामे) is not a
+        // starting point for a swipe.
+        if (swipeIndex < 0) return;
+        const nextIndex = dx < 0 ? swipeIndex + 1 : swipeIndex - 1;
+        if (nextIndex < 0 || nextIndex >= swipeOrder.length) return;
 
         hapticFeedback.medium();
-        onChangeView(VIEW_ORDER[nextIndex]);
+        onChangeView(swipeOrder[nextIndex]);
     };
 
     const slideClass = direction === 'right'

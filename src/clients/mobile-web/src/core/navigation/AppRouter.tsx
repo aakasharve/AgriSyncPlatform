@@ -32,6 +32,8 @@ import { isRecordingPathBusy } from '../../shared/utils/recordingPathBusy';
 // here as a window event; see that module's header for why.
 import { OPEN_REVIEW_INBOX_EVENT } from '../../features/oversight/oversightNavigationEvents';
 import { useOpenSurfaceRequest } from '../../features/oversight/useOpenSurfaceRequest';
+// spec: plr-d10 (I14, CMP-3) — the one role → hidden-tab rule (a worker gets no तुलना).
+import { hiddenMainViewsFor } from './hiddenViews';
 
 // Sub-plan 04 Task 8 — Routes-as-data decomposition.
 // AppRouter is a thin orchestrator that wires hooks, builds an
@@ -67,6 +69,13 @@ const AppRouter: React.FC = () => {
     const { currentFarmId, currentFarm } = useFarmContext();
 
     const { currentRoute, setCurrentRoute, mainView, setMainView, logIntent, setLogIntent, lastLabourLogIds } = navigation;
+    const hiddenViews = hiddenMainViewsFor(currentFarm?.role);
+    // A tab this person may not open is never left on screen (e.g. a farm switch from an owner seat to a
+    // worker seat while तुलना was open): back to आजची कामे. Above every early return (rules of hooks).
+    const onHiddenView = hiddenViews.includes(mainView);
+    React.useEffect(() => {
+        if (onHiddenView) setMainView('log');
+    }, [onHiddenView, setMainView]);
     const { logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady } = context;
     const {
         isDemoMode, setIsDemoMode,
@@ -114,6 +123,8 @@ const AppRouter: React.FC = () => {
     // each other and both live in renderGlobalSheets.
     const [showNoWorkReason, setShowNoWorkReason] = React.useState(false);
     const [reflectFocusRequest, setReflectFocusRequest] = React.useState<{ logId: string; date: string; plotId?: string } | null>(null);
+    // spec: plr-d10 (I14, H16) — लक्ष द्या's "तुकडा पहा" opens the overview on that plot.
+    const [reflectFocusPlotId, setReflectFocusPlotId] = React.useState<string | null>(null);
 
     // Convert a DailyLog to an editable AgriLogResponse (manual ledger edit flow).
     const handleEditLog = (log: DailyLog) => {
@@ -219,6 +230,7 @@ const AppRouter: React.FC = () => {
     const ctx: AppRouterContext = {
         activeFarmId: currentFarmId,
         currentRoute, setCurrentRoute, mainView, setMainView,
+        hiddenViews,
         goBackOr: navigation.goBackOr,
         logIntent, setLogIntent, lastLabourLogIds,
         logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady,
@@ -248,6 +260,7 @@ const AppRouter: React.FC = () => {
         showQuickLog, setShowQuickLog,
         showNoWorkReason, setShowNoWorkReason,
         reflectFocusRequest, setReflectFocusRequest,
+        reflectFocusPlotId, setReflectFocusPlotId,
         ownerDisplayName: derivations.ownerDisplayName,
         operatorNameById: derivations.operatorNameById,
         todayDateKey: derivations.todayDateKey,
@@ -279,6 +292,7 @@ const AppRouter: React.FC = () => {
                     view={mainView}
                     onChangeView={setMainView}
                     disabled={isRecordingPathBusy(status)}
+                    hiddenViews={hiddenViews}
                 >
                     {renderReflectView(ctx)}
                     {renderCompareView(ctx)}

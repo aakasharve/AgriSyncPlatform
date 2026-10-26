@@ -92,7 +92,9 @@ describe('AttentionPage — a never-succeeded sync is not "all your farms are on
         render(<AttentionPage />);
 
         await waitFor(() => expect(screen.getByText(FALSE_REASSURANCE)).toBeInTheDocument());
-        expect(screen.getByText(FALSE_REASSURANCE_EN)).toBeInTheDocument();
+        // spec: plr-d10 (I14, H14) — the page is Marathi only now: the English twin line is gone (no doubled
+        // labels). The TRUE all-clear itself is unchanged, which is what this test protects.
+        expect(screen.queryByText(FALSE_REASSURANCE_EN)).toBeNull();
         expect(screen.queryByText(ERROR_LABEL)).toBeNull();
         expect(screen.queryByText(RETRY_LABEL)).toBeNull();
     });

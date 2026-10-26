@@ -82,6 +82,47 @@ export function toggledTask(t: PlannedTask, now: Date = new Date()): PlannedTask
     return { ...t, status, completedAt: status === 'done' ? now.toISOString() : undefined };
 }
 
+/** When a to-do typed on this page is due (spec plr-d10 I14, T2). */
+export type TodoWhen = 'today' | 'tomorrow' | 'next_week' | 'no_date';
+
+/** The days each choice adds to today — the same four the app's task sheet offers. */
+const WHEN_DAYS: Record<Exclude<TodoWhen, 'no_date'>, number> = { today: 0, tomorrow: 1, next_week: 7 };
+
+const addDaysToKey = (key: string, n: number): string => {
+    const [y, m, d] = key.slice(0, 10).split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d + n));
+    return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+};
+
+export interface NewTodo {
+    title: string;
+    when: TodoWhen;
+    priority: PlannedTask['priority'];
+    /** The one plot the page is narrowed to; absent → the whole farm. */
+    place?: { plotId: string; cropId: string };
+}
+
+/**
+ * spec: plr-d10 (I14, T2) — a to-do typed inline ("आठवण जोडा") as the SAME record the app's task sheet
+ * makes (`TaskCreationSheet.handleSave`: manual, pending, a due date from the same four choices), saved to
+ * the same store. One difference, on purpose: with no plot chosen it belongs to the whole farm
+ * (`FARM_GLOBAL`, as `LogFactory` files a spoken reminder), never the sheet's made-up `'unknown_plot'`.
+ */
+export function newTodoTask(todo: NewTodo, todayKey: string, id: string, now: Date = new Date()): PlannedTask {
+    return {
+        id,
+        title: todo.title.trim(),
+        plotId: todo.place?.plotId ?? FARM_GLOBAL,
+        cropId: todo.place?.cropId ?? FARM_GLOBAL,
+        priority: todo.priority,
+        status: 'pending',
+        sourceType: 'manual',
+        dueDate: todo.when === 'no_date' ? undefined : addDaysToKey(todayKey, WHEN_DAYS[todo.when]),
+        createdAt: now.toISOString(),
+        tags: [],
+    };
+}
+
 interface BuildArgs {
     tasks: readonly PlannedTask[];
     /** Ids the task store holds (the only ones a tick can change). */
@@ -136,7 +177,10 @@ export function buildTodoList({ tasks, storeIds, crops, scope, wholeFarm, todayK
             group,
             done: isClosed(t),
             dueText,
-            kindLabel: t.sourceType === 'observation_derived' ? 'आठवण' : 'काम',
+            // A reminder he spoke (`observation_derived`) or typed himself (`manual` — what "आठवण जोडा" saves,
+            // and what the old task sheet saved) is an आठवण, as the approved preview files a typed line; work
+            // the schedule or a parse put on the list is a काम (I14-V2-02: "आठवण जोडा" must not land as "काम").
+            kindLabel: t.sourceType === 'observation_derived' || t.sourceType === 'manual' ? 'आठवण' : 'काम',
             fromLabel: FROM_LABEL[t.sourceType] ?? '',
             priorityLabel: t.priority === 'urgent' ? 'तातडीचं' : t.priority === 'high' ? 'महत्त्वाचं' : undefined,
             place: placeOf(t),

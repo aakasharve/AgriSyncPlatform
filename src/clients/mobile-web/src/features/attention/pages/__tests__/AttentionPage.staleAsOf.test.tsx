@@ -35,7 +35,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
-import { formatDisplayTime } from '../../../../shared/utils/displayTime';
+import { formatFarmerTime } from '../../../../shared/utils/displayTime';
 
 const cursorRef: { current: { tableName: string; lastSyncAt: string; version: number } | undefined } = {
     current: undefined,
@@ -82,10 +82,14 @@ describe('AttentionPage — the all-clear says WHEN it is from, even on a stale-
 
         await waitFor(() => expect(screen.getByText(FALSE_REASSURANCE)).toBeInTheDocument());
 
-        // The exact wording the non-empty branch already uses for this —
-        // reused verbatim, not invented for this branch.
-        const expectedLabel = formatDisplayTime(YESTERDAY_SYNC_ISO);
-        expect(expectedLabel).not.toBe('');
-        await waitFor(() => expect(screen.getByText(`as of ${expectedLabel}`)).toBeInTheDocument());
+        // spec: plr-d10 (I14, H14) — the stamp is Marathi now (was "as of 11:30 AM"), and it carries the DAY
+        // as well as the time, so a pull from another day can never read as today's: the date of the last
+        // successful sync, the farmer-facing time of day, "पर्यंतची माहिती".
+        const time = formatFarmerTime(YESTERDAY_SYNC_ISO);
+        expect(time).not.toBe('');
+        await waitFor(() => expect(screen.getByTestId('attention-as-of')).toBeInTheDocument());
+        const stamp = screen.getByTestId('attention-as-of').textContent ?? '';
+        expect(stamp).toBe(`28 ऑग, ${time} पर्यंतची माहिती`);
+        expect(stamp).not.toMatch(/as of|आज/);
     });
 });

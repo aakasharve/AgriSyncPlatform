@@ -46,6 +46,9 @@ import { buildOversightHeaderInputs } from './app/helpers/appContentOversightInp
 // swipe path (`core/navigation/MainViewTransition.tsx`, wired in
 // `AppRouter.tsx`) both call it, so the two can never drift apart.
 import { isRecordingPathBusy } from './shared/utils/recordingPathBusy';
+// spec: plr-d10 (I14, CMP-3) — a worker gets no तुलना; the one rule, read here for the switcher.
+import { useOptionalFarmContext } from './core/session/FarmContext';
+import { hiddenMainViewsFor } from './core/navigation/hiddenViews';
 
 interface AppContentProps {
     crops: CropProfile[];
@@ -72,6 +75,8 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
     } = useFarmContextState();
 
     const currentFarmName = myFarms?.find(f => f.farmId === currentFarmId)?.name;
+    // The person's role on the CURRENT farm (`/me/context`), so the switcher leaves out what they may not open.
+    const hiddenViews = hiddenMainViewsFor(useOptionalFarmContext()?.currentFarm?.role);
     const app = useAgriLogApp({ initialCrops, currentFarmId, currentFarmName });
     useTemplateCatalogSync();
 
@@ -162,6 +167,8 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 // switcher only on the home tabs; a place (खरेदी, सेट-अप केंद्र…) has its own title
                 // and मागे, and used to show आजची कामे lit while the farmer was on खरेदी.
                 navCardsOnlyOnMain
+                // spec: plr-d10 (I14, CMP-3) — founder 2026-10-25: a worker gets no तुलना card.
+                hiddenViews={hiddenViews}
                 disabled={isRecordingPathBusy(voice.status)}
                 activeOperator={data.farmerProfile.operators.find(op => op.id === data.farmerProfile.activeOperatorId)}
                 farmContext={myFarms ? {

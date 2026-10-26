@@ -5,6 +5,7 @@
 // pre-decomposition if-cascade.
 
 import React from 'react';
+import type { PageView } from '../../types';
 import { AppRouterContext } from './routeContext';
 import {
     ProfilePage,
@@ -340,11 +341,30 @@ export const renderQrDemoRoute = (ctx: AppRouterContext): React.ReactNode => {
     );
 };
 
+// spec: plr-d10 (I14 — H14, H15 / T3, H16) — लक्ष द्या: one "← मागे" (back where he came from); each card's
+// button opens where it can be done (`features/attention/attentionActions.ts`); late to-dos from the SAME
+// task store as करायची कामे, so a tick on either page clears both.
 export const renderAttentionRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'attention') return null;
+    const openView = (view: PageView) => { ctx.setMainView(view); ctx.setCurrentRoute('main'); };
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <AttentionPage />
+            <AttentionPage
+                onBack={() => ctx.goBackOr('main')}
+                hiddenViews={ctx.hiddenViews}
+                onGo={(target) => {
+                    if (target.kind === 'view') {
+                        // "तुकडा पहा": the overview opens narrowed to that plot (read once by ReflectPage).
+                        if (target.view === 'reflect' && target.plotId) ctx.setReflectFocusPlotId?.(target.plotId);
+                        openView(target.view);
+                    } else if (target.kind === 'tests') ctx.setCurrentRoute('tests');
+                    else if (target.kind === 'route') ctx.setCurrentRoute(target.route);
+                }}
+                tasks={ctx.plannedTasks}
+                crops={ctx.crops}
+                onUpdateTask={(task) => ctx.handleUpdateTask(task.id, task)}
+                onOpenTodos={() => openView('reflect')}
+            />
         </div>
     );
 };

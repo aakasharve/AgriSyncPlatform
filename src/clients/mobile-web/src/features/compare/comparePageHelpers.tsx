@@ -1,8 +1,13 @@
 import React from 'react';
-import { DailyLog, PlannedItem, ExecutedItem, Plot, PlotComparisonSummary } from '../../types';
+import { BucketIssue, DailyLog, PlannedItem, ExecutedItem, Plot, PlotComparisonSummary } from '../../types';
 import { BlockStatus } from '../scheduler/components/DayCard';
 import { parseDateKey } from '../../core/domain/services/DateKeyService';
 import { Droplets, Sprout, SprayCan, Hammer } from 'lucide-react';
+// spec: plr-d10 (I14, CMP-1) — every word this builder hands the page is plain Marathi now (was English:
+// "Plan: Day 4", "Missed: 210 days late", "Reason: Farmer preventive decision"). The numbers and the matching
+// are unchanged. Every Marathi string in this file is PROPOSED (Marathi).
+import { dateLabel } from '../reflect/overview/reflectDates';
+import { CATEGORY_MR, executedLabelMr, marathiOnly, plannedLabelMr, reasonMr, relativeDayMr } from './compareText';
 
 export type CompareCategory = 'ACTIVITY' | 'NUTRITION' | 'SPRAY' | 'IRRIGATION';
 export type FarmerStatus = 'ON_TRACK' | 'SLIGHT_LAG' | 'BEHIND' | 'EXTRA';
@@ -62,20 +67,29 @@ export interface ScheduleReplicaDay {
 
 export const CATEGORY_ORDER: CompareCategory[] = ['ACTIVITY', 'NUTRITION', 'SPRAY', 'IRRIGATION'];
 
+// PROPOSED (Marathi)
 export const CATEGORY_META: Record<CompareCategory, { label: string; shortLabel: string }> = {
-    ACTIVITY: { label: 'Activities', shortLabel: 'Work' },
-    NUTRITION: { label: 'Nutrition', shortLabel: 'Nutri' },
-    SPRAY: { label: 'Sprays', shortLabel: 'Spray' },
-    IRRIGATION: { label: 'Water', shortLabel: 'Water' }
+    ACTIVITY: { label: 'कामं', shortLabel: CATEGORY_MR.ACTIVITY },
+    NUTRITION: { label: 'खत', shortLabel: CATEGORY_MR.NUTRITION },
+    SPRAY: { label: 'फवारणी', shortLabel: CATEGORY_MR.SPRAY },
+    IRRIGATION: { label: 'पाणी', shortLabel: CATEGORY_MR.IRRIGATION }
 };
 
 export const round1 = (value: number): number => Math.round(value * 10) / 10;
 
+/** Said gently (PLR-D9 T7: no scolding). PROPOSED (Marathi) */
 export const getStatusText = (status: FarmerStatus): string => {
-    if (status === 'ON_TRACK') return 'You are ON TRACK';
-    if (status === 'SLIGHT_LAG') return 'You are SLIGHTLY BEHIND';
-    if (status === 'EXTRA') return 'You are doing EXTRA work';
-    return 'You are BEHIND';
+    if (status === 'ON_TRACK') return 'वेळेवर आहे';
+    if (status === 'SLIGHT_LAG') return 'थोडं काम बाकी';
+    if (status === 'EXTRA') return 'जास्तीचं काम केलं';
+    return 'बरंच काम बाकी';
+};
+
+/** A kind of work's state, in one word. PROPOSED (Marathi) */
+export const getHealthText = (health: CategoryHealth): string => {
+    if (health === 'BEHIND') return 'बाकी आहे';
+    if (health === 'EXTRA') return 'जास्तीचं';
+    return 'वेळेवर';
 };
 
 export const getStatusStyles = (status: FarmerStatus) => {
@@ -136,51 +150,63 @@ export const getCategoryIcon = (category: CompareCategory, size = 16, className 
     return <Droplets size={size} className={className} />;
 };
 
-export const trimReason = (reasonText: string): string => reasonText.replace(/^Reason:\s*/i, '');
+const REASON_PREFIX = 'कारण: ';
+
+export const trimReason = (reasonText: string): string => reasonText.startsWith(REASON_PREFIX) ? reasonText.slice(REASON_PREFIX.length) : reasonText;
 
 export const compactList = (items: string[], prefix: string, max = 2): string | undefined => {
     if (items.length === 0) return undefined;
     const head = items.slice(0, max);
     const more = items.length - head.length;
-    return `${prefix}${head.join(', ')}${more > 0 ? ` +${more} more` : ''}`;
+    return `${prefix}${head.join(', ')}${more > 0 ? ` +${more}` : ''}`;
 };
 
-export const firstEventIssueReason = (log: DailyLog): string | null => {
-    const cropIssue = log.cropActivities.find(e => e.issue)?.issue;
-    if (cropIssue) return `${cropIssue.issueType}: ${cropIssue.reason}`;
+/** The first held-up event's issue (`BucketIssue`) on the log, if any. */
+export const firstEventIssue = (log: DailyLog): BucketIssue | null =>
+    log.cropActivities?.find(e => e.issue)?.issue
+    ?? log.irrigation?.find(e => e.issue)?.issue
+    ?? log.inputs?.find(e => e.issue)?.issue
+    ?? log.labour?.find(e => e.issue)?.issue
+    ?? log.machinery?.find(e => e.issue)?.issue
+    ?? null;
 
-    const irrIssue = log.irrigation.find(e => e.issue)?.issue;
-    if (irrIssue) return `${irrIssue.issueType}: ${irrIssue.reason}`;
-
-    const inputIssue = log.inputs.find(e => e.issue)?.issue;
-    if (inputIssue) return `${inputIssue.issueType}: ${inputIssue.reason}`;
-
-    const labourIssue = log.labour.find(e => e.issue)?.issue;
-    if (labourIssue) return `${labourIssue.issueType}: ${labourIssue.reason}`;
-
-    const machineIssue = log.machinery.find(e => e.issue)?.issue;
-    if (machineIssue) return `${machineIssue.issueType}: ${machineIssue.reason}`;
-
-    return null;
-};
-
+/**
+ * Why extra work was done — only what the record itself says, in Marathi. The old text invented a reason
+ * when the record had none ("Farmer preventive decision"); now it says no reason was recorded (P4).
+ * Codes are said in the app's words ("WEATHER" → "पाऊस / हवामान"), never shown raw. A reason the record
+ * holds only in English or as an unknown code is not printed; the line then says it is written in the log
+ * (true, and not English). PROPOSED (Marathi)
+ */
 export const getExtraReasonFromLog = (log?: DailyLog): string => {
-    if (!log) return 'Reason: Farmer decision';
+    if (!log) return `${REASON_PREFIX}नोंदलेलं नाही`;
+    let unreadable = false;
 
     if (log.disturbance) {
-        return `Reason: ${log.disturbance.group} - ${log.disturbance.reason}`;
+        const d = log.disturbance;
+        const said = reasonMr([d.cause, d.reason, d.group], d.reason);
+        if (said) return `${REASON_PREFIX}${said}`;
+        unreadable = true;
     }
 
-    const eventIssue = firstEventIssueReason(log);
-    if (eventIssue) return `Reason: ${eventIssue}`;
+    const issue = firstEventIssue(log);
+    if (issue) {
+        const said = reasonMr([issue.issueType], issue.reason);
+        if (said) return `${REASON_PREFIX}${said}`;
+        unreadable = true;
+    }
 
     const observationIssue = log.observations?.find(o => o.noteType === 'issue' || o.noteType === 'reminder');
-    if (observationIssue) return `Reason: ${observationIssue.textRaw}`;
+    if (observationIssue) {
+        const said = marathiOnly(observationIssue.textRaw);
+        if (said) return `${REASON_PREFIX}${said}`;
+        unreadable = true;
+    }
 
     const rain = log.weatherStamp?.precipMm || 0;
-    if (rain >= 8) return 'Reason: Weather condition adjustment';
+    if (rain >= 8) return `${REASON_PREFIX}त्या दिवशी पाऊस ${round1(rain)} मिमी`;
 
-    return 'Reason: Farmer preventive decision';
+    // PROPOSED (Marathi) — a reason exists, but not in words this screen can show.
+    return unreadable ? `${REASON_PREFIX}नोंदीत लिहिलं आहे` : `${REASON_PREFIX}नोंदलेलं नाही`;
 };
 
 export const mapBucketToCategory = (bucketType: string): CompareCategory => {
@@ -206,10 +232,9 @@ export const getDateForDay = (referenceDate: string, dayOffset: number): Date =>
     return date;
 };
 
-export const getDateLabelForDay = (referenceDate: string, dayOffset: number): string => {
-    const date = getDateForDay(referenceDate, dayOffset);
-    return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-};
+/** `26 ऑक्टो` (was the English `26 Oct`). */
+export const getDateLabelForDay = (referenceDate: string, dayOffset: number): string =>
+    dateLabel(getDateForDay(referenceDate, dayOffset));
 
 export const getRelativeDayFromToday = (targetDate: Date): number => {
     const today = new Date();
@@ -220,7 +245,10 @@ export const getRelativeDayFromToday = (targetDate: Date): number => {
 export const formatRelativeDay = (value: number): string => (value > 0 ? `+${value}` : `${value}`);
 
 export interface CompareReport {
+    /** The template's stage name as it is stored (often English) — show it through `stageNameMr`. */
     stageName: string;
+    /** The stage's kind (`StageCode`), the Marathi fallback when the name is not one we know. */
+    stageCode: string;
     stageStartDay: number;
     stageEndDay: number;
     seasonDay: number;
@@ -319,16 +347,16 @@ export const buildCompareReport = (
         bucket.planned.forEach(planned => {
             const executed = (planned.matchedExecutionId ? executedById.get(planned.matchedExecutionId) : undefined) as ExecutedItem | undefined;
             const plannedText = typeof planned.expectedDay === 'number'
-                ? `Plan: Day ${planned.expectedDay}`
-                : 'Plan: Current phase';
+                ? `ठरलेला दिवस ${planned.expectedDay}`
+                : 'या टप्प्यात';
 
             if (planned.isMatched) {
                 mustDoItems.push({
                     id: `${category}_${planned.id}`,
                     category,
-                    name: planned.name,
+                    name: plannedLabelMr(planned.name, category),
                     plannedText,
-                    actualText: executed ? `Done: Day ${executed.executedDay}` : 'Done',
+                    actualText: executed ? `झालं: दिवस ${executed.executedDay}` : 'झालं',
                     isDone: true,
                     delayDays: 0
                 });
@@ -337,16 +365,16 @@ export const buildCompareReport = (
                     ? Math.max(0, comparisonData.currentDay - planned.expectedDay)
                     : Math.max(0, comparisonData.currentDay - stageEndDay);
 
-                categoryCounts[category].missedNames.push(planned.name);
+                const nameMr = plannedLabelMr(planned.name, category);
+                if (!categoryCounts[category].missedNames.includes(nameMr)) categoryCounts[category].missedNames.push(nameMr);
 
+                // PLR-D9 T7: never "N days late" — the delay still orders the list, it is not shouted.
                 mustDoItems.push({
                     id: `${category}_${planned.id}`,
                     category,
-                    name: planned.name,
+                    name: nameMr,
                     plannedText,
-                    actualText: delayDays > 0
-                        ? `Missed: ${delayDays} day${delayDays > 1 ? 's' : ''} late`
-                        : 'Missed: Not done yet',
+                    actualText: 'अजून नोंद नाही',
                     isDone: false,
                     delayDays
                 });
@@ -356,14 +384,14 @@ export const buildCompareReport = (
         bucket.executed
             .filter(executed => executed.isExtra)
             .forEach(executed => {
-                const relativeDay = formatRelativeDay(
+                const relativeDay = relativeDayMr(
                     getRelativeDayFromToday(getDateForDay(comparisonData.referenceDate, executed.executedDay))
                 );
                 extraItems.push({
                     id: `${category}_${executed.id}`,
                     category,
-                    name: executed.name,
-                    doneText: `Done: Phase Day ${executed.executedDay} (day ${relativeDay})`,
+                    name: executedLabelMr(executed.name, category, executed.quantity),
+                    doneText: `झालं: दिवस ${executed.executedDay} (${relativeDay})`,
                     reasonText: getExtraReasonFromLog(logsById.get(executed.sourceLogId)),
                     executedDay: executed.executedDay
                 });
@@ -436,67 +464,68 @@ export const buildCompareReport = (
                     ? executedByCategoryId[category].get(matchedExecutionId)
                     : undefined;
 
+                const nameMr = plannedLabelMr(planned.name, category);
                 if (matchedExecution && matchedExecution.executedDay === day) {
-                    doneNames.push(planned.name);
+                    doneNames.push(nameMr);
                     return;
                 }
 
                 if (day > comparisonData.currentDay) {
-                    plannedNames.push(planned.name);
+                    plannedNames.push(nameMr);
                     return;
                 }
 
                 if (!matchedExecution) {
-                    missedNames.push(planned.name);
+                    missedNames.push(nameMr);
                     return;
                 }
 
                 if (matchedExecution && matchedExecution.executedDay > day) {
-                    missedNames.push(`${planned.name} (done Day ${matchedExecution.executedDay})`);
+                    missedNames.push(`${nameMr} (दिवस ${matchedExecution.executedDay} ला झालं)`);
                     return;
                 }
 
-                doneNames.push(planned.name);
+                doneNames.push(nameMr);
             });
 
             if (missedNames.length > 0) {
                 statusByCategory[category] = 'MISSED';
-                noteByCategory[category] = `X Missed ${missedNames.length}`;
+                noteByCategory[category] = `राहिलं ${missedNames.length}`;
                 missedEntries.push(
                     compactList(
                         missedNames.map(name => `${CATEGORY_META[category].shortLabel}: ${name}`),
                         '',
                         2
-                    ) || `${CATEGORY_META[category].shortLabel}: missed`
+                    ) || `${CATEGORY_META[category].shortLabel}: राहिलं`
                 );
                 return;
             }
 
             if (doneNames.length > 0) {
                 statusByCategory[category] = 'DONE';
-                noteByCategory[category] = `Done ${doneNames.length}`;
+                noteByCategory[category] = `झालं ${doneNames.length}`;
                 return;
             }
 
             if (plannedNames.length > 0) {
                 statusByCategory[category] = 'PLANNED';
-                noteByCategory[category] = `Plan ${plannedNames.length}`;
+                noteByCategory[category] = `ठरलं ${plannedNames.length}`;
                 return;
             }
 
             if (extraForDay.length > 0) {
                 statusByCategory[category] = 'DONE';
-                noteByCategory[category] = `Extra ${extraForDay.length}`;
+                noteByCategory[category] = `जास्त ${extraForDay.length}`;
             }
         });
 
         const dayExtras = extraByDay.get(day) || [];
         const extraEntries = dayExtras.map(item => {
             const reason = trimReason(item.reasonText);
-            const relativeDay = formatRelativeDay(
+            const relativeDay = relativeDayMr(
                 getRelativeDayFromToday(getDateForDay(comparisonData.referenceDate, item.executedDay))
             );
-            return `${CATEGORY_META[item.category].shortLabel}: ${item.name} (day ${relativeDay}, ${reason})`;
+            return `${CATEGORY_META[item.category].shortLabel}: ${item.name} (${relativeDay}, ${reason})`;
         });
 
         scheduleDays.push({
@@ -533,6 +562,7 @@ export const buildCompareReport = (
 
     return {
         stageName: stage.stageName,
+        stageCode: stage.stageCode,
         stageStartDay: stage.plannedStartDay,
         stageEndDay: stage.plannedEndDay,
         seasonDay: comparisonData.currentDay,
