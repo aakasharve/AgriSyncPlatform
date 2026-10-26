@@ -15,8 +15,8 @@ import { getTemplateById, setScheduleTemplatesFromReferenceData } from '../../..
 import type { CropScheduleTemplate } from '../../scheduler.types';
 import { addDays } from '../scheduleDates';
 import {
-    PART_LABEL, aheadItemCount, buildScheduleModel, dayVerdict, extrasOn, normalizeInstance, owedWork, partsDone, pastDays,
-    stageTally, todayOf, upcomingDays, type ScheduleModel,
+    PART_LABEL, aheadItemCount, buildScheduleModel, dayVerdict, dueTodayCount, extrasOn, normalizeInstance, owedWork, partsDone, pastDays,
+    shiftDaysUpTo, stageTally, todayOf, upcomingDays, type ScheduleModel,
 } from '../scheduleModel';
 import { REF, SERVER_TEMPLATE, SPRAY_TEMPLATE, SPRAY_TEMPLATE_ID, TEMPLATE_ID, TODAY, activity, fert, log, plot, spray, water, work } from './scheduleFixtures';
 
@@ -162,6 +162,16 @@ describe('expected vs done for this stage (S7) and the three counts (S5)', () =>
     it('past days newest first (S8)', () => {
         expect(pastDays(build()).slice(0, 3).map(d => d.day)).toEqual([8, 7, 6]);
     });
+
+    it('today\'s open tasks = the आज card\'s open lines: the irrigation (the weekly weeding is not due on day 9); 0 once watered, before day 0 and after the end (V2-01)', () => {
+        expect(dueTodayCount(build())).toBe(1);
+        expect(todayOf(build())!.items).toHaveLength(1);
+        expect(dueTodayCount(build([...LOGS(), log(TODAY, water())]))).toBe(0);
+        expect(dueTodayCount(build([], k(-3)))).toBe(0);
+        expect(dueTodayCount(build([], k(69)))).toBe(0);
+        // Day 14: irrigation is not due (14 is not 0,3,6,9,12) but the weekly weeding is.
+        expect([dueTodayCount(build([], k(14))), todayOf(build([], k(14)))!.items.map(i => i.part)]).toEqual([1, ['work']]);
+    });
 });
 
 describe('edges', () => {
@@ -191,10 +201,19 @@ describe('edges', () => {
         expect(pastDays(m).map(x => x.day).slice(-2)).toEqual([-14, -15]);
     });
 
-    it('a recorded schedule shift moves the plan day', () => {
-        const m = buildScheduleModel({ template, instance: plot().schedule, plotId: 'plot-1', logs: [], todayKey: TODAY,
-            shifts: [{ id: 's', plotId: 'plot-1', date: k(3), shiftDays: 2, reason: 'WEATHER' }] });
-        expect(m.todayDay).toBe(7);
+    it('a recorded schedule shift moves the plan day, and the model says by how much (the banner\'s one rule)', () => {
+        const shifts = [{ id: 's', plotId: 'plot-1', date: k(3), shiftDays: 2, reason: 'WEATHER' as const }, { id: 'later', plotId: 'plot-1', date: k(20), shiftDays: 5, reason: 'WEATHER' as const }];
+        const m = buildScheduleModel({ template, instance: plot().schedule, plotId: 'plot-1', logs: [], todayKey: TODAY, shifts });
+        expect([m.todayDay, m.lossDays]).toEqual([7, 2]); // the day-20 shift has not happened yet
+        expect(shiftDaysUpTo(shifts, TODAY)).toBe(2);
+        expect(build().lossDays).toBe(0);
+    });
+
+    it('after the end, आधी राहिलेलं काम fades a week after the last day — never owed for months (V2-05)', () => {
+        // Nothing logged: the last stage's fertigation (every 2 days, days 15–39) was missed throughout.
+        const justEnded = owedWork(build([], k(41)));
+        expect(justEnded.map(o => [o.part, o.firstDay, o.lastDay, o.times])).toEqual([['nutrition', 35, 39, 3]]); // days 34..40 only
+        expect(owedWork(build([], k(69)))).toEqual([]); // 30 days after the end
     });
 
     it('an old phone\'s schedule saved by the old editor (wizard object) is read, not crashed on', () => {

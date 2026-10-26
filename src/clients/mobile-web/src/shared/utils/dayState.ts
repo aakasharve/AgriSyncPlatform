@@ -388,7 +388,10 @@ const taskInScope = (task: PlannedTask, scope?: ScopeOptions): boolean => {
     return true;
 };
 
-const getTaskCompletion = (tasks: PlannedTask[], dateKey: string, scope?: ScopeOptions) => {
+// spec: plr-d10 (I15, V2-01) — exported (was module-private) so the शेड्यूल page can say how many of the
+// farmer's own to-do tasks are still open by the SAME rule `pendingCount` uses, without also taking the
+// schedule half of that count (which still reads the app's built-in stand-in schedule; the page has its own).
+export const getTaskCompletion = (tasks: PlannedTask[], dateKey: string, scope?: ScopeOptions) => {
     const scopedTasks = tasks.filter(task => {
         if (!taskInScope(task, scope)) return false;
         if (!task.dueDate) return false;

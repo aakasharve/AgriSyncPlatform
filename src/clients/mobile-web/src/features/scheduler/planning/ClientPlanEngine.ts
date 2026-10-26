@@ -18,8 +18,7 @@ import {
     OperationType,
     OperationCategory,
     FrequencyMode,
-    PeriodicExpectation,
-    OneTimeExpectation
+    PeriodicExpectation
 } from '../scheduler.types';
 
 import {
@@ -141,9 +140,13 @@ export const derivePlannedItemsForDay = (
         const mode = override?.customFrequencyMode ?? pe.frequencyMode;
         const value = override?.customFrequencyValue ?? pe.frequencyValue;
 
+        // A routine with its own days (spec: plr-d10 I15, V2-07) runs inside them, counted from its first day.
+        const own = hasOwnDays(pe) ? getPeriodicWindow(pe, stage, instance, periodicInterval(mode, value)) : null;
+        if (own && (dayNumber < own.first || dayNumber > own.last)) return false;
+
         if (mode === 'EVERY_N_DAYS') {
-            // Calculate relative to stage start
-            const stageStart = getStageStartDay(stage, instance);
+            // Calculate relative to stage start (or to the routine's own first day)
+            const stageStart = own ? own.first : getStageStartDay(stage, instance);
             const relDay = dayNumber - stageStart;
             return relDay >= 0 && relDay % value === 0;
         }
@@ -224,14 +227,15 @@ export const derivePlannedItemsForStage = (
     // If stage has not started yet, nothing is due.
     if (effectiveEndDay < stageStart) return [];
 
-    const derivePeriodicDueDays = (mode: FrequencyMode, value: number): number[] => {
-        const safeValue = Math.max(1, value);
-        const interval = mode === 'EVERY_N_DAYS'
-            ? safeValue
-            : Math.max(1, Math.floor(7 / safeValue));
+    const derivePeriodicDueDays = (pe: PeriodicExpectation, mode: FrequencyMode, value: number): number[] => {
+        const interval = periodicInterval(mode, value);
+        // A routine with its own days runs inside them (spec: plr-d10 I15, V2-07); else over the whole stage.
+        const own = hasOwnDays(pe) ? getPeriodicWindow(pe, stage, instance, interval) : null;
+        const first = own ? own.first : stageStart;
+        const last = own ? Math.min(own.last, effectiveEndDay) : effectiveEndDay;
         const dueDays: number[] = [];
 
-        for (let day = stageStart; day <= effectiveEndDay; day += interval) {
+        for (let day = first; day <= last; day += interval) {
             dueDays.push(day);
         }
 
@@ -244,7 +248,7 @@ export const derivePlannedItemsForStage = (
         const override = instance.expectationOverrides.find(o => o.expectationId === pe.id);
         const mode = override?.customFrequencyMode ?? pe.frequencyMode;
         const value = override?.customFrequencyValue ?? pe.frequencyValue;
-        const dueDays = derivePeriodicDueDays(mode, value);
+        const dueDays = derivePeriodicDueDays(pe, mode, value);
 
         dueDays.forEach((dueDay, idx) => {
             items.push({
@@ -297,6 +301,41 @@ export const getStageStartDay = (stage: StageTemplate, instance: PlotScheduleIns
 export const getStageEndDay = (stage: StageTemplate, instance: PlotScheduleInstance): number => {
     const override = instance.stageOverrides.find(o => o.stageId === stage.id);
     return override?.customDayEnd ?? stage.dayEnd;
+};
+
+/** Days between two occurrences of a routine: every N days, or 7 ÷ (times a week). */
+export const periodicInterval = (mode: FrequencyMode, value: number): number =>
+    mode === 'EVERY_N_DAYS' ? Math.max(1, value) : Math.max(1, Math.floor(7 / Math.max(1, value)));
+
+/** The routine carries its own days from the reference schedule (`startDay` / `endDay`). */
+export const hasOwnDays = (pe: Pick<PeriodicExpectation, 'startDay' | 'endDay'>): boolean =>
+    Number.isFinite(pe.startDay) || Number.isFinite(pe.endDay);
+
+/**
+ * spec: plr-d10 (I15, V2-07) — the first and last day a routine falls on, inside its stage. Same rule as the
+ * server's PlanDerivationEngine (`AlignFirstDueDay`): the routine's own start day when it is inside the stage,
+ * else the first stage day on the routine's cadence; it stops at its own end day or the stage end, whichever
+ * is first. A plot's own stage change (override) moves the routine's days with its stage. Without days of its
+ * own a routine spans its whole stage.
+ */
+export const getPeriodicWindow = (
+    pe: Pick<PeriodicExpectation, 'startDay' | 'endDay'>,
+    stage: StageTemplate,
+    instance: PlotScheduleInstance,
+    interval: number,
+): { first: number; last: number } => {
+    const stageStart = getStageStartDay(stage, instance);
+    const stageEnd = getStageEndDay(stage, instance);
+    const moved = stageStart - stage.dayStart;
+    const step = Math.max(1, interval);
+    let first = stageStart;
+    if (Number.isFinite(pe.startDay)) {
+        const own = (pe.startDay as number) + moved;
+        const behind = (stageStart - own) % step;
+        first = own >= stageStart ? own : behind === 0 ? stageStart : stageStart + (step - behind);
+    }
+    const last = Number.isFinite(pe.endDay) ? Math.min(stageEnd, (pe.endDay as number) + moved) : stageEnd;
+    return { first, last };
 };
 
 export const getCurrentStage = (

@@ -135,15 +135,23 @@ export const DefaultScheduleNote: React.FC<{ onLibrary: () => void }> = ({ onLib
     </div>
 );
 
-/** The kept 'N days behind' banner (timelineUtils.getEffectivePhaseAndDay), in Marathi. */
-export const BehindBanner: React.FC<{ lossDays?: number; effectiveDay: number | null }> = ({ lossDays, effectiveDay }) => {
-    if (!lossDays || lossDays <= 0) return null;
+/**
+ * The kept 'N days behind' banner, in Marathi. Counted by the page's own rule (V2-06), so it can never give
+ * another day number than the card above or the editor: the crop's day is the card's "आजचा दिवस" (from the
+ * schedule's day 0, less the recorded shifts) and the calendar day is that plus the shifts. The old page's
+ * banner counted 1-based from the plot's first start date, so it said "पिकासाठी दिवस 8" beside a card saying
+ * 7, and kept counting from the old date after the editor moved day 0.
+ */
+export const BehindBanner: React.FC<{ model: Pick<ScheduleModel, 'todayDay' | 'lossDays'> }> = ({ model }) => {
+    const { todayDay, lossDays } = model;
+    if (lossDays <= 0) return null;
+    const day = (n: number) => (n >= 0 ? String(n) : '—');
     return (
         <div className="flex items-center gap-3 rounded-2xl border border-orange-200 bg-orange-50 p-3" data-testid="behind-banner">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-orange-100 text-orange-600"><Info size={20} aria-hidden="true" /></span>
             <span className="min-w-0">
                 <span className="block text-[16px] font-extrabold text-orange-900">{SC.behind(lossDays)}</span>
-                <span className="block text-[14px] font-bold text-orange-800">{SC.behindLine(effectiveDay !== null ? String(effectiveDay + lossDays) : '—', effectiveDay !== null ? String(effectiveDay) : '—')}</span>
+                <span className="block text-[14px] font-bold text-orange-800">{SC.behindLine(day(todayDay + lossDays), day(todayDay))}</span>
             </span>
         </div>
     );

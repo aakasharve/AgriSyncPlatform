@@ -47,8 +47,14 @@ describe('usePlotClips (the phone\'s own store)', () => {
         expect([...result.current.keys()].sort()).toEqual(['2026-10-17', '2026-10-18']);
     });
 
-    it('no plot → no clips (never a made-up count)', () => {
-        const { result } = renderHook(() => usePlotClips(null));
+    it('no plot → no clips: leaving a plot that has clips clears them (never the last plot\'s count)', async () => {
+        await getDatabase().voiceClips.put(clip('a', 'plot-1', '2026-10-17T09:00:00Z'));
+        const { result, rerender } = renderHook(({ plotId }: { plotId: string | null }) => usePlotClips(plotId), { initialProps: { plotId: 'plot-1' as string | null } });
+        await waitFor(() => expect(result.current.get('2026-10-17')?.map(c => c.id)).toEqual(['a']));
+        rerender({ plotId: null });
+        await waitFor(() => expect(result.current.size).toBe(0));
+        // And a clip recorded afterwards for the old plot does not come back while no plot is chosen.
+        await act(async () => { await getDatabase().voiceClips.put(clip('b', 'plot-1', '2026-10-18T09:00:00Z')); });
         expect(result.current.size).toBe(0);
     });
 });

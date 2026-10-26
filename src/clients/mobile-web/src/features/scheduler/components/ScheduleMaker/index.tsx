@@ -30,6 +30,7 @@ import { DAY_ZERO_LABEL, OWNER_LABEL, SC } from '../../schedulePage/scheduleCopy
 import { scheduleNameMr } from '../../schedulePage/scheduleNames';
 import { daysBetween, toDayKey } from '../../schedulePage/scheduleDates';
 import { resolvePlotSchedule, type EditorChoice } from '../../schedulePage/resolveSchedule';
+import { shiftDaysUpTo } from '../../schedulePage/scheduleModel';
 
 interface ScheduleMakerProps {
     crops: CropProfile[];
@@ -83,7 +84,8 @@ const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, initialCropId, ini
 
     const chosen = options.find(t => t.id === templateId);
     const dayKey = toDayKey(startDate);
-    const todayDay = dayKey ? daysBetween(dayKey, todayKey) : null;
+    // The same day number the शेड्यूल page will then show: from day 0, less this plot's recorded shifts (V2-06).
+    const todayDay = dayKey ? daysBetween(dayKey, todayKey) - shiftDaysUpTo(plot?.scheduleShifts, todayKey) : null;
     const forAllPlots = !!crop && crop.plots.length > 1 && !!templateId && templateId !== crop.activeScheduleId;
     const canSave = !!crop && !!plot && !!chosen && !!dayKey;
 

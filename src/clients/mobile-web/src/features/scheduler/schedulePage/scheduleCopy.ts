@@ -41,9 +41,10 @@ export const SC = {
     showOlder: 'आणखी जुने दिवस दाखवा',
     today: 'आज',
     ahead: 'पुढचे दिवस',
-    next3: '३ दिवस',
-    next8: '८ दिवस',
-    in8: '८ दिवसांत',
+    // The preview's words; its digits written as every other number on the page (Latin), V2-10.
+    next3: '3 दिवस',
+    next8: '8 दिवस',
+    in8: '8 दिवसांत',
     owedSub: 'हे अजून झालेलं नाही',
     nothingOwed: 'आधीचं काहीही राहिलेलं नाही',
     tomorrow: 'उद्या',
@@ -88,6 +89,8 @@ export const SC = {
     todaySpend: 'आजचा खर्च', // PROPOSED (Marathi)
     riskTitle: 'काम मागे पडतंय', // PROPOSED (Marathi)
     pendingToday: (n: number) => `आज ${n} कामं बाकी`, // existing app line ("आज N कामं बाकी", oneAllClearSurface)
+    // The farmer's own to-do tasks still open (the to-do page is "करायची कामे", reflect/todoModel).
+    tasksOpen: (n: number) => `करायच्या यादीत ${n} कामं बाकी`, // PROPOSED (Marathi)
     sprayGap: (n: number) => `फवारणी करून ${n} दिवस झाले`, // PROPOSED (Marathi)
     waterGap: (n: number) => `पाणी देऊन ${n} दिवस झाले`, // PROPOSED (Marathi)
     // Shortened from the app's own close-day line "दिवस पूर्ण करण्यासाठी क्लिक करा" (dfesTranslations clickToClose).

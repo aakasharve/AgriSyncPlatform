@@ -24,9 +24,9 @@ vi.mock('../../../finance/components/MoneyLensDrawer', () => ({
 vi.mock('../../../finance/financeSelectors', () => ({ financeSelectors: { getTotalCost: () => 250 } }));
 
 import SchedulerPage from '../../../../pages/SchedulerPage';
-import { setScheduleTemplatesFromReferenceData } from '../../../../infrastructure/reference/TemplateCatalog';
-import { getEffectivePhaseAndDay } from '../../../../shared/utils/timelineUtils';
-import type { CropProfile, DailyLog } from '../../../../types';
+import { isFallbackTemplate, setScheduleTemplatesFromReferenceData } from '../../../../infrastructure/reference/TemplateCatalog';
+import { getTemplateForCrop } from '../../planning/ClientPlanEngine';
+import type { CropProfile, DailyLog, PlannedTask } from '../../../../types';
 import { addDays } from '../scheduleDates';
 import { REF, SERVER_TEMPLATE, SPRAY_TEMPLATE, SPRAY_TEMPLATE_ID, TEMPLATE_ID, crop, log, plot, water, work } from './scheduleFixtures';
 
@@ -46,12 +46,12 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 /** The page with a real parent: a save comes back as new crops, as in the app. */
-function mount(initial: CropProfile[] = [crop()], logs: DailyLog[] = LOGS) {
+function mount(initial: CropProfile[] = [crop()], logs: DailyLog[] = LOGS, tasks: PlannedTask[] = []) {
     const onUpdateCrops = vi.fn();
     const props = { onCloseDay: vi.fn(), onBack: vi.fn(), onUpdateCrops };
     const Harness = () => {
         const [crops, setCrops] = useState(initial);
-        return <SchedulerPage crops={crops} logs={logs} tasks={[]} {...props} onUpdateCrops={next => { onUpdateCrops(next); setCrops(next); }} />;
+        return <SchedulerPage crops={crops} logs={logs} tasks={tasks} {...props} onUpdateCrops={next => { onUpdateCrops(next); setCrops(next); }} />;
     };
     render(<Harness />);
     return props;
@@ -91,13 +91,27 @@ describe('crop and plot pick', () => {
 });
 
 describe('the \'N days behind\' banner', () => {
-    it('in Marathi, with the calendar day and the crop\'s day from the same rule the old page used', () => {
-        const shifted = plot({ scheduleShifts: [{ id: 's1', plotId: 'plot-1', date: k(3), shiftDays: 2, reason: 'WEATHER' }] } as never);
-        mount([crop([shifted])]);
-        const info = getEffectivePhaseAndDay(shifted, '2026-10-26');
-        expect(info.lossDays).toBe(2);
+    const shifted = () => plot({ scheduleShifts: [{ id: 's1', plotId: 'plot-1', date: k(3), shiftDays: 2, reason: 'WEATHER' }] } as never);
+
+    it('in Marathi; the crop\'s day is the card\'s day and the editor\'s day — one rule, one number (V2-06)', () => {
+        mount([crop([shifted()])]);
         expect(text('behind-banner')).toContain('शेड्यूल 2 दिवस मागे चाललं आहे');
-        expect(text('behind-banner')).toContain(`कॅलेंडरप्रमाणे दिवस ${info.day! + 2} · पिकासाठी दिवस ${info.day}`);
+        // Calendar: 9 days since day 0. Crop: 9 less the 2-day shift = 7 — the same 7 as the card's tile
+        // (the old banner counted 1-based from the plot's start date and said 8 here).
+        expect(text('day-now')).toBe('7');
+        expect(text('behind-banner')).toContain('कॅलेंडरप्रमाणे दिवस 9 · पिकासाठी दिवस 7');
+        fireEvent.click(screen.getByTestId('open-editor'));
+        expect(text('editor-today-day')).toBe('म्हणजे आज दिवस 7');
+    });
+
+    it('after the editor moves day 0, the banner counts from the new day 0 (it kept the old start date before)', () => {
+        mount([crop([shifted()])]);
+        fireEvent.click(screen.getByTestId('open-editor'));
+        fireEvent.change(screen.getByTestId('editor-date'), { target: { value: k(1) } });
+        expect(text('editor-today-day')).toBe('म्हणजे आज दिवस 6');
+        fireEvent.click(screen.getByTestId('editor-save'));
+        expect(text('day-now')).toBe('6');
+        expect(text('behind-banner')).toContain('कॅलेंडरप्रमाणे दिवस 8 · पिकासाठी दिवस 6');
     });
 
     it('not drawn when nothing slipped', () => {
@@ -123,14 +137,84 @@ describe('honest states', () => {
         expect(screen.getByTestId('stage-ribbon').textContent).toContain('तुम्ही इथे आहात'); // the overall pin, at the end
         expect(within(screen.getByTestId('stage-ribbon')).getAllByText('तुम्ही इथे आहात')).toHaveLength(1);
     });
+
+    it('the today card after the end says it ended — never "दिवस 69 / 40", never "तुम्ही इथे आहात" (V2-03)', () => {
+        const old = plot({ startDate: k(-60), schedule: { ...plot().schedule, referenceDate: k(-60) } });
+        mount([crop([old])]);
+        expect(text('today-pill')).toBe('आज · या शेड्यूलचे सगळे दिवस संपले');
+        expect(text('today-card')).not.toMatch(/दिवस 69|तुम्ही इथे आहात/);
+    });
+
+    it('the today card before day 0 says when it starts — never "दिवस -3" and no pin (V2-03)', () => {
+        const soon = plot({ startDate: k(12), schedule: { ...plot().schedule, referenceDate: k(12) } });
+        mount([crop([soon])]);
+        expect(text('day-now')).toBe('—');
+        expect(text('not-started')).toBe('शेड्यूल 3 दिवसांनी सुरू होईल');
+        expect(text('today-pill')).toBe('आज · शेड्यूल 3 दिवसांनी सुरू होईल');
+        expect(text('today-card')).not.toMatch(/-3|तुम्ही इथे आहात/);
+    });
+
+    it('while on the schedule the pill is "तुम्ही इथे आहात · आज · दिवस 9 / 40"', () => {
+        mount();
+        expect(text('today-pill')).toBe('तुम्ही इथे आहात · आज · दिवस 9 / 40');
+    });
+});
+
+describe('the risk card counts what the page shows (V2-01)', () => {
+    const tools = () => text('sched-tools');
+
+    it('day 9: "आज 1 कामं बाकी" — the one open line on the आज card (the weekly weeding is not counted daily)', () => {
+        mount();
+        const open = within(screen.getByTestId('today-parts')).getAllByTestId(/^item-/);
+        expect(open.map(e => e.textContent)).toEqual(['ठिबक सिंचनअपेक्षित']);
+        expect(text('risk-card')).toContain('आज 1 कामं बाकी');
+        expect(tools()).not.toContain('आज 2 कामं बाकी');
+    });
+
+    it('a plot on the app\'s stand-in schedule: "no schedule", and no "कामं बाकी" from the stand-in under it', () => {
+        const standIn = getTemplateForCrop('Tomato');
+        expect(isFallbackTemplate(standIn)).toBe(true);
+        const p = plot({ schedule: { ...plot().schedule, templateId: standIn.id, referenceType: 'PLANTING' } });
+        mount([crop([p], { name: 'Tomato', activeScheduleId: null })]);
+        expect(text('sched-no-schedule')).toContain('या पिकासाठी अजून शेड्यूल नाही');
+        expect(tools()).not.toContain('कामं बाकी');
+        expect(text('risk-card')).toContain('पाणी देऊन 5 दिवस झाले'); // the log facts stay
+    });
+
+    it('an ended schedule: "आज यात काही नाही" and no "कामं बाकी" beside it', () => {
+        const old = plot({ startDate: k(-60), schedule: { ...plot().schedule, referenceDate: k(-60) } });
+        mount([crop([old])]);
+        expect(text('today-nothing')).toBe('आज यात काही नाही');
+        expect(tools()).not.toContain('कामं बाकी');
+    });
+
+    it('watered today: the आज card shows it done and the risk card has no "आज … कामं बाकी"', () => {
+        mount([crop()], [...LOGS, log(k(9), water())]);
+        expect(tools()).not.toContain('आज 1 कामं बाकी');
+    });
+
+    it('the farmer\'s own to-do tasks keep their own line: open ones for this plot, due today or before', () => {
+        const task = (id: string, extra: Partial<PlannedTask>): PlannedTask => ({
+            id, title: 'औषध आणणे', plotId: 'plot-1', cropId: 'crop-1', dueDate: k(9), priority: 'normal', status: 'pending', sourceType: 'manual', createdAt: '2026-10-20T00:00:00Z', ...extra,
+        });
+        mount([crop()], LOGS, [
+            task('t1', {}),
+            task('t2', { dueDate: k(7) }),              // carried from day 7
+            task('t3', { status: 'done' }),             // done
+            task('t4', { dueDate: k(12) }),             // not due yet
+            task('t5', { plotId: 'plot-9' }),           // another plot
+        ]);
+        expect(text('risk-card')).toContain('करायच्या यादीत 2 कामं बाकी');
+        expect(text('risk-card')).toContain('आज 1 कामं बाकी'); // the schedule's own line is separate
+    });
 });
 
 describe('today\'s tools', () => {
     it('last spray / last water, the risk card, today\'s spend → MoneyLens, Close Day in the app\'s own words', () => {
         const p = mount();
         expect(text('last-spray')).toBe('अजून नोंद नाही');
-        expect(text('last-water')).toMatch(/दिवसांपूर्वी|आज|काल/);
-        expect(text('risk-card')).toContain('पाणी देऊन');
+        expect(text('last-water')).toBe('5 दिवसांपूर्वी');
+        expect(text('risk-card')).toContain('पाणी देऊन 5 दिवस झाले');
         expect(text('today-spend-amount')).toBe('₹ 250');
         fireEvent.click(screen.getByTestId('today-spend'));
         expect(screen.getByTestId('money-lens')).toBeInTheDocument();

@@ -32,13 +32,19 @@ export type ScheduleSource = 'adopted' | 'plot' | 'default';
 
 export interface ResolvedSchedule { template: CropScheduleTemplate; instance: PlotScheduleInstance; source: ScheduleSource }
 
+/** A schedule someone really made (not the app's stand-in, not empty), else undefined. */
+const real = (t: CropScheduleTemplate | undefined): CropScheduleTemplate | undefined =>
+    t && !isFallbackTemplate(t) && t.stages.length > 0 ? t : undefined;
+
 export function resolvePlotSchedule(crop: CropProfile, plot: Plot, todayKey: string): ResolvedSchedule | null {
     const stored = plot.schedule as Partial<PlotScheduleInstance> | undefined;
-    const adopted = getScheduleById(crop.activeScheduleId || '');
-    const own = getScheduleById(typeof stored?.templateId === 'string' ? stored.templateId : '');
-    const cropDefault = getTemplateForCrop(crop.name);
+    // Each step skips the app's stand-in: a plot added before the catalog synced stores the stand-in's id
+    // ('tpl_fallback_grape'), and that must not hide the crop's real schedule once it is here (V2-04).
+    const adopted = real(getScheduleById(crop.activeScheduleId || ''));
+    const own = real(getScheduleById(typeof stored?.templateId === 'string' ? stored.templateId : ''));
+    const cropDefault = real(getTemplateForCrop(crop.name));
     const template = adopted || own || cropDefault;
-    if (!template || isFallbackTemplate(template) || template.stages.length === 0) return null;
+    if (!template) return null;
     // A plot schedule that is just the crop's default (made when the plot was added) is not a choice either.
     const source: ScheduleSource = adopted ? 'adopted' : own && own.id !== cropDefault?.id ? 'plot' : 'default';
     const instance = normalizeInstance(stored, {

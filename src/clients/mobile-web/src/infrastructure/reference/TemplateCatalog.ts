@@ -289,6 +289,13 @@ function buildExpectations(
             frequencyMode,
             frequencyValue,
             notes: activity.name,
+            // spec: plr-d10 (I15, V2-07) — keep the routine's own days. It used to start on the stage's first
+            // day, so a spray the server plans for days 18–35 was expected from day 16, and the शेड्यूल page
+            // showed राहिलं on a day nothing was due. An end day equal to the start day is how the server's
+            // DB schedules send a bare offset (GetScheduleTemplatesHandler: startDay, startDay): the routine
+            // then runs to its stage end, as the server's PlanDerivationEngine does.
+            startDay: Math.max(0, activity.startDay),
+            ...(activity.endDay > activity.startDay ? { endDay: activity.endDay } : {}),
         });
     });
 

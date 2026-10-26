@@ -29,8 +29,10 @@
  * different sprays on one day stay two different lines.
  */
 import type { DailyLog } from '../../../types';
-import type { CropScheduleTemplate, PlotScheduleInstance, ScheduleShiftEvent } from '../scheduler.types';
-import { derivePlannedItemsForDay, getStageEndDay, getStageStartDay, type PlannedTaskDerived } from '../planning/ClientPlanEngine';
+import type { CropScheduleTemplate, PlotScheduleInstance, ScheduleShiftEvent, StageTemplate } from '../scheduler.types';
+import {
+    derivePlannedItemsForDay, getPeriodicWindow, getStageEndDay, getStageStartDay, periodicInterval, type PlannedTaskDerived,
+} from '../planning/ClientPlanEngine';
 import { getExecutionCountByCategory } from '../../../shared/utils/dayState';
 import { countCompletedIrrigationEvents } from '../../../core/domain/services/IrrigationCompletionService';
 import { CATEGORY_LABEL_MR } from '../../logs/services/dfesScheduleWindow';
@@ -83,7 +85,10 @@ export interface StageView { id: string; name: string; from: number; to: number;
 
 export interface ScheduleModel {
     todayKey: string;
+    /** Today's plan day: days since the schedule's day 0, less the recorded shifts (`lossDays`). */
     todayDay: number;
+    /** Days the schedule has been pushed back by recorded shifts up to today (the 'N days behind' banner). */
+    lossDays: number;
     totalDays: number | null;
     progressPct: number | null;
     stages: StageView[];
@@ -171,7 +176,11 @@ export function partsDone(logs: readonly DailyLog[]): Set<Part> {
     return done;
 }
 
-function shiftUpTo(shifts: readonly ScheduleShiftEvent[] | undefined, key: string): number {
+/**
+ * The days a plot's schedule has been pushed back by recorded shifts (weather etc.) up to `key`. The ONE rule
+ * the page, the 'N days behind' banner and the editor's "म्हणजे आज दिवस N" all count with.
+ */
+export function shiftDaysUpTo(shifts: readonly ScheduleShiftEvent[] | undefined, key: string): number {
     let total = 0;
     for (const s of shifts ?? []) {
         const k = toDayKey(s?.date);
@@ -180,23 +189,26 @@ function shiftUpTo(shifts: readonly ScheduleShiftEvent[] | undefined, key: strin
     return total;
 }
 
-/** A PER_WEEK routine is due on a weekly cadence from its stage start (as `derivePlannedItemsForStage`), not daily. */
-function keepItem(template: CropScheduleTemplate, instance: PlotScheduleInstance, item: PlannedTaskDerived, day: number, stageStart: number): boolean {
-    if (item.type !== 'PERIODIC') return true;
+/**
+ * A PER_WEEK routine is due on a weekly cadence from its first day (as `derivePlannedItemsForStage`), not
+ * daily: its stage start, or the routine's own first day when the schedule gives one (`getPeriodicWindow`).
+ */
+function keepItem(template: CropScheduleTemplate, instance: PlotScheduleInstance, item: PlannedTaskDerived, day: number, stage: StageTemplate | null): boolean {
+    if (item.type !== 'PERIODIC' || !stage) return true;
     const pe = template.periodicExpectations.find(p => p.id === item.originalId);
     if (!pe) return true;
     const ov = instance.expectationOverrides.find(o => o.expectationId === pe.id);
     const mode = ov?.customFrequencyMode ?? pe.frequencyMode;
     if (mode !== 'PER_WEEK') return true;
-    const per = Math.max(1, ov?.customFrequencyValue ?? pe.frequencyValue);
-    const interval = Math.max(1, Math.floor(7 / per));
-    return day >= stageStart && (day - stageStart) % interval === 0;
+    const interval = periodicInterval(mode, ov?.customFrequencyValue ?? pe.frequencyValue);
+    const first = getPeriodicWindow(pe, stage, instance, interval).first;
+    return day >= first && (day - first) % interval === 0;
 }
 
 export function buildScheduleModel(input: ScheduleInput): ScheduleModel {
     const { template, instance, plotId, todayKey, shifts } = input;
     const refKey = toDayKey(instance.referenceDate) ?? todayKey;
-    const planDay = (key: string) => daysBetween(refKey, key) - shiftUpTo(shifts, key);
+    const planDay = (key: string) => daysBetween(refKey, key) - shiftDaysUpTo(shifts, key);
     const todayDay = planDay(todayKey);
 
     const ranges = [...template.stages]
@@ -231,9 +243,8 @@ export function buildScheduleModel(input: ScheduleInput): ScheduleModel {
         const range = stageAt(day);
         const inSchedule = ranges.length > 0 && day >= firstStart && day <= lastEnd;
         const plan = inSchedule ? derivePlannedItemsForDay(template, instance, day) : null;
-        const stageStart = plan?.stage ? getStageStartDay(plan.stage, instance) : firstStart;
         const items: ExpectedItem[] = (plan?.plannedItems ?? [])
-            .filter(it => keepItem(template, instance, it, day, stageStart))
+            .filter(it => keepItem(template, instance, it, day, plan?.stage ?? null))
             .map(it => {
                 const part = partOf(it.category);
                 const title = opNameMr(it.operationId) ?? PART_LABEL[part];
@@ -260,6 +271,7 @@ export function buildScheduleModel(input: ScheduleInput): ScheduleModel {
     return {
         todayKey,
         todayDay,
+        lossDays: shiftDaysUpTo(shifts, todayKey),
         totalDays,
         progressPct,
         stages,
@@ -308,11 +320,12 @@ export interface OwedEntry { id: string; part: Part; title: string; detail: stri
 /**
  * आधी राहिलेलं काम (S6): work expected on a day already gone whose part has NOT been done on any day since
  * (up to today). Looks back over the current stage, and never less than the last 7 days (so yesterday's miss
- * does not vanish on a stage's first day). One line per part + task (the schedule's own task name keeps two
- * different sprays apart), with how many times it was owed.
+ * does not vanish on a stage's first day). Once the schedule has ended only the last 7 days are looked at, so
+ * the last stage's misses fade a week after the end instead of being owed for months (V2-05). One line per
+ * part + task (the schedule's own task name keeps two different sprays apart), with how many times it was owed.
  */
 export function owedWork(model: ScheduleModel): OwedEntry[] {
-    const st = model.tallyStage;
+    const st = model.currentStage;
     const from = Math.max(0, Math.min(st ? st.from : model.todayDay, model.todayDay - 7));
     const lastDone: Partial<Record<Part, string>> = {};
     for (const d of model.days) {
@@ -348,6 +361,17 @@ export const aheadItemCount = (model: ScheduleModel, n: number): number =>
 export const pastDays = (model: ScheduleModel): ScheduleDay[] => model.days.filter(d => d.when === 'past').reverse();
 
 export const todayOf = (model: ScheduleModel): ScheduleDay | undefined => model.byKey.get(model.todayKey);
+
+/**
+ * Today's tasks the schedule still expects (their part not done yet today) — exactly the आज card's open
+ * lines, so the risk card's "आज N कामं बाकी" can never disagree with the list under it (V2-01). Nothing
+ * before day 0, nothing after the schedule ended.
+ */
+export function dueTodayCount(model: ScheduleModel): number {
+    const today = todayOf(model);
+    if (!today) return 0;
+    return PARTS.reduce((sum, p) => sum + (today.cells[p].status === 'due' ? today.cells[p].items.length : 0), 0);
+}
 
 /** Parts done that day although the schedule did not ask for them (जास्तीचं). */
 export const extrasOn = (day: ScheduleDay): Part[] => PARTS.filter(p => day.cells[p].status === 'extra');

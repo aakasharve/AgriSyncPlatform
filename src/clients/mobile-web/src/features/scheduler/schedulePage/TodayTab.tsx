@@ -42,21 +42,36 @@ export const OwedCard: React.FC<{ owed: readonly OwedEntry[]; onOpenDay: (key: s
     </section>
 );
 
+/**
+ * The today card's pill. "तुम्ही इथे आहात · आज · दिवस N / total" only while today is on the schedule: before
+ * day 0 it says when the schedule starts (never "दिवस -3"), after the last day that it has ended (never
+ * "दिवस 69 / 40") — the same words as the card at the top (V2-03).
+ */
+export const TodayPill: React.FC<{ day: number; totalDays: number | null; ended: boolean }> = ({ day, totalDays, ended }) => {
+    const onSchedule = day >= 0 && !ended;
+    return (
+        <p className={`m-0 inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[15px] font-extrabold ${onSchedule ? 'bg-[#1448E6] text-white' : 'bg-amber-100 text-amber-950'}`} data-testid="today-pill">
+            {onSchedule
+                ? <><Pin size={15} aria-hidden="true" />{SC.here} · {SC.today} · {totalDays !== null ? SC.dayOf(day, totalDays) : SC.dayN(day)}</>
+                : <>{SC.today} · {ended ? SC.ended : SC.notStarted(-day)}</>}
+        </p>
+    );
+};
+
 export const TodayTab: React.FC<{
     owed: readonly OwedEntry[];
     today: ScheduleDay | undefined;
     tomorrow: ScheduleDay | undefined;
     totalDays: number | null;
+    ended: boolean;
     onOpenDay: (key: string) => void;
     onSeeAhead: () => void;
-}> = ({ owed, today, tomorrow, totalDays, onOpenDay, onSeeAhead }) => (
+}> = ({ owed, today, tomorrow, totalDays, ended, onOpenDay, onSeeAhead }) => (
     <>
         <OwedCard owed={owed} onOpenDay={onOpenDay} />
         {today && (
             <section className="rounded-3xl border-2 border-[#1448E6] bg-[#1448E6]/5 p-4 backdrop-blur-sm" data-testid="today-card">
-                <p className="m-0 inline-flex items-center gap-1.5 rounded-full bg-[#1448E6] px-3.5 py-1.5 text-[15px] font-extrabold text-white">
-                    <Pin size={15} aria-hidden="true" />{SC.here} · {SC.today} · {totalDays !== null ? SC.dayOf(today.day, totalDays) : SC.dayN(today.day)}
-                </p>
+                <TodayPill day={today.day} totalDays={totalDays} ended={ended} />
                 {today.items.length === 0
                     ? <p className="m-0 mt-2 text-[16px] font-bold text-stone-700" data-testid="today-nothing">{SC.nothingToday}</p>
                     : (

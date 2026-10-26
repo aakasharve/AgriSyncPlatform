@@ -15,6 +15,7 @@
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import { isFallbackTemplate, setScheduleTemplatesFromReferenceData } from '../../../../infrastructure/reference/TemplateCatalog';
+import { getScheduleById, getTemplateForCrop } from '../../planning/ClientPlanEngine';
 import type { Plot } from '../../../../types';
 import { adoptForCrop, applyEditorChoice, resolvePlotSchedule } from '../resolveSchedule';
 import { scheduleNameMr, taskNameMr } from '../scheduleNames';
@@ -34,6 +35,21 @@ describe('S16 — the schedule comes from the real crop, never from the id text'
     it('a crop with no real schedule gets null, so the page says "no schedule" instead of inventing one', () => {
         const bare = plot({ schedule: undefined as never });
         expect(resolvePlotSchedule(crop([bare], { name: 'Tomato', activeScheduleId: null }), bare, TODAY)).toBeNull();
+    });
+
+    it('a plot made before the catalog synced stores the stand-in\'s id: once the real schedule is here, the page shows it (V2-04)', () => {
+        // The window the verifier found: the catalog starts empty, something asks for the crop's schedule and
+        // the stand-in 'tpl_fallback_grape' is made (and cached), and the plot is saved with that id.
+        setScheduleTemplatesFromReferenceData([]);
+        const standIn = getTemplateForCrop('Grapes');
+        expect(isFallbackTemplate(standIn)).toBe(true);
+        setScheduleTemplatesFromReferenceData([SERVER_TEMPLATE, SPRAY_TEMPLATE]);
+        const early = plot({ schedule: { ...plot().schedule, templateId: standIn.id } });
+        expect(getScheduleById(standIn.id)).toBe(standIn); // still cached — it used to win over the real one
+        const r = resolvePlotSchedule(crop([early], { activeScheduleId: null }), early, TODAY);
+        expect([r?.template.id, r?.source]).toEqual([TEMPLATE_ID, 'default']);
+        // An adopted id that is a stand-in is skipped the same way.
+        expect(resolvePlotSchedule(crop([early], { activeScheduleId: standIn.id }), early, TODAY)?.template.id).toBe(TEMPLATE_ID);
     });
 
     it('nobody chose it: no adopted schedule and the plot holds only the crop\'s default → source "default"', () => {

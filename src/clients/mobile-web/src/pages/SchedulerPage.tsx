@@ -22,8 +22,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CropProfile, DailyLog, PlannedTask, ResourceItem } from '../types';
 import { getDateKey } from '../core/domain/services/DateKeyService';
 import { useBackDismiss } from '../core/navigation/useBackDismiss';
-import { getEffectivePhaseAndDay } from '../shared/utils/timelineUtils';
-import { computeDayState } from '../shared/utils/dayState';
+import { computeDayState, getTaskCompletion } from '../shared/utils/dayState';
 import { financeSelectors } from '../features/finance/financeSelectors';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
 import { ChoiceChips, GlassCard, PageBar, SANS } from '../shared/components/ui/placeUi';
@@ -35,7 +34,7 @@ import { ScheduleDaySheet } from '../features/scheduler/schedulePage/ScheduleDay
 import { ScheduleTools } from '../features/scheduler/schedulePage/ScheduleTools';
 import type { ScheduleTab } from '../features/scheduler/schedulePage/ScheduleTabs';
 import { SC } from '../features/scheduler/schedulePage/scheduleCopy';
-import { buildScheduleModel } from '../features/scheduler/schedulePage/scheduleModel';
+import { buildScheduleModel, dueTodayCount } from '../features/scheduler/schedulePage/scheduleModel';
 import { adoptForCrop, applyEditorChoice, resolvePlotSchedule, type EditorChoice } from '../features/scheduler/schedulePage/resolveSchedule';
 import { usePlotClips } from '../features/scheduler/schedulePage/usePlotClips';
 
@@ -103,20 +102,19 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
         : null), [resolved, plot, logs, todayKey]);
     const clips = usePlotClips(plot?.id ?? null);
 
-    const dayState = useMemo(() => computeDayState({
-        logs, crops, tasks, date: todayKey,
-        selectedCropIds: cropId ? [cropId] : undefined,
-        selectedPlotIds: plotId ? [plotId] : undefined,
-    }), [logs, crops, tasks, todayKey, cropId, plotId]);
+    // The risk card and last-action tiles (V2-01). Today's open schedule tasks come from the page's OWN model —
+    // the आज card's lines — never from `computeDayState().pendingCount`, whose schedule half still reads the
+    // app's built-in stand-in schedule. So no crops are handed to it here: only the last spray / water (which
+    // read this plot's logs) and the farmer's own to-do tasks (same rule as before) are taken from the day state.
+    const facts = useMemo(() => {
+        const scope = { selectedCropIds: cropId ? [cropId] : undefined, selectedPlotIds: plotId ? [plotId] : undefined };
+        const { lastActions } = computeDayState({ logs, crops: [], tasks: [], date: todayKey, ...scope });
+        return { dueToday: model ? dueTodayCount(model) : 0, tasksOpen: getTaskCompletion(tasks, todayKey, scope).pending, lastActions };
+    }, [logs, tasks, todayKey, cropId, plotId, model]);
     const moneyFilters = useMemo(() => ({ fromDate: todayKey, toDate: todayKey, cropId: cropId || undefined, plotId: plotId || undefined }), [todayKey, cropId, plotId]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const todaySpend = useMemo(() => financeSelectors.getTotalCost(moneyFilters), [moneyFilters, logs.length]);
     const libraryCount = useMemo(() => libraryTemplates(crops).length, [crops]);
-    const behind = useMemo(() => {
-        if (!plot) return { effectiveDay: null };
-        const info = getEffectivePhaseAndDay(plot, todayKey);
-        return { lossDays: info.lossDays, effectiveDay: info.day };
-    }, [plot, todayKey]);
 
     const saveCrops = (next: CropProfile[]) => onUpdateCrops(next);
 
@@ -210,10 +208,10 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
             )}
             {crop && plot && resolved && model && (
                 <PlotScheduleHome cropName={crop.name} plotName={plot.name} template={resolved.template} source={resolved.source} model={model} clips={clips}
-                    behind={behind} tab={tab} onTab={setTab} onOpenDay={setOpenDayKey} onLibrary={() => setView('LIBRARY')} />
+                    tab={tab} onTab={setTab} onOpenDay={setOpenDayKey} onLibrary={() => setView('LIBRARY')} />
             )}
             <ScheduleTools
-                dayState={dayState}
+                facts={facts}
                 todaySpend={todaySpend}
                 onOpenMoney={() => setMoneyOpen(true)}
                 onCloseDay={onCloseDay}

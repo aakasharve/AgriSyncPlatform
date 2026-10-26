@@ -31,12 +31,11 @@ export const PlotScheduleHome: React.FC<{
     source: ScheduleSource;
     model: ScheduleModel;
     clips: ClipsByDay;
-    behind: { lossDays?: number; effectiveDay: number | null };
     tab: ScheduleTab;
     onTab: (t: ScheduleTab) => void;
     onOpenDay: (key: string) => void;
     onLibrary: () => void;
-}> = ({ cropName, plotName, template, source, model, clips, behind, tab, onTab, onOpenDay, onLibrary }) => {
+}> = ({ cropName, plotName, template, source, model, clips, tab, onTab, onOpenDay, onLibrary }) => {
     const facts = useMemo(() => {
         const total = stageTally(model);
         const byPart = Object.fromEntries(PARTS.map(p => [p, stageTally(model, p)])) as Record<Part, Tally>;
@@ -51,7 +50,7 @@ export const PlotScheduleHome: React.FC<{
         <div className="space-y-4" data-testid="plot-schedule">
             <ScheduleHeader cropName={cropName} plotName={plotName} template={template} model={model} />
             {source === 'default' && <DefaultScheduleNote onLibrary={onLibrary} />}
-            <BehindBanner lossDays={behind.lossDays} effectiveDay={behind.effectiveDay} />
+            <BehindBanner model={model} />
             <StageProgress model={model} />
             <ScheduleTabs tab={tab} onTab={onTab} counts={{
                 done: facts.total.done,
@@ -61,7 +60,7 @@ export const PlotScheduleHome: React.FC<{
                 ahead: facts.ahead,
             }} />
             {tab === 'done' && <DoneTab total={facts.total} byPart={facts.byPart} past={facts.past} clipCount={clipCount} onOpenDay={onOpenDay} />}
-            {tab === 'today' && <TodayTab owed={facts.owed} today={facts.today} tomorrow={facts.tomorrow} totalDays={model.totalDays} onOpenDay={onOpenDay} onSeeAhead={() => onTab('ahead')} />}
+            {tab === 'today' && <TodayTab owed={facts.owed} today={facts.today} tomorrow={facts.tomorrow} totalDays={model.totalDays} ended={model.ended} onOpenDay={onOpenDay} onSeeAhead={() => onTab('ahead')} />}
             {tab === 'ahead' && <AheadTab model={model} />}
         </div>
     );
