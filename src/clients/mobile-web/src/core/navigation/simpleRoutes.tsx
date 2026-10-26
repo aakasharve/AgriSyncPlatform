@@ -83,7 +83,9 @@ export const renderLabourRoute = (ctx: AppRouterContext): React.ReactNode => {
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
             <LabourFeaturePage
-                onExit={() => ctx.setCurrentRoute('profile')}
+                // spec: plr-d10-redesign-real-integration-2026-10-25 (I12, WP-6) — back returns where he
+                // came from: the work home's "आजची हजेरी" door goes back home, the hub row back to the hub.
+                onExit={() => ctx.goBackOr('profile')}
                 onGoToLog={(opts) => {
                     // Labour V2 R1 Task 3.1 — the labour mic is a VERIFICATION instrument.
                     // No anchor → no mic. This is the door (the hub hero is already drawn

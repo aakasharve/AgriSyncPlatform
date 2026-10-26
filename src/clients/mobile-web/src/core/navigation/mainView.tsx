@@ -8,8 +8,6 @@ import {
     AgriLogResponse, DailyLog
 } from '../../types';
 import type { TodayCounts } from '../../domain/types/farm.types';
-import CropSelector from '../../features/context/components/CropSelector';
-import InputMethodToggle from '../../shared/components/ui/InputMethodToggle';
 import AudioRecorder from '../../features/voice/components/AudioRecorder';
 import AudioRecorderStreaming from '../../features/voice/components/AudioRecorderStreaming';
 import LiveCaption from '../../features/voice/components/LiveCaption';
@@ -18,10 +16,8 @@ import ManualEntry from '../../features/logs/components/ManualEntry';
 // `ArrowLeft` left with `LabourLogBanner`, its only consumer. `Users` stays —
 // the success card's bucket chips still use it.
 import { Leaf } from 'lucide-react';
-import { getSegmentVisual } from '../../shared/utils/uiUtils';
 import { getDateKey } from '../domain/services/DateKeyService';
 import { buildTimelineEntries } from '../../services/transcriptTimelineService';
-import { formatCurrencyINR } from '../../shared/utils/dayState';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
 // `MeterDisplay` is NOT imported here any more. main rendered it directly on the
 // success card; dfes-companion moved that score block INTO
@@ -33,11 +29,14 @@ import { FEATURE_FLAGS } from '../../app/featureFlags';
 // which owns the decision to render the panel (it is the component that knows
 // whether the farmer's context is the whole farm).
 import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
-// spec: owner-oversight-loop (Task 13, changes 3 + 5) — real components
-// (not inlined here), because both call `useLanguage()` internally and this
-// file's render functions are plain functions, not components — see
-// `mainViewComponents.tsx`'s header for why that hook rule forces the split.
-import SathiGuideCard from '../../features/oversight/components/SathiGuideCard';
+// spec: plr-d10-redesign-real-integration-2026-10-25 (I12) — the आजची कामे tab's entry flow (work
+// home -> crop -> plots + mic) and the band for saying one part again. They REPLACE the owner-oversight
+// SathiGuideCard + HelpBar on this screen (the guide's question is now Sathi's, in the founder's words;
+// the always-disabled "श्रम साथीशी बोला" is gone — P5).
+import { LogEntryFlow } from '../../features/logs/components/entry/LogEntryFlow';
+import { SegmentBanner, SegmentCancel } from '../../features/logs/components/entry/SegmentBanner';
+import { ReviewBackBar } from '../../features/logs/components/entry/ReviewBackBar';
+import { mayShowFarmMoney } from '../../features/labour/homeAttendanceDoor';
 import { toAttendanceOnlyDraft, toAttendanceSubmission, attendanceCaptureDay } from '../../features/logs/attendanceDraft';
 import { draftProvenance } from '../../features/voice/draftProvenance';
 import type { LogProvenance } from '../../domain/ai/LogProvenance';
@@ -45,7 +44,6 @@ import type { LogProvenance } from '../../domain/ai/LogProvenance';
 // renders against. The invoking feature owns the meaning of a labour parse.
 import AttendanceResult from '../../features/labour/components/AttendanceResult';
 import { resolveLabourAnchor } from '../../features/labour/labourAnchor';
-import HelpBar from '../../features/oversight/components/HelpBar';
 import {
     LabourLogBanner,
     // main's is the processing <h3> LINE; dfes's (imported above) is
@@ -223,9 +221,8 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         logIntent
     } = ctx;
 
-    // Focus the existing recorder by scrolling to (and briefly ringing) the
-    // crop selector. Shared by the daily-loop hero tap and the recorder's own
-    // "select a context first" nudge (DRY — same scroll+ring pattern).
+    // The recorder's own "choose a plot first" nudge: scroll to (and briefly ring)
+    // the crop/plot choice. Same scroll+ring pattern as before.
     const focusRecorder = () => {
         const el = document.getElementById('crop-selector-container');
         if (el) {
@@ -235,324 +232,137 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         }
     };
 
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I12) — THE आजची कामे TAB IS NOW TWO THINGS.
+    //   1. The REVIEW of a parsed entry / a log being corrected: shown exactly when the old screen
+    //      showed ManualEntry (manual mode with a crop/plot chosen). Unchanged here — the next lane
+    //      replaces it. It did gain the one-step "मागे" back to the mic of the same plots
+    //      (`ReviewBackBar`, I12-V1-M1): on the old screen the carousel + voice toggle above the form
+    //      were the way to say it again or change the plots.
+    //   2. Everything else: the founder-approved ENTRY flow (`LogEntryFlow`) — work home -> crop ->
+    //      that crop's plots + the mic. It replaces the legacy screen that stood here: SathiGuideCard
+    //      (its question is now Sathi's, in the founder's words), the carousel CropSelector (now the
+    //      stepper), the permanently disabled HelpBar "श्रम साथीशी बोला" (REMOVED: a dead control, P5;
+    //      help lives in सेट-अप केंद्र), the dark running-cost card (re-homed on the work home), the
+    //      voice/manual InputMethodToggle (now the quiet "type instead" line + the hand-filled form),
+    //      and the English "Recording…", "Select a plot to continue..." and "Cancel & Go Back".
+    const showReview = mode !== 'voice' && hasActiveLogContext;
+
+    // Saying one part again is cancelled back to the review it belongs to. It used to set the
+    // status 'confirming', which nothing renders — the farmer was left on a blank screen.
+    const cancelSegment = () => { setRecordingSegment(null); setMode('manual'); };
+
+    // I12-V1-M1 — "मागे" on the review: ONE step, to the mic of the same plots (the scope is kept, so
+    // the entry flow opens on its plot + mic step). The unsaved parse is dropped, exactly as the old
+    // voice toggle above the form dropped it; nothing saved is touched. The draft is cleared so the
+    // hand-filled form step cannot reopen with this parse in it.
+    const backFromReview = () => { setDraftLog(null); setMode('voice'); };
+
+    // Labour V2 R1 Task 3.4b — the ONE ManualEntry call, moved up (not modified) so the review below
+    // and the entry flow's hand-filled form use the same form. `labourEdit`: the बदल करा surface of
+    // the labour door's confirm card. It takes THAT draft's own parse provenance (never the voice
+    // state's last one) and its capture day.
+    const renderManualEntry = (labourEdit?: { provenance: LogProvenance | undefined; recordedDateKey: string }) => (
+        <ManualEntry
+            context={currentLogContext}
+            crops={crops}
+            defaults={ledgerDefaults}
+            profile={farmerProfile}
+            onSubmit={handleManualSubmit}
+            disabled={false}
+            // FOUNDER RULING 2026-08-31 — the labour
+            // door writes only हजेरी. Filtered HERE,
+            // at the form's entrance, so the other
+            // buckets never enter the draft the
+            // farmer edits and therefore can never
+            // be saved from this door. Any task he
+            // stated survives on the labour row
+            // itself — see attendanceDraft.ts.
+            initialData={logIntent === 'labour' ? toAttendanceOnlyDraft(draftLog) : draftLog}
+            attendanceOnly={logIntent === 'labour'}
+            provenance={labourEdit ? labourEdit.provenance : provenance}
+            recordedDateKey={labourEdit?.recordedDateKey}
+            // Labour door: the server takes only labour from the voice job.
+            captureScope={logIntent === 'labour' ? 'labour' : undefined}
+            onDataConsumed={() => setDraftLog(null)}
+            todayCountsMap={(() => {
+                const map: Record<string, TodayCounts> = {};
+                if (currentLogContext) {
+                    const todayStr = getDateKey();
+                    const pids = new Set<string>();
+                    currentLogContext.selection.forEach(s => s.selectedPlotIds.forEach(p => pids.add(p)));
+                    pids.forEach(pid => {
+                        map[pid] = getTodayCounts(pid, todayStr);
+                    });
+                }
+                return map;
+            })()}
+            /* LABOUR_PHASE2 P2.4 — the farm-wide half of the
+               day, carried SEPARATELY. A farm-wide context
+               yields no plot ids, so the map above is
+               legitimately `{}` and ManualEntry showed zeros
+               for a day the farmer HAD recorded work in. The
+               fix is NOT to fold farm-wide logs into that map:
+               `R24` measured that its consumer sums it across
+               the plots in context, turning a plot's 3 labour
+               entries into 11. No plot key here, so the two can
+               never be added. */
+            farmWideToday={getFarmWideDaySummary(history, getDateKey())}
+            transcriptEntries={(() => {
+                // Build timeline entries for today's logs in current context
+                const todayStr = getDateKey();
+                const contextPlotIds = new Set<string>();
+                currentLogContext?.selection.forEach(s => s.selectedPlotIds.forEach(p => contextPlotIds.add(p)));
+
+                const todayLogsLocal = history.filter(log =>
+                    log.date === todayStr &&
+                    log.context?.selection?.some((sel: { selectedPlotIds?: readonly string[] }) =>
+                        sel.selectedPlotIds?.some((pid: string) => contextPlotIds.has(pid))
+                    )
+                );
+                return buildTimelineEntries(todayLogsLocal, crops);
+            })()}
+            todayLogs={(() => {
+                // Full log objects for loading into editor
+                const todayStr = getDateKey();
+                const contextPlotIds = new Set<string>();
+                currentLogContext?.selection.forEach(s => s.selectedPlotIds.forEach(p => contextPlotIds.add(p)));
+
+                return history.filter(log =>
+                    log.date === todayStr &&
+                    log.context?.selection?.some((sel: { selectedPlotIds?: readonly string[] }) =>
+                        sel.selectedPlotIds?.some((pid: string) => contextPlotIds.has(pid))
+                    )
+                );
+            })()}
+        />
+    );
+
     return (
         <>
             {/* IDLE / RECORDING STATE */}
             {status !== 'confirming' && status !== 'success' && status !== 'processing' && (
                 <>
-                    {/* FOUNDER RULING 2026-08-29 — `DailyLoopHero` is GONE from
-                        this screen, not flag-gated off. He read the home screen
-                        and found two blocks asking the same thing: this hero's
-                        "आज काहीच सांगितलं नाही…" and `SathiGuideCard`'s "आज कोणत्या
-                        प्लॉटवर काम केलं?". He had already ruled once on this exact
-                        duplication (2026-08-27, *"there are two line only keep
-                        which is on the oversight bar"*) — that pass deleted only
-                        the SETTLED line and left the "nothing told" one, so the
-                        pair survived. This removes the whole surface.
-
-                        WHAT NOW OWNS EACH FACT — no fact was dropped with it:
-                          • the waiting COUNT  → the oversight strip's ring above
-                          • "what did you do" → `SathiGuideCard`, now the hero
-                        The hero's third input, the carried "काल राहिलं" signal,
-                        had no second home and is not restated anywhere; it was
-                        only ever a decoration on a line the strip already made. */}
-
-                    {/* spec: owner-oversight-loop (Task 7, design doc §4.2, §5) —
-                        the large gradient weather card, the Daily Closure
-                        card and the "Daily Log" heading + owner chip used to
-                        sit here, above the plot selector, making a farmer
-                        scroll ~380px before reaching the only question this
-                        screen exists for. The header already shows the
-                        owner (canonical strip), the closure/pending-approval
-                        facts now live in the oversight drawer. The weather
-                        chip that used to sit here (Task 7's one-line
-                        `CompactWeatherChip`) MOVED AGAIN in Task 11 — the
-                        founder's header restructure put it into `AppHeader`
-                        row 1 instead ("in the dead space on the right,
-                        before the gear"), so it is not rendered here any
-                        more (never rendered twice). */}
-
                     {/* spec: 2026-07-13-labour-attendance-approval-design (Task 3.5) —
-                        promoted from the Task-3.4 dismissible hint to a full
-                        banner (founder ask #1). Purely presentational + a
-                        null-check on logIntent; no effect on capture/parsing/
-                        submission. Tapping it navigates straight back to
-                        Labour Management (founder ask #2) — there is no ✕
-                        dismiss any more. */}
+                        the banner that says why he is here and takes him back to
+                        Labour Management. Purely presentational + a null-check on
+                        logIntent; no effect on capture/parsing/submission. */}
                     {!recordingSegment && logIntent === 'labour' && (
                         <LabourLogBanner onBackToLabour={() => setCurrentRoute('labour')} />
                     )}
 
-                    {/* spec: owner-oversight-loop (Task 13, change 3) — the
-                        Sathi guide card, above the plot selector, per the
-                        founder's own reference image. */}
-                    {!recordingSegment && <SathiGuideCard forLabour={logIntent === 'labour'} />}
-
-                    {!recordingSegment && (
-                        <div id="crop-selector-container" className="mb-6 animate-in slide-in-from-top-4 duration-500">
-                            <CropSelector
-                                mode="log"
-                                crops={crops}
-                                selectedCrops={logScope.selectedCropIds}
-                                selectedPlots={(() => {
-                                    const map: Record<string, string[]> = {};
-                                    logScope.selectedCropIds.forEach(cId => {
-                                        const relevantPlots = logScope.selectedPlotIds.filter(pid =>
-                                            crops.find(c => c.id === cId)?.plots.some(p => p.id === pid)
-                                        );
-                                        map[cId] = relevantPlots;
-                                    });
-                                    return map;
-                                })()}
-                                onSelectionChange={(newCrops, newPlots) => {
-                                    const flattenedPlots = Object.values(newPlots).flat();
-                                    setLogScope({
-                                        selectedCropIds: newCrops,
-                                        selectedPlotIds: flattenedPlots,
-                                        mode: flattenedPlots.length > 1 ? 'multi' : 'single',
-                                        applyPolicy: 'broadcast'
-                                    });
-                                    // Auto-switch to voice mode to show the recorder immediately
-                                    if (flattenedPlots.length > 0) {
-                                        setMode('voice');
-                                    }
-                                }}
-                                disabled={false}
-                                // spec: owner-oversight-loop (Task 13, change
-                                // 4) — "संपूर्ण शेत" demoted out of the
-                                // carousel, below as its own quiet row.
-                                hideGlobalCard
-                            />
-                        </div>
-                    )}
-
-                    {/* spec: owner-oversight-loop (Task 13, change 5) — the
-                        closing help bar. */}
-                    {!recordingSegment && <HelpBar />}
-
-                    {/* spec: owner-oversight-loop (Task 7, design doc §4.2,
-                        §5) — Running Cost, MOVED below the plot selector:
-                        ambient status a farmer sees after acting, not a
-                        blocker before it. The "cost may be inaccurate — N
-                        unverified" line is REMOVED here (not moved) — that
-                        same fact already lives in the oversight drawer's
-                        decision rows, and a third copy is exactly what this
-                        reorder exists to remove (spec §4.2's own ruling). */}
-                    {!recordingSegment && (
-                        <div
-                            data-testid="running-cost-card"
-                            className="mb-6 rounded-2xl bg-stone-900 text-white p-3.5 space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500"
-                        >
-                            {/* PLR-D9 T1 — in Marathi, and naming what the money covers. */}
-                            <p data-testid="running-cost-scope" className="text-xs font-bold text-stone-300">
-                                खर्च: {costSnapshot.scopeLabel}
-                            </p>
-                            <div className="grid grid-cols-3 gap-2 text-sm">
-                                <div>
-                                    <p className="text-stone-400 text-xs">आज</p>
-                                    <p className="font-black">₹ {formatCurrencyINR(costSnapshot.today)}</p>
-                                </div>
-                                <div>
-                                    <p className="text-stone-400 text-xs">काल</p>
-                                    <p className="font-black">₹ {formatCurrencyINR(yesterdayCost)}</p>
-                                </div>
-                                <div>
-                                    <p className="text-stone-400 text-xs">आतापर्यंत</p>
-                                    <p className="font-black">₹ {formatCurrencyINR(costSnapshot.cropSoFar)}</p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* INPUT METHOD TOGGLE */}
-                    {!recordingSegment && status !== 'recording' && (
-                        <div className="mb-6 px-4 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-100">
-                            <InputMethodToggle
-                                mode={mode}
-                                onChange={(newMode) => {
-                                    // wave-3.7 — he was taken to the mic to answer Sathi
-                                    // and is switching away without speaking. Record the
-                                    // SKIP honestly; never invent an answer he did not
-                                    // give (P4). Fire-and-forget: a telemetry write must
-                                    // never delay the mode switch he asked for.
-                                    if (mode === 'voice' && newMode !== 'voice') {
-                                        void abandonPendingQuestionAnswer();
-                                    }
-                                    setMode(newMode);
-                                }}
-                                disabled={false}
-                                suggestInteraction={hasActiveLogContext}
-                            />
-                        </div>
-                    )}
-
-                    {recordingSegment && (
-                        <div className={`mb-4 border-2 p-5 rounded-3xl flex items-center justify-between shadow-sm animate-in slide-in-from-top-4 ${getSegmentVisual(recordingSegment).color}`}>
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-white/50 rounded-full animate-pulse">
-                                    {getSegmentVisual(recordingSegment).icon}
-                                </div>
-                                <div>
-                                    <p className="font-bold text-lg leading-none mb-1">Recording {getSegmentVisual(recordingSegment).label}</p>
-                                    <p className="text-sm opacity-80">
-                                        {recordingSegment === 'labour' ? 'Speak count & duration...' : 'Speak details clearly...'}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* wave-3.7, founder decision 3 — the question stays VISIBLE while he
-                        answers it. Read straight from the stash, so it survives a reload
-                        and needs no second copy of the selection state. */}
-                    {mode === 'voice' && (() => {
-                        const pendingQuestion = readPendingQuestionAnswer();
-                        if (!pendingQuestion) return null;
-                        return (
-                            <div
-                                data-testid="shramsathi-pinned-question"
-                                className="mb-4 rounded-xl border px-4 py-3 text-sm font-medium"
-                                // The 'ask' tone from SurfaceSection — marigold means "what
-                                // Sathi still wants" everywhere else on this surface, so the
-                                // pinned question must read as the SAME thing he just tapped.
-                                // Literal hex, not a Tailwind token: no marigold scale exists
-                                // in this project's config, and a non-existent utility class
-                                // would silently render as no colour at all.
-                                style={{
-                                    fontFamily: "'Noto Sans Devanagari', sans-serif",
-                                    backgroundColor: '#FEF8EF', borderColor: '#F6E3C4', color: '#B4650F',
-                                }}
-                            >
-                                {pendingQuestion.selected.resolvedPromptMr}
-                            </div>
-                        );
-                    })()}
-
-                    <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        {getContextColorIndicator()}
-
-                        <div className={`transition-all duration-500 ${!isContextReady ? 'opacity-90' : ''}`}>
-                            {mode === 'voice' ? (
-                                <>
-                                    {DEFAULT_VOICE_CONFIG.streamingPcm.enabled ? (
-                                        <AudioRecorderStreaming
-                                            onAudioCaptured={handleAudioReady}
-                                            onProcessingStart={() => setStatus('processing')}
-                                            onTextCaptured={handleTextReady}
-                                            disabled={!isContextReady}
-                                            externalError={error}
-                                            transcript={errorTranscript}
-                                            suggestInteraction={isContextReady}
-                                            onRequestContextSelection={focusRecorder}
-                                        />
-                                    ) : (
-                                        <AudioRecorder
-                                            onAudioCaptured={handleAudioReady}
-                                            onTextCaptured={handleTextReady}
-                                            disabled={!isContextReady}
-                                            externalError={error}
-                                            transcript={errorTranscript}
-                                            suggestInteraction={isContextReady}
-                                            onRequestContextSelection={focusRecorder}
-                                        />
-                                    )}
-                                    {/* SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2.
-                                        Cost-safe: consumes the same Sarvam transcribe-stream that
-                                        useVoiceRecorder.runTranscribeStage already opened; no
-                                        additional Sarvam call. Self-hides when there are no
-                                        partials AND the stream isn't open. */}
-                                    <LiveCaption
-                                        text={liveCaption}
-                                        isTranscribing={voiceStreamingPhase === 'transcribing'}
-                                    />
-                                </>
-                            ) : (
-                                hasActiveLogContext ? (
-                                    (() => {
+                    {showReview ? (
+                        <>
+                            {/* While one part is being said again, its own "रद्द करा" (SegmentCancel) is the way back. */}
+                            {!recordingSegment && <ReviewBackBar onBack={backFromReview} />}
+                            {recordingSegment && <SegmentBanner segment={recordingSegment} />}
+                            <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                {getContextColorIndicator()}
+                                <div className={`transition-all duration-500 ${!isContextReady ? 'opacity-90' : ''}`}>
+                                    {(() => {
                                         // Labour V2 R1 Task 3.4b — the invoking feature owns the
                                         // result surface. The generic ManualEntry(attendanceOnly)
-                                        // branch below is KEPT as the बदल करा edit surface; it
-                                        // stopped being the landing. The call moved verbatim into
-                                        // this closure — it is NOT modified.
+                                        // branch is KEPT as the बदल करा edit surface.
                                         const attendanceDraft = logIntent === 'labour' ? toAttendanceOnlyDraft(draftLog) : null;
-                                        // `labourEdit`: the बदल करा surface of the labour door's confirm
-                                        // card. It takes THAT draft's own parse provenance (never the
-                                        // voice state's last one) and its capture day.
-                                        const renderManualEntry = (labourEdit?: { provenance: LogProvenance | undefined; recordedDateKey: string }) => (
-                                    <ManualEntry
-                                        context={currentLogContext}
-                                        crops={crops}
-                                        defaults={ledgerDefaults}
-                                        profile={farmerProfile}
-                                        onSubmit={handleManualSubmit}
-                                        disabled={false}
-                                        // FOUNDER RULING 2026-08-31 — the labour
-                                        // door writes only हजेरी. Filtered HERE,
-                                        // at the form's entrance, so the other
-                                        // buckets never enter the draft the
-                                        // farmer edits and therefore can never
-                                        // be saved from this door. Any task he
-                                        // stated survives on the labour row
-                                        // itself — see attendanceDraft.ts.
-                                        initialData={logIntent === 'labour' ? toAttendanceOnlyDraft(draftLog) : draftLog}
-                                        attendanceOnly={logIntent === 'labour'}
-                                        provenance={labourEdit ? labourEdit.provenance : provenance}
-                                        recordedDateKey={labourEdit?.recordedDateKey}
-                                        // Labour door: the server takes only labour from the voice job.
-                                        captureScope={logIntent === 'labour' ? 'labour' : undefined}
-                                        onDataConsumed={() => setDraftLog(null)}
-                                        todayCountsMap={(() => {
-                                            const map: Record<string, TodayCounts> = {};
-                                            if (currentLogContext) {
-                                                const todayStr = getDateKey();
-                                                const pids = new Set<string>();
-                                                currentLogContext.selection.forEach(s => s.selectedPlotIds.forEach(p => pids.add(p)));
-                                                pids.forEach(pid => {
-                                                    map[pid] = getTodayCounts(pid, todayStr);
-                                                });
-                                            }
-                                            return map;
-                                        })()}
-                                        /* LABOUR_PHASE2 P2.4 — the farm-wide half of the
-                                           day, carried SEPARATELY. A farm-wide context
-                                           yields no plot ids, so the map above is
-                                           legitimately `{}` and ManualEntry showed zeros
-                                           for a day the farmer HAD recorded work in. The
-                                           fix is NOT to fold farm-wide logs into that map:
-                                           `R24` measured that its consumer sums it across
-                                           the plots in context, turning a plot's 3 labour
-                                           entries into 11. No plot key here, so the two can
-                                           never be added. */
-                                        farmWideToday={getFarmWideDaySummary(history, getDateKey())}
-                                        transcriptEntries={(() => {
-                                            // Build timeline entries for today's logs in current context
-                                            const todayStr = getDateKey();
-                                            const contextPlotIds = new Set<string>();
-                                            currentLogContext?.selection.forEach(s => s.selectedPlotIds.forEach(p => contextPlotIds.add(p)));
-
-                                            const todayLogsLocal = history.filter(log =>
-                                                log.date === todayStr &&
-                                                log.context?.selection?.some((sel: { selectedPlotIds?: readonly string[] }) =>
-                                                    sel.selectedPlotIds?.some((pid: string) => contextPlotIds.has(pid))
-                                                )
-                                            );
-                                            return buildTimelineEntries(todayLogsLocal, crops);
-                                        })()}
-                                        todayLogs={(() => {
-                                            // Full log objects for loading into editor
-                                            const todayStr = getDateKey();
-                                            const contextPlotIds = new Set<string>();
-                                            currentLogContext?.selection.forEach(s => s.selectedPlotIds.forEach(p => contextPlotIds.add(p)));
-
-                                            return history.filter(log =>
-                                                log.date === todayStr &&
-                                                log.context?.selection?.some((sel: { selectedPlotIds?: readonly string[] }) =>
-                                                    sel.selectedPlotIds?.some((pid: string) => contextPlotIds.has(pid))
-                                                )
-                                            );
-                                        })()}
-                                    />
-                                        );
                                         if (logIntent === 'labour') {
                                             // The labour door lands on the Labour-owned screen. A
                                             // draft with no labour rows falls through to the empty
@@ -583,30 +393,80 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                             );
                                         }
                                         return renderManualEntry();
-                                    })()
-                                ) : (
-                                    <div className="flex items-center justify-center h-64 text-slate-400">
-                                        Select a plot to continue...
-                                    </div>
-                                )
-                            )}
-                        </div>
-
-                        {/* The "today's timeline / activity feed" that used to sit here MOVED to "माझं शेत"
-                            (founder 2026-10-24: its own button on the Reflect page, not on the log page) —
-                            see `renderReflectView` and `features/logs/components/TodayActivityFeed.tsx`. */}
-
-                        {recordingSegment && (
-                            <div className="mt-6 text-center">
-                                <button
-                                    onClick={() => { setRecordingSegment(null); setStatus('confirming'); }}
-                                    className="text-stone-400 font-bold text-sm bg-stone-100 px-6 py-2 rounded-full hover:bg-stone-200"
-                                >
-                                    Cancel & Go Back
-                                </button>
+                                    })()}
+                                </div>
+                                {recordingSegment && <SegmentCancel onCancel={cancelSegment} />}
                             </div>
-                        )}
-                    </div>
+                        </>
+                    ) : (
+                        <LogEntryFlow
+                            crops={crops}
+                            logScope={logScope}
+                            setLogScope={setLogScope}
+                            onChooseVoice={() => { if (mode !== 'voice') setMode('voice'); }}
+                            labourIntent={logIntent === 'labour'}
+                            onBackToLabour={() => setCurrentRoute('labour')}
+                            onClearLabourIntent={() => ctx.setLogIntent(null)}
+                            recordingSegment={recordingSegment}
+                            onCancelSegment={cancelSegment}
+                            homeRequested={ctx.logHomePending ?? false}
+                            onHomeRequestHandled={ctx.consumeLogHome}
+                            // H10 — the हजेरी door only for the owner tier or the owner's labour grant.
+                            onOpenAttendance={ctx.canOpenAttendanceFromHome ? () => setCurrentRoute('labour') : undefined}
+                            // The running-cost card (c95afa1c), re-homed on the work home. A worker sees no
+                            // money (PLR-D9 §6: "कामगार — … no money"), and neither does a role the
+                            // server has not told this phone yet (unknown stays closed, I12-V1-m6).
+                            cost={!mayShowFarmMoney(ctx.farmRole) ? undefined : {
+                                today: costSnapshot.today, yesterday: yesterdayCost, soFar: costSnapshot.cropSoFar, scopeLabel: costSnapshot.scopeLabel,
+                            }}
+                            // wave-3.7, founder decision 3 — the question stays VISIBLE while he answers it.
+                            // Read straight from the stash, so it survives a reload.
+                            pinnedQuestion={mode === 'voice' ? readPendingQuestionAnswer()?.selected.resolvedPromptMr ?? null : null}
+                            // wave-3.7 — leaving the mic for the hand-filled form records the SKIP honestly;
+                            // never an invented answer (P4). Fire-and-forget.
+                            onLeaveVoice={() => { void abandonPendingQuestionAnswer(); }}
+                            renderForm={() => renderManualEntry()}
+                            renderRecorder={({ onRecordingChange, onOpenForm }) => (
+                                <>
+                                    {DEFAULT_VOICE_CONFIG.streamingPcm.enabled ? (
+                                        <AudioRecorderStreaming
+                                            onAudioCaptured={handleAudioReady}
+                                            onProcessingStart={() => setStatus('processing')}
+                                            onTextCaptured={handleTextReady}
+                                            disabled={!isContextReady}
+                                            externalError={error}
+                                            transcript={errorTranscript}
+                                            suggestInteraction={isContextReady}
+                                            onRequestContextSelection={focusRecorder}
+                                            onRecordingChange={onRecordingChange}
+                                            onOpenForm={onOpenForm}
+                                        />
+                                    ) : (
+                                        <AudioRecorder
+                                            onAudioCaptured={handleAudioReady}
+                                            onTextCaptured={handleTextReady}
+                                            disabled={!isContextReady}
+                                            externalError={error}
+                                            transcript={errorTranscript}
+                                            suggestInteraction={isContextReady}
+                                            onRequestContextSelection={focusRecorder}
+                                            onRecordingChange={onRecordingChange}
+                                            onOpenForm={onOpenForm}
+                                        />
+                                    )}
+                                    {/* SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2.
+                                        Cost-safe: consumes the same Sarvam transcribe-stream that
+                                        useVoiceRecorder.runTranscribeStage already opened; no
+                                        additional Sarvam call. Self-hides when there are no
+                                        partials AND the stream isn't open. */}
+                                    <LiveCaption
+                                        text={liveCaption}
+                                        isTranscribing={voiceStreamingPhase === 'transcribing'}
+                                    />
+                                </>
+                            )}
+                        />
+                    )}
                 </>
             )}
 
@@ -666,7 +526,12 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
             {/* The saved-to-ledger screen moved to `savedView.tsx` — 311 lines
                 of this file, and the only branch in it that closed over nothing
                 local. See that file for why it was the one that could move. */}
-            {status === 'success' && renderSavedView(ctx)}
+            {status === 'success' && renderSavedView({
+                ...ctx,
+                // I12 — "आणखी नोंद करा" and the saved card's मागे land on the mic of the same plots
+                // (the entry flow), not on an empty hand-filled form.
+                handleReset: () => { handleReset(); setMode('voice'); },
+            })}
 
 
 

@@ -46,6 +46,7 @@ import { buildOversightHeaderInputs } from './app/helpers/appContentOversightInp
 // swipe path (`core/navigation/MainViewTransition.tsx`, wired in
 // `AppRouter.tsx`) both call it, so the two can never drift apart.
 import { isRecordingPathBusy } from './shared/utils/recordingPathBusy';
+import { useWorkTabViewChange } from './features/logs/components/entry/workHomeRequest';
 
 interface AppContentProps {
     crops: CropProfile[];
@@ -150,6 +151,12 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
         [data.history, data.crops, data.farmerProfile.operators, data.plannedTasks],
     );
 
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I12, H08) — the header's page switcher.
+    const onWorkTabViewChange = useWorkTabViewChange(
+        { mode: voice.mode, hasActiveLogContext: context.hasActiveLogContext, status: voice.status },
+        { setMainView: navigation.setMainView, requestLogHome: navigation.requestLogHome, resetSaved: _handleReset, setMode: voice.setMode },
+    );
+
     return (
         <div className="relative flex h-full flex-col bg-transparent text-stone-800 font-sans selection:bg-emerald-200">
             <AiTestModeBanner />
@@ -157,7 +164,10 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 currentRoute={navigation.currentRoute}
                 currentView={navigation.mainView}
                 onNavigate={navigation.setCurrentRoute}
-                onViewChange={navigation.setMainView}
+                // spec: plr-d10-redesign-real-integration-2026-10-25 (I12) — a tap on the आजची कामे card
+                // (again, or from another tab) opens its work home fresh, also from the saved card.
+                // Never over an unsaved review form or a parse in progress (`workTabTapAction`).
+                onViewChange={onWorkTabViewChange}
                 // spec: plr-d10-redesign-real-integration-2026-10-25 (WP-6, PLR-D9 N1) — the page
                 // switcher only on the home tabs; a place (खरेदी, सेट-अप केंद्र…) has its own title
                 // and मागे, and used to show आजची कामे lit while the farmer was on खरेदी.

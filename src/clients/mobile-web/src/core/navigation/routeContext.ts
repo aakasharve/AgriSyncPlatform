@@ -88,6 +88,14 @@ export interface AppRouterContext {
     // the log(s) saved while logIntent === 'labour'; threaded to the labour
     // route so it can render a "just logged" labour-only summary.
     lastLabourLogIds: Navigation['lastLabourLogIds'];
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I12) — the आजची कामे tab card was tapped:
+    // the log tab answers with its work home, fresh. Optional so older context builders compile.
+    logHomePending?: boolean;
+    consumeLogHome?: () => void;
+    /** The server-told role on the current farm (/me/context), e.g. 'PrimaryOwner', 'Worker'. */
+    farmRole?: string | null;
+    /** The work home's "आजची हजेरी" door: owner tier or the owner's labour grant only (H10). */
+    canOpenAttendanceFromHome?: boolean;
 
     // log/context
     logScope: LogContext['logScope'];

@@ -32,6 +32,7 @@ import { isRecordingPathBusy } from '../../shared/utils/recordingPathBusy';
 // here as a window event; see that module's header for why.
 import { OPEN_REVIEW_INBOX_EVENT } from '../../features/oversight/oversightNavigationEvents';
 import { useOpenSurfaceRequest } from '../../features/oversight/useOpenSurfaceRequest';
+import { useHomeAttendanceDoor } from '../../features/labour/useHomeAttendanceDoor';
 
 // Sub-plan 04 Task 8 — Routes-as-data decomposition.
 // AppRouter is a thin orchestrator that wires hooks, builds an
@@ -64,9 +65,19 @@ const AppRouter: React.FC = () => {
     const { getTodayCounts, getContextColorIndicator } = useAppViewHelpers();
     // Session's active farm — threaded into ctx so the hook-free route render
     // functions (mainView) can reach it. See AppRouterContext.activeFarmId.
-    const { currentFarmId, currentFarm } = useFarmContext();
+    const { currentFarmId, currentFarm, meContext } = useFarmContext();
+    const userId = meContext?.me?.userId ?? null;
 
     const { currentRoute, setCurrentRoute, mainView, setMainView, logIntent, setLogIntent, lastLabourLogIds } = navigation;
+
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I12, H10) — the work home's हजेरी door.
+    // Owner tier by the server-told role; anyone else (never a worker, never an unknown role) only
+    // with the owner's labour grant AS THE SERVER ANSWERS IT: asked when the tab opens online, so a
+    // मुकादम on a fresh phone sees the door on first use (I12-V1-M2). Hidden while unknown.
+    const farmRole = currentFarm?.role ?? null;
+    const canOpenAttendanceFromHome = useHomeAttendanceDoor({
+        role: farmRole, userId, farmId: currentFarmId, active: currentRoute === 'main' && mainView === 'log',
+    });
     const { logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady } = context;
     const {
         isDemoMode, setIsDemoMode,
@@ -221,6 +232,10 @@ const AppRouter: React.FC = () => {
         currentRoute, setCurrentRoute, mainView, setMainView,
         goBackOr: navigation.goBackOr,
         logIntent, setLogIntent, lastLabourLogIds,
+        logHomePending: navigation.logHomePending,
+        consumeLogHome: navigation.consumeLogHome,
+        farmRole,
+        canOpenAttendanceFromHome,
         logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady,
         isDemoMode, setIsDemoMode,
         farmerProfile, setFarmerProfile,

@@ -31,6 +31,14 @@ export interface UseAppNavigationResult {
     goBack: () => boolean;
     /** A screen's own back button: where he came from, else `fallback` (WP-6). */
     goBackOr: (fallback: AppRoute) => void;
+    /**
+     * spec: plr-d10-redesign-real-integration-2026-10-25 (I12) — the आजची कामे tab card was tapped:
+     * the log tab should show its work home, fresh. A one-shot request: the tab's entry flow
+     * answers it (`consumeLogHome`) the moment it sees it, whether it was mounted or not.
+     */
+    logHomePending: boolean;
+    requestLogHome: () => void;
+    consumeLogHome: () => void;
 }
 
 const MAX_HISTORY = 20;
@@ -82,6 +90,7 @@ export const useAppNavigation = (): UseAppNavigationResult => {
     const [mainView, setMainView] = useState<PageView>('log');
     const [logIntent, setLogIntentState] = useState<LogIntent>(null);
     const [lastLabourLogIds, setLastLabourLogIdsState] = useState<string[]>([]);
+    const [logHomePending, setLogHomePending] = useState(false);
     // Back-button history. Refs (not state): reading them must not re-render,
     // and goBack must see the latest value without a stale closure.
     const routeRef = useRef<AppRoute>(currentRoute);
@@ -179,6 +188,9 @@ export const useAppNavigation = (): UseAppNavigationResult => {
         setLastLabourLogIdsState(ids);
     }, []);
 
+    const requestLogHome = useCallback(() => setLogHomePending(true), []);
+    const consumeLogHome = useCallback(() => setLogHomePending(false), []);
+
     return {
         currentRoute,
         setCurrentRoute,
@@ -190,6 +202,9 @@ export const useAppNavigation = (): UseAppNavigationResult => {
         lastLabourLogIds,
         setLastLabourLogIds,
         goBack,
-        goBackOr
+        goBackOr,
+        logHomePending,
+        requestLogHome,
+        consumeLogHome,
     };
 };
