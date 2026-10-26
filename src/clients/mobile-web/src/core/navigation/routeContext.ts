@@ -150,6 +150,11 @@ export interface AppRouterContext {
     // dfes-companion Phase 4 — voice-continuity ladder outcome.
     continuityLevel: VoiceState['continuityLevel'];
     savedPendingCaptureId: VoiceState['savedPendingCaptureId'];
+    /**
+     * PLR-D10 I13 — the recording the voice auto-save just wrote, for the ONE result screen. Shown only
+     * while it is the latest save (`lastSavedLogIds`). Optional so older context builders compile.
+     */
+    voiceResult?: VoiceState['voiceResult'];
 
     // weather
     weatherData: WeatherState['weatherData'];

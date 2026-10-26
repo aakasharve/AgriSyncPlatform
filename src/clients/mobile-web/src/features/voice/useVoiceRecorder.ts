@@ -15,10 +15,7 @@ import { CoreConsentMissingError } from '../consent/separation/coreConsentGate';
 import type { PendingLadderLevel } from './continuity/pendingInterpretation';
 import { PendingInterpretationStore } from './continuity/PendingInterpretationStore';
 import { DeviceSpeechRecognizer } from '../../infrastructure/voice/DeviceSpeechRecognizer';
-import { yieldToPaint, hasSuccessfulIrrigation, bindDraftProvenance, type UseVoiceRecorderProps, type PreprocessedAudioResult } from './useVoiceRecorder.types';
-
-
-
+import { yieldToPaint, hasSuccessfulIrrigation, bindDraftProvenance, type UseVoiceRecorderProps, type PreprocessedAudioResult, type VoiceRecordingRef } from './useVoiceRecorder.types';
 
 export const useVoiceRecorder = ({
     currentLogContext,
@@ -28,7 +25,7 @@ export const useVoiceRecorder = ({
     farmerProfile,
     setMode,
     parser,
-    voicePreprocessor,
+    voicePreprocessor, onVoiceDraft,
 }: UseVoiceRecorderProps) => {
 
     const [status, setStatus] = useState<AppStatus>('idle');
@@ -68,6 +65,7 @@ export const useVoiceRecorder = ({
     }
     const lastVoiceSessionMetadataRef = useRef<VoiceSessionMetadata | null>(null);
     const lastVoiceIdempotencySeedRef = useRef<string | null>(null);
+    const lastRecordingRef = useRef<VoiceRecordingRef | null>(null); // PLR-D10 I13 — null for typed text
     const transcribeConsumerRef = useRef<TranscribeStreamConsumer | null>(null);
     const transcribeAbortRef = useRef<AbortController | null>(null);
     if (!transcribeConsumerRef.current) {
@@ -392,6 +390,7 @@ export const useVoiceRecorder = ({
         // — this is still closer to recording-time than the server's
         // request-receipt wall clock would be.
         const recordedAtUtc = audioData.recordedAtUtc ?? new Date().toISOString();
+        lastRecordingRef.current = { recordedAtUtc, clipId: preprocessed.idempotencyKey };
 
         // The single PROVEN batch audio path — the guaranteed safety net.
         // /ai/voice-parse → Gemini multimodal → buckets. This is invoked
@@ -576,10 +575,10 @@ export const useVoiceRecorder = ({
             return true;
         }
 
-        // Always show ManualEntry for review — never skip to auto-save.
-        // User must see what was parsed before it is written to the ledger.
-
-        // FUTURE: if selections.length > 1 and draftLog is ready, auto-open wizard
+        // PLR-D10 I13 (founder 2026-09-02) — a parse of a RECORDING auto-saves: the sink owns the screen from here. Typed
+        // text, a one-part re-record, and anything the sink declines keep today's ManualEntry review (never lost).
+        const recording = lastRecordingRef.current;
+        if (!isSegmentUpdate && recording && onVoiceDraft && await onVoiceDraft(bindDraftProvenance(response, prov), prov ?? undefined, recording)) return true;
         if (isSegmentUpdate) {
             const mergedDraft = { ...draftLog! };
 
@@ -636,7 +635,6 @@ export const useVoiceRecorder = ({
             setDraftLog(bindDraftProvenance(mergedDraft, prov)); // this parse's provenance, bound to its draft (draftProvenance.ts)
             setRecordingSegment(null);
         } else {
-            // Fallback: If no auto-save prop (e.g. testing) or it was unclear, set draft
             setDraftLog(bindDraftProvenance(response, prov));
         }
 
@@ -646,6 +644,7 @@ export const useVoiceRecorder = ({
     };
 
     const handleTextReady = async (text: string) => {
+        lastRecordingRef.current = null; // typed: the review form, never the voice auto-save
         await processInput({ type: 'text', data: text }); // mimeType not needed for text
     };
 

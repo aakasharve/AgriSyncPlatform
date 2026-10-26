@@ -435,6 +435,15 @@ export interface VoiceClipCacheRecord {
     archiveNextAttemptAtUtc?: string;
     /** When the server acknowledged the upload (same moment `s3RetainedKey` was set). */
     archiveAckedAtUtc?: string;
+    /**
+     * PLR-D10 I13 — the log this recording became, stamped by the voice auto-save on THIS phone
+     * (`infrastructure/voice/clipLogLink.ts`). It is what lets the result screen and the day's feed play
+     * a log's own recording. Absent = not linked (older clips, a parse kept for the review form, a clip
+     * from before this field): the log simply shows no ▶, never a guessed clip.
+     * NON-INDEXED on purpose - no Dexie version bump (a bump is one-way for APK users), and the clips
+     * table is small enough to scan for a day's handful of logs.
+     */
+    dailyLogId?: string;
     status: VoiceClipStatus;
     retentionPolicy: VoiceClipRetentionPolicy;
     expiresAtUtc: string;

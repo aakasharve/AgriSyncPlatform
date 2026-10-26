@@ -57,7 +57,8 @@ import { buildEditSavedMessage, buildQueuedLogToast, buildSkippedSyncToast } fro
 // comment lives there) to keep this file under the 800-line budget;
 // re-exported here so existing `from './useLogCommands'` imports (and any
 // future ones) keep working.
-import type { ManualSubmitOutcome, UseLogCommandsResult } from './useLogCommands.types';
+import type { AutoSaveOptions, ManualSubmitOutcome, UseLogCommandsResult } from './useLogCommands.types';
+import { markAutoSavedFromVoice } from '../helpers/autoSavedVoiceLog';
 export type { ManualSubmitOutcome, UseLogCommandsResult };
 
 // `UseLogCommandsResult` moved to `useLogCommands.types.ts` for the same
@@ -284,7 +285,11 @@ export const useLogCommands = ({
     }, [crops, plannedTasks]);
 
     // --- AUTO SAVE ---
-    const handleAutoSave = useCallback(async (logData: AgriLogResponse, provenance?: LogProvenance) => {
+    // PLR-D10 I13 — the voice path's ONE save (founder 2026-09-02: no review form, no Save tap). Resolves to
+    // the logs once they are on the phone, or null when nothing was written (the caller then keeps the parse
+    // in the review form). A step that fails AFTER the write still shows the saved record: a retry would mint
+    // a second copy. No English toast on failure any more: the review form with his parse IS the message.
+    const handleAutoSave = useCallback(async (logData: AgriLogResponse, provenance?: LogProvenance, options: AutoSaveOptions = {}): Promise<DailyLog[] | null> => {
 
         // PHASE 25: Context Switching & Global Voice
         let effectiveScope = logScope;
@@ -309,15 +314,16 @@ export const useLogCommands = ({
         // Safety check: Must have effective scope or active context
         if (!hasActiveLogContext && !logData.suggestedContext) {
             logger.warn("Auto-save blocked: No context");
-            return;
+            return null;
         }
 
         const correlationId = CorrelationId.generate();
         logger.info('Auto-save started', { correlationId, summary: logData.summary });
+        let written: DailyLog[] | null = null;
 
         try {
             // SINGLE WRITE PATH: Delegate to Service
-            const newLogs = await logCommandService.createFromVoice(
+            const created = await logCommandService.createFromVoice(
                 logData,
                 effectiveScope,
                 crops,
@@ -327,12 +333,15 @@ export const useLogCommands = ({
                 // loop is on. Flag read stays in the app layer (domain-agnostic).
                 FEATURE_FLAGS.dailyLoop
             );
+            const newLogs = options.autoSavedFromVoice ? created.map(markAutoSavedFromVoice) : created;
 
             // Persist (Service handles persistence via injected repo)
             await logCommandService.confirmAndSave(
                 newLogs,
                 setHistory // Update UI
             );
+            written = newLogs;
+            await options.onWritten?.(newLogs);
             // T2 — the result is EVIDENCE, not noise. `null` in demo mode,
             // where nothing is meant to reach a server at all.
             const syncOutcome = await enqueueForSyncAndNoteSkips(newLogs);
@@ -352,23 +361,27 @@ export const useLogCommands = ({
                 [...newLogs, ...history]
             );
 
-            // AUTO-SAVE SUCCESS: Show the success screen instead of just a toast
-            setToast(buildSkippedSyncToast(syncOutcome, language) ?? buildQueuedLogToast(language, beforePercent, afterPercent));
+            // AUTO-SAVE SUCCESS: the voice result screen says "लक्षात ठेवलं" itself, so only the honest
+            // "will not be sent" toast stays on that path.
+            const skippedToast = buildSkippedSyncToast(syncOutcome, language);
+            if (skippedToast || !options.autoSavedFromVoice) setToast(skippedToast ?? buildQueuedLogToast(language, beforePercent, afterPercent));
             setStatus('success');
             setMode('manual'); // Ensure we are in a view that shows the success state overlay
 
             logger.info('Auto-save completed', { correlationId });
+            return newLogs;
         } catch (e) {
             logger.error("Auto-save error", e, { correlationId });
-            setToast({ message: "Failed to auto-save", type: 'error' });
-            setError("Failed to auto-save. Please check your connection.");
+            if (!written) return null;
+            calculateLogSummary(written, null); // no evidence either way about the server: no claim
+            setLastSavedLogIds(written.map(l => l.id));
+            setStatus('success');
+            setMode('manual');
+            return written;
         }
-        // Pre-existing exhaustive-deps gap (predates Task 3.5; calculateLogSummary
-        // and isDemoMode are used but not listed) — not introduced by this
-        // change; not touched to avoid altering this callback's memoization
-        // behavior for handleAutoSave, which has no caller in the app today.
-         
-    }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setToast, setStatus, setMode, setLastSavedLogSummary, setLastSavedLogIds, setError, computeClosureDelta, history, setLogScope, language]);
+        // Pre-existing exhaustive-deps gap (calculateLogSummary and isDemoMode are used but not listed) — kept,
+        // so this callback's memoization is unchanged. Its one caller is the voice auto-save (PLR-D10 I13).
+    }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setToast, setStatus, setMode, setLastSavedLogSummary, setLastSavedLogIds, computeClosureDelta, history, setLogScope, language]);
 
     // --- FINAL CONFIRM ---
     const handleFinalConfirm = useCallback(async (editedData: AgriLogResponse | null, draftLog: AgriLogResponse | null) => {

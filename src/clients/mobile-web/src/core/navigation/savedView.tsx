@@ -66,7 +66,7 @@ import { AppRouterContext } from './routeContext';
 // a hook can't live directly in its body — this small component gives the
 // dismiss toggle its own fiber. Keyed by candidate.task.id at the call site
 // so switching to a different top candidate resets the dismissal.
-const TaskCloseConfirmSlot: React.FC<{
+export const TaskCloseConfirmSlot: React.FC<{
     candidate: TaskCloseCandidate;
     onConfirm: (candidate: TaskCloseCandidate) => void;
 }> = ({ candidate, onConfirm }) => {
@@ -378,15 +378,19 @@ export const renderSavedView = (ctx: AppRouterContext): React.ReactNode => {
                                     }}
                                     className="w-full bg-white text-emerald-700 border border-emerald-200 py-4 rounded-xl font-bold text-lg hover:bg-emerald-50 transition-colors mb-1"
                                 >
-                                    {lastSavedLogIds.length > 1 ? 'सर्व नोंदी पाहा' : 'नोंद पाहा'}
+                                    {/* PLR-D10 I13 (LP-22) — no "नोंद" on the screens after he saves: the approved
+                                        "बदला" (confirmation.edit) opens the same edit form; for several plots,
+                                        PROPOSED (Marathi) "सर्व पाहा". */}
+                                    {lastSavedLogIds.length > 1 ? 'सर्व पाहा' : 'बदला'}
                                 </button>
                             )}
 
                             <button onClick={() => setMainView('reflect')} className="w-full bg-stone-100 text-stone-700 py-4 rounded-xl font-bold text-lg hover:bg-stone-200 transition-colors">
                                 कामाचा नकाशा
                             </button>
+                            {/* PLR-D5 :65 — "आणखी सांगा" replaces "आणखी नोंद करा" (same reset, same mic). */}
                             <button onClick={handleReset} className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-emerald-800 transition-colors shadow-lg shadow-emerald-900/20">
-                                आणखी नोंद करा
+                                आणखी सांगा
                             </button>
                         </div>
                     </div>

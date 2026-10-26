@@ -80,6 +80,7 @@ import { DISPLAY_TIME_ZONE } from '../../shared/utils/displayTime';
 // It is one — `notQueuedBadge.test.tsx` binds to exactly this path.
 export { NotQueuedForServerBadge, LabourLogBanner } from './mainViewComponents';
 import { renderSavedView } from './savedView';
+import { currentVoiceResult, renderVoiceResultView } from './voiceResultView';
 
 // `TaskCloseConfirmSlot` moved to `savedView.tsx` with the branch that was
 // its only consumer.
@@ -234,8 +235,9 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
 
     // spec: plr-d10-redesign-real-integration-2026-10-25 (I12) — THE आजची कामे TAB IS NOW TWO THINGS.
     //   1. The REVIEW of a parsed entry / a log being corrected: shown exactly when the old screen
-    //      showed ManualEntry (manual mode with a crop/plot chosen). Unchanged here — the next lane
-    //      replaces it. It did gain the one-step "मागे" back to the mic of the same plots
+    //      showed ManualEntry (manual mode with a crop/plot chosen). Since I13 a successful parse of a
+    //      RECORDING no longer lands here (it auto-saves and shows the ONE result screen); typed text,
+    //      the हजेरी door, an empty parse and "बदला" still do. It did gain the one-step "मागे" back to the mic of the same plots
     //      (`ReviewBackBar`, I12-V1-M1): on the old screen the carousel + voice toggle above the form
     //      were the way to say it again or change the plots.
     //   2. Everything else: the founder-approved ENTRY flow (`LogEntryFlow`) — work home -> crop ->
@@ -518,7 +520,8 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                         onClick={handleReset}
                         className="mt-4 w-full rounded-xl bg-stone-900 py-4 text-lg font-bold text-white transition-colors hover:bg-emerald-800"
                     >
-                        आणखी नोंद करा
+                        {/* PLR-D5 :65 — "आणखी सांगा", the word नोंद removed from the screens after he speaks. */}
+                        आणखी सांगा
                     </button>
                 </div>
             )}
@@ -526,12 +529,14 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
             {/* The saved-to-ledger screen moved to `savedView.tsx` — 311 lines
                 of this file, and the only branch in it that closed over nothing
                 local. See that file for why it was the one that could move. */}
-            {status === 'success' && renderSavedView({
-                ...ctx,
-                // I12 — "आणखी नोंद करा" and the saved card's मागे land on the mic of the same plots
+            {status === 'success' && (() => {
+                // I12 — "आणखी सांगा" and the saved screen's मागे land on the mic of the same plots
                 // (the entry flow), not on an empty hand-filled form.
-                handleReset: () => { handleReset(); setMode('voice'); },
-            })}
+                const savedCtx = { ...ctx, handleReset: () => { handleReset(); setMode('voice'); } };
+                // I13 — a VOICE auto-save shows the ONE result screen; typed and हजेरी saves keep the saved card.
+                const voiceResult = currentVoiceResult(ctx);
+                return voiceResult ? renderVoiceResultView(savedCtx, voiceResult) : renderSavedView(savedCtx);
+            })()}
 
 
 

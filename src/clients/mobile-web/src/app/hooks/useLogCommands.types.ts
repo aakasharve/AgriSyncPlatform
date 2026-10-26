@@ -71,8 +71,20 @@ import type { LogCommandServiceImpl } from '../../application/services/LogComman
  */
 export type ManualSubmitOutcome = 'saved' | 'saved_with_warning' | 'not_saved' | 'already_saving';
 
+/** PLR-D10 I13 — how the voice auto-save calls `handleAutoSave`. */
+export interface AutoSaveOptions {
+    /** Stamp the logs "saved from a voice parse, no review" (server keeps them unconfirmed). */
+    autoSavedFromVoice?: boolean;
+    /**
+     * Runs right after the DURABLE phone write and before the screen turns to 'success', so whatever it
+     * records (the clip link, the result-screen state) is in place when that screen first reads it.
+     */
+    onWritten?: (logs: DailyLog[]) => Promise<void>;
+}
+
 export interface UseLogCommandsResult {
-    handleAutoSave: (logData: AgriLogResponse, provenance?: LogProvenance) => Promise<void>;
+    /** Resolves to the logs once they are on the phone, or null when nothing was written. */
+    handleAutoSave: (logData: AgriLogResponse, provenance?: LogProvenance, options?: AutoSaveOptions) => Promise<DailyLog[] | null>;
     handleFinalConfirm: (editedData: AgriLogResponse | null, draftLog: AgriLogResponse | null) => Promise<void>;
     // Pre-existing `any` (predates Task 3.5; tracked project-wide by
     // Sub-plan 04 Task 10 per eslint.config.js) — not introduced by this

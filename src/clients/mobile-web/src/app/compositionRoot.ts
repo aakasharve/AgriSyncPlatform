@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CropProfile, InputMode } from '../types';
+import type { VoiceDraftSink } from '../features/voice/useVoiceRecorder.types';
+import { useVoiceAutoSave } from './hooks/useVoiceAutoSave';
 
 // Feature Controllers
 import { useAppNavigation } from './hooks/useAppNavigation';
@@ -77,6 +79,9 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
     );
 
     // --- 4. VOICE RECORDER (Producer) ---
+    // PLR-D10 I13 — the voice auto-save is built after the commands it calls (step 5b), so the recorder
+    // reaches it through this ref. Until it is set, the hand-off declines and the review form is used.
+    const voiceDraftSink = useRef<VoiceDraftSink | null>(null);
     const voice = useVoiceRecorder({
         currentLogContext,
         hasActiveLogContext,
@@ -89,6 +94,7 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
         parser,
         logScope,
         voicePreprocessor,
+        onVoiceDraft: (draft, provenance, recording) => voiceDraftSink.current?.(draft, provenance, recording) ?? Promise.resolve(false),
     });
 
     // --- 5. COMMANDS (Consumer) ---
@@ -120,6 +126,18 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
         setCurrentRoute: navigation.setCurrentRoute,
         setLastLabourLogIds: navigation.setLastLabourLogIds
     });
+
+    // --- 5b. VOICE AUTO-SAVE (PLR-D10 I13) ---
+    const autoSave = useVoiceAutoSave({
+        handleAutoSave: commands.handleAutoSave,
+        logIntent: navigation.logIntent,
+        setStatus: voice.setStatus,
+    });
+    useEffect(() => { voiceDraftSink.current = autoSave.sink; }, [autoSave.sink]);
+    const { clearVoiceResult } = autoSave;
+    // Leaving the result (मागे, आणखी सांगा, a new recording) drops it, so it can never stand in for a later save.
+    const handleReset = () => { voice.handleResetVoice(); clearVoiceResult(); };
+
     useEffect(() => {
         const handleGlobalToast = (event: Event) => {
             const detail = (event as CustomEvent<GlobalToastDetail>).detail;
@@ -183,6 +201,7 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
     useEffect(() => {
         if (!hasActiveLogContext) {
             voice.handleResetVoice();
+            clearVoiceResult();
             const resetModeHandle = window.setTimeout(() => setMode('voice'), 0);
             return () => window.clearTimeout(resetModeHandle);
         }
@@ -197,7 +216,7 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
         navigation,
         context,
         data: appData,
-        voice: { ...voice, mode, setMode },
+        voice: { ...voice, mode, setMode, voiceResult: autoSave.voiceResult },
         weather,
         commands,
         trust,
@@ -209,6 +228,6 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
         lastSavedLogIds,
 
         // Handlers that cross domains
-        handleReset: voice.handleResetVoice,
+        handleReset,
     };
 };

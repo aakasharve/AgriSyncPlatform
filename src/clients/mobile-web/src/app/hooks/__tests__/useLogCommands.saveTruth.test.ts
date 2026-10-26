@@ -490,7 +490,9 @@ describe('useLogCommands — a save may not claim what was never queued (T2)', (
         enqueueLogsForSync.mockResolvedValue({ queuedLogIds: [], skippedLogIds: ['1'] });
 
         const { result } = renderHook(() => useLogCommands(props()));
-        paths.push(() => result.current.handleAutoSave({ summary: 'x' } as never));
+        // PLR-D10 I13 — handleAutoSave now resolves to the saved logs (its caller links the clip and
+        // opens the result screen); wrapped like handleManualSubmit below.
+        paths.push(async () => { await result.current.handleAutoSave({ summary: 'x' } as never); });
         paths.push(() => result.current.handleFinalConfirm({ summary: 'x' } as never, null));
         paths.push(() => result.current.handleWizardSubmit([makeLog('1')] as never));
         // fix rounds 1-2 (spec: 2026-08-14-founder-decisions-launch-cohort-and-scope)
