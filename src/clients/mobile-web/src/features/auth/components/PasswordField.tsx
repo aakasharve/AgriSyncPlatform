@@ -6,7 +6,9 @@
  * - Hidden by default (type="password").
  * - Eye icon toggle switches between type="password" and type="text".
  * - Value and onChange are controlled externally (no internal value state).
- * - Accessible: button aria-label toggles between "Show password" / "Hide password".
+ * - Accessible: button aria-label toggles between "Show password" / "Hide password" — or the
+ *   caller's own words (`showLabel` / `hideLabel`; spec plr-d10 I16 LANG-2: the login passes
+ *   them in the chosen language). Optional and additive: a caller that passes nothing is unchanged.
  * - Reuses existing auth input classes (no new visual style).
  * - Right padding prevents text from overlapping the icon button.
  * - Font: DM Sans for English/inputs (project font rule).
@@ -22,6 +24,10 @@ export interface PasswordFieldProps {
     onChange: (value: string) => void;
     disabled?: boolean;
     autoComplete?: string;
+    /** Screen-reader name of the eye while the password is hidden. */
+    showLabel?: string;
+    /** Screen-reader name of the eye while the password is shown. */
+    hideLabel?: string;
 }
 
 const PasswordField: React.FC<PasswordFieldProps> = ({
@@ -31,6 +37,8 @@ const PasswordField: React.FC<PasswordFieldProps> = ({
     onChange,
     disabled = false,
     autoComplete = 'current-password',
+    showLabel = 'Show password',
+    hideLabel = 'Hide password',
 }) => {
     const [isVisible, setIsVisible] = useState(false);
 
@@ -58,7 +66,7 @@ const PasswordField: React.FC<PasswordFieldProps> = ({
                 />
                 <button
                     type="button"
-                    aria-label={isVisible ? 'Hide password' : 'Show password'}
+                    aria-label={isVisible ? hideLabel : showLabel}
                     onClick={toggleVisibility}
                     disabled={disabled}
                     className="absolute inset-y-0 right-0 flex items-center px-3 text-stone-400 hover:text-stone-600 disabled:opacity-50"

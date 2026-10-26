@@ -3,11 +3,14 @@
  * Sends POST /user/auth/start-otp; on success hands off to OtpVerifyForm.
  *
  * Multi-tenant plan §3.6.
- * Design: emerald, Marathi-above-English, one decision per screen.
+ * Design: emerald, one decision per screen. spec: plr-d10-redesign-real-integration-2026-10-25
+ * (I16 — LANG-2): words in ONE language (`authCopy`), never Marathi and English side by side.
  */
 import React, { useRef, useState } from 'react';
 import { Phone } from 'lucide-react';
 import { startOtp, type StartOtpResponse, type OtpError } from '../data/otpClient';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { authCopy } from '../authCopy';
 
 interface OtpLoginFormProps {
     onOtpSent: (phone: string, response: StartOtpResponse) => void;
@@ -34,6 +37,8 @@ interface OtpLoginFormProps {
 const OtpLoginForm: React.FC<OtpLoginFormProps> = ({
     onOtpSent, consentSlot, sendBlocked = false, beforeSend, beforeSendFailedMessage, onPhoneChange,
 }) => {
+    const language = useOptionalLanguage()?.language ?? 'mr';
+    const c = authCopy(language).otp;
     const [phone, setPhone] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -51,7 +56,7 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({
             try {
                 await beforeSend();
             } catch {
-                setError(beforeSendFailedMessage ?? 'हे साठवता आलं नाही. / Could not save this.');
+                setError(beforeSendFailedMessage ?? c.saveFailed);
                 setIsLoading(false);
                 sendingRef.current = false;
                 return;
@@ -63,9 +68,10 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({
         } catch (err) {
             const otpErr = err as OtpError;
             if (otpErr.status === 429) {
-                setError('खूप जास्त विनंत्या. काही वेळाने प्रयत्न करा. / Too many requests. Try again later.');
+                setError(c.tooMany);
             } else {
-                setError(otpErr.message ?? 'OTP पाठवणे अयशस्वी. / Failed to send OTP.');
+                // The server's own message is English: shown only to someone who chose English.
+                setError(language === 'en' ? (otpErr.message ?? c.sendFailed) : c.sendFailed);
             }
         } finally {
             setIsLoading(false);
@@ -77,14 +83,14 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({
         <form onSubmit={handleSubmit} className="space-y-5">
             <div className="text-center space-y-1">
                 <h2 className="text-xl font-serif font-bold text-stone-800">
-                    लॉग इन करा
+                    {c.title}
                 </h2>
-                <p className="text-xs text-stone-500">Sign in with your phone number</p>
+                <p className="text-xs text-stone-500">{c.line}</p>
             </div>
 
             <div className="space-y-1">
                 <label htmlFor="otp-phone" className="block text-xs font-bold uppercase tracking-wide text-stone-500">
-                    मोबाईल नंबर · Phone
+                    {c.phone}
                 </label>
                 <div className="flex items-stretch overflow-hidden rounded-xl border border-stone-200 bg-white transition-colors focus-within:border-emerald-400 focus-within:ring-2 focus-within:ring-emerald-200/60">
                     <span className="flex select-none items-center gap-1.5 border-r border-stone-200 bg-stone-50/80 px-3 text-stone-700">
@@ -101,7 +107,7 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({
                             setError(null);
                             onPhoneChange?.(next);
                         }}
-                        placeholder="10-digit number"
+                        placeholder={c.phonePlaceholder}
                         autoComplete="tel"
                         className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm font-medium outline-none placeholder:text-stone-400"
                         disabled={isLoading}
@@ -124,7 +130,7 @@ const OtpLoginForm: React.FC<OtpLoginFormProps> = ({
                 disabled={isLoading || !phone.trim() || sendBlocked}
                 className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
             >
-                {isLoading ? 'OTP पाठवत आहे…' : 'OTP पाठवा / Send OTP'}
+                {isLoading ? c.sending : c.send}
             </button>
         </form>
     );

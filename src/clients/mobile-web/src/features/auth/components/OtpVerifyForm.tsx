@@ -15,6 +15,11 @@ import { verifyOtp, type StartOtpResponse, type OtpError } from '../data/otpClie
 import { setAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
 import { setRememberDevice } from '../../../infrastructure/storage/RememberDeviceStore';
 import { getOrCreateDeviceId } from '../../../infrastructure/storage/DeviceIdStore';
+// spec: plr-d10-redesign-real-integration-2026-10-25 (I16 — LANG-2, FR-8) — ONE language per screen
+// (`authCopy`), and the step's ONE "← मागे" back to the number.
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { authCopy } from '../authCopy';
+import { FirstRunBack } from '../../onboarding/firstRun/FirstRunShell';
 
 interface OtpVerifyFormProps {
     phone: string;
@@ -24,6 +29,9 @@ interface OtpVerifyFormProps {
 }
 
 const OtpVerifyForm: React.FC<OtpVerifyFormProps> = ({ phone, otpMeta, onVerified, onBack }) => {
+    const language = useOptionalLanguage()?.language ?? 'mr';
+    const copy = authCopy(language);
+    const c = copy.verify;
     const [otp, setOtp] = useState('');
     const [displayName, setDisplayName] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -90,13 +98,14 @@ const OtpVerifyForm: React.FC<OtpVerifyFormProps> = ({ phone, otpMeta, onVerifie
         } catch (err) {
             const otpErr = err as OtpError;
             if (otpErr.status === 401) {
-                setError('चुकीचा OTP. परत प्रयत्न करा. / Wrong OTP. Try again.');
+                setError(c.wrongCode);
             } else if (otpErr.status === 410) {
-                setError('OTP कालबाह्य झाला. / OTP expired. Go back and request a new one.');
+                setError(c.expired);
             } else if (otpErr.status === 429) {
-                setError('खूप जास्त प्रयत्न. / Too many attempts. Wait and try again.');
+                setError(c.tooMany);
             } else {
-                setError(otpErr.message ?? 'OTP पडताळणी अयशस्वी. / Verification failed.');
+                // The server's own message is English: shown only to someone who chose English.
+                setError(language === 'en' ? (otpErr.message ?? c.failed) : c.failed);
             }
         } finally {
             setIsLoading(false);
@@ -109,10 +118,11 @@ const OtpVerifyForm: React.FC<OtpVerifyFormProps> = ({ phone, otpMeta, onVerifie
 
     return (
         <form onSubmit={handleSubmit} className="space-y-5">
+            <FirstRunBack onBack={onBack} label={copy.back} testId="otp-verify-back" />
             <div className="text-center space-y-1">
-                <h2 className="text-xl font-display font-black text-stone-800">OTP टाका</h2>
-                <p className="text-xs text-stone-500">
-                    Enter the 6-digit code sent to <span className="font-mono font-bold text-stone-700">{maskedPhone}</span>
+                <h2 className="text-xl font-display font-black text-stone-800">{c.title}</h2>
+                <p className="text-xs text-stone-500" data-testid="otp-verify-sent-to">
+                    {c.sentTo(maskedPhone)}
                 </p>
             </div>
 
@@ -128,27 +138,27 @@ const OtpVerifyForm: React.FC<OtpVerifyFormProps> = ({ phone, otpMeta, onVerifie
                     className="block text-xs font-bold uppercase tracking-wide text-stone-500"
                     style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
                 >
-                    तुमचं नाव · Your name
+                    {c.name}
                 </label>
                 <input
                     id="otp-name"
                     type="text"
                     value={displayName}
                     onChange={e => setDisplayName(e.target.value)}
-                    placeholder="उदा. पुरुषोत्तम आरवे"
+                    placeholder={c.namePlaceholder}
                     autoComplete="name"
                     style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
                     className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm font-medium outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200/60"
                     disabled={isLoading}
                 />
                 <p className="text-[10px] text-stone-400" style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}>
-                    पहिल्यांदा येत असाल तरच लागेल · Only needed the first time
+                    {c.nameHint}
                 </p>
             </div>
 
             <div className="space-y-1">
                 <label htmlFor="otp-code" className="block text-xs font-bold uppercase tracking-wide text-stone-500">
-                    ६-अंकी कोड · 6-digit code
+                    {c.code}
                 </label>
                 <input
                     id="otp-code"
@@ -165,7 +175,7 @@ const OtpVerifyForm: React.FC<OtpVerifyFormProps> = ({ phone, otpMeta, onVerifie
                 />
                 {secondsLeft > 0 && (
                     <p className="text-[10px] text-stone-400 text-right">
-                        Resend in {secondsLeft}s
+                        {c.waitToResend(secondsLeft)}
                     </p>
                 )}
             </div>
@@ -187,10 +197,8 @@ const OtpVerifyForm: React.FC<OtpVerifyFormProps> = ({ phone, otpMeta, onVerifie
                     className="text-xs font-medium text-stone-600 select-none cursor-pointer"
                 >
                     <span style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}>
-                        हे डिव्हाइस लक्षात ठेवा
+                        {c.remember}
                     </span>
-                    {' · '}
-                    <span>Remember this device</span>
                 </label>
             </div>
 
@@ -205,15 +213,7 @@ const OtpVerifyForm: React.FC<OtpVerifyFormProps> = ({ phone, otpMeta, onVerifie
                 disabled={isLoading || otp.length !== 6}
                 className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
             >
-                {isLoading ? 'पडताळत आहे…' : 'पडताळा / Verify'}
-            </button>
-
-            <button
-                type="button"
-                onClick={onBack}
-                className="w-full text-xs font-semibold text-stone-500 hover:text-stone-700 py-1"
-            >
-                ← मागे जा / Back
+                {isLoading ? c.verifying : c.verify}
             </button>
         </form>
     );

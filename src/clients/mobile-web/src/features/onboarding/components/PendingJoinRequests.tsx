@@ -16,6 +16,7 @@
  */
 import React, { useState } from 'react';
 import { Clock3, PauseCircle } from 'lucide-react';
+import type { Language } from '../../../i18n/language';
 import { JOIN_BY_CODE_COPY } from './JoinByCodeScreen';
 
 /** PROPOSED Marathi. */
@@ -26,6 +27,19 @@ export const PENDING_SEAT_COPY = {
     withdrawFailed: 'आत्ता मागे घेता आलं नाही. इंटरनेट तपासून पुन्हा प्रयत्न करा.',
     pausedLine: `${JOIN_BY_CODE_COPY.pausedTitle}. ${JOIN_BY_CODE_COPY.pausedLine}`,
 } as const;
+
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I16, round-1 review F6) — the same lines in
+ * English, for the first run's 0-farm screen when the person chose English on स्वागत (one language
+ * per screen). Only a caller that passes `language="en"` gets them; every other caller is unchanged.
+ */
+const PENDING_SEAT_COPY_EN: Record<keyof typeof PENDING_SEAT_COPY, string> = {
+    requestLine: 'Request sent — waiting for the owner to approve',
+    withdraw: 'Withdraw the request',
+    withdrawing: 'Withdrawing…',
+    withdrawFailed: 'Could not withdraw it now. Check the internet and try again.',
+    pausedLine: 'Your work on this farm is paused. Talk to the owner.',
+};
 
 /** What a seat that is not Active means to the person holding it. */
 export type WaitingSeatKind = 'request' | 'paused';
@@ -48,9 +62,12 @@ export interface PendingJoinRequestsProps {
      */
     onWithdraw?: (farmId: string) => Promise<void>;
     testId?: string;
+    /** The screen's language. Marathi unless the caller says English. */
+    language?: Language;
 }
 
-const PendingJoinRequests: React.FC<PendingJoinRequestsProps> = ({ seats, onWithdraw, testId = 'pending-join-requests' }) => {
+const PendingJoinRequests: React.FC<PendingJoinRequestsProps> = ({ seats, onWithdraw, testId = 'pending-join-requests', language = 'mr' }) => {
+    const PENDING = language === 'en' ? PENDING_SEAT_COPY_EN : PENDING_SEAT_COPY;
     const [busyFarmId, setBusyFarmId] = useState<string | null>(null);
     const [failedFarmId, setFailedFarmId] = useState<string | null>(null);
 
@@ -87,7 +104,7 @@ const PendingJoinRequests: React.FC<PendingJoinRequestsProps> = ({ seats, onWith
                             <span>
                                 <span className="font-extrabold">{seat.name}</span>
                                 {': '}
-                                {kind === 'paused' ? PENDING_SEAT_COPY.pausedLine : PENDING_SEAT_COPY.requestLine}
+                                {kind === 'paused' ? PENDING.pausedLine : PENDING.requestLine}
                             </span>
                         </p>
                         {kind === 'request' && onWithdraw && (
@@ -98,12 +115,12 @@ const PendingJoinRequests: React.FC<PendingJoinRequestsProps> = ({ seats, onWith
                                 disabled={busyFarmId !== null}
                                 className="mt-2 rounded-xl border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-900 hover:border-amber-400 disabled:opacity-50"
                             >
-                                {busyFarmId === seat.farmId ? PENDING_SEAT_COPY.withdrawing : PENDING_SEAT_COPY.withdraw}
+                                {busyFarmId === seat.farmId ? PENDING.withdrawing : PENDING.withdraw}
                             </button>
                         )}
                         {failedFarmId === seat.farmId && (
                             <p role="alert" className="m-0 mt-2 text-xs font-bold text-rose-700">
-                                {PENDING_SEAT_COPY.withdrawFailed}
+                                {PENDING.withdrawFailed}
                             </p>
                         )}
                     </li>

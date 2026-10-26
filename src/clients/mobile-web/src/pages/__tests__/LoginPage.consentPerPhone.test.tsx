@@ -112,7 +112,8 @@ const passwordInput = (): HTMLInputElement => {
     return el;
 };
 const sendOtp = () => screen.getByRole('button', { name: /Send OTP|OTP पाठवा/ });
-const signIn = () => screen.getByRole('button', { name: /^sign in$/i });
+// spec: plr-d10 I16 (LANG-2) — one language per screen: "लॉग इन करा" (this file runs in Marathi).
+const signIn = () => screen.getByRole('button', { name: /^लॉग इन करा$/ });
 const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 40)); });
 
 async function renderLogin(): Promise<void> {
@@ -122,7 +123,7 @@ async function renderLogin(): Promise<void> {
 
 async function renderPasswordMode(): Promise<void> {
     render(<LoginPage />);
-    fireEvent.click(await screen.findByRole('button', { name: /use password/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /पासवर्डने लॉग इन करा/ }));
     await screen.findByTestId('consent-tick', {}, { timeout: 5000 });
 }
 
@@ -243,7 +244,7 @@ describe('(h) LoginPage OTP — the acceptance belongs to the number it was give
         expect(h.startOtp.mock.calls[0][0]).toBe(PHONE_A);
 
         // The OTP step's back control returns to the number, on the same mounted page.
-        fireEvent.click(await screen.findByRole('button', { name: /मागे जा/ }, { timeout: 5000 }));
+        fireEvent.click(await screen.findByRole('button', { name: 'मागे' }, { timeout: 5000 }));
         await waitFor(() => expect(document.querySelector('input[type="tel"]')).not.toBeNull());
 
         fireEvent.change(phoneInput(), { target: { value: PHONE_B } });

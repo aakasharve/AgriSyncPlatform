@@ -46,6 +46,7 @@ import { buildOversightHeaderInputs } from './app/helpers/appContentOversightInp
 // swipe path (`core/navigation/MainViewTransition.tsx`, wired in
 // `AppRouter.tsx`) both call it, so the two can never drift apart.
 import { isRecordingPathBusy } from './shared/utils/recordingPathBusy';
+import { useAuth } from './app/providers/AuthProvider';
 
 interface AppContentProps {
     crops: CropProfile[];
@@ -72,6 +73,19 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
     } = useFarmContextState();
 
     const currentFarmName = myFarms?.find(f => f.farmId === currentFarmId)?.name;
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I16 — FR-6/7) — the farm the person is now
+    // IN (Active seats only), for the first run's last two steps; its role is the server's.
+    const openFarm = myFarms?.find(f => f.farmId === currentFarmId) ?? myFarms?.[0] ?? null;
+    const hasOpenFarm = openFarm !== null;
+    const openFarmName = openFarm?.name ?? '';
+    const openFarmRole = openFarm?.role ?? '';
+    const firstRunFarm = useMemo(
+        () => (hasOpenFarm ? { name: openFarmName, role: openFarmRole } : null),
+        [hasOpenFarm, openFarmName, openFarmRole],
+    );
+    // FR-8: the 0-farm doors' "← मागे" goes back to the phone number — that is, signs out. The doors
+    // ask "बाहेर पडायचं?" first (FirstFarmDoors); only "बाहेर पडा" there calls this.
+    const { logout } = useAuth();
     const app = useAgriLogApp({ initialCrops, currentFarmId, currentFarmName });
     useTemplateCatalogSync();
 
@@ -212,18 +226,21 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 }}
             >
                 <AppFeatureProviders app={app} helpers={featureHelpers}>
-                    <AppRouter />
+                    {/* While the join door is open its own answer is on screen ("तुम्ही आधीच या
+                        शेतात आहात"…); the first-run steps wait until it is closed. */}
+                    <AppRouter firstRunFarm={showJoinByCode ? null : firstRunFarm} farmsKnown={myFarms !== null} />
                 </AppFeatureProviders>
             </main>
 
-            {/* Minimal 2-field onboarding shown to genuinely-new users (0 farms).
-                Replaces the force-opened heavy wizard on the 0-farm path. */}
+            {/* The 0-farm screen: two equal doors (my own farm → the 2-field form; I was invited →
+                the join door below). Replaces the force-opened heavy wizard on the 0-farm path. */}
             <MinimalOnboarding
                 isOpen={showMinimalOnboarding}
                 onComplete={handleWizardComplete}
                 onJoinViaQr={handleJoinViaQr}
                 pendingSeats={pendingFarms}
                 onWithdrawRequest={handleWithdrawRequest}
+                onBack={() => { void logout(); }}
             />
 
             {/* Heavy wizard — still available from AppHeader "create farm" CTA

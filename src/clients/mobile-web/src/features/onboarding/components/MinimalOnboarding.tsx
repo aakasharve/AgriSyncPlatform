@@ -1,15 +1,12 @@
 /**
- * MinimalOnboarding — 2-field stand-in shown to genuinely-new users who
- * have 0 farms after login.
+ * MinimalOnboarding — the screen a signed-in person with 0 farms sees.
  *
- * Design intent:
- *   - Matches the FirstFarmWizard visual language (same gradient, card
- *     radius, button style, Marathi-above-English copy) but is a single
- *     focused screen — no steps, no wizard chrome.
- *   - Mobile-first at 375 px.
- *   - Validates both fields are non-empty before enabling submit.
- *   - Shows an inline error on API failure + a spinner on the loading state.
- *   - "Join via QR" escape hatch for workers who belong to an existing farm.
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I16 — FR-3 / MU-1, FR-8, LANG-2) — it opens on
+ * two EQUAL doors (`FirstFarmDoors`): "माझं शेत सुरू करायचं" or "मला बोलावलं आहे". The first opens the
+ * same 2-field create-farm form as before (his name — kept, founder keep-every-feature rule — and the
+ * farm's name), now in the first run's look, in ONE language and with ONE "← मागे" back to the doors.
+ * The second opens the ONE join door (`JoinByCodeScreen`, via `onJoinViaQr`). There is no role
+ * question anywhere: the creator is मालक; a joiner's role is the owner's call.
  *
  * API: POST /bootstrap/first-farm  { farmName, farmerName }
  *   → BootstrapFirstFarmResponse.farmId drives the completion callback.
@@ -18,14 +15,29 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Sprout, ArrowRight, Users } from 'lucide-react';
 import {
     bootstrapFirstFarm,
     isInviteApiError,
     type BootstrapFirstFarmResponse,
 } from '../qr/inviteApi';
-import { JOIN_DOOR_LABEL } from '../qr/farmCodeEntry';
-import PendingJoinRequests, { type WaitingSeat } from './PendingJoinRequests';
+import { type WaitingSeat } from './PendingJoinRequests';
+import FirstFarmDoors from './FirstFarmDoors';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { firstRunCopy, type FirstRunCopy } from '../firstRun/firstRunCopy';
+import { FirstRunGlass, FirstRunHeading, FirstRunShell, GreenButton, Rise } from '../firstRun/FirstRunShell';
+
+/**
+ * The line for a failed POST /bootstrap/first-farm. The endpoint's own refusals
+ * (FirstFarmBootstrapEndpoints.cs): 401 (sign-in no longer valid) and 403
+ * `bootstrap.phone_not_verified`; its 400 `bootstrap.invalid_payload` (no farm name) cannot be sent
+ * from this form (the button needs a name). A request that never got an answer is the internet.
+ */
+export const createFailedLine = (err: unknown, c: FirstRunCopy['create']): string => {
+    if (!isInviteApiError(err)) return c.failed;
+    if (err.status === 401) return c.failedSignIn;
+    if (err.error === 'bootstrap.phone_not_verified') return c.failedPhone;
+    return c.failedServer;
+};
 
 interface MinimalOnboardingProps {
     isOpen: boolean;
@@ -40,7 +52,11 @@ interface MinimalOnboardingProps {
     pendingSeats?: WaitingSeat[];
     /** Withdraws a waiting request (server self-exit) and refreshes the farm lists. */
     onWithdrawRequest?: (farmId: string) => Promise<void>;
+    /** Back from the doors to the phone number (signs out). Not drawn without it. */
+    onBack?: () => void;
 }
+
+const INPUT = 'min-h-[56px] w-full rounded-2xl bg-white px-4 text-[19px] font-extrabold text-stone-900 outline-none ring-1 ring-stone-300 placeholder:font-semibold placeholder:text-stone-400 focus:ring-2 focus:ring-emerald-500 disabled:opacity-60';
 
 const MinimalOnboarding: React.FC<MinimalOnboardingProps> = ({
     isOpen,
@@ -48,7 +64,11 @@ const MinimalOnboarding: React.FC<MinimalOnboardingProps> = ({
     onJoinViaQr,
     pendingSeats = [],
     onWithdrawRequest,
+    onBack,
 }) => {
+    const language = useOptionalLanguage()?.language ?? 'mr';
+    const c = firstRunCopy(language);
+    const [step, setStep] = useState<'doors' | 'create'>('doors');
     const [farmerName, setFarmerName] = useState('');
     const [farmName, setFarmName] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -56,25 +76,42 @@ const MinimalOnboarding: React.FC<MinimalOnboardingProps> = ({
 
     const farmerNameRef = useRef<HTMLInputElement | null>(null);
 
-    // Reset state and focus the first field whenever the screen opens.
+    // Every opening starts at the two doors with an empty form.
     useEffect(() => {
         if (isOpen) {
+            setStep('doors');
             setFarmerName('');
             setFarmName('');
             setError(null);
             setLoading(false);
-            setTimeout(() => farmerNameRef.current?.focus(), 150);
         }
     }, [isOpen]);
 
+    useEffect(() => {
+        if (isOpen && step === 'create') {
+            const t = setTimeout(() => farmerNameRef.current?.focus(), 150);
+            return () => clearTimeout(t);
+        }
+    }, [isOpen, step]);
+
     if (!isOpen) return null;
+
+    if (step === 'doors') {
+        return (
+            <FirstFarmDoors
+                onStartOwnFarm={() => setStep('create')}
+                onJoin={onJoinViaQr}
+                onBack={onBack}
+                pendingSeats={pendingSeats}
+                onWithdrawRequest={onWithdrawRequest}
+            />
+        );
+    }
 
     const canSubmit = farmerName.trim().length >= 1 && farmName.trim().length >= 1 && !loading;
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const submit = async () => {
         if (!canSubmit) return;
-
         setError(null);
         setLoading(true);
         try {
@@ -82,185 +119,53 @@ const MinimalOnboarding: React.FC<MinimalOnboardingProps> = ({
             const result = await bootstrapFirstFarm(farmName, undefined, farmerName);
             onComplete(result);
         } catch (err) {
-            const msg = isInviteApiError(err)
-                ? err.message
-                : 'Could not reach the server. Please try again.';
-            setError(msg);
+            // The server's own message is English: shown only to someone who chose English. In Marathi
+            // each known refusal has its own line (round-1 review FR-3-b) — "check the internet" only
+            // when the request never reached the server.
+            if (language === 'en' && isInviteApiError(err)) setError(err.message);
+            else setError(createFailedLine(err, c.create));
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        /* z-[60]: above BottomNavigation (z-50) which is rendered after this
-           element in AppContent's DOM. Same stacking precedent as FirstFarmWizard. */
-        <div className="fixed inset-0 z-[60] flex flex-col bg-gradient-to-b from-emerald-50 via-stone-50 to-white">
-            <div className="flex-1 overflow-y-auto px-5 pb-10 pt-10 sm:px-8">
-                <div className="mx-auto flex min-h-full max-w-md flex-col">
-
-                    {/* Hero icon — mirrors FirstFarmWizard welcome step */}
-                    <div className="flex justify-center mb-8">
-                        <div className="relative">
-                            <div
-                                className="absolute inset-0 -z-10 rounded-full bg-emerald-200/40 blur-3xl"
-                                aria-hidden
-                            />
-                            <div className="flex h-24 w-24 items-center justify-center rounded-[2rem] bg-emerald-600 text-white shadow-xl shadow-emerald-200">
-                                <Sprout size={44} strokeWidth={1.75} />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Heading */}
-                    <div className="mb-8 text-center">
-                        {/* Marathi heading: font-display → DM Sans + Noto Sans Devanagari */}
-                        <h1 className="font-display text-[2rem] font-black leading-[1.15] text-stone-900">
-                            स्वागत आहे!
-                        </h1>
-                        <p
-                            className="mt-1 text-sm font-semibold text-stone-500"
-                            style={{ fontFamily: '"DM Sans", sans-serif' }}
-                        >
-                            Welcome to ShramSafal
-                        </p>
-                        <p className="mt-4 text-base font-semibold text-stone-700">
-                            चला सुरुवात करूया — दोन गोष्टी सांगा.
-                        </p>
-                        <p
-                            className="mt-0.5 text-sm text-stone-400"
-                            style={{ fontFamily: '"DM Sans", sans-serif' }}
-                        >
-                            Just two quick things to get started.
-                        </p>
-                    </div>
-
-                    {/* 2-field form */}
-                    <form onSubmit={handleSubmit} noValidate className="flex flex-1 flex-col gap-5">
-
-                        {/* Farmer Name */}
-                        <div className="flex flex-col gap-1.5">
-                            <label
-                                htmlFor="mo-farmer-name"
-                                className="text-sm font-bold text-stone-700"
-                            >
-                                तुमचे नाव
-                                <span
-                                    className="ml-1.5 font-normal text-stone-400"
-                                    style={{ fontFamily: '"DM Sans", sans-serif' }}
-                                >
-                                    (Your name)
-                                </span>
-                            </label>
-                            <input
-                                id="mo-farmer-name"
-                                ref={farmerNameRef}
-                                type="text"
-                                value={farmerName}
+        /* z-[60]: above BottomNavigation (z-50); the join door (z-[70]) opens over it. */
+        <FirstRunShell testId="first-farm-create" layer="z-[60]" onBack={loading ? undefined : () => setStep('doors')} backLabel={c.back}>
+            <form onSubmit={e => { e.preventDefault(); void submit(); }} noValidate className="flex flex-1 flex-col">
+                <Rise className="mt-4"><FirstRunHeading>{c.create.title}</FirstRunHeading></Rise>
+                <Rise d={0.1}><p className="m-0 mt-1 text-center text-[14.5px] font-semibold text-stone-600">{c.create.line}</p></Rise>
+                <Rise d={0.15} className="mt-6">
+                    <FirstRunGlass className="space-y-4">
+                        <label className="block" htmlFor="mo-farmer-name">
+                            <span className="text-[14px] font-extrabold text-stone-700">{c.create.farmerName}</span>
+                            <input id="mo-farmer-name" ref={farmerNameRef} type="text" value={farmerName}
                                 onChange={e => { setFarmerName(e.target.value); setError(null); }}
-                                maxLength={100}
-                                placeholder="उदा. पुरुषोत्तम पाटील"
-                                autoComplete="name"
-                                disabled={loading}
-                                className="w-full rounded-2xl border-2 border-stone-200 bg-white px-4 py-4 font-display text-xl font-black text-stone-900 outline-none placeholder:font-sans placeholder:text-stone-300 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 disabled:opacity-60"
-                            />
-                        </div>
-
-                        {/* Farm Name */}
-                        <div className="flex flex-col gap-1.5">
-                            <label
-                                htmlFor="mo-farm-name"
-                                className="text-sm font-bold text-stone-700"
-                            >
-                                शेताचे नाव
-                                <span
-                                    className="ml-1.5 font-normal text-stone-400"
-                                    style={{ fontFamily: '"DM Sans", sans-serif' }}
-                                >
-                                    (Farm name)
-                                </span>
-                            </label>
-                            <input
-                                id="mo-farm-name"
-                                type="text"
-                                value={farmName}
+                                maxLength={100} placeholder={c.create.farmerNamePlaceholder} autoComplete="name" disabled={loading}
+                                className={`mt-1 ${INPUT}`} />
+                        </label>
+                        <label className="block" htmlFor="mo-farm-name">
+                            <span className="text-[14px] font-extrabold text-stone-700">{c.create.farmName}</span>
+                            <input id="mo-farm-name" type="text" value={farmName}
                                 onChange={e => { setFarmName(e.target.value); setError(null); }}
-                                maxLength={120}
-                                placeholder="उदा. रामू पाटील शेत"
-                                autoComplete="off"
-                                disabled={loading}
-                                className="w-full rounded-2xl border-2 border-stone-200 bg-white px-4 py-4 font-display text-xl font-black text-stone-900 outline-none placeholder:font-sans placeholder:text-stone-300 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 disabled:opacity-60"
-                            />
-                        </div>
-
-                        {/* Inline error */}
+                                maxLength={120} placeholder={c.create.farmNamePlaceholder} autoComplete="off" disabled={loading}
+                                className={`mt-1 ${INPUT}`} />
+                        </label>
                         {error && (
-                            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                            <p role="alert" data-testid="first-farm-create-error" className="m-0 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[14px] font-bold text-rose-700">
                                 {error}
-                            </div>
-                        )}
-
-                        {/* Submit CTA — matches FirstFarmWizard button style exactly */}
-                        <div className="mt-auto pt-4">
-                            <button
-                                type="submit"
-                                disabled={!canSubmit}
-                                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-4 text-lg font-bold text-white shadow-lg shadow-emerald-200 transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                {loading ? (
-                                    <>
-                                        <span
-                                            className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white"
-                                            aria-hidden
-                                        />
-                                        <span>सुरू होत आहे…</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        सुरू करा
-                                        <ArrowRight size={20} />
-                                    </>
-                                )}
-                            </button>
-                            <p
-                                className="mt-2 text-center text-xs text-stone-400"
-                                style={{ fontFamily: '"DM Sans", sans-serif' }}
-                            >
-                                {loading ? 'Setting up your farm…' : 'Get started'}
                             </p>
-                        </div>
-                    </form>
-
-                    {pendingSeats.length > 0 && (
-                        <div className="mt-8">
-                            <PendingJoinRequests
-                                seats={pendingSeats}
-                                onWithdraw={onWithdrawRequest}
-                                testId="minimal-onboarding-pending"
-                            />
-                        </div>
-                    )}
-
-                    {/* Join-via-QR escape hatch — for workers joining an existing farm */}
-                    <div className="mt-8 flex flex-col items-center gap-2 pb-4">
-                        <p className="text-xs text-stone-400">
-                            दुसऱ्या शेतकऱ्याच्या शेतावर काम करता?
-                        </p>
-                        <button
-                            type="button"
-                            onClick={onJoinViaQr}
-                            disabled={loading}
-                            className="flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-4 py-2 text-xs font-bold text-stone-600 hover:border-stone-300 disabled:opacity-50"
-                        >
-                            <Users size={13} />
-                            {/* spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — opens the join
-                                door: the typed farm code as well as the QR. */}
-                            {JOIN_DOOR_LABEL}
-                        </button>
-                    </div>
-
-                </div>
-            </div>
-        </div>
+                        )}
+                    </FirstRunGlass>
+                </Rise>
+                <div className="flex-1" />
+                <Rise d={0.3} className="mt-6">
+                    <GreenButton type="submit" onClick={() => undefined} disabled={!canSubmit} testId="first-farm-create-submit">
+                        {loading ? c.create.submitting : c.create.submit}
+                    </GreenButton>
+                </Rise>
+            </form>
+        </FirstRunShell>
     );
 };
 

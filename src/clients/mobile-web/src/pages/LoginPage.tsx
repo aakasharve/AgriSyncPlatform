@@ -15,11 +15,12 @@ import { useConsentBeforeOtp } from '../features/consent/gate/useConsentBeforeOt
 // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the join button no longer pops a
 // window.prompt for a link. The server answers a farm code only for a signed-in person, so
 // the button says so plainly and the join door (code or QR) opens by itself after sign-in.
-import { JOIN_DOOR_LABEL, rememberJoinAfterSignIn } from '../features/onboarding/qr/farmCodeEntry';
-
-/** PROPOSED Marathi. */
-const JOIN_AFTER_SIGN_IN_HINT =
-    'आधी तुमच्या फोन नंबरने आत या. आत आल्यावर शेताचा कोड टाकायचं पान लगेच उघडेल. QR असेल तर तो फोनच्या कॅमेऱ्याने स्कॅन करा.';
+import { rememberJoinAfterSignIn } from '../features/onboarding/qr/farmCodeEntry';
+// spec: plr-d10-redesign-real-integration-2026-10-25 (I16 — LANG-2, FR-8) — every word on this page
+// in ONE language (`authCopy`; the join hint is the step-1 PROPOSED Marathi, unchanged), and ONE
+// "← मागे" back to स्वागत on the number step.
+import { authCopy } from '../features/auth/authCopy';
+import { FirstRunBack } from '../features/onboarding/firstRun/FirstRunShell';
 
 // Top-level auth mode. 'otp' is the single PUBLIC flow — real users enter their
 // phone, verify via OTP once, and the account is created-or-found by phone
@@ -59,17 +60,19 @@ const FarmFooter: React.FC = () => (
     </div>
 );
 
-const TrustItem: React.FC<{ icon: React.ReactNode; mr: string; en: string }> = ({ icon, mr, en }) => (
+const TrustItem: React.FC<{ icon: React.ReactNode; label: string }> = ({ icon, label }) => (
     <div className="flex flex-1 flex-col items-center gap-1 px-1 text-center">
         <span className="text-emerald-600">{icon}</span>
-        {/* Marathi here is small body text — the default sans stack falls back to
-            Noto Sans Devanagari; English/brand stays DM Sans. */}
-        <span className="text-[11px] font-bold leading-none text-stone-600">{mr}</span>
-        <span className="text-[10px] font-medium leading-none text-stone-400">{en}</span>
+        <span className="text-[11px] font-bold leading-none text-stone-600">{label}</span>
     </div>
 );
 
-const LoginPage: React.FC = () => {
+interface LoginPageProps {
+    /** Back to स्वागत (the step before this one in the first run). Not drawn on the OTP step, which has its own. */
+    onBack?: () => void;
+}
+
+const LoginPage: React.FC<LoginPageProps> = ({ onBack }) => {
     const { login, isLoading, authError, clearAuthError } = useAuth();
     const [topMode, setTopMode] = useState<TopMode>('otp');
     const [phone, setPhone] = useState('');
@@ -83,12 +86,17 @@ const LoginPage: React.FC = () => {
     const [otpPhone, setOtpPhone] = useState('');
     const [otpMeta, setOtpMeta] = useState<StartOtpResponse | null>(null);
 
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
+    const c = authCopy(language);
     // The number typed in the OTP form (it owns its own input). Consent belongs to the
     // number it was given for, so the hook is told which number is on screen.
     const [otpTypedPhone, setOtpTypedPhone] = useState('');
     const consent = useConsentBeforeOtp(topMode === 'otp' ? otpTypedPhone : phone);
     const [consentError, setConsentError] = useState<string | null>(null);
+    // AuthProvider's refusal text is English ("Login failed. Check phone/password…"); it is shown
+    // as it is only to someone who chose English (LANG-2 — the same rule as the OTP forms).
+    const shownAuthError = authError ? (language === 'en' ? authError : c.password.failed) : null;
+    const shownError = consentError ?? shownAuthError;
     // One press = one sign-in. `isLoading` only turns true inside login(), so without this a
     // second tap during the consent write would sign in twice.
     const submittingRef = useRef(false);
@@ -130,10 +138,15 @@ const LoginPage: React.FC = () => {
             <div className="h-full overflow-y-auto bg-gradient-to-b from-emerald-50/60 via-white to-emerald-50/40 text-stone-900">
                 <div className="relative flex min-h-full flex-col">
                     <div className="flex flex-1 flex-col items-center px-4 pt-9 pb-3 pl-safe-area pr-safe-area">
+                        {onBack && otpMeta === null && (
+                            <div className="-mt-5 mb-3 w-full max-w-sm">
+                                <FirstRunBack onBack={onBack} label={c.back} testId="login-back" />
+                            </div>
+                        )}
                         {/* Brand lockup (shield + wordmark + tagline) — optimized WebP. */}
                         <img
                             src="/brand/logo-full.webp"
-                            alt="ShramSafal — Trusted Daily Farm Work Companion"
+                            alt={c.logoAlt}
                             className="mb-6 h-auto w-[min(300px,82%)] select-none"
                             draggable={false}
                         />
@@ -163,7 +176,7 @@ const LoginPage: React.FC = () => {
                                     onClick={() => setTopMode('password')}
                                     className="text-[11px] text-stone-400 underline underline-offset-2 hover:text-stone-600"
                                 >
-                                    पासवर्डने लॉग इन करा / Use password
+                                    {c.usePassword}
                                 </button>
                             </div>
 
@@ -171,7 +184,7 @@ const LoginPage: React.FC = () => {
                             <div className="space-y-2 pt-1">
                                 <div className="flex items-center gap-2">
                                     <div className="h-px flex-1 bg-stone-200" />
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">कामाला येता?</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">{c.joinSeparator}</span>
                                     <div className="h-px flex-1 bg-stone-200" />
                                 </div>
                                 <button
@@ -181,11 +194,11 @@ const LoginPage: React.FC = () => {
                                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm font-bold text-emerald-700 transition-colors hover:bg-emerald-50"
                                 >
                                     <QrCode size={16} />
-                                    {JOIN_DOOR_LABEL}
+                                    {c.joinLabel}
                                 </button>
                                 {joinAfterSignIn && (
                                     <p role="status" data-testid="login-join-hint" className="m-0 rounded-xl bg-emerald-50 px-3 py-2 text-center text-[13px] font-bold leading-snug text-emerald-900 ring-1 ring-emerald-200">
-                                        {JOIN_AFTER_SIGN_IN_HINT}
+                                        {c.joinAfterSignInHint}
                                     </p>
                                 )}
                             </div>
@@ -193,11 +206,11 @@ const LoginPage: React.FC = () => {
 
                         {/* Trust signals */}
                         <div className="mt-7 flex w-full max-w-sm items-start justify-center">
-                            <TrustItem icon={<ShieldCheck size={20} strokeWidth={2.2} />} mr="सुरक्षित" en="Secure" />
+                            <TrustItem icon={<ShieldCheck size={20} strokeWidth={2.2} />} label={c.trustSecure} />
                             <div className="mt-1 h-8 w-px bg-stone-200" />
-                            <TrustItem icon={<UserCheck size={20} strokeWidth={2.2} />} mr="विश्वसनीय" en="Reliable" />
+                            <TrustItem icon={<UserCheck size={20} strokeWidth={2.2} />} label={c.trustReliable} />
                             <div className="mt-1 h-8 w-px bg-stone-200" />
-                            <TrustItem icon={<Sprout size={20} strokeWidth={2.2} />} mr="शेतकऱ्यांसाठी तयार" en="Built for Farmers" />
+                            <TrustItem icon={<Sprout size={20} strokeWidth={2.2} />} label={c.trustForFarmers} />
                         </div>
                     </div>
 
@@ -216,21 +229,21 @@ const LoginPage: React.FC = () => {
             <div className="w-full max-w-sm glass-panel p-6 space-y-5 shadow-xl border border-stone-200/70">
                 <img
                     src="/brand/logo-full.webp"
-                    alt="ShramSafal — Trusted Daily Farm Work Companion"
+                    alt={c.logoAlt}
                     className="mx-auto mb-1 h-auto w-[min(260px,76%)] select-none"
                     draggable={false}
                 />
                 <p className="text-center text-xs font-medium text-stone-500">
-                    Sign in with phone and password.
+                    {c.password.intro}
                 </p>
                 <button type="button" onClick={() => setTopMode('otp')} className="w-full text-xs font-bold text-emerald-600 hover:text-emerald-700 py-1 rounded-xl border border-emerald-200 bg-emerald-50">
-                    ← OTP ने लॉग इन करा / Back to OTP sign-in (recommended)
+                    ← {c.password.backToOtp}
                 </button>
 
                 <form className="space-y-4" onSubmit={handleSubmit}>
                     <div className="space-y-1">
                         <label htmlFor="auth-phone" className="block text-xs font-semibold text-stone-600 uppercase tracking-wide">
-                            Phone
+                            {c.password.phone}
                         </label>
                         <input
                             id="auth-phone"
@@ -251,7 +264,7 @@ const LoginPage: React.FC = () => {
 
                     <PasswordField
                         id="auth-password"
-                        label="Password"
+                        label={c.password.password}
                         value={password}
                         onChange={(val) => {
                             setPassword(val);
@@ -261,6 +274,8 @@ const LoginPage: React.FC = () => {
                         }}
                         autoComplete="current-password"
                         disabled={isLoading}
+                        showLabel={c.password.showPassword}
+                        hideLabel={c.password.hidePassword}
                     />
 
                     {/* spec: secure-remembered-device-sessions-2026-06-24 — Task 4.2
@@ -280,18 +295,16 @@ const LoginPage: React.FC = () => {
                             className="text-xs font-medium text-stone-600 select-none cursor-pointer"
                         >
                             <span style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}>
-                                हे डिव्हाइस लक्षात ठेवा
+                                {c.password.remember}
                             </span>
-                            {' · '}
-                            <span>Remember this device</span>
                         </label>
                     </div>
 
                     <ConsentTick consent={consent} disabled={isLoading} />
 
-                    {(consentError ?? authError) && (
+                    {shownError && (
                         <div role="alert" className="text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
-                            {consentError ?? authError}
+                            {shownError}
                         </div>
                     )}
 
@@ -300,7 +313,7 @@ const LoginPage: React.FC = () => {
                         disabled={isLoading || consent.recording || !consent.canSend}
                         className="w-full rounded-xl disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold text-sm py-2.5 transition-colors bg-emerald-600 hover:bg-emerald-700"
                     >
-                        {isLoading ? 'Signing in...' : 'Sign In'}
+                        {isLoading ? c.password.signingIn : c.password.signIn}
                     </button>
                 </form>
 
@@ -308,7 +321,7 @@ const LoginPage: React.FC = () => {
                     <div className="flex items-center gap-2">
                         <div className="flex-1 h-px bg-stone-200"></div>
                         <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
-                            मी कामाला येतो · I am a worker
+                            {c.password.workerSeparator}
                         </span>
                         <div className="flex-1 h-px bg-stone-200"></div>
                     </div>
@@ -319,21 +332,21 @@ const LoginPage: React.FC = () => {
                         className="w-full flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm font-bold text-emerald-700 hover:bg-emerald-50 transition-colors"
                     >
                         <QrCode size={16} />
-                        {JOIN_DOOR_LABEL}
+                        {c.joinLabel}
                     </button>
                     {joinAfterSignIn && (
                         <p role="status" data-testid="login-join-hint" className="m-0 rounded-xl bg-emerald-50 px-3 py-2 text-center text-[13px] font-bold leading-snug text-emerald-900 ring-1 ring-emerald-200">
-                            {JOIN_AFTER_SIGN_IN_HINT}
+                            {c.joinAfterSignInHint}
                         </p>
                     )}
                     <p className="text-[10px] text-stone-400 text-center leading-relaxed">
-                        Workers only need their phone number and the OTP. No password.
+                        {c.password.workerNote}
                     </p>
                 </div>
 
                 <div className="mt-6 text-center">
                     <p className="text-xs text-stone-400">
-                        AgriSync Platform v{APP_VERSION}
+                        {c.password.version} {APP_VERSION}
                     </p>
                 </div>
             </div>
