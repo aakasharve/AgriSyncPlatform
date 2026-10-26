@@ -215,6 +215,17 @@ export const CreateDailyLogPayload = z.object({
     // An UNKNOWN value is refused by the server (SyncInvalidPayload), never read
     // as absent: guessing the door would decide what gets written.
     captureScope: z.enum(['labour']).optional(),
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I13), FOUNDER DECISION
+    // 2026-09-02 — `true` = the phone saved this log straight from a voice parse,
+    // with no review tap. The server then does NOT self-attest the creator: the log
+    // stays Draft (one marker event, reason 'auto-saved-from-voice') until the
+    // farmer's own confirm through verify_log / verify_log_v2. "Captured" must never
+    // read as "reviewed".
+    //
+    // OPTIONAL, absent/false = today's behaviour exactly (an owner's own log is
+    // self-verified at creation), which is what every older client gets (P11). A
+    // plain boolean: no string or number stand-ins.
+    autoSavedFromVoice: z.boolean().optional(),
 });
 
 export type CreateDailyLogPayloadType = z.infer<typeof CreateDailyLogPayload>;

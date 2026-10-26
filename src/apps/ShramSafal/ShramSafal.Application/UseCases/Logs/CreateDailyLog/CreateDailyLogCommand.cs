@@ -79,7 +79,13 @@ public sealed record CreateDailyLogCommand(
     // B002 (PR #82 review), founder ruling 2026-08-31 — which door captured this
     // record. Added LAST with the default every existing caller means: the whole
     // parse, exactly as before. See DailyLogCaptureScope.
-    DailyLogCaptureScope CaptureScope = DailyLogCaptureScope.WholeDay)
+    DailyLogCaptureScope CaptureScope = DailyLogCaptureScope.WholeDay,
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I13), founder decision
+    // 2026-09-02 — the phone saved this log straight from a voice parse, with no review
+    // tap. When true the creator is NOT self-attested: the log stays Draft with the
+    // DailyLog.AutoSavedFromVoiceReason marker until a person's own verify act. Added
+    // LAST with the default every existing caller means (false = today's behaviour, P11).
+    bool AutoSavedFromVoice = false)
 {
     public string? IdempotencyKey
     {

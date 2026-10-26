@@ -488,8 +488,29 @@ public sealed class CreateDailyLogHandler(
         // Non-owner roles get nothing here: TrySelfVerifyAsCreator refuses any role that
         // does not hold BOTH FSM edges, so a Mukadam's log still lands on Draft and still
         // needs an owner. No FSM edge was added or widened.
-        var creatorRole = await repository.GetUserRoleForFarmAsync(
-            command.FarmId, command.OperatorUserId, ct);
+        //
+        // ── spec: plr-d10-redesign-real-integration-2026-10-25 (I13) ─────────────────
+        // FOUNDER DECISION 2026-09-02: a voice log is saved on a successful parse with no
+        // Save tap, and "ShramSafal captured his statement" must never read as "he
+        // reviewed it". So an auto-saved create is NOT self-attested: it gets ONE Draft
+        // marker event (DailyLog.AutoSavedFromVoiceReason) and waits for his own verify
+        // act. The flag can only LOWER the caller's own standing (fail-closed), so it is
+        // honoured for every role. Absent/false = the wave-1.3 path below, unchanged (P11).
+        // The marker never goes down to a phone (DtoMappingExtensions.WireVerificationEvents):
+        // the response below reads Draft with no events, like any unreviewed log today.
+        var autoSavedFromVoice = command.AutoSavedFromVoice;
+        if (autoSavedFromVoice)
+        {
+            log.MarkAutoSavedFromVoice(idGenerator.New(), clock.UtcNow);
+            logger.LogInformation(
+                "DailyLog {LogId} auto-saved from voice by operator {OperatorUserId} on farm {FarmId}; " +
+                "left in Draft for the farmer's own confirm (no self-attestation).",
+                log.Id, command.OperatorUserId, command.FarmId);
+        }
+
+        var creatorRole = autoSavedFromVoice
+            ? null
+            : await repository.GetUserRoleForFarmAsync(command.FarmId, command.OperatorUserId, ct);
         AppRole? selfAttestedAs = null;
         if (creatorRole is { } role
             && log.TrySelfVerifyAsCreator(idGenerator.New(), idGenerator.New(), role, clock.UtcNow))
@@ -686,6 +707,45 @@ public sealed class CreateDailyLogHandler(
                         selfAttested = true,
                         role = attestedRole.ToString(),
                         reason = Domain.Logs.DailyLog.SelfAttestationReason
+                    },
+                    farmId: command.FarmId,
+                    clientCommandId: command.ClientRequestId,
+                    appVersion: stampedAppVersion,
+                    deviceId: command.AuditDeviceId,
+                    ipHash: command.AuditIpHash,
+                    sourceAiJobId: validatedSourceAiJobId),
+                ct);
+        }
+
+        // spec: plr-d10 (I13) — the same I1 rule for the auto-save marker: a verification
+        // event nobody pressed a button for leaves a row in the audit ledger, written at the
+        // moment of the act. Status did not move (Draft -> Draft); the row says WHY no
+        // attestation was made, so "which days were only ever captured, never reviewed?"
+        // stays answerable from the ledger alone.
+        if (autoSavedFromVoice)
+        {
+            await repository.AddAuditEventAsync(
+                AuditEventFactory.Create(
+                    entityType: "DailyLog",
+                    entityId: log.Id,
+                    action: "VerificationChanged",
+                    actorUserId: command.OperatorUserId,
+                    actorRole: command.ActorRole ?? "unknown",
+                    payload: new
+                    {
+                        logId = log.Id,
+                        from = Domain.Logs.VerificationStatus.Draft.ToString(),
+                        to = Domain.Logs.VerificationStatus.Draft.ToString(),
+                        selfAttested = false,
+                        autoSavedFromVoice = true,
+                        reason = Domain.Logs.DailyLog.AutoSavedFromVoiceReason,
+                        // I13-V1-M2 — the phone SAYS this came from a voice parse; the server
+                        // only PROVES it when the create named an AiJob this farm owns. A
+                        // browser-side parse may have no AiJob, so a mismatch is recorded, not
+                        // refused: the ledger reads "flag set, provenance Manual, no proven
+                        // job" plainly instead of two facts silently contradicting (P8).
+                        sourceAiJobValidated = validatedSourceAiJobId is not null,
+                        provenanceSource = provenance.Source
                     },
                     farmId: command.FarmId,
                     clientCommandId: command.ClientRequestId,

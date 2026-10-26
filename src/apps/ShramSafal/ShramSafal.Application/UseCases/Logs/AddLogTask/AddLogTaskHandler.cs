@@ -210,6 +210,10 @@ public sealed class AddLogTaskHandler(
             // CorrectionPending) — those are already "not approved", nothing to re-open.
             reOpen = log.Edit(idGenerator.New(), new UserId(command.ActorUserId), reOpenAtUtc);
 
+            // spec: plr-d10 (I13) — a log the phone auto-saved from voice is never
+            // re-attested here: TrySelfVerifyAsCreator refuses it (DailyLog.
+            // AutoSavedFromVoiceReason), so it re-opens to Draft and waits for the
+            // farmer's own confirm, exactly like a day somebody else added to.
             if (reOpen is not null && command.ActorUserId == log.OperatorUserId.Value)
             {
                 // Authority from the DATABASE, never from command.ActorRole — the same
@@ -287,7 +291,10 @@ public sealed class AddLogTaskHandler(
                         trigger = "TaskAdded",
                         taskId = task.Id,
                         reAttestedByCreator = reAttested,
-                        role = reAttestedRole
+                        role = reAttestedRole,
+                        // spec: plr-d10 (I13) — says why an operator's own task did not
+                        // re-attest his day: it was captured by voice, never reviewed.
+                        autoSavedFromVoice = log.WasAutoSavedFromVoice
                     },
                     farmId: log.FarmId,
                     clientCommandId: command.ClientCommandId,

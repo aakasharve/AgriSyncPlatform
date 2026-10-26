@@ -102,5 +102,6 @@ public sealed record CreateDailyLogPayload(
     IReadOnlyList<LabourItem>? Labour = null,
     ManualDraftItem? ManualDraft = null,
     /// <summary>Allowed values: "labour".</summary>
-    string? CaptureScope = null
+    string? CaptureScope = null,
+    bool? AutoSavedFromVoice = null
 );
