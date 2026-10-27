@@ -34,7 +34,8 @@ public sealed record MyFarmProjection(
     string? FarmCode,
     Guid OwnerAccountId,
     AppRole? Role,
-    MembershipStatus Status = MembershipStatus.Active);
+    MembershipStatus Status = MembershipStatus.Active,
+    string? StatusReason = null);
 
 /// <summary>
 /// Labour V2 R1 Task 3.5b — one engagement's day-fact about a person, as read
@@ -1328,6 +1329,59 @@ public interface IShramSafalRepository
     Task<FarmMembership?> GetTrackedFarmMembershipIncludingTerminalAsync(
         Guid farmId, Guid userId, CancellationToken ct = default)
         => GetTrackedFarmMembershipAsync(farmId, userId, ct);
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2, plan §2 #1) — the person's standing on the
+    /// farm for <see cref="Services.FarmAccessPolicy"/>: the registrant (always every power), or
+    /// their live seat (any status, so the policy itself refuses a waiting or paused one) with its
+    /// role and stored permission choice; <c>null</c> when neither exists.
+    /// Default body (F7): built from <see cref="GetUserRoleForFarmAsync"/> — the Active-only role —
+    /// with the role's default permissions, so a test double answers what its role answers.
+    /// </summary>
+    async Task<Services.FarmAccess?> GetFarmAccessForUserAsync(
+        Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        var role = await GetUserRoleForFarmAsync(farmId, userId, ct);
+        return role is null
+            ? null
+            : new Services.FarmAccess(role.Value, MembershipStatus.Active, IsRegistrant: false, StoredPermissions: null);
+    }
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the person's most recently ENDED seat on the
+    /// farm (Revoked or Exited; newest by its last change), untracked, or <c>null</c>. The owner's
+    /// decision route reads it to answer a decline / removal re-sent after it landed. NOT for SEC-2:
+    /// the newest ended seat can be a request the person withdrew himself, which would hide the
+    /// owner's stop — the QR claim reads <see cref="GetFarmMembershipHistoryAsync"/> instead.
+    /// Default body: <c>null</c> (no history), so the in-tree test doubles keep their behaviour;
+    /// production overrides.
+    /// </summary>
+    Task<FarmMembership?> GetLatestEndedFarmMembershipAsync(
+        Guid farmId, Guid userId, CancellationToken ct = default)
+        => Task.FromResult<FarmMembership?>(null);
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2, SEC-2) — EVERY seat this person has had on the
+    /// farm (any status, ended ones included), untracked, oldest first. The QR claim reads the
+    /// whole history (<see cref="FarmMembership.HasUnansweredOwnerStop"/>) so a seat the person
+    /// ended himself (a withdrawn request) can never hide the owner's earlier stop. Default body:
+    /// empty (no history), so the in-tree test doubles keep their behaviour; production overrides.
+    /// </summary>
+    Task<IReadOnlyList<FarmMembership>> GetFarmMembershipHistoryAsync(
+        Guid farmId, Guid userId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<FarmMembership>>(Array.Empty<FarmMembership>());
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2, M-7 of the 27 Oct alignment) — the LAST FOUR
+    /// digits of each account's phone number (<c>public.users.phone</c>), keyed by user id. Names
+    /// are self-typed, so the owner's team screen shows who is really asking; only the tail, never
+    /// the whole number. Read ONLY by the owner-tier roster and the owner's decision answer. A user
+    /// with no row is absent (the phone then shows nothing, never an invented number). Default
+    /// body: empty, so the in-tree test doubles keep their behaviour; production overrides.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetPhoneLast4ByIdsAsync(
+        IEnumerable<Guid> userIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyDictionary<Guid, string>>(new Dictionary<Guid, string>());
     /// <summary>
     /// DFES (dfes-companion-2026-07-11) — all <see cref="ShramSafal.Domain.Dfes.DailyRichnessAggregate"/>
     /// rows for a farm (the Phase-3 engagement fold reads these). Default impl returns empty so the

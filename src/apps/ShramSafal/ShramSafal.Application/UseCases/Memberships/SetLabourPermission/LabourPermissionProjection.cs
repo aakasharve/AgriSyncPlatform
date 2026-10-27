@@ -17,7 +17,14 @@ namespace ShramSafal.Application.UseCases.Memberships.SetLabourPermission;
 /// </summary>
 internal static class LabourPermissionProjection
 {
-    public static LabourPermissionDto From(FarmMembership membership, DateTime nowUtc, string? displayName = null)
+    /// <param name="isRegistrant">spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — this member
+    /// registered the farm; only the caller knows (it reads the farm row).</param>
+    /// <param name="phoneLast4">spec: plr-d7-m1-multiuser-2026-10-26 (step 2, M-7) — the last four
+    /// digits of the member's phone, passed only by the owner-tier roster and the owner's decision
+    /// answer (never the grant-write response).</param>
+    public static LabourPermissionDto From(
+        FarmMembership membership, DateTime nowUtc, string? displayName = null, bool isRegistrant = false,
+        string? phoneLast4 = null)
     {
         var carriedByRole = LabourManagementPermission.IsCarriedByRole(membership.Role);
 
@@ -43,6 +50,19 @@ internal static class LabourPermissionProjection
             Source: source,
             IsGrantEditable: !carriedByRole,
             LabourGrantExpiresAtUtc: hasEffectiveGrant ? membership.LabourGrantExpiresAtUtc : null,
-            DisplayName: displayName);
+            DisplayName: displayName,
+            // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the SAME effective rule the gates
+            // use (FarmMembership.EffectivePermissions → FarmPermissionDefaults.Effective), so the
+            // card cannot claim a power the server refuses. The registrant holds every power.
+            Permissions: FarmPermissionDefaults.Names(
+                isRegistrant && membership.Status == MembershipStatus.Active
+                    ? FarmPermissionDefaults.All
+                    : membership.EffectivePermissions),
+            StatusReason: membership.StatusReason,
+            IsRegistrant: isRegistrant,
+            JoinedVia: membership.JoinedVia.ToString(),
+            RequestedAtUtc: membership.GrantedAtUtc,
+            PhoneLast4: string.IsNullOrWhiteSpace(phoneLast4) ? null : phoneLast4,
+            ApprovedByOwner: membership.ApprovedByUserId is not null);
     }
 }

@@ -54,7 +54,17 @@ public sealed record FarmMembershipSnapshot(
     string JoinedVia,
     DateTime GrantedAtUtc,
     DateTime? LastSeenAtUtc,
-    SubscriptionSnapshot? Subscription);
+    SubscriptionSnapshot? Subscription,
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — ADDITIVE. The seat's EFFECTIVE permission
+    // names, computed by the composition-root reader with ShramSafal's one rule
+    // (FarmPermissionDefaults; empty for a seat that is not Active, every name for the registrant),
+    // so this context never re-derives another context's rule.
+    IReadOnlyList<string>? Permissions = null,
+    // The owner's reason for the last decision (shown to a paused person).
+    string? StatusReason = null,
+    // The labour grant (hajeri / pakka) as stored; the handler evaluates the end date with its clock.
+    bool HasLabourGrant = false,
+    DateTime? LabourGrantExpiresAtUtc = null);
 
 public sealed record AffiliationSnapshot(
     string? ReferralCode,

@@ -1068,7 +1068,10 @@ internal sealed class ShramSafalRepository(
             // hold a PendingApproval request; the status says so (the registrant always has
             // access, whatever his own seat row says — the same shortcut every gate applies).
             var status = isRegistrant || seat is null ? MembershipStatus.Active : seat.Status;
-            return new MyFarmProjection(farmId, f.Name, f.FarmCode, (Guid)f.OwnerAccountId, role, status);
+            // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — a paused person is told WHY (the
+            // owner's written reason); no other status carries one to the person.
+            var reason = status == MembershipStatus.Suspended ? seat?.StatusReason : null;
+            return new MyFarmProjection(farmId, f.Name, f.FarmCode, (Guid)f.OwnerAccountId, role, status, reason);
         }).ToList();
     }
 
@@ -2027,6 +2030,102 @@ internal sealed class ShramSafalRepository(
                 || m.Status == MembershipStatus.Exited ? 1 : 0)
             .ThenByDescending(m => m.ModifiedAtUtc)
             .FirstOrDefaultAsync(ct);
+    }
+
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — see the port. The registrant first (the
+    // same shortcut every gate applies), then the ONE live seat (any status: the policy refuses a
+    // waiting or paused one itself, so it can tell "paused" from "never a member" if it ever needs
+    // to). Read under whatever farm scope the caller already established.
+    public async Task<ShramSafal.Application.Services.FarmAccess?> GetFarmAccessForUserAsync(
+        Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+        var typedUserId = new UserId(userId);
+
+        var isRegistrant = await db.Farms
+            .AsNoTracking()
+            .AnyAsync(f => f.Id == typedFarmId && f.OwnerUserId == typedUserId, ct);
+        if (isRegistrant)
+        {
+            return new ShramSafal.Application.Services.FarmAccess(
+                AppRole.PrimaryOwner, MembershipStatus.Active, IsRegistrant: true, StoredPermissions: null);
+        }
+
+        var seat = await db.FarmMemberships
+            .AsNoTracking()
+            .Where(m => m.FarmId == typedFarmId && m.UserId == typedUserId
+                && m.Status != MembershipStatus.Revoked && m.Status != MembershipStatus.Exited)
+            .Select(m => new { m.Role, m.Status, m.Permissions })
+            .FirstOrDefaultAsync(ct);
+
+        return seat is null
+            ? null
+            : new ShramSafal.Application.Services.FarmAccess(seat.Role, seat.Status, IsRegistrant: false, seat.Permissions);
+    }
+
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, SEC-2) — see the port. Newest ended seat by its
+    // last change (an exit or a removal is the row's last write).
+    public async Task<FarmMembership?> GetLatestEndedFarmMembershipAsync(
+        Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+        var typedUserId = new UserId(userId);
+
+        return await db.FarmMemberships
+            .AsNoTracking()
+            .Where(m => m.FarmId == typedFarmId && m.UserId == typedUserId
+                && (m.Status == MembershipStatus.Revoked || m.Status == MembershipStatus.Exited))
+            .OrderByDescending(m => m.ModifiedAtUtc)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, SEC-2) — see the port. Every seat, oldest first,
+    // read under whatever farm scope the caller already established (the QR claim: the token's farm).
+    public async Task<IReadOnlyList<FarmMembership>> GetFarmMembershipHistoryAsync(
+        Guid farmId, Guid userId, CancellationToken ct = default)
+    {
+        var typedFarmId = new FarmId(farmId);
+        var typedUserId = new UserId(userId);
+
+        return await db.FarmMemberships
+            .AsNoTracking()
+            .Where(m => m.FarmId == typedFarmId && m.UserId == typedUserId)
+            .OrderBy(m => m.GrantedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, M-7) — see the port. Only the last four digits
+    // leave the database (right(phone, 4)); public.users carries no RLS policy (global directory),
+    // the same cross-schema read GetOperatorsByIdsAsync makes on every pull.
+    public async Task<IReadOnlyDictionary<Guid, string>> GetPhoneLast4ByIdsAsync(
+        IEnumerable<Guid> userIds, CancellationToken ct = default)
+    {
+        var ids = userIds.Where(id => id != Guid.Empty).Distinct().ToArray();
+
+        // No public.users directory without a relational provider (the in-memory test hosts):
+        // no phone tail, never an invented one — the same guard as GetOperatorsByIdsAsync.
+        if (ids.Length == 0 || !db.Database.IsRelational())
+        {
+            return new Dictionary<Guid, string>();
+        }
+
+        var rows = await db.Database
+            .SqlQueryRaw<PhoneTailRow>(
+                """
+                select u."Id" as "UserId", right(u.phone, 4) as "PhoneLast4"
+                from public.users u
+                where u."Id" = ANY(@ids) and length(u.phone) >= 4
+                """,
+                new Npgsql.NpgsqlParameter("ids", ids))
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(r => r.UserId, r => r.PhoneLast4);
+    }
+
+    private sealed class PhoneTailRow
+    {
+        public Guid UserId { get; set; }
+        public string PhoneLast4 { get; set; } = string.Empty;
     }
     // --- spec: dfes-companion-2026-07-11 (wave-4.4) — founder model, 2026-08-17 -------
     // The farms this user OWNS, kept apart from the farms he merely belongs to.

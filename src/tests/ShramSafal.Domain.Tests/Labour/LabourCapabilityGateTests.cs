@@ -139,6 +139,40 @@ public sealed class LabourCapabilityGateTests
             "each real change is explainable afterwards — and there are exactly two changes, not four");
     }
 
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2, verifier SEC-MU2-1) — a WAITING request
+    /// (typed farm code, PendingApproval) is not a person anyone may hand हजेरी व पक्कं to: who he
+    /// becomes is the primary owner's approval alone. Refused for the owner and a co-owner alike,
+    /// nothing stored, no history. CONTROL: a paused (let-in) person can still be granted.
+    /// </summary>
+    [Fact]
+    public async Task A_waiting_request_cannot_be_granted_but_a_paused_member_can()
+    {
+        var repo = new FakeRepo();
+        repo.SetRole(FarmA, OwnerA, AppRole.PrimaryOwner);
+        var coOwner = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        repo.SetRole(FarmA, coOwner, AppRole.SecondaryOwner);
+        var waiting = repo.AddWaitingRequest(FarmA, WorkerA);
+        var handler = new SetLabourPermissionHandler(repo, new FixedClock(Now));
+
+        foreach (var caller in new[] { OwnerA, coOwner })
+        {
+            var refused = await handler.HandleAsync(Set(FarmA, WorkerA, true, caller));
+            refused.IsFailure.Should().BeTrue();
+            refused.Error.Code.Should().Contain("Forbidden");
+        }
+
+        waiting.CanManageLabourRecords.Should().BeFalse("nothing is stored on a waiting request");
+        repo.AuditActions.Should().BeEmpty();
+        repo.SaveCalls.Should().Be(0);
+
+        var paused = repo.AddMembership(FarmA, MukadamA, AppRole.Mukadam);
+        paused.Suspend(new UserId(OwnerA), "थांबा", Now.AddHours(-1));
+        var granted = await handler.HandleAsync(Set(FarmA, MukadamA, true, OwnerA));
+        granted.IsSuccess.Should().BeTrue();
+        paused.CanManageLabourRecords.Should().BeTrue();
+    }
+
     [Fact]
     public async Task Re_sending_the_state_the_row_already_holds_succeeds_and_records_no_history()
     {
@@ -613,6 +647,11 @@ public sealed class LabourCapabilityGateTests
         public int GrantReads { get; private set; }
         public int SaveCalls { get; private set; }
         public List<string> AuditActions { get; } = [];
+
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the roster reads the farm to mark its
+        // registrant. No farm row here: nobody on these rosters is the registrant.
+        public override Task<Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default)
+            => Task.FromResult<Farm?>(null);
         public List<ShramSafal.Domain.Audit.AuditEvent> Audits { get; } = [];
         public bool LeakForeignMembershipsFromRoster { get; set; }
         public bool LeakForeignMembershipFromTrackedRead { get; set; }
@@ -628,6 +667,15 @@ public sealed class LabourCapabilityGateTests
                 Guid.NewGuid(), new FarmId(farmId), new UserId(userId), role, Now);
             _memberships.Add(membership);
             return membership;
+        }
+
+        /// <summary>A typed-code join request (PendingApproval, Worker placeholder) — no role read
+        /// answers for it (BN-1: only Active seats are members).</summary>
+        public FarmMembership AddWaitingRequest(Guid farmId, Guid userId)
+        {
+            var request = FarmMembership.CreateJoinRequest(Guid.NewGuid(), new FarmId(farmId), new UserId(userId), Now);
+            _memberships.Add(request);
+            return request;
         }
 
         public void AddLog(DailyLog log) => _logs[log.Id] = log;

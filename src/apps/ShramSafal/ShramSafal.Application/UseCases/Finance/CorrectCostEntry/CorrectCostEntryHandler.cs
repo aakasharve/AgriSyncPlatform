@@ -7,6 +7,8 @@ using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
+using ShramSafal.Application.Services;
+using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
 
@@ -46,6 +48,15 @@ public sealed class CorrectCostEntryHandler(
 
         var actorRole = await repository.GetUserRoleForFarmAsync((Guid)entry.FarmId, command.CorrectedByUserId, ct);
         if (actorRole is not AppRole.PrimaryOwner and not AppRole.SecondaryOwner)
+        {
+            return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.Forbidden);
+        }
+
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — correcting a cost is CHANGING money: the
+        // AddCost permission. Founder D-22 (26 Oct): a co-owner label grants nothing by itself, so a
+        // co-owner corrects only when the primary owner stored AddCost for him; the primary owner
+        // always may.
+        if (!await FarmPermissionGate.HasAsync(repository, (Guid)entry.FarmId, command.CorrectedByUserId, FarmPermission.AddCost, ct))
         {
             return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.Forbidden);
         }

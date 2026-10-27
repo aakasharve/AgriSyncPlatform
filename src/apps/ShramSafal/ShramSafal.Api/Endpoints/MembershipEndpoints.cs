@@ -10,6 +10,7 @@ using ShramSafal.Application.UseCases.Memberships.ExitMembership;
 using ShramSafal.Application.UseCases.Memberships.GetLabourPermissions;
 using ShramSafal.Application.UseCases.Memberships.GetMyFarms;
 using ShramSafal.Application.UseCases.Memberships.JoinByCode;
+using ShramSafal.Application.UseCases.Memberships.ManageMembership;
 using ShramSafal.Application.UseCases.Memberships.IssueFarmInvite;
 using ShramSafal.Application.UseCases.Memberships.RotateFarmInvite;
 using ShramSafal.Application.UseCases.Memberships.SetLabourPermission;
@@ -413,6 +414,158 @@ public static class MembershipEndpoints
         })
         .WithName("SetFarmLabourPermission");
 
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, AC2) — the owner's decisions about one
+        // person. Six routes, one pipeline-wrapped handler (ManageMembershipHandler: the PRIMARY
+        // owner only — founder D-22 — never self, never the registrant, last owner stays, one
+        // audit row per real change). Every answer is the person's roster row
+        // (LabourPermissionDto, the same shape GET labour-permissions returns), so the phone
+        // adopts the server's truth rather than assuming its request landed.
+        //   POST farms/{farmId}/memberships/{userId}/approve  {role, permissions?, grantLabour?}
+        //   POST farms/{farmId}/memberships/{userId}/decline  {reason?}
+        //   POST farms/{farmId}/memberships/{userId}/suspend  {reason?}
+        //   POST farms/{farmId}/memberships/{userId}/restore
+        //   POST farms/{farmId}/memberships/{userId}/remove   {reason?}
+        //   PUT  farms/{farmId}/memberships/{userId}/access   {role?, permissions?, resetPermissions?, labourGrant?}
+        // Errors: 403 (no body — not an owner, self, registrant, not on this farm), 409
+        // {error:"membership.last_owner"|"membership.wrong_status"}, 400 InvalidCommand.
+        group.MapPost("/farms/{farmId:guid}/memberships/{targetUserId:guid}/approve", async Task<IResult> (
+            Guid farmId, Guid targetUserId, ApproveMembershipRequest? request, HttpContext httpContext,
+            ClaimsPrincipal user, IHandler<ManageMembershipCommand, LabourPermissionDto> handler,
+            ICallerFarmTenantScope scope, CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // Scope first (the pipeline's owner check issues its first command before it
+            // publishes a tenant claim) — same as labour-permissions.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
+            }
+
+            return await DecideAsync(farmId, targetUserId, userId, MembershipDecision.Approve, httpContext, handler, ct,
+                role: request?.Role, permissions: request?.Permissions, grantLabour: request?.GrantLabour == true);
+        })
+        .WithName("ApproveFarmMembership");
+
+        group.MapPost("/farms/{farmId:guid}/memberships/{targetUserId:guid}/decline", async Task<IResult> (
+            Guid farmId, Guid targetUserId, MembershipReasonRequest? request, HttpContext httpContext,
+            ClaimsPrincipal user, IHandler<ManageMembershipCommand, LabourPermissionDto> handler,
+            ICallerFarmTenantScope scope, CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // Scope first (the pipeline's owner check issues its first command before it
+            // publishes a tenant claim) — same as labour-permissions.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
+            }
+
+            return await DecideAsync(farmId, targetUserId, userId, MembershipDecision.Decline, httpContext, handler, ct,
+                reason: request?.Reason);
+        })
+        .WithName("DeclineFarmMembership");
+
+        group.MapPost("/farms/{farmId:guid}/memberships/{targetUserId:guid}/suspend", async Task<IResult> (
+            Guid farmId, Guid targetUserId, MembershipReasonRequest? request, HttpContext httpContext,
+            ClaimsPrincipal user, IHandler<ManageMembershipCommand, LabourPermissionDto> handler,
+            ICallerFarmTenantScope scope, CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // Scope first (the pipeline's owner check issues its first command before it
+            // publishes a tenant claim) — same as labour-permissions.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
+            }
+
+            return await DecideAsync(farmId, targetUserId, userId, MembershipDecision.Suspend, httpContext, handler, ct,
+                reason: request?.Reason);
+        })
+        .WithName("SuspendFarmMembership");
+
+        group.MapPost("/farms/{farmId:guid}/memberships/{targetUserId:guid}/restore", async Task<IResult> (
+            Guid farmId, Guid targetUserId, HttpContext httpContext,
+            ClaimsPrincipal user, IHandler<ManageMembershipCommand, LabourPermissionDto> handler,
+            ICallerFarmTenantScope scope, CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // Scope first (the pipeline's owner check issues its first command before it
+            // publishes a tenant claim) — same as labour-permissions.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
+            }
+
+            return await DecideAsync(farmId, targetUserId, userId, MembershipDecision.Restore, httpContext, handler, ct);
+        })
+        .WithName("RestoreFarmMembership");
+
+        group.MapPost("/farms/{farmId:guid}/memberships/{targetUserId:guid}/remove", async Task<IResult> (
+            Guid farmId, Guid targetUserId, MembershipReasonRequest? request, HttpContext httpContext,
+            ClaimsPrincipal user, IHandler<ManageMembershipCommand, LabourPermissionDto> handler,
+            ICallerFarmTenantScope scope, CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // Scope first (the pipeline's owner check issues its first command before it
+            // publishes a tenant claim) — same as labour-permissions.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
+            }
+
+            return await DecideAsync(farmId, targetUserId, userId, MembershipDecision.Remove, httpContext, handler, ct,
+                reason: request?.Reason);
+        })
+        .WithName("RemoveFarmMembership");
+
+        group.MapPut("/farms/{farmId:guid}/memberships/{targetUserId:guid}/access", async Task<IResult> (
+            Guid farmId, Guid targetUserId, SetMemberAccessRequest? request, HttpContext httpContext,
+            ClaimsPrincipal user, IHandler<ManageMembershipCommand, LabourPermissionDto> handler,
+            ICallerFarmTenantScope scope, CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // Scope first (the pipeline's owner check issues its first command before it
+            // publishes a tenant claim) — same as labour-permissions.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
+            }
+
+            return await DecideAsync(farmId, targetUserId, userId, MembershipDecision.SetAccess, httpContext, handler, ct,
+                role: request?.Role, permissions: request?.Permissions, resetPermissions: request?.ResetPermissions == true,
+                labourGrant: request?.LabourGrant);
+        })
+        .WithName("SetFarmMemberAccess");
+
         // Minimal "my farms" list so the frontend can resolve the real farmId.
         //
         // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, P11) — `?includePending=true` (sent by this
@@ -439,6 +592,47 @@ public static class MembershipEndpoints
         .WithName("GetMyFarms");
 
         return group;
+    }
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the shared tail of the six owner-decision
+    /// routes, AFTER each route established the caller's farm scope: the pipeline-wrapped handler.
+    /// The acting owner is the JWT subject; the target comes from the path, never the body.
+    /// </summary>
+    private static async Task<IResult> DecideAsync(
+        Guid farmId,
+        Guid targetUserId,
+        Guid callerUserId,
+        MembershipDecision decision,
+        HttpContext httpContext,
+        IHandler<ManageMembershipCommand, LabourPermissionDto> handler,
+        CancellationToken ct,
+        string? role = null,
+        IReadOnlyList<string>? permissions = null,
+        bool grantLabour = false,
+        bool resetPermissions = false,
+        string? reason = null,
+        bool? labourGrant = null)
+    {
+        var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+        var result = await handler.HandleAsync(
+            new ManageMembershipCommand(
+                new FarmId(farmId),
+                new UserId(targetUserId),
+                new UserId(callerUserId),
+                decision,
+                Role: role,
+                Permissions: permissions,
+                ResetPermissions: resetPermissions,
+                GrantLabour: grantLabour,
+                LabourGrant: labourGrant,
+                Reason: reason,
+                ClientAppVersion: ResolveClientAppVersion(httpContext),
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash),
+            ct);
+
+        return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
     }
 
     /// <summary>
@@ -528,3 +722,34 @@ public sealed record JoinByCodeRequest(string? FarmCode);
 public sealed record SetLabourPermissionRequest(
     bool CanManageLabourRecords,
     DateTime? LabourGrantExpiresAtUtc = null);
+
+/// <summary>
+/// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — body of
+/// <c>POST farms/{farmId}/memberships/{userId}/approve</c>: the role the OWNER chooses
+/// ("Worker" / "Mukadam"; a co-owner / family seat waits for step 2b), optional permission names
+/// to store (absent = the
+/// role's defaults), and the हजेरी व पक्कं switch as DESIRED state: <c>true</c> for the "काम + हजेरी"
+/// choice, absent / <c>false</c> = off — a grant left on the waiting request does not survive an
+/// approval as "काम सांगणे".
+/// </summary>
+public sealed record ApproveMembershipRequest(
+    string? Role,
+    IReadOnlyList<string>? Permissions = null,
+    bool? GrantLabour = null);
+
+/// <summary>spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the owner's words for a decline, pause or removal.</summary>
+public sealed record MembershipReasonRequest(string? Reason);
+
+/// <summary>
+/// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — body of
+/// <c>PUT farms/{farmId}/memberships/{userId}/access</c>: the DESIRED role and / or permission
+/// names, or <c>resetPermissions</c> = back to the role's defaults. A NEW role starts from that
+/// role's defaults (stored permissions and the हजेरी व पक्कं grant) unless this same body names
+/// them; absent on an unchanged role = keep. <c>labourGrant</c> = the हजेरी व पक्कं switch as
+/// DESIRED state (the "काम + हजेरी" choice sends <c>true</c>, "काम सांगणे" <c>false</c>).
+/// </summary>
+public sealed record SetMemberAccessRequest(
+    string? Role = null,
+    IReadOnlyList<string>? Permissions = null,
+    bool? ResetPermissions = null,
+    bool? LabourGrant = null);

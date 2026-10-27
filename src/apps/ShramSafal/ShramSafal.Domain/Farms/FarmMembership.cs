@@ -97,6 +97,106 @@ public sealed class FarmMembership : Entity<Guid>
     public DateTime? LabourGrantExpiresAtUtc { get; private set; }
 
     /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — what the owner switched on for this person,
+    /// beyond the role. <c>null</c> = the role's defaults (every row written before step 2), so an
+    /// old row answers exactly what its role answers (P11). Read it through
+    /// <see cref="EffectivePermissions"/>, never on its own.
+    /// </summary>
+    public FarmPermission? Permissions { get; private set; }
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the owner's written reason for the last
+    /// status decision (pause, removal, decline). A PAUSED person is shown it ("काम थांबवलं —
+    /// कारण…"); a decline or removal reason is kept as history only — the ended seat is no longer
+    /// listed to that person (<c>/me/context</c> and <c>/farms/mine</c> list live seats).
+    /// Cleared when the seat is approved or restored. At most 500 characters.
+    /// </summary>
+    public string? StatusReason { get; private set; }
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — who made the last status decision: the owner
+    /// for approve / decline / pause / restore / remove, the person himself for a plain exit. An
+    /// exit from a PAUSED seat keeps the owner's pause here (see <see cref="EndedAfterOwnerStop"/>).
+    /// </summary>
+    public UserId? StatusChangedByUserId { get; private set; }
+
+    /// <summary>spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — when <see cref="StatusChangedByUserId"/> decided.</summary>
+    public DateTime? StatusChangedAtUtc { get; private set; }
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the last time what this person may READ or
+    /// DO on the farm changed (status, role or permissions). Step 4 compares it with the phone's
+    /// pull cursor so a widened access re-sends the farm from the beginning (plan §2 #6).
+    /// </summary>
+    public DateTime? AccessChangedAtUtc { get; private set; }
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the effective permission set of THIS seat:
+    /// <see cref="FarmPermissionDefaults.Effective"/> over the role and the stored choice, and
+    /// nothing at all unless the seat is <see cref="MembershipStatus.Active"/> (a waiting request,
+    /// a pause or an ended seat grants nothing).
+    /// </summary>
+    public FarmPermission EffectivePermissions =>
+        Status == MembershipStatus.Active
+            ? FarmPermissionDefaults.Effective(Role, Permissions)
+            : FarmPermission.None;
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2, SEC-2) — this seat ended because the OWNER
+    /// stopped it: removed or declined (<see cref="MembershipStatus.Revoked"/>), or the person left
+    /// while PAUSED (an exit keeps the owner's pause as the last decision). A person whose last seat
+    /// ended this way must not get a fresh Active seat by scanning the farm QR again — the claim
+    /// waits for the owner's approval. A plain exit from an Active seat is not a stop.
+    /// </summary>
+    public bool EndedAfterOwnerStop =>
+        Status == MembershipStatus.Revoked
+        || (Status == MembershipStatus.Exited
+            && StatusChangedByUserId is { } by
+            && by != UserId);
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2, SEC-2) — the OWNER let this seat in: he
+    /// approved it (<see cref="ApprovedByUserId"/>), or he added the person himself
+    /// (<see cref="JoinedVia.OwnerManualAdd"/> / <see cref="JoinedVia.PrimaryOwnerBootstrap"/>).
+    /// A farm-QR claim or a typed-code request is the PERSON asking, never this.
+    /// </summary>
+    public bool WasLetInByOwner =>
+        ApprovedByUserId is not null
+        || JoinedVia is JoinedVia.OwnerManualAdd or JoinedVia.PrimaryOwnerBootstrap;
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2, SEC-2) — over ALL of one person's seats on
+    /// one farm: did the owner stop him (<see cref="EndedAfterOwnerStop"/>) with no owner
+    /// let-in (<see cref="WasLetInByOwner"/>) on any seat made AFTER that stop? While this is
+    /// <c>true</c> the farm QR only ever makes him a waiting request.
+    ///
+    /// <para><b>Why the whole history and not the newest ended seat.</b> A seat the person ends
+    /// himself — a withdrawn request ("विनंती मागे घ्या"), a plain exit — is not the owner's
+    /// answer. Reading only the newest ended row let a stopped person withdraw his own waiting
+    /// request (a newer, self-ended row) and scan again for a fresh Active seat. Only the owner's
+    /// own let-in answers his stop.</para>
+    ///
+    /// <para>Seats are ordered by when they were made (<see cref="GrantedAtUtc"/>): a person holds
+    /// at most one live seat per farm, so a later seat was always made after the earlier one
+    /// ended. Pure: no I/O.</para>
+    /// </summary>
+    public static bool HasUnansweredOwnerStop(IEnumerable<FarmMembership> seats)
+    {
+        ArgumentNullException.ThrowIfNull(seats);
+        var history = seats.ToList();
+        var lastStop = history
+            .Where(s => s.EndedAfterOwnerStop)
+            .OrderByDescending(s => s.GrantedAtUtc)
+            .FirstOrDefault();
+
+        return lastStop is not null
+            && !history.Any(s => s.GrantedAtUtc > lastStop.GrantedAtUtc && s.WasLetInByOwner);
+    }
+
+    /// <summary>The longest owner reason stored (column <c>status_reason varchar(500)</c>).</summary>
+    public const int MaxStatusReasonLength = 500;
+
+    /// <summary>
     /// The stored decision evaluated at a moment: granted AND not yet expired.
     /// BOTH readers of the grant answer through this rule — the SQL twin in
     /// <c>GetLabourManagementGrantAsync</c> for the gate, this method for the
@@ -272,11 +372,27 @@ public sealed class FarmMembership : Entity<Guid>
         Role = AppRole.Worker;
         JoinedVia = JoinedVia.QrScan;
         InvitationId = invitationId;
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, verifier SEC-MU2-1) — "exactly what a fresh
+        // claim makes" includes nothing granted: a हजेरी व पक्कं grant or a stored permission left
+        // on the waiting request (no path writes one now) never rides into the Active seat.
+        CanManageLabourRecords = false;
+        LabourGrantExpiresAtUtc = null;
+        Permissions = null;
         ModifiedAtUtc = utcNow;
         LastSeenAtUtc = utcNow;
     }
 
-    public void Approve(UserId approverUserId, DateTime utcNow)
+    /// <summary>Legacy approve: the seat keeps the role and permissions it already carries.</summary>
+    public void Approve(UserId approverUserId, DateTime utcNow) =>
+        Approve(approverUserId, Role, Permissions, utcNow);
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the owner lets a waiting person in and, in
+    /// the same tap, CHOOSES their role and permissions (plan §2 #5: the joiner never chooses). The
+    /// placeholder role of a typed-code request is replaced here. Ownership itself
+    /// (<see cref="AppRole.PrimaryOwner"/>) is never handed out by an approval.
+    /// </summary>
+    public void Approve(UserId approverUserId, AppRole role, FarmPermission? permissions, DateTime utcNow)
     {
         if (Status != MembershipStatus.PendingApproval)
         {
@@ -289,11 +405,41 @@ public sealed class FarmMembership : Entity<Guid>
             throw new ArgumentException("Approver id is required.", nameof(approverUserId));
         }
 
+        if (role == AppRole.PrimaryOwner)
+        {
+            throw new ArgumentException("An approval never makes a primary owner.", nameof(role));
+        }
+
+        EnsureKnown(permissions);
+
         Status = MembershipStatus.Active;
+        Role = role;
+        Permissions = permissions;
         ApprovedByUserId = approverUserId;
-        ModifiedAtUtc = utcNow;
+        RecordDecision(approverUserId, reason: null, utcNow);
     }
 
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the owner says "नको" to a waiting person.
+    /// The request ends (<see cref="MembershipStatus.Revoked"/>) with the owner's reason; the row
+    /// stays as history.
+    /// </summary>
+    public void Decline(UserId declinedByUserId, string? reason, DateTime utcNow)
+    {
+        if (Status is not (MembershipStatus.PendingApproval or MembershipStatus.PendingOtpClaim))
+        {
+            throw new InvalidOperationException(
+                $"Only a waiting membership can be declined (current {Status}).");
+        }
+
+        RequireActor(declinedByUserId);
+        var why = NormalizeReason(reason);
+        Status = MembershipStatus.Revoked;
+        RevokedAtUtc = utcNow;
+        RecordDecision(declinedByUserId, why, utcNow);
+    }
+
+    /// <summary>Legacy pause with no actor or reason.</summary>
     public void Suspend(DateTime utcNow)
     {
         if (Status != MembershipStatus.Active)
@@ -304,8 +450,22 @@ public sealed class FarmMembership : Entity<Guid>
 
         Status = MembershipStatus.Suspended;
         ModifiedAtUtc = utcNow;
+        AccessChangedAtUtc = utcNow;
     }
 
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the owner pauses this person's work ("काम
+    /// थांबवा"): nothing new is read or written; history stays. The reason is shown to the person.
+    /// </summary>
+    public void Suspend(UserId suspendedByUserId, string? reason, DateTime utcNow)
+    {
+        RequireActor(suspendedByUserId);
+        var why = NormalizeReason(reason);
+        Suspend(utcNow);
+        RecordDecision(suspendedByUserId, why, utcNow);
+    }
+
+    /// <summary>Legacy restore with no actor.</summary>
     public void Restore(DateTime utcNow)
     {
         if (Status != MembershipStatus.Suspended)
@@ -316,6 +476,110 @@ public sealed class FarmMembership : Entity<Guid>
 
         Status = MembershipStatus.Active;
         ModifiedAtUtc = utcNow;
+        AccessChangedAtUtc = utcNow;
+    }
+
+    /// <summary>spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the owner lets a paused person work again.</summary>
+    public void Restore(UserId restoredByUserId, DateTime utcNow)
+    {
+        RequireActor(restoredByUserId);
+        Restore(utcNow);
+        RecordDecision(restoredByUserId, reason: null, utcNow);
+    }
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the owner removes this person from the farm
+    /// ("शेतातून काढा"), from Active or paused. Terminal; history stays. Invariant I3 holds: the
+    /// last Active primary owner cannot be removed.
+    /// </summary>
+    public void Remove(UserId removedByUserId, string? reason, DateTime utcNow, bool isLastActivePrimaryOwner)
+    {
+        if (Status is not (MembershipStatus.Active or MembershipStatus.Suspended))
+        {
+            throw new InvalidOperationException(
+                $"Only an Active or paused membership can be removed (current {Status}).");
+        }
+
+        RequireActor(removedByUserId);
+        var why = NormalizeReason(reason);
+        Revoke(utcNow, isLastActivePrimaryOwner);
+        RecordDecision(removedByUserId, why, utcNow);
+    }
+
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the owner changes what this person is and
+    /// may do: the role and/or the stored permission choice (<c>null</c> = the role's defaults).
+    /// Returns <c>true</c> only when something actually moved — a re-sent request is not a
+    /// decision and writes no history (the same rule as <see cref="SetLabourRecordManagement"/>).
+    /// Only a live seat that has been let in (Active or paused) can be changed; a waiting request
+    /// is answered with <see cref="Approve(UserId, AppRole, FarmPermission?, DateTime)"/>.
+    /// </summary>
+    public bool SetAccess(AppRole role, FarmPermission? permissions, UserId changedByUserId, DateTime utcNow)
+    {
+        if (Status is not (MembershipStatus.Active or MembershipStatus.Suspended))
+        {
+            throw new InvalidOperationException(
+                $"Access can be changed only on an Active or paused membership (current {Status}).");
+        }
+
+        RequireActor(changedByUserId);
+        EnsureKnown(permissions);
+
+        if (Role == role && Permissions == permissions)
+        {
+            return false;
+        }
+
+        Role = role;
+        Permissions = permissions;
+        ModifiedAtUtc = utcNow;
+        AccessChangedAtUtc = utcNow;
+        return true;
+    }
+
+    /// <param name="reason">Already passed through <see cref="NormalizeReason"/> BEFORE the status
+    /// moved, so a refused reason can never leave a half-applied decision.</param>
+    private void RecordDecision(UserId byUserId, string? reason, DateTime utcNow)
+    {
+        StatusReason = reason;
+        StatusChangedByUserId = byUserId;
+        StatusChangedAtUtc = utcNow;
+        AccessChangedAtUtc = utcNow;
+        ModifiedAtUtc = utcNow;
+    }
+
+    /// <summary>Trims; blank = no reason; longer than the column = refused (never silently cut).</summary>
+    public static string? NormalizeReason(string? reason)
+    {
+        var trimmed = reason?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            return null;
+        }
+
+        if (trimmed.Length > MaxStatusReasonLength)
+        {
+            throw new ArgumentException(
+                $"A reason is at most {MaxStatusReasonLength} characters.", nameof(reason));
+        }
+
+        return trimmed;
+    }
+
+    private static void RequireActor(UserId byUserId)
+    {
+        if (byUserId.IsEmpty)
+        {
+            throw new ArgumentException("The deciding user is required.", nameof(byUserId));
+        }
+    }
+
+    private static void EnsureKnown(FarmPermission? permissions)
+    {
+        if (permissions is { } value && !FarmPermissionDefaults.IsKnown(value))
+        {
+            throw new ArgumentException("Unknown permission bits.", nameof(permissions));
+        }
     }
 
     /// <summary>
@@ -351,8 +615,18 @@ public sealed class FarmMembership : Entity<Guid>
         Status = MembershipStatus.Revoked;
         RevokedAtUtc = utcNow;
         ModifiedAtUtc = utcNow;
+        AccessChangedAtUtc = utcNow;
     }
 
+    /// <summary>
+    /// The person leaves (self-exit) — always allowed, from any live status (a waiting request is
+    /// withdrawn, a paused seat is left), except the last Active primary owner (I3).
+    ///
+    /// <para>spec: plr-d7-m1-multiuser-2026-10-26 (step 2, SEC-2): leaving an ACTIVE or waiting seat
+    /// records the person himself as the last decider. Leaving a PAUSED seat keeps the owner's pause
+    /// (actor + reason) as the last decision, so <see cref="EndedAfterOwnerStop"/> still says the
+    /// owner stopped this person — and the farm QR cannot hand him a fresh Active seat.</para>
+    /// </summary>
     public void Exit(DateTime utcNow, bool isLastActivePrimaryOwner)
     {
         if (IsTerminal)
@@ -367,9 +641,17 @@ public sealed class FarmMembership : Entity<Guid>
             throw new LastPrimaryOwnerRevocationException(FarmId);
         }
 
+        var wasPaused = Status == MembershipStatus.Suspended;
         Status = MembershipStatus.Exited;
         ExitedAtUtc = utcNow;
         ModifiedAtUtc = utcNow;
+        AccessChangedAtUtc = utcNow;
+        if (!wasPaused)
+        {
+            StatusChangedByUserId = UserId;
+            StatusChangedAtUtc = utcNow;
+            StatusReason = null;
+        }
     }
 
     public void ChangeRole(AppRole newRole, DateTime utcNow)
@@ -437,6 +719,9 @@ public sealed class FarmMembership : Entity<Guid>
         CanManageLabourRecords = allowed;
         LabourGrantExpiresAtUtc = effectiveExpiry;
         ModifiedAtUtc = utcNow;
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the grant opens attendance and log
+        // approval, so it changes what this person may read and do (step 4 re-sends on it).
+        AccessChangedAtUtc = utcNow;
         return true;
     }
 

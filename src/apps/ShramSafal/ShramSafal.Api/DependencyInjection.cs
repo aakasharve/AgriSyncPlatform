@@ -438,6 +438,33 @@ public static class DependencyInjection
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
                         ShramSafal.Application.UseCases.Memberships.GetLabourPermissions.GetLabourPermissionsQuery>>())));
 
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the owner's membership decisions
+        // (approve / decline / suspend / restore / remove / set access). Same pipeline shape as the
+        // labour grant above, for the same reasons (EnsureIsOwner = gate + tenant claim), and the
+        // same NO-IEntitlementPolicy ruling: who is on your own farm is not a paid feature.
+        services.AddScoped<ShramSafal.Application.UseCases.Memberships.ManageMembership.ManageMembershipHandler>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+            ShramSafal.Application.UseCases.Memberships.ManageMembership.ManageMembershipCommand>,
+            ShramSafal.Application.UseCases.Memberships.ManageMembership.ManageMembershipAuthorizer>();
+        services.AddScoped<AgriSync.BuildingBlocks.Application.IHandler<
+            ShramSafal.Application.UseCases.Memberships.ManageMembership.ManageMembershipCommand,
+            ShramSafal.Application.Contracts.Dtos.LabourPermissionDto>>(sp =>
+            AgriSync.BuildingBlocks.Application.HandlerPipeline.Build(
+                sp.GetRequiredService<
+                    ShramSafal.Application.UseCases.Memberships.ManageMembership.ManageMembershipHandler>(),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                    ShramSafal.Application.UseCases.Memberships.ManageMembership.ManageMembershipCommand,
+                    ShramSafal.Application.Contracts.Dtos.LabourPermissionDto>(
+                    sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                        AgriSync.BuildingBlocks.Application.PipelineBehaviors.LoggingBehavior<
+                            ShramSafal.Application.UseCases.Memberships.ManageMembership.ManageMembershipCommand,
+                            ShramSafal.Application.Contracts.Dtos.LabourPermissionDto>>>()),
+                new AgriSync.BuildingBlocks.Application.PipelineBehaviors.AuthorizationBehavior<
+                    ShramSafal.Application.UseCases.Memberships.ManageMembership.ManageMembershipCommand,
+                    ShramSafal.Application.Contracts.Dtos.LabourPermissionDto>(
+                    sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<
+                        ShramSafal.Application.UseCases.Memberships.ManageMembership.ManageMembershipCommand>>())));
+
         // T-IGH-03-PIPELINE-ROLLOUT (AddCostEntry): caller-shape
         // validation (incl. labour-payout routing rule) +
         // farm-existence + farm-membership authorization. The endpoint

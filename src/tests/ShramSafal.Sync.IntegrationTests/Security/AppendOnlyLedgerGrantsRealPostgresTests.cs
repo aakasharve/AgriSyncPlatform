@@ -103,6 +103,11 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         // cannot mask or undo the ledger REVOKEs proven here. Safe mid-proof. (On production a
         // Down() re-opens farm data to pending / paused seats — see the migration's summary.)
         "20261025204459_RequireActiveMembershipForUserScopedDataReads",
+
+        // ── Reviewed 2026-10-26 (spec: plr-d7-m1-multiuser-2026-10-26, step 2); Down() read in
+        //    full. Five NULLABLE columns on ssf.farm_memberships (Down() drops exactly those). No
+        //    privilege change, no ledger table. Safe mid-proof.
+        "20261026141837_AddMembershipAccessFields",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

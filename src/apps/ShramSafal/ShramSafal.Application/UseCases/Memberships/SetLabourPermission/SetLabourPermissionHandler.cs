@@ -115,6 +115,18 @@ public sealed class SetLabourPermissionHandler(
             return Result.Failure<LabourPermissionDto>(ShramSafalErrors.Forbidden);
         }
 
+        // ── 4b. Only a person who has been let in (working or paused) ──────────
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, verifier SEC-MU2-1). The read above returns
+        // every seat that has not ended, a WAITING request (PendingApproval / PendingOtpClaim)
+        // included. A grant stored on a waiting request used to survive the primary owner's
+        // approval as काम सांगणे — and a co-owner (owner tier passes step 3) could store it. Who
+        // a waiting person becomes is the primary owner's approval alone (founder D-22), so a
+        // waiting seat is refused here, with the same uniform answer as every refusal above.
+        if (membership.Status is not (MembershipStatus.Active or MembershipStatus.Suspended))
+        {
+            return Result.Failure<LabourPermissionDto>(ShramSafalErrors.Forbidden);
+        }
+
         // ── 5. A grant that would change nothing is refused, not swallowed ───
         // Owner-tier and Mukadam carry the capability through their role. Storing
         // `false` for them would leave the owner staring at a switch that did not

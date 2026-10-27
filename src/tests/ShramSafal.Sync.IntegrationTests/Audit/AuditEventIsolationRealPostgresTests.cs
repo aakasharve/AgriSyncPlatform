@@ -1241,6 +1241,13 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         // see the migration's own summary. Its own proof is
         // Memberships/PendingJoinRequestAccessRealPostgresTests.
         "20261025204459_RequireActiveMembershipForUserScopedDataReads",
+
+        // ── Reviewed 2026-10-26 (spec: plr-d7-m1-multiuser-2026-10-26, step 2); Down() read in
+        //    full. Up() adds five NULLABLE columns to ssf.farm_memberships (permissions,
+        //    status_reason, status_changed_by_user_id, status_changed_at_utc,
+        //    access_changed_at_utc) with no default, no backfill, no index, no policy and no
+        //    grant; Down() drops exactly those five. Never touches ssf.audit_events. Safe mid-proof.
+        "20261026141837_AddMembershipAccessFields",
     ];
 
     /// <summary>

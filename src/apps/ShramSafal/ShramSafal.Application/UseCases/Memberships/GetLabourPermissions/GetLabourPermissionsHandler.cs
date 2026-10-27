@@ -84,9 +84,23 @@ public sealed class GetLabourPermissionsHandler(IShramSafalRepository repository
             .Where(o => !string.IsNullOrWhiteSpace(o.DisplayName))
             .ToDictionary(o => o.UserId, o => o.DisplayName);
 
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — which member registered the farm: the
+        // phone never offers pause / remove / change on his card (the server refuses them anyway).
+        var farm = await repository.GetFarmByIdAsync(query.FarmId.Value, ct);
+
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, M-7) — the last four phone digits of the
+        // SAME member ids (names are self-typed; the owner sees who is really asking).
+        var phoneTails = members.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await repository.GetPhoneLast4ByIdsAsync(members.Select(m => m.UserId.Value), ct);
+
         var rows = members
             .Select(m => LabourPermissionProjection.From(
-                m, now, nameByUser.TryGetValue(m.UserId.Value, out var name) ? name : null))
+                m,
+                now,
+                nameByUser.TryGetValue(m.UserId.Value, out var name) ? name : null,
+                isRegistrant: farm is not null && farm.OwnerUserId == m.UserId,
+                phoneLast4: phoneTails.TryGetValue(m.UserId.Value, out var tail) ? tail : null))
             .ToArray();
 
         return Result.Success<IReadOnlyList<LabourPermissionDto>>(rows);

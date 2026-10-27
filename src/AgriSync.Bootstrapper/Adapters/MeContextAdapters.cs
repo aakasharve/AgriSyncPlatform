@@ -155,6 +155,12 @@ public sealed class FarmMembershipSnapshotReader(
                     JoinedVia = x.m.JoinedVia,
                     x.m.GrantedAtUtc,
                     x.m.LastSeenAtUtc,
+                    // spec: plr-d7-m1-multiuser-2026-10-26 (step 2)
+                    x.m.Permissions,
+                    x.m.StatusReason,
+                    x.m.CanManageLabourRecords,
+                    x.m.LabourGrantExpiresAtUtc,
+                    IsRegistrant = x.f.OwnerUserId == userId,
                 })
                 .ToListAsync(token),
             ct);
@@ -207,7 +213,19 @@ public sealed class FarmMembershipSnapshotReader(
                 JoinedVia: r.JoinedVia.ToString(),
                 GrantedAtUtc: r.GrantedAtUtc,
                 LastSeenAtUtc: r.LastSeenAtUtc,
-                Subscription: sub);
+                Subscription: sub,
+                // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — ShramSafal's ONE effective rule:
+                // nothing unless Active, everything for the registrant, else role defaults merged
+                // with the owner's stored choice.
+                Permissions: ShramSafal.Domain.Farms.FarmPermissionDefaults.Names(
+                    r.Status != ShramSafal.Domain.Farms.MembershipStatus.Active
+                        ? ShramSafal.Domain.Farms.FarmPermission.None
+                        : r.IsRegistrant
+                            ? ShramSafal.Domain.Farms.FarmPermissionDefaults.All
+                            : ShramSafal.Domain.Farms.FarmPermissionDefaults.Effective(r.Role, r.Permissions)),
+                StatusReason: r.StatusReason,
+                HasLabourGrant: r.CanManageLabourRecords,
+                LabourGrantExpiresAtUtc: r.LabourGrantExpiresAtUtc);
         }).ToList();
     }
 

@@ -129,6 +129,27 @@ public sealed class ClaimJoinHandler(
         // answers the request: the seat becomes what a fresh claim makes (Active Worker, QrScan).
         // Returning the request as it was would let a typed code BLOCK the QR — the one live seat
         // per person per farm — and leave the worker outside until an approval step exists.
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, SEC-2) — the owner STOPPED this person
+        // (removed, declined, or paused and then he left) and has not let him in again since. The
+        // farm QR is the owner's consent for strangers, not a way around his own decision: the
+        // claim waits for his approval. The WHOLE history is read: a request the person withdrew
+        // himself is a newer ended seat, and must never hide the owner's stop behind it.
+        var stoppedBefore = (existing is null || existing.IsTypedCodeJoinRequest)
+            && FarmMembership.HasUnansweredOwnerStop(
+                await farmRepository.GetFarmMembershipHistoryAsync(farm.Id.Value, command.CallerUserId.Value, ct));
+
+        if (existing is not null && existing.IsTypedCodeJoinRequest && stoppedBefore)
+        {
+            // His typed request stays a request: the QR does not answer it.
+            return Result.Success(new ClaimJoinResult(
+                MembershipId: existing.Id,
+                FarmId: farm.Id,
+                FarmName: farm.Name,
+                Role: existing.Role.ToString(),
+                WasAlreadyMember: true,
+                Status: existing.Status));
+        }
+
         if (existing is not null && existing.IsTypedCodeJoinRequest)
         {
             var answered = await TryActivateTypedCodeRequestAsync(command, farm, tokenRow.InvitationId, utcNow, ct);
@@ -161,6 +182,9 @@ public sealed class ClaimJoinHandler(
         // Plan §5.1 Flow A: no approval gate, so membership lands Active
         // immediately. JoinedVia = QrScan so audit queries can tell
         // scan-path memberships apart from bootstrap + manual adds.
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, SEC-2) — EXCEPT for a person the owner
+        // stopped last time: his scan makes a PendingApproval seat (Worker placeholder, the owner
+        // chooses the role when approving), never a fresh Active one.
         var membership = FarmMembership.CreateFromInvitation(
             id: idGenerator.New(),
             farmId: farm.Id,
@@ -168,10 +192,13 @@ public sealed class ClaimJoinHandler(
             role: AppRole.Worker,
             joinedVia: JoinedVia.QrScan,
             invitationId: tokenRow.InvitationId,
-            requireApproval: false,
+            requireApproval: stoppedBefore,
             grantedAtUtc: utcNow);
 
-        membership.ClaimWithoutApproval(utcNow);
+        if (!stoppedBefore)
+        {
+            membership.ClaimWithoutApproval(utcNow);
+        }
 
         await farmRepository.AddFarmMembershipAsync(membership, ct);
         // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
@@ -181,10 +208,19 @@ public sealed class ClaimJoinHandler(
             AuditEventFactory.Create(
                 entityType: "FarmMembership",
                 entityId: membership.Id,
-                action: "MemberJoined",
+                action: stoppedBefore ? "MemberJoinRequested" : "MemberJoined",
                 actorUserId: command.CallerUserId.Value,
-                actorRole: membership.Role.ToString().ToLowerInvariant(),
-                payload: new { farmId = farm.Id, userId = command.CallerUserId, role = membership.Role.ToString(), joinedVia = "QrScan" },
+                // A waiting seat holds no role yet (same wording as a typed-code request).
+                actorRole: stoppedBefore ? "joiner" : membership.Role.ToString().ToLowerInvariant(),
+                payload: new
+                {
+                    farmId = farm.Id,
+                    userId = command.CallerUserId,
+                    role = membership.Role.ToString(),
+                    joinedVia = "QrScan",
+                    status = membership.Status.ToString(),
+                    waitsForOwnerAfterStop = stoppedBefore,
+                },
                 farmId: farm.Id.Value,
                 clientCommandId: null,
                 appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
@@ -217,7 +253,10 @@ public sealed class ClaimJoinHandler(
                 Status: winner.Status));
         }
 
-        await EmitInvitationClaimedAsync(command, farm, membership, utcNow, ct);
+        if (!stoppedBefore)
+        {
+            await EmitInvitationClaimedAsync(command, farm, membership, utcNow, ct);
+        }
 
         return Result.Success(new ClaimJoinResult(
             MembershipId: membership.Id,

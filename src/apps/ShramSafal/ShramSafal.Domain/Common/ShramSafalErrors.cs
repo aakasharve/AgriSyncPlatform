@@ -184,4 +184,15 @@ public static class ShramSafalErrors
     // wrong or unknown typed farm code. It never names a farm. The endpoint sends only the code
     // ({"error":"join.code_unknown"}); the phone shows its own Marathi text for it.
     public static readonly Error JoinCodeUnknown = Error.NotFound("join.code_unknown", "No farm has this code.");
+
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the owner's membership decisions. Conflict
+    // (409, with a body the phone can branch on), not Forbidden: the caller IS an owner; this one
+    // decision is what cannot happen.
+    public static readonly Error MembershipLastOwner = Error.Conflict(
+        "membership.last_owner",
+        "This would leave the farm without an active primary owner.");
+
+    public static readonly Error MembershipWrongStatus = Error.Conflict(
+        "membership.wrong_status",
+        "This person's membership is not in a state where that decision applies.");
 }

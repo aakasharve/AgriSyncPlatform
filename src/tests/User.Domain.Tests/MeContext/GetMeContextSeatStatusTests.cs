@@ -35,8 +35,9 @@ public sealed class GetMeContextSeatStatusTests
         var activeFarm = Guid.NewGuid();
         var context = await RunAsync(
             includePending: true,
-            Seat(waitingFarm, "Shinde Mala", status, role: "Worker"),
-            Seat(activeFarm, "Jadhav Wadi", "Active", role: "Mukadam"));
+            Seat(waitingFarm, "Shinde Mala", status, role: "Worker") with { StatusReason = "थांबा" },
+            // step 2: a Mukadam verifies only with the labour grant (canVerify is now real).
+            Seat(activeFarm, "Jadhav Wadi", "Active", role: "Mukadam") with { HasLabourGrant = true });
 
         var waiting = context.Farms.Single(f => f.FarmId == waitingFarm);
         waiting.Name.Should().Be("Shinde Mala");
@@ -46,6 +47,8 @@ public sealed class GetMeContextSeatStatusTests
         waiting.Plan.Should().Be("Free", "the contract's 'nothing known' value, never the owner's real plan (PastDue here)");
         waiting.PlanValidUntilUtc.Should().BeNull();
         waiting.Capabilities.Should().Be(new MeCapabilitiesDto(false, false, false, false));
+        waiting.Permissions.Should().BeEmpty("spec step 2: a seat that is not Active grants nothing");
+        waiting.StatusReason.Should().Be("थांबा", "spec step 2: a paused person is told the owner's reason");
         context.Alerts.Should().NotContain(a => a.FarmId == waitingFarm,
             "a plan alert would tell a requester the owner's billing state");
 
@@ -56,7 +59,7 @@ public sealed class GetMeContextSeatStatusTests
         active.OwnerAccountId.Should().Be(OwnerAccount);
         active.Plan.Should().Be("PastDue");
         active.PlanValidUntilUtc.Should().NotBeNull();
-        active.Capabilities.CanVerify.Should().BeTrue("control: a Mukadam's capabilities are computed as before");
+        active.Capabilities.CanVerify.Should().BeTrue("control: a Mukadam with the labour grant may verify");
         context.Alerts.Should().ContainSingle(a => a.FarmId == activeFarm && a.Kind == "plan_expiring");
     }
 
@@ -104,6 +107,86 @@ public sealed class GetMeContextSeatStatusTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.Farms.Should().BeEmpty("a caller that does not say includePending is an older app");
+    }
+
+    // ── spec: plr-d7-m1-multiuser-2026-10-26 (step 2) ─────────────────────────
+
+    /// <summary>
+    /// P11-M2: with includePending the list carries waiting / paused seats, but "no_farms_yet" is
+    /// about farms the person is IN. A person whose only seat is a waiting request still gets it
+    /// (before the fix he lost it, because the pending row counted as a farm).
+    /// </summary>
+    [Theory]
+    [InlineData("PendingApproval")]
+    [InlineData("Suspended")]
+    public async Task No_farms_yet_counts_Active_seats_only_even_with_includePending(string status)
+    {
+        var waitingFarm = Guid.NewGuid();
+
+        var onlyWaiting = await RunAsync(includePending: true, Seat(waitingFarm, "Shinde Mala", status, role: "Worker"));
+        onlyWaiting.Farms.Should().ContainSingle("the waiting seat is still listed for the person to see");
+        onlyWaiting.Alerts.Should().ContainSingle(a => a.Kind == "no_farms_yet");
+
+        // CONTROL: with one Active seat beside it, the person HAS a farm.
+        var withActive = await RunAsync(
+            includePending: true,
+            Seat(waitingFarm, "Shinde Mala", status, role: "Worker"),
+            Seat(Guid.NewGuid(), "Jadhav Wadi", "Active", role: "Worker"));
+        withActive.Alerts.Should().NotContain(a => a.Kind == "no_farms_yet");
+    }
+
+    /// <summary>
+    /// The capability flags say what the server allows — fixed before any screen reads them
+    /// (plan §4): canVerify = owner tier or a live labour grant; canAddCost = every Active seat
+    /// (recording a purchase is open to every Active member — founder D-24d / D-12, alignment M-5);
+    /// the effective permission names (correcting money = AddCost) travel as they are.
+    /// </summary>
+    [Fact]
+    public async Task Capabilities_are_what_the_server_allows()
+    {
+        var farms = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
+        var context = await RunAsync(
+            includePending: false,
+            Seat(farms[0], "a", "Active", role: "Mukadam") with { Permissions = [] },
+            Seat(farms[1], "b", "Active", role: "Mukadam") with { Permissions = [], HasLabourGrant = true },
+            Seat(farms[2], "c", "Active", role: "Mukadam") with { Permissions = [], HasLabourGrant = true, LabourGrantExpiresAtUtc = Now.AddMinutes(-1) },
+            Seat(farms[3], "d", "Active", role: "Worker") with { Permissions = [] },
+            Seat(farms[4], "e", "Active", role: "SecondaryOwner") with { Permissions = ["SeeMoney", "PlanWork"] });
+
+        MeCapabilitiesDto Caps(int i) => context.Farms.Single(f => f.FarmId == farms[i]).Capabilities;
+
+        Caps(0).CanVerify.Should().BeFalse("an un-granted Mukadam is refused by the verify gate");
+        Caps(1).CanVerify.Should().BeTrue("the labour grant lets him verify");
+        Caps(2).CanVerify.Should().BeFalse("an expired grant answers nothing");
+        for (var i = 0; i < farms.Length; i++)
+        {
+            Caps(i).CanAddCost.Should().BeTrue($"seat {i}: every Active member may record a purchase (the server's rule)");
+        }
+
+        Caps(3).CanInvite.Should().BeFalse();
+        Caps(3).CanVerify.Should().BeFalse("a plain worker verifies nothing");
+        Caps(4).CanVerify.Should().BeTrue("owner tier verifies (the labour rule, unchanged until step 2b)");
+        Caps(4).CanInvite.Should().BeTrue();
+        context.Farms.Single(f => f.FarmId == farms[3]).Permissions.Should().BeEmpty("a worker holds no stored power");
+        context.Farms.Single(f => f.FarmId == farms[4]).Permissions.Should().Equal("SeeMoney", "PlanWork");
+    }
+
+    [Fact]
+    public async Task A_waiting_or_paused_seat_has_no_capability_not_even_recording_a_purchase()
+    {
+        var waiting = Guid.NewGuid();
+        var paused = Guid.NewGuid();
+        var context = await RunAsync(
+            includePending: true,
+            Seat(waiting, "w", "PendingApproval", role: "Worker") with { Permissions = [] },
+            Seat(paused, "p", "Suspended", role: "Mukadam") with { Permissions = [], HasLabourGrant = true });
+
+        foreach (var farm in context.Farms)
+        {
+            farm.Capabilities.CanAddCost.Should().BeFalse($"{farm.Status}: nothing is granted until Active");
+            farm.Capabilities.CanVerify.Should().BeFalse();
+            farm.Permissions.Should().BeEmpty();
+        }
     }
 
     private static FarmMembershipSnapshot Seat(Guid farmId, string name, string status, string role)

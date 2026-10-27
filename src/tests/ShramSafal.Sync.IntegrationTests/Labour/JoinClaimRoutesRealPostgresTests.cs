@@ -278,14 +278,18 @@ public sealed class JoinClaimRoutesRealPostgresTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Revoked_and_Exited_prior_members_PINNED_get_a_fresh_Active_Worker_row_the_terminal_row_is_kept()
+    public async Task Revoked_prior_members_PINNED_get_a_waiting_request_and_Exited_ones_a_fresh_Active_Worker_row_the_terminal_row_is_kept()
     {
         await AssertAppRoleIsNotVacuousAsync();
         var invite = await IssueOkAsync(OwnerA, FarmA);
 
-        // Current behaviour, preserved: GetFarmMembershipAsync ignores terminal rows, so a
-        // re-scan is a fresh join (QR is the sanctioned way back in); the Revoked/Exited
-        // history row is not touched. Pinned so a change is a conscious one.
+        // GetFarmMembershipAsync ignores terminal rows, so a re-scan makes a NEW row and the
+        // Revoked/Exited history row is not touched. Pinned so a change is a conscious one.
+        //
+        // CONSCIOUS CHANGE — spec: plr-d7-m1-multiuser-2026-10-26 (step 2, SEC-2): a REVOKED seat
+        // means the owner removed (or declined) this person, so his re-scan is now a request that
+        // waits for the owner (PendingApproval, status 2), never a fresh Active seat. A person who
+        // LEFT on his own (Exited, no owner decision behind it) still gets straight back in.
         foreach (var who in new[] { RevokedBefore, ExitedBefore })
         {
             using var response = await ClaimAsync(who, invite.Token, invite.FarmCode);
@@ -293,7 +297,7 @@ public sealed class JoinClaimRoutesRealPostgresTests : IAsyncLifetime
         }
 
         var revoked = await MembershipsAsync(FarmA, RevokedBefore);
-        revoked.Select(m => (m.Role, m.Status)).Should().BeEquivalentTo(new[] { ("Worker", 5), ("Worker", 3) });
+        revoked.Select(m => (m.Role, m.Status)).Should().BeEquivalentTo(new[] { ("Worker", 5), ("Worker", 2) });
         var exited = await MembershipsAsync(FarmA, ExitedBefore);
         exited.Select(m => (m.Role, m.Status)).Should().BeEquivalentTo(new[] { ("Worker", 6), ("Worker", 3) });
     }

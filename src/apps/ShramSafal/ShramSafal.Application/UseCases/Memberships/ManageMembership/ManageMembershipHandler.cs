@@ -1,0 +1,459 @@
+using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Application;
+using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Roles;
+using ShramSafal.Application.Contracts.Dtos;
+using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Memberships.SetLabourPermission;
+using ShramSafal.Domain.Audit;
+using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Farms;
+
+namespace ShramSafal.Application.UseCases.Memberships.ManageMembership;
+
+/// <summary>
+/// spec: plr-d7-m1-multiuser-2026-10-26 (step 2, AC2) — the owner approves / declines / pauses /
+/// restores / removes a person, or changes their role and permissions. Until this existed a typed
+/// farm code made a PendingApproval seat that nothing could ever answer.
+///
+/// <para><b>The guards, in order (each refusal is <see cref="ShramSafalErrors.Forbidden"/>, never
+/// NotFound, so the route is no oracle for which phone belongs to which farm):</b></para>
+/// <list type="number">
+/// <item>Nobody decides about themselves.</item>
+/// <item>Only the PRIMARY owner decides (founder D-22, answered 26 Oct 2026: "The primary owner
+/// decides who may see information, assign work, confirm records…"; a co-owner, family or मुकादम
+/// label grants no say over people, and no delegated power passes that authority onward). For now
+/// the primary owner is the farm's registrant (<c>farms.owner_user_id</c>): the caller must answer
+/// <see cref="AppRole.PrimaryOwner"/> from <c>GetUserRoleForFarmAsync</c> AND be that registrant
+/// (a PrimaryOwner seat that is not the registrant decides nothing). The pipeline's
+/// <see cref="ManageMembershipAuthorizer"/> (owner tier, which also publishes the farm's tenant
+/// claim) ran first; a co-owner passes it and is refused here.</item>
+/// <item>Never the farm's registrant (<c>farms.owner_user_id</c>): he cannot be paused, removed or
+/// changed in M1 (plan §4). Kept as its own check although "only the registrant decides" and
+/// "nobody decides about himself" already imply it.</item>
+/// <item>The person's live seat must be on THIS farm (read with the farm in the predicate and
+/// re-asserted — doctrine E4, as <c>SetLabourPermissionHandler</c>).</item>
+/// <item>The last Active primary owner stays (invariant I3) →
+/// <see cref="ShramSafalErrors.MembershipLastOwner"/> (409).</item>
+/// </list>
+/// <para><b>Only two choices are given in step 2</b> (<see cref="GivableRoles"/>): काम सांगणे
+/// (Worker) and काम + हजेरी (Mukadam + the existing labour grant). A co-owner / family seat is not
+/// offered until step 2b, where its powers are visible switches (D-22 §1, alignment M-2); asking for
+/// it is <see cref="ShramSafalErrors.InvalidCommand"/> (400).</para>
+/// A decision re-sent after it already landed (approve as the same choice, pause of a paused seat,
+/// restore of a working seat) answers 200 with the current truth and writes nothing. A decision the
+/// seat's status does not allow (restore a waiting request, approve someone let in as another role)
+/// is <see cref="ShramSafalErrors.MembershipWrongStatus"/> (409).
+///
+/// <para><b>One audit row per real change</b> (as <c>SetLabourPermissionHandler.cs:158</c>): who,
+/// what, from → to, the reason. A re-sent request that changes nothing writes no history and
+/// answers 200 with the current truth; a re-sent decline / removal of a seat that has already ended
+/// answers the same way.</para>
+///
+/// <para><b>No IEntitlementPolicy</b> — deciding who is on your own farm is access control, not a
+/// paid feature (same ruling as the labour grant).</para>
+/// </summary>
+public sealed class ManageMembershipHandler(
+    IShramSafalRepository repository,
+    IClock clock)
+    : IHandler<ManageMembershipCommand, LabourPermissionDto>
+{
+    /// <summary>The roles the primary owner may give in step 2: काम सांगणे and काम + हजेरी.
+    /// Ownership is never handed out here; a co-owner / family seat waits for step 2b's visible
+    /// switches (D-22); experts wait for step 6.</summary>
+    private static readonly AppRole[] GivableRoles = [AppRole.Worker, AppRole.Mukadam];
+
+    public async Task<Result<LabourPermissionDto>> HandleAsync(
+        ManageMembershipCommand command, CancellationToken ct = default)
+    {
+        // ── 1. Shape ─────────────────────────────────────────────────────────
+        if (command.FarmId.IsEmpty || command.TargetUserId.IsEmpty || command.CallerUserId.IsEmpty
+            || !Enum.IsDefined(command.Decision))
+        {
+            return Invalid();
+        }
+
+        if (!TryReadRole(command, out var requestedRole)
+            || !TryReadPermissions(command, out var requestedPermissions)
+            || !TryReadReason(command.Reason, out var reason))
+        {
+            return Invalid();
+        }
+
+        if (command.LabourGrant is not null && command.Decision != MembershipDecision.SetAccess)
+        {
+            return Invalid();
+        }
+
+        if (command.Decision == MembershipDecision.SetAccess
+            && requestedRole is null && command.Permissions is null && !command.ResetPermissions
+            && command.LabourGrant is null)
+        {
+            return Invalid();
+        }
+
+        // ── 2. Nobody decides about themselves ───────────────────────────────
+        if (command.TargetUserId == command.CallerUserId)
+        {
+            return Forbidden();
+        }
+
+        // ── 3. The primary owner only (D-22) ─────────────────────────────────
+        var callerRole = await repository.GetUserRoleForFarmAsync(
+            command.FarmId.Value, command.CallerUserId.Value, ct);
+        if (callerRole != AppRole.PrimaryOwner)
+        {
+            return Forbidden();
+        }
+
+        // ── 4. …and that primary owner is the farm's registrant; never the registrant as target ──
+        // Founder override (26 Oct): "primary owner" = farms.owner_user_id for now. A PrimaryOwner
+        // SEAT that is not the registrant (no path makes one today, ALIGN §4D, but legacy rows and
+        // test fixtures can) answers PrimaryOwner from the role read above and must still decide
+        // nothing (verifier SEC-MU2-6). The farm row is read only after the role check, so a
+        // stranger learns nothing from this step.
+        var farm = await repository.GetFarmByIdAsync(command.FarmId.Value, ct);
+        if (farm is null
+            || farm.OwnerUserId != command.CallerUserId
+            || farm.OwnerUserId == command.TargetUserId)
+        {
+            return Forbidden();
+        }
+
+        // ── 5. The person's live seat on THIS farm, locked for the decision ──
+        var seat = await repository.GetTrackedFarmMembershipForUpdateAsync(
+            command.FarmId.Value, command.TargetUserId.Value, ct);
+        var now = clock.UtcNow;
+        if (seat is null || seat.FarmId != command.FarmId)
+        {
+            return await AnswerEndedSeatAsync(command, now, ct);
+        }
+
+        // ── 6. The last Active primary owner stays (I3) ──────────────────────
+        var isLastActivePrimaryOwner = false;
+        if (seat.Role == AppRole.PrimaryOwner && seat.Status == MembershipStatus.Active)
+        {
+            isLastActivePrimaryOwner =
+                await repository.CountActivePrimaryOwnersAsync(command.FarmId.Value, ct) <= 1;
+            var leavesOwnerTier = command.Decision is MembershipDecision.Suspend or MembershipDecision.Remove
+                || (command.Decision == MembershipDecision.SetAccess
+                    && requestedRole is { } newRole && newRole != AppRole.PrimaryOwner);
+            if (isLastActivePrimaryOwner && leavesOwnerTier)
+            {
+                return Result.Failure<LabourPermissionDto>(ShramSafalErrors.MembershipLastOwner);
+            }
+        }
+
+        // ── 7. What the seat becomes (approve / change). Only the primary owner gets here, and he
+        //       holds every power, so nothing he gives is a power he lacks (no re-delegation exists).
+        var target = ResolveAccess(command, seat, requestedRole, requestedPermissions);
+
+        // ── 8. A decision re-sent after it landed: the current truth, no second history row ──
+        if (AlreadyDone(command, seat, target))
+        {
+            return Result.Success(await ProjectAsync(seat, now, ct));
+        }
+
+        // ── 9. Apply ─────────────────────────────────────────────────────────
+        var before = new SeatSnapshot(seat.Status, seat.Role, seat.EffectivePermissions, seat.CanManageLabourRecords);
+        bool changed;
+        try
+        {
+            changed = Apply(command, seat, target, reason, isLastActivePrimaryOwner, now);
+        }
+        catch (LastPrimaryOwnerRevocationException)
+        {
+            return Result.Failure<LabourPermissionDto>(ShramSafalErrors.MembershipLastOwner);
+        }
+        catch (InvalidOperationException)
+        {
+            return Result.Failure<LabourPermissionDto>(ShramSafalErrors.MembershipWrongStatus);
+        }
+        catch (ArgumentException)
+        {
+            // A shape the parsers above already refuse (unknown permission bits, a reason over 500).
+            return Result.Failure<LabourPermissionDto>(ShramSafalErrors.InvalidCommand);
+        }
+
+        // ── 10. History only when something moved ────────────────────────────
+        if (changed)
+        {
+            await repository.AddAuditEventAsync(BuildAudit(command, AppRole.PrimaryOwner, seat, before), ct);
+            await repository.SaveChangesAsync(ct);
+        }
+
+        return Result.Success(await ProjectAsync(seat, now, ct));
+    }
+
+    /// <summary>
+    /// What an approve or an access change makes of the seat: role, stored permissions (<c>null</c>
+    /// = the role's defaults) and the हजेरी व पक्कं grant (<c>null</c> = leave it). <c>null</c> for
+    /// the other decisions.
+    ///
+    /// <para><b>A new role starts from ITS defaults</b> (stored permissions AND the labour grant)
+    /// unless the same request names them. Keeping the old stored set across a role change let a
+    /// person moved to काम सांगणे keep the powers the owner had stored for his old role while his
+    /// card said कामगार; keeping the grant let a मुकादम moved to काम सांगणे keep हजेरी व पक्कं.</para>
+    ///
+    /// <para><b>An approval sets the grant to EXACTLY the chosen preset</b> — on for काम + हजेरी,
+    /// off otherwise — never "leave it". A grant already stored on the waiting seat (written
+    /// before SetLabourPermission refused waiting seats, or by a co-owner's PUT labour-permissions)
+    /// must not survive into a seat the primary owner let in as काम सांगणे (verifier SEC-MU2-1).</para>
+    /// </summary>
+    private static AccessTarget? ResolveAccess(
+        ManageMembershipCommand command,
+        FarmMembership seat,
+        AppRole? requestedRole,
+        FarmPermission? requestedPermissions)
+    {
+        switch (command.Decision)
+        {
+            case MembershipDecision.Approve:
+                {
+                    var role = requestedRole!.Value;
+                    // The owner tier carries the grant by role: the stored flag stays off there.
+                    var grant = !LabourManagementPermission.IsCarriedByRole(role) && command.GrantLabour;
+                    return new AccessTarget(role, requestedPermissions, grant);
+                }
+
+            case MembershipDecision.SetAccess:
+                {
+                    var role = requestedRole ?? seat.Role;
+                    var roleChanges = role != seat.Role;
+                    var permissions = command.ResetPermissions ? null
+                        : command.Permissions is not null ? requestedPermissions
+                        : roleChanges ? null
+                        : seat.Permissions;
+                    // The owner tier carries the grant by role: the stored flag stays off there.
+                    var grant = LabourManagementPermission.IsCarriedByRole(role)
+                        ? (roleChanges ? false : null)
+                        : command.LabourGrant ?? (roleChanges ? false : null);
+                    return new AccessTarget(role, permissions, grant);
+                }
+
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// The decision already holds (a retry on a bad line after the first try landed): approve of a
+    /// seat the owner already let in as exactly this choice, pause of a paused seat, restore of a
+    /// working seat. Decline / remove of an ended seat are answered by <see cref="AnswerEndedSeatAsync"/>.
+    /// </summary>
+    private static bool AlreadyDone(ManageMembershipCommand command, FarmMembership seat, AccessTarget? target) =>
+        command.Decision switch
+        {
+            MembershipDecision.Approve =>
+                seat.Status == MembershipStatus.Active
+                && seat.ApprovedByUserId is not null
+                && target is not null
+                && seat.Role == target.Role
+                && seat.Permissions == target.Permissions
+                && (target.LabourGrant is not { } grant || seat.CanManageLabourRecords == grant),
+            MembershipDecision.Suspend => seat.Status == MembershipStatus.Suspended,
+            MembershipDecision.Restore => seat.Status == MembershipStatus.Active,
+            _ => false,
+        };
+
+    private static bool Apply(
+        ManageMembershipCommand command,
+        FarmMembership seat,
+        AccessTarget? target,
+        string? reason,
+        bool isLastActivePrimaryOwner,
+        DateTime now)
+    {
+        switch (command.Decision)
+        {
+            case MembershipDecision.Approve:
+                seat.Approve(command.CallerUserId, target!.Role, target.Permissions, now);
+                if (target.LabourGrant is { } approvedGrant)
+                {
+                    // Desired state, both ways: a grant left on the waiting seat is turned OFF here.
+                    seat.SetLabourRecordManagement(approvedGrant, expiresAtUtc: null, now);
+                }
+
+                return true;
+
+            case MembershipDecision.Decline:
+                seat.Decline(command.CallerUserId, reason, now);
+                return true;
+
+            case MembershipDecision.Suspend:
+                seat.Suspend(command.CallerUserId, reason, now);
+                return true;
+
+            case MembershipDecision.Restore:
+                seat.Restore(command.CallerUserId, now);
+                return true;
+
+            case MembershipDecision.Remove:
+                seat.Remove(command.CallerUserId, reason, now, isLastActivePrimaryOwner);
+                return true;
+
+            case MembershipDecision.SetAccess:
+                // Both writes, always (no short-circuit): either may be the only real change.
+                var accessMoved = seat.SetAccess(target!.Role, target.Permissions, command.CallerUserId, now);
+                var grantMoved = target.LabourGrant is { } grant
+                    && seat.SetLabourRecordManagement(grant, expiresAtUtc: null, now);
+                return accessMoved | grantMoved;
+
+            default:
+                // Unreachable: HandleAsync refuses an undefined decision first.
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// No live seat. A decline or removal asks for "this person is not on the farm", and that is
+    /// already true when his newest seat on THIS farm has ended — whether the owner ended it (a
+    /// retry on a bad line after the first try landed: Revoked) or the person left or withdrew
+    /// his request on his own meanwhile (Exited). Answer that truth: 200 with the ENDED row as it
+    /// is (its real status and when it changed — nothing claims a fresh decision), no second
+    /// history row; the phone adopts the row and the person drops off the list. Answering 403 for
+    /// a person who already left told the owner "हे तुम्हाला करता येत नाही" — untrue (verifier
+    /// MU2-V6).
+    ///
+    /// <para>Which decision ended the seat is not matched (verifier SEC-MU2-7): the row cannot tell
+    /// a declined request from a removed farm-QR seat (both are Revoked with no approver), and both
+    /// answers state the same end. The caller is the farm's registrant (steps 3-4), so the row is
+    /// his own farm's history and nothing leaks. Anything else is the uniform refusal.</para>
+    /// </summary>
+    private async Task<Result<LabourPermissionDto>> AnswerEndedSeatAsync(
+        ManageMembershipCommand command, DateTime now, CancellationToken ct)
+    {
+        if (command.Decision is MembershipDecision.Decline or MembershipDecision.Remove)
+        {
+            var ended = await repository.GetLatestEndedFarmMembershipAsync(
+                command.FarmId.Value, command.TargetUserId.Value, ct);
+            if (ended is not null
+                && ended.FarmId == command.FarmId
+                && ended.IsTerminal)
+            {
+                return Result.Success(await ProjectAsync(ended, now, ct));
+            }
+        }
+
+        return Forbidden();
+    }
+
+    private AuditEvent BuildAudit(
+        ManageMembershipCommand command, AppRole callerRole, FarmMembership seat, SeatSnapshot before) =>
+        AuditEventFactory.Create(
+            entityType: "FarmMembership",
+            entityId: seat.Id,
+            action: command.Decision switch
+            {
+                MembershipDecision.Approve => "MemberApproved",
+                MembershipDecision.Decline => "MemberDeclined",
+                MembershipDecision.Suspend => "MemberSuspended",
+                MembershipDecision.Restore => "MemberRestored",
+                MembershipDecision.Remove => "MemberRemoved",
+                _ => "MemberAccessChanged",
+            },
+            actorUserId: command.CallerUserId.Value,
+            actorRole: callerRole.ToString().ToLowerInvariant(),
+            payload: new
+            {
+                farmId = command.FarmId.Value,
+                targetUserId = command.TargetUserId.Value,
+                fromStatus = before.Status.ToString(),
+                toStatus = seat.Status.ToString(),
+                fromRole = before.Role.ToString(),
+                toRole = seat.Role.ToString(),
+                fromPermissions = FarmPermissionDefaults.Names(before.Permissions),
+                // What the seat may do NOW (effective), and what the owner stored (null = role
+                // defaults) — both, because "defaults" and "chose exactly the defaults" are
+                // different decisions (P3).
+                permissions = FarmPermissionDefaults.Names(seat.EffectivePermissions),
+                storedPermissions = seat.Permissions is { } stored ? FarmPermissionDefaults.Names(stored) : null,
+                labourGrantBefore = before.LabourGrant,
+                labourGrant = seat.CanManageLabourRecords,
+                reason = seat.StatusReason,
+            },
+            farmId: command.FarmId.Value,
+            clientCommandId: null,
+            appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                : command.ClientAppVersion,
+            deviceId: command.AuditDeviceId,
+            ipHash: command.AuditIpHash,
+            sourceAiJobId: null);
+
+    /// <summary>The person's roster row as the owner's team screen reads it: the server's own
+    /// projection, with the directory name and (M-7) the last four phone digits. Never the
+    /// registrant (refused at step 4), so <c>isRegistrant</c> is false.</summary>
+    private async Task<LabourPermissionDto> ProjectAsync(FarmMembership seat, DateTime now, CancellationToken ct)
+    {
+        var userId = seat.UserId.Value;
+        var directory = await repository.GetOperatorsByIdsAsync([userId], ct);
+        var name = directory.FirstOrDefault(o => o.UserId == userId)?.DisplayName;
+        var tails = await repository.GetPhoneLast4ByIdsAsync([userId], ct);
+        return LabourPermissionProjection.From(
+            seat,
+            now,
+            string.IsNullOrWhiteSpace(name) ? null : name,
+            isRegistrant: false,
+            phoneLast4: tails.TryGetValue(userId, out var tail) ? tail : null);
+    }
+
+    private static bool TryReadRole(ManageMembershipCommand command, out AppRole? role)
+    {
+        role = null;
+        var raw = command.Role?.Trim();
+        var needsRole = command.Decision == MembershipDecision.Approve;
+        if (string.IsNullOrEmpty(raw))
+        {
+            return !needsRole;
+        }
+
+        if (command.Decision is not (MembershipDecision.Approve or MembershipDecision.SetAccess)
+            || int.TryParse(raw, out _)
+            || !Enum.TryParse<AppRole>(raw, ignoreCase: true, out var parsed)
+            || !GivableRoles.Contains(parsed))
+        {
+            return false;
+        }
+
+        role = parsed;
+        return true;
+    }
+
+    private static bool TryReadPermissions(ManageMembershipCommand command, out FarmPermission? permissions)
+    {
+        permissions = null;
+        if (command.Permissions is null)
+        {
+            return true;
+        }
+
+        if (command.Decision is not (MembershipDecision.Approve or MembershipDecision.SetAccess)
+            || !FarmPermissionDefaults.TryParse(command.Permissions, out var parsed))
+        {
+            return false;
+        }
+
+        permissions = parsed;
+        return true;
+    }
+
+    /// <summary>The same rule as <see cref="FarmMembership.NormalizeReason"/>: trimmed, blank = none,
+    /// longer than the column = refused (never silently cut).</summary>
+    private static bool TryReadReason(string? raw, out string? reason)
+    {
+        var trimmed = raw?.Trim();
+        reason = string.IsNullOrEmpty(trimmed) ? null : trimmed;
+        return reason is null || reason.Length <= FarmMembership.MaxStatusReasonLength;
+    }
+
+    private static Result<LabourPermissionDto> Invalid() =>
+        Result.Failure<LabourPermissionDto>(ShramSafalErrors.InvalidCommand);
+
+    private static Result<LabourPermissionDto> Forbidden() =>
+        Result.Failure<LabourPermissionDto>(ShramSafalErrors.Forbidden);
+
+    private sealed record SeatSnapshot(MembershipStatus Status, AppRole Role, FarmPermission Permissions, bool LabourGrant);
+
+    private sealed record AccessTarget(AppRole Role, FarmPermission? Permissions, bool? LabourGrant);
+}

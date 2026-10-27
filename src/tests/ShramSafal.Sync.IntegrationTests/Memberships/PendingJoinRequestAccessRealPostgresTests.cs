@@ -445,7 +445,13 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
 
     /// <summary>ShramSafal migrations after the Active-only one, reviewed as safe to revert and
     /// re-apply inside this per-fact scratch database. Add one only after reading its Down().</summary>
-    private static readonly string[] ReviewedMigrationsAfterActiveOnly = [];
+    private static readonly string[] ReviewedMigrationsAfterActiveOnly =
+    [
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — Down() read in full: drops the five
+        // NULLABLE access columns it added to ssf.farm_memberships; no policy, no grant, no row.
+        // Reverting it mid-proof loses nothing this fact asserts about.
+        "20261026141837_AddMembershipAccessFields",
+    ];
 
     /// <summary>(user-scoped DATA policies still testing NOT IN (5,6), those testing status = 3) —
     /// read as superuser from the deparsed text, the farms + memberships relationship policies excluded.</summary>

@@ -122,6 +122,37 @@ internal sealed class FarmMembershipConfiguration : IEntityTypeConfiguration<Far
         builder.Property(x => x.LabourGrantExpiresAtUtc)
             .HasColumnName("labour_grant_expires_at_utc");
 
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — migration AddMembershipAccessFields.
+        // Every column is NULLABLE with NO default and NO backfill: a row written before step 2
+        // means "the role's defaults" (permissions null), "no recorded decision" (the three
+        // status_* columns) and "access never changed since the seat was made"
+        // (access_changed_at_utc). Older binaries never read them (P11). No index (read only beside
+        // (farm_id, user_id), which ix_farm_memberships_farm_user_nonterminal covers) and no RLS
+        // change (policies name rows, not columns).
+        builder.Property(x => x.Permissions)
+            .HasColumnName("permissions")
+            .HasConversion<int?>();
+
+        builder.Property(x => x.StatusReason)
+            .HasColumnName("status_reason")
+            .HasMaxLength(FarmMembership.MaxStatusReasonLength);
+
+        builder.Property(x => x.StatusChangedByUserId)
+            .HasColumnName("status_changed_by_user_id")
+            .HasConversion(
+                v => v == null ? (Guid?)null : v.Value.Value,
+                v => v == null ? null : new AgriSync.SharedKernel.Contracts.Ids.UserId(v.Value));
+
+        builder.Property(x => x.StatusChangedAtUtc)
+            .HasColumnName("status_changed_at_utc");
+
+        builder.Property(x => x.AccessChangedAtUtc)
+            .HasColumnName("access_changed_at_utc");
+
+        builder.Ignore(x => x.EffectivePermissions);
+        builder.Ignore(x => x.EndedAfterOwnerStop);
+        builder.Ignore(x => x.WasLetInByOwner);
+
         builder.HasIndex(x => x.FarmId);
         builder.HasIndex(x => x.UserId);
 

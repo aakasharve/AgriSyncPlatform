@@ -7,6 +7,7 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Farms;
+using ShramSafal.Application.Services;
 
 namespace ShramSafal.Application.UseCases.Finance.AllocateGlobalExpense;
 
@@ -46,6 +47,14 @@ public sealed class AllocateGlobalExpenseHandler(
 
         var canWriteFarm = await repository.IsUserMemberOfFarmAsync(costEntry.FarmId, command.CreatedByUserId, ct);
         if (!canWriteFarm)
+        {
+            return Result.Failure<DayLedgerDto>(ShramSafalErrors.Forbidden);
+        }
+
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — spreading a whole-farm cost over plots is
+        // CHANGING money: the AddCost permission (the primary owner, or someone he stored it for).
+        // Recording a cost stays open to every Active member (AddCostEntry).
+        if (!await FarmPermissionGate.HasAsync(repository, (Guid)costEntry.FarmId, command.CreatedByUserId, FarmPermission.AddCost, ct))
         {
             return Result.Failure<DayLedgerDto>(ShramSafalErrors.Forbidden);
         }

@@ -57,6 +57,39 @@
 /// grant-write response and whenever the directory has no name; the client must
 /// then show NO name rather than invent one. Additive: older clients ignore it.
 /// </param>
+/// <param name="Permissions">
+/// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — ADDITIVE: the member's EFFECTIVE permission
+/// names (<c>FarmPermission</c>: "AddCost", "PlanWork", ...) — role defaults merged with the owner's
+/// stored choice, and empty for a seat that is not Active. <c>null</c> only from an older server.
+/// </param>
+/// <param name="StatusReason">
+/// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — ADDITIVE: the owner's written reason for the
+/// last decision (a pause, a removal, a decline), or <c>null</c>.
+/// </param>
+/// <param name="IsRegistrant">
+/// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — ADDITIVE: this member registered the farm
+/// (<c>farms.owner_user_id</c>). Nobody may pause, remove or change him (plan §4), so the phone
+/// shows no such control on his card.
+/// </param>
+/// <param name="JoinedVia">
+/// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — ADDITIVE: how the seat came to be
+/// ("SelfJoin" = typed the farm code, "QrScan", ...). Audit wording only, never authority.
+/// </param>
+/// <param name="RequestedAtUtc">
+/// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — ADDITIVE: when the seat was made (for a waiting
+/// request: when the person asked).
+/// </param>
+/// <param name="PhoneLast4">
+/// spec: plr-d7-m1-multiuser-2026-10-26 (step 2, M-7) — ADDITIVE: the last four digits of the
+/// member's account phone, so the owner sees who is really asking (names are self-typed). Only on
+/// the owner-tier roster and the owner's decision answer; <c>null</c> when unknown — the phone then
+/// shows nothing.
+/// </param>
+/// <param name="ApprovedByOwner">
+/// spec: plr-d7-m1-multiuser-2026-10-26 (step 2, M-8) — ADDITIVE: an owner approved this seat (it
+/// came in by asking — the typed farm code, or a farm-QR scan after the owner had stopped the
+/// person), as opposed to a direct farm-QR join. Wording only, never authority.
+/// </param>
 public sealed record LabourPermissionDto(
     Guid UserId,
     string Role,
@@ -66,4 +99,11 @@ public sealed record LabourPermissionDto(
     string Source,
     bool IsGrantEditable,
     DateTime? LabourGrantExpiresAtUtc,
-    string? DisplayName = null);
+    string? DisplayName = null,
+    IReadOnlyList<string>? Permissions = null,
+    string? StatusReason = null,
+    bool IsRegistrant = false,
+    string? JoinedVia = null,
+    DateTime? RequestedAtUtc = null,
+    string? PhoneLast4 = null,
+    bool ApprovedByOwner = false);

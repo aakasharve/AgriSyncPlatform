@@ -97,6 +97,24 @@ public sealed class FarmMembershipStateMachineTests
         Assert.False(m.IsTypedCodeJoinRequest);
     }
 
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, verifier SEC-MU2-1) — a grant left on the
+    // waiting request does not ride into the seat the owner's QR makes (a fresh claim has none).
+    [Fact(DisplayName = "Owner's QR activation carries no grant left on the waiting request")]
+    public void Owner_qr_activation_carries_no_grant_left_on_the_waiting_request()
+    {
+        var m = FarmMembership.CreateJoinRequest(Guid.NewGuid(), Farm, Worker, Now);
+        m.SetLabourRecordManagement(true, Now.AddDays(3), Now);
+        Assert.True(m.CanManageLabourRecords);
+
+        m.ActivateFromOwnerQr(Invitation, Now.AddMinutes(3));
+
+        Assert.Equal(MembershipStatus.Active, m.Status);
+        Assert.False(m.CanManageLabourRecords);
+        Assert.Null(m.LabourGrantExpiresAtUtc);
+        Assert.Null(m.Permissions);
+        Assert.Equal(FarmPermission.None, m.EffectivePermissions);
+    }
+
     [Fact(DisplayName = "Owner's QR does not approve a PendingApproval seat that did not come from a typed code")]
     public void Owner_qr_does_not_approve_an_invitation_request_that_carries_a_chosen_role()
     {

@@ -31,7 +31,12 @@ public sealed record MeFarmDto(
     string JoinedVia,
     string Plan,
     DateTime? PlanValidUntilUtc,
-    MeCapabilitiesDto Capabilities);
+    MeCapabilitiesDto Capabilities,
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — ADDITIVE, last (older phones ignore them):
+    // the seat's effective permission names ("AddCost", "PlanWork", ...; empty unless Active) and
+    // the owner's reason for a pause.
+    IReadOnlyList<string>? Permissions = null,
+    string? StatusReason = null);
 
 public sealed record MeCapabilitiesDto(
     bool CanInvite,

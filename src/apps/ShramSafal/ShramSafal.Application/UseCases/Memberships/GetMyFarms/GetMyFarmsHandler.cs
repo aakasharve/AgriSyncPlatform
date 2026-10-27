@@ -35,7 +35,8 @@ public sealed record MyFarmDto(
     string Role,
     string? FarmCode,
     SubscriptionSnapshot? Subscription,
-    string Status = "Active");
+    string Status = "Active",
+    string? StatusReason = null);
 
 public sealed record MyFarmsResult(IReadOnlyList<MyFarmDto> Farms);
 
@@ -86,7 +87,10 @@ public sealed class GetMyFarmsHandler(
                     Role: row.Role?.ToString() ?? "Worker",
                     FarmCode: null,
                     Subscription: null,
-                    Status: row.Status.ToString()));
+                    Status: row.Status.ToString(),
+                    // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — ADDITIVE, last: the owner's
+                    // reason, for a paused seat only ("काम थांबवलं — कारण…").
+                    StatusReason: row.StatusReason));
                 continue;
             }
 

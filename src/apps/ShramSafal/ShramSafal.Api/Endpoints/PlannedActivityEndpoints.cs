@@ -2,6 +2,7 @@ using System.Security.Claims;
 using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Planning.OverridePlannedActivity;
 
 namespace ShramSafal.Api.Endpoints;
@@ -16,11 +17,25 @@ public static class PlannedActivityEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             OverridePlannedActivityHandler handler,
+            ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — scope first, on the farm the body
+            // names, so the authorizer's farm reads run under the caller's tenant claim
+            // (TenantConnectionInterceptor fails closed without one — the defect class
+            // FarmScopedRouteTenantScopeTests guards for path-keyed routes; these three carry the
+            // farm in the body). Not a member → 403, as elsewhere. WHO may plan is unchanged
+            // (role >= Mukadam, the authorizers): the PlanWork permission is for D-24 tasks, and
+            // the crop-schedule ↔ planning integration is on hold (founder D-24e2, 26 Oct).
+            var scopeResult = await scope.EstablishForCallerAsync(request.FarmId, actorUserId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
@@ -51,11 +66,25 @@ public static class PlannedActivityEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<AddLocalPlannedActivityCommand> handler,
+            ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — scope first, on the farm the body
+            // names, so the authorizer's farm reads run under the caller's tenant claim
+            // (TenantConnectionInterceptor fails closed without one — the defect class
+            // FarmScopedRouteTenantScopeTests guards for path-keyed routes; these three carry the
+            // farm in the body). Not a member → 403, as elsewhere. WHO may plan is unchanged
+            // (role >= Mukadam, the authorizers): the PlanWork permission is for D-24 tasks, and
+            // the crop-schedule ↔ planning integration is on hold (founder D-24e2, 26 Oct).
+            var scopeResult = await scope.EstablishForCallerAsync(request.FarmId, actorUserId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
@@ -88,11 +117,25 @@ public static class PlannedActivityEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<RemovePlannedActivityCommand> handler,
+            ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — scope first, on the farm the body
+            // names, so the authorizer's farm reads run under the caller's tenant claim
+            // (TenantConnectionInterceptor fails closed without one — the defect class
+            // FarmScopedRouteTenantScopeTests guards for path-keyed routes; these three carry the
+            // farm in the body). Not a member → 403, as elsewhere. WHO may plan is unchanged
+            // (role >= Mukadam, the authorizers): the PlanWork permission is for D-24 tasks, and
+            // the crop-schedule ↔ planning integration is on hold (founder D-24e2, 26 Oct).
+            var scopeResult = await scope.EstablishForCallerAsync(request.FarmId, actorUserId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic

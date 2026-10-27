@@ -57,10 +57,16 @@ public sealed class GetMeContextHandler(
 
         var farmDtos = memberships
             .Where(m => includePending || string.Equals(m.Status, ActiveSeatStatus, StringComparison.Ordinal))
-            .Select(m => MapFarm(m, accounts, userId))
+            .Select(m => MapFarm(m, accounts, userId, utcNow))
             .ToList();
 
-        var alerts = BuildAlerts(user.PhoneVerifiedAtUtc, farmDtos, utcNow);
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, P11-M2) — the alerts speak about farms the
+        // person is IN: with includePending the list also holds waiting / paused seats, and a
+        // person whose only seat is a waiting request still has no farm yet ("no_farms_yet").
+        var activeFarms = farmDtos
+            .Where(f => string.Equals(f.Status, ActiveSeatStatus, StringComparison.Ordinal))
+            .ToList();
+        var alerts = BuildAlerts(user.PhoneVerifiedAtUtc, activeFarms, utcNow);
 
         var dto = new MeContextDto(
             Me: new MeIdentityDto(
@@ -85,7 +91,8 @@ public sealed class GetMeContextHandler(
     private static MeFarmDto MapFarm(
         FarmMembershipSnapshot m,
         AccountsSnapshot accounts,
-        UserId caller)
+        UserId caller,
+        DateTime utcNow)
     {
         // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — a seat that is not Active (a typed-code
         // join request still waiting for the owner, a paused seat) is a relationship, not access.
@@ -106,7 +113,11 @@ public sealed class GetMeContextHandler(
                 JoinedVia: m.JoinedVia,
                 Plan: ResolvePlan(sub: null),
                 PlanValidUntilUtc: null,
-                Capabilities: NoCapabilities);
+                Capabilities: NoCapabilities,
+                // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — nothing is granted, and a paused
+                // person is told why.
+                Permissions: Array.Empty<string>(),
+                StatusReason: m.StatusReason);
         }
 
         var plan = ResolvePlan(m.Subscription);
@@ -124,7 +135,9 @@ public sealed class GetMeContextHandler(
             JoinedVia: m.JoinedVia,
             Plan: plan,
             PlanValidUntilUtc: validUntil,
-            Capabilities: ResolveCapabilities(m.Role, callerIsPrimaryOwner));
+            Capabilities: ResolveCapabilities(m, callerIsPrimaryOwner, utcNow),
+            Permissions: m.Permissions ?? Array.Empty<string>(),
+            StatusReason: m.StatusReason);
     }
 
     private static string ResolvePlan(SubscriptionSnapshot? sub)
@@ -141,11 +154,29 @@ public sealed class GetMeContextHandler(
         };
     }
 
-    private static MeCapabilitiesDto ResolveCapabilities(string role, bool callerIsPrimaryOwner)
+    /// <summary>
+    /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the flags say what the SERVER will allow,
+    /// never more (plan §4: fixed before any screen reads them).
+    /// <list type="bullet">
+    /// <item><c>canInvite</c> — owner tier (the QR routes are owner-only).</item>
+    /// <item><c>canVerify</c> — owner tier, or an unexpired labour grant (the verify gate is that
+    /// one rule). An un-granted Mukadam used to read <c>true</c> here and was refused.</item>
+    /// <item><c>canAddCost</c> — <c>true</c> for every Active seat: recording a purchase is open to
+    /// every Active member on the server (AddCostEntry; founder D-24d / D-12, alignment M-5). It
+    /// used to say owner-only while the server let every member in. Correcting money is the
+    /// separate AddCost permission, read from <c>Permissions</c>.</item>
+    /// </list>
+    /// Only Active seats reach here (a waiting or paused seat gets no capabilities at all).
+    /// </summary>
+    private static MeCapabilitiesDto ResolveCapabilities(FarmMembershipSnapshot m, bool callerIsPrimaryOwner, DateTime utcNow)
     {
-        var canInvite = role is "PrimaryOwner" or "SecondaryOwner";
-        var canAddCost = role is "PrimaryOwner" or "SecondaryOwner";
-        var canVerify = role is "PrimaryOwner" or "SecondaryOwner" or "Mukadam";
+        var role = m.Role;
+        var ownerTier = role is "PrimaryOwner" or "SecondaryOwner";
+        var hasLiveLabourGrant = m.HasLabourGrant
+            && (m.LabourGrantExpiresAtUtc is null || utcNow < m.LabourGrantExpiresAtUtc);
+        var canInvite = ownerTier;
+        const bool canAddCost = true;
+        var canVerify = ownerTier || hasLiveLabourGrant;
         var canSeeBilling = role == "PrimaryOwner" && callerIsPrimaryOwner;
 
         return new MeCapabilitiesDto(
